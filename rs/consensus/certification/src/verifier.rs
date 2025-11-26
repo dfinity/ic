@@ -3,7 +3,7 @@ use ic_interfaces::{
     certification::{Verifier, VerifierError},
     validation::ValidationResult,
 };
-use ic_types::{consensus::certification::Certification, RegistryVersion, SubnetId};
+use ic_types::{RegistryVersion, SubnetId, consensus::certification::Certification};
 use std::sync::Arc;
 
 /// VerifierImpl implements the verification of state hash certifications.
@@ -41,17 +41,17 @@ impl Verifier for VerifierImpl {
 mod tests {
     use super::*;
     use assert_matches::assert_matches;
-    use ic_test_utilities::crypto::CryptoReturningOk;
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
+        CryptoHashOfPartialState, Height,
         consensus::certification::{Certification, CertificationContent},
         crypto::{
-            threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
             CryptoHash, Signed,
+            threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         },
         signature::ThresholdSignature,
-        CryptoHashOfPartialState, Height,
     };
 
     fn fake_dkg_id(h: u64) -> NiDkgId {

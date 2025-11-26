@@ -1,9 +1,9 @@
 use ic_crypto_internal_bls12_381_type::{
-    verify_bls_signature, G1Affine, G1Projective, G2Affine, G2Prepared, Gt, Polynomial, Scalar,
+    G1Affine, G1Projective, G2Affine, G2Prepared, Gt, Polynomial, Scalar, verify_bls_signature,
 };
 use ic_crypto_internal_bls12_381_vetkd::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::{seq::SliceRandom, CryptoRng, Rng, RngCore, SeedableRng};
+use rand::{CryptoRng, Rng, RngCore, SeedableRng, seq::SliceRandom};
 use std::collections::BTreeMap;
 
 #[derive(Copy, Clone, Debug)]
@@ -69,11 +69,7 @@ impl TransportSecretKey {
         let k_is_valid_sig =
             Gt::multipairing(&[(&k, G2Prepared::neg_generator()), (&msg, &dpk_prep)]).is_identity();
 
-        if k_is_valid_sig {
-            Some(k)
-        } else {
-            None
-        }
+        if k_is_valid_sig { Some(k) } else { None }
     }
 }
 
@@ -87,13 +83,15 @@ fn transport_key_gen_is_stable() {
         "32f7f581d6de3c06a822fd6e7e8265fbc00f8401696a5bdc34f5a6d2ff3f922f"
     );
 
-    assert_eq!(hex::encode(tsk.public_key().serialize()),
-               "ac9524f219f1f958f261c87577e49dbbf2182c4060d51f84b8a0efac33c3c7ba9cd0bc9f41edf434d6c8a8fe20077e50");
+    assert_eq!(
+        hex::encode(tsk.public_key().serialize()),
+        "ac9524f219f1f958f261c87577e49dbbf2182c4060d51f84b8a0efac33c3c7ba9cd0bc9f41edf434d6c8a8fe20077e50"
+    );
 }
 
 fn random_derivation_context<R: RngCore + CryptoRng>(rng: &mut R) -> DerivationContext {
-    let canister_id = rng.gen::<[u8; 32]>();
-    let context = rng.gen::<[u8; 32]>();
+    let canister_id = rng.r#gen::<[u8; 32]>();
+    let context = rng.r#gen::<[u8; 32]>();
 
     DerivationContext::new(&canister_id, &context)
 }
@@ -105,14 +103,18 @@ fn key_derivation_outputs_expected_values() {
     let canister_id = b"test-canister-id";
 
     let context1 = DerivationContext::new(canister_id, &[]);
-    assert_eq!(hex::encode(DerivedPublicKey::derive_sub_key(&mpk, &context1).serialize()),
-               "af78a908589d332fc8b9d042807c483e73872e2aea7620bdb985b9289d5a99ebfd5ac0ec4844a4c542f6d0f12a716d941674953cef4f38dde601ce9792db8832557eaa051733c5541fa5017465d69b62cc4d93f2079fb8c050b4bd735ef75859");
+    assert_eq!(
+        hex::encode(DerivedPublicKey::derive_sub_key(&mpk, &context1).serialize()),
+        "af78a908589d332fc8b9d042807c483e73872e2aea7620bdb985b9289d5a99ebfd5ac0ec4844a4c542f6d0f12a716d941674953cef4f38dde601ce9792db8832557eaa051733c5541fa5017465d69b62cc4d93f2079fb8c050b4bd735ef75859"
+    );
 
     let context = b"test-context";
 
     let context2 = DerivationContext::new(canister_id, context);
-    assert_eq!(hex::encode(DerivedPublicKey::derive_sub_key(&mpk, &context2).serialize()),
-               "a20125b8cdfc57f71b6f67e557e82c1307c1af9f728573f3b682f3b1816684f3f6aed5d8dd40a309b457a25dab7d8a1416fc0e0973000321c0c1dd844d80a5708e81fdd8338ea6433f175992fa05ef343b1e7f89a09f3b5b7c0766ccb3c624cd");
+    assert_eq!(
+        hex::encode(DerivedPublicKey::derive_sub_key(&mpk, &context2).serialize()),
+        "a20125b8cdfc57f71b6f67e557e82c1307c1af9f728573f3b682f3b1816684f3f6aed5d8dd40a309b457a25dab7d8a1416fc0e0973000321c0c1dd844d80a5708e81fdd8338ea6433f175992fa05ef343b1e7f89a09f3b5b7c0766ccb3c624cd"
+    );
 }
 
 #[test]
@@ -130,7 +132,7 @@ fn encrypted_key_share_creation_is_stable() {
     let master_pk = G2Affine::from(G2Affine::generator() * master_sk);
 
     let context = random_derivation_context(&mut rng);
-    let input = rng.gen::<[u8; 28]>();
+    let input = rng.r#gen::<[u8; 28]>();
 
     const EXPECTED_EKS_VALUE: [&str; NODES] = [
         "811d9cd064cd7c6ab4a448c68b8b5fc8a5f08cd17c78d46469e810e8df3d1f8d3f1431ccf627e2198b72d850eb99b2e2b2dfe2c43ddf86e5403ba474a3a0ba596ddabecfe303eddfd70444057baaae733f92eca70509425f87633ce9d78a28040b559446e22f73d637b04c6eca6ecff71fb3d1a662d86ef22fa6c3ef8157c582e4afdc7a0047d4535c6e01e9c65eae7896dea80dc666ec27eba683e2f08148b623aa697fa6f04740eac098b1ccdbd2b17632b3132750bbd48969b2e0346e6170",
@@ -204,7 +206,7 @@ impl<'a> VetkdTestProtocolExecution<'a> {
         rng: &mut R,
         setup: &'a VetkdTestProtocolSetup,
     ) -> VetkdTestProtocolExecution<'a> {
-        let input = rng.gen::<[u8; 32]>().to_vec();
+        let input = rng.r#gen::<[u8; 32]>().to_vec();
         let context = random_derivation_context(rng);
 
         let derived_pk = DerivedPublicKey::derive_sub_key(&setup.master_pk, &context);
@@ -334,30 +336,33 @@ fn test_protocol_execution() {
 
     // Check that recovery works with sufficient shares, and fails without sufficient shares
     for rec_threshold in 1..nodes {
-        if let Ok(ek) = proto.combine_all(&random_subset(rng, &node_eks, rec_threshold)) {
-            assert!(
-                rec_threshold >= threshold,
-                "Recovery only works with sufficient quorum"
-            );
+        match proto.combine_all(&random_subset(rng, &node_eks, rec_threshold)) {
+            Ok(ek) => {
+                assert!(
+                    rec_threshold >= threshold,
+                    "Recovery only works with sufficient quorum"
+                );
 
-            assert!(ek.is_valid(
-                &setup.master_pk,
-                &proto.context,
-                &proto.input,
-                &setup.transport_pk
-            ));
+                assert!(ek.is_valid(
+                    &setup.master_pk,
+                    &proto.context,
+                    &proto.input,
+                    &setup.transport_pk
+                ));
 
-            let k = setup
-                .transport_sk
-                .decrypt(&ek, &proto.derived_pk, &proto.input)
-                .expect("Decryption failed");
+                let k = setup
+                    .transport_sk
+                    .decrypt(&ek, &proto.derived_pk, &proto.input)
+                    .expect("Decryption failed");
 
-            keys_recovered.push(k);
-        } else {
-            assert!(
-                rec_threshold < threshold,
-                "Recovery fails with insufficient quorum"
-            );
+                keys_recovered.push(k);
+            }
+            _ => {
+                assert!(
+                    rec_threshold < threshold,
+                    "Recovery fails with insufficient quorum"
+                );
+            }
         }
     }
 
@@ -379,7 +384,7 @@ fn test_protocol_execution() {
 
     // Check that if we introduce incorrect shares then combine_all will fail
 
-    let other_input = rng.gen::<[u8; 24]>();
+    let other_input = rng.r#gen::<[u8; 24]>();
     assert_ne!(proto.input, other_input);
     let node_info_wrong_input = proto.create_encrypted_key_shares(rng, Some(&other_input));
 
@@ -392,7 +397,7 @@ fn test_protocol_execution() {
 
         // Avoid using a duplicate index for this test
         let random_unused_idx = loop {
-            let idx = (rng.gen::<usize>() % node_eks_wrong_input.len()) as NodeIndex;
+            let idx = (rng.r#gen::<usize>() % node_eks_wrong_input.len()) as NodeIndex;
             if !shares.contains_key(&idx) {
                 break idx;
             }

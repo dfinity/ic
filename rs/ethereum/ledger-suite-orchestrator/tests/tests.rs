@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -8,9 +9,9 @@ use ic_ledger_suite_orchestrator::candid::{
     UpdateCyclesManagement, UpgradeArg,
 };
 use ic_ledger_suite_orchestrator_test_utils::{
+    GIT_COMMIT_HASH_UPGRADE, LedgerSuiteOrchestrator, MINTER_PRINCIPAL, NNS_ROOT_PRINCIPAL,
     assert_reply, cketh_installed_canisters, default_init_arg, ledger_suite_orchestrator_wasm,
-    new_state_machine, usdc, usdc_erc20_contract, usdt, LedgerSuiteOrchestrator,
-    GIT_COMMIT_HASH_UPGRADE, MINTER_PRINCIPAL, NNS_ROOT_PRINCIPAL,
+    new_state_machine, usdc, usdc_erc20_contract, usdt,
 };
 use ic_state_machine_tests::ErrorCode;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
@@ -556,8 +557,8 @@ mod upgrade {
         UniversalCanister,
     };
     use ic_ledger_suite_orchestrator_test_utils::{
-        default_init_arg, ledger_suite_orchestrator_wasm, ledger_wasm, tweak_ledger_suite_wasms,
-        usdt_erc20_contract, GIT_COMMIT_HASH_UPGRADE,
+        GIT_COMMIT_HASH_UPGRADE, default_init_arg, ledger_suite_orchestrator_wasm, ledger_wasm,
+        tweak_ledger_suite_wasms, usdt_erc20_contract,
     };
     use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, CanisterStatusType};
     use icrc_ledger_types::icrc1::transfer::TransferArg;
@@ -919,7 +920,7 @@ mod upgrade {
     #[test]
     fn should_upgrade_when_some_canister_are_stopped_to_simulate_previous_upgrade_failure() {
         let rng = &mut reproducible_rng();
-        let [stop_ledger, stop_index] = rng.gen::<[bool; 2]>();
+        let [stop_ledger, stop_index] = rng.r#gen::<[bool; 2]>();
         test_when_canisters_stopped(stop_ledger, stop_index);
 
         fn test_when_canisters_stopped(stop_ledger: bool, stop_index: bool) {

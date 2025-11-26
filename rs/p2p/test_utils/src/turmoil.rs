@@ -10,31 +10,30 @@ use std::{
 };
 
 use crate::{
+    RegistryConsensusHandle,
     consensus::{TestConsensus, U64Artifact},
     create_peer_manager_and_registry_handle, temp_crypto_component_with_tls_keys,
-    RegistryConsensusHandle,
 };
 use axum::Router;
 use bytes::BytesMut;
-use futures::{future::BoxFuture, FutureExt};
+use futures::{FutureExt, future::BoxFuture};
 use ic_artifact_downloader::FetchArtifact;
 use ic_artifact_manager::create_artifact_handler;
 use ic_consensus_manager::AbortableBroadcastChannel;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
-    p2p::artifact_manager::JoinGuard, p2p::consensus::ArtifactTransmit,
-    p2p::state_sync::StateSyncClient, time_source::SysTimeSource,
+    p2p::artifact_manager::JoinGuard, p2p::state_sync::StateSyncClient, time_source::SysTimeSource,
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::SubnetTopology;
 use ic_quic_transport::{QuicTransport, Transport};
 use ic_state_manager::state_sync::types::StateSyncMessage;
-use ic_types::{artifact::UnvalidatedArtifactMutation, NodeId, RegistryVersion};
-use quinn::{self, udp::EcnCodepoint, AsyncUdpSocket, UdpPoller};
+use ic_types::{NodeId, RegistryVersion};
+use quinn::{self, AsyncUdpSocket, UdpPoller, udp::EcnCodepoint};
 use tokio::{
     select,
-    sync::{mpsc, oneshot, watch, Notify},
+    sync::{Notify, mpsc, oneshot, watch},
 };
 use turmoil::Sim;
 
@@ -111,7 +110,7 @@ impl<MakeFut, Fut> Debug for UdpPollHelper<MakeFut, Fut> {
 //
 
 impl AsyncUdpSocket for CustomUdp {
-    fn create_io_poller(self: Arc<Self>) -> Pin<Box<(dyn UdpPoller + 'static)>> {
+    fn create_io_poller(self: Arc<Self>) -> Pin<Box<dyn UdpPoller + 'static>> {
         Box::pin(UdpPollHelper::new(move || {
             let socket = self.clone();
             async move { socket.inner.writable().await }
@@ -321,7 +320,7 @@ pub fn add_transport_to_sim<F>(
     registry_handler: RegistryConsensusHandle,
     topology_watcher: watch::Receiver<SubnetTopology>,
     conn_checker: Option<Router>,
-    crypto: Option<Arc<dyn TlsConfig + Send + Sync>>,
+    crypto: Option<Arc<dyn TlsConfig>>,
     state_sync_client: Option<Arc<dyn StateSyncClient<Message = StateSyncMessage>>>,
     consensus_manager: Option<TestConsensus<U64Artifact>>,
     post_setup_future: F,
@@ -381,14 +380,10 @@ pub fn add_transport_to_sim<F>(
                     bouncer_factory,
                     MetricsRegistry::default(),
                 );
-                let AbortableBroadcastChannel {
-                    outbound_tx,
-                    inbound_rx,
-                } = consensus_builder.abortable_broadcast_channel(downloader, usize::MAX);
+                let channel = consensus_builder.abortable_broadcast_channel(downloader, usize::MAX);
 
                 let artifact_processor_jh = start_test_processor(
-                    outbound_tx,
-                    inbound_rx,
+                    channel,
                     consensus.clone(),
                     consensus.clone().read().unwrap().clone(),
                 );
@@ -427,8 +422,8 @@ pub fn add_transport_to_sim<F>(
     });
 }
 
-pub fn waiter_fut(
-) -> impl Fn(NodeId, Arc<dyn Transport>) -> BoxFuture<'static, ()> + Clone + 'static {
+pub fn waiter_fut()
+-> impl Fn(NodeId, Arc<dyn Transport>) -> BoxFuture<'static, ()> + Clone + 'static {
     |_, _| {
         async move {
             loop {
@@ -441,15 +436,10 @@ pub fn waiter_fut(
 
 #[allow(clippy::type_complexity)]
 pub fn start_test_processor(
-    outbound_tx: mpsc::Sender<ArtifactTransmit<U64Artifact>>,
-    inbound_rx: mpsc::Receiver<UnvalidatedArtifactMutation<U64Artifact>>,
+    channel: AbortableBroadcastChannel<U64Artifact>,
     pool: Arc<RwLock<TestConsensus<U64Artifact>>>,
     change_set_producer: TestConsensus<U64Artifact>,
 ) -> Box<dyn JoinGuard> {
-    let channel = AbortableBroadcastChannel {
-        outbound_tx,
-        inbound_rx,
-    };
     create_artifact_handler(
         channel,
         change_set_producer,

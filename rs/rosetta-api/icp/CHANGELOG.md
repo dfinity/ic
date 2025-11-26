@@ -5,6 +5,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## Unreleased
 
+### Added
+- Added support for legacy `SignedTransaction` format from pre-v2.1.0 for the `construction/submit` endpoint. ([#7416](https://github.com/dfinity/ic/pull/7416))
+- Added new `self_describing_action` field in the `Proposal` struct, returned e.g, by the `get_pending_proposals` endpoint. ([#7643](https://github.com/dfinity/ic/pull/7643))
+
+## [2.1.8] - 2025-10-09
+### Added
+- Added explicit timeout in ic-agent initialization to improve initial sync performance ([#7131](https://github.com/dfinity/ic/pull/7131))
+
+## [2.1.7] - 2025-08-12
+### Added
+- Environment presets to configure ICP Rosetta API with `--environment` flag ([#5982](https://github.com/dfinity/ic/pull/5982))
+- New endpoint `get_minimum_dissolve_delay` to retrieve the minimum dissolve delay of a neuron that allows voting ([#5863](https://github.com/dfinity/ic/pull/5863))
+- Support for `DISBURSE_MATURITY` neuron operation. Allows to disburse neuron's maturity directly to an account ([#5994](https://github.com/dfinity/ic/pull/5994))
+
+### Changed
+- Grouped Rosetta CLI parameters for better organization and readability ([#5981](https://github.com/dfinity/ic/pull/5981))
+- Ignore spender account in transfers when searching transactions by account ([#5794](https://github.com/dfinity/ic/pull/5794))
+
 ### Removed
 - Removed deprecated `MERGE_MATURITY` neuron management operation.
 
@@ -67,7 +85,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - added functionality to refresh voting power on the governance canister
 ### Changed
 - [BREAKING CHANGE]: consolidate block and transaction tables into a single table
-  The clients have to delete the old database and re-sync the Rosetta node from scratch. 
+  The clients have to delete the old database and re-sync the Rosetta node from scratch.
+- [BREAKING CHANGE]: change `pub type SignedTransaction = Vec<Request>` to
+  `pub struct SignedTransaction { pub requests: Vec<Request> }`, affecting the
+  `construction/submit` endpoint.
 
 ## [2.0.0] - 2024-01-18
 ### Fixes

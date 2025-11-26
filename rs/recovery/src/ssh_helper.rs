@@ -1,7 +1,7 @@
 use crate::{
-    cli::wait_for_confirmation, command_helper::exec_cmd, error::RecoveryError, RecoveryResult,
+    RecoveryResult, cli::wait_for_confirmation, command_helper::exec_cmd, error::RecoveryError,
 };
-use slog::{info, warn, Logger};
+use slog::{Logger, info, warn};
 use std::{net::IpAddr, path::PathBuf, process::Command, thread, time};
 
 const SSH_ARGS: &[&str] = &[
@@ -95,7 +95,8 @@ impl SshHelper {
 pub fn get_rsync_ssh_arg(key_file: Option<&PathBuf>) -> String {
     let mut arg = format!("ssh {}", SSH_ARGS.join(" "));
     if let Some(file) = key_file {
-        arg.push_str(&format!(" -i {}", file.display()));
+        // We use debug formatting because it escapes the path in case it contains spaces.
+        arg.push_str(&format!(" -i {file:?}"));
     }
     arg
 }

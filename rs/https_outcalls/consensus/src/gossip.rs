@@ -8,7 +8,7 @@ use ic_interfaces::{
     p2p::consensus::{Bouncer, BouncerFactory, BouncerValue},
 };
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{artifact::CanisterHttpResponseId, messages::CallbackId};
 use std::{collections::BTreeSet, sync::Arc};
@@ -62,7 +62,13 @@ impl<Pool: CanisterHttpPool> BouncerFactory<CanisterHttpResponseId, Pool>
         let log = self.log.clone();
         Box::new(move |id: &'_ CanisterHttpResponseId| {
             if id.content.registry_version != registry_version {
-                warn!(log, "Dropping canister http response share with callback id: {}, because registry version {} does not match expected version {}", id.content.id, id.content.registry_version, registry_version);
+                warn!(
+                    log,
+                    "Dropping canister http response share with callback id: {}, because registry version {} does not match expected version {}",
+                    id.content.id,
+                    id.content.registry_version,
+                    registry_version
+                );
                 return BouncerValue::Unwanted;
             }
 

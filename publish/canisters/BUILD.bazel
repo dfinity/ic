@@ -19,7 +19,11 @@ CANISTERS = {
     "ic-btc-checker.wasm.gz": "//rs/bitcoin/checker:btc_checker_canister",
     "ic-ckbtc-minter.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter",
     "ic-ckbtc-minter_debug.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+    "ic-ckdoge-minter.wasm.gz": "//rs/dogecoin/ckdoge/minter:ckdoge_minter",
+    "ic-ckdoge-minter_debug.wasm.gz": "//rs/dogecoin/ckdoge/minter:ckdoge_minter_debug",
     "ic-cketh-minter.wasm.gz": "//rs/ethereum/cketh/minter:cketh_minter",
+    "ic-icrc1-archive.wasm.gz": "//rs/ledger_suite/icrc1/archive:archive_canister",
+    "ic-icrc1-archive-u256.wasm.gz": "//rs/ledger_suite/icrc1/archive:archive_canister_u256",
     "ic-icrc1-index-ng.wasm.gz": "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
     "ic-icrc1-index-ng-u256.wasm.gz": "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256",
     "ic-icrc1-ledger.wasm.gz": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
@@ -27,9 +31,12 @@ CANISTERS = {
     "ic-icp-index-canister.wasm.gz": "//rs/ledger_suite/icp/index:ic-icp-index-canister",
     "ic-ledger-suite-orchestrator-canister.wasm.gz": "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister",
     "identity-canister.wasm.gz": "//rs/nns/identity:identity-canister",
+    "ledger-archive-node-canister.wasm.gz": "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm",
     "ledger-canister.wasm.gz": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
-    "ledger-canister_notify-method.wasm.gz": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
+    # FIXME(FI-1845): Remove once all users have migrated to the ledger canister without notify-method in the name.
+    "ledger-canister_notify-method.wasm.gz": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
     "lifeline_canister.wasm.gz": "//rs/nns/handlers/lifeline/impl:lifeline_canister",
+    "migration-canister.wasm.gz": "//rs/migration_canister:migration-canister",
     "nns-ui-canister.wasm.gz": "//rs/nns/nns-ui:nns-ui-canister",
     "rate-limit-canister.wasm.gz": "//rs/boundary_node/rate_limits:rate_limit_canister",
     "registry-canister.wasm.gz": "//rs/registry/canister:registry-canister",
@@ -51,13 +58,13 @@ CANISTERS = {
     # Node Rewards
     "node-rewards-canister.wasm.gz": "//rs/node_rewards/canister:node-rewards-canister",
     "node-rewards-canister-test.wasm.gz": "//rs/node_rewards/canister:node-rewards-canister-test",
+
+    # Helpful in advanced testing scenarios, e.g., to emulate a broken 3rd party canister.
+    "universal_canister.wasm.gz": "//rs/universal_canister/impl:universal_canister",
 }
 
 COMPRESSED_CANISTERS = {
     "ic-btc-canister.wasm.gz": "@btc_canister//file",
-    "ic-icrc1-archive.wasm.gz": "//rs/ledger_suite/icrc1/archive:archive_canister.wasm.gz",
-    "ic-icrc1-archive-u256.wasm.gz": "//rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz",
-    "ledger-archive-node-canister.wasm.gz": "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm.wasm.gz",
 }
 
 DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES = 21

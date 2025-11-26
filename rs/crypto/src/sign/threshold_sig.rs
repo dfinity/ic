@@ -99,7 +99,7 @@ fn map_threshold_sign_error_or_panic(
             // if a call to `load_transcript`, which inserts a key in the secret key store,
             // runs concurrently with an invocation of `retain_active_keys`, which removes keys
             // associated with past epochs, it could happen that the inserted key is immediately
-            // removed after insertion, even though it releates to a future epoch. In this case
+            // removed after insertion, even though it relates to a future epoch. In this case
             // calling again `load_transcript` may help reinserting the key in the key store.
             // Note that this is unexpected since consensus waits for past calls to
             // `retain_active_keys` to terminate before loading new transcripts.
@@ -119,7 +119,7 @@ fn map_threshold_sign_error_or_panic(
         CspThresholdSignError::UnsupportedAlgorithm { .. }
         | CspThresholdSignError::MalformedSecretKey { .. }
         | CspThresholdSignError::WrongSecretKeyType { .. } => {
-            panic!("Illegal state: {}", error)
+            panic!("Illegal state: {error}")
         }
     }
 }
@@ -236,10 +236,9 @@ fn calculate_and_store_public_key_or_panic<C: ThresholdSignatureCspClient>(
         )
         .unwrap_or_else(|error| {
             panic!(
-                "Calculation of individual threshold public key for DKG ID {:?} \
-                for node ID {} failed because the threshold signature data \
-                store contained malformed data: {:?}",
-                dkg_id, node_id, error
+                "Calculation of individual threshold public key for DKG ID {dkg_id:?} \
+                for node ID {node_id} failed because the threshold signature data \
+                store contained malformed data: {error:?}"
             )
         });
     lockable_threshold_sig_data_store
@@ -266,8 +265,7 @@ fn panic_on_illegal_individual_sig_verification_state(error: CryptoError) -> Cry
         CryptoError::InvalidArgument { .. } | CryptoError::MalformedPublicKey { .. } => panic!(
             "Illegal state: the algorithm of the public key from the threshold signature data \
             store (which is based on the algorithm of the public coefficients in the store) is \
-            not supported: {}",
-            error
+            not supported: {error}"
         ),
         CryptoError::MalformedSignature { .. } => unreachable!(
             "This case cannot occur because `CryptoError::MalformedSignature` is returned only \
@@ -368,11 +366,11 @@ fn map_csp_combine_sigs_error(error: CryptoError) -> CryptoError {
         _ => {
             if error.is_reproducible() {
                 CryptoError::InternalError {
-                    internal_error: format!("Unexpected error from the CSP: {}", error),
+                    internal_error: format!("Unexpected error from the CSP: {error}"),
                 }
             } else {
                 CryptoError::TransientInternalError {
-                    internal_error: format!("Transient internal error: {}", error),
+                    internal_error: format!("Transient internal error: {error}"),
                 }
             }
         }
@@ -382,8 +380,7 @@ fn map_csp_combine_sigs_error(error: CryptoError) -> CryptoError {
 fn node_id_missing_error(node_id: NodeId, dkg_id: &NiDkgId) -> CryptoError {
     CryptoError::InvalidArgument {
         message: format!(
-            "There is no node index for dkg id \"{:?}\" and node id \"{}\" in the transcript data.",
-            dkg_id, node_id
+            "There is no node index for dkg id \"{dkg_id:?}\" and node id \"{node_id}\" in the transcript data."
         ),
     }
 }
@@ -420,11 +417,11 @@ fn map_verify_combined_error(error: CryptoError) -> CryptoError {
         _ => {
             if error.is_reproducible() {
                 CryptoError::InternalError {
-                    internal_error: format!("Unexpected error from the CSP: {}", error),
+                    internal_error: format!("Unexpected error from the CSP: {error}"),
                 }
             } else {
                 CryptoError::TransientInternalError {
-                    internal_error: format!("Transient internal error: {}", error),
+                    internal_error: format!("Transient internal error: {error}"),
                 }
             }
         }

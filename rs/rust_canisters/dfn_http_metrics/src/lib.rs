@@ -38,7 +38,7 @@ pub fn serve_metrics(
                     Err(err) => HttpResponse {
                         status_code: 500,
                         headers: vec![],
-                        body: ByteBuf::from(format!("Failed to encode metrics: {}", err)),
+                        body: ByteBuf::from(format!("Failed to encode metrics: {err}")),
                     },
                 }
             } else {

@@ -2,7 +2,7 @@
 name = "ic-ledger-canister-blocks-synchronizer"
 version = "0.1.0"
 authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+edition.workspace = true
 description = "Synchronizes a local copy of the ledger blocks with the ledger"
 
 [dependencies]

@@ -3,8 +3,8 @@ use ic_limits::INITIAL_NOTARY_DELAY;
 use ic_management_canister_types_private::VetKdKeyId;
 use ic_protobuf::registry::crypto::v1::AlgorithmId;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_protobuf::registry::subnet::v1::chain_key_initialization::Initialization;
 use ic_protobuf::registry::subnet::v1::ChainKeyInitialization;
+use ic_protobuf::registry::subnet::v1::chain_key_initialization::Initialization;
 use ic_protobuf::registry::subnet::v1::{
     CanisterCyclesCostSchedule, CatchUpPackageContents, InitialNiDkgTranscriptRecord,
     SubnetListRecord, SubnetRecord,
@@ -15,16 +15,16 @@ use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
     make_subnet_list_record_key, make_subnet_record_key,
 };
-use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl};
+use ic_registry_local_store::{LocalStoreImpl, compact_delta_to_changelog};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
+use ic_types::crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId;
 use ic_types::{
-    crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
     NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
+    crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
 };
 use std::sync::Arc;
 use std::time::Duration;

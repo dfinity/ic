@@ -1,0 +1,27 @@
+[package]
+name = "guest_disk"
+edition.workspace = true
+
+[lib]
+
+[[bin]]
+name = "guest_disk"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+config = { path = "../../config" }
+config_types = { path = "../../config_types" }
+libcryptsetup-rs = { workspace = true }
+ic_device = { path = "../../device" }
+ic_sev = { path = "../../sev" }
+ic-sys = { path = "../../../sys" }
+itertools = { workspace = true }
+nix = { workspace = true }
+rand = { workspace = true }
+sev = { workspace = true }
+tempfile = { workspace = true }
+
+[dev-dependencies]
+parking_lot = { workspace = true }

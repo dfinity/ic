@@ -7,18 +7,19 @@ use crate::driver::{
     context::GroupContext,
     dsl::SubprocessFn,
     event::TaskId,
+    logger::new_discard_logger,
     process::{KillFn, Process},
-    subprocess_ipc::{log_panic_event, LogReceiver, ReportOrFailure},
+    subprocess_ipc::{LogReceiver, ReportOrFailure, log_panic_event},
     task::{Task, TaskHandle},
     task_scheduler::TaskResult,
 };
-use slog::{debug, error, info, Logger};
+use slog::{Logger, debug, error, info};
 use std::{
     panic::catch_unwind,
     process::Command,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
     },
 };
 use tokio::{runtime::Handle as RtHandle, task::JoinHandle, time::timeout};
@@ -33,6 +34,7 @@ pub struct SubprocessTask {
     f: Arc<Mutex<Option<Box<dyn SubprocessFn>>>>,
     spawned: AtomicBool,
     group_ctx: GroupContext,
+    quiet: bool,
 }
 
 impl SubprocessTask {
@@ -41,6 +43,7 @@ impl SubprocessTask {
         rt: RtHandle,
         f: F,
         group_ctx: GroupContext,
+        quiet: bool,
     ) -> Self {
         Self {
             task_id,
@@ -48,6 +51,7 @@ impl SubprocessTask {
             f: shared_mutex(Some(Box::new(f))),
             spawned: Default::default(),
             group_ctx,
+            quiet,
         }
     }
 }
@@ -60,7 +64,7 @@ impl Task for SubprocessTask {
 
         // select a random socket id used for this child process
         use rand::Rng;
-        let sock_id: u64 = rand::thread_rng().gen();
+        let sock_id: u64 = rand::thread_rng().r#gen();
         let sock_path = GroupContext::log_socket_path(sock_id);
 
         let mut child_cmd = Command::new(self.group_ctx.exec_path.clone());
@@ -68,14 +72,32 @@ impl Task for SubprocessTask {
             .arg("--working-dir") // TODO: rename as --group-dir
             .arg(self.group_ctx.group_dir().as_os_str())
             .arg("--group-base-name")
-            .arg(self.group_ctx.group_base_name.clone())
+            .arg(self.group_ctx.group_base_name.clone());
+
+        if !self.group_ctx.logs_enabled {
+            child_cmd.arg("--no-logs");
+        }
+
+        for pattern in &self.group_ctx.exclude_logs {
+            child_cmd.arg("--exclude-logs").arg(pattern.as_str());
+        }
+
+        child_cmd
             .arg("spawn-child")
             .arg(self.task_id.name())
             .arg(sock_id.to_string());
 
         info!(self.group_ctx.log(), "Spawning {:?} ...", child_cmd);
 
-        let log = self.group_ctx.logger();
+        // When this subtask is `quiet`, have the receiver discard logs.
+        // NOTE: We discard on the receiver rather than the sender, so that no
+        // information is lost. Eventually, we may want to split the logfile
+        // and stdout, and will leave this to the receiver.
+        let log = if !self.quiet {
+            self.group_ctx.logger()
+        } else {
+            new_discard_logger()
+        };
         let log_rcvr = self
             .rt
             .block_on(LogReceiver::new(sock_path, log.clone()))
@@ -100,7 +122,7 @@ impl Task for SubprocessTask {
                 // if cancellation request: task state is set to cancelled
                 // we still have to wait for jh_res -> leads to report or failure
                 // if cancelled, ignore child report
-                // 
+                //
 
                 // A misbehaving child might have not connected to the parent at all. In such a
                 // case, this join would block forever.
@@ -142,7 +164,7 @@ impl Task for SubprocessTask {
                                     )),
                                     Some(code) => notify(TaskResult::Failure(
                                         task_id.clone(),
-                                        format!("Task {} failed with exit code: {:?}.", task_id, code),
+                                        format!("Task {task_id} failed with exit code: {code:?}."),
                                     )),
                                     None => notify(TaskResult::Failure(
                                         task_id.clone(),
@@ -153,7 +175,7 @@ impl Task for SubprocessTask {
                                 Err(e) => {
                                     notify(TaskResult::Failure(
                                         task_id,
-                                        format!("System API failure: {:?}", e),
+                                        format!("System API failure: {e:?}"),
                                     ));
                                 }
                             }
@@ -208,12 +230,11 @@ impl ChildTaskHandle {
             let mut task_state = self.task_state.lock().unwrap();
 
             if task_state.is_running() {
-                if let TaskState::Running(kill) =
-                    std::mem::replace(&mut *task_state, requested_state)
-                {
-                    (kill)()
-                } else {
-                    unreachable!();
+                match std::mem::replace(&mut *task_state, requested_state) {
+                    TaskState::Running(kill) => (kill)(),
+                    _ => {
+                        unreachable!();
+                    }
                 }
             } else {
                 debug!(self.log, "Task '{}' already terminated!", self.task_id);
@@ -262,7 +283,7 @@ fn panic_to_result(panic_res: std::thread::Result<()>) -> Result<(), String> {
         } else if let Some(s) = panic_res.downcast_ref::<&str>() {
             Err(s.to_string())
         } else {
-            Err(format!("{:?}", panic_res))
+            Err(format!("{panic_res:?}"))
         }
     } else {
         Ok(())

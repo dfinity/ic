@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -17,6 +17,7 @@ rust_binary(
         # Keep sorted.
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
+        "@crate_index//:itertools",
         "@crate_index//:serde_json",
         "@crate_index//:slog",
         "@crate_index//:ssh2",
@@ -29,10 +30,9 @@ system_test(
     env = UNIVERSAL_CANISTER_ENV,
     flaky = True,  # flakiness rate of 1.22% over the month from 2025-02-11 till 2025-03-11
     tags = [
-        "k8s",
         "long_test",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GRAFANA_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -50,7 +50,7 @@ system_test(
     tags = [
         "long_test",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS + [
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS + [
         "@ii_dev_canister//file",
     ],
     deps = [
@@ -71,7 +71,7 @@ system_test(
     tags = [
         "manual",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/prep",

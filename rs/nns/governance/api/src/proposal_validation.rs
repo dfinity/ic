@@ -1,4 +1,4 @@
-use crate::types::Proposal;
+use crate::MakeProposalRequest;
 
 // The limits on NNS proposal title len (in bytes).
 const PROPOSAL_TITLE_BYTES_MIN: usize = 5;
@@ -12,7 +12,9 @@ const PROPOSAL_URL_CHAR_MAX: usize = 2048;
 const PROPOSAL_URL_CHAR_MIN: usize = 10;
 
 /// Validates the user submitted proposal fields.
-pub fn validate_user_submitted_proposal_fields(proposal: &Proposal) -> Result<(), String> {
+pub fn validate_user_submitted_proposal_fields(
+    proposal: &MakeProposalRequest,
+) -> Result<(), String> {
     validate_proposal_title(&proposal.title)?;
     validate_proposal_summary(&proposal.summary)?;
     validate_proposal_url(&proposal.url)?;
@@ -30,16 +32,14 @@ pub fn validate_proposal_title(title: &Option<String>) -> Result<(), String> {
     // Require that title is not too short.
     if len < PROPOSAL_TITLE_BYTES_MIN {
         return Err(format!(
-            "Proposal title is too short (must be at least {} bytes)",
-            PROPOSAL_TITLE_BYTES_MIN,
+            "Proposal title is too short (must be at least {PROPOSAL_TITLE_BYTES_MIN} bytes)",
         ));
     }
 
     // Require that title is not too long.
     if len > PROPOSAL_TITLE_BYTES_MAX {
         return Err(format!(
-            "Proposal title is too long (can be at most {} bytes)",
-            PROPOSAL_TITLE_BYTES_MAX,
+            "Proposal title is too long (can be at most {PROPOSAL_TITLE_BYTES_MAX} bytes)",
         ));
     }
 
@@ -67,7 +67,7 @@ pub fn validate_proposal_url(url: &str) -> Result<(), String> {
     // An empty string will fail validation as it is not a valid url,
     // but it's fine for us.
     if !url.is_empty() {
-        ic_nervous_system_common_validation::validate_proposal_url(
+        ic_nervous_system_common_validation::validate_url(
             url,
             PROPOSAL_URL_CHAR_MIN,
             PROPOSAL_URL_CHAR_MAX,

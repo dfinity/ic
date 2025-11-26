@@ -1,8 +1,9 @@
 #![allow(clippy::all)]
+use candid::{Int, Nat};
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::protobuf::AccountIdentifier;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// The entity that owns the nodes that run the network.
 ///
@@ -48,6 +49,8 @@ pub struct BallotInfo {
     candid::CandidType, candid::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug, Default,
 )]
 pub struct NeuronInfo {
+    /// The unique identifier of the neuron.
+    pub id: Option<NeuronId>,
     /// The exact time at which this data was computed. This means, for
     /// example, that the exact time that this neuron will enter the
     /// dissolved state, assuming it is currently dissolving, is given
@@ -542,6 +545,9 @@ pub struct Proposal {
     /// This section describes the action that the proposal proposes to
     /// take.
     pub action: Option<proposal::Action>,
+    /// A self-describing action that can be understood without the schema of a specific
+    /// proposal type.
+    pub self_describing_action: Option<SelfDescribingProposalAction>,
 }
 /// Nested message and enum types in `Proposal`.
 pub mod proposal {
@@ -581,7 +587,7 @@ pub mod proposal {
         /// key can be destroyed so that the neuron can only be controlled
         /// by its followees, although this makes it impossible to
         /// subsequently unlock the balance.
-        ManageNeuron(Box<super::ManageNeuron>),
+        ManageNeuron(Box<super::ManageNeuronProposal>),
         /// Propose a change to some network parameters of network
         /// economics.
         ManageNetworkEconomics(super::NetworkEconomics),
@@ -602,6 +608,8 @@ pub mod proposal {
         RewardNodeProviders(super::RewardNodeProviders),
         /// Register Known Neuron
         RegisterKnownNeuron(super::KnownNeuron),
+        /// Deregister Known Neuron
+        DeregisterKnownNeuron(super::DeregisterKnownNeuron),
         /// Obsolete. Superseded by CreateServiceNervousSystem. Kept for Candid compatibility.
         SetSnsTokenSwapOpenTimeWindow(super::SetSnsTokenSwapOpenTimeWindow),
         /// Call the open method on an SNS swap canister.
@@ -642,12 +650,12 @@ pub struct Empty {}
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
 )]
-pub struct ManageNeuron {
+pub struct ManageNeuronProposal {
     /// This is the legacy way to specify neuron IDs that is now discouraged.
     pub id: Option<NeuronId>,
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
     pub neuron_id_or_subaccount: Option<manage_neuron::NeuronIdOrSubaccount>,
-    pub command: Option<manage_neuron::Command>,
+    pub command: Option<manage_neuron::ManageNeuronProposalCommand>,
 }
 /// Nested message and enum types in `ManageNeuron`.
 pub mod manage_neuron {
@@ -785,6 +793,8 @@ pub mod manage_neuron {
     pub struct Split {
         /// The amount to split to the child neuron.
         pub amount_e8s: u64,
+        /// The memo to use for the child neuron.
+        pub memo: Option<u64>,
     }
     /// Merge another neuron into this neuron.
     #[derive(
@@ -1003,7 +1013,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug,
     )]
-    pub enum Command {
+    pub enum ManageNeuronProposalCommand {
         Configure(Configure),
         Disburse(Disburse),
         Spawn(Spawn),
@@ -1372,6 +1382,7 @@ pub enum ProposalActionRequest {
     RewardNodeProvider(RewardNodeProvider),
     RewardNodeProviders(RewardNodeProviders),
     RegisterKnownNeuron(KnownNeuron),
+    DeregisterKnownNeuron(DeregisterKnownNeuron),
     CreateServiceNervousSystem(CreateServiceNervousSystem),
     InstallCode(InstallCodeRequest),
     StopOrStartCanister(StopOrStartCanister),
@@ -1437,7 +1448,10 @@ pub mod governance_error {
         Unspecified = 0,
         /// The operation was successfully completed.
         Ok = 1,
-        /// This operation is not available, e.g., not implemented.
+        /// There have been too many instances of this operation recently. In
+        /// practice, this usually just means that another instance of this operation
+        /// is currently in flight, but another reason this might come up is rate
+        /// limiting.
         Unavailable = 2,
         /// The caller is not authorized to perform this operation.
         NotAuthorized = 3,
@@ -2185,6 +2199,31 @@ pub struct KnownNeuron {
     pub id: Option<NeuronId>,
     pub known_neuron_data: Option<KnownNeuronData>,
 }
+/// Topic variants that can be followed by known neurons.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug,
+)]
+pub enum TopicToFollow {
+    CatchAll,
+    NeuronManagement,
+    ExchangeRate,
+    NetworkEconomics,
+    Governance,
+    NodeAdmin,
+    ParticipantManagement,
+    SubnetManagement,
+    Kyc,
+    NodeProviderRewards,
+    IcOsVersionDeployment,
+    IcOsVersionElection,
+    SnsAndCommunityFund,
+    ApiBoundaryNodeManagement,
+    SubnetRental,
+    ApplicationCanisterManagement,
+    ProtocolCanisterManagement,
+    ServiceNervousSystemManagement,
+}
+
 /// Known neurons have extra information (a name and optionally a description) that can be used to identify them.
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug, Default,
@@ -2192,6 +2231,15 @@ pub struct KnownNeuron {
 pub struct KnownNeuronData {
     pub name: String,
     pub description: Option<String>,
+    pub committed_topics: Option<Vec<Option<TopicToFollow>>>,
+    pub links: Option<Vec<String>>,
+}
+/// Proposal action to deregister a known neuron by removing its name and description.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct DeregisterKnownNeuron {
+    pub id: Option<NeuronId>,
 }
 /// Proposal action to call the "open" method of an SNS token swap canister.
 #[derive(
@@ -2459,9 +2507,7 @@ pub mod install_code {
     }
 }
 
-#[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Default)]
 pub struct InstallCodeRequest {
     pub canister_id: ::core::option::Option<PrincipalId>,
     pub install_mode: ::core::option::Option<i32>,
@@ -2706,7 +2752,6 @@ pub struct Governance {
     /// Whether the heartbeat function is currently spawning neurons, meaning
     /// that it should finish before being called again.
     pub spawning_neurons: Option<bool>,
-    pub making_sns_proposal: Option<governance::MakingSnsProposal>,
     /// Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
     pub xdr_conversion_rate: Option<XdrConversionRate>,
     /// The summary of restore aging event.
@@ -2865,22 +2910,6 @@ pub mod governance {
             pub potential_voting_power_buckets: ::std::collections::HashMap<u64, u64>,
         }
     }
-    /// Records that making an OpenSnsTokenSwap (OSTS) or CreateServiceNervousSystem (CSNS)
-    /// proposal is in progress. We only want one of these to be happening at the same time,
-    /// because otherwise, it is error prone to enforce that open OSTS or CSNS proposals are
-    /// unique. In particular, the result of checking that the proposal currently being made
-    /// would be unique is liable to becoming invalid during an .await.
-    ///
-    /// This is a temporary measure, because OSTS is part of the SNS flow that will
-    /// be replaced by 1-proposal very soon.
-    #[derive(
-        candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
-    )]
-    pub struct MakingSnsProposal {
-        pub proposer_id: Option<NeuronId>,
-        pub caller: Option<PrincipalId>,
-        pub proposal: Option<super::Proposal>,
-    }
 }
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
@@ -2899,7 +2928,7 @@ pub struct XdrConversionRate {
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
 )]
-pub struct ListProposalInfo {
+pub struct ListProposalInfoRequest {
     /// Limit on the number of \[ProposalInfo\] to return. If no value is
     /// specified, or if a value greater than 100 is specified, 100
     /// will be used.
@@ -2933,6 +2962,8 @@ pub struct ListProposalInfo {
     /// is useful to improve download times and to ensure that the response to the
     /// request doesn't exceed the message size limit.
     pub omit_large_fields: Option<bool>,
+    /// Whether to include self-describing proposal actions in the response.
+    pub return_self_describing_action: Option<bool>,
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, Debug, PartialEq)]
 pub struct ListProposalInfoResponse {
@@ -3077,13 +3108,35 @@ pub mod claim_or_refresh_neuron_from_account_response {
         NeuronId(NeuronId),
     }
 }
-/// The monthly Node Provider rewards as of a point in time.
+/// Date UTC used in NodeProviderRewards to define their validity boundaries
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct DateUtc {
+    pub year: u32,
+    pub month: u32,
+    pub day: u32,
+}
+/// The monthly Node Provider rewards, representing the distribution of rewards for a specific time period.
+///
+/// Prior to the introduction of the performance-based reward algorithm, rewards were computed from a
+/// single registry snapshot (identified by `registry_version`). After performance-based rewards were enabled,
+/// rewards depend on node metrics collected over a date range, making `start_date` and `end_date` essential
+/// for defining the covered period. In this case, `registry_version` is no longer set.
+///
+/// Summary of field usage:
+/// - Before performance-based rewards: `registry_version` is Some; `start_date` and `end_date` are None.
+/// - After performance-based rewards: `start_date` and `end_date` are Some; `registry_version` is None.
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
 )]
 pub struct MonthlyNodeProviderRewards {
     /// The time when the rewards were calculated.
     pub timestamp: u64,
+    /// The start date (included) that these rewards cover.
+    pub start_date: Option<DateUtc>,
+    /// The end date (included) that these rewards cover.
+    pub end_date: Option<DateUtc>,
     /// The Rewards calculated and rewarded.
     pub rewards: Vec<RewardNodeProvider>,
     /// The XdrConversionRate used to calculate the rewards.  This comes from the CMC canister.
@@ -3097,6 +3150,9 @@ pub struct MonthlyNodeProviderRewards {
     pub maximum_node_provider_rewards_e8s: Option<u64>,
     /// The registry version used to calculate these rewards at the time the rewards were calculated.
     pub registry_version: Option<u64>,
+    /// Rewards calculation algorithm version used to calculate rewards.
+    /// See RewardsCalculationAlgorithmVersion for the allowed values.
+    pub algorithm_version: Option<u32>,
     /// The list of node_provieders at the time when the rewards were calculated.
     pub node_providers: Vec<NodeProvider>,
 }
@@ -3608,7 +3664,7 @@ pub enum Topic {
     SubnetManagement = 7,
     /// All proposals to manage NNS-controlled canisters not covered by other topics (Protocol
     /// Canister Management or Service Nervous System Management).
-    NetworkCanisterManagement = 8,
+    ApplicationCanisterManagement = 8,
     /// Proposals that update KYC information for regulatory purposes,
     /// for example during the initial Genesis distribution of ICP in the
     /// form of neurons.
@@ -3650,58 +3706,7 @@ pub enum Topic {
     /// relevant canisters and managing SNS framework canister WASMs through SNS-W.
     ServiceNervousSystemManagement = 18,
 }
-impl Topic {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Topic::Unspecified => "TOPIC_UNSPECIFIED",
-            Topic::NeuronManagement => "TOPIC_NEURON_MANAGEMENT",
-            Topic::ExchangeRate => "TOPIC_EXCHANGE_RATE",
-            Topic::NetworkEconomics => "TOPIC_NETWORK_ECONOMICS",
-            Topic::Governance => "TOPIC_GOVERNANCE",
-            Topic::NodeAdmin => "TOPIC_NODE_ADMIN",
-            Topic::ParticipantManagement => "TOPIC_PARTICIPANT_MANAGEMENT",
-            Topic::SubnetManagement => "TOPIC_SUBNET_MANAGEMENT",
-            Topic::NetworkCanisterManagement => "TOPIC_NETWORK_CANISTER_MANAGEMENT",
-            Topic::Kyc => "TOPIC_KYC",
-            Topic::NodeProviderRewards => "TOPIC_NODE_PROVIDER_REWARDS",
-            Topic::IcOsVersionDeployment => "TOPIC_IC_OS_VERSION_DEPLOYMENT",
-            Topic::IcOsVersionElection => "TOPIC_IC_OS_VERSION_ELECTION",
-            Topic::SnsAndCommunityFund => "TOPIC_SNS_AND_COMMUNITY_FUND",
-            Topic::ApiBoundaryNodeManagement => "TOPIC_API_BOUNDARY_NODE_MANAGEMENT",
-            Topic::SubnetRental => "TOPIC_SUBNET_RENTAL",
-            Topic::ProtocolCanisterManagement => "TOPIC_PROTOCOL_CANISTER_MANAGEMENT",
-            Topic::ServiceNervousSystemManagement => "TOPIC_SERVICE_NERVOUS_SYSTEM_MANAGEMENT",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> Option<Self> {
-        match value {
-            "TOPIC_UNSPECIFIED" => Some(Self::Unspecified),
-            "TOPIC_NEURON_MANAGEMENT" => Some(Self::NeuronManagement),
-            "TOPIC_EXCHANGE_RATE" => Some(Self::ExchangeRate),
-            "TOPIC_NETWORK_ECONOMICS" => Some(Self::NetworkEconomics),
-            "TOPIC_GOVERNANCE" => Some(Self::Governance),
-            "TOPIC_NODE_ADMIN" => Some(Self::NodeAdmin),
-            "TOPIC_PARTICIPANT_MANAGEMENT" => Some(Self::ParticipantManagement),
-            "TOPIC_SUBNET_MANAGEMENT" => Some(Self::SubnetManagement),
-            "TOPIC_NETWORK_CANISTER_MANAGEMENT" => Some(Self::NetworkCanisterManagement),
-            "TOPIC_KYC" => Some(Self::Kyc),
-            "TOPIC_NODE_PROVIDER_REWARDS" => Some(Self::NodeProviderRewards),
-            "TOPIC_IC_OS_VERSION_DEPLOYMENT" => Some(Self::IcOsVersionDeployment),
-            "TOPIC_IC_OS_VERSION_ELECTION" => Some(Self::IcOsVersionElection),
-            "TOPIC_SNS_AND_COMMUNITY_FUND" => Some(Self::SnsAndCommunityFund),
-            "TOPIC_API_BOUNDARY_NODE_MANAGEMENT" => Some(Self::ApiBoundaryNodeManagement),
-            "TOPIC_SUBNET_RENTAL" => Some(Self::SubnetRental),
-            "TOPIC_PROTOCOL_CANISTER_MANAGEMENT" => Some(Self::ProtocolCanisterManagement),
-            "TOPIC_SERVICE_NERVOUS_SYSTEM_MANAGEMENT" => Some(Self::ServiceNervousSystemManagement),
-            _ => None,
-        }
-    }
-}
+
 /// Every neuron is in one of three states.
 ///
 /// Note that `Disbursed` is not a state of a neuron, as the neuron is
@@ -4129,6 +4134,23 @@ pub enum NnsFunction {
     DeployHostosToSomeNodes = 51,
     /// The proposal requests a subnet rental.
     SubnetRentalRequest = 52,
+    /// Instruct the migration canister to not accept any more migration requests.
+    PauseCanisterMigrations = 53,
+    /// Instruct the migration canister to accept migration requests again.
+    UnpauseCanisterMigrations = 54,
+    /// For taking a subnet offline for repairs, as well as back online. These
+    /// are the first and last steps in subnet recovery.
+    ///
+    /// The primary thing this does is set the `halted` field in `SubnetRecord`.
+    /// However, there are a couple of secondary changes that this also does:
+    ///
+    ///     1. Set the `ssh_read_only_access` field in `SubnetRecord`.
+    ///     2. Set the `ssh_node_state_write_access` field in `NodeRecord`.
+    ///
+    /// When there is a DFINITY node where SEV is not enabled in the subnet,
+    /// UpdateConfigOfSubnet can be used instead. But otherwise, this is the
+    /// state of the art (as of Oct 2025) way of doing subnet recovery.
+    SetSubnetOperationalLevel = 55,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4209,6 +4231,9 @@ impl NnsFunction {
             }
             NnsFunction::DeployHostosToSomeNodes => "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES",
             NnsFunction::SubnetRentalRequest => "NNS_FUNCTION_SUBNET_RENTAL_REQUEST",
+            NnsFunction::PauseCanisterMigrations => "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS",
+            NnsFunction::UnpauseCanisterMigrations => "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS",
+            NnsFunction::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4286,6 +4311,9 @@ impl NnsFunction {
             }
             "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES" => Some(Self::DeployHostosToSomeNodes),
             "NNS_FUNCTION_SUBNET_RENTAL_REQUEST" => Some(Self::SubnetRentalRequest),
+            "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS" => Some(Self::PauseCanisterMigrations),
+            "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS" => Some(Self::UnpauseCanisterMigrations),
+            "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
             _ => None,
         }
     }
@@ -4446,4 +4474,62 @@ pub struct MaturityDisbursement {
     pub account_to_disburse_to: Option<Account>,
     /// The account identifier to disburse the maturity to.
     pub account_identifier_to_disburse_to: Option<AccountIdentifier>,
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Default, Clone, PartialEq,
+)]
+pub struct GetNeuronIndexRequest {
+    pub exclusive_start_neuron_id: Option<NeuronId>,
+    pub page_size: Option<u32>,
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Default, Clone, PartialEq,
+)]
+pub struct NeuronIndexData {
+    pub neurons: Vec<NeuronInfo>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct ListNeuronVotesRequest {
+    pub neuron_id: Option<NeuronId>,
+    pub before_proposal: Option<ProposalId>,
+    pub limit: Option<u64>,
+}
+
+pub type ListNeuronVotesResponse = Result<NeuronVotes, GovernanceError>;
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct NeuronVotes {
+    pub votes: Option<Vec<NeuronVote>>,
+    pub all_finalized_before_proposal: Option<ProposalId>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct NeuronVote {
+    pub proposal_id: Option<ProposalId>,
+    pub vote: Option<Vote>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub enum Value {
+    Blob(Vec<u8>),
+    Text(String),
+    Nat(Nat),
+    Int(Int),
+    Array(Vec<Value>),
+    Map(HashMap<String, Value>),
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct SelfDescribingProposalAction {
+    pub type_name: Option<String>,
+    pub type_description: Option<String>,
+    pub value: Option<Value>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct GetPendingProposalsRequest {
+    pub return_self_describing_action: Option<bool>,
 }

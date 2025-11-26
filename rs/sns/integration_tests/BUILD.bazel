@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_ic_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "rust_ic_test", "rust_ic_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -132,6 +132,7 @@ rust_canister(
         "//rs/rust_canisters/dfn_core",
         "//rs/sns/governance",
         "//rs/types/base_types",
+        "@crate_index//:ic-stable-structures",
         "@crate_index//:pretty-bytes",
         "@crate_index//:prost",
         "@crate_index//:rand",
@@ -143,10 +144,10 @@ DATA_DEPS = [
     ":sns-governance-mem-test-canister",
     ":sns-test-dapp-canister",
     "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
-    "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
     "//rs/ledger_suite/icrc1/archive:archive_canister",
     "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
     "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+    "//rs/migration_canister:migration-canister",
     "//rs/nervous_system/common/test_canister",
     "//rs/nns/cmc:cycles-minting-canister",
     "//rs/nns/governance:governance-canister-test",
@@ -161,7 +162,7 @@ DATA_DEPS = [
     "//rs/sns/root:sns-root-canister",
     "//rs/sns/swap:sns-swap-canister",
     "//rs/universal_canister/impl:universal_canister.wasm.gz",
-    "@mainnet_ic-icrc1-ledger//file",
+    "@mainnet_canisters//:sns_ledger.wasm.gz",
 ]
 
 ENV = {
@@ -174,7 +175,6 @@ ENV = {
     "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
     "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     "IC_NERVOUS_SYSTEM_COMMON_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/nervous_system/common/test_canister:test_canister)",
-    "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
     "NODE_REWARDS_CANISTER_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
     "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
@@ -187,7 +187,8 @@ ENV = {
     "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
     "UNSTOPPABLE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/integration_tests:unstoppable-canister)",
     "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
-    "MAINNET_IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
+    "MAINNET_IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath @mainnet_canisters//:sns_ledger.wasm.gz)",
+    "MIGRATION_CANISTER_WASM_PATH": "$(rootpath //rs/migration_canister:migration-canister)",
 }
 
 rust_ic_test_suite_with_extra_srcs(
@@ -197,7 +198,8 @@ rust_ic_test_suite_with_extra_srcs(
         ["src/*.rs"],
         exclude = [
             "src/lib.rs",
-            "src/golden_state_swap_upgrade_twice.rs",
+            "src/golden_state_swap_upgrade_twice.rs",  # there's a dedicated :golden_state_swap_upgrade_twice target for this test below.
+            "src/upgrade_canister.rs",  # there's a dedicated :upgrade_canister_test target for this test below.
         ],
     ),
     aliases = ALIASES,
@@ -212,6 +214,26 @@ rust_ic_test_suite_with_extra_srcs(
     flaky = True,  # flakiness rate of over 1% for the "proposals" and "upgrade_canister" tests over the month from 2025-02-11 till 2025-03-11.
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["cpu:8"],
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES,
+)
+
+rust_ic_test(
+    name = "upgrade_canister_test",
+    size = "large",
+    srcs = ["src/upgrade_canister.rs"],
+    args = [
+        "--test-threads",
+        "7",
+    ],
+    crate_features = ["test"],
+    data = DATA_DEPS,
+    env = ENV,
+    flaky = True,  # flakiness rate of over 1% over the month from 2025-02-11 till 2025-03-11.
+    #proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "cpu:8",
+        "long_test",  # The P90 duration of this test is over 6 minutes for the week starting on 2025-08-21.
+    ],
     deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES,
 )
 
@@ -250,10 +272,10 @@ rust_ic_test_suite_with_extra_srcs(
     ],
     crate_features = ["test"],
     data = DATA_DEPS + [
-        "@mainnet_sns-swap-canister//file",
+        "@mainnet_canisters//:swap.wasm.gz",
     ],
     env = dict(ENV.items() + [
-        ("MAINNET_SNS_SWAP_CANISTER_WASM_PATH", "$(rootpath @mainnet_sns-swap-canister//file)"),
+        ("MAINNET_SNS_SWAP_CANISTER_WASM_PATH", "$(rootpath @mainnet_canisters//:swap.wasm.gz)"),
     ]),
     extra_srcs = [],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,

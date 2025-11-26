@@ -40,7 +40,7 @@ fn should_pass_nist_variable_output_test_vectors() {
         let buf = &mut vec![0u8; outputlen / 8];
         xof_reader.read(buf);
 
-        assert_eq!(buf, &output, "test vec with COUNT = {} failed", count);
+        assert_eq!(buf, &output, "test vec with COUNT = {count} failed");
     }
 }
 
@@ -84,6 +84,6 @@ fn should_pass_nist_short_msg_test_vectors() {
         let buf = &mut vec![0u8; output.len()];
         xof_reader.read(buf);
 
-        assert_eq!(buf, &output, "test vec for Len = {} failed", len);
+        assert_eq!(buf, &output, "test vec for Len = {len} failed");
     }
 }

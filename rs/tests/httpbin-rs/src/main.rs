@@ -7,13 +7,13 @@ use std::{
 };
 
 use axum::{
+    Router,
     body::Body,
-    extract::{Path, Request},
+    extract::{ConnectInfo, Path, Request},
     http::{HeaderMap, HeaderName, Method, StatusCode},
     middleware::map_response,
     response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
-    Router,
 };
 use clap::Parser;
 use hyper::body::Incoming;
@@ -27,7 +27,7 @@ use serde_json::json;
 use tokio::{
     net::TcpListener,
     select, signal,
-    time::{sleep, Duration},
+    time::{Duration, sleep},
 };
 use tokio_rustls::TlsAcceptor;
 use tower::Service;
@@ -54,6 +54,11 @@ async fn root_handler() -> Html<&'static str> {
 </body>
 </html>",
     )
+}
+
+/// Returns the requester's IP address.
+async fn ip_handler(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> String {
+    addr.ip().to_string()
 }
 
 /// Returns a body of size `size`
@@ -117,8 +122,8 @@ async fn many_response_headers_handler(Path(size): Path<usize>) -> (HeaderMap, S
 
     for i in 0..size {
         headers.insert(
-            HeaderName::from_str(&format!("Name{:?}", i)).unwrap(),
-            format!("value{:?}", i).parse().unwrap(),
+            HeaderName::from_str(&format!("Name{i:?}")).unwrap(),
+            format!("value{i:?}").parse().unwrap(),
         );
     }
 
@@ -223,6 +228,7 @@ async fn add_deterministic_headers(res: Response) -> impl IntoResponse {
 fn router() -> Router {
     Router::new()
         .route("/", get(root_handler))
+        .route("/ip", get(ip_handler))
         .route("/bytes/{size}", get(bytes_or_equal_bytes_handler))
         .route("/equal_bytes/{size}", get(bytes_or_equal_bytes_handler))
         .route("/ascii/{body}", get(ascii_handler))
@@ -301,14 +307,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             loop {
                 select! {
                     connection = listener.accept() => {
-                        let (tcp_stream, _) = connection?;
+                        let (tcp_stream, remote_addr) = connection?;
                         let tls_acceptor = tls_acceptor.clone();
 
                         let router = router();
-                        let hyper_service =
-                            hyper::service::service_fn(move |request: Request<Incoming>| {
-                                router.clone().call(request)
-                            });
 
                         tokio::spawn(async move {
                             let tls_stream = match tls_acceptor.accept(tcp_stream).await {
@@ -318,6 +320,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                     return;
                                 }
                             };
+
+                            let hyper_service =
+                                hyper::service::service_fn(move |mut request: Request<Incoming>| {
+                                    request.extensions_mut().insert(ConnectInfo(remote_addr));
+                                    router.clone().call(request)
+                                });
+
                             if let Err(err) = Builder::new(TokioExecutor::new())
                                 .http2()
                                 .max_header_list_size(MAX_HEADER_LIST_SIZE)
@@ -335,9 +344,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
         }
         _ => {
-            axum::serve(listener, router())
-                .with_graceful_shutdown(shutdown_signal())
-                .await?
+            axum::serve(
+                listener,
+                router().into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .with_graceful_shutdown(shutdown_signal())
+            .await?
         }
     };
     Ok(())

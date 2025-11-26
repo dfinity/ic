@@ -1,0 +1,58 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/ic_os/config:config_lib",
+    "//rs/ic_os/config_types",
+    "//rs/ic_os/device",
+    "//rs/ic_os/sev",
+    "//rs/sys",
+    "@crate_index//:anyhow",
+    "@crate_index//:clap",
+    "@crate_index//:itertools",
+    "@crate_index//:libcryptsetup-rs",
+    "@crate_index//:nix",
+    "@crate_index//:rand",
+    "@crate_index//:sev",
+    "@crate_index//:tempfile",
+]
+
+DEV_DEPENDENCIES = [
+    "@crate_index//:parking_lot",
+]
+
+rust_binary(
+    name = "guest_disk",
+    srcs = [
+        "src/main.rs",
+        "src/tests.rs",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    deps = DEPENDENCIES + [":guest_disk_lib"],
+)
+
+rust_library(
+    name = "guest_disk_lib",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    crate_name = "guest_disk",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "guest_disk_test",
+    crate = ":guest_disk",
+    # This test needs root, so we mark it manual here and expose it in //rs/tests/node:root_tests
+    tags = ["manual"],
+    visibility = ["//rs/tests/node:__subpackages__"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

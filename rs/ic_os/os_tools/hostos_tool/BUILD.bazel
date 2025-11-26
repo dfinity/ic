@@ -7,9 +7,12 @@ DEPENDENCIES = [
     "//rs/ic_os/config_types",
     "//rs/ic_os/deterministic_ips",
     "//rs/ic_os/network",
+    "//rs/ic_os/os_tools/guestos_recovery_tui",
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
+    "@crate_index//:itertools",
+    "@crate_index//:regex",
 ]
 
 DEV_DEPENDENCIES = []

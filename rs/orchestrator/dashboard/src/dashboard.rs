@@ -5,11 +5,11 @@
 use async_trait::async_trait;
 use std::io::BufRead;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
-use tokio::sync::watch::Receiver;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
 };
+use tokio_util::sync::CancellationToken;
 
 /// A simplest HTTP dashboard that listens to a port and responds to GET
 /// requests on a single thread.
@@ -17,11 +17,10 @@ use tokio::{
 pub trait Dashboard {
     /// Starts the HTTP server and monitors the exit signal. Exits on whenever the exit signal is
     /// changed.
-    async fn run(&self, mut exit_signal: Receiver<bool>) {
-        tokio::select! {
-            _ = self.serve_requests() => {}
-            _ = exit_signal.changed() => {}
-        };
+    async fn run(&self, cancellation_token: CancellationToken) {
+        cancellation_token
+            .run_until_cancelled(self.serve_requests())
+            .await;
     }
 
     /// Starts listening on the port and calls handle_connection on each
@@ -31,7 +30,7 @@ pub trait Dashboard {
         let listener = match TcpListener::bind(addr).await {
             Ok(listener) => listener,
             Err(e) => {
-                self.log_info(&format!("Failed to bind to socket {}: {}", addr, e));
+                self.log_info(&format!("Failed to bind to socket {addr}: {e}"));
                 return;
             }
         };
@@ -48,7 +47,7 @@ pub trait Dashboard {
     async fn handle_connection(&self, mut stream: TcpStream) {
         let mut buffer = [0; 512];
         if let Err(e) = stream.read(&mut buffer).await {
-            self.log_info(&format!("Failed to read request: {}", e));
+            self.log_info(&format!("Failed to read request: {e}"));
             return;
         }
 
@@ -57,7 +56,7 @@ pub trait Dashboard {
             true => {
                 let headers = "HTTP/1.1 200 OK\r\n\r\n";
                 let contents = self.build_response();
-                format!("{}{}", headers, contents)
+                format!("{headers}{contents}")
             }
             false => {
                 let request = match buffer.lines().next() {
@@ -76,11 +75,11 @@ pub trait Dashboard {
         stream
             .write_all(response.as_bytes())
             .await
-            .unwrap_or_else(|e| self.log_info(&format!("Failed to flush stream: {}", e)));
+            .unwrap_or_else(|e| self.log_info(&format!("Failed to flush stream: {e}")));
         stream
             .flush()
             .await
-            .unwrap_or_else(|e| self.log_info(&format!("Failed to flush stream: {}", e)));
+            .unwrap_or_else(|e| self.log_info(&format!("Failed to flush stream: {e}")));
     }
 
     /// Returns the port reserved by the implementing component.

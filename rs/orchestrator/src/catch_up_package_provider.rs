@@ -36,37 +36,44 @@ use crate::{
     utils::https_endpoint_to_url,
 };
 use http_body_util::{BodyExt, Full};
-use hyper::{body::Bytes, Method, Request};
+use hyper::{Method, Request, StatusCode, body::Bytes};
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_protobuf::{registry::node::v1::NodeRecord, types::v1 as pb};
 use ic_sys::fs::write_protobuf_using_tmp_file;
 use ic_types::{
+    Height, NodeId, RegistryVersion, SubnetId,
     consensus::{
+        HasHeight, HasVersion,
         catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
-        HasHeight,
     },
     crypto::*,
-    Height, NodeId, RegistryVersion, SubnetId,
 };
 use prost::Message;
-use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc};
+use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc, time::Duration};
+#[allow(clippy::disallowed_types)]
+use tokio::sync::Mutex;
+use tokio::time::timeout;
 
 /// Fetches catch-up packages from peers and local storage.
 ///
 /// CUPs are used to determine which version of the IC peers are running
 /// and hence which version of the IC this node should be starting.
-#[derive(Clone)]
 pub(crate) struct CatchUpPackageProvider {
     registry: Arc<RegistryHelper>,
     cup_dir: PathBuf,
     crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
-    crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
+    crypto_tls_config: Arc<dyn TlsConfig>,
     logger: ReplicaLogger,
     node_id: NodeId,
+    #[allow(clippy::disallowed_types)]
+    // Use a tokio mutex because the lock needs to be held across an await point,
+    // and this code isn't performance-critical.
+    backoff: Mutex<Duration>,
+    initial_backoff: Duration,
 }
 
 impl CatchUpPackageProvider {
@@ -75,9 +82,29 @@ impl CatchUpPackageProvider {
         registry: Arc<RegistryHelper>,
         cup_dir: PathBuf,
         crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
-        crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
+        crypto_tls_config: Arc<dyn TlsConfig>,
         logger: ReplicaLogger,
         node_id: NodeId,
+    ) -> Self {
+        Self::new_with_initial_backoff(
+            registry,
+            cup_dir,
+            crypto,
+            crypto_tls_config,
+            logger,
+            node_id,
+            Duration::from_secs(30),
+        )
+    }
+
+    fn new_with_initial_backoff(
+        registry: Arc<RegistryHelper>,
+        cup_dir: PathBuf,
+        crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
+        crypto_tls_config: Arc<dyn TlsConfig>,
+        logger: ReplicaLogger,
+        node_id: NodeId,
+        initial_backoff: Duration,
     ) -> Self {
         Self {
             node_id,
@@ -86,21 +113,18 @@ impl CatchUpPackageProvider {
             crypto,
             crypto_tls_config,
             logger,
+            #[allow(clippy::disallowed_types)]
+            backoff: Mutex::new(initial_backoff),
+            initial_backoff,
         }
     }
 
-    // Randomly selects a peer from the subnet and pulls its CUP. If this CUP is
-    // newer than the currently available one and it could be verified, then this
-    // CUP is returned. Note that it is acceptable to use a single peer, because
-    // CUPs are validated. If all `f` nodes serve unusable CUPs, we have a probability
-    // of 2/3 to hit a non-faulty node, so roughly on 4th attempt we should obtain
-    // the correct peer CUP.
-    async fn get_peer_cup(
+    fn select_peers(
         &self,
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
         current_cup: Option<&pb::CatchUpPackage>,
-    ) -> Option<pb::CatchUpPackage> {
+    ) -> Vec<(NodeId, NodeRecord)> {
         use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
         use rand::seq::SliceRandom;
 
@@ -111,47 +135,77 @@ impl CatchUpPackageProvider {
             .ok()
             .flatten()
             .unwrap_or_default();
+
         // Randomize the order of peer_urls
         nodes.shuffle(&mut rand::thread_rng());
-        let current_node = nodes
-            .as_slice()
-            .iter()
-            .find(|t| t.0 == self.node_id)
-            .cloned();
 
-        // Try only one peer at-a-time if there is already a local CUP,
-        // Otherwise, try not to fall back to the registry CUP.
-        let mut peers = match current_cup {
-            Some(_) => vec![nodes.pop().or_else(|| {
-                warn!(
-                    self.logger,
-                    "Empty peer list for subnet {} at version {}", subnet_id, registry_version
-                );
-                None
-            })?],
-            None => nodes,
+        let current_node_index = nodes.iter().position(|t| t.0 == self.node_id);
+
+        let max_num_peers_to_try = match (current_node_index, current_cup) {
+            // If we don't have a local CUP, we try not to fall back to the registry CUP.
+            // Therefore, we select all nodes.
+            (_, None) => nodes.len(),
+            (Some(index), _) => {
+                // If we are still a member of the subnet, move our own data to the front, so that we
+                // first try to fetch the CUP from our own replica. This improves the upgrade behaviour
+                // of a healthy subnet, as we decrease the probability of hitting peers who already
+                // started the upgrade process and will not serve a CUP until they're online again.
+                nodes.swap(0, index);
+                2
+            }
+            // Try only one peer at-a-time if there is already a local CUP,
+            (None, _) => 1,
         };
 
-        // If we are still a member of the subnet, append our own data so that we first try to
-        // fetch the CUP from our own replica. This improves the upgrade behaviour of a healthy
-        // subnet, as we decrease the probability hitting peers who already started the upgrade
-        // process and will not serve a CUP until they're online again.
-        if let Some(current_node) = current_node {
-            peers.push(current_node);
+        nodes.into_iter().take(max_num_peers_to_try).collect()
+    }
+
+    /// Randomly selects a peer from the subnet and pulls its CUP. If this CUP is
+    /// newer than the currently available one and it could be verified, then this
+    /// CUP is returned. Note that it is acceptable to use a single peer, because
+    /// CUPs are validated. If all `f` nodes serve unusable CUPs, we have a probability
+    /// of 2/3 to hit a non-faulty node, so roughly on 4th attempt we should obtain
+    /// the correct peer CUP.
+    /// If this node is part of the subnet according to the given registry version, then
+    /// we will attempt to fetch the CUP from our own replica first, before trying a
+    /// second random node.
+    async fn get_peer_cup(
+        &self,
+        subnet_id: SubnetId,
+        registry_version: RegistryVersion,
+        current_cup: Option<&pb::CatchUpPackage>,
+    ) -> Option<pb::CatchUpPackage> {
+        let peers = self.select_peers(subnet_id, registry_version, current_cup);
+
+        if peers.is_empty() {
+            warn!(
+                self.logger,
+                "Empty peer list for subnet {} at version {}", subnet_id, registry_version
+            );
+            return None;
         }
 
         let param = current_cup
             .map(CatchUpPackageParam::try_from)
             .and_then(Result::ok);
 
-        for (node_id, node_record) in peers.iter() {
-            if let Some((proto, cup)) = self
+        for (node_id, node_record) in &peers {
+            match self
                 .fetch_and_verify_catch_up_package(node_id, node_record, param, subnet_id)
                 .await
             {
-                // Note: None is < Some(_)
-                if Some(CatchUpPackageParam::from(&cup)) > param {
-                    return Some(proto);
+                Ok(Some((proto, cup))) => {
+                    // Note: None is < Some(_)
+                    if Some(CatchUpPackageParam::from(&cup)) > param {
+                        return Some(proto);
+                    }
+                }
+                Ok(None) => {}
+                Err(err) => {
+                    warn!(
+                        self.logger,
+                        "Failed to fetch CUP from node {}: {}", node_id, err
+                    );
                 }
             }
         }
@@ -171,33 +225,26 @@ impl CatchUpPackageProvider {
         node_record: &NodeRecord,
         param: Option<CatchUpPackageParam>,
         subnet_id: SubnetId,
-    ) -> Option<(pb::CatchUpPackage, CatchUpPackage)> {
-        let http = node_record.clone().http.or_else(|| {
-            warn!(
-                self.logger,
-                "Node record's http endpoint is None: {:?}", node_record
-            );
-            None
+    ) -> Result<Option<(pb::CatchUpPackage, CatchUpPackage)>, String> {
+        let http = node_record.clone().http.ok_or_else(|| {
+            format!("Node {node_id} record's http endpoint is None: {node_record:?}")
         })?;
-        let mut uri = https_endpoint_to_url(&http, &self.logger)?;
+        let mut uri = https_endpoint_to_url(&http)?;
         uri.path_segments_mut()
-            .ok()?
+            .map_err(|()| "URL cannot be segmented".to_string())?
             .push("_")
             .push("catch_up_package");
 
         let uri = uri.to_string();
 
-        let protobuf = self
+        let Some(protobuf) = self
             .fetch_catch_up_package(node_id, uri.clone(), param)
-            .await?;
+            .await?
+        else {
+            return Ok(None);
+        };
         let cup = CatchUpPackage::try_from(&protobuf)
-            .map_err(|e| {
-                warn!(
-                    self.logger,
-                    "Failed to read CUP from peer at url {}: {:?}", uri, e
-                )
-            })
-            .ok()?;
+            .map_err(|e| format!("Failed to read CUP from peer at url {uri}: {e:?}"))?;
 
         self.crypto
             .verify_combined_threshold_sig_by_public_key(
@@ -206,15 +253,9 @@ impl CatchUpPackageProvider {
                 subnet_id,
                 cup.content.block.get_value().context.registry_version,
             )
-            .map_err(|e| {
-                warn!(
-                    self.logger,
-                    "Failed to verify CUP signature at: {:?} with: {:?}", uri, e
-                )
-            })
-            .ok()?;
+            .map_err(|e| format!("Failed to verify CUP signature at: {uri:?} with: {e:?}"))?;
 
-        Some((protobuf, cup))
+        Ok(Some((protobuf, cup)))
     }
 
     // Attempt to fetch a `CatchUpPackage` from the given endpoint.
@@ -226,7 +267,7 @@ impl CatchUpPackageProvider {
         node_id: &NodeId,
         url: String,
         param: Option<CatchUpPackageParam>,
-    ) -> Option<pb::CatchUpPackage> {
+    ) -> Result<Option<pb::CatchUpPackage>, String> {
         let body = Bytes::from(
             param
                 .and_then(|param| serde_cbor::to_vec(&param).ok())
@@ -236,8 +277,7 @@ impl CatchUpPackageProvider {
         let client_config = self
             .crypto_tls_config
             .client_config(*node_id, self.registry.get_latest_version())
-            .map_err(|e| warn!(self.logger, "Failed to create tls client config: {:?}", e))
-            .ok()?;
+            .map_err(|e| format!("Failed to create tls client config for {node_id}: {e:?}"))?;
 
         let https = HttpsConnectorBuilder::new()
             .with_tls_config(client_config)
@@ -246,54 +286,63 @@ impl CatchUpPackageProvider {
             .build();
 
         let client = Client::builder(TokioExecutor::new())
-            .pool_idle_timeout(tokio::time::Duration::from_secs(600))
             .pool_max_idle_per_host(1)
             .build::<_, Full<Bytes>>(https);
 
-        let req = tokio::time::timeout(
-            tokio::time::Duration::from_secs(10),
+        let req = timeout(
+            Duration::from_secs(10),
             client.request(
                 Request::builder()
                     .method(Method::POST)
                     .header(hyper::header::CONTENT_TYPE, "application/cbor")
-                    .uri(url)
+                    .uri(&url)
                     .body(Full::from(body))
-                    .map_err(|e| warn!(self.logger, "Failed to create request: {:?}", e))
-                    .ok()?,
+                    .map_err(|e| format!("Failed to create request to {url}: {e:?}"))?,
             ),
         );
 
         let res = req
             .await
-            .map_err(|e| warn!(self.logger, "Querying CUP endpoint timed out: {:?}", e))
-            .ok()?
-            .map_err(|e| warn!(self.logger, "Failed to query CUP endpoint: {:?}", e))
-            .ok()?;
+            .map_err(|e| format!("Querying CUP endpoint at {url} timed out: {e:?}"))?
+            .map_err(|e| format!("Failed to query CUP endpoint at {url}: {e:?}"))?;
 
-        let bytes = res
-            .into_body()
-            .collect()
-            .await
-            .map_err(|e| {
-                warn!(
-                    self.logger,
-                    "Failed to convert the response body to bytes: {:?}", e
-                )
-            })
-            .ok()?
-            .to_bytes();
+        let status = res.status();
+        let mut backoff = self.backoff.lock().await;
+        let body_req = timeout(*backoff, res.into_body().collect());
 
-        if bytes.is_empty() {
-            None
-        } else {
-            pb::CatchUpPackage::decode(&bytes[..])
-                .map_err(|e| {
-                    warn!(
-                        self.logger,
-                        "Failed to deserialize CUP from protobuf: {:?}", e
-                    )
-                })
-                .ok()
+        let bytes = match body_req.await {
+            Ok(result) => {
+                // Reset backoff on success
+                *backoff = self.initial_backoff;
+                match result {
+                    Ok(bytes) => bytes.to_bytes(),
+                    Err(e) => {
+                        return Err(format!(
+                            "Failed to convert the response body to bytes: {e:?}"
+                        ));
+                    }
+                }
+            }
+            Err(timeout_err) => {
+                let old_backoff = *backoff;
+                *backoff = old_backoff.saturating_mul(2);
+                return Err(format!(
+                    "Timed out while reading CUP response body of {} after {} secs: {:?}. Setting backoff to {} secs",
+                    url,
+                    old_backoff.as_secs(),
+                    timeout_err,
+                    backoff.as_secs()
+                ));
+            }
+        };
+
+        match status {
+            // Replicas should return `NO_CONTENT` if their own CUP isn't higher than `param`
+            StatusCode::NO_CONTENT => Ok(None),
+            StatusCode::OK => pb::CatchUpPackage::decode(&bytes[..])
+                .map_err(|e| format!("Failed to deserialize CUP from protobuf: {e:?}"))
+                .map(Some),
+            other_status => Err(format!("Status: {other_status}, body: {bytes:?}")),
         }
     }
 
@@ -316,9 +365,18 @@ impl CatchUpPackageProvider {
         })?;
         info!(
             self.logger,
-            "Persisting CUP (registry version={}, height={}) to file {}",
+            "Persisting CUP (replica_version={}, registry_version={}, height={}, signed={}, state_hash={}, timestamp={}) to file {}",
+            cup.content.version(),
             cup.content.registry_version(),
-            cup.height(),
+            cup.content.height(),
+            cup.is_signed(),
+            hex::encode(cup.content.state_hash.clone().get().0),
+            cup.content
+                .block
+                .get_value()
+                .context
+                .time
+                .as_nanos_since_unix_epoch(),
             &cup_file_path.display(),
         );
         write_protobuf_using_tmp_file(&cup_file_path, cup_proto).map_err(|e| {
@@ -440,4 +498,492 @@ fn get_cup_proto_height(cup: &pb::CatchUpPackage) -> Option<Height> {
         .ok()
         .and_then(|content| content.block)
         .map(|block| Height::from(block.height))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        catch_up_package_provider::CatchUpPackageProvider, registry_helper::RegistryHelper,
+    };
+    use assert_matches::assert_matches;
+    use http_body_util::{StreamBody, combinators::BoxBody};
+    use hyper::{
+        Response,
+        body::{Bytes, Frame},
+        server::conn::http2,
+        service::service_fn,
+    };
+    use hyper_util::rt::{TokioExecutor, TokioIo};
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
+    use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
+    use ic_logger::no_op_logger;
+    use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_keys::make_node_record_key;
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_test_utilities_registry::{SubnetRecordBuilder, add_single_subnet_record};
+    use ic_test_utilities_types::ids::{SUBNET_0, node_test_id};
+    use rcgen::{CertificateParams, KeyPair};
+    use rustls::{
+        ClientConfig, DigitallySignedStruct, ServerConfig, SignatureScheme,
+        client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
+        pki_types::{CertificateDer, PrivatePkcs8KeyDer, ServerName, UnixTime},
+    };
+    use std::{
+        convert::Infallible,
+        net::SocketAddr,
+        sync::{Arc, Mutex},
+        time::Duration,
+    };
+    use tokio::net::TcpListener;
+    use tokio_rustls::TlsAcceptor;
+
+    #[derive(Clone, Debug)]
+    enum TestService {
+        /// Service that responds with headers, and then either sends a full CUP or stalls forever.
+        SendBodyOrStall(Arc<Mutex<bool>>),
+        /// Service that never responds.
+        Unresponsive,
+        /// Service that returns no content (no newer CUP available)
+        NoContent,
+        /// Service that responds with an error
+        BadRequest,
+    }
+
+    async fn test_service(
+        service: TestService,
+    ) -> Result<Response<BoxBody<Bytes, Infallible>>, hyper::Error> {
+        match service {
+            TestService::SendBodyOrStall(send_cup) => slow_body_service(send_cup).await,
+            TestService::Unresponsive => unresponsive_service().await,
+            TestService::NoContent => no_content_service().await,
+            TestService::BadRequest => error_service().await,
+        }
+    }
+
+    async fn slow_body_service(
+        send_cup: Arc<Mutex<bool>>,
+    ) -> Result<Response<BoxBody<Bytes, Infallible>>, hyper::Error> {
+        let s = async_stream::stream! {
+            if *send_cup.lock().unwrap() {
+                yield Ok(Frame::data(Bytes::from(fake_cup().encode_to_vec())));
+            } else {
+                // Send one chunk
+                yield Ok(Frame::data(Bytes::from("partial data")));
+                // Stall forever
+                tokio::time::sleep(Duration::from_secs(3600)).await;
+            }
+        };
+
+        Ok(Response::builder()
+            .status(StatusCode::OK)
+            .body(BoxBody::new(StreamBody::new(s)))
+            .unwrap())
+    }
+
+    async fn unresponsive_service() -> Result<Response<BoxBody<Bytes, Infallible>>, hyper::Error> {
+        tokio::time::sleep(Duration::from_secs(3600)).await;
+        unreachable!()
+    }
+
+    async fn no_content_service() -> Result<Response<BoxBody<Bytes, Infallible>>, hyper::Error> {
+        Ok(Response::builder()
+            .status(StatusCode::NO_CONTENT)
+            .body(Full::new(Bytes::from("")).boxed())
+            .unwrap())
+    }
+
+    async fn error_service() -> Result<Response<BoxBody<Bytes, Infallible>>, hyper::Error> {
+        Ok(Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(Full::new(Bytes::from("error message")).boxed())
+            .unwrap())
+    }
+
+    fn fake_cup() -> pb::CatchUpPackage {
+        pb::CatchUpPackage {
+            content: vec![1, 2, 3, 4],
+            signature: vec![5, 6, 7, 8],
+            signer: None,
+        }
+    }
+
+    async fn start_server(service: TestService) -> SocketAddr {
+        let addr: SocketAddr = ([127, 0, 0, 1], 0).into();
+        let listener = TcpListener::bind(addr).await.unwrap();
+        let local_addr = listener.local_addr().unwrap();
+
+        let key_pair = KeyPair::generate().unwrap();
+        let priv_key = PrivatePkcs8KeyDer::from(key_pair.serialize_der());
+        let cert = CertificateDer::from(
+            CertificateParams::new(vec![])
+                .unwrap()
+                .self_signed(&key_pair)
+                .unwrap(),
+        );
+
+        let mut tls_cfg = ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(vec![cert.clone()], priv_key.into())
+            .unwrap();
+        tls_cfg.alpn_protocols = vec![
+            b"h2".to_vec(), // HTTP/2
+        ];
+
+        let acceptor = TlsAcceptor::from(Arc::new(tls_cfg));
+        tokio::spawn(async move {
+            loop {
+                let service = service.clone();
+                let (tcp_stream, _) = listener.accept().await.unwrap();
+                let acceptor = acceptor.clone();
+                tokio::task::spawn(async move {
+                    let service = service.clone();
+                    let tls_stream = acceptor.accept(tcp_stream).await.unwrap();
+                    let _ = http2::Builder::new(TokioExecutor::new())
+                        .serve_connection(
+                            TokioIo::new(tls_stream),
+                            service_fn(|_req| test_service(service.clone())),
+                        )
+                        .await;
+                });
+            }
+        });
+
+        local_addr
+    }
+
+    fn setup_registry() -> Arc<RegistryHelper> {
+        setup_registry_with_membership(RegistryVersion::from(1), vec![])
+    }
+
+    fn setup_registry_with_membership(
+        registry_version: RegistryVersion,
+        nodes: Vec<NodeId>,
+    ) -> Arc<RegistryHelper> {
+        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+        add_single_subnet_record(
+            &data_provider,
+            registry_version.get(),
+            SUBNET_0,
+            SubnetRecordBuilder::new()
+                .with_committee(nodes.as_slice())
+                .build(),
+        );
+
+        for node in nodes {
+            data_provider
+                .add(
+                    &make_node_record_key(node),
+                    registry_version,
+                    Some(NodeRecord::default()),
+                )
+                .unwrap();
+        }
+
+        let registry_client = Arc::new(FakeRegistryClient::new(data_provider));
+        registry_client.update_to_latest_version();
+
+        Arc::new(RegistryHelper::new(
+            node_test_id(1),
+            registry_client as Arc<_>,
+            no_op_logger(),
+        ))
+    }
+
+    fn mock_tls_config() -> MockTlsConfig {
+        #[derive(Debug)]
+        struct NoVerify;
+        impl ServerCertVerifier for NoVerify {
+            fn verify_server_cert(
+                &self,
+                _end_entity: &CertificateDer,
+                _intermediates: &[CertificateDer],
+                _server_name: &ServerName,
+                _ocsp_response: &[u8],
+                _now: UnixTime,
+            ) -> Result<ServerCertVerified, rustls::Error> {
+                Ok(ServerCertVerified::assertion())
+            }
+            fn verify_tls12_signature(
+                &self,
+                _: &[u8],
+                _: &CertificateDer<'_>,
+                _: &DigitallySignedStruct,
+            ) -> Result<HandshakeSignatureValid, rustls::Error> {
+                Ok(HandshakeSignatureValid::assertion())
+            }
+            fn verify_tls13_signature(
+                &self,
+                _: &[u8],
+                _: &CertificateDer<'_>,
+                _: &DigitallySignedStruct,
+            ) -> Result<HandshakeSignatureValid, rustls::Error> {
+                Ok(HandshakeSignatureValid::assertion())
+            }
+            fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+                rustls::crypto::ring::default_provider()
+                    .signature_verification_algorithms
+                    .supported_schemes()
+            }
+        }
+
+        let accept_any_config = ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(NoVerify))
+            .with_no_client_auth();
+
+        let mut tls_config = MockTlsConfig::new();
+        tls_config
+            .expect_client_config()
+            .returning(move |_, _| Ok(accept_any_config.clone()));
+        tls_config
+    }
+
+    fn make_cup_provider(
+        cup_dir: PathBuf,
+        node_id: NodeId,
+        backoff: Duration,
+    ) -> CatchUpPackageProvider {
+        make_cup_provider_with_registry(cup_dir, node_id, backoff, setup_registry())
+    }
+
+    fn make_cup_provider_with_registry(
+        cup_dir: PathBuf,
+        node_id: NodeId,
+        backoff: Duration,
+        registry: Arc<RegistryHelper>,
+    ) -> CatchUpPackageProvider {
+        CatchUpPackageProvider::new_with_initial_backoff(
+            registry,
+            cup_dir,
+            Arc::new(CryptoReturningOk::default()),
+            Arc::new(mock_tls_config()),
+            no_op_logger(),
+            node_id,
+            backoff,
+        )
+    }
+
+    #[tokio::test]
+    async fn test_fetch_catch_up_package_body_request_times_out() {
+        let send_cup = Arc::new(Mutex::new(false));
+        let server_addr = start_server(TestService::SendBodyOrStall(send_cup.clone())).await;
+        let url = format!("https://{server_addr}");
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let node_id = node_test_id(1);
+
+        let initial_backoff = Duration::from_secs(5);
+        let cup_provider =
+            make_cup_provider(tmp_dir.path().to_path_buf(), node_id, initial_backoff);
+
+        let err = cup_provider
+            .fetch_catch_up_package(&node_id, url.clone(), None)
+            .await
+            .expect_err("Expected timeout error when fetching CUP from slow server");
+
+        assert!(
+            err.contains("Timed out while reading CUP response body")
+                && err.contains("after 5 secs: Elapsed(()). Setting backoff to 10 secs")
+        );
+
+        // Verify that the backoff was increased
+        {
+            let backoff = cup_provider.backoff.lock().await;
+            assert_eq!(*backoff, Duration::from_secs(10));
+        }
+
+        // Allow the next request to succeed
+        *send_cup.lock().unwrap() = true;
+
+        let cup = cup_provider
+            .fetch_catch_up_package(&node_id, url, None)
+            .await
+            .expect("Expected to fetch the CUP successfully")
+            .expect("Expected non-empty CUP");
+
+        assert_eq!(cup, fake_cup());
+
+        // Verify that the backoff was reset after a successful request
+        {
+            let backoff = cup_provider.backoff.lock().await;
+            assert_eq!(*backoff, initial_backoff);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_fetch_catch_up_package_unresponsive_times_out() {
+        let server_addr = start_server(TestService::Unresponsive).await;
+        let url = format!("https://{server_addr}");
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let node_id = node_test_id(1);
+
+        let cup_provider = make_cup_provider(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+        );
+
+        let err = cup_provider
+            .fetch_catch_up_package(&node_id, url.clone(), None)
+            .await
+            .expect_err("Expected timeout error when fetching CUP from slow server");
+
+        assert!(err.contains("Querying CUP endpoint") && err.contains("timed out: Elapsed(())"));
+    }
+
+    #[tokio::test]
+    async fn test_fetch_catch_up_package_no_content() {
+        let server_addr = start_server(TestService::NoContent).await;
+        let url = format!("https://{server_addr}");
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let node_id = node_test_id(1);
+
+        let cup_provider = make_cup_provider(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+        );
+
+        let res = cup_provider
+            .fetch_catch_up_package(&node_id, url.clone(), None)
+            .await
+            .expect("Expected no content");
+
+        assert!(res.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_fetch_catch_up_package_bad_request() {
+        let server_addr = start_server(TestService::BadRequest).await;
+        let url = format!("https://{server_addr}");
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let node_id = node_test_id(1);
+
+        let cup_provider = make_cup_provider(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+        );
+
+        let err = cup_provider
+            .fetch_catch_up_package(&node_id, url.clone(), None)
+            .await
+            .expect_err("Expected error when fetching CUP");
+
+        assert!(err.contains("Status: 400 Bad Request, body: b\"error message\""));
+    }
+
+    #[test]
+    fn test_select_peers_empty() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let node_id = node_test_id(1);
+        let registry_version = RegistryVersion::from(1);
+
+        let cup_provider = make_cup_provider(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+        );
+
+        // If there are no nodes on the subnet, no peers should be selected
+        let peers = cup_provider.select_peers(SUBNET_0, registry_version, None);
+        assert!(peers.is_empty());
+
+        let peers = cup_provider.select_peers(SUBNET_0, registry_version, Some(&fake_cup()));
+        assert!(peers.is_empty());
+    }
+
+    #[test]
+    fn test_select_peers_only_one_node() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let node_id = node_test_id(1);
+        let registry_version = RegistryVersion::from(1);
+        let nodes = vec![node_id];
+        let registry = setup_registry_with_membership(registry_version, nodes.clone());
+
+        // We are the node
+        let cup_provider_assigned = make_cup_provider_with_registry(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+            registry.clone(),
+        );
+
+        // We are not the node
+        let cup_provider_unassigned = make_cup_provider_with_registry(
+            tmp_dir.path().to_path_buf(),
+            node_test_id(2),
+            Duration::from_secs(5),
+            registry.clone(),
+        );
+
+        // If there is only one node on the subnet, it should always be used to fetch the CUP
+        for cup in [None, Some(fake_cup())] {
+            let selected =
+                cup_provider_assigned.select_peers(SUBNET_0, registry_version, cup.as_ref());
+            assert_eq!(selected.iter().map(|n| n.0).collect::<Vec<_>>(), nodes);
+            let selected =
+                cup_provider_unassigned.select_peers(SUBNET_0, registry_version, cup.as_ref());
+            assert_eq!(selected.iter().map(|n| n.0).collect::<Vec<_>>(), nodes);
+        }
+    }
+
+    #[test]
+    fn test_select_peers_multiple_nodes_assigned() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let node_id = node_test_id(1);
+        let registry_version = RegistryVersion::from(1);
+        let nodes = (1..=7).map(node_test_id).collect::<Vec<_>>();
+        let registry = setup_registry_with_membership(registry_version, nodes.clone());
+
+        let cup_provider = make_cup_provider_with_registry(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+            registry.clone(),
+        );
+
+        // If there is a cup, two nodes should be selected, and this node should be the first one
+        let selected_with_cup = cup_provider
+            .select_peers(SUBNET_0, registry_version, Some(&fake_cup()))
+            .iter()
+            .map(|n| n.0)
+            .collect::<Vec<_>>();
+        assert_matches!(&selected_with_cup[..], &[first, _] if first == node_id);
+
+        // If there is no cup, all nodes should be selected
+        let selected_without_cup = cup_provider
+            .select_peers(SUBNET_0, registry_version, None)
+            .iter()
+            .map(|n| n.0)
+            .collect::<Vec<_>>();
+        assert_eq!(nodes.len(), selected_without_cup.len())
+    }
+
+    #[test]
+    fn test_select_peers_multiple_nodes_unassigned() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let node_id = node_test_id(8);
+        let registry_version = RegistryVersion::from(1);
+        let nodes = (1..=7).map(node_test_id).collect::<Vec<_>>();
+        let registry = setup_registry_with_membership(registry_version, nodes.clone());
+
+        let cup_provider = make_cup_provider_with_registry(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+            registry.clone(),
+        );
+
+        // If there is a cup, only one node should be selected
+        let selected_with_cup =
+            cup_provider.select_peers(SUBNET_0, registry_version, Some(&fake_cup()));
+        assert_eq!(1, selected_with_cup.len());
+        assert_ne!(selected_with_cup[0].0, node_id);
+
+        // If there is no cup, all nodes should be selected
+        let selected_without_cup = cup_provider.select_peers(SUBNET_0, registry_version, None);
+        assert_eq!(nodes.len(), selected_without_cup.len());
+        assert!(!selected_without_cup.iter().any(|(id, _)| id == &node_id));
+    }
 }

@@ -1,19 +1,19 @@
 use std::process::exit;
 
 use clap::Parser;
+use ic_nervous_system_agent::CallCanisters;
 use ic_nervous_system_agent::helpers::nns::get_nns_neuron_controller;
 use ic_nervous_system_agent::helpers::sns::get_principal_neurons;
-use ic_nervous_system_agent::CallCanisters;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_sns_cli::upgrade_sns_controlled_canister::{validate_candid_arg_for_wasm, Wasm};
+use ic_sns_cli::upgrade_sns_controlled_canister::{Wasm, validate_candid_arg_for_wasm};
 use ic_sns_cli::utils::get_agent;
 use ic_sns_testing::sns::{
     await_sns_controlled_canister_upgrade, complete_sns_swap, create_sns, find_sns_by_name,
     propose_sns_controlled_canister_upgrade, sns_proposal_upvote as sns_proposal_upvote_impl,
 };
 use ic_sns_testing::utils::{
-    get_nns_neuron_hotkeys, transfer_icp_from_treasury, validate_network as validate_network_impl,
-    validate_target_canister, DEFAULT_POWERFUL_NNS_NEURON_ID,
+    DEFAULT_POWERFUL_NNS_NEURON_ID, get_nns_neuron_hotkeys, transfer_icp_from_treasury,
+    validate_network as validate_network_impl, validate_target_canister,
 };
 use ic_sns_testing::{
     RunBasicScenarioArgs, SnsProposalUpvoteArgs, SnsTestingArgs, SnsTestingSubCommand,
@@ -32,7 +32,7 @@ async fn run_basic_scenario(network: String, args: RunBasicScenarioArgs) {
     if !target_canister_validation_errors.is_empty() {
         eprintln!("SNS-testing failed to validate the test canister:");
         for error in &target_canister_validation_errors {
-            eprintln!("{}", error);
+            eprintln!("{error}");
         }
         exit(1);
     }
@@ -81,7 +81,7 @@ async fn run_basic_scenario(network: String, args: RunBasicScenarioArgs) {
         validate_candid_arg_for_wasm(&upgrade_canister_wasm, args.upgrade_candid_arg).unwrap();
 
     println!("Creating SNS...");
-    let sns = create_sns(
+    let (sns, dev_sns_neuron_id) = create_sns(
         dev_agent,
         nns_neuron_id,
         dev_agent,
@@ -93,6 +93,7 @@ async fn run_basic_scenario(network: String, args: RunBasicScenarioArgs) {
     println!("Upgrading SNS-controlled test canister...");
     let proposal_id = propose_sns_controlled_canister_upgrade(
         dev_agent,
+        dev_sns_neuron_id,
         sns.clone(),
         args.canister_id,
         upgrade_canister_wasm.bytes().to_vec(),
@@ -110,7 +111,7 @@ async fn validate_network(network: String) {
     if !network_validation_errors.is_empty() {
         eprintln!("SNS-testing failed to validate the target network:");
         for error in &network_validation_errors {
-            eprintln!("{}", error);
+            eprintln!("{error}");
         }
         exit(1);
     }
@@ -139,7 +140,7 @@ async fn swap_complete(network: String, args: SwapCompleteArgs) {
                 match get_principal_neurons(&agent, sns.governance, principal).await {
                     Ok(neurons) => neurons,
                     Err(e) => {
-                        eprintln!("Failed to get principal neurons: {}", e);
+                        eprintln!("Failed to get principal neurons: {e}");
                         vec![]
                     }
                 };

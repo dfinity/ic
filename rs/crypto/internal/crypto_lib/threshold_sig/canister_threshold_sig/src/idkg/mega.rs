@@ -58,8 +58,7 @@ impl MEGaPublicKey {
     ) -> CanisterThresholdSerializationResult<Self> {
         let point = EccPoint::deserialize(curve, value).map_err(|e| {
             CanisterThresholdSerializationError(format!(
-                "failed to deserialize MEGaPublicKey: {:?}",
-                e
+                "failed to deserialize MEGaPublicKey: {e:?}"
             ))
         })?;
         Ok(Self { point })
@@ -749,7 +748,7 @@ impl MEGaCiphertextPair {
 /// - pub_size: Serialized size of a public key (in bytes)
 /// - priv_size: Serialized size of a private key (in bytes)
 macro_rules! generate_serializable_keyset {
-    ($curve:ident, $pub_size:expr, $priv_size:expr) => {
+    ($curve:ident, $pub_size:expr_2021, $priv_size:expr_2021) => {
         paste! {
             impl TryFrom<&[<MEGaPublicKey $curve Bytes>]> for MEGaPublicKey {
                 type Error = CanisterThresholdSerializationError;

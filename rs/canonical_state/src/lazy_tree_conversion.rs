@@ -1,37 +1,41 @@
 //! Conversion from `ReplicatedState` to `LazyTree`.
 
 use crate::{
+    CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION, MIN_SUPPORTED_CERTIFICATION_VERSION,
     encoding::{
         encode_controllers, encode_message, encode_metadata, encode_stream_header,
         encode_subnet_canister_ranges, encode_subnet_metrics,
     },
-    CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION, MIN_SUPPORTED_CERTIFICATION_VERSION,
 };
-use ic_canonical_state_tree_hash::lazy_tree::{blob, fork, num, string, Lazy, LazyFork, LazyTree};
+use LazyTree::Blob;
+use ic_canonical_state_tree_hash::lazy_tree::{Lazy, LazyFork, LazyTree, blob, fork, num, string};
 use ic_crypto_tree_hash::Label;
 use ic_error_types::ErrorCode;
 use ic_error_types::RejectCode;
 use ic_registry_routing_table::RoutingTable;
 use ic_replicated_state::{
+    ExecutionState, ReplicatedState, Stream,
     canister_state::CanisterState,
     metadata_state::{
         ApiBoundaryNodeEntry, IngressHistoryState, StreamMap, SubnetMetrics, SubnetTopology,
         SystemMetadata,
     },
     replicated_state::ReplicatedStateMessageRouting,
-    ExecutionState, ReplicatedState, Stream,
 };
 use ic_types::{
-    ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{MessageId, EXPECTED_MESSAGE_ID_LENGTH},
-    xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
     CanisterId, NodeId, PrincipalId, SubnetId,
+    ingress::{IngressState, IngressStatus, WasmResult},
+    messages::{EXPECTED_MESSAGE_ID_LENGTH, MessageId},
+    xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
 };
-use std::collections::BTreeMap;
 use std::convert::{AsRef, TryFrom, TryInto};
 use std::iter::once;
 use std::sync::Arc;
-use LazyTree::Blob;
+use std::{collections::BTreeMap, marker::PhantomData};
+
+/// The maximum number of disjoint ranges a single leaf of the routing table can contain.
+/// Changes to this constant require a new certification version.
+const MAX_RANGES_PER_ROUTING_TABLE_LEAF: usize = 5;
 
 /// A simple map from a label to a tree. It should be mostly used for static
 /// subtrees where all the labels are known in advance.
@@ -310,6 +314,68 @@ impl<'a, T: Send + Sync> LazyFork<'a> for StreamQueueFork<'a, T> {
     }
 }
 
+/// The subtree under /canister_ranges/<subnet_id>/, consisting of any number of leaves, each encoding a small number of canister ranges
+/// and labelled by the smallest canister id contained.
+struct CanisterRangesFork<'a> {
+    /// List of ranges to represent in a tree.
+    /// If None, then the list of ranges is empty. This case can happen if a subnet exists but has no canisters assigned to it. Also see `EMTPY_RANGES_LABEL`.
+    split_ranges: Option<Arc<SplitRanges>>,
+    /// This `PhantomData` is necessary so that the compiler knows that 'a from `LazyFork<'a>` always outlives this struct.
+    phantom: PhantomData<&'a ()>,
+}
+
+/// Subnets with no assigned ranges are represented by a single child with label `EMPTY_RANGES_LABEL` and a value encoding an empty set.
+const EMPTY_RANGES_LABEL: CanisterId = CanisterId::from_u64(0);
+
+impl<'a> LazyFork<'a> for CanisterRangesFork<'a> {
+    fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
+        let idx = CanisterId::from_label(label.as_bytes())?;
+        match &self.split_ranges {
+            Some(split_ranges) => split_ranges.get(&idx).map(|ranges| {
+                blob({
+                    let ranges = Arc::clone(ranges);
+                    move || encode_subnet_canister_ranges(Some(&ranges))
+                })
+            }),
+            None => {
+                // For subnets with no canister ranges we create a single entry at label CanisterId(0) encoding empty ranges.
+                if idx == EMPTY_RANGES_LABEL {
+                    Some(blob(move || encode_subnet_canister_ranges(None)))
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
+        match &self.split_ranges {
+            Some(split_ranges) => Box::new(split_ranges.keys().map(|idx| idx.to_label())),
+            None => Box::new(std::iter::once(EMPTY_RANGES_LABEL.to_label())),
+        }
+    }
+
+    fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + '_> {
+        match &self.split_ranges {
+            Some(split_ranges) => Box::new(split_ranges.iter().map(|(idx, ranges)| {
+                let idx = idx.to_owned();
+                let ranges = Arc::clone(ranges);
+                (idx.to_label(), {
+                    blob(move || encode_subnet_canister_ranges(Some(&ranges)))
+                })
+            })),
+            None => Box::new(std::iter::once((
+                EMPTY_RANGES_LABEL.to_label(),
+                blob(move || encode_subnet_canister_ranges(None)),
+            ))),
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.split_ranges.as_ref().map_or(1, |r| r.len())
+    }
+}
+
 fn invert_routing_table(
     routing_table: &RoutingTable,
 ) -> BTreeMap<SubnetId, Vec<(PrincipalId, PrincipalId)>> {
@@ -323,17 +389,49 @@ fn invert_routing_table(
     inverse_map
 }
 
+/// The canister ranges of a single subnet, split into multiple chunks.
+type SplitRanges = BTreeMap<CanisterId, Arc<Vec<(PrincipalId, PrincipalId)>>>;
+/// The entire routing table in the format required for the /canister_ranges subtree.
+type SplitRoutingTable = BTreeMap<SubnetId, Arc<SplitRanges>>;
+
+/// Split the inverted routing table into multiple chunks such that no chunk is larger than `max_ranges_per_leaf` ranges.
+fn split_inverted_routing_table(
+    inverted_routing_table: &BTreeMap<SubnetId, Vec<(PrincipalId, PrincipalId)>>,
+    max_ranges_per_leaf: usize,
+) -> SplitRoutingTable {
+    inverted_routing_table
+        .iter()
+        .map(|(k, v)| {
+            let splits: BTreeMap<_, _> = v
+                .chunks(max_ranges_per_leaf)
+                .map(|v| {
+                    (
+                        CanisterId::unchecked_from_principal(v[0].0),
+                        Arc::new(v.to_owned()),
+                    )
+                })
+                .collect();
+            (*k, Arc::new(splits))
+        })
+        .collect()
+}
+
 /// Converts replicated state into a lazy tree.
 pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
     let certification_version = state.metadata.certification_version;
     assert!(
-        MIN_SUPPORTED_CERTIFICATION_VERSION <= certification_version && certification_version <= MAX_SUPPORTED_CERTIFICATION_VERSION,
-        "Unable to certify state with version {:?}. Supported certification versions are {:?}..={:?}",
-        certification_version,
-        MIN_SUPPORTED_CERTIFICATION_VERSION,
-        MAX_SUPPORTED_CERTIFICATION_VERSION,
+        MIN_SUPPORTED_CERTIFICATION_VERSION <= certification_version
+            && certification_version <= MAX_SUPPORTED_CERTIFICATION_VERSION,
+        "Unable to certify state with version {certification_version:?}. Supported certification versions are {MIN_SUPPORTED_CERTIFICATION_VERSION:?}..={MAX_SUPPORTED_CERTIFICATION_VERSION:?}",
     );
     let own_subnet_id = state.metadata.own_subnet_id;
+    let inverted_routing_table = Arc::new(invert_routing_table(
+        &state.metadata.network_topology.routing_table,
+    ));
+    let split_routing_table = Arc::new(split_inverted_routing_table(
+        &inverted_routing_table,
+        MAX_RANGES_PER_ROUTING_TABLE_LEAF,
+    ));
 
     fork(
         FiniteMap::default()
@@ -357,14 +455,11 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
                 fork(IngressHistoryFork(&state.metadata.ingress_history)),
             )
             .with("subnet", move || {
-                let inverted_routing_table = Arc::new(invert_routing_table(
-                    &state.metadata.network_topology.routing_table,
-                ));
                 subnets_as_tree(
                     &state.metadata.network_topology.subnets,
                     own_subnet_id,
                     &state.metadata.node_public_keys,
-                    inverted_routing_table,
+                    inverted_routing_table.clone(),
                     &state.metadata.subnet_metrics,
                     certification_version,
                 )
@@ -372,6 +467,17 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
             .with_tree(
                 "time",
                 num(state.metadata.batch_time.as_nanos_since_unix_epoch()),
+            )
+            .with_if(
+                certification_version >= CertificationVersion::V21,
+                "canister_ranges",
+                move || {
+                    canister_ranges_as_tree(
+                        &state.metadata.network_topology.subnets,
+                        Arc::clone(&split_routing_table),
+                        certification_version,
+                    )
+                },
             ),
     )
 }
@@ -757,6 +863,26 @@ fn subnets_as_tree<'a>(
                         blob(move || encode_subnet_metrics(metrics, certification_version)),
                     ),
             )
+        },
+    })
+}
+
+fn canister_ranges_as_tree(
+    subnets: &BTreeMap<SubnetId, SubnetTopology>,
+    split_routing_table: Arc<SplitRoutingTable>,
+    certification_version: CertificationVersion,
+) -> LazyTree<'_> {
+    let split_routing_table = Arc::clone(&split_routing_table);
+    fork(MapTransformFork {
+        map: subnets,
+        map_filter: NoFilter,
+        certification_version,
+        mk_tree: move |subnet_id, _subnet_topology, _certification_version| {
+            let split_ranges = split_routing_table.get(&subnet_id).map(Arc::clone);
+            fork(CanisterRangesFork {
+                split_ranges,
+                phantom: PhantomData,
+            })
         },
     })
 }

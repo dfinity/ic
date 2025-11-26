@@ -1,6 +1,7 @@
 //! A crate that groups user-facing and internal error types and codes produced
 //! by the Internet Computer.
 
+use ic_heap_bytes::DeterministicHeapBytes;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
 use str_traits::StrEllipsize;
@@ -141,7 +142,18 @@ impl From<ErrorCode> for RejectCode {
 /// code and the rest is just a sequentially assigned two-digit
 /// number.
 #[derive(
-    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, EnumIter, Serialize,
+    Copy,
+    Clone,
+    Eq,
+    DeterministicHeapBytes,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    Deserialize,
+    EnumIter,
+    Serialize,
 )]
 pub enum ErrorCode {
     // 1xx -- `RejectCode::SysFatal`
@@ -217,7 +229,18 @@ const MAX_USER_ERROR_DESCRIPTION_LEN_BYTES: usize = 8 * 1024;
 /// The error that is sent back to users of IC if something goes
 /// wrong. It's designed to be copyable and serializable so that we
 /// can persist it in ingress history.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone,
+    Eq,
+    DeterministicHeapBytes,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    Deserialize,
+    Serialize,
+)]
 pub struct UserError {
     code: ErrorCode,
     description: String,
@@ -343,8 +366,7 @@ impl UserError {
     pub fn assert_contains(&self, code: ErrorCode, description: &str) {
         assert_eq!(
             self.code, code,
-            "Failed to match actual error \"{:?}\" with expected \"{}, {}\"",
-            self, code, description
+            "Failed to match actual error \"{self:?}\" with expected \"{code}, {description}\""
         );
         assert!(
             self.description.contains(description),

@@ -5,8 +5,8 @@ use std::{
 };
 
 use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, dkg_pool::DkgPoolImpl};
-use ic_config::{artifact_pool::ArtifactPoolConfig, Config};
-use ic_consensus::consensus::{validator::Validator, ValidatorMetrics};
+use ic_config::{Config, artifact_pool::ArtifactPoolConfig};
+use ic_consensus::consensus::validator::Validator;
 use ic_consensus_certification::CertificationCrypto;
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
@@ -27,19 +27,22 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    Height, NodeId, PrincipalId, SubnetId,
     artifact::ConsensusMessageId,
     consensus::{
-        certification::{Certification, CertificationShare},
         Block, ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable, HasBlockHash,
         HasCommittee,
+        certification::{Certification, CertificationShare},
     },
     crypto::CryptoHashOf,
     replica_config::ReplicaConfig,
-    Height, NodeId, PrincipalId, SubnetId,
 };
+use rayon::ThreadPoolBuilder;
 use serde::{Deserialize, Serialize};
 
 use crate::{mocks::MockPayloadBuilder, player::ReplayError};
+
+const MAX_VALIDATION_THREADS: usize = 8;
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct InvalidArtifact {
@@ -75,7 +78,7 @@ impl InvalidArtifact {
 
     fn bytes_to_hex_string(&self, v: &[u8]) -> String {
         v.iter().fold(String::new(), |mut hash, byte| {
-            hash.push_str(&format!("{:X}", byte));
+            hash.push_str(&format!("{byte:X}"));
             hash
         })
     }
@@ -119,6 +122,10 @@ impl ReplayValidator {
         let dkg_pool = RwLock::new(DkgPoolImpl::new(metrics_registry.clone(), log.clone()));
         let node_id = NodeId::from(PrincipalId::new_node_test_id(1));
         let replica_cfg = ReplicaConfig::new(node_id, subnet_id);
+        let thread_pool = ThreadPoolBuilder::new()
+            .num_threads(MAX_VALIDATION_THREADS)
+            .build()
+            .expect("Failed to create thread pool");
 
         let validator = Validator::new(
             replica_cfg.clone(),
@@ -129,8 +136,9 @@ impl ReplayValidator {
             state_manager,
             message_routing,
             Arc::new(dkg_pool) as Arc<_>,
+            Arc::new(thread_pool),
             log.clone(),
-            ValidatorMetrics::new(metrics_registry.clone()),
+            &metrics_registry,
             time_source.clone(),
         );
 
@@ -246,7 +254,7 @@ impl ReplayValidator {
 
         self.verifier
             .validate(self.replica_cfg.subnet_id, certification, registry_version)
-            .map_err(|e| format!("{:?}", e))
+            .map_err(|e| format!("{e:?}"))
     }
 
     /// Verify the given certification share against the membership defined by the local consensus pool cache
@@ -260,7 +268,7 @@ impl ReplayValidator {
             Certification::committee(),
         ) {
             // In case of an error, we simply skip this artifact.
-            Err(e) => Err(format!("Failed to determine membership: {:?}", e)),
+            Err(e) => Err(format!("Failed to determine membership: {e:?}")),
             // If the signer does not belong to the signers committee at the
             // given height, reject this artifact.
             Ok(false) => Err("Signer does not belong to committee.".into()),
@@ -298,7 +306,7 @@ impl ReplayValidator {
             };
 
             changes.iter().for_each(|action| match action {
-                ChangeAction::HandleInvalid(ref a, ref s) => {
+                ChangeAction::HandleInvalid(a, s) => {
                     let block_hash = match a {
                         ConsensusMessage::Finalization(f) => Some(f.block_hash().clone()),
                         ConsensusMessage::Notarization(n) => Some(n.block_hash().clone()),
@@ -319,7 +327,7 @@ impl ReplayValidator {
                     expected.remove(&hash);
                 }
                 other => {
-                    println!("Unexpected change action: {:?}", other);
+                    println!("Unexpected change action: {other:?}");
                 }
             });
 
@@ -331,10 +339,7 @@ impl ReplayValidator {
         }
 
         let new_height = PoolReader::new(pool).get_finalized_height();
-        println!(
-            "Validated artifacts up to new finalized height: {}",
-            new_height
-        );
+        println!("Validated artifacts up to new finalized height: {new_height}");
 
         if new_height < target_height {
             Err(ReplayError::ValidationIncomplete(

@@ -9,7 +9,7 @@ The purpose of the policy is to:
 
 * confine system services (to guard against bugs and escalation attacks)
 
-* confine 3rd party code (e.g. filebeat)
+* confine 3rd party code
 
 * enforce sandboxing restrictions on WebAssembly execution
 

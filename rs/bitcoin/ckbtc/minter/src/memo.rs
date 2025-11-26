@@ -1,4 +1,5 @@
 #![allow(deprecated)]
+use crate::state::LedgerBurnIndex;
 use minicbor::Encoder;
 use minicbor::{Decode, Encode};
 
@@ -54,6 +55,13 @@ pub enum MintMemo<'a> {
         status: Option<Status>,
         #[n(2)]
         associated_burn_index: Option<u64>,
+    },
+    #[n(3)]
+    ReimburseWithdrawal {
+        #[n(0)]
+        /// The id corresponding to the withdrawal request,
+        /// which corresponds to the ledger burn index.
+        withdrawal_id: LedgerBurnIndex,
     },
 }
 

@@ -6,6 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
+    "//rs/nervous_system/lock",
     "//rs/nervous_system/runtime",
     "//rs/rust_canisters/dfn_core",
     "//rs/types/management_canister_types",
@@ -15,9 +16,15 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:async-trait",
+]
 
-DEV_DEPENDENCIES = []
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:tokio",
+]
 
 MACRO_DEV_DEPENDENCIES = []
 

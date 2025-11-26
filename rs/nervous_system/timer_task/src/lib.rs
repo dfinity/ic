@@ -113,6 +113,8 @@
 //! }
 //! ```
 
+#![allow(deprecated)]
+
 mod metrics;
 
 pub use metrics::MetricsRegistry as TimerTaskMetricsRegistry;
@@ -123,8 +125,8 @@ use futures::FutureExt;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
 use ic_nervous_system_time_helpers::now_seconds;
-pub use ic_nervous_system_timers::{set_timer, set_timer_interval, TimerId};
-use metrics::{with_async_metrics, with_sync_metrics, MetricsRegistryRef};
+pub use ic_nervous_system_timers::{TimerId, set_timer, set_timer_interval};
+use metrics::{MetricsRegistryRef, with_async_metrics, with_sync_metrics};
 use std::future::Future;
 use std::time::Duration;
 

@@ -1,17 +1,12 @@
 use ic_base_types::{EnvironmentVariables, NumBytes, NumSeconds};
-use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2};
-use ic_replicated_state::MessageMemoryUsage;
 use ic_types::{
-    ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
-    MemoryAllocation, PrincipalId,
+    ComputeAllocation, Cycles, InvalidComputeAllocationError, MemoryAllocation, PrincipalId,
 };
-use num_traits::{cast::ToPrimitive, SaturatingSub};
+use num_traits::cast::ToPrimitive;
+use std::collections::BTreeMap;
 use std::convert::TryFrom;
-
-use crate::canister_manager::types::CanisterManagerError;
 
 #[cfg(test)]
 mod tests;
@@ -30,6 +25,7 @@ pub(crate) struct CanisterSettings {
     pub(crate) freezing_threshold: Option<NumSeconds>,
     pub(crate) reserved_cycles_limit: Option<Cycles>,
     pub(crate) log_visibility: Option<LogVisibilityV2>,
+    pub(crate) log_memory_limit: Option<NumBytes>,
     pub(crate) wasm_memory_limit: Option<NumBytes>,
     pub(crate) environment_variables: Option<EnvironmentVariables>,
 }
@@ -43,6 +39,7 @@ impl CanisterSettings {
         freezing_threshold: Option<NumSeconds>,
         reserved_cycles_limit: Option<Cycles>,
         log_visibility: Option<LogVisibilityV2>,
+        log_memory_limit: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
         environment_variables: Option<EnvironmentVariables>,
     ) -> Self {
@@ -54,6 +51,7 @@ impl CanisterSettings {
             freezing_threshold,
             reserved_cycles_limit,
             log_visibility,
+            log_memory_limit,
             wasm_memory_limit,
             environment_variables,
         }
@@ -87,6 +85,10 @@ impl CanisterSettings {
         self.log_visibility.as_ref()
     }
 
+    pub fn log_memory_limit(&self) -> Option<NumBytes> {
+        self.log_memory_limit
+    }
+
     pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
         self.wasm_memory_limit
     }
@@ -108,11 +110,10 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
         };
 
         let memory_allocation = match input.memory_allocation {
-            Some(ma) => Some(MemoryAllocation::try_from(NumBytes::from(
-                ma.0.to_u64().ok_or_else(|| {
-                    UpdateSettingsError::MemoryAllocation(InvalidMemoryAllocationError::new(ma))
-                })?,
-            ))?),
+            Some(ma) => Some(MemoryAllocation::from(NumBytes::from(
+                ma.0.to_u64()
+                    .ok_or(UpdateSettingsError::MemoryAllocationOutOfRange { provided: ma })?,
+            ))),
             None => None,
         };
 
@@ -127,6 +128,14 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             Some(limit) => Some(Cycles::from(limit.0.to_u128().ok_or(
                 UpdateSettingsError::ReservedCyclesLimitOutOfRange { provided: limit },
             )?)),
+            None => None,
+        };
+
+        let log_memory_limit = match input.log_memory_limit {
+            Some(ls) => Some(NumBytes::from(
+                ls.0.to_u64()
+                    .ok_or(UpdateSettingsError::LogMemoryLimitOutOfRange { provided: ls })?,
+            )),
             None => None,
         };
 
@@ -157,9 +166,20 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             None => None,
         };
 
-        let environment_variables = input.environment_variables.map(|env_vars| {
-            EnvironmentVariables::new(env_vars.into_iter().map(|e| (e.name, e.value)).collect())
-        });
+        let environment_variables = match input.environment_variables {
+            Some(env_vars) => {
+                let original_length = env_vars.len();
+                let environment_variables = env_vars
+                    .into_iter()
+                    .map(|e| (e.name, e.value))
+                    .collect::<BTreeMap<String, String>>();
+                if environment_variables.len() != original_length {
+                    return Err(UpdateSettingsError::DuplicateEnvironmentVariables);
+                }
+                Some(EnvironmentVariables::new(environment_variables))
+            }
+            None => None,
+        };
 
         Ok(CanisterSettings::new(
             input
@@ -171,6 +191,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             freezing_threshold,
             reserved_cycles_limit,
             input.log_visibility,
+            log_memory_limit,
             wasm_memory_limit,
             environment_variables,
         ))
@@ -196,6 +217,7 @@ pub(crate) struct CanisterSettingsBuilder {
     freezing_threshold: Option<NumSeconds>,
     reserved_cycles_limit: Option<Cycles>,
     log_visibility: Option<LogVisibilityV2>,
+    log_memory_limit: Option<NumBytes>,
     wasm_memory_limit: Option<NumBytes>,
     environment_variables: Option<EnvironmentVariables>,
 }
@@ -211,6 +233,7 @@ impl CanisterSettingsBuilder {
             freezing_threshold: None,
             reserved_cycles_limit: None,
             log_visibility: None,
+            log_memory_limit: None,
             wasm_memory_limit: None,
             environment_variables: None,
         }
@@ -225,6 +248,7 @@ impl CanisterSettingsBuilder {
             freezing_threshold: self.freezing_threshold,
             reserved_cycles_limit: self.reserved_cycles_limit,
             log_visibility: self.log_visibility,
+            log_memory_limit: self.log_memory_limit,
             wasm_memory_limit: self.wasm_memory_limit,
             environment_variables: self.environment_variables,
         }
@@ -279,6 +303,13 @@ impl CanisterSettingsBuilder {
         }
     }
 
+    pub fn with_log_memory_limit(self, log_memory_limit: NumBytes) -> Self {
+        Self {
+            log_memory_limit: Some(log_memory_limit),
+            ..self
+        }
+    }
+
     pub fn with_wasm_memory_limit(self, wasm_memory_limit: NumBytes) -> Self {
         Self {
             wasm_memory_limit: Some(wasm_memory_limit),
@@ -296,11 +327,13 @@ impl CanisterSettingsBuilder {
 
 pub enum UpdateSettingsError {
     ComputeAllocation(InvalidComputeAllocationError),
-    MemoryAllocation(InvalidMemoryAllocationError),
+    MemoryAllocationOutOfRange { provided: candid::Nat },
     FreezingThresholdOutOfRange { provided: candid::Nat },
     ReservedCyclesLimitOutOfRange { provided: candid::Nat },
     WasmMemoryLimitOutOfRange { provided: candid::Nat },
     WasmMemoryThresholdOutOfRange { provided: candid::Nat },
+    DuplicateEnvironmentVariables,
+    LogMemoryLimitOutOfRange { provided: candid::Nat },
 }
 
 impl From<UpdateSettingsError> for UserError {
@@ -315,39 +348,42 @@ impl From<UpdateSettingsError> for UserError {
                     err.given()
                 ),
             ),
-            UpdateSettingsError::MemoryAllocation(err) => UserError::new(
+            UpdateSettingsError::MemoryAllocationOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
-                format!(
-                    "MemoryAllocation expected to be in the range [{}..{}], got {}",
-                    err.min, err.max, err.given
-                ),
+                format!("MemoryAllocation expected to be in the range [0..2^64-1], got {provided}"),
             ),
             UpdateSettingsError::FreezingThresholdOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Freezing threshold expected to be in the range of [0..2^64-1], got {}",
-                    provided
+                    "Freezing threshold expected to be in the range of [0..2^64-1], got {provided}"
                 ),
             ),
             UpdateSettingsError::ReservedCyclesLimitOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Reserved cycles limit expected to be in the range of [0..2^128-1], got {}",
-                    provided
+                    "Reserved cycles limit expected to be in the range of [0..2^128-1], got {provided}"
                 ),
             ),
             UpdateSettingsError::WasmMemoryLimitOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Wasm memory limit expected to be in the range of [0..2^64-1], got {}",
-                    provided
+                    "Wasm memory limit expected to be in the range of [0..2^64-1], got {provided}"
                 ),
             ),
             UpdateSettingsError::WasmMemoryThresholdOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Wasm memory threshold expected to be in the range of [0..2^64-1], got {}",
-                    provided
+                    "Wasm memory threshold expected to be in the range of [0..2^64-1], got {provided}"
+                ),
+            ),
+            UpdateSettingsError::DuplicateEnvironmentVariables => UserError::new(
+                ErrorCode::InvalidManagementPayload,
+                "Duplicate environment variables are not allowed".to_string(),
+            ),
+            UpdateSettingsError::LogMemoryLimitOutOfRange { provided } => UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!(
+                    "Log memory limit expected to be in the range of [0..2^64-1], got {provided}"
                 ),
             ),
         }
@@ -360,12 +396,6 @@ impl From<InvalidComputeAllocationError> for UpdateSettingsError {
     }
 }
 
-impl From<InvalidMemoryAllocationError> for UpdateSettingsError {
-    fn from(err: InvalidMemoryAllocationError) -> Self {
-        Self::MemoryAllocation(err)
-    }
-}
-
 pub(crate) struct ValidatedCanisterSettings {
     controllers: Option<Vec<PrincipalId>>,
     compute_allocation: Option<ComputeAllocation>,
@@ -375,11 +405,40 @@ pub(crate) struct ValidatedCanisterSettings {
     reserved_cycles_limit: Option<Cycles>,
     reservation_cycles: Cycles,
     log_visibility: Option<LogVisibilityV2>,
+    log_memory_limit: Option<NumBytes>,
     wasm_memory_limit: Option<NumBytes>,
     environment_variables: Option<EnvironmentVariables>,
 }
 
 impl ValidatedCanisterSettings {
+    pub fn new(
+        controllers: Option<Vec<PrincipalId>>,
+        compute_allocation: Option<ComputeAllocation>,
+        memory_allocation: Option<MemoryAllocation>,
+        wasm_memory_threshold: Option<NumBytes>,
+        freezing_threshold: Option<NumSeconds>,
+        reserved_cycles_limit: Option<Cycles>,
+        reservation_cycles: Cycles,
+        log_visibility: Option<LogVisibilityV2>,
+        log_memory_limit: Option<NumBytes>,
+        wasm_memory_limit: Option<NumBytes>,
+        environment_variables: Option<EnvironmentVariables>,
+    ) -> Self {
+        Self {
+            controllers,
+            compute_allocation,
+            memory_allocation,
+            wasm_memory_threshold,
+            freezing_threshold,
+            reserved_cycles_limit,
+            reservation_cycles,
+            log_visibility,
+            log_memory_limit,
+            wasm_memory_limit,
+            environment_variables,
+        }
+    }
+
     pub fn controllers(&self) -> Option<Vec<PrincipalId>> {
         self.controllers.clone()
     }
@@ -412,6 +471,10 @@ impl ValidatedCanisterSettings {
         self.log_visibility.as_ref()
     }
 
+    pub fn log_memory_limit(&self) -> Option<NumBytes> {
+        self.log_memory_limit
+    }
+
     pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
         self.wasm_memory_limit
     }
@@ -419,198 +482,4 @@ impl ValidatedCanisterSettings {
     pub fn environment_variables(&self) -> Option<&EnvironmentVariables> {
         self.environment_variables.as_ref()
     }
-}
-
-/// Validates the new canisters settings:
-/// - memory allocation:
-///     - it cannot be lower than the current canister memory usage.
-///     - there must be enough available subnet capacity for the change.
-///     - there must be enough cycles for storage reservation.
-///     - there must be enough cycles to avoid freezing the canister.
-/// - compute allocation:
-///     - there must be enough available compute capacity for the change.
-///     - there must be enough cycles to avoid freezing the canister.
-/// - controllers:
-///     - the number of controllers cannot exceed the given maximum.
-///
-/// Keep this function in sync with `do_update_settings()`.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn validate_canister_settings(
-    settings: CanisterSettings,
-    canister_memory_usage: NumBytes,
-    canister_message_memory_usage: MessageMemoryUsage,
-    canister_memory_allocation: MemoryAllocation,
-    subnet_available_memory: &SubnetAvailableMemory,
-    subnet_memory_saturation: &ResourceSaturation,
-    canister_compute_allocation: ComputeAllocation,
-    subnet_compute_allocation_usage: u64,
-    subnet_compute_allocation_capacity: u64,
-    max_controllers: usize,
-    canister_freezing_threshold: NumSeconds,
-    canister_cycles_balance: Cycles,
-    cycles_account_manager: &CyclesAccountManager,
-    subnet_size: usize,
-    canister_reserved_balance: Cycles,
-    canister_reserved_balance_limit: Option<Cycles>,
-) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
-    let old_memory_bytes = canister_memory_allocation.allocated_bytes(canister_memory_usage);
-    let new_memory_bytes = match settings.memory_allocation {
-        None => canister_memory_usage,
-        Some(new_memory_allocation) => {
-            // The new memory allocation cannot be lower than the current canister
-            // memory usage.
-            if let MemoryAllocation::Reserved(reserved_bytes) = new_memory_allocation {
-                if reserved_bytes < canister_memory_usage {
-                    return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
-                        memory_allocation_given: new_memory_allocation,
-                        memory_usage_needed: canister_memory_usage,
-                    });
-                }
-            }
-            new_memory_allocation.allocated_bytes(canister_memory_usage)
-        }
-    };
-
-    // If the available memory in the subnet is negative, then we must cap
-    // it at zero such that the new memory allocation can change between
-    // zero and the old memory allocation. Note that capping at zero also
-    // makes conversion from `i64` to `u64` valid.
-    let subnet_available_memory = subnet_available_memory.get_execution_memory().max(0) as u64;
-    let subnet_available_memory = subnet_available_memory.saturating_add(old_memory_bytes.get());
-    if new_memory_bytes.get() > subnet_available_memory {
-        return Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-            requested: new_memory_bytes,
-            available: NumBytes::from(subnet_available_memory),
-        });
-    }
-
-    if let Some(new_compute_allocation) = settings.compute_allocation {
-        // The saturating `u64` subtractions ensure that the available compute
-        // capacity of the subnet never goes below zero. This means that even if
-        // compute capacity is oversubscribed, the new compute allocation can
-        // change between zero and the old compute allocation.
-        let available_compute_allocation = subnet_compute_allocation_capacity
-            .saturating_sub(subnet_compute_allocation_usage)
-            // Minus 1 below guarantees there is always at least 1% of free compute
-            // if the subnet was not already oversubscribed.
-            .saturating_sub(1)
-            .saturating_add(canister_compute_allocation.as_percent());
-        if new_compute_allocation.as_percent() > available_compute_allocation {
-            return Err(CanisterManagerError::SubnetComputeCapacityOverSubscribed {
-                requested: new_compute_allocation,
-                available: available_compute_allocation,
-            });
-        }
-    }
-
-    let controllers = settings.controllers();
-    if let Some(controllers) = &controllers {
-        if controllers.len() > max_controllers {
-            return Err(CanisterManagerError::InvalidSettings {
-                message: format!(
-                    "Invalid settings: 'controllers' length exceeds maximum size allowed of {}.",
-                    max_controllers
-                ),
-            });
-        }
-    }
-
-    let new_memory_allocation = settings
-        .memory_allocation
-        .unwrap_or(canister_memory_allocation);
-
-    let new_compute_allocation = settings
-        .compute_allocation()
-        .unwrap_or(canister_compute_allocation);
-
-    let freezing_threshold = settings
-        .freezing_threshold
-        .unwrap_or(canister_freezing_threshold);
-
-    let threshold = cycles_account_manager.freeze_threshold_cycles(
-        freezing_threshold,
-        new_memory_allocation,
-        canister_memory_usage,
-        canister_message_memory_usage,
-        new_compute_allocation,
-        subnet_size,
-        canister_reserved_balance,
-    );
-
-    if canister_cycles_balance < threshold {
-        if new_compute_allocation > canister_compute_allocation {
-            // Note that the error is produced only if allocation increases.
-            // This is to allow increasing of the freezing threshold to make the
-            // canister frozen.
-            return Err(
-                CanisterManagerError::InsufficientCyclesInComputeAllocation {
-                    compute_allocation: new_compute_allocation,
-                    available: canister_cycles_balance,
-                    threshold,
-                },
-            );
-        }
-        if new_memory_allocation > canister_memory_allocation {
-            // Note that the error is produced only if allocation increases.
-            // This is to allow increasing of the freezing threshold to make the
-            // canister frozen.
-            return Err(CanisterManagerError::InsufficientCyclesInMemoryAllocation {
-                memory_allocation: new_memory_allocation,
-                available: canister_cycles_balance,
-                threshold,
-            });
-        }
-    }
-
-    let allocated_bytes = new_memory_bytes.saturating_sub(&old_memory_bytes);
-    let reservation_cycles = cycles_account_manager.storage_reservation_cycles(
-        allocated_bytes,
-        subnet_memory_saturation,
-        subnet_size,
-    );
-    let reserved_balance_limit = settings
-        .reserved_cycles_limit()
-        .or(canister_reserved_balance_limit);
-
-    if let Some(limit) = reserved_balance_limit {
-        if canister_reserved_balance > limit {
-            return Err(CanisterManagerError::ReservedCyclesLimitIsTooLow {
-                cycles: canister_reserved_balance,
-                limit,
-            });
-        } else if canister_reserved_balance + reservation_cycles > limit {
-            return Err(
-                CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation {
-                    memory_allocation: new_memory_allocation,
-                    requested: canister_reserved_balance + reservation_cycles,
-                    limit,
-                },
-            );
-        }
-    }
-
-    // Note that this check does not include the freezing threshold to be
-    // consistent with the `reserve_cycles()` function, which moves
-    // cycles between the main and reserved balances without checking
-    // the freezing threshold.
-    if canister_cycles_balance < reservation_cycles {
-        return Err(CanisterManagerError::InsufficientCyclesInMemoryAllocation {
-            memory_allocation: new_memory_allocation,
-            available: canister_cycles_balance,
-            threshold: reservation_cycles,
-        });
-    }
-
-    Ok(ValidatedCanisterSettings {
-        controllers: settings.controllers(),
-        compute_allocation: settings.compute_allocation(),
-        memory_allocation: settings.memory_allocation(),
-        wasm_memory_threshold: settings.wasm_memory_threshold(),
-        freezing_threshold: settings.freezing_threshold(),
-        reserved_cycles_limit: settings.reserved_cycles_limit(),
-        reservation_cycles,
-        log_visibility: settings.log_visibility().cloned(),
-        wasm_memory_limit: settings.wasm_memory_limit(),
-        environment_variables: settings.environment_variables().cloned(),
-    })
 }

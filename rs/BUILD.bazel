@@ -27,13 +27,6 @@
 # Can depend on: any other package.
 #
 # Dependants: none.
-#   Exceptions:
-#       //rs/ic_os/dev_test_tools/launch-single-vm:__pkg__ depends on
-#           //rs/tests/driver:ic-system-test-driver
-#       //rs/pocket_ic_server:__pkg__ depends on
-#           //rs/tests/research:ic-hs
-#           //rs/tests/httpbin-rs:httpbin
-#           //rs/tests/research:spec_compliance
 package_group(
     name = "system-tests-pkg",
     packages = ["//rs/tests/..."],
@@ -42,9 +35,6 @@ package_group(
 # Targets containing tooling relevant creating VMs.
 #
 # Can depend on: //rs:release-pkg.
-#   Exceptions:
-#       //rs/ic_os/dev_test_tools/launch-single-vm:__pkg__ depends on
-#       //rs/tests/driver:ic-system-test-driver
 #
 # Dependants: //rs:system-tests-pkg.
 package_group(

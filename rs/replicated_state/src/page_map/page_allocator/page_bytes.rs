@@ -1,6 +1,6 @@
 /// Fast serialization and deserialization for `PageBytes`.
 use ic_sys::PageBytes;
-use serde::{de::Visitor, Deserializer, Serializer};
+use serde::{Deserializer, Serializer, de::Visitor};
 use std::convert::TryInto;
 
 pub fn serialize<S>(bytes: &PageBytes, serializer: S) -> Result<S::Ok, S::Error>

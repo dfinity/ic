@@ -32,6 +32,13 @@
 //    that registers a Treasury Manager extension. However, anyone can deploy a ledger canister
 //    and remain its controller; as a rule of thumb, such ledgers should not be trusted by DAOs.
 
+// Known Security Risks:
+// ====================
+// Some liquidity pools do not implement slippage protection
+// for deposits. In other words, the price ratio at the time
+// of execution may differ from the ratio at the time the proposal was
+// approved.
+
 // Part O. Common types
 // ====================
 
@@ -133,6 +140,24 @@ type Balances = record {
   asset_to_balances : opt vec record { Asset; BalanceBook };
 };
 
+/// Let `k` denote a particular state, `party[k]` denote the account balance of `party`
+/// in state `k`, and `managed_assets` be the sum of all assets managed on behalf of
+/// the treasury owner in state `k`.
+///
+/// Initial managed assets
+/// ----------------------
+/// managed_assets[0] == treasury_manager[0]
+///
+///     (treasury_owner[0] == external_custodian[0] == fee_collector[0]
+///      == payees[0] == payers[0] == suspense[0] == 0)
+///
+/// Current managed assets
+/// ----------------------
+/// managed_assets[k] == treasury_manager[k] + treasury_owner[k] + external_custodian[k]
+///
+/// Under "normal operations", the following invariants hold for all k > 0:
+/// 1) suspense[k] == 0
+/// 2) managed_assets[k] == managed_assets[k-1] + payers[k] - payees[k] - fee_collector[k]
 type BalanceBook = record {
   treasury_owner : opt Balance;
   treasury_manager : opt Balance;
@@ -140,6 +165,10 @@ type BalanceBook = record {
   fee_collector : opt Balance;
   payees : opt Balance;
   payers : opt Balance;
+
+  // An account in which items are entered temporarily before allocation to the correct
+  // or final account, e.g., due to transient errors.
+  suspense : opt Balance;
 };
 
 type Balance = record {
@@ -178,6 +207,10 @@ type TransactionResult = variant {
 // also use this structure for representing witnesses of non-ledger transactions, e.g., from adding
 // a token to a DEX for the first time.
 type TransactionWitness = variant {
+  // A placeholder for a transaction witness used to record a transaction attempt before
+  // it is completed.
+  Pending;
+
   // For financial audits.
   Ledger : vec Transfer;
 

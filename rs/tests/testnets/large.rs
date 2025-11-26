@@ -55,7 +55,7 @@ use ic_system_test_driver::driver::{
 use ic_system_test_driver::sns_client::add_all_wasms_to_sns_wasm;
 use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, install_sns_aggregator, nns_dapp_customizations,
-    set_authorized_subnets, set_icp_xdr_exchange_rate, set_sns_subnet,
+    set_authorized_subnets, set_sns_subnet,
 };
 
 const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 1;
@@ -74,7 +74,6 @@ pub fn setup(env: TestEnv) {
     PrometheusVm::default()
         .start(&env)
         .expect("Failed to start prometheus VM");
-
     // set up IC overriding the default resources to be more powerful
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
@@ -100,15 +99,11 @@ pub fn setup(env: TestEnv) {
         nns_dapp_customizations(),
     );
 
-    // sets the exchange rate to 12 XDR per 1 ICP
-    set_icp_xdr_exchange_rate(&env, 12_0000);
-
-    // sets the exchange rate to 12 XDR per 1 ICP
     set_authorized_subnets(&env);
 
     // deploys the ic-gateway/s
     for i in 0..NUM_IC_GATEWAYS {
-        let ic_gatway_name = format!("ic-gateway-{}", i);
+        let ic_gatway_name = format!("ic-gateway-{i}");
         IcGatewayVm::new(&ic_gatway_name)
             .start(&env)
             .expect("failed to setup ic-gateway");

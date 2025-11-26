@@ -2,8 +2,8 @@ use ic_base_types::{NumBytes, NumSeconds, PrincipalIdBlobParseError};
 use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasmtime_embedder::system_api::{
+    ApiType, DefaultOutOfInstructionsHandler, MAX_ENV_VAR_NAME_SIZE, SystemApiImpl,
     sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
-    ApiType, DefaultOutOfInstructionsHandler, SystemApiImpl, MAX_ENV_VAR_NAME_SIZE,
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
@@ -15,7 +15,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    testing::CanisterQueuesTesting, CallOrigin, Memory, NetworkTopology, NumWasmPages, SystemState,
+    CallOrigin, Memory, NetworkTopology, NumWasmPages, SystemState, testing::CanisterQueuesTesting,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
@@ -24,13 +24,14 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
+    CanisterTimer, CountBytes, Cycles, MAX_STABLE_MEMORY_IN_BYTES, NumInstructions, PrincipalId,
+    SubnetId, Time,
+    batch::CanisterCyclesCostSchedule,
     messages::{
-        CallbackId, RejectContext, RequestOrResponse, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
+        CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, RejectContext, RequestOrResponse,
     },
     methods::{Callback, WasmClosure},
     time::{self, UNIX_EPOCH},
-    CanisterTimer, CountBytes, Cycles, NumInstructions, PrincipalId, SubnetId, Time,
-    MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
 };
 use maplit::btreemap;
 use more_asserts::assert_le;
@@ -45,6 +46,8 @@ mod common;
 use common::*;
 
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 40);
+
+const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * 1024; // 4 KiB
 
 fn get_system_state_with_cycles(cycles_amount: Cycles) -> SystemState {
     SystemState::new_running_for_testing(
@@ -237,6 +240,7 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::CostCreateCanister => vec!["*", "s"],
         SystemApiCallId::CostSignWithEcdsa=> vec!["*", "s"],
         SystemApiCallId::CostHttpRequest=> vec!["*", "s"],
+        SystemApiCallId::CostHttpRequestV2=> vec!["*", "s"],
         SystemApiCallId::CostSignWithSchnorr=> vec!["*", "s"],
         SystemApiCallId::CostVetkdDeriveKey => vec!["*", "s"],
         SystemApiCallId::DebugPrint => vec!["*", "s"],
@@ -866,6 +870,7 @@ fn api_availability_test(
         SystemApiCallId::CostCall => {}
         SystemApiCallId::CostCreateCanister => {}
         SystemApiCallId::CostHttpRequest => {}
+        SystemApiCallId::CostHttpRequestV2 => {}
         SystemApiCallId::CostSignWithEcdsa => {}
         SystemApiCallId::CostSignWithSchnorr => {}
         SystemApiCallId::CostVetkdDeriveKey => {}
@@ -1067,7 +1072,12 @@ fn test_canister_balance() {
 
     system_state
         .new_call_context(
-            CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
+            CallOrigin::CanisterUpdate(
+                canister_test_id(33),
+                CallbackId::from(5),
+                NO_DEADLINE,
+                String::from(""),
+            ),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
@@ -1095,7 +1105,12 @@ fn test_canister_cycle_balance() {
 
     system_state
         .new_call_context(
-            CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
+            CallOrigin::CanisterUpdate(
+                canister_test_id(33),
+                CallbackId::from(5),
+                NO_DEADLINE,
+                String::from(""),
+            ),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
@@ -1130,7 +1145,12 @@ fn test_msg_cycles_available_traps() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     system_state
         .new_call_context(
-            CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
+            CallOrigin::CanisterUpdate(
+                canister_test_id(33),
+                CallbackId::from(5),
+                NO_DEADLINE,
+                String::from(""),
+            ),
             available_cycles,
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
@@ -1208,6 +1228,7 @@ fn certified_data_set() {
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -1294,7 +1315,12 @@ fn msg_cycles_accept_all_cycles_in_call_context() {
     let mut system_state = SystemStateBuilder::default().build();
     system_state
         .new_call_context(
-            CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
+            CallOrigin::CanisterUpdate(
+                canister_test_id(33),
+                CallbackId::from(5),
+                NO_DEADLINE,
+                String::from(""),
+            ),
             Cycles::from(amount),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
@@ -1317,7 +1343,12 @@ fn msg_cycles_accept_all_cycles_in_call_context_when_more_asked() {
     let mut system_state = SystemStateBuilder::default().build();
     system_state
         .new_call_context(
-            CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
+            CallOrigin::CanisterUpdate(
+                canister_test_id(33),
+                CallbackId::from(5),
+                NO_DEADLINE,
+                String::from(""),
+            ),
             Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
@@ -1342,14 +1373,21 @@ fn call_perform_not_enough_cycles_does_not_trap() {
         .build();
     // Set initial cycles small enough so that it does not have enough
     // cycles to send xnet messages.
-    let initial_cycles = cycles_account_manager.xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE)
-        - Cycles::from(10u128);
+    let initial_cycles = cycles_account_manager.xnet_call_performed_fee(
+        SMALL_APP_SUBNET_MAX_SIZE,
+        CanisterCyclesCostSchedule::Normal,
+    ) - Cycles::from(10u128);
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(initial_cycles)
         .build();
     system_state
         .new_call_context(
-            CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
+            CallOrigin::CanisterUpdate(
+                canister_test_id(33),
+                CallbackId::from(5),
+                NO_DEADLINE,
+                String::from(""),
+            ),
             Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
@@ -1368,10 +1406,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
         Ok(code) => {
             assert_eq!(code, RejectCode::SysTransient as i32);
         }
-        _ => panic!(
-            "expected to get an InsufficientCyclesInMessageMemoryGrow error, got {:?}",
-            res
-        ),
+        _ => panic!("expected to get an InsufficientCyclesInMessageMemoryGrow error, got {res:?}"),
     }
     let system_state_modifications = api.take_system_state_modifications();
     system_state_modifications
@@ -1380,6 +1415,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -1393,7 +1429,8 @@ fn call_perform_not_enough_cycles_does_not_trap() {
 fn growing_wasm_memory_updates_subnet_available_memory() {
     let wasm_page_size = 64 << 10;
     let subnet_available_memory_bytes = 2 * wasm_page_size;
-    let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes, 0, 0);
+    let subnet_available_memory =
+        SubnetAvailableMemory::new_for_testing(subnet_available_memory_bytes, 0, 0);
     let wasm_custom_sections_available_memory_before =
         subnet_available_memory.get_wasm_custom_sections_memory();
     let system_state = SystemStateBuilder::default().build();
@@ -1410,6 +1447,7 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
     let mut api = SystemApiImpl::new(
         api_type,
@@ -1461,7 +1499,8 @@ fn helper_test_on_low_wasm_memory(
 ) {
     let wasm_page_size = 64 << 10;
     let subnet_available_memory_bytes = 20 * GIB;
-    let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes, 0, 0);
+    let subnet_available_memory =
+        SubnetAvailableMemory::new_for_testing(subnet_available_memory_bytes, 0, 0);
 
     let mut state_builder = SystemStateBuilder::default()
         .wasm_memory_threshold(wasm_memory_threshold)
@@ -1490,6 +1529,7 @@ fn helper_test_on_low_wasm_memory(
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
 
     let mut api = SystemApiImpl::new(
@@ -1511,8 +1551,13 @@ fn helper_test_on_low_wasm_memory(
     if grow_wasm_memory {
         api.try_grow_wasm_memory(0, additional_wasm_pages).unwrap();
     } else {
-        api.try_grow_stable_memory(0, additional_wasm_pages, StableMemoryApi::Stable64)
-            .unwrap();
+        api.try_grow_stable_memory(
+            0,
+            additional_wasm_pages,
+            MAX_STABLE_MEMORY_IN_BYTES,
+            StableMemoryApi::Stable64,
+        )
+        .unwrap();
     }
 
     let system_state_modifications = api.take_system_state_modifications();
@@ -1522,6 +1567,7 @@ fn helper_test_on_low_wasm_memory(
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -1606,52 +1652,7 @@ fn test_on_low_wasm_memory_grow_wasm_memory_all_status_changes() {
 }
 
 #[test]
-fn test_on_low_wasm_memory_grow_stable_memory() {
-    // When memory_allocation is provided, hook condition can be triggered if:
-    // memory_allocation - used_stable_memory - used_wasm_memory < wasm_memory_threshold
-    // Hence growing stable memory can trigger hook condition.
-    let wasm_memory_threshold = NumBytes::new(GIB as u64);
-    let wasm_memory_limit = None;
-    let memory_allocation = Some(NumBytes::new(3 * GIB as u64));
-    let max_allowed_memory_size = 2 * GIB;
-    let grow_wasm_memory = false;
-
-    // Hook condition is not satisfied.
-    helper_test_on_low_wasm_memory(
-        wasm_memory_threshold,
-        wasm_memory_limit,
-        memory_allocation,
-        max_allowed_memory_size,
-        grow_wasm_memory,
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-    );
-
-    // Hook condition is satisfied.
-    helper_test_on_low_wasm_memory(
-        wasm_memory_threshold,
-        wasm_memory_limit,
-        memory_allocation,
-        max_allowed_memory_size + 1,
-        grow_wasm_memory,
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-        OnLowWasmMemoryHookStatus::Ready,
-    );
-
-    // Without `memory_allocation`, hook condition is not satisfied.
-    helper_test_on_low_wasm_memory(
-        wasm_memory_threshold,
-        wasm_memory_limit,
-        None,
-        max_allowed_memory_size + 1,
-        grow_wasm_memory,
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-    );
-}
-
-#[test]
-fn test_on_low_wasm_memory_without_memory_limitn() {
+fn test_on_low_wasm_memory_without_memory_limit() {
     // When memory limit is not set, the default Wasm memory limit is 4 GIB.
     let wasm_memory_threshold = NumBytes::new(GIB as u64);
     // `max_allowed_wasm_memory` = `wasm_memory_limit` - `wasm_memory_threshold`
@@ -1688,7 +1689,7 @@ fn push_output_request_respects_memory_limits() {
     let subnet_available_memory_bytes = 1 << 30;
     let subnet_available_message_memory_bytes = MAX_RESPONSE_COUNT_BYTES as i64 + 13;
 
-    let subnet_available_memory = SubnetAvailableMemory::new(
+    let subnet_available_memory = SubnetAvailableMemory::new_for_testing(
         subnet_available_memory_bytes,
         subnet_available_message_memory_bytes,
         0,
@@ -1707,6 +1708,7 @@ fn push_output_request_respects_memory_limits() {
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
@@ -1787,6 +1789,7 @@ fn push_output_request_respects_memory_limits() {
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -1798,7 +1801,7 @@ fn push_output_request_oversized_request_memory_limits() {
     let subnet_available_memory_bytes = 1 << 30;
     let subnet_available_message_memory_bytes = 3 * MAX_RESPONSE_COUNT_BYTES as i64;
 
-    let subnet_available_memory = SubnetAvailableMemory::new(
+    let subnet_available_memory = SubnetAvailableMemory::new_for_testing(
         subnet_available_memory_bytes,
         subnet_available_message_memory_bytes,
         0,
@@ -1817,6 +1820,7 @@ fn push_output_request_oversized_request_memory_limits() {
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
@@ -1902,6 +1906,7 @@ fn push_output_request_oversized_request_memory_limits() {
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -1938,6 +1943,7 @@ fn ic0_global_timer_set_is_propagated_from_sandbox() {
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -2089,7 +2095,7 @@ fn test_save_log_message_invalid_message_offset() {
 
 #[test]
 fn test_save_log_message_trims_long_message() {
-    let long_message_size = 2 * MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE;
+    let long_message_size = 2 * TEST_DEFAULT_LOG_MEMORY_LIMIT;
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &SystemStateBuilder::default().build(),
@@ -2102,13 +2108,13 @@ fn test_save_log_message_trims_long_message() {
     // Expect added log record with the content trimmed to the allowed size.
     let records = api.canister_log().records();
     assert_eq!(records.len(), initial_records_number + 1);
-    assert!(records.back().unwrap().content.len() <= MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE);
+    assert!(records.back().unwrap().content.len() <= TEST_DEFAULT_LOG_MEMORY_LIMIT);
 }
 
 #[test]
 fn test_save_log_message_keeps_total_log_size_limited() {
     let messages_number = 10;
-    let long_message_size = 2 * MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE;
+    let long_message_size = 2 * TEST_DEFAULT_LOG_MEMORY_LIMIT;
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &SystemStateBuilder::default().build(),
@@ -2123,7 +2129,7 @@ fn test_save_log_message_keeps_total_log_size_limited() {
     // Expect only one log record to be kept, staying within the size limit.
     let log = api.canister_log();
     assert_eq!(log.records().len(), initial_records_number + 1);
-    assert_le!(log.used_space(), MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE);
+    assert_le!(log.used_space(), TEST_DEFAULT_LOG_MEMORY_LIMIT);
 }
 
 #[test]
@@ -2186,6 +2192,7 @@ fn ic0_call_with_best_effort_response() {
                 &mut system_state,
                 &default_network_topology(),
                 own_subnet_id,
+                false,
                 &no_op_logger(),
             )
             .unwrap();
@@ -2232,6 +2239,7 @@ fn get_system_api_for_best_effort_response(
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
 
     SystemApiImpl::new(
@@ -2240,7 +2248,7 @@ fn get_system_api_for_best_effort_response(
         CANISTER_CURRENT_MEMORY_USAGE,
         CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
         execution_parameters,
-        SubnetAvailableMemory::new(
+        SubnetAvailableMemory::new_for_testing(
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,
@@ -2466,15 +2474,19 @@ fn test_env_var_value_operations() {
     copy_to_heap(&mut heap, invalid_utf8);
     let result = api.ic0_env_var_value_size(0, invalid_utf8.len(), &heap);
     let error = result.unwrap_err();
-    assert!(error
-        .to_string()
-        .contains("ic0.env_var_value_size: Variable name is not a valid UTF-8 string."));
+    assert!(
+        error
+            .to_string()
+            .contains("ic0.env_var_value_size: Variable name is not a valid UTF-8 string.")
+    );
 
     let result = api.ic0_env_var_value_copy(0, invalid_utf8.len(), 0, 0, 0, &mut heap);
     let error = result.unwrap_err();
-    assert!(error
-        .to_string()
-        .contains("Variable name is not a valid UTF-8 string."));
+    assert!(
+        error
+            .to_string()
+            .contains("Variable name is not a valid UTF-8 string.")
+    );
 
     // Test name too long
     let long_name = "A".repeat(MAX_ENV_VAR_NAME_SIZE + 1);

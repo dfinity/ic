@@ -3,11 +3,11 @@
   <uuid>1ea49839-7f46-4560-a4c7-fce677bbfbbd</uuid>
   <metadata>
     <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
-      <libosinfo:os id="http://ubuntu.com/ubuntu/20.04"/>
+      <libosinfo:os id="http://ubuntu.com/ubuntu/24.04"/>
     </libosinfo:libosinfo>
   </metadata>
-  <memory unit='GiB'>490</memory>
-  <currentMemory unit='GiB'>490</currentMemory>
+  <memory unit='GiB'>4</memory>
+  <currentMemory unit='GiB'>4</currentMemory>
   <vcpu placement='static'>64</vcpu>
   <cpu mode='host-model'/>
   <launchSecurity type='sev-snp' kernelHashes='yes'>
@@ -15,17 +15,13 @@
     <reducedPhysBits>1</reducedPhysBits>
     <policy>30000</policy>
   </launchSecurity>
-  <memoryBacking>
-    <locked/>
-  </memoryBacking>
   <resource>
     <partition>/machine</partition>
   </resource>
-  <os>
+  <os type='efi'>
     <type arch='x86_64' machine='pc-q35-9.2'>hvm</type>
-    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
-    <nvram>/var/lib/libvirt/qemu/nvram/upgrade-guestos_VARS.fd</nvram>
     <boot dev='hd'/>
+    <loader readonly='yes'>/tmp/OVMF_SEV.fd</loader>
     <kernel>/tmp/test-kernel</kernel>
     <initrd>/tmp/test-initrd</initrd>
     <cmdline>security=selinux selinux=1 enforcing=0</cmdline>
@@ -51,7 +47,7 @@
     <emulator>/usr/bin/qemu-system-x86_64</emulator>
     <disk type='block' device='disk'>
       <driver name='qemu' type='raw' cache='none' discard='unmap'/>
-      <source dev='/dev/hostlvm/guestos' index='1'/>
+      <source dev='/dev/guest_disk' index='1'/>
       <backingStore/>
       <target dev='vda' bus='virtio'/>
       <alias name='virtio-disk0'/>
@@ -147,7 +143,7 @@
         <model name='isa-serial'/>
       </target>
       <alias name='serial0'/>
-      <log file='/var/log/libvirt/qemu/upgrade-guestos-serial.log' append='off'/>
+      <log file='/var/serial/console.txt' append='off'/>
     </serial>
     <console type='pty' tty='/dev/pts/3'>
       <source path='/dev/pts/3'/>

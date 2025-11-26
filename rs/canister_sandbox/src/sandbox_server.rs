@@ -125,32 +125,32 @@ mod tests {
         },
     };
     use ic_base_types::{NumSeconds, PrincipalId};
+    use ic_config::embedders::Config as EmbeddersConfig;
     use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
-    use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
     use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
     use ic_embedders::{
-        wasm_utils,
+        SerializedModuleBytes, WasmtimeEmbedder, wasm_utils,
         wasmtime_embedder::system_api::{
-            sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState},
             ApiType, ExecutionParameters, InstructionLimits,
+            sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState},
         },
-        SerializedModuleBytes, WasmtimeEmbedder,
     };
-    use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
+    use ic_interfaces::execution_environment::{
+        ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
+    };
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::Global;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{
-        MessageMemoryUsage, NetworkTopology, NumWasmPages, PageIndex, PageMap,
-    };
+    use ic_replicated_state::{NetworkTopology, NumWasmPages, PageIndex, PageMap};
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
+        CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+        batch::CanisterCyclesCostSchedule,
         ingress::WasmResult,
         messages::{CallContextId, RequestMetadata},
         methods::{FuncRef, WasmMethod},
         time::Time,
-        CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     };
     use ic_wasm_types::BinaryEncodedWasm;
     use mockall::*;
@@ -168,11 +168,9 @@ mod tests {
     fn execution_parameters() -> ExecutionParameters {
         ExecutionParameters {
             instruction_limits: InstructionLimits::new(
-                FlagStatus::Disabled,
                 NumInstructions::new(INSTRUCTION_LIMIT),
                 NumInstructions::new(INSTRUCTION_LIMIT),
             ),
-            canister_memory_limit: NumBytes::new(4 << 30),
             wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
             canister_guaranteed_callback_quota: 50,
@@ -194,7 +192,7 @@ mod tests {
             canister_test_id(0),
             CanisterStatusView::Running,
             NumSeconds::from(3600),
-            MemoryAllocation::BestEffort,
+            MemoryAllocation::default(),
             NumBytes::new(0),
             ComputeAllocation::default(),
             Default::default(),
@@ -216,6 +214,7 @@ mod tests {
             0,
             ic00_aliases,
             SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
             SchedulerConfig::application_subnet().dirty_page_overhead,
             CanisterTimer::Inactive,
             0,
@@ -265,7 +264,7 @@ mod tests {
             canister_current_memory_usage: NumBytes::new(0),
             canister_current_message_memory_usage: MessageMemoryUsage::ZERO,
             execution_parameters: execution_parameters(),
-            subnet_available_memory: SubnetAvailableMemory::new(
+            subnet_available_memory: SubnetAvailableMemory::new_for_testing(
                 i64::MAX / 2,
                 i64::MAX / 2,
                 i64::MAX / 2,
@@ -297,7 +296,7 @@ mod tests {
             canister_current_memory_usage: NumBytes::new(0),
             canister_current_message_memory_usage: MessageMemoryUsage::ZERO,
             execution_parameters: execution_parameters(),
-            subnet_available_memory: SubnetAvailableMemory::new(
+            subnet_available_memory: SubnetAvailableMemory::new_for_testing(
                 i64::MAX / 2,
                 i64::MAX / 2,
                 i64::MAX / 2,
@@ -341,10 +340,13 @@ mod tests {
         pub fn get(&self) -> T {
             let mut guard = self.item.lock().unwrap();
             loop {
-                if let Some(item) = (*guard).take() {
-                    break item;
-                } else {
-                    guard = self.cond.wait(guard).unwrap();
+                match (*guard).take() {
+                    Some(item) => {
+                        break item;
+                    }
+                    _ => {
+                        guard = self.cond.wait(guard).unwrap();
+                    }
                 }
             }
         }
@@ -1380,7 +1382,7 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert!(rep.0.is_ok(), "{:?}", rep);
+        assert!(rep.0.is_ok(), "{rep:?}");
 
         let wasm_memory = PageMap::new_for_testing();
         let wasm_memory_id = open_memory(&srv, &wasm_memory, 1);
@@ -1400,7 +1402,6 @@ mod tests {
             child_stable_memory_id,
         );
         exec_input.execution_parameters.instruction_limits = InstructionLimits::new(
-            FlagStatus::Enabled,
             NumInstructions::new(100_000),
             // The slice should be big enough for any syscall to fit.
             NumInstructions::new(1_000),
@@ -1522,7 +1523,6 @@ mod tests {
             child_stable_memory_id,
         );
         exec_input.execution_parameters.instruction_limits = InstructionLimits::new(
-            FlagStatus::Enabled,
             NumInstructions::new(100_000),
             // The slice should be big enough for any syscall to fit.
             NumInstructions::new(1_000),

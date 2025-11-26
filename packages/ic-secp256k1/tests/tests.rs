@@ -1,5 +1,8 @@
 use hex_literal::hex;
-use ic_secp256k1::{DerivationPath, KeyDecodingError, PrivateKey, PublicKey};
+use ic_secp256k1::{
+    DerivationPath, KeyDecodingError, MasterPublicKeyId, PocketIcMasterPublicKeyId, PrivateKey,
+    PublicKey,
+};
 use rand::Rng;
 use rand_chacha::ChaCha20Rng;
 
@@ -9,7 +12,7 @@ fn test_rng_with_seed(seed: [u8; 32]) -> ChaCha20Rng {
 }
 
 fn test_rng() -> ChaCha20Rng {
-    let seed = rand::thread_rng().gen::<[u8; 32]>();
+    let seed = rand::thread_rng().r#gen::<[u8; 32]>();
     // If a test ever fails, reproduce it using
     // let mut rng = test_rng_with_seed(hex!("SEED"));
     println!("RNG seed: {}", hex::encode(seed));
@@ -151,7 +154,7 @@ fn bitcoin_library_accepts_our_bip341_signatures() {
     use bitcoin::{
         hashes::hex::FromHex,
         schnorr::TapTweak,
-        secp256k1::{schnorr::Signature, Message, Secp256k1, XOnlyPublicKey},
+        secp256k1::{Message, Secp256k1, XOnlyPublicKey, schnorr::Signature},
         util::taproot::TapBranchHash,
     };
 
@@ -162,8 +165,8 @@ fn bitcoin_library_accepts_our_bip341_signatures() {
     for _trial in 0..1024 {
         let sk = PrivateKey::generate_using_rng(&mut rng);
 
-        let msg = rng.gen::<[u8; 32]>();
-        let ttr = rng.gen::<[u8; 32]>();
+        let msg = rng.r#gen::<[u8; 32]>();
+        let ttr = rng.r#gen::<[u8; 32]>();
 
         let sig = sk.sign_message_with_bip341(&msg, &mut rng, &ttr).unwrap();
 
@@ -275,19 +278,19 @@ fn should_reject_invalid_public_keys() {
         ),
         InvalidKey::new(
             "valid uncompressed point with header 02",
-            "02F599CDA3A05987498A716E820651AC96A4EEAA3AD9B7D6F244A83CC3381CABC4C300A1369821A5A86D4D9BA74FF68817C4CAEA4BAC737A7B00A48C4835F28DB4"
+            "02F599CDA3A05987498A716E820651AC96A4EEAA3AD9B7D6F244A83CC3381CABC4C300A1369821A5A86D4D9BA74FF68817C4CAEA4BAC737A7B00A48C4835F28DB4",
         ),
         InvalidKey::new(
             "valid uncompressed point with header 03",
-            "03F599CDA3A05987498A716E820651AC96A4EEAA3AD9B7D6F244A83CC3381CABC4C300A1369821A5A86D4D9BA74FF68817C4CAEA4BAC737A7B00A48C4835F28DB4"
+            "03F599CDA3A05987498A716E820651AC96A4EEAA3AD9B7D6F244A83CC3381CABC4C300A1369821A5A86D4D9BA74FF68817C4CAEA4BAC737A7B00A48C4835F28DB4",
         ),
         InvalidKey::new(
             "invalid uncompressed point (y off by one)",
-            "04F599CDA3A05987498A716E820651AC96A4EEAA3AD9B7D6F244A83CC3381CABC4C300A1369821A5A86D4D9BA74FF68817C4CAEA4BAC737A7B00A48C4835F28DB5"
+            "04F599CDA3A05987498A716E820651AC96A4EEAA3AD9B7D6F244A83CC3381CABC4C300A1369821A5A86D4D9BA74FF68817C4CAEA4BAC737A7B00A48C4835F28DB5",
         ),
         InvalidKey::new(
             "valid P256 point",
-            "04EB2D21CD969E68C767B091E91900863E7699826C3466F15B956BBB6CBAEDB09A5A16ED621975EC1BCB81A41EE5DCF719021B12A95CC858A735A266135EFD2E4E"
+            "04EB2D21CD969E68C767B091E91900863E7699826C3466F15B956BBB6CBAEDB09A5A16ED621975EC1BCB81A41EE5DCF719021B12A95CC858A735A266135EFD2E4E",
         ),
     ];
 
@@ -303,8 +306,8 @@ fn should_reject_invalid_public_keys() {
 }
 
 #[test]
-fn should_serialization_and_deserialization_round_trip_for_private_keys(
-) -> Result<(), KeyDecodingError> {
+fn should_serialization_and_deserialization_round_trip_for_private_keys()
+-> Result<(), KeyDecodingError> {
     let rng = &mut test_rng();
 
     for _ in 0..200 {
@@ -329,8 +332,8 @@ fn should_serialization_and_deserialization_round_trip_for_private_keys(
 }
 
 #[test]
-fn should_serialization_and_deserialization_round_trip_for_public_keys(
-) -> Result<(), KeyDecodingError> {
+fn should_serialization_and_deserialization_round_trip_for_public_keys()
+-> Result<(), KeyDecodingError> {
     let rng = &mut test_rng();
 
     for _ in 0..2000 {
@@ -384,19 +387,84 @@ fn should_match_bip340_reference_test_signatures() {
     }
 
     let bip340_tests = [
-        Bip340Test::new("F9308A019258C31049344F85F89D5229B531C845836F99B08601F113BCE036F9", "0000000000000000000000000000000000000000000000000000000000000000", "E907831F80848D1069A5371B402410364BDF1C5F8307B0084C55F1CE2DCA821525F66A4A85EA8B71E482A74F382D2CE5EBEEE8FDB2172F477DF4900D310536C0", true),
-        Bip340Test::new("DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659", "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89", "6896BD60EEAE296DB48A229FF71DFE071BDE413E6D43F917DC8DCF8C78DE33418906D11AC976ABCCB20B091292BFF4EA897EFCB639EA871CFA95F6DE339E4B0A", true),
-        Bip340Test::new("DD308AFEC5777E13121FA72B9CC1B7CC0139715309B086C960E18FD969774EB8", "7E2D58D8B3BCDF1ABADEC7829054F90DDA9805AAB56C77333024B9D0A508B75C", "5831AAEED7B44BB74E5EAB94BA9D4294C49BCF2A60728D8B4C200F50DD313C1BAB745879A5AD954A72C45A91C3A51D3C7ADEA98D82F8481E0E1E03674A6F3FB7", true),
-        Bip340Test::new("25D1DFF95105F5253C4022F628A996AD3A0D95FBF21D468A1B33F8C160D8F517", "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", "7EB0509757E246F19449885651611CB965ECC1A187DD51B64FDA1EDC9637D5EC97582B9CB13DB3933705B32BA982AF5AF25FD78881EBB32771FC5922EFC66EA3", true),
-        Bip340Test::new("D69C3509BB99E412E68B0FE8544E72837DFA30746D8BE2AA65975F29D22DC7B9", "4DF3C3F68FCC83B27E9D42C90431A72499F17875C81A599B566C9889B9696703", "00000000000000000000003B78CE563F89A0ED9414F5AA28AD0D96D6795F9C6376AFB1548AF603B3EB45C9F8207DEE1060CB71C04E80F593060B07D28308D7F4", true),
-        Bip340Test::new("DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659", "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89", "FFF97BD5755EEEA420453A14355235D382F6472F8568A18B2F057A14602975563CC27944640AC607CD107AE10923D9EF7A73C643E166BE5EBEAFA34B1AC553E2", false),
-        Bip340Test::new("DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659", "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89", "1FA62E331EDBC21C394792D2AB1100A7B432B013DF3F6FF4F99FCB33E0E1515F28890B3EDB6E7189B630448B515CE4F8622A954CFE545735AAEA5134FCCDB2BD", false),
-        Bip340Test::new("DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659", "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89", "6CFF5C3BA86C69EA4B7376F31A9BCB4F74C1976089B2D9963DA2E5543E177769961764B3AA9B2FFCB6EF947B6887A226E8D7C93E00C5ED0C1834FF0D0C2E6DA6", false),
-        Bip340Test::new("DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659", "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89", "0000000000000000000000000000000000000000000000000000000000000000123DDA8328AF9C23A94C1FEECFD123BA4FB73476F0D594DCB65C6425BD186051", false),
-        Bip340Test::new("DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659", "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89", "00000000000000000000000000000000000000000000000000000000000000017615FBAF5AE28864013C099742DEADB4DBA87F11AC6754F93780D5A1837CF197", false),
-        Bip340Test::new("DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659", "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89", "4A298DACAE57395A15D0795DDBFD1DCB564DA82B0F269BC70A74F8220429BA1D69E89B4C5564D00349106B8497785DD7D1D713A8AE82B32FA79D5F7FC407D39B", false),
-        Bip340Test::new("DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659", "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89", "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F69E89B4C5564D00349106B8497785DD7D1D713A8AE82B32FA79D5F7FC407D39B", false),
-        Bip340Test::new("DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659", "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89", "6CFF5C3BA86C69EA4B7376F31A9BCB4F74C1976089B2D9963DA2E5543E177769FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", false),
+        Bip340Test::new(
+            "F9308A019258C31049344F85F89D5229B531C845836F99B08601F113BCE036F9",
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            "E907831F80848D1069A5371B402410364BDF1C5F8307B0084C55F1CE2DCA821525F66A4A85EA8B71E482A74F382D2CE5EBEEE8FDB2172F477DF4900D310536C0",
+            true,
+        ),
+        Bip340Test::new(
+            "DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659",
+            "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89",
+            "6896BD60EEAE296DB48A229FF71DFE071BDE413E6D43F917DC8DCF8C78DE33418906D11AC976ABCCB20B091292BFF4EA897EFCB639EA871CFA95F6DE339E4B0A",
+            true,
+        ),
+        Bip340Test::new(
+            "DD308AFEC5777E13121FA72B9CC1B7CC0139715309B086C960E18FD969774EB8",
+            "7E2D58D8B3BCDF1ABADEC7829054F90DDA9805AAB56C77333024B9D0A508B75C",
+            "5831AAEED7B44BB74E5EAB94BA9D4294C49BCF2A60728D8B4C200F50DD313C1BAB745879A5AD954A72C45A91C3A51D3C7ADEA98D82F8481E0E1E03674A6F3FB7",
+            true,
+        ),
+        Bip340Test::new(
+            "25D1DFF95105F5253C4022F628A996AD3A0D95FBF21D468A1B33F8C160D8F517",
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "7EB0509757E246F19449885651611CB965ECC1A187DD51B64FDA1EDC9637D5EC97582B9CB13DB3933705B32BA982AF5AF25FD78881EBB32771FC5922EFC66EA3",
+            true,
+        ),
+        Bip340Test::new(
+            "D69C3509BB99E412E68B0FE8544E72837DFA30746D8BE2AA65975F29D22DC7B9",
+            "4DF3C3F68FCC83B27E9D42C90431A72499F17875C81A599B566C9889B9696703",
+            "00000000000000000000003B78CE563F89A0ED9414F5AA28AD0D96D6795F9C6376AFB1548AF603B3EB45C9F8207DEE1060CB71C04E80F593060B07D28308D7F4",
+            true,
+        ),
+        Bip340Test::new(
+            "DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659",
+            "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89",
+            "FFF97BD5755EEEA420453A14355235D382F6472F8568A18B2F057A14602975563CC27944640AC607CD107AE10923D9EF7A73C643E166BE5EBEAFA34B1AC553E2",
+            false,
+        ),
+        Bip340Test::new(
+            "DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659",
+            "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89",
+            "1FA62E331EDBC21C394792D2AB1100A7B432B013DF3F6FF4F99FCB33E0E1515F28890B3EDB6E7189B630448B515CE4F8622A954CFE545735AAEA5134FCCDB2BD",
+            false,
+        ),
+        Bip340Test::new(
+            "DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659",
+            "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89",
+            "6CFF5C3BA86C69EA4B7376F31A9BCB4F74C1976089B2D9963DA2E5543E177769961764B3AA9B2FFCB6EF947B6887A226E8D7C93E00C5ED0C1834FF0D0C2E6DA6",
+            false,
+        ),
+        Bip340Test::new(
+            "DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659",
+            "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89",
+            "0000000000000000000000000000000000000000000000000000000000000000123DDA8328AF9C23A94C1FEECFD123BA4FB73476F0D594DCB65C6425BD186051",
+            false,
+        ),
+        Bip340Test::new(
+            "DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659",
+            "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89",
+            "00000000000000000000000000000000000000000000000000000000000000017615FBAF5AE28864013C099742DEADB4DBA87F11AC6754F93780D5A1837CF197",
+            false,
+        ),
+        Bip340Test::new(
+            "DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659",
+            "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89",
+            "4A298DACAE57395A15D0795DDBFD1DCB564DA82B0F269BC70A74F8220429BA1D69E89B4C5564D00349106B8497785DD7D1D713A8AE82B32FA79D5F7FC407D39B",
+            false,
+        ),
+        Bip340Test::new(
+            "DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659",
+            "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89",
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F69E89B4C5564D00349106B8497785DD7D1D713A8AE82B32FA79D5F7FC407D39B",
+            false,
+        ),
+        Bip340Test::new(
+            "DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659",
+            "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89",
+            "6CFF5C3BA86C69EA4B7376F31A9BCB4F74C1976089B2D9963DA2E5543E177769FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141",
+            false,
+        ),
     ];
 
     for tv in bip340_tests {
@@ -498,7 +566,9 @@ fn should_handle_short_len_prehashed() {
 
     let prehash = hex!("2F45495C63D9BD3BD436D855");
 
-    let sig = hex!("307B5A1D99434C89F243BF2678EF969FD24A85BC3B62CFD0E083715FA91879FD918BCF8FAB5F622713284C42A73D5F96CAAE4BD94BC69655A43F18FB1DF89039");
+    let sig = hex!(
+        "307B5A1D99434C89F243BF2678EF969FD24A85BC3B62CFD0E083715FA91879FD918BCF8FAB5F622713284C42A73D5F96CAAE4BD94BC69655A43F18FB1DF89039"
+    );
 
     assert!(pk.verify_ecdsa_signature_prehashed_with_malleability(&prehash, &sig));
 }
@@ -513,7 +583,7 @@ fn key_derivation_matches_bip32() {
 
     // zeros the high bit to avoid requesting hardened derivation, which we do not support
     let path = (0..255)
-        .map(|_| rng.gen::<u32>() & 0x7FFFFFFF)
+        .map(|_| rng.r#gen::<u32>() & 0x7FFFFFFF)
         .collect::<Vec<u32>>();
 
     let master_key = PrivateKey::generate_using_rng(rng).public_key();
@@ -585,7 +655,7 @@ mod try_recovery_from_digest {
         let rng = &mut test_rng();
         let private_key = PrivateKey::generate_using_rng(rng);
         let public_key = private_key.public_key();
-        let digest = rng.gen::<[u8; 32]>();
+        let digest = rng.r#gen::<[u8; 32]>();
         let signature = private_key.sign_digest_with_ecdsa(&digest);
 
         let recid = public_key
@@ -648,11 +718,11 @@ tz/anssmxkNaYFHKxkqYb8GWzZHcs6fgz6D13qrBrOguDHJJ0N8mKHet
         Ok(_) => panic!("Unexpectedly accepted a secp256r1 private key as secp256k1"),
         Err(KeyDecodingError::InvalidKeyEncoding(e)) => {
             assert_eq!(
-                format!("{:?}", e),
+                format!("{e:?}"),
                 "\"PublicKey(OidUnknown { oid: ObjectIdentifier(1.3.132.0.10) })\""
             );
         }
-        Err(e) => panic!("Unexpected error {:?}", e),
+        Err(e) => panic!("Unexpected error {e:?}"),
     }
 }
 
@@ -667,10 +737,161 @@ Fuih1ILwOK+Hmr2Q5yPe4k0Kz2se3NM1eQeVaTl5BtwlTTc9IOcky4I7oQ==
         Ok(_) => panic!("Unexpectedly accepted a secp256r1 public key as secp256k1"),
         Err(KeyDecodingError::InvalidKeyEncoding(e)) => {
             assert_eq!(
-                format!("{:?}", e),
+                format!("{e:?}"),
                 "\"OidUnknown { oid: ObjectIdentifier(1.3.132.0.10) }\""
             );
         }
-        Err(e) => panic!("Unexpected error {:?}", e),
+        Err(e) => panic!("Unexpected error {e:?}"),
     }
+}
+
+fn test_key_derivation(
+    mk: PublicKey,
+    canister_id: &'static str,
+    derivation_path: &[Vec<u8>],
+    expected_key: &'static str,
+) {
+    use std::str::FromStr;
+
+    let canister_id = ic_secp256k1::CanisterId::from_str(canister_id).unwrap();
+
+    let dpk = mk.derive_subkey(&DerivationPath::from_canister_id_and_path(
+        canister_id.as_slice(),
+        derivation_path,
+    ));
+
+    assert_eq!(hex::encode(dpk.0.serialize_sec1(true)), expected_key,);
+}
+
+#[test]
+fn offline_ecdsa_key_derivation_matches_mainnet_for_key_1() {
+    test_key_derivation(
+        PublicKey::mainnet_key(MasterPublicKeyId::EcdsaKey1),
+        "h5jwf-5iaaa-aaaan-qmvoa-cai",
+        &[hex!("ABCDEF").to_vec(), hex!("012345").to_vec()],
+        "02735ca28b5c3e380016d7f28bf4703b540a8bbe8e24beffdc021455ca2ab93fe3",
+    );
+}
+
+#[test]
+fn offline_ecdsa_key_derivation_matches_mainnet_for_test_key_1() {
+    let derivation_path = [
+        "Hello".as_bytes().to_vec(),
+        "Threshold".as_bytes().to_vec(),
+        "Signatures".as_bytes().to_vec(),
+    ];
+
+    test_key_derivation(
+        PublicKey::mainnet_key(MasterPublicKeyId::EcdsaTestKey1),
+        "h5jwf-5iaaa-aaaan-qmvoa-cai",
+        &derivation_path,
+        "0315ae8bb8c6e9f78eec2167f5ac773067f37a39da1a1efbc585f9e90658d1c620",
+    );
+}
+
+#[test]
+fn offline_schnorr_key_derivation_matches_mainnet_for_key_1() {
+    test_key_derivation(
+        PublicKey::mainnet_key(MasterPublicKeyId::SchnorrKey1),
+        "h5jwf-5iaaa-aaaan-qmvoa-cai",
+        &[hex!("ABCDEF").to_vec(), hex!("012345").to_vec()],
+        "03e5e92c2399985f82521b110ac3dbf697a6b9522002c0d31d0b7cd5352c343457",
+    );
+}
+
+#[test]
+fn offline_schnorr_key_derivation_matches_mainnet_for_test_key_1() {
+    let derivation_path = [
+        "Hello".as_bytes().to_vec(),
+        "Threshold".as_bytes().to_vec(),
+        "Signatures".as_bytes().to_vec(),
+    ];
+
+    test_key_derivation(
+        PublicKey::mainnet_key(MasterPublicKeyId::SchnorrTestKey1),
+        "h5jwf-5iaaa-aaaan-qmvoa-cai",
+        &derivation_path,
+        "0237ca6a41c1db8ab40410445250a5d46fbec7f3e449c8f40f86d8622a4106cebd",
+    );
+}
+
+#[test]
+fn offline_ecdsa_key_derivation_matches_pocketic_for_key_1() {
+    test_key_derivation(
+        PublicKey::pocketic_key(PocketIcMasterPublicKeyId::EcdsaKey1),
+        "uzt4z-lp777-77774-qaabq-cai",
+        &[],
+        "02b0b6acdac2848231bdf5946f4b8d53919e542453fc8a5e2f6ed86f1c10112dd1",
+    );
+}
+
+#[test]
+fn offline_ecdsa_key_derivation_matches_pocketic_for_test_key_1() {
+    test_key_derivation(
+        PublicKey::pocketic_key(PocketIcMasterPublicKeyId::EcdsaTestKey1),
+        "uzt4z-lp777-77774-qaabq-cai",
+        &[],
+        "03a92d76d67a715fa4c938abee3f87736106ffc3f86a8dd0ac86268d823f0cfada",
+    );
+}
+
+#[test]
+fn offline_ecdsa_key_derivation_matches_pocketic_for_dfx_test_key() {
+    test_key_derivation(
+        PublicKey::pocketic_key(PocketIcMasterPublicKeyId::EcdsaDfxTestKey),
+        "uzt4z-lp777-77774-qaabq-cai",
+        &[],
+        "036d7246f93e7921a1f909fb451a19dbf7efc7166aa95dd14b1e9d6a58b619a98c",
+    );
+}
+
+#[test]
+fn offline_bip340_key_derivation_matches_pocketic_for_key_1() {
+    let derivation_path = vec![
+        b"Test".to_vec(),
+        b"Derivation".to_vec(),
+        b"For".to_vec(),
+        b"Bip340secp256k1".to_vec(),
+        b"key_1".to_vec(),
+    ];
+    test_key_derivation(
+        PublicKey::pocketic_key(PocketIcMasterPublicKeyId::SchnorrKey1),
+        "uzt4z-lp777-77774-qaabq-cai",
+        &derivation_path,
+        "026bdb2db9f5bf4993db8f278820096f69a3a7ba9cecde62396c8f828f6aaebe2c",
+    );
+}
+
+#[test]
+fn offline_bip340_key_derivation_matches_pocketic_for_test_key_1() {
+    let derivation_path = vec![
+        b"Test".to_vec(),
+        b"Derivation".to_vec(),
+        b"For".to_vec(),
+        b"Bip340secp256k1".to_vec(),
+        b"test_key_1".to_vec(),
+    ];
+    test_key_derivation(
+        PublicKey::pocketic_key(PocketIcMasterPublicKeyId::SchnorrTestKey1),
+        "uzt4z-lp777-77774-qaabq-cai",
+        &derivation_path,
+        "03e02e9e0304adf56b602f281f221b8b31ec18f294a93ef2434f7fa6d1d7714cbd",
+    );
+}
+
+#[test]
+fn offline_bip340_key_derivation_matches_pocketic_for_dfx_test_key() {
+    let derivation_path = vec![
+        b"Test".to_vec(),
+        b"Derivation".to_vec(),
+        b"For".to_vec(),
+        b"Bip340secp256k1".to_vec(),
+        b"dfx_test_key".to_vec(),
+    ];
+    test_key_derivation(
+        PublicKey::pocketic_key(PocketIcMasterPublicKeyId::SchnorrDfxTestKey),
+        "uzt4z-lp777-77774-qaabq-cai",
+        &derivation_path,
+        "03ccb166a97a93df8cc130e0a7873aab5f2e31d2ca52dc46bd5ddf72ae78d73f68",
+    );
 }

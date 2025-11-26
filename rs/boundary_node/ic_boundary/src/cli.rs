@@ -7,7 +7,6 @@ use ic_bn_lib::{
         shed::cli::{ShedSharded, ShedSystem},
     },
     parse_size, parse_size_usize,
-    types::RequestType,
 };
 use ic_config::crypto::CryptoConfig;
 use ic_types::CanisterId;
@@ -15,7 +14,10 @@ use std::time::Duration;
 use std::{net::SocketAddr, path::PathBuf};
 use url::Url;
 
-use crate::core::{AUTHOR_NAME, SERVICE_NAME};
+use crate::{
+    core::{AUTHOR_NAME, SERVICE_NAME},
+    http::RequestType,
+};
 
 #[derive(Parser)]
 #[clap(name = SERVICE_NAME)]
@@ -33,7 +35,6 @@ pub struct Cli {
     #[command(flatten, next_help_heading = "HTTP Client")]
     pub http_client: http::client::cli::HttpClient,
 
-    #[cfg(feature = "tls")]
     #[command(flatten, next_help_heading = "TLS settings")]
     pub tls: Tls,
 
@@ -122,7 +123,6 @@ pub struct Listen {
     pub listen_http_port: Option<u16>,
 
     /// Port to listen for HTTPS (listens on IPv6 wildcard "::")
-    #[cfg(feature = "tls")]
     #[clap(env, long)]
     pub listen_https_port: Option<u16>,
 
@@ -188,7 +188,6 @@ pub struct NfTables {
     pub nftables_system_replicas_var: String,
 }
 
-#[cfg(feature = "tls")]
 #[derive(Args)]
 pub struct Tls {
     /// Hostname to request TLS certificate for

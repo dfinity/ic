@@ -34,6 +34,5 @@ ic-crypto-test-utils-local-csp-vault = { path = "../test_utils/local_csp_vault" 
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
-ic-test-utilities = { path = "../../test_utilities" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 tempfile = { workspace = true }

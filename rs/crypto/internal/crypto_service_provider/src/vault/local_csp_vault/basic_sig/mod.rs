@@ -85,15 +85,13 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 SecretKeyStoreInsertionError::TransientError(e) => {
                     CspBasicSignatureKeygenError::TransientInternalError {
                         internal_error: format!(
-                            "Error persisting secret key store during CSP basic signature key generation: {}",
-                            e
+                            "Error persisting secret key store during CSP basic signature key generation: {e}"
                         ),
                     }
                 }
                 SecretKeyStoreInsertionError::SerializationError(e) => CspBasicSignatureKeygenError::InternalError {
                     internal_error: format!(
-                        "Error persisting secret key store during CSP basic signature key generation: {}",
-                        e
+                        "Error persisting secret key store during CSP basic signature key generation: {e}"
                     ),
                 },
             })
@@ -109,8 +107,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                         PublicKeySetOnceError::Io(io_error) => {
                             CspBasicSignatureKeygenError::TransientInternalError {
                                 internal_error: format!(
-                                    "IO error persisting node signing public key: {}",
-                                    io_error
+                                    "IO error persisting node signing public key: {io_error}"
                                 ),
                             }
                         }
@@ -162,7 +159,7 @@ fn validate_node_signing_public_key(
 ) -> Result<ValidNodeSigningPublicKey, CspBasicSignatureKeygenError> {
     ValidNodeSigningPublicKey::try_from(public_key_proto).map_err(|error| {
         CspBasicSignatureKeygenError::InternalError {
-            internal_error: format!("Node signing public key validation error: {}", error),
+            internal_error: format!("Node signing public key validation error: {error}"),
         }
     })
 }

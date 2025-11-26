@@ -16,8 +16,8 @@ Success::
 . The calls succeed with the expected values.
 end::catalog[] */
 
-use anyhow::{anyhow, bail, Error};
-use ic_agent::{export::Principal, Agent};
+use anyhow::{Error, anyhow, bail};
+use ic_agent::{Agent, export::Principal};
 use ic_boundary_nodes_system_test_utils::{
     constants::COUNTER_CANISTER_WAT,
     helpers::{create_canister, get_install_url},
@@ -32,16 +32,16 @@ use ic_system_test_driver::{
 };
 use ic_types::PrincipalId;
 use reqwest::{
+    ClientBuilder, Method, Request, StatusCode,
     header::{
         ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN,
         ACCESS_CONTROL_MAX_AGE, CACHE_CONTROL, CONTENT_TYPE, COOKIE, DNT, IF_MODIFIED_SINCE,
         IF_NONE_MATCH, RANGE, USER_AGENT,
     },
     redirect::Policy,
-    ClientBuilder, Method, Request, StatusCode,
 };
 use serde::Deserialize;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::net::SocketAddr;
 use v2_call_transport::V2CallAgent;
 

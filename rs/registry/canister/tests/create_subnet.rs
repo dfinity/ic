@@ -20,7 +20,7 @@ use ic_nns_test_utils::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::{invariant_compliant_mutation_as_atomic_req, INITIAL_MUTATION_ID},
+    registry::{INITIAL_MUTATION_ID, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::subnet::v1::{
     ChainKeyConfig as ChainKeyConfigPb, SubnetListRecord as SubnetListRecordPb,
@@ -29,7 +29,7 @@ use ic_protobuf::registry::subnet::v1::{
 use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
 use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_subnet_features::{
-    ChainKeyConfig, KeyConfig as KeyConfigInternal, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+    ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig as KeyConfigInternal,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryAtomicMutateRequest, upsert};
@@ -199,12 +199,16 @@ fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
 
         let cup_contents = get_cup_contents(&registry, subnet_id).await;
 
-        assert!(cup_contents
-            .initial_ni_dkg_transcript_low_threshold
-            .is_some());
-        assert!(cup_contents
-            .initial_ni_dkg_transcript_high_threshold
-            .is_some());
+        assert!(
+            cup_contents
+                .initial_ni_dkg_transcript_low_threshold
+                .is_some()
+        );
+        assert!(
+            cup_contents
+                .initial_ni_dkg_transcript_high_threshold
+                .is_some()
+        );
 
         Ok(())
     });
@@ -265,6 +269,7 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         }));
 
         let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
@@ -294,6 +299,7 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
         // Create payload message with KeyConfigRequest
         let signature_request_timeout_ns = Some(12345);
         let idkg_key_rotation_period_ms = Some(12345);
+        let max_parallel_pre_signature_transcripts_in_creation = Some(12345);
         let payload = CreateSubnetPayload {
             chain_key_config: Some(InitialChainKeyConfig {
                 key_configs: vec![KeyConfigRequest {
@@ -310,6 +316,7 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
                 }],
                 signature_request_timeout_ns,
                 idkg_key_rotation_period_ms,
+                max_parallel_pre_signature_transcripts_in_creation,
             }),
             ..make_create_subnet_payload(node_ids.clone())
         };
@@ -347,6 +354,10 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
         assert_eq!(
             chain_key_config.idkg_key_rotation_period_ms,
             idkg_key_rotation_period_ms
+        );
+        assert_eq!(
+            chain_key_config.max_parallel_pre_signature_transcripts_in_creation,
+            max_parallel_pre_signature_transcripts_in_creation
         );
         assert_eq!(
             chain_key_config.key_configs,

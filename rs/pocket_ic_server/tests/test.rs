@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::common::{send_signal_to_pic, start_server, start_server_helper};
 use candid::{Encode, Principal};
 use ic_agent::agent::CallResponse;
@@ -8,9 +9,9 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_utils::interfaces::ManagementCanister;
 use nix::sys::signal::Signal;
 use pocket_ic::common::rest::{InstanceConfig, SubnetConfigSet, SubnetKind};
-use pocket_ic::{update_candid, PocketIc, PocketIcBuilder, PocketIcState};
-use reqwest::blocking::Client;
+use pocket_ic::{PocketIc, PocketIcBuilder, PocketIcState, update_candid};
 use reqwest::StatusCode;
+use reqwest::blocking::Client;
 use slog::Level;
 use std::io::Read;
 use std::path::PathBuf;
@@ -125,11 +126,15 @@ fn test_creation_of_instance_extended() {
             ..Default::default()
         }
         .into(),
+        http_gateway_config: None,
         state_dir: None,
-        nonmainnet_features: false,
+        icp_config: None,
         log_level: None,
         bitcoind_addr: None,
+        dogecoind_addr: None,
         icp_features: None,
+        incomplete_state: None,
+        initial_time: None,
     };
     let response = client
         .post(url.join("instances").unwrap())
@@ -171,10 +176,12 @@ fn test_blob_store() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 
-    assert!(response
-        .headers()
-        .get(reqwest::header::CONTENT_ENCODING)
-        .is_none());
+    assert!(
+        response
+            .headers()
+            .get(reqwest::header::CONTENT_ENCODING)
+            .is_none()
+    );
 
     let blob = response.bytes().unwrap();
     assert_eq!(blob, "decafbad".as_bytes());
@@ -220,11 +227,13 @@ fn test_blob_store_wrong_encoding() {
         .send()
         .unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    assert!(response
-        .text()
-        .unwrap()
-        .to_lowercase()
-        .contains("bad encoding"));
+    assert!(
+        response
+            .text()
+            .unwrap()
+            .to_lowercase()
+            .contains("bad encoding")
+    );
 }
 
 #[test]

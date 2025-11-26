@@ -4,30 +4,43 @@ package state.canister_state_bits.v1;
 import "google/protobuf/wrappers.proto";
 import "state/ingress/v1/ingress.proto";
 import "state/queues/v1/queues.proto";
-import "state/v1/metadata.proto";
 import "types/v1/management_canister_types.proto";
 import "types/v1/types.proto";
+
+enum SnapshotSource {
+  SNAPSHOT_SOURCE_UNSPECIFIED = 0;
+  SNAPSHOT_SOURCE_TAKEN_FROM_CANISTER = 1;
+  SNAPSHOT_SOURCE_UPLOADED_MANUALLY = 2;
+}
 
 message CallContext {
   message Ingress {
     types.v1.UserId user_id = 1;
     bytes message_id = 2;
+    string method_name = 3;
+  }
+  message Query {
+    types.v1.UserId user_id = 1;
+    string method_name = 2;
   }
   message CanisterUpdateOrQuery {
     types.v1.CanisterId canister_id = 1;
     uint64 callback_id = 2;
     // If non-zero, this originates from a best-effort canister update call.
     uint32 deadline_seconds = 3;
+    string method_name = 4;
   }
   // System task is either a Heartbeat or a GlobalTimer.
   message SystemTask {}
-
+  // deprecated types.v1.UserId query
+  reserved 3;
+  reserved "query";
   oneof call_origin {
     Ingress ingress = 1;
     CanisterUpdateOrQuery canister_update = 2;
-    types.v1.UserId query = 3;
     CanisterUpdateOrQuery canister_query = 4;
     SystemTask system_task = 7;
+    Query user_query = 12;
   }
   bool responded = 5;
   state.queues.v1.Funds available_funds = 6;
@@ -272,6 +285,8 @@ message CanisterLoadSnapshot {
   uint64 canister_version = 1;
   uint64 taken_at_timestamp = 2;
   bytes snapshot_id = 3;
+  SnapshotSource source = 4;
+  types.v1.PrincipalId from_canister_id = 5;
 }
 
 message CanisterControllers {
@@ -287,6 +302,7 @@ message CanisterRename {
   types.v1.PrincipalId canister_id = 1;
   uint64 total_num_changes = 2;
   RenameTo rename_to = 3;
+  types.v1.PrincipalId requested_by = 4;
 }
 
 message RenameTo {
@@ -385,11 +401,12 @@ message TaskQueue {
   repeated ExecutionTask queue = 3;
 }
 
+// Next ID: 57
 message CanisterStateBits {
   reserved 1;
   reserved "controller";
   uint64 last_full_execution_round = 2;
-  CallContextManager call_context_manager = 3;
+  reserved 3;
   uint64 compute_allocation = 4;
   int64 accumulated_priority = 5;
   reserved 6;
@@ -457,6 +474,8 @@ message CanisterStateBits {
   reserved "log_visibility";
   // Log visibility for the canister.
   LogVisibilityV2 log_visibility_v2 = 51;
+  // The capacity of the canister log in bytes.
+  uint64 log_memory_limit = 56;
   // Log records of the canister.
   repeated CanisterLogRecord canister_log_records = 43;
   // The index of the next log record to be created.

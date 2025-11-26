@@ -4,6 +4,7 @@ set -e
 
 source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
+source /opt/ic/bin/grub.sh
 
 SCRIPT="$(basename "$0")[$$]"
 VERSION_FILE="/opt/ic/share/version.txt"
@@ -16,46 +17,6 @@ get_version_noreport() {
         VERSION="unknown"
         VERSION_OK=0
     fi
-}
-
-# Reads properties "boot_alternative" and "boot_cycle" from the grubenv
-# file. The properties are stored as global variables.
-#
-# Arguments:
-# $1 - name of grubenv file
-read_grubenv() {
-    local GRUBENV_FILE="$1"
-
-    while IFS="=" read -r key value; do
-        case "$key" in
-            '#'*) ;;
-            'boot_alternative' | 'boot_cycle')
-                eval "$key=\"$value\""
-                ;;
-            *) ;;
-        esac
-    done <"$GRUBENV_FILE"
-}
-
-# Writes "boot_alternative" and "boot_cycle" global variables to grubenv file
-#
-# Arguments:
-# $1 - name of grubenv file
-write_grubenv() {
-    local GRUBENV_FILE="$1"
-
-    TMP_FILE=$(mktemp /tmp/grubenv-XXXXXXXXXXXX)
-    (
-        echo "# GRUB Environment Block"
-        echo boot_alternative="$boot_alternative"
-        echo boot_cycle="$boot_cycle"
-        # Fill to make sure we will have 1024 bytes
-        echo -n "################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################"
-    ) >"${TMP_FILE}"
-    # Truncate to arrive at precisely 1024 bytes
-    truncate --size=1024 "${TMP_FILE}"
-    cat "${TMP_FILE}" >"${GRUBENV_FILE}"
-    rm "${TMP_FILE}"
 }
 
 # Convert A -> B and B -> A
@@ -105,7 +66,7 @@ usage() {
 Usage:
   manageboot.sh [ -f grubenvfile] system_type action
 
-  -f specify alternative grubenv file (defaults to /grub/grubenv).
+  -f specify alternative grubenv file (defaults to /boot/grub/grubenv).
      Primarily useful for testing
 
   Arguments:
@@ -123,13 +84,16 @@ Usage:
       The update is written to the partitions, but the bootloader is
       not changed yet; see upgrade-commit command.
 
-    upgrade-commit
+    upgrade-commit [--no-reboot]
       Commits a previously installed upgrade by writing instructions to the
       bootloader to switch to the new system after reboot, and also triggers
-      reboot immediately.
+      reboot immediately (unless --no-reboot is specified).
       This must be called after the upgrade-install command above finished
       successfully. Calling it under any other circumstances is illegal and
       will result in a wrong (possibly failing) boot.
+
+      Options:
+        --no-reboot  Skip the automatic reboot after committing the upgrade.
 
     confirm
       Confirm that the current system booted fine (required after first
@@ -166,7 +130,7 @@ if [ $(id -u) != 0 ]; then
 fi
 
 # Parsing options first
-GRUBENV_FILE=/grub/grubenv
+GRUBENV_FILE=/boot/grub/grubenv
 while getopts ":f:" OPT; do
     case "${OPT}" in
         f)
@@ -190,7 +154,7 @@ if [ -z "${SYSTEM_TYPE}" ] || [ -z "${ACTION}" ]; then
 fi
 
 if [[ "${SYSTEM_TYPE}" != "guestos" && "${SYSTEM_TYPE}" != "hostos" ]]; then
-    echo "Invalid system type. Must be 'guestos' or 'hostos'."
+    write_log "Invalid system type. Must be 'guestos' or 'hostos'."
     exit 1
 fi
 
@@ -198,6 +162,7 @@ get_version_noreport
 
 # Read current state
 read_grubenv "${GRUBENV_FILE}"
+write_log "${SYSTEM_TYPE} read grub environment - boot_alternative: ${boot_alternative}, boot_cycle: ${boot_cycle}"
 
 CURRENT_ALTERNATIVE="${boot_alternative}"
 NEXT_BOOT="${CURRENT_ALTERNATIVE}"
@@ -205,8 +170,10 @@ IS_STABLE=1
 if [ "${boot_cycle}" == "first_boot" ]; then
     # If the next system to be booted according to bootloader has never been
     # booted yet, then we must still be in the other system.
+    write_log "WARNING: ${SYSTEM_TYPE} detected first_boot state - adjusting CURRENT_ALTERNATIVE from ${CURRENT_ALTERNATIVE} to $(swap_alternative "${CURRENT_ALTERNATIVE}")"
     CURRENT_ALTERNATIVE=$(swap_alternative "${CURRENT_ALTERNATIVE}")
     IS_STABLE=0
+    write_log "${SYSTEM_TYPE} system marked as unstable due to first_boot state"
 
     write_metric "${SYSTEM_TYPE}_boot_stable" \
         "0" \
@@ -217,11 +184,13 @@ fi
 if [ "${boot_cycle}" == "failsafe_check" ]; then
     # If the system booted is marked as "failsafe_check" then bootloader
     # will revert to the other system on next boot.
+    write_log "${SYSTEM_TYPE} detected failsafe_check state - system will rollback to $(swap_alternative "${NEXT_BOOT}") on next reboot"
     NEXT_BOOT=$(swap_alternative "${NEXT_BOOT}")
     write_log "${SYSTEM_TYPE} sets ${NEXT_BOOT} as failsafe for next boot"
 
     # TODO should also set IS_STABLE=0 here to prevent manual overwrite
     # of a backup install slot.
+    write_log "${SYSTEM_TYPE} WARNING: System is in failsafe_check state - upgrade attempts will fail until state is resolved"
 
     write_metric "${SYSTEM_TYPE}_boot_stable" \
         "0" \
@@ -245,11 +214,12 @@ TARGET_VAR=$(get_partition "${TARGET_ALTERNATIVE}" "var")
 # Execute subsequent action
 case "${ACTION}" in
     upgrade-install)
+        write_log "${SYSTEM_TYPE} upgrade-install action called - IS_STABLE: ${IS_STABLE}, boot_cycle: ${boot_cycle}, boot_alternative: ${boot_alternative}"
         if [ "${IS_STABLE}" != 1 ]; then
-            write_log "${SYSTEM_TYPE} attempted to install upgrade in unstable state"
-            echo "Cannot install an upgrade before present system is committed as stable." >&2
+            write_log "Cannot install an upgrade before present system is committed as stable."
             exit 1
         fi
+        write_log "${SYSTEM_TYPE} upgrade-install proceeding - system is stable"
 
         if [ "$#" == 2 ]; then
             BOOT_IMG="$1"
@@ -295,15 +265,25 @@ case "${ACTION}" in
 
         ;;
     upgrade-commit)
+        write_log "${SYSTEM_TYPE} upgrade-commit action called - IS_STABLE: ${IS_STABLE}, boot_cycle: ${boot_cycle}, boot_alternative: ${boot_alternative}"
         if [ "${IS_STABLE}" != 1 ]; then
-            echo "Cannot install an upgrade before present system is committed as stable." >&2
+            write_log "Cannot install an upgrade before present system is committed as stable."
             exit 1
         fi
 
+        NO_REBOOT=0
+        if [ "$1" == "--no-reboot" ]; then
+            NO_REBOOT=1
+            write_log "${SYSTEM_TYPE} upgrade-commit called with --no-reboot flag"
+        fi
+
         # Tell boot loader to switch partitions on next boot.
+        write_log "${SYSTEM_TYPE} upgrade-commit proceeding - switching from ${boot_alternative} to ${TARGET_ALTERNATIVE}"
+        write_log "Setting boot_alternative to ${TARGET_ALTERNATIVE} and boot_cycle to first_boot"
+        write_grubenv "${GRUBENV_FILE}" "${TARGET_ALTERNATIVE}" "first_boot"
+        # Only update variables after successful write_grubenv
         boot_alternative="${TARGET_ALTERNATIVE}"
         boot_cycle=first_boot
-        write_grubenv "${GRUBENV_FILE}"
 
         write_log "${SYSTEM_TYPE} upgrade committed to slot ${TARGET_ALTERNATIVE}"
         write_metric_attr "${SYSTEM_TYPE}_boot_action" \
@@ -316,17 +296,23 @@ case "${ACTION}" in
             "${SYSTEM_TYPE} is boot stable" \
             "gauge"
 
-        write_log "${SYSTEM_TYPE} upgrade rebooting now, next slot ${TARGET_ALTERNATIVE}"
-        sync
-        # Ignore termination signals from the following reboot, so that
-        # the script exits without error.
-        trap -- '' SIGTERM
-        reboot
+        if [ "${NO_REBOOT}" == 1 ]; then
+            write_log "${SYSTEM_TYPE} upgrade committed to slot ${TARGET_ALTERNATIVE}, skipping reboot"
+        else
+            write_log "${SYSTEM_TYPE} upgrade rebooting now, next slot ${TARGET_ALTERNATIVE}"
+            # Ignore termination signals from the following reboot, so that
+            # the script exits without error.
+            trap 'write_log "upgrade-commit received SIGTERM"; exit 0' SIGTERM
+            reboot
+        fi
         ;;
     confirm)
+        write_log "${SYSTEM_TYPE} confirm action called - current boot_cycle: ${boot_cycle}, boot_alternative: ${boot_alternative}, IS_STABLE: ${IS_STABLE}"
         if [ "$boot_cycle" != "stable" ]; then
+            write_log "${SYSTEM_TYPE} transitioning from boot_cycle '${boot_cycle}' to 'stable' at slot ${CURRENT_ALTERNATIVE}"
+            write_grubenv "${GRUBENV_FILE}" "$boot_alternative" "stable"
+            # Only update boot_cycle after successful write_grubenv
             boot_cycle=stable
-            write_grubenv "${GRUBENV_FILE}"
             write_log "${SYSTEM_TYPE} stable boot confirmed at slot ${CURRENT_ALTERNATIVE}"
             write_metric "${SYSTEM_TYPE}_boot_stable" \
                 "1" \
@@ -337,6 +323,8 @@ case "${ACTION}" in
                 "1" \
                 "${SYSTEM_TYPE} boot action" \
                 "gauge"
+        else
+            write_log "${SYSTEM_TYPE} confirm called but boot_cycle is already 'stable' - no action needed"
         fi
         ;;
     current)

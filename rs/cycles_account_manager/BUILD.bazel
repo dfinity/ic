@@ -2,49 +2,56 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/config",
-    "//rs/interfaces",
-    "//rs/monitoring/logger",
-    "//rs/nns/constants",
-    "//rs/registry/subnet_type",
-    "//rs/replicated_state",
-    "//rs/types/base_types",
-    "//rs/types/management_canister_types",
-    "//rs/types/types",
-    "@crate_index//:prometheus",
-    "@crate_index//:serde",
-    "@crate_index//:slog",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/limits",
-    "//rs/test_utilities",
-    "//rs/test_utilities/logger",
-    "//rs/test_utilities/state",
-    "//rs/test_utilities/types",
-    "//rs/types/wasm_types",
-    "@crate_index//:candid",
-]
-
 rust_library(
     name = "cycles_account_manager",
     srcs = glob(["src/**"]),
     crate_name = "ic_cycles_account_manager",
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/interfaces",
+        "//rs/monitoring/logger",
+        "//rs/nns/constants",
+        "//rs/registry/subnet_type",
+        "//rs/replicated_state",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:prometheus",
+        "@crate_index//:serde",
+        "@crate_index//:slog",
+    ],
 )
 
 rust_test(
     name = "cycles_account_manager_test",
     crate = ":cycles_account_manager",
-    deps = DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/test_utilities/types",
+        "@crate_index//:candid",
+    ],
 )
 
 rust_test(
     name = "cycles_account_manager_integration",
     srcs = glob(["tests/**/*.rs"]),
-    deps = [":cycles_account_manager"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [":cycles_account_manager"] + [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/interfaces",
+        "//rs/limits",
+        "//rs/monitoring/logger",
+        "//rs/registry/subnet_type",
+        "//rs/replicated_state",
+        "//rs/test_utilities",
+        "//rs/test_utilities/logger",
+        "//rs/test_utilities/state",
+        "//rs/test_utilities/types",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:prometheus",
+    ],
 )

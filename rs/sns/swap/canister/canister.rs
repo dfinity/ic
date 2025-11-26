@@ -1,5 +1,6 @@
 // TODO: Jira ticket NNS1-3556
 #![allow(static_mut_refs)]
+#![allow(deprecated)]
 
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
@@ -34,7 +35,7 @@ use ic_sns_swap::{
         NotifyPaymentFailureResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Swap,
     },
 };
-use ic_stable_structures::{writer::Writer, Memory};
+use ic_stable_structures::{Memory, writer::Writer};
 use prost::Message;
 use std::{
     cell::RefCell,
@@ -183,10 +184,7 @@ async fn do_get_canister_status(
         .await
         .map(CanisterStatusResultV2::from)
         .unwrap_or_else(|err| {
-            panic!(
-                "Couldn't get canister_status of {}. Err: {:#?}",
-                canister_id, err
-            )
+            panic!("Couldn't get canister_status of {canister_id}. Err: {err:#?}")
         })
 }
 
@@ -350,17 +348,14 @@ fn init_timers() {
 fn reset_timers(_request: ResetTimersRequest) -> ResetTimersResponse {
     let reset_timers_cool_down_interval_seconds = RESET_TIMERS_COOL_DOWN_INTERVAL.as_secs();
 
-    if let Some(timers) = swap_mut().timers {
-        if let Some(last_reset_timestamp_seconds) = timers.last_reset_timestamp_seconds {
-            if now_seconds().saturating_sub(last_reset_timestamp_seconds)
-                < reset_timers_cool_down_interval_seconds
-            {
-                panic!(
-                    "Reset has already been called within the past {:?} seconds",
-                    reset_timers_cool_down_interval_seconds
-                );
-            }
-        }
+    if let Some(timers) = swap_mut().timers
+        && let Some(last_reset_timestamp_seconds) = timers.last_reset_timestamp_seconds
+        && now_seconds().saturating_sub(last_reset_timestamp_seconds)
+            < reset_timers_cool_down_interval_seconds
+    {
+        panic!(
+            "Reset has already been called within the past {reset_timers_cool_down_interval_seconds:?} seconds"
+        );
     }
 
     init_timers();
@@ -449,8 +444,7 @@ fn canister_post_upgrade() {
         Err(err) => {
             panic!(
                 "Error deserializing canister state post-upgrade. \
-                CANISTER HAS BROKEN STATE!!!!. Error: {:?}",
-                err
+                CANISTER HAS BROKEN STATE!!!!. Error: {err:?}"
             );
         }
         Ok(proto) => set_state(proto),
@@ -460,8 +454,7 @@ fn canister_post_upgrade() {
     // rolls back.
     swap().rebuild_indexes().unwrap_or_else(|err| {
         panic!(
-            "Error rebuilding the Swap canister indexes. The stable memory has been exhausted: {}",
-            err
+            "Error rebuilding the Swap canister indexes. The stable memory has been exhausted: {err}"
         )
     });
 
@@ -469,7 +462,10 @@ fn canister_post_upgrade() {
 }
 
 /// Serve an HttpRequest made to this canister
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 pub fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),
@@ -539,6 +535,15 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "sale_cf_total_icp_e8s",
         swap().current_neurons_fund_participation_e8s() as f64,
         "The total amount of ICP contributed by the Community Fund",
+    )?;
+    w.encode_gauge(
+        "swap_auto_finalization_failed",
+        if swap().has_auto_finalization_failed() {
+            1.0
+        } else {
+            0.0
+        },
+        "Whether the auto-finalization has failed (1.0 if failed, 0.0 if succeeded or not attempted)",
     )?;
 
     Ok(())

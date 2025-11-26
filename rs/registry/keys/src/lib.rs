@@ -7,9 +7,9 @@ use candid::{CandidType, Deserialize};
 use core::fmt;
 use ic_base_types::{CanisterId, NodeId, SubnetId};
 use ic_management_canister_types_private::{EcdsaKeyId, MasterPublicKeyId};
+use ic_types::PrincipalId;
 use ic_types::crypto::KeyPurpose;
 use ic_types::registry::RegistryClientError;
-use ic_types::PrincipalId;
 use serde::Serialize;
 use std::str::FromStr;
 
@@ -43,22 +43,20 @@ pub fn get_ecdsa_key_id_from_signing_subnet_list_key(
         .strip_prefix(ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX)
         .ok_or_else(|| RegistryClientError::DecodeError {
             error: format!(
-                "ECDSA Signing Subnet List key id {} does not start with prefix {}",
-                signing_subnet_list_key, ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX
+                "ECDSA Signing Subnet List key id {signing_subnet_list_key} does not start with prefix {ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX}"
             ),
         })?;
     prefix_removed
         .parse::<EcdsaKeyId>()
         .map_err(|error| RegistryClientError::DecodeError {
             error: format!(
-                "ECDSA Signing Subnet List key id {} could not be converted to an EcdsaKeyId: {:?}",
-                signing_subnet_list_key, error
+                "ECDSA Signing Subnet List key id {signing_subnet_list_key} could not be converted to an EcdsaKeyId: {error:?}"
             ),
         })
 }
 
 pub fn make_chain_key_enabled_subnet_list_key(key_id: &MasterPublicKeyId) -> String {
-    format!("{}{}", CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, key_id)
+    format!("{CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX}{key_id}")
 }
 
 pub fn get_master_public_key_id_from_signing_subnet_list_key(
@@ -68,16 +66,14 @@ pub fn get_master_public_key_id_from_signing_subnet_list_key(
         .strip_prefix(CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX)
         .ok_or_else(|| RegistryClientError::DecodeError {
             error: format!(
-                "Chain Key Signing Subnet List key id {} does not start with prefix {}",
-                signing_subnet_list_key, CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX
+                "Chain Key Signing Subnet List key id {signing_subnet_list_key} does not start with prefix {CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX}"
             ),
         })?;
     prefix_removed
         .parse::<MasterPublicKeyId>()
         .map_err(|error| RegistryClientError::DecodeError {
             error: format!(
-                "Chain Key Signing Subnet List key id {} could not be converted to a MasterPublicKeyId: {:?}",
-                signing_subnet_list_key, error
+                "Chain Key Signing Subnet List key id {signing_subnet_list_key} could not be converted to a MasterPublicKeyId: {error:?}"
             ),
         })
 }
@@ -160,11 +156,11 @@ impl fmt::Display for FirewallRulesScope {
                 subnet_id.get()
             )?,
             FirewallRulesScope::ReplicaNodes => {
-                write!(fmt, "{}", FIREWALL_RULES_SCOPE_REPLICA_NODES)?
+                write!(fmt, "{FIREWALL_RULES_SCOPE_REPLICA_NODES}")?
             }
-            FirewallRulesScope::Global => write!(fmt, "{}", FIREWALL_RULES_SCOPE_GLOBAL)?,
+            FirewallRulesScope::Global => write!(fmt, "{FIREWALL_RULES_SCOPE_GLOBAL}")?,
             FirewallRulesScope::ApiBoundaryNodes => {
-                write!(fmt, "{}", FIREWALL_RULES_SCOPE_API_BOUNDARY_NODES)?
+                write!(fmt, "{FIREWALL_RULES_SCOPE_API_BOUNDARY_NODES}")?
             }
         };
         Ok(())
@@ -195,20 +191,16 @@ impl FromStr for FirewallRulesScope {
 }
 
 pub fn make_firewall_rules_record_key(scope: &FirewallRulesScope) -> String {
-    format!("{}{}", FIREWALL_RULES_RECORD_KEY_PREFIX, scope)
+    format!("{FIREWALL_RULES_RECORD_KEY_PREFIX}{scope}")
 }
 
 /// Returns the principal_id associated with a given firewall_record key if
 /// the key is, in fact, a valid firewall_record_key of node or subnet scope.
 pub fn get_firewall_rules_record_principal_id(key: &str) -> Option<PrincipalId> {
-    let firewall_node_record_prefix = format!(
-        "{}{}_",
-        FIREWALL_RULES_RECORD_KEY_PREFIX, FIREWALL_RULES_SCOPE_NODE_PREFIX
-    );
-    let firewall_subnet_record_prefix = format!(
-        "{}{}_",
-        FIREWALL_RULES_RECORD_KEY_PREFIX, FIREWALL_RULES_SCOPE_SUBNET_PREFIX
-    );
+    let firewall_node_record_prefix =
+        format!("{FIREWALL_RULES_RECORD_KEY_PREFIX}{FIREWALL_RULES_SCOPE_NODE_PREFIX}_");
+    let firewall_subnet_record_prefix =
+        format!("{FIREWALL_RULES_RECORD_KEY_PREFIX}{FIREWALL_RULES_SCOPE_SUBNET_PREFIX}_");
     if let Some(key) = key.strip_prefix(&firewall_node_record_prefix) {
         PrincipalId::from_str(key).ok()
     } else if let Some(key) = key.strip_prefix(&firewall_subnet_record_prefix) {
@@ -224,10 +216,7 @@ pub fn make_provisional_whitelist_record_key() -> String {
 
 // Makes a key for a NodeOperatorRecord.
 pub fn make_node_operator_record_key(node_operator_principal_id: PrincipalId) -> String {
-    format!(
-        "{}{}",
-        NODE_OPERATOR_RECORD_KEY_PREFIX, node_operator_principal_id
-    )
+    format!("{NODE_OPERATOR_RECORD_KEY_PREFIX}{node_operator_principal_id}")
 }
 
 /// Checks whether a given key is a Node Operator record key
@@ -307,7 +296,7 @@ pub fn get_api_boundary_node_record_node_id(key: &str) -> Option<PrincipalId> {
 
 /// Makes a key for a threshold signature public key entry for a subnet.
 pub fn make_crypto_threshold_signing_pubkey_key(subnet_id: SubnetId) -> String {
-    format!("{}{}", CRYPTO_THRESHOLD_SIGNING_KEY_PREFIX, subnet_id)
+    format!("{CRYPTO_THRESHOLD_SIGNING_KEY_PREFIX}{subnet_id}")
 }
 
 // If `key` starts with `CRYPTO_THRESHOLD_SIGNING_KEY_PREFIX`, tries to parse it
@@ -323,12 +312,12 @@ pub fn maybe_parse_crypto_threshold_signing_pubkey_key(key: &str) -> Option<Subn
 
 /// Makes a key for a record for the catch up package contents.
 pub fn make_catch_up_package_contents_key(subnet_id: SubnetId) -> String {
-    format!("catch_up_package_contents_{}", subnet_id)
+    format!("catch_up_package_contents_{subnet_id}")
 }
 
 /// Makes a key for a SubnetRecord registry entry.
 pub fn make_subnet_record_key(subnet_id: SubnetId) -> String {
-    format!("{}{}", SUBNET_RECORD_KEY_PREFIX, subnet_id)
+    format!("{SUBNET_RECORD_KEY_PREFIX}{subnet_id}")
 }
 
 /// Makes a key for a crypto key registry entry for a node.
@@ -383,7 +372,7 @@ pub fn make_canister_ranges_key(range_start: CanisterId) -> String {
     // If at some point we stop having the same length CanisterIds, we will need to prepend a length
     // byte into this encoding to have the same properties apply, and that will also require a data migration.
     let encoded_range_start = hex::encode(range_start.get().to_vec());
-    format!("{}{}", CANISTER_RANGES_PREFIX, encoded_range_start)
+    format!("{CANISTER_RANGES_PREFIX}{encoded_range_start}")
 }
 
 #[cfg(test)]
@@ -401,7 +390,7 @@ mod tests {
             KeyPurpose::DkgDealingEncryption,
             KeyPurpose::CommitteeSigning,
         ] {
-            let n: u64 = rng.gen();
+            let n: u64 = rng.r#gen();
             let node_id = NodeId::from(PrincipalId::new_node_test_id(n));
             let crypto_node_key = make_crypto_node_key(node_id, *key_purpose);
             let parsed = maybe_parse_crypto_node_key(&crypto_node_key);
@@ -459,8 +448,7 @@ mod tests {
     #[test]
     fn ecdsa_enabled_subnet_list_bad_key_id_error_message() {
         let bad_key = "key_without_curve";
-        let signing_subnet_list_key =
-            format!("{}{}", ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX, bad_key);
+        let signing_subnet_list_key = format!("{ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX}{bad_key}");
         assert_eq!(
             get_ecdsa_key_id_from_signing_subnet_list_key(&signing_subnet_list_key).unwrap_err(),
             RegistryClientError::DecodeError {
@@ -472,8 +460,7 @@ mod tests {
     #[test]
     fn ecdsa_enabled_subnet_list_bad_curve_error_message() {
         let bad_key = "UnknownCurve:key_name";
-        let signing_subnet_list_key =
-            format!("{}{}", ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX, bad_key);
+        let signing_subnet_list_key = format!("{ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX}{bad_key}");
         assert_eq!(
             get_ecdsa_key_id_from_signing_subnet_list_key(&signing_subnet_list_key).unwrap_err(),
             RegistryClientError::DecodeError {
@@ -519,7 +506,7 @@ mod tests {
     fn chain_key_enabled_subnet_list_bad_key_id_error_message() {
         let bad_key = "key_without_curve";
         let signing_subnet_list_key =
-            format!("{}{}", CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, bad_key);
+            format!("{CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX}{bad_key}");
         assert_eq!(
             get_master_public_key_id_from_signing_subnet_list_key(&signing_subnet_list_key).unwrap_err(),
             RegistryClientError::DecodeError {
@@ -532,7 +519,7 @@ mod tests {
     fn chain_key_enabled_subnet_list_bad_curve_error_message() {
         let bad_key = "ecdsa:UnknownCurve:key_name";
         let signing_subnet_list_key =
-            format!("{}{}", CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, bad_key);
+            format!("{CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX}{bad_key}");
         assert_eq!(
             get_master_public_key_id_from_signing_subnet_list_key(&signing_subnet_list_key).unwrap_err(),
             RegistryClientError::DecodeError {
@@ -545,7 +532,7 @@ mod tests {
     fn chain_key_enabled_subnet_list_bad_scheme_error_message() {
         let bad_key = "UnknownScheme:UnknownCurve:key_name";
         let signing_subnet_list_key =
-            format!("{}{}", CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, bad_key);
+            format!("{CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX}{bad_key}");
         assert_eq!(
             get_master_public_key_id_from_signing_subnet_list_key(&signing_subnet_list_key).unwrap_err(),
             RegistryClientError::DecodeError {
@@ -592,14 +579,14 @@ mod tests {
         );
         assert_eq!(
             FirewallRulesScope::from_str(
-                format!("{}({})", FIREWALL_RULES_SCOPE_SUBNET_PREFIX, id).as_str()
+                format!("{FIREWALL_RULES_SCOPE_SUBNET_PREFIX}({id})").as_str()
             )
             .unwrap(),
             FirewallRulesScope::Subnet(SubnetId::from(id))
         );
         assert_eq!(
             FirewallRulesScope::from_str(
-                format!("{}({})", FIREWALL_RULES_SCOPE_NODE_PREFIX, id).as_str()
+                format!("{FIREWALL_RULES_SCOPE_NODE_PREFIX}({id})").as_str()
             )
             .unwrap(),
             FirewallRulesScope::Node(NodeId::from(id))

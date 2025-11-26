@@ -4,7 +4,8 @@ type AccountIdentifier = record {
 
 type Action = variant {
   RegisterKnownNeuron : KnownNeuron;
-  ManageNeuron : ManageNeuron;
+  DeregisterKnownNeuron : DeregisterKnownNeuron;
+  ManageNeuron : ManageNeuronProposal;
   UpdateCanisterSettings : UpdateCanisterSettings;
   InstallCode : InstallCode;
   StopOrStartCanister : StopOrStartCanister;
@@ -152,7 +153,7 @@ type SetFollowingResponse = record {
 };
 
 // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
-type Command = variant {
+type ManageNeuronProposalCommand = variant {
   Spawn : Spawn;
   Split : Split;
   Follow : Follow;
@@ -311,7 +312,6 @@ type GlobalTimeOfDay = record {
 
 type Governance = record {
   default_followees : vec record { int32; Followees };
-  making_sns_proposal : opt MakingSnsProposal;
   most_recent_monthly_node_provider_rewards : opt MonthlyNodeProviderRewards;
   maturity_modulation_last_updated_at_timestamp_seconds : opt nat64;
   wait_for_quiet_threshold_seconds : nat64;
@@ -441,9 +441,18 @@ type KnownNeuron = record {
   known_neuron_data : opt KnownNeuronData;
 };
 
+type DeregisterKnownNeuron = record {
+  id : opt NeuronId;
+};
+
 type KnownNeuronData = record {
   name : text;
   description : opt text;
+  links : opt vec text;
+  // The first `opt` makes it so that the field can be renamed/deprecated in the future, and
+  // the second `opt` makes it so that an older client not recognizing a new variant can still
+  // get the rest of the `vec`.
+  committed_topics : opt vec opt TopicToFollow;
 };
 
 type LedgerParameters = record {
@@ -508,7 +517,7 @@ type ListNodeProvidersResponse = record {
   node_providers : vec NodeProvider;
 };
 
-type ListProposalInfo = record {
+type ListProposalInfoRequest = record {
   include_reward_status : vec int32;
   omit_large_fields : opt bool;
   before_proposal : opt ProposalId;
@@ -516,6 +525,7 @@ type ListProposalInfo = record {
   exclude_topic : vec int32;
   include_all_manage_neuron_proposals : opt bool;
   include_status : vec int32;
+  return_self_describing_action : opt bool;
 };
 
 type ListProposalInfoResponse = record {
@@ -534,17 +544,11 @@ type MakeProposalResponse = record {
   proposal_id : opt ProposalId;
 };
 
-type MakingSnsProposal = record {
-  proposal : opt Proposal;
-  caller : opt principal;
-  proposer_id : opt NeuronId;
-};
-
-// Not to be confused with ManageNeuronRequest. (Yes, this is very structurally
-// similar to that, but not actually exactly equivalent.)
-type ManageNeuron = record {
+// Not to be confused with ManageNeuronRequest. This is only used to represent a manage neuron proposal. 
+// (Yes, this is very structurally similar to that, but not actually exactly equivalent)
+type ManageNeuronProposal = record {
   id : opt NeuronId;
-  command : opt Command;
+  command : opt ManageNeuronProposalCommand;
   neuron_id_or_subaccount : opt NeuronIdOrSubaccount;
 };
 
@@ -608,11 +612,20 @@ type MergeResponse = record {
   source_neuron_info : opt NeuronInfo;
 };
 
+type DateUtc = record {
+  year : nat32;
+  month : nat32;
+  day : nat32;
+};
+
 type MonthlyNodeProviderRewards = record {
   minimum_xdr_permyriad_per_icp : opt nat64;
   registry_version : opt nat64;
+  algorithm_version : opt nat32;
   node_providers : vec NodeProvider;
   timestamp : nat64;
+  start_date : opt DateUtc;
+  end_date : opt DateUtc;
   rewards : vec RewardNodeProvider;
   xdr_conversion_rate : opt XdrConversionRate;
   maximum_node_provider_rewards_e8s : opt nat64;
@@ -792,6 +805,20 @@ type NeuronInFlightCommand = record {
   timestamp : nat64;
 };
 
+type GetNeuronIndexRequest = record {
+  exclusive_start_neuron_id: opt NeuronId;
+  page_size: opt nat32;
+};
+
+type NeuronIndexData = record {
+  neurons: vec NeuronInfo;
+};
+
+type GetNeuronIndexResult = variant {
+  Ok : NeuronIndexData;
+  Err : GovernanceError;
+};
+
 // A limit view of Neuron that allows some aspects of all neurons to be read by
 // anyone (i.e. without having to be the neuron's controller nor one of its
 // hotkeys).
@@ -799,6 +826,7 @@ type NeuronInFlightCommand = record {
 // As such, the meaning of each field in this type is generally the same as the
 // one of the same (or at least similar) name in Neuron.
 type NeuronInfo = record {
+  id: opt NeuronId;
   dissolve_delay_seconds : nat64;
   recent_ballots : vec BallotInfo;
   neuron_type : opt int32;
@@ -980,10 +1008,12 @@ type Proposal = record {
   title : opt text;
   action : opt Action;
   summary : text;
+  self_describing_action : opt SelfDescribingProposalAction;
 };
 
 type ProposalActionRequest = variant {
   RegisterKnownNeuron : KnownNeuron;
+  DeregisterKnownNeuron : DeregisterKnownNeuron;
   ManageNeuron : ManageNeuronRequest;
   UpdateCanisterSettings : UpdateCanisterSettings;
   InstallCode : InstallCodeRequest;
@@ -1015,8 +1045,19 @@ type FulfillSubnetRentalRequest = record {
   //
   // This must be approved by a prior proposal to bless an IC OS version.
   //
-  // This is a full git commit ID in the ic repo. (Therefore, it must be a 40
-  // character hexidecimal string.)
+  // This is a FULL git commit ID in the ic repo. (Therefore, it must be a 40
+  // character hexidecimal string, not an abbreviated git commit ID.)
+  //
+  // One way to find a suitable value is with the following command:
+  //
+  //     ic-admin \
+  //         get-subnet 0 \
+  //         --nns-urls https://nns.ic0.app \
+  //     | grep replica_version_id
+  //
+  // Where to obtain a recent version of ic-admin:
+  //
+  //     https://github.com/dfinity/ic/releases/latest
   replica_version_id : opt text;
 };
 
@@ -1218,6 +1259,7 @@ type SpawnResponse = record {
 
 type Split = record {
   amount_e8s : nat64;
+  memo : opt nat64;
 };
 
 type StakeMaturity = record {
@@ -1321,6 +1363,90 @@ type MaturityDisbursement = record {
   account_identifier_to_disburse_to : opt AccountIdentifier;
 };
 
+// A topic that can be followed. It is almost the same as the topic on the
+// proposal, except that the `CatchAll` is a special value and following on this
+// `topic` will let the neuron follow the votes on all topics except for
+// Governance and SnsAndCommunityFund.
+type TopicToFollow = variant {
+  CatchAll;
+  NeuronManagement;
+  ExchangeRate;
+  NetworkEconomics;
+  Governance;
+  NodeAdmin;
+  ParticipantManagement;
+  SubnetManagement;
+  Kyc;
+  NodeProviderRewards;
+  IcOsVersionDeployment;
+  IcOsVersionElection;
+  SnsAndCommunityFund;
+  ApiBoundaryNodeManagement;
+  SubnetRental;
+  ApplicationCanisterManagement;
+  ProtocolCanisterManagement;
+  ServiceNervousSystemManagement;
+};
+
+type ListNeuronVotesRequest = record {
+  // The neuron id for which the voting history will be returned. Currently, the voting history is
+  // only recorded for known neurons.
+  neuron_id : opt NeuronId;
+  // Only fetch the voting history for proposal whose id `< before_proposal`. This can be used as a
+  // pagination token - pass the minimum proposal id as `before_proposal` for the next page.
+  before_proposal : opt ProposalId;
+  // The maximum number of votes to fetch. The maximum number allowed is 500, and 500 will be used
+  // if is set as either null or > 500.
+  limit : opt nat64;
+};
+
+type ListNeuronVotesResponse = variant {
+  Ok : record {
+    votes : opt vec NeuronVote;
+    // All the proposals before this id is "finalized", which means if a proposal before this id
+    // does not exist in the votes, it will never appear in the voting history, either because the
+    // neuron is not eligible to vote on the proposal, or the neuron is not a known neuron at the
+    // time of the proposal creation. Therefore, if a client syncs the entire voting history of a
+    // certain neuron and store `all_finalized_before_proposal`, it doesn't need to start from
+    // scratch the next time - it can stop as soon as they have seen any votes 
+    // `< all_finalized_before_proposal`.
+    all_finalized_before_proposal : opt ProposalId;
+  };
+  Err : GovernanceError;
+};
+
+type NeuronVote = record {
+  proposal_id : opt ProposalId;
+  // The vote of the neuron on the specific proposal id.
+  vote : opt Vote;
+};
+
+type Vote = variant {
+  // Abstentions are recorded as Unspecified.
+  Unspecified;
+  Yes;
+  No;
+};
+
+type SelfDescribingProposalAction = record {
+  type_name : opt text;
+  type_description : opt text;
+  value : opt Value;
+};
+
+type Value = variant {
+  Blob : blob;
+  Text : text;
+  Nat : nat;
+  Int : int;
+  Array : vec Value;
+  Map : vec record { text; Value };
+};
+
+type GetPendingProposalsRequest = record {
+  return_self_describing_action : opt bool;
+}
+
 service : (Governance) -> {
   claim_gtc_neurons : (principal, vec NeuronId) -> (Result);
   claim_or_refresh_neuron_from_account : (ClaimOrRefreshNeuronFromAccount) -> (
@@ -1339,6 +1465,7 @@ service : (Governance) -> {
     ) query;
   get_network_economics_parameters : () -> (NetworkEconomics) query;
   get_neuron_ids : () -> (vec nat64) query;
+  get_neuron_index: (GetNeuronIndexRequest) -> (GetNeuronIndexResult) query;
   get_neuron_info : (nat64) -> (Result_5) query;
   get_neuron_info_by_id_or_subaccount : (NeuronIdOrSubaccount) -> (
       Result_5,
@@ -1347,7 +1474,7 @@ service : (Governance) -> {
       GetNeuronsFundAuditInfoResponse,
     ) query;
   get_node_provider_by_caller : (null) -> (Result_7) query;
-  get_pending_proposals : () -> (vec ProposalInfo) query;
+  get_pending_proposals : (opt GetPendingProposalsRequest) -> (vec ProposalInfo) query;
   get_proposal_info : (nat64) -> (opt ProposalInfo) query;
   get_restore_aging_summary : () -> (RestoreAgingSummary) query;
   list_known_neurons : () -> (ListKnownNeuronsResponse) query;
@@ -1356,7 +1483,8 @@ service : (Governance) -> {
       ListNodeProviderRewardsResponse,
     ) query;
   list_node_providers : () -> (ListNodeProvidersResponse) query;
-  list_proposals : (ListProposalInfo) -> (ListProposalInfoResponse) query;
+  list_proposals : (ListProposalInfoRequest) -> (ListProposalInfoResponse) query;
+  list_neuron_votes : (ListNeuronVotesRequest) -> (ListNeuronVotesResponse) query;
   manage_neuron : (ManageNeuronRequest) -> (ManageNeuronResponse);
   settle_community_fund_participation : (SettleCommunityFundParticipation) -> (
       Result,

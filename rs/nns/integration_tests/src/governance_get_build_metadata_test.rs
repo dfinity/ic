@@ -3,10 +3,10 @@
 use dfn_candid::candid;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
-use ic_nns_governance_api::{neuron::DissolveState, Neuron};
+use ic_nns_governance_api::{Neuron, neuron::DissolveState};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
 };
 
 #[test]
@@ -56,9 +56,7 @@ fn get_build_metadata_test() {
         ] {
             assert!(
                 response.contains(phrase),
-                "Failed to find {} in response:\n{}",
-                phrase,
-                response
+                "Failed to find {phrase} in response:\n{response}"
             );
         }
 

@@ -2,8 +2,8 @@
 //! writing Rust canisters.
 
 use candid::CandidType;
-use ic_protobuf::proxy::try_from_option_field;
 use ic_protobuf::proxy::ProxyDecodeError;
+use ic_protobuf::proxy::try_from_option_field;
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, DisplayerOf, Id};
 use serde::Deserialize;
@@ -23,6 +23,12 @@ pub use principal_id::{
     PrincipalId, PrincipalIdClass, PrincipalIdError, PrincipalIdError as PrincipalIdBlobParseError,
     PrincipalIdError as PrincipalIdParseError,
 };
+
+use ic_crypto_sha2::Sha256;
+use std::collections::BTreeMap;
+
+/// The length of a hash result in bytes.
+pub const HASH_LENGTH: usize = 32;
 
 pub struct RegistryVersionTag {}
 /// A type representing the registry's version.
@@ -117,6 +123,32 @@ pub fn subnet_id_try_from_protobuf(value: pb::SubnetId) -> Result<SubnetId, Prox
     Ok(SubnetId::from(principal_id))
 }
 
+/// A generic function that computes the hash of a `BTreeMap` using a provided key-value hashing function.
+///
+/// This implementation follows the `hash_of_map` specification described in the Internet Computer public spec:
+/// https://internetcomputer.org/docs/current/references/ic-interface-spec#hash-of-map.
+///
+/// The `hash_key_val` function must hash both the key and the value, and return their concatenated result.
+pub fn hash_of_map<K, V, F>(map: &BTreeMap<K, V>, hash_key_val: F) -> [u8; HASH_LENGTH]
+where
+    F: Fn(&K, &V) -> Vec<u8>,
+{
+    let mut pair_hashes: Vec<Vec<u8>> = Vec::with_capacity(map.len());
+
+    for (key, value) in map {
+        pair_hashes.push(hash_key_val(key, value));
+    }
+
+    pair_hashes.sort();
+
+    let mut hasher = Sha256::new();
+    for hash in pair_hashes {
+        hasher.write(&hash);
+    }
+
+    hasher.finish()
+}
+
 /// From its protobuf definition convert to a SubnetId.  Normally, we would
 /// use `impl TryFrom<Option<pb::SubnetId>> for SubnetId` here however we cannot
 /// as both `Id` and `pb::SubnetId` are defined in other crates.
@@ -153,8 +185,8 @@ pub enum SnapshotIdError {
 impl fmt::Display for SnapshotIdError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidLength(err) => write!(f, "Invalid length of SnapshotId: {}", err),
-            Self::InvalidFormat(err) => write!(f, "Invalid format of SnapshotId: {}", err,),
+            Self::InvalidLength(err) => write!(f, "Invalid length of SnapshotId: {err}"),
+            Self::InvalidFormat(err) => write!(f, "Invalid format of SnapshotId: {err}",),
         }
     }
 }
@@ -286,7 +318,7 @@ impl std::fmt::Display for SnapshotId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let local_id = self.get_local_snapshot_id();
         let canister_id = self.get_canister_id();
-        write!(f, "{}-{}", canister_id, local_id)
+        write!(f, "{canister_id}-{local_id}")
     }
 }
 

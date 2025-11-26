@@ -106,7 +106,7 @@ pub enum DecryptError {
         secret_key_epoch: Epoch,
     },
     /// One of the forward-secure-encryption chunks failed to decrypt.
-    InvalidChunk,
+    InvalidChunk(String),
     /// Hardware error: This machine cannot handle this request because some
     /// parameter was too large.
     SizeError(SizeError),
@@ -545,12 +545,36 @@ pub mod dealing {
     impl From<InvalidDealingError> for InvalidArgumentError {
         fn from(error: InvalidDealingError) -> InvalidArgumentError {
             match error {
-          InvalidDealingError::UnexpectedShare { receiver_index, number_of_receivers } => InvalidArgumentError{ message: format!("Expected receiver indices 0..{} inclusive but found {}.", number_of_receivers.get()-1, receiver_index) },
-          InvalidDealingError::MissingShare { receiver_index } => InvalidArgumentError{ message: format!("Missing share for receiver {}", receiver_index) },
-          InvalidDealingError::MalformedShare { receiver_index } => InvalidArgumentError{ message: format!("Malformed share for receiver {}", receiver_index) },
-          InvalidDealingError::ThresholdMismatch { threshold, public_coefficients_len } => InvalidArgumentError{ message: format!("The reshared public coefficients don't match the threshold\n  Threshold: {}\n  Public coefficients len: {}", threshold, public_coefficients_len) },
-          InvalidDealingError::ReshareMismatch { old, new } => InvalidArgumentError{ message: format!("The reshared public key does not match the preexisting key.\n  Old: {:?}\n  New: {:?}", old, new) },
-        }
+                InvalidDealingError::UnexpectedShare {
+                    receiver_index,
+                    number_of_receivers,
+                } => InvalidArgumentError {
+                    message: format!(
+                        "Expected receiver indices 0..{} inclusive but found {}.",
+                        number_of_receivers.get() - 1,
+                        receiver_index
+                    ),
+                },
+                InvalidDealingError::MissingShare { receiver_index } => InvalidArgumentError {
+                    message: format!("Missing share for receiver {receiver_index}"),
+                },
+                InvalidDealingError::MalformedShare { receiver_index } => InvalidArgumentError {
+                    message: format!("Malformed share for receiver {receiver_index}"),
+                },
+                InvalidDealingError::ThresholdMismatch {
+                    threshold,
+                    public_coefficients_len,
+                } => InvalidArgumentError {
+                    message: format!(
+                        "The reshared public coefficients don't match the threshold\n  Threshold: {threshold}\n  Public coefficients len: {public_coefficients_len}"
+                    ),
+                },
+                InvalidDealingError::ReshareMismatch { old, new } => InvalidArgumentError {
+                    message: format!(
+                        "The reshared public key does not match the preexisting key.\n  Old: {old:?}\n  New: {new:?}"
+                    ),
+                },
+            }
         }
     }
 }

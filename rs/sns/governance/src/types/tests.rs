@@ -1,9 +1,9 @@
 use super::*;
 use crate::pb::v1::{
+    ExecuteGenericNervousSystemFunction, Proposal, ProposalData, VotingRewardsParameters,
     claim_swap_neurons_request::neuron_recipe,
     governance::Mode::PreInitializationSwap,
     nervous_system_function::{FunctionType, GenericNervousSystemFunction},
-    ExecuteGenericNervousSystemFunction, Proposal, ProposalData, VotingRewardsParameters,
 };
 use candid::Nat;
 use futures::FutureExt;
@@ -332,7 +332,7 @@ fn test_mode_allows_manage_neuron_command_or_err_normal_is_generally_ok() {
         for caller_is_swap_canister in [true, false] {
             let result = governance::Mode::Normal
                 .allows_manage_neuron_command_or_err(&command, caller_is_swap_canister);
-            assert!(result.is_ok(), "{:#?}", result);
+            assert!(result.is_ok(), "{result:#?}");
         }
     }
 }
@@ -344,7 +344,7 @@ fn test_mode_allows_manage_neuron_command_or_err_pre_initialization_swap_ok() {
         for caller_is_swap_canister in [true, false] {
             let result = PreInitializationSwap
                 .allows_manage_neuron_command_or_err(command, caller_is_swap_canister);
-            assert!(result.is_ok(), "{:#?}", result);
+            assert!(result.is_ok(), "{result:#?}");
         }
     }
 }
@@ -356,7 +356,7 @@ fn test_mode_allows_manage_neuron_command_or_err_pre_initialization_swap_verbote
         for caller_is_swap_canister in [true, false] {
             let result = PreInitializationSwap
                 .allows_manage_neuron_command_or_err(command, caller_is_swap_canister);
-            assert!(result.is_err(), "{:#?}", result);
+            assert!(result.is_err(), "{result:#?}");
         }
     }
 }
@@ -368,12 +368,12 @@ fn test_mode_allows_manage_neuron_command_or_err_pre_initialization_swap_claim_o
     let caller_is_swap_canister = false;
     let result = PreInitializationSwap
         .allows_manage_neuron_command_or_err(claim_or_refresh, caller_is_swap_canister);
-    assert!(result.is_err(), "{:#?}", result);
+    assert!(result.is_err(), "{result:#?}");
 
     let caller_is_swap_canister = true;
     let result = PreInitializationSwap
         .allows_manage_neuron_command_or_err(claim_or_refresh, caller_is_swap_canister);
-    assert!(result.is_ok(), "{:#?}", result);
+    assert!(result.is_ok(), "{result:#?}");
 }
 
 const ROOT_TARGETING_FUNCTION_ID: u64 = 1001;
@@ -492,7 +492,7 @@ fn test_mode_allows_proposal_action_or_err_normal_is_always_ok() {
             &DISALLOWED_TARGET_CANISTER_IDS,
             &ID_TO_NERVOUS_SYSTEM_FUNCTION,
         );
-        assert!(result.is_ok(), "{:#?} {:#?}", result, action);
+        assert!(result.is_ok(), "{result:#?} {action:#?}");
     }
 }
 
@@ -504,7 +504,7 @@ fn test_mode_allows_proposal_action_or_err_pre_initialization_swap_happy() {
             &DISALLOWED_TARGET_CANISTER_IDS,
             &ID_TO_NERVOUS_SYSTEM_FUNCTION,
         );
-        assert!(result.is_ok(), "{:#?} {:#?}", result, action);
+        assert!(result.is_ok(), "{result:#?} {action:#?}");
     }
 }
 
@@ -516,33 +516,33 @@ fn test_mode_allows_proposal_action_or_err_pre_initialization_swap_sad() {
             &DISALLOWED_TARGET_CANISTER_IDS,
             &ID_TO_NERVOUS_SYSTEM_FUNCTION,
         );
-        assert!(result.is_err(), "{:#?}", action);
+        assert!(result.is_err(), "{action:#?}");
     }
 }
 
 #[test]
-fn test_mode_allows_proposal_action_or_err_pre_initialization_swap_disallows_targeting_an_sns_canister(
-) {
+fn test_mode_allows_proposal_action_or_err_pre_initialization_swap_disallows_targeting_an_sns_canister()
+ {
     for action in &PROPOSAL_ACTIONS.2 {
         let result = PreInitializationSwap.allows_proposal_action_or_err(
             action,
             &DISALLOWED_TARGET_CANISTER_IDS,
             &ID_TO_NERVOUS_SYSTEM_FUNCTION,
         );
-        assert!(result.is_err(), "{:#?}", action);
+        assert!(result.is_err(), "{action:#?}");
     }
 }
 
 #[test]
-fn test_mode_allows_proposal_action_or_err_pre_initialization_swap_allows_targeting_a_random_canister(
-) {
+fn test_mode_allows_proposal_action_or_err_pre_initialization_swap_allows_targeting_a_random_canister()
+ {
     let action = &PROPOSAL_ACTIONS.3;
     let result = PreInitializationSwap.allows_proposal_action_or_err(
         action,
         &DISALLOWED_TARGET_CANISTER_IDS,
         &ID_TO_NERVOUS_SYSTEM_FUNCTION,
     );
-    assert!(result.is_ok(), "{:#?} {:#?}", result, action);
+    assert!(result.is_ok(), "{result:#?} {action:#?}");
 }
 
 #[test]
@@ -566,7 +566,7 @@ fn test_mode_allows_proposal_action_or_err_function_not_found() {
                 it specifies an unknown function ID."
         ),
     };
-    assert_eq!(err.error_type, ErrorType::NotFound as i32, "{:#?}", err);
+    assert_eq!(err.error_type, ErrorType::NotFound as i32, "{err:#?}");
 }
 
 #[should_panic]
@@ -734,13 +734,13 @@ fn test_sns_metadata_validate() {
 
     for sns_metadata in invalid_sns_metadata {
         if sns_metadata.validate().is_ok() {
-            panic!("Invalid metadata passed validation: {:?}", sns_metadata);
+            panic!("Invalid metadata passed validation: {sns_metadata:?}");
         }
     }
 
     for sns_metadata in valid_sns_metadata {
         if sns_metadata.validate().is_err() {
-            panic!("Valid metadata failed validation: {:?}", sns_metadata);
+            panic!("Valid metadata failed validation: {sns_metadata:?}");
         }
     }
 }
@@ -1027,7 +1027,9 @@ fn test_neuron_permission_list_display_impl() {
     let neuron_permission_list = NeuronPermissionList::all();
     assert_eq!(
         format!("permissions: {neuron_permission_list}"),
-        format!("permissions: [Unspecified, ConfigureDissolveState, ManagePrincipals, SubmitProposal, Vote, Disburse, Split, MergeMaturity, DisburseMaturity, StakeMaturity, ManageVotingPermission]")
+        format!(
+            "permissions: [Unspecified, ConfigureDissolveState, ManagePrincipals, SubmitProposal, Vote, Disburse, Split, MergeMaturity, DisburseMaturity, StakeMaturity, ManageVotingPermission]"
+        )
     );
 }
 
@@ -1041,7 +1043,9 @@ fn test_neuron_permission_list_display_impl_doesnt_panic_unknown_permission() {
     };
     assert_eq!(
         format!("permissions: {neuron_permission_list}"),
-        format!("permissions: [Unspecified, ConfigureDissolveState, ManagePrincipals, SubmitProposal, Vote, Disburse, Split, MergeMaturity, DisburseMaturity, StakeMaturity, ManageVotingPermission, <Invalid permission ({invalid_permission})>]")
+        format!(
+            "permissions: [Unspecified, ConfigureDissolveState, ManagePrincipals, SubmitProposal, Vote, Disburse, Split, MergeMaturity, DisburseMaturity, StakeMaturity, ManageVotingPermission, <Invalid permission ({invalid_permission})>]"
+        )
     );
 }
 
@@ -1188,17 +1192,16 @@ fn test_summarize_blob_field() {
     let too_long = (0..65).collect::<Vec<u8>>();
     let result = summarize_blob_field(&too_long);
     assert_ne!(result, too_long);
-    assert!(result.len() > 64, "{:X?}", result);
+    assert!(result.len() > 64, "{result:X?}");
 
     let result = String::from_utf8(summarize_blob_field(&too_long)).unwrap();
     assert!(
         result.contains("⚠️ NOT THE ORIGINAL CONTENTS OF THIS FIELD ⚠"),
-        "{:X?}",
-        result,
+        "{result:X?}",
     );
-    assert!(result.contains("00 01 02 03"), "{:X?}", result);
-    assert!(result.contains("3D 3E 3F 40"), "{:X?}", result);
-    assert!(result.contains("Length: 65"), "{:X?}", result);
+    assert!(result.contains("00 01 02 03"), "{result:X?}");
+    assert!(result.contains("3D 3E 3F 40"), "{result:X?}");
+    assert!(result.contains("Length: 65"), "{result:X?}");
     assert!(
         // SHA256
         result.contains(
@@ -1208,8 +1211,7 @@ fn test_summarize_blob_field() {
                 69 41 82 02 7E 6D 0F C0 \
                 75 07 4F 2F AB B3 17 81",
         ),
-        "{:X?}",
-        result,
+        "{result:X?}",
     );
 }
 

@@ -11,11 +11,13 @@ clap = { workspace = true }
 hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
+ic-nns-delegation-manager = { path = "../http_endpoints/nns_delegation_manager" }
 ic-btc-adapter-client = { path = "../bitcoin/client" }
 ic-btc-consensus = { path = "../bitcoin/consensus" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-certification = { path = "../consensus/certification" }
+ic-consensus-cup-utils = { path = "../consensus/cup_utils" }
 ic-consensus-dkg = { path = "../consensus/dkg" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
@@ -79,7 +81,7 @@ harness = false
 
 [[bin]]
 name = "replica"
-path = "src/main.rs"
+path = "bin/replica/main.rs"
 
 [features]
 profiler = ["pprof"]

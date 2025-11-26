@@ -9,7 +9,7 @@
 //! bazel run //rs/execution_environment:execute_inspect_message_bench
 //! ```
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use execution_environment_bench::{common, wat::*};
 use ic_execution_environment::execution::inspect_message;
 
@@ -18,6 +18,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities_types::ids::user_test_id;
 use ic_test_utilities_types::messages::SignedIngressBuilder;
+use ic_types::batch::CanisterCyclesCostSchedule;
 
 use crate::common::Wasm64;
 
@@ -86,12 +87,12 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
         ),
         common::Benchmark(
             "wasm32/ic0_accept_message()*".into(),
-            Module::InspectMessage.from_sections(("", ""), Wasm64::Disabled), // inspect_message accepts by default
+            Module::InspectMessage.from_sections(("", "", ""), Wasm64::Disabled), // inspect_message accepts by default
             506,
         ),
         common::Benchmark(
             "wasm64/ic0_accept_message()*".into(),
-            Module::InspectMessage.from_sections(("", ""), Wasm64::Enabled), // inspect_message accepts by default
+            Module::InspectMessage.from_sections(("", "", ""), Wasm64::Enabled), // inspect_message accepts by default
             506,
         ),
     ];
@@ -129,6 +130,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 &no_op_logger(),
                 exec_env.state_changes_error(),
                 &IngressFilterMetrics::new(&MetricsRegistry::new()),
+                CanisterCyclesCostSchedule::Normal,
             );
             assert_eq!(result, Ok(()), "Error executing inspect message method");
             assert_eq!(

@@ -2,7 +2,7 @@ use crate::public_key_store::{
     PublicKeyAddError, PublicKeyRetainError, PublicKeySetOnceError, PublicKeyStore,
 };
 use crate::public_key_store::{PublicKeyGenerationTimestamps, PublicKeyRetainCheckError};
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug};
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
 use ic_types::Time;
@@ -56,7 +56,7 @@ impl ProtoPublicKeyStore {
             }
             Err(err) => match err.kind() {
                 ErrorKind::NotFound => None,
-                _ => panic!("Failed to read public key store data: {}", err),
+                _ => panic!("Failed to read public key store data: {err}"),
             },
         }
     }

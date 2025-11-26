@@ -15,8 +15,6 @@ rust_library(
         "//rs/ledger_suite/common/ledger_core",
         "//rs/ledger_suite/icp:icp_ledger",
         "//rs/ledger_suite/icp/index:ic-icp-index",
-        "//rs/nns/constants",
-        "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/dfn_protobuf",
         "//rs/rust_canisters/on_wire",
         "//rs/state_machine_tests",

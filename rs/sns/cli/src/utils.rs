@@ -1,7 +1,7 @@
 use anyhow::Context;
 use anyhow::Result;
 use dfx_core::interface::{builder::IdentityPicker, dfx::DfxInterface};
-use futures::{stream, StreamExt};
+use futures::{StreamExt, stream};
 use ic_agent::Agent;
 use ic_nervous_system_agent::sns::Sns;
 use itertools::Itertools;

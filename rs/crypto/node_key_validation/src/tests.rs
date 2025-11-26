@@ -201,7 +201,7 @@ mod node_signing_public_key_validation {
 
         assert_matches!(result, Err(KeyValidationError { error })
             if error.contains("invalid node signing key")
-            && error.contains(format!("key not valid for node ID {}", wrong_node_id).as_str())
+            && error.contains(format!("key not valid for node ID {wrong_node_id}").as_str())
         );
     }
 
@@ -275,8 +275,8 @@ mod committee_signing_public_key_validation {
     fn should_fail_if_committee_signing_key_pubkey_is_corrupted() {
         let corrupted_committee_signing_key = {
             let mut public_key = valid_committee_signing_public_key();
-            public_key.key_value[0] ^= 0xff; // this flips the compression flag and thus
-                                             // makes the encoding of the point invalid
+            // this flips the compression flag and thus makes the encoding of the point invalid
+            public_key.key_value[0] ^= 0xff;
             public_key
         };
 

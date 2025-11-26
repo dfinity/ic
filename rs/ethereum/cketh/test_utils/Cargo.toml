@@ -10,7 +10,7 @@ documentation.workspace = true
 assert_matches = { workspace = true }
 candid = { workspace = true }
 ethers-core = "2.0.8"
-evm_rpc_types = "1.4.0"
+evm_rpc_types = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-cdk = { workspace = true }

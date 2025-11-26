@@ -1,5 +1,4 @@
 load("@aspect_bazel_lib//lib:tar.bzl", "tar")
-load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 load("@rules_distroless//apt:defs.bzl", "dpkg_status")
 load("@rules_distroless//distroless:defs.bzl", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image")
@@ -12,18 +11,16 @@ exports_files([
     "counter.wat",
 ])
 
-bool_flag(
-    name = "k8s",
-    build_setting_default = False,
-)
-
 # Packages we install into the image; see base image definition and its
 # 'manifest = ...' field for more information
 PACKAGES = [
     "@noble//bash/amd64",
     "@noble//ca-certificates/amd64",
     "@noble//coreutils/amd64",
+    "@noble//libcryptsetup-dev/amd64",
+    "@noble//dmsetup/amd64",
     "@noble//dosfstools/amd64",
+    "@noble//e2fsprogs/amd64",
     "@noble//gawk/amd64",
     "@noble//gzip/amd64",
     "@noble//libssl3t64/amd64",
@@ -32,6 +29,7 @@ PACKAGES = [
     "@noble//openssh-client/amd64",
     "@noble//rsync/amd64",
     "@noble//tar/amd64",
+    "@noble//udev/amd64",
     "@noble//xz-utils/amd64",
     "@noble//zstd/amd64",
 ]
@@ -196,6 +194,12 @@ oci_tar(
 )
 
 oci_tar(
+    name = "dogecoind.tar",
+    image = "@dogecoind",
+    repo_tags = ["dogecoind:image"],
+)
+
+oci_tar(
     name = "ic_gatewayd.tar",
     image = "@ic_gatewayd",
     repo_tags = ["ic_gatewayd:image"],
@@ -211,6 +215,7 @@ uvm_config_image(
     name = "ckbtc_uvm_config_image",
     srcs = [
         ":bitcoind.tar",
+        ":dogecoind.tar",
         ":minica.tar",
         ":nginx-proxy.tar",
         "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
@@ -225,9 +230,48 @@ uvm_config_image(
 )
 
 uvm_config_image(
+    name = "impersonate_upstreams_uvm_config_image",
+    srcs = [
+        ":minica.tar",
+        ":static-file-server.tar",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.key",
+    ],
+    remap_paths = {
+        "canister_http_test_ca.cert": "minica.pem",
+        "canister_http_test_ca.key": "minica-key.pem",
+    },
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
+)
+
+uvm_config_image(
     name = "ic_gateway_uvm_config_image",
     srcs = [
         ":ic_gatewayd.tar",
     ],
     tags = ["manual"],  # this target will be built if required as a dependency of another target
+)
+
+oci_tar(
+    name = "vector-with-log-fetcher.tar",
+    image = "@vector-with-log-fetcher",
+    repo_tags = [
+        "vector-with-log-fetcher:image",
+    ],
+)
+
+exports_files([
+    "vector_activate.sh",
+])
+
+uvm_config_image(
+    name = "vector_with_log_fetcher_image",
+    srcs = [
+        ":vector-with-log-fetcher.tar",
+        ":vector_activate.sh",
+    ],
+    remap_paths = {
+        "vector_activate.sh": "activate",
+    },
+    tags = ["manual"],
 )

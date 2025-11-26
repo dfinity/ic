@@ -2,8 +2,8 @@ use crate::backup::Backup;
 use crate::height_index::HeightIndexedInstants;
 use crate::{
     consensus_pool_cache::{
-        get_highest_finalized_block, update_summary_block, ConsensusBlockChainImpl,
-        ConsensusCacheImpl,
+        ConsensusBlockChainImpl, ConsensusCacheImpl, get_highest_finalized_block,
+        update_summary_block,
     },
     inmemory_pool::InMemoryPoolSection,
     metrics::{LABEL_POOL_TYPE, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
@@ -19,13 +19,13 @@ use ic_interfaces::{
     p2p::consensus::{ArtifactTransmit, ArtifactTransmits, MutablePool, ValidatedPoolReader},
     time_source::TimeSource,
 };
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::buckets::linear_buckets;
 use ic_protobuf::types::v1 as pb;
-use ic_types::crypto::CryptoHashOf;
 use ic_types::NodeId;
-use ic_types::{artifact::ConsensusMessageId, consensus::*, Height, SubnetId, Time};
-use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
+use ic_types::crypto::CryptoHashOf;
+use ic_types::{Height, SubnetId, Time, artifact::ConsensusMessageId, consensus::*};
+use prometheus::{Histogram, IntCounter, IntGauge, histogram_opts, labels, opts};
 use std::time::Instant;
 use std::{marker::PhantomData, sync::Arc, time::Duration};
 
@@ -388,8 +388,12 @@ impl ConsensusPool for UncachedConsensusPoolImpl {
         self
     }
 
-    fn build_block_chain(&self, start: &Block, end: &Block) -> Arc<dyn ConsensusBlockChain> {
-        Arc::new(ConsensusBlockChainImpl::new(self, start, end))
+    fn build_block_chain(&self, start_height: Height, end: Block) -> Arc<dyn ConsensusBlockChain> {
+        Arc::new(ConsensusBlockChainImpl::new_from_cache(
+            self,
+            start_height,
+            end,
+        ))
     }
 
     fn block_instant(&self, _hash: &CryptoHashOf<Block>) -> Option<Instant> {
@@ -534,14 +538,14 @@ impl ConsensusPoolImpl {
             self.validated_metrics.update(self.validated.pool_section());
 
             // Update the metrics if necessary.
-            if let (Some(last_height), Some(new_height)) = (last_height, new_height) {
-                if new_height != last_height {
-                    self.validated_metrics.update_count_per_height(
-                        self.validated.pool_section(),
-                        last_height,
-                        new_height,
-                    );
-                }
+            if let (Some(last_height), Some(new_height)) = (last_height, new_height)
+                && new_height != last_height
+            {
+                self.validated_metrics.update_count_per_height(
+                    self.validated.pool_section(),
+                    last_height,
+                    new_height,
+                );
             }
             purged
         } else {
@@ -673,8 +677,12 @@ impl ConsensusPool for ConsensusPoolImpl {
         self.cache.as_ref()
     }
 
-    fn build_block_chain(&self, start: &Block, end: &Block) -> Arc<dyn ConsensusBlockChain> {
-        Arc::new(ConsensusBlockChainImpl::new(self, start, end))
+    fn build_block_chain(&self, start_height: Height, end: Block) -> Arc<dyn ConsensusBlockChain> {
+        Arc::new(ConsensusBlockChainImpl::new_from_cache(
+            self,
+            start_height,
+            end,
+        ))
     }
 
     fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
@@ -733,7 +741,7 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
                     }
                     let msg_id = to_move.get_id();
                     let timestamp = self.unvalidated.get_timestamp(&msg_id).unwrap_or_else(|| {
-                        panic!("Timestamp is not found for MoveToValidated: {:?}", to_move)
+                        panic!("Timestamp is not found for MoveToValidated: {to_move:?}")
                     });
                     let validated = ValidatedConsensusArtifact {
                         msg: to_move,
@@ -1037,24 +1045,25 @@ mod tests {
     use crate::backup::{BackupAge, PurgingError};
 
     use super::*;
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_interfaces::p2p::consensus::UnvalidatedArtifact;
     use ic_interfaces::time_source::TimeSource;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::types::v1 as pb;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::FakeStateManager};
+    use ic_test_utilities::state_manager::FakeStateManager;
     use ic_test_utilities_consensus::{fake::*, make_genesis};
-    use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
+    use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
+        RegistryVersion, ReplicaVersion,
         artifact::IdentifiableArtifact,
         batch::ValidationContext,
-        consensus::{dkg::DkgSummary, BlockProposal, RandomBeacon},
-        crypto::{crypto_hash, CryptoHash, CryptoHashOf},
+        consensus::{BlockProposal, RandomBeacon, dkg::DkgSummary},
+        crypto::{CryptoHash, CryptoHashOf, crypto_hash},
         time::UNIX_EPOCH,
-        RegistryVersion, ReplicaVersion,
     };
     use prost::Message;
     use std::{collections::HashMap, convert::TryFrom, fs, io::Read, path::Path, sync::RwLock};
@@ -1216,10 +1225,12 @@ mod tests {
                 &result.transmits[1], ArtifactTransmit::Deliver(x) if x.artifact.id() == random_beacon_3.get_id()));
 
             let result = pool.apply(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
-            assert!(!result
-                .transmits
-                .iter()
-                .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
+            assert!(
+                !result
+                    .transmits
+                    .iter()
+                    .any(|x| matches!(x, ArtifactTransmit::Deliver(_)))
+            );
             // purging genesis CUP & beacon + validated beacon at height 2
             assert_eq!(result.transmits.len(), 3);
             assert!(result.transmits.iter().any(
@@ -1294,10 +1305,12 @@ mod tests {
             ));
 
             let result = pool.apply(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
-            assert!(!result
-                .transmits
-                .iter()
-                .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
+            assert!(
+                !result
+                    .transmits
+                    .iter()
+                    .any(|x| matches!(x, ArtifactTransmit::Deliver(_)))
+            );
             // purging genesis CUP & beacon + 2 validated beacon shares
             assert_eq!(result.transmits.len(), 4);
             assert!(result.transmits.iter().any(|x| matches!(x, ArtifactTransmit::Abort(id) if *id == random_beacon_share_2.get_id())));
@@ -1974,7 +1987,7 @@ mod tests {
                 let m = self.map.read().unwrap();
                 let age = m
                     .get(&name)
-                    .unwrap_or_else(|| panic!("No age entry found for key path: {:?}", path));
+                    .unwrap_or_else(|| panic!("No age entry found for key path: {path:?}"));
                 Ok(*age)
             }
         }
@@ -1983,7 +1996,7 @@ mod tests {
             let time_source = FastForwardTimeSource::new();
             let backup_dir = tempfile::Builder::new().tempdir().unwrap();
             let subnet_id = subnet_test_id(0);
-            let path = backup_dir.path().join(format!("{:?}", subnet_id));
+            let path = backup_dir.path().join(format!("{subnet_id:?}"));
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_id,
@@ -2016,7 +2029,7 @@ mod tests {
             pool.backup = Some(Backup::new_with_age_func(
                 &pool,
                 backup_dir.path().into(),
-                backup_dir.path().join(format!("{:?}", subnet_id)),
+                backup_dir.path().join(format!("{subnet_id:?}")),
                 // Artifact retention time
                 Duration::from_millis(2700),
                 purging_interval,

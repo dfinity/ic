@@ -1,8 +1,8 @@
 use super::*;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::{Followees, MaturityDisbursement},
-    storage::with_stable_neuron_indexes,
+    pb::v1::{BallotInfo, Followees, KnownNeuronData, MaturityDisbursement},
+    storage::{with_stable_neuron_indexes, with_voting_history_store},
 };
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -234,7 +234,7 @@ fn test_remove_inactive_neuron() {
             NeuronStoreError::NeuronNotFound { neuron_id } => {
                 assert_eq!(neuron_id, inactive_neuron.id());
             }
-            _ => panic!("read returns error other than not found: {:?}", error),
+            _ => panic!("read returns error other than not found: {error:?}"),
         },
     }
 }
@@ -879,34 +879,50 @@ fn test_approve_genesis_kyc() {
         neuron_4.id().id => neuron_4.clone(),
     });
     // Before calling `approve_genesis_kyc`, none of the neurons have KYC verified.
-    assert!(!neuron_store
-        .with_neuron(&neuron_1.id(), |n| n.kyc_verified)
-        .unwrap());
-    assert!(!neuron_store
-        .with_neuron(&neuron_2.id(), |n| n.kyc_verified)
-        .unwrap());
-    assert!(!neuron_store
-        .with_neuron(&neuron_3.id(), |n| n.kyc_verified)
-        .unwrap());
-    assert!(!neuron_store
-        .with_neuron(&neuron_4.id(), |n| n.kyc_verified)
-        .unwrap());
+    assert!(
+        !neuron_store
+            .with_neuron(&neuron_1.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
+    assert!(
+        !neuron_store
+            .with_neuron(&neuron_2.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
+    assert!(
+        !neuron_store
+            .with_neuron(&neuron_3.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
+    assert!(
+        !neuron_store
+            .with_neuron(&neuron_4.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
 
     // Approve KYC for neuron_1, neuron_2 and neuron_3.
     approve_genesis_kyc(&mut neuron_store, &[principal_1, principal_2]).unwrap();
 
-    assert!(neuron_store
-        .with_neuron(&neuron_1.id(), |n| n.kyc_verified)
-        .unwrap());
-    assert!(neuron_store
-        .with_neuron(&neuron_2.id(), |n| n.kyc_verified)
-        .unwrap());
-    assert!(neuron_store
-        .with_neuron(&neuron_3.id(), |n| n.kyc_verified)
-        .unwrap());
-    assert!(!neuron_store
-        .with_neuron(&neuron_4.id(), |n| n.kyc_verified)
-        .unwrap());
+    assert!(
+        neuron_store
+            .with_neuron(&neuron_1.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
+    assert!(
+        neuron_store
+            .with_neuron(&neuron_2.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
+    assert!(
+        neuron_store
+            .with_neuron(&neuron_3.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
+    assert!(
+        !neuron_store
+            .with_neuron(&neuron_4.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
 }
 
 // Prepares `num_neurons_same_controller` neurons with the same controller and
@@ -955,16 +971,20 @@ fn test_approve_genesis_kyc_cap_not_exceeded() {
 
     // All 1000 neurons should have KYC verified.
     for neuron in &neurons {
-        assert!(neuron_store
-            .with_neuron(&neuron.id(), |n| n.kyc_verified)
-            .unwrap());
+        assert!(
+            neuron_store
+                .with_neuron(&neuron.id(), |n| n.kyc_verified)
+                .unwrap()
+        );
     }
 
     // The neuron with id 1001 should not have KYC verified.
-    assert!(!neuron_store
-        .with_neuron(&neuron_should_not_have_kyc_verified.id(), |n| n
-            .kyc_verified)
-        .unwrap());
+    assert!(
+        !neuron_store
+            .with_neuron(&neuron_should_not_have_kyc_verified.id(), |n| n
+                .kyc_verified)
+            .unwrap()
+    );
 }
 
 #[test]
@@ -987,8 +1007,49 @@ fn test_approve_genesis_kyc_cap_exceeded() {
 
     // None of the neurons should have KYC verified.
     for neuron in &neurons {
-        assert!(!neuron_store
-            .with_neuron(&neuron.id(), |n| n.kyc_verified)
-            .unwrap());
+        assert!(
+            !neuron_store
+                .with_neuron(&neuron.id(), |n| n.kyc_verified)
+                .unwrap()
+        );
     }
+}
+
+#[test]
+fn test_record_neuron_vote() {
+    let mut neuron_store = NeuronStore::new(BTreeMap::new());
+    let neuron = simple_neuron_builder(1)
+        .with_known_neuron_data(Some(KnownNeuronData {
+            name: "my known neuron".to_string(),
+            description: Some("my known neuron description".to_string()),
+            links: vec![],
+            committed_topics: vec![],
+        }))
+        .build();
+    let neuron_id = neuron_store.add_neuron(neuron).unwrap();
+
+    neuron_store
+        .record_neuron_vote(
+            neuron_id,
+            Topic::NetworkEconomics,
+            ProposalId { id: 1 },
+            Vote::Yes,
+        )
+        .unwrap();
+
+    let recent_ballots = neuron_store
+        .with_neuron(&neuron_id, |n| n.recent_ballots.clone())
+        .unwrap();
+    assert_eq!(
+        recent_ballots,
+        vec![BallotInfo {
+            proposal_id: Some(ProposalId { id: 1 }),
+            vote: Vote::Yes as i32,
+        }]
+    );
+
+    let voting_history = with_voting_history_store(|voting_history| {
+        voting_history.list_neuron_votes(neuron_id, None, Some(10))
+    });
+    assert_eq!(voting_history, vec![(ProposalId { id: 1 }, Vote::Yes)]);
 }

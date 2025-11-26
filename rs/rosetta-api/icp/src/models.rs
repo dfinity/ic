@@ -24,6 +24,9 @@ pub struct ConstructionHashResponse {
     pub metadata: ObjectMap,
 }
 
+/// `SignedTransaction` up to v2.0.0
+pub type LegacySignedTransaction = Vec<Request>;
+
 /// The type (encoded as CBOR) returned by /construction/combine, containing the
 /// IC calls to submit the transaction and to check the result.
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -34,12 +37,14 @@ pub struct SignedTransaction {
 impl FromStr for SignedTransaction {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_cbor::from_slice(
-            hex::decode(s)
-                .map_err(|err| format!("{:?}", err))?
-                .as_slice(),
-        )
-        .map_err(|err| format!("{:?}", err))
+        let bytes = hex::decode(s).map_err(|err| format!("{err:?}"))?;
+        serde_cbor::from_slice(bytes.as_slice()).or_else(|first_err| {
+            serde_cbor::from_slice::<LegacySignedTransaction>(bytes.as_slice())
+                .map(|legacy_requests| SignedTransaction {
+                    requests: legacy_requests,
+                })
+                .map_err(|_| format!("{first_err:?}"))
+        })
     }
 }
 impl std::fmt::Display for SignedTransaction {
@@ -47,6 +52,7 @@ impl std::fmt::Display for SignedTransaction {
         write!(f, "{}", hex::encode(serde_cbor::to_vec(self).unwrap()))
     }
 }
+
 /// A vector of update/read-state calls for different ingress windows
 /// of the same call.
 pub type Request = (RequestType, Vec<EnvelopePair>);
@@ -95,8 +101,12 @@ impl TryFrom<ConstructionDeriveRequestMetadata> for ObjectMap {
     fn try_from(d: ConstructionDeriveRequestMetadata) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(serde_json::Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ConstructionDeriveRequestMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert ConstructionDeriveRequestMetadata to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert ConstructionDeriveRequestMetadata to ObjectMap. Expected type Object but received: {o:?}"
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert ConstructionDeriveRequestMetadata to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -106,8 +116,7 @@ impl TryFrom<Option<ObjectMap>> for ConstructionDeriveRequestMetadata {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse ConstructionDeriveRequestMetadata metadata from metadata JSON object: {}",
-                e
+                "Could not parse ConstructionDeriveRequestMetadata metadata from metadata JSON object: {e}"
             ))
         })
     }
@@ -136,8 +145,12 @@ impl TryFrom<ConstructionMetadataRequestOptions> for ObjectMap {
     fn try_from(d: ConstructionMetadataRequestOptions) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(serde_json::Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ConstructionMetadataRequestOptions to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert ConstructionMetadataRequestOptions to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert ConstructionMetadataRequestOptions to ObjectMap. Expected type Object but received: {o:?}"
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert ConstructionMetadataRequestOptions to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -147,8 +160,7 @@ impl TryFrom<ObjectMap> for ConstructionMetadataRequestOptions {
     fn try_from(o: ObjectMap) -> Result<Self, ApiError> {
         serde_json::from_value(serde_json::Value::Object(o)).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse ConstructionMetadataRequestOptions from Object: {}",
-                e
+                "Could not parse ConstructionMetadataRequestOptions from Object: {e}"
             ))
         })
     }
@@ -159,8 +171,7 @@ impl TryFrom<Option<ObjectMap>> for ConstructionMetadataRequestOptions {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse ConstructionMetadataRequestOptions metadata from metadata JSON object: {}",
-                e
+                "Could not parse ConstructionMetadataRequestOptions metadata from metadata JSON object: {e}"
             ))
         })
     }
@@ -177,16 +188,13 @@ impl TryFrom<ConstructionParseRequest> for ParsedTransaction {
         if value.signed {
             Ok(ParsedTransaction::Signed(
                 serde_cbor::from_slice(&from_hex(&value.transaction)?).map_err(|e| {
-                    ApiError::invalid_request(format!("Could not decode signed transaction: {}", e))
+                    ApiError::invalid_request(format!("Could not decode signed transaction: {e}"))
                 })?,
             ))
         } else {
             Ok(ParsedTransaction::Unsigned(
                 serde_cbor::from_slice(&from_hex(&value.transaction)?).map_err(|e| {
-                    ApiError::invalid_request(format!(
-                        "Could not decode unsigned transaction: {}",
-                        e
-                    ))
+                    ApiError::invalid_request(format!("Could not decode unsigned transaction: {e}"))
                 })?,
             ))
         }
@@ -224,8 +232,12 @@ impl TryFrom<ConstructionPayloadsRequestMetadata> for ObjectMap {
     fn try_from(d: ConstructionPayloadsRequestMetadata) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(serde_json::Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ConstructionPayloadsRequestMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert ConstructionPayloadsRequestMetadata to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert ConstructionPayloadsRequestMetadata to ObjectMap. Expected type Object but received: {o:?}"
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert ConstructionPayloadsRequestMetadata to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -235,8 +247,7 @@ impl TryFrom<ObjectMap> for ConstructionPayloadsRequestMetadata {
     fn try_from(o: ObjectMap) -> Result<Self, ApiError> {
         serde_json::from_value(serde_json::Value::Object(o)).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse ConstructionPayloadsRequestMetadata from Object: {}",
-                e
+                "Could not parse ConstructionPayloadsRequestMetadata from Object: {e}"
             ))
         })
     }
@@ -257,12 +268,8 @@ impl std::fmt::Display for UnsignedTransaction {
 impl FromStr for UnsignedTransaction {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_cbor::from_slice(
-            hex::decode(s)
-                .map_err(|err| format!("{:?}", err))?
-                .as_slice(),
-        )
-        .map_err(|err| format!("{:?}", err))
+        serde_cbor::from_slice(hex::decode(s).map_err(|err| format!("{err:?}"))?.as_slice())
+            .map_err(|err| format!("{err:?}"))
     }
 }
 
@@ -401,8 +408,7 @@ impl TryFrom<Option<ObjectMap>> for AccountBalanceMetadata {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse AccountBalanceMetadata metadata from metadata JSON object: {}",
-                e
+                "Could not parse AccountBalanceMetadata metadata from metadata JSON object: {e}"
             ))
         })
     }
@@ -543,8 +549,7 @@ impl TryFrom<Option<ObjectMap>> for NeuronInfoResponse {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse NeuronInfoResponse metadata from metadata JSON object: {}",
-                e
+                "Could not parse NeuronInfoResponse metadata from metadata JSON object: {e}"
             ))
         })
     }
@@ -562,8 +567,13 @@ impl TryFrom<QueryBlockRangeRequest> for ObjectMap {
         match serde_json::to_value(d) {
             Ok(v) => match v {
                 serde_json::Value::Object(ob) => Ok(ob),
-                _ => Err(ApiError::internal_error(format!("Could not convert QueryBlockRangeRequest to ObjectMap. Expected type Object but received: {:?}",v)))
-            },Err(err) => Err(ApiError::internal_error(format!("Could not convert QueryBlockRangeRequest to ObjectMap: {:?}",err))),
+                _ => Err(ApiError::internal_error(format!(
+                    "Could not convert QueryBlockRangeRequest to ObjectMap. Expected type Object but received: {v:?}"
+                ))),
+            },
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert QueryBlockRangeRequest to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -573,8 +583,7 @@ impl TryFrom<ObjectMap> for QueryBlockRangeRequest {
     fn try_from(o: ObjectMap) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o)).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse QueryBlockRangeRequest from JSON object: {}",
-                e
+                "Could not parse QueryBlockRangeRequest from JSON object: {e}"
             ))
         })
     }
@@ -591,8 +600,13 @@ impl TryFrom<QueryBlockRangeResponse> for ObjectMap {
         match serde_json::to_value(d) {
             Ok(v) => match v {
                 serde_json::Value::Object(ob) => Ok(ob),
-                _ => Err(ApiError::internal_error(format!("Could not convert QueryBlockRangeResponse to ObjectMap. Expected type Object but received: {:?}",v)))
-            },Err(err) =>Err(ApiError::internal_error(format!("Could not convert QueryBlockRangeResponse to ObjectMap: {:?}",err))),
+                _ => Err(ApiError::internal_error(format!(
+                    "Could not convert QueryBlockRangeResponse to ObjectMap. Expected type Object but received: {v:?}"
+                ))),
+            },
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert QueryBlockRangeResponse to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -602,8 +616,7 @@ impl TryFrom<ObjectMap> for QueryBlockRangeResponse {
     fn try_from(o: ObjectMap) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o)).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse QueryBlockRangeResponse from JSON object: {}",
-                e
+                "Could not parse QueryBlockRangeResponse from JSON object: {e}"
             ))
         })
     }

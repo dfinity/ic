@@ -34,7 +34,7 @@ struct KeyConfigRequest {
 /// Struct simplyfiying the creation of `ic-admin` commands for a given NNS [Url].
 #[derive(Clone, Debug)]
 pub struct AdminHelper {
-    pub binary: PathBuf,
+    pub ic_admin: PathBuf,
     pub nns_url: Url,
     pub neuron_args: Option<NeuronArgs>,
 }
@@ -42,18 +42,16 @@ pub struct AdminHelper {
 impl AdminHelper {
     /// Create a new command builder for a given binary path, NNS [Url] and
     /// [NeuronArgs].
-    pub fn new(binary: PathBuf, nns_url: Url, neuron_args: Option<NeuronArgs>) -> Self {
+    pub fn new(ic_admin: PathBuf, nns_url: Url, neuron_args: Option<NeuronArgs>) -> Self {
         Self {
-            binary,
+            ic_admin,
             nns_url,
             neuron_args,
         }
     }
 
     pub fn get_ic_admin_cmd_base(&self) -> IcAdmin {
-        let mut ica = self.binary.clone();
-        ica.push("ic-admin");
-        let mut ic_admin = vec![ica.display().to_string()];
+        let mut ic_admin = vec![self.ic_admin.display().to_string()];
 
         ic_admin.add_argument("nns-url", quote(&self.nns_url));
 
@@ -129,8 +127,7 @@ impl AdminHelper {
             .add_argument(
                 SUMMARY_ARG,
                 quote(format!(
-                    "Elect new replica binary revision (commit {})",
-                    upgrade_version,
+                    "Elect new replica binary revision (commit {upgrade_version})",
                 )),
             );
 
@@ -152,7 +149,7 @@ impl AdminHelper {
             .add_positional_argument(upgrade_version)
             .add_argument(
                 SUMMARY_ARG,
-                quote(format!("Upgrade replica version of subnet {}.", subnet_id)),
+                quote(format!("Upgrade replica version of subnet {subnet_id}.")),
             );
 
         self.add_proposer_args(&mut ic_admin);
@@ -192,13 +189,13 @@ impl AdminHelper {
                 })
                 .collect::<Vec<_>>();
             let key_requests_string = serde_json::to_string(&key_requests)
-                .map_err(|err| eprintln!("Generating key_requests_string failed with {}", err))
+                .map_err(|err| eprintln!("Generating key_requests_string failed with {err}"))
                 .unwrap_or_default();
 
             if !key_requests.is_empty() {
                 ic_admin.add_argument(
                     "initial-chain-key-configs-to-request",
-                    format!("'{}'", key_requests_string),
+                    format!("'{key_requests_string}'"),
                 );
             }
             if let Some(idkg_key_rotation_period_ms) = config.idkg_key_rotation_period_ms {
@@ -206,6 +203,14 @@ impl AdminHelper {
             }
             if let Some(signature_request_timeout_ns) = config.signature_request_timeout_ns {
                 ic_admin.add_argument("signature-request-timeout-ns", signature_request_timeout_ns);
+            }
+            if let Some(max_parallel_pre_signature_transcripts_in_creation) =
+                config.max_parallel_pre_signature_transcripts_in_creation
+            {
+                ic_admin.add_argument(
+                    "max-parallel-pre-signature-transcripts-in-creation",
+                    max_parallel_pre_signature_transcripts_in_creation,
+                );
             }
         }
 
@@ -220,7 +225,7 @@ impl AdminHelper {
                 .add_argument("registry-version", params.registry_version);
         }
 
-        ic_admin.add_argument(SUMMARY_ARG, quote(format!("Recover subnet {}.", subnet_id)));
+        ic_admin.add_argument(SUMMARY_ARG, quote(format!("Recover subnet {subnet_id}.")));
 
         let since_the_epoch = time
             .duration_since(UNIX_EPOCH)
@@ -252,7 +257,7 @@ impl AdminHelper {
             .add_argument("subnet-type", "system")
             .add_argument(
                 SUMMARY_ARG,
-                format!("Create subnet with id {}", subnet_id_override),
+                format!("Create subnet with id {subnet_id_override}"),
             );
 
         for node_id in node_ids {
@@ -328,7 +333,7 @@ fn prepend_if_necessary(argument: impl ToString, prefix: &str) -> String {
 
 /// Wraps a string in escaped quotation marks.
 pub fn quote(text: impl Display) -> String {
-    format!("\"{}\"", text)
+    format!("\"{text}\"")
 }
 
 #[cfg(test)]
@@ -343,7 +348,7 @@ mod tests {
     use ic_registry_subnet_features::KeyConfig;
     use std::{str::FromStr, time::Duration};
 
-    const FAKE_IC_ADMIN_DIR: &str = "/fake/ic/admin/dir/";
+    const FAKE_IC_ADMIN: &str = "/fake/ic/admin/dir/ic-admin";
     const FAKE_NNS_URL: &str = "https://fake_nns_url.com:8080";
     const FAKE_SUBNET_ID_1: &str =
         "gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe";
@@ -362,7 +367,8 @@ mod tests {
             )
             .join(" ");
 
-        assert_eq!(result,
+        assert_eq!(
+            result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
             propose-to-update-subnet \
@@ -371,7 +377,7 @@ mod tests {
             --is-halted true \
             --ssh-readonly-access \"fake public key\" \
             --summary \"Halt subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe, for recovery and update ssh readonly access\""
-            );
+        );
     }
 
     #[test]
@@ -384,7 +390,8 @@ mod tests {
             )
             .join(" ");
 
-        assert_eq!(result,
+        assert_eq!(
+            result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
             propose-to-create-subnet \
@@ -396,7 +403,8 @@ mod tests {
             --is-halted \
             --subnet-type system \
             --summary Create subnet with id gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe nqpqw-cp42a-rmdsx-fpui3-ncne5-kzq6o-m67an-w25cx-zu636-lcf2v-fqe \
-            --test-neuron-proposer");
+            --test-neuron-proposer"
+        );
     }
 
     #[test]
@@ -436,7 +444,8 @@ mod tests {
             )
             .join(" ");
 
-        assert_eq!(result,
+        assert_eq!(
+            result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
             propose-to-update-recovery-cup \
@@ -445,7 +454,8 @@ mod tests {
             --state-hash fake_state_hash \
             --summary \"Recover subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe.\" \
             --time-ns 123456 \
-            --test-neuron-proposer");
+            --test-neuron-proposer"
+        );
     }
 
     #[test]
@@ -479,6 +489,7 @@ mod tests {
             ],
             signature_request_timeout_ns: Some(123_456),
             idkg_key_rotation_period_ms: Some(321_654),
+            max_parallel_pre_signature_transcripts_in_creation: Some(123_654),
         };
         let result = fake_admin_helper_with_neuron_args()
             .get_propose_to_update_recovery_cup_command(
@@ -497,7 +508,8 @@ mod tests {
             )
             .join(" ");
 
-        assert_eq!(result,
+        assert_eq!(
+            result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
             --use-hsm \
@@ -514,13 +526,15 @@ mod tests {
                 {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"vetkd:Bls12_381_G2:test_key_3\",\"pre_signatures_to_create_in_advance\":\"0\",\"max_queue_size\":\"32\"}]' \
             --idkg-key-rotation-period-ms 321654 \
             --signature-request-timeout-ns 123456 \
+            --max-parallel-pre-signature-transcripts-in-creation 123654 \
             --replacement-nodes \"nqpqw-cp42a-rmdsx-fpui3-ncne5-kzq6o-m67an-w25cx-zu636-lcf2v-fqe\" \
             --registry-store-uri https://fake_registry_store_uri.com/ \
             --registry-store-hash fake_registry_store_hash \
             --registry-version 666 \
             --summary \"Recover subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe.\" \
             --time-ns 123456 \
-            --proposer fake_neuron_id");
+            --proposer fake_neuron_id"
+        );
     }
 
     #[test]
@@ -532,14 +546,16 @@ mod tests {
             )
             .join(" ");
 
-        assert_eq!(result,
+        assert_eq!(
+            result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
             propose-to-deploy-guestos-to-all-subnet-nodes \
             gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
             fake_replica_version \
             --summary \"Upgrade replica version of subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe.\" \
-            --test-neuron-proposer");
+            --test-neuron-proposer"
+        );
     }
 
     fn subnet_id_from_str(subnet_id: &str) -> SubnetId {
@@ -554,7 +570,7 @@ mod tests {
 
     fn fake_admin_helper() -> AdminHelper {
         AdminHelper::new(
-            PathBuf::from(FAKE_IC_ADMIN_DIR),
+            PathBuf::from(FAKE_IC_ADMIN),
             Url::try_from(FAKE_NNS_URL).unwrap(),
             /*neuron_args=*/ None,
         )
@@ -562,7 +578,7 @@ mod tests {
 
     fn fake_admin_helper_with_neuron_args() -> AdminHelper {
         AdminHelper::new(
-            PathBuf::from(FAKE_IC_ADMIN_DIR),
+            PathBuf::from(FAKE_IC_ADMIN),
             Url::try_from(FAKE_NNS_URL).unwrap(),
             Some(NeuronArgs {
                 dfx_hsm_pin: "fake_dfx_hsm_pin".to_string(),

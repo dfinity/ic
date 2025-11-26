@@ -216,7 +216,9 @@ async fn test_upgrade_existing_sns() {
         eprintln!("Ledger check 1: We get the expected state in the archive(s) ...");
         sns::ledger::check_blocks_or_panic(&pocket_ic, sns.ledger.canister_id).await;
 
-        eprintln!("Ledger check 2: We get the same number of blocks that we had before the upgrade (because no transactions have happened after the upgrade) ...");
+        eprintln!(
+            "Ledger check 2: We get the same number of blocks that we had before the upgrade (because no transactions have happened after the upgrade) ..."
+        );
         let post_upgrade_chain_length =
             sns::ledger::get_blocks(&pocket_ic, sns.ledger.canister_id, 0_u64, 1_u64)
                 .await
@@ -327,7 +329,9 @@ async fn test_upgrade_existing_sns() {
         sns::ledger::check_blocks_or_panic(&pocket_ic, sns.ledger.canister_id).await;
     }
 
-    eprintln!("Publish modified versions of all the wasms and ensure we can upgrade a second time (pre-upgrade smoke test) ...");
+    eprintln!(
+        "Publish modified versions of all the wasms and ensure we can upgrade a second time (pre-upgrade smoke test) ..."
+    );
     {
         let wasm = create_modified_sns_wasm(&build_index_ng_sns_wasm(), Some(42));
         let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).await.unwrap();
@@ -349,10 +353,7 @@ async fn test_upgrade_existing_sns() {
         SnsCanisterType::Ledger,
         SnsCanisterType::Archive,
     ] {
-        eprintln!(
-            "upgrade_sns_to_next_version_and_assert_change {:?} ...",
-            sns_canister_type
-        );
+        eprintln!("upgrade_sns_to_next_version_and_assert_change {sns_canister_type:?} ...");
         sns::upgrade_sns_to_next_version_and_assert_change(&pocket_ic, &sns, sns_canister_type)
             .await;
     }

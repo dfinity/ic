@@ -1,14 +1,14 @@
 use super::*;
 use crate::{
+    CheckpointMetrics, ManifestMetrics, NUMBER_OF_CHECKPOINT_THREADS, StateManagerMetrics,
     checkpoint::make_unvalidated_checkpoint,
     flush_canister_snapshots_and_page_maps,
     manifest::RehashManifest,
     state_sync::types::{FileInfo, Manifest},
     tip::{flush_tip_channel, spawn_tip_thread},
-    CheckpointMetrics, ManifestMetrics, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use assert_matches::assert_matches;
-use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, NumSeconds, SnapshotId};
+use ic_base_types::{CanisterId, NumSeconds, SnapshotId, subnet_id_try_from_protobuf};
 use ic_config::state_manager::lsmt_config_default;
 use ic_error_types::{ErrorCode, UserError};
 use ic_logger::ReplicaLogger;
@@ -16,27 +16,28 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_snapshots::CanisterSnapshot, page_map::TestPageAllocatorFileDescriptorImpl,
     CheckpointLoadingMetrics, ReplicatedState, SystemMetadata,
+    canister_snapshots::CanisterSnapshot, page_map::TestPageAllocatorFileDescriptorImpl,
+    testing::ReplicatedStateTesting,
 };
 use ic_state_layout::{
-    ProtoFileWith, StateLayout, CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR,
-    INGRESS_HISTORY_FILE, SPLIT_MARKER_FILE, SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE,
+    CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR, INGRESS_HISTORY_FILE, ProtoFileWith,
+    REFUNDS_FILE, SPLIT_MARKER_FILE, SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE, StateLayout,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_state::new_canister_state_with_execution;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::{
-    ids::{user_test_id, SUBNET_1, SUBNET_2},
+    ids::{SUBNET_1, SUBNET_2, user_test_id},
     messages::RequestBuilder,
 };
 use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 use ic_types::{
+    Cycles, Height,
     ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::MessageId,
     time::UNIX_EPOCH,
-    Cycles, Height,
 };
 use std::{path::Path, sync::Arc, time::Duration};
 use tempfile::TempDir;
@@ -91,6 +92,7 @@ fn subnet_a_files() -> &'static [&'static str] {
         "canister_states/00000000000000030101/canister.pbuf",
         "canister_states/00000000000000030101/software.wasm",
         INGRESS_HISTORY_FILE,
+        REFUNDS_FILE,
         "snapshots/00000000000000010101/000000000000000000000000000000010101/snapshot.pbuf",
         "snapshots/00000000000000010101/000000000000000000000000000000010101/software.wasm",
         SUBNET_QUEUES_FILE,
@@ -106,6 +108,7 @@ fn subnet_a_prime_files() -> &'static [&'static str] {
         "canister_states/00000000000000030101/canister.pbuf",
         "canister_states/00000000000000030101/software.wasm",
         INGRESS_HISTORY_FILE,
+        REFUNDS_FILE,
         "snapshots/00000000000000010101/000000000000000000000000000000010101/snapshot.pbuf",
         "snapshots/00000000000000010101/000000000000000000000000000000010101/software.wasm",
         SPLIT_MARKER_FILE,
@@ -379,8 +382,10 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         },
         UNIX_EPOCH,
         (1u64 << 30).into(),
+        |_| {},
     );
     state.metadata.batch_time = Time::from_secs_since_unix_epoch(1234567890).unwrap();
+    state.add_refund(CANISTER_0, Cycles::new(1 << 20));
 
     let snapshot_id = SnapshotId::from((CANISTER_1, 0));
     let snapshot =
@@ -409,12 +414,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         &state_manager_metrics.checkpoint_metrics,
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
-    .unwrap_or_else(|err| {
-        panic!(
-            "Expected make_unvalidated_checkpoint to succeed, got {:?}",
-            err
-        )
-    });
+    .unwrap_or_else(|err| panic!("Expected make_unvalidated_checkpoint to succeed, got {err:?}"));
     flush_tip_channel(&tip_channel);
     let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
     validate_and_finalize_checkpoint_and_remove_unverified_marker(
@@ -557,7 +557,7 @@ fn file_info<'a>(file: &str, manifest: &'a Manifest) -> &'a FileInfo {
             return file_info;
         }
     }
-    panic!("file '{}' not found in manifest: {:?}", file, manifest)
+    panic!("file '{file}' not found in manifest: {manifest:?}")
 }
 
 /// Computes the manifest of the latest checkpoint under the state layout at

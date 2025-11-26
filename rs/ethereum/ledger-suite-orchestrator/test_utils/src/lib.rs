@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::flow::{AddErc20TokenFlow, ManagedCanistersAssert};
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
@@ -162,7 +163,7 @@ impl LedgerSuiteOrchestrator {
     pub fn assert_managed_canisters(self, contract: &Erc20Contract) -> ManagedCanistersAssert {
         let canister_ids = self
             .call_orchestrator_canister_ids(contract)
-            .unwrap_or_else(|| panic!("No managed canister IDs found for contract {:?}", contract));
+            .unwrap_or_else(|| panic!("No managed canister IDs found for contract {contract:?}"));
 
         assert_ne!(
             canister_ids.ledger, canister_ids.index,
@@ -320,10 +321,7 @@ impl LedgerSuiteOrchestrator {
                 }
             }
         }
-        panic!(
-            "Failed to get result after {} ticks: {:?}",
-            MAX_TICKS, last_error
-        );
+        panic!("Failed to get result after {MAX_TICKS} ticks: {last_error:?}");
     }
 
     pub fn wait_for_canister_to_be_installed_and_running(&self, canister_id: Principal) {
@@ -336,8 +334,7 @@ impl LedgerSuiteOrchestrator {
                 Ok(())
             } else {
                 Err(format!(
-                    "Canister {} is not ready {:?}",
-                    canister_id, ledger_status
+                    "Canister {canister_id} is not ready {ledger_status:?}"
                 ))
             }
         });
@@ -494,7 +491,7 @@ pub fn assert_reply(result: WasmResult) -> Vec<u8> {
     match result {
         WasmResult::Reply(bytes) => bytes,
         WasmResult::Reject(reject) => {
-            panic!("Expected a successful reply, got a reject: {}", reject)
+            panic!("Expected a successful reply, got a reject: {reject}")
         }
     }
 }

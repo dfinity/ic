@@ -55,7 +55,7 @@ mod tls_public_key_cert {
         let empty_der = Vec::new();
 
         let error = TlsPublicKeyCert::new_from_der(empty_der).unwrap_err();
-        assert!(format!("{}", error).contains("Error parsing DER"));
+        assert!(format!("{error}").contains("Error parsing DER"));
     }
 
     #[test]
@@ -64,7 +64,7 @@ mod tls_public_key_cert {
 
         let error = TlsPublicKeyCert::new_from_der(malformed_der).unwrap_err();
 
-        assert!(format!("{}", error).contains("Error parsing DER"));
+        assert!(format!("{error}").contains("Error parsing DER"));
     }
 
     #[test]
@@ -101,7 +101,7 @@ mod tls_public_key_cert {
         assert!(remainder.is_empty(), "DER not fully consumed when parsing");
         assert_eq!(x509_cert.subject().iter_common_name().count(), 1);
         let subj_name = x509_cert.subject();
-        let subj_name = format!("{}", subj_name);
+        let subj_name = format!("{subj_name}");
         assert_eq!(subj_name, "CN=Spock");
     }
 

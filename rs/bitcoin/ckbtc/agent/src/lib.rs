@@ -1,8 +1,8 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
-use ic_ckbtc_minter::queries::RetrieveBtcStatusRequest;
-use ic_ckbtc_minter::state::eventlog::{Event, GetEventsArg};
+use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
+use ic_ckbtc_minter::state::eventlog::{Event, GetEventsArg};
 use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs,
     retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk},
@@ -114,6 +114,19 @@ impl CkBtcMinterAgent {
         .await
     }
 
+    pub async fn estimate_withdrawal_fee(
+        &self,
+        amount: u64,
+    ) -> Result<WithdrawalFee, CkBtcMinterAgentError> {
+        self.query(
+            "estimate_withdrawal_fee",
+            EstimateFeeArg {
+                amount: Some(amount),
+            },
+        )
+        .await
+    }
+
     pub async fn distribute_kyt_fee(&self) -> Result<(), CkBtcMinterAgentError> {
         self.update("distribute_kyt_fee", ()).await
     }
@@ -161,16 +174,13 @@ fn parse_metrics(text: &str) -> BTreeMap<String, Metric> {
 
 fn parse_metric(line: &str) -> Option<(String, f64, i64)> {
     let mut parts = line.split_whitespace();
-    if let Some(name) = parts.next() {
-        if let Some(value) = parts.next() {
-            if let Ok(value) = value.parse::<f64>() {
-                if let Some(ts) = parts.next() {
-                    if let Ok(ts) = ts.parse::<i64>() {
-                        return Some((name.to_string(), value, ts));
-                    }
-                }
-            }
-        }
+    if let Some(name) = parts.next()
+        && let Some(value) = parts.next()
+        && let Ok(value) = value.parse::<f64>()
+        && let Some(ts) = parts.next()
+        && let Ok(ts) = ts.parse::<i64>()
+    {
+        return Some((name.to_string(), value, ts));
     }
     None
 }

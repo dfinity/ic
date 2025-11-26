@@ -1,7 +1,7 @@
 use clap::Parser;
 use ic_config::{
-    logger::{Level, LogFormat},
     Config,
+    logger::{Level, LogFormat},
 };
 use std::{
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},

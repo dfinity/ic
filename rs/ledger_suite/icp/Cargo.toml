@@ -10,8 +10,6 @@ documentation.workspace = true
 candid = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
 crc32fast = "1.2.0"
-dfn_candid = { path = "../../rust_canisters/dfn_candid" }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
@@ -38,8 +36,10 @@ ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-icp-archive = { path = "archive" }
 ic-icp-index = { path = "index" }
-ic-ledger-suite-state-machine-tests = { path = "../tests/sm-tests" }
+ic-ledger-suite-in-memory-ledger = { path = "../test_utils/in_memory_ledger" }
+ic-ledger-suite-state-machine-helpers = { path = "../test_utils/state_machine_helpers" }
 ic-ledger-test-utils = { path = "test_utils" }
+ic-management-canister-types = { workspace = true }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-test-utils-golden-nns-state = { path = "../../nns/test_utils/golden_nns_state" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
@@ -67,7 +67,3 @@ path = "tests/check_generated_files.rs"
 [[test]]
 name = "protobuf_encoding"
 path = "tests/protobuf_encoding.rs"
-
-[[bin]]
-name = "test-notified"
-path = "tests/notified/notified.rs"

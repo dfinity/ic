@@ -6,19 +6,19 @@ use crate::{
     utils::http_endpoint_to_url,
 };
 use candid::Encode;
-use ic_agent::{export::Principal, Agent};
+use ic_agent::{Agent, export::Principal};
 use ic_config::{
+    Config,
     http_handler::Config as HttpConfig,
     initial_ipv4_config::IPv4Config as InitialIPv4Config,
     message_routing::Config as MsgRoutingConfig,
     metrics::{Config as MetricsConfig, Exporter},
     transport::TransportConfig,
-    Config,
 };
 use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, threshold_sig_public_key_to_der};
 use ic_interfaces::crypto::IDkgKeyRotationResult;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_registry_canister_api::{AddNodePayload, IPv4Config, UpdateNodeDirectlyPayload};
@@ -28,7 +28,7 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_local_store::LocalStore;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::{crypto::KeyPurpose, messages::MessageId, NodeId, RegistryVersion, SubnetId};
+use ic_types::{NodeId, RegistryVersion, SubnetId, crypto::KeyPurpose, messages::MessageId};
 use idna::domain_to_ascii_strict;
 use prost::Message;
 use rand::prelude::*;
@@ -93,7 +93,10 @@ impl NodeRegistration {
                     Box::new(signer)
                 }
                 None => {
-                    UtilityCommand::notify_host("Node operator private key found but could not be successfully read. Falling back to HSM.", 1);
+                    UtilityCommand::notify_host(
+                        "Node operator private key found but could not be successfully read. Falling back to HSM.",
+                        1,
+                    );
                     Box::new(Hsm)
                 }
             },
@@ -132,7 +135,7 @@ impl NodeRegistration {
         .unwrap()
         {
             warn!(self.log, "Node keys are not setup: {:?}", e);
-            UtilityCommand::notify_host(format!("Node keys are not setup: {:?}", e).as_str(), 1);
+            UtilityCommand::notify_host(format!("Node keys are not setup: {e:?}").as_str(), 1);
             self.retry_register_node().await;
         }
         // postcondition: node keys are registered
@@ -294,7 +297,7 @@ impl NodeRegistration {
             self.metrics.observe_key_rotation_error();
             warn!(self.log, "Failed to check keys with registry: {e:?}");
             UtilityCommand::notify_host(
-                format!("Failed to check keys with registry: {:?}", e).as_str(),
+                format!("Failed to check keys with registry: {e:?}").as_str(),
                 1,
             );
         }
@@ -327,7 +330,7 @@ impl NodeRegistration {
             Err(e) => {
                 self.metrics.observe_key_rotation_error();
                 warn!(self.log, "Key rotation error: {e:?}");
-                UtilityCommand::notify_host(format!("Key rotation error: {:?}", e).as_str(), 1);
+                UtilityCommand::notify_host(format!("Key rotation error: {e:?}").as_str(), 1);
             }
         }
     }
@@ -622,10 +625,7 @@ impl NodeRegistration {
             Ok(_) => true,
             Err(e) => {
                 warn!(self.log, "Node keys are not setup: {:?}", e);
-                UtilityCommand::notify_host(
-                    format!("Node keys are not setup: {:?}", e).as_str(),
-                    1,
-                );
+                UtilityCommand::notify_host(format!("Node keys are not setup: {e:?}").as_str(), 1);
                 false
             }
         }
@@ -709,8 +709,7 @@ fn metrics_config_to_endpoint(
 fn get_endpoint(log: &ReplicaLogger, ip_addr: String, port: u16) -> OrchestratorResult<String> {
     let parsed_ip_addr: IpAddr = ip_addr.parse().map_err(|err| {
         OrchestratorError::invalid_configuration_error(format!(
-            "Could not parse IP-address {}: {}",
-            ip_addr, err
+            "Could not parse IP-address {ip_addr}: {err}"
         ))
     })?;
     if parsed_ip_addr.is_loopback() {
@@ -721,9 +720,9 @@ fn get_endpoint(log: &ReplicaLogger, ip_addr: String, port: u16) -> Orchestrator
     }
     let ip_addr_str = match parsed_ip_addr {
         IpAddr::V4(_) => ip_addr,
-        IpAddr::V6(_) => format!("[{}]", ip_addr),
+        IpAddr::V6(_) => format!("[{ip_addr}]"),
     };
-    Ok(format!("{}:{}", ip_addr_str, port))
+    Ok(format!("{ip_addr_str}:{port}"))
 }
 
 fn process_ipv4_config(
@@ -814,7 +813,7 @@ mod tests {
     fn capturing_echo_succeeds() {
         // echo `test` | sha256sum
         let input = "f2ca1bb6c7e907d06dafe4687e579fce76b37e4e93b7605022da52e6ccc26fd2".to_string();
-        let expected = format!("{}\n", input).as_bytes().to_vec();
+        let expected = format!("{input}\n").as_bytes().to_vec();
 
         let utility_command = UtilityCommand::new(
             "sh".to_string(),
@@ -876,16 +875,16 @@ mod tests {
         use ic_registry_local_store::LocalStoreImpl;
         use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
         use ic_test_utilities_in_memory_logger::{
-            assertions::LogEntriesAssert, InMemoryReplicaLogger,
+            InMemoryReplicaLogger, assertions::LogEntriesAssert,
         };
         use ic_types::{
+            PrincipalId,
             consensus::CatchUpContentProtobufBytes,
             crypto::{
                 AlgorithmId, BasicSigOf, CombinedThresholdSigOf, CryptoResult,
                 CurrentNodePublicKeys,
             },
             registry::RegistryClientError,
-            PrincipalId,
         };
         use mockall::{predicate::*, *};
         use slog::Level;
@@ -1146,8 +1145,8 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn should_not_log_anything_if_check_keys_with_registry_succeeds_and_latest_rotation_too_recent(
-        ) {
+        async fn should_not_log_anything_if_check_keys_with_registry_succeeds_and_latest_rotation_too_recent()
+         {
             let in_memory_logger = InMemoryReplicaLogger::new();
             let setup = Setup::builder()
                 .with_check_keys_with_registry_result(Ok(()))

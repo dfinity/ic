@@ -104,9 +104,10 @@ fn should_insert_after_removal() {
     let mut map = MultiKeyMap::<PrimaryKey, AltKey, u32>::default();
     map.try_insert(PrimaryKey::new(1), AltKey::new('a'), 1)
         .unwrap();
-    assert!(map
-        .try_insert(PrimaryKey::new(1), AltKey::new('a'), 1)
-        .is_err());
+    assert!(
+        map.try_insert(PrimaryKey::new(1), AltKey::new('a'), 1)
+            .is_err()
+    );
 
     assert_eq!(
         map.remove_entry(&PrimaryKey::new(1)),

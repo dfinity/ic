@@ -102,7 +102,7 @@ impl Logger<LogEntry> for LogEntryLogger {
 
         // Example:
         // s:0/n:0/ic_consensus/certifier Received 0 hash(es) to be certified in 11.26µs
-        let message = format!("{}{}/{} {}", net_context, crate_, module, message);
+        let message = format!("{net_context}{crate_}/{module} {message}");
 
         let kv = slog::o!("log_entry" => log_entry);
 

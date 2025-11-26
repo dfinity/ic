@@ -3,7 +3,7 @@
 /// Operands used in encoding UC payloads.
 macro_rules! try_from_u8 {
     ($(#[$meta:meta])* $vis:vis enum $name:ident {
-        $($(#[$vmeta:meta])* $vname:ident $(= $val:expr)?,)*
+        $($(#[$vmeta:meta])* $vname:ident $(= $val:expr_2021)?,)*
     }) => {
         $(#[$meta])*
         #[repr(u8)]
@@ -121,5 +121,8 @@ try_from_u8!(
         LiquidCyclesBalance128 = 92,
         CallDataAppendCyclesAddMax = 93,
         RootKey = 94,
+        SetOnLowWasmMemoryMethod = 95,
+        WasmMemoryGrow = 96,
+        CostHttpRequestV2 = 97,
     }
 );

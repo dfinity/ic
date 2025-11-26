@@ -1,7 +1,7 @@
 use candid::Principal;
 use ic_icrc_rosetta_client::RosettaClient;
-use ic_icrc_rosetta_runner::start_rosetta;
 use ic_icrc_rosetta_runner::RosettaOptions;
+use ic_icrc_rosetta_runner::start_rosetta;
 use icrc_ledger_types::icrc1::account::Account;
 use pocket_ic::PocketIcBuilder;
 use rosetta_core::identifiers::{AccountIdentifier, NetworkIdentifier, PartialBlockIdentifier};
@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use tokio::runtime::Runtime;
 
 fn path_from_env(var: &str) -> PathBuf {
-    std::fs::canonicalize(std::env::var(var).unwrap_or_else(|_| panic!("Unable to find {}", var)))
+    std::fs::canonicalize(std::env::var(var).unwrap_or_else(|_| panic!("Unable to find {var}")))
         .unwrap()
 }
 
@@ -23,7 +23,7 @@ fn test() {
     let mut pocket_ic = PocketIcBuilder::new().with_nns_subnet().build();
     let endpoint = pocket_ic.make_live(None);
     let port = endpoint.port().unwrap();
-    let replica_url = format!("http://localhost:{}", port);
+    let replica_url = format!("http://localhost:{port}");
     let rosetta_bin = path_from_env("ROSETTA_BIN_PATH");
 
     // Wrap async calls in a blocking Block

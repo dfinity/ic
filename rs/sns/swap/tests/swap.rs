@@ -4,10 +4,9 @@ use crate::common::{
     create_generic_sns_neuron_recipes, create_successful_swap_neuron_basket_for_neurons_fund,
     create_successful_swap_neuron_basket_for_one_direct_participant,
     doubles::{
-        spy_clients, spy_clients_exploding_root, LedgerExpect, NnsGovernanceClientCall,
-        NnsGovernanceClientReply, SnsGovernanceClientCall, SnsGovernanceClientReply,
-        SnsRootClientCall, SnsRootClientReply, SpyNnsGovernanceClient, SpySnsGovernanceClient,
-        SpySnsRootClient,
+        LedgerExpect, NnsGovernanceClientCall, NnsGovernanceClientReply, SnsGovernanceClientCall,
+        SnsGovernanceClientReply, SnsRootClientCall, SnsRootClientReply, SpyNnsGovernanceClient,
+        SpySnsGovernanceClient, SpySnsRootClient, spy_clients, spy_clients_exploding_root,
     },
     get_account_balance_mock_ledger, get_snapshot_of_buyers_index_list, get_sns_balance,
     get_transfer_and_account_balance_mock_ledger, get_transfer_mock_ledger, i2principal_id_string,
@@ -18,19 +17,19 @@ use crate::common::{
 use assert_matches::assert_matches;
 use candid::Principal;
 use error_refund_icp_response::err::Type::Precondition;
-use futures::{channel::mpsc, future::FutureExt, StreamExt};
+use futures::{StreamExt, channel::mpsc, future::FutureExt};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{
+    E8, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
     assert_is_err, assert_is_ok, ledger::compute_neuron_staking_subaccount_bytes,
-    NervousSystemError, E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
 };
 use ic_nervous_system_common_test_utils::{
-    drain_receiver_channel, InterleavingTestLedger, LedgerCall, LedgerControlMessage, LedgerReply,
-    SpyLedger,
+    InterleavingTestLedger, LedgerCall, LedgerControlMessage, LedgerReply, SpyLedger,
+    drain_receiver_channel,
 };
 use ic_nervous_system_proto::pb::v1::{Countries, Principals};
 use ic_neurons_fund::{
@@ -38,24 +37,25 @@ use ic_neurons_fund::{
     PolynomialMatchingFunction, SerializableFunction,
 };
 use ic_sns_governance::pb::v1::{
-    claim_swap_neurons_request::{neuron_recipe, NeuronRecipe, NeuronRecipes},
-    claim_swap_neurons_response::ClaimSwapNeuronsResult,
-    governance, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, NeuronId, NeuronIds, SetMode,
+    ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, NeuronId, NeuronIds, SetMode,
     SetModeResponse,
+    claim_swap_neurons_request::{NeuronRecipe, NeuronRecipes, neuron_recipe},
+    claim_swap_neurons_response::ClaimSwapNeuronsResult,
+    governance,
 };
 use ic_sns_swap::{
     environment::CanisterClients,
     memory,
     pb::v1::{
-        settle_neurons_fund_participation_response::NeuronsFundNeuron,
-        sns_neuron_recipe::{ClaimedStatus, Investor, Investor::CommunityFund, NeuronAttributes},
         Lifecycle::{Aborted, Committed, Open, Pending, Unspecified},
         NeuronBasketConstructionParameters, SetDappControllersRequest, SetDappControllersResponse,
+        settle_neurons_fund_participation_response::NeuronsFundNeuron,
+        sns_neuron_recipe::{ClaimedStatus, Investor, Investor::CommunityFund, NeuronAttributes},
         *,
     },
     swap::{
-        apportion_approximately_equally, principal_to_subaccount, CLAIM_SWAP_NEURONS_BATCH_SIZE,
-        FIRST_PRINCIPAL_BYTES, NEURON_BASKET_MEMO_RANGE_START,
+        CLAIM_SWAP_NEURONS_BATCH_SIZE, FIRST_PRINCIPAL_BYTES, NEURON_BASKET_MEMO_RANGE_START,
+        apportion_approximately_equally, principal_to_subaccount,
     },
     swap_builder::SwapBuilder,
 };
@@ -225,7 +225,7 @@ fn create_generic_committed_swap() -> Swap {
 fn fallback_controller_principal_ids_must_not_be_empty() {
     let mut init = init();
     init.fallback_controller_principal_ids.clear();
-    assert!(init.validate().is_err(), "{:#?}", init);
+    assert!(init.validate().is_err(), "{init:#?}");
 }
 
 #[test]
@@ -277,8 +277,8 @@ fn test_min_icp() {
     assert!(!swap.try_commit(END_TIMESTAMP_SECONDS - 1));
     assert!(!swap.try_abort(END_TIMESTAMP_SECONDS - 1));
     // Deposit 2 ICP from one buyer.
-    assert!(swap
-        .refresh_buyer_token_e8s(
+    assert!(
+        swap.refresh_buyer_token_e8s(
             *TEST_USER1_PRINCIPAL,
             None,
             SWAP_CANISTER_ID,
@@ -292,7 +292,8 @@ fn test_min_icp() {
         )
         .now_or_never()
         .unwrap()
-        .is_ok());
+        .is_ok()
+    );
     assert_eq!(
         swap.buyers
             .get(&TEST_USER1_PRINCIPAL.to_string())
@@ -301,8 +302,8 @@ fn test_min_icp() {
         2 * E8
     );
     // Deposit 2 ICP from another buyer.
-    assert!(swap
-        .refresh_buyer_token_e8s(
+    assert!(
+        swap.refresh_buyer_token_e8s(
             *TEST_USER2_PRINCIPAL,
             None,
             SWAP_CANISTER_ID,
@@ -316,7 +317,8 @@ fn test_min_icp() {
         )
         .now_or_never()
         .unwrap()
-        .is_ok());
+        .is_ok()
+    );
     assert_eq!(
         swap.buyers
             .get(&TEST_USER2_PRINCIPAL.to_string())
@@ -500,8 +502,8 @@ fn test_max_icp() {
     assert!(!swap.try_abort(END_TIMESTAMP_SECONDS - 1));
 
     // Deposit 6 ICP from one buyer.
-    assert!(swap
-        .refresh_buyer_token_e8s(
+    assert!(
+        swap.refresh_buyer_token_e8s(
             *TEST_USER1_PRINCIPAL,
             None,
             SWAP_CANISTER_ID,
@@ -515,7 +517,8 @@ fn test_max_icp() {
         )
         .now_or_never()
         .unwrap()
-        .is_ok());
+        .is_ok()
+    );
     assert_eq!(
         swap.buyers
             .get(&TEST_USER1_PRINCIPAL.to_string())
@@ -524,8 +527,8 @@ fn test_max_icp() {
         6 * E8
     );
     // Deposit 6 ICP from another buyer.
-    assert!(swap
-        .refresh_buyer_token_e8s(
+    assert!(
+        swap.refresh_buyer_token_e8s(
             *TEST_USER2_PRINCIPAL,
             None,
             SWAP_CANISTER_ID,
@@ -539,7 +542,8 @@ fn test_max_icp() {
         )
         .now_or_never()
         .unwrap()
-        .is_ok());
+        .is_ok()
+    );
     // But only 4 ICP is "accepted".
     assert_eq!(
         swap.buyers
@@ -586,8 +590,8 @@ fn test_scenario_happy() {
     assert!(!swap.try_commit(END_TIMESTAMP_SECONDS - 1));
     assert!(!swap.try_abort(END_TIMESTAMP_SECONDS - 1));
     // Deposit 900 ICP from one buyer.
-    assert!(swap
-        .refresh_buyer_token_e8s(
+    assert!(
+        swap.refresh_buyer_token_e8s(
             *TEST_USER1_PRINCIPAL,
             None,
             SWAP_CANISTER_ID,
@@ -601,7 +605,8 @@ fn test_scenario_happy() {
         )
         .now_or_never()
         .unwrap()
-        .is_ok());
+        .is_ok()
+    );
     assert_eq!(
         swap.buyers
             .get(&TEST_USER1_PRINCIPAL.to_string())
@@ -613,8 +618,8 @@ fn test_scenario_happy() {
     assert!(!swap.try_commit(END_TIMESTAMP_SECONDS - 1));
     assert!(!swap.try_abort(END_TIMESTAMP_SECONDS - 1));
     // Deposit 600 ICP from another buyer.
-    assert!(swap
-        .refresh_buyer_token_e8s(
+    assert!(
+        swap.refresh_buyer_token_e8s(
             *TEST_USER2_PRINCIPAL,
             None,
             SWAP_CANISTER_ID,
@@ -628,7 +633,8 @@ fn test_scenario_happy() {
         )
         .now_or_never()
         .unwrap()
-        .is_ok());
+        .is_ok()
+    );
     assert_eq!(
         swap.buyers
             .get(&TEST_USER2_PRINCIPAL.to_string())
@@ -645,8 +651,8 @@ fn test_scenario_happy() {
         assert_eq!(abort_swap.lifecycle(), Aborted);
     }
     // Deposit 400 ICP from a third buyer.
-    assert!(swap
-        .refresh_buyer_token_e8s(
+    assert!(
+        swap.refresh_buyer_token_e8s(
             *TEST_USER3_PRINCIPAL,
             None,
             SWAP_CANISTER_ID,
@@ -660,7 +666,8 @@ fn test_scenario_happy() {
         )
         .now_or_never()
         .unwrap()
-        .is_ok());
+        .is_ok()
+    );
     assert_eq!(
         swap.buyers
             .get(&TEST_USER3_PRINCIPAL.to_string())
@@ -1044,7 +1051,7 @@ fn test_scenario_happy() {
                 }
             );
         } else {
-            panic!("Finalization failed: {:#?}", response);
+            panic!("Finalization failed: {response:#?}");
         }
     };
 
@@ -1390,27 +1397,27 @@ async fn test_finalize_swap_ok_matched_funding() {
         .as_ref()
         .expect("Transaction fee not known.");
     let icp_ledger_calls = clients.icp_ledger.get_calls_snapshot();
-    assert_eq!(icp_ledger_calls.len(), 3, "{:#?}", icp_ledger_calls);
+    assert_eq!(icp_ledger_calls.len(), 3, "{icp_ledger_calls:#?}");
     for call in icp_ledger_calls.iter() {
         let (&fee_e8s, &memo) = match call {
             LedgerCall::TransferFundsICRC1 { fee_e8s, memo, .. } => (fee_e8s, memo),
-            call => panic!("Unexpected call on the queue: {:?}", call),
+            call => panic!("Unexpected call on the queue: {call:?}"),
         };
 
-        assert_eq!(fee_e8s, DEFAULT_TRANSFER_FEE.get_e8s(), "{:#?}", call);
-        assert_eq!(memo, 0, "{:#?}", call);
+        assert_eq!(fee_e8s, DEFAULT_TRANSFER_FEE.get_e8s(), "{call:#?}");
+        assert_eq!(memo, 0, "{call:#?}");
     }
 
     let sns_ledger_calls = clients.sns_ledger.get_calls_snapshot();
-    assert_eq!(sns_ledger_calls.len(), 12, "{:#?}", sns_ledger_calls);
+    assert_eq!(sns_ledger_calls.len(), 12, "{sns_ledger_calls:#?}");
     for call in sns_ledger_calls.iter() {
         let (&fee_e8s, &memo) = match call {
             LedgerCall::TransferFundsICRC1 { fee_e8s, memo, .. } => (fee_e8s, memo),
-            call => panic!("Unexpected call on the queue: {:?}", call),
+            call => panic!("Unexpected call on the queue: {call:?}"),
         };
 
-        assert_eq!(fee_e8s, sns_transaction_fee_e8s, "{:#?}", call);
-        assert_eq!(memo, 0, "{:#?}", call);
+        assert_eq!(fee_e8s, sns_transaction_fee_e8s, "{call:#?}");
+        assert_eq!(memo, 0, "{call:#?}");
     }
 
     // ICP should be sent to SNS governance (from various swap subaccounts.)
@@ -1826,10 +1833,12 @@ fn test_error_refund_single_user() {
     )
     .now_or_never()
     .unwrap();
-    assert!(refund_err
-        .description
-        .unwrap()
-        .contains("ABORTED or COMMITTED"));
+    assert!(
+        refund_err
+            .description
+            .unwrap()
+            .contains("ABORTED or COMMITTED")
+    );
     assert_eq!(refund_err.error_type.unwrap(), Precondition as i32);
 
     // The minimum number of participants is 1, so when calling commit with the appropriate end
@@ -2140,8 +2149,8 @@ fn test_get_buyer_state() {
 
     assert_eq!(swap.lifecycle(), Open);
     // Deposit 6 ICP from one buyer.
-    assert!(swap
-        .refresh_buyer_token_e8s(
+    assert!(
+        swap.refresh_buyer_token_e8s(
             *TEST_USER1_PRINCIPAL,
             None,
             SWAP_CANISTER_ID,
@@ -2155,7 +2164,8 @@ fn test_get_buyer_state() {
         )
         .now_or_never()
         .unwrap()
-        .is_ok());
+        .is_ok()
+    );
     // Assert the balance is correct
     assert_eq!(
         swap.buyers
@@ -2177,8 +2187,8 @@ fn test_get_buyer_state() {
     );
 
     // Deposit 6 ICP from another buyer.
-    assert!(swap
-        .refresh_buyer_token_e8s(
+    assert!(
+        swap.refresh_buyer_token_e8s(
             *TEST_USER2_PRINCIPAL,
             None,
             SWAP_CANISTER_ID,
@@ -2192,7 +2202,8 @@ fn test_get_buyer_state() {
         )
         .now_or_never()
         .unwrap()
-        .is_ok());
+        .is_ok()
+    );
     // But only 4 ICP is "accepted" as the swap's init.max_direct_participation_icp_e8s is 10 Tokens and has
     // been reached by this point.
     assert_eq!(
@@ -2215,12 +2226,13 @@ fn test_get_buyer_state() {
     );
 
     // Using `get_buyer_state` without a known principal returns None
-    assert!(swap
-        .get_buyer_state(&GetBuyerStateRequest {
+    assert!(
+        swap.get_buyer_state(&GetBuyerStateRequest {
             principal_id: Some(*TEST_USER3_PRINCIPAL)
         })
         .buyer_state
-        .is_none());
+        .is_none()
+    );
 }
 
 /// Test that the locking mechanism of finalize_swap works. Use the InterleavingTestLedger
@@ -2330,8 +2342,10 @@ fn test_finalize_swap_rejects_concurrent_calls() {
         match response.error_message {
             None => panic!("Expected finalize_swap to reject this concurrent request"),
             Some(error_message) => {
-                assert!(error_message
-                    .contains("The Swap canister has finalize_swap call already in progress"))
+                assert!(
+                    error_message
+                        .contains("The Swap canister has finalize_swap call already in progress")
+                )
             }
         }
 
@@ -2626,7 +2640,9 @@ async fn test_finalization_halts_when_sweep_icp_fails() {
 
     assert_eq!(
         result.error_message,
-        Some(String::from("Transferring ICP did not complete fully, some transfers were invalid or failed. Halting swap finalization"))
+        Some(String::from(
+            "Transferring ICP did not complete fully, some transfers were invalid or failed. Halting swap finalization"
+        ))
     );
 
     // Assert that all other fields are set to None because finalization was halted.
@@ -2731,18 +2747,15 @@ async fn test_sweep_sns_handles_invalid_neuron_recipes() {
             (Err((_, observed_err)), Some(expected_err_substring)) => {
                 assert!(
                     observed_err.contains(expected_err_substring),
-                    "Observed error `{}` does not contain the expected substring `{}`.",
-                    observed_err,
-                    expected_err_substring
+                    "Observed error `{observed_err}` does not contain the expected substring `{expected_err_substring}`."
                 );
             }
             (Err((_, observed_err)), None) => {
-                panic!("Expected valid neuron recipe, observed {:?}.", observed_err);
+                panic!("Expected valid neuron recipe, observed {observed_err:?}.");
             }
             (Ok(_), Some(expected_err_substring)) => {
                 panic!(
-                    "Expected neuron recipe validation error matching `{}`, got ok.",
-                    expected_err_substring
+                    "Expected neuron recipe validation error matching `{expected_err_substring}`, got ok."
                 );
             }
             (Ok(_), None) => (), // all good
@@ -2947,7 +2960,9 @@ async fn test_finalization_halts_when_sweep_sns_fails() {
 
     assert_eq!(
         result.error_message,
-        Some(String::from("Transferring SNS tokens did not complete fully, some transfers were invalid or failed. Halting swap finalization"))
+        Some(String::from(
+            "Transferring SNS tokens did not complete fully, some transfers were invalid or failed. Halting swap finalization"
+        ))
     );
 
     // Assert all other fields are set to None because finalization was halted
@@ -3118,7 +3133,12 @@ async fn test_finalization_halts_when_set_mode_fails() {
         })
     );
 
-    assert_eq!(result.error_message, Some(String::from("Setting the SNS Governance mode to normal did not complete fully. Halting swap finalization")));
+    assert_eq!(
+        result.error_message,
+        Some(String::from(
+            "Setting the SNS Governance mode to normal did not complete fully. Halting swap finalization"
+        ))
+    );
 
     // Assert that sweep_icp was executed correctly, but ignore the specific values
     assert!(result.sweep_icp_result.is_some());
@@ -4140,7 +4160,9 @@ async fn test_finalization_halts_when_create_sns_neuron_recipes_fails() {
 
     assert_eq!(
         result.error_message,
-        Some(String::from("Creating SnsNeuronRecipes did not complete fully, some data was invalid or failed. Halting swap finalization"))
+        Some(String::from(
+            "Creating SnsNeuronRecipes did not complete fully, some data was invalid or failed. Halting swap finalization"
+        ))
     );
 
     // Assert all other fields are set to None because finalization was halted
@@ -4571,7 +4593,7 @@ fn test_rebuild_indexes_correctly_rebuilds_buyers_list_index() {
 
     // Execute the code under test
     swap.rebuild_indexes()
-        .unwrap_or_else(|err| panic!("rebuild_indexes failed due to {}", err));
+        .unwrap_or_else(|err| panic!("rebuild_indexes failed due to {err}"));
 
     // Inspect results
 
@@ -4626,7 +4648,7 @@ fn test_rebuild_indexes_ignores_existing_index() {
 
     // Execute the code under test
     swap.rebuild_indexes()
-        .unwrap_or_else(|err| panic!("rebuild_indexes failed due to {}", err));
+        .unwrap_or_else(|err| panic!("rebuild_indexes failed due to {err}"));
 
     // Inspect results
 
@@ -4694,9 +4716,7 @@ fn buy_token_err(swap: &mut Swap, user: &PrincipalId, balance_icp: &u64, error_m
         .unwrap_err();
     assert!(
         observed.contains(error_message),
-        "Expected substring `{}` not found in observed error `{}`.",
-        error_message,
-        observed,
+        "Expected substring `{error_message}` not found in observed error `{observed}`.",
     );
 }
 
@@ -5507,7 +5527,7 @@ fn test_refresh_buyer_tokens_without_neurons_fund_matched_funding() {
                 ),
             }),
         });
-        println!("{:#?}", neurons_fund_participation_constraints);
+        println!("{neurons_fund_participation_constraints:#?}");
         init = Init {
             neurons_fund_participation_constraints,
             neurons_fund_participation: Some(false),

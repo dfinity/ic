@@ -8,15 +8,19 @@ DEPENDENCIES = [
     ":build_script",
     "//rs/ic_os/config_types",
     "//rs/ic_os/deterministic_ips",
+    "//rs/ic_os/device",
     "//rs/ic_os/grub",
     "//rs/ic_os/metrics_tool",
+    "//rs/ic_os/sev",
     "@crate_index//:anyhow",
     "@crate_index//:askama",
     "@crate_index//:clap",
+    "@crate_index//:devicemapper",
     "@crate_index//:gpt",
     "@crate_index//:macaddr",
+    "@crate_index//:memchr",
+    "@crate_index//:nix",
     "@crate_index//:regex",
-    "@crate_index//:sys-mount",
     "@crate_index//:systemd",
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
@@ -31,13 +35,10 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/ic_os/build_tools/partition_tools",
     "@crate_index//:goldenfile",
-    "@crate_index//:nix",
     "@crate_index//:url",
 ]
 
-MACRO_DEPENDENCIES = [
-    "@crate_index//:async-trait",
-]
+MACRO_DEPENDENCIES = []
 
 cargo_build_script(
     name = "build_script",
@@ -85,12 +86,28 @@ rust_test(
     timeout = "long",
     crate = ":guest_vm_runner_dev",
     crate_features = [
+        "skip_default_tests",
         "dev",
         "integration_tests",
     ],
     data = glob(["golden/*"]) + ["//ic-os/guestos/envs/prod:disk-img-for-tests.tar"],
     env = {"ICOS_IMAGE": "$(rootpath //ic-os/guestos/envs/prod:disk-img-for-tests.tar)"},
+    flaky = True,
     # Mark it manual here and expose it in //ic-os/tests:integration_tests
     tags = ["manual"],
     deps = DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "upgrade_device_mapper_test",
+    crate = ":guest_vm_runner_dev",
+    crate_features = [
+        "skip_default_tests",
+        "dev",
+        "upgrade_device_mapper_test",
+    ],
+    # This test needs root, so we mark it manual here and expose it in //rs/tests/node:root_tests
+    tags = ["manual"],
+    visibility = ["//rs/tests/node:__subpackages__"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

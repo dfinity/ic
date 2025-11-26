@@ -100,7 +100,7 @@ pub fn network_status(storage_client: &StorageClient) -> Result<NetworkStatusRes
     let genesis_block = storage_client
         .get_block_at_idx(0)
         .map_err(|e| {
-            Error::unable_to_find_block(&format!("Error retrieving genesis block: {:?}", e))
+            Error::unable_to_find_block(&format!("Error retrieving genesis block: {e:?}"))
         })?
         .ok_or_else(|| {
             Error::unable_to_find_block(
@@ -132,7 +132,13 @@ pub fn block_transaction(
             .map_err(|err| Error::invalid_block_identifier(&err))?;
 
     if &rosetta_block.clone().get_block_identifier() != block_identifier {
-        return Err(Error::invalid_block_identifier(&format!("Both index {} and hash {} were provided but they do not match the same block. Actual index {} and hash {}",block_identifier.index,block_identifier.hash,rosetta_block.index,hex::encode(rosetta_block.clone().get_block_hash()))));
+        return Err(Error::invalid_block_identifier(&format!(
+            "Both index {} and hash {} were provided but they do not match the same block. Actual index {} and hash {}",
+            block_identifier.index,
+            block_identifier.hash,
+            rosetta_block.index,
+            hex::encode(rosetta_block.clone().get_block_hash())
+        )));
     }
 
     if &rosetta_block.clone().get_transaction_identifier() != transaction_identifier {
@@ -359,7 +365,7 @@ pub fn search_transactions(
         .unwrap_or(rosetta_block_with_highest_block_index.index as i64)
         .try_into()
         .map_err(|err| {
-            Error::request_processing_error(&format!("Max block has to be a valid u64: {}", err))
+            Error::request_processing_error(&format!("Max block has to be a valid u64: {err}"))
         })?;
 
     let limit: u64 = request
@@ -367,11 +373,11 @@ pub fn search_transactions(
         .unwrap_or(MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST as i64)
         .try_into()
         .map_err(|err| {
-            Error::request_processing_error(&format!("Limit has to be a valid u64: {}", err))
+            Error::request_processing_error(&format!("Limit has to be a valid u64: {err}"))
         })?;
 
     let offset: u64 = request.offset.unwrap_or(0).try_into().map_err(|err| {
-        Error::request_processing_error(&format!("Offset has to be a valid u64: {}", err))
+        Error::request_processing_error(&format!("Offset has to be a valid u64: {err}"))
     })?;
 
     if max_block < offset {
@@ -385,8 +391,7 @@ pub fn search_transactions(
         .map(|op| {
             op.parse::<OperationType>().map_err(|err| {
                 Error::request_processing_error(&format!(
-                    "Operation type has to be a valid OperationType: {}",
-                    err
+                    "Operation type has to be a valid OperationType: {err}"
                 ))
             })
         })
@@ -397,8 +402,7 @@ pub fn search_transactions(
         .map(|acc| {
             Account::try_from(acc).map_err(|err| {
                 Error::request_processing_error(&format!(
-                    "Account identifier has to be a valid AccountIdentifier: {}",
-                    err
+                    "Account identifier has to be a valid AccountIdentifier: {err}"
                 ))
             })
         })
@@ -430,8 +434,7 @@ pub fn search_transactions(
         let tx_hash = serde_bytes::ByteBuf::try_from(transaction_identifier)
             .map_err(|err| {
                 Error::request_processing_error(&format!(
-                    "Transaction identifier hash has to be a valid ByteBuf: {}",
-                    err
+                    "Transaction identifier hash has to be a valid ByteBuf: {err}"
                 ))
             })?
             .as_slice()
@@ -476,7 +479,7 @@ pub fn search_transactions(
                 .collect::<Vec<_>>()
                 .as_slice(),
         )
-        .map_err(|e| Error::unable_to_find_block(&format!("Error fetching blocks: {:?}", e)))?;
+        .map_err(|e| Error::unable_to_find_block(&format!("Error fetching blocks: {e:?}")))?;
 
     let mut transactions = vec![];
     for rosetta_block in rosetta_blocks.iter_mut() {
@@ -594,8 +597,7 @@ pub fn call(
             ))
         }
         _ => Err(Error::processing_construction_failed(&format!(
-            "Method {} not supported",
-            method_name
+            "Method {method_name} not supported"
         ))),
     }
 }
@@ -603,9 +605,9 @@ pub fn call(
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::Metadata;
     use crate::common::storage::types::IcrcOperation;
     use crate::common::storage::types::RosettaBlock;
-    use crate::Metadata;
     use ic_icrc1::blocks::encoded_block_to_generic_block;
     use ic_icrc1_test_utils::valid_blockchain_strategy;
     use ic_icrc1_tokens_u256::U256;
@@ -637,7 +639,10 @@ mod test {
                             // We only push Mint blocks since `update_account_balances` will
                             // complain if we e.g., transfer from an account with no balance.
                             if let ic_icrc1::Operation::Mint{..} = block.transaction.operation {
-                                rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.encode()), added_index as u64).unwrap());
+                                // Since we skip some blocks, the fee collector block index is not correct anymore.
+                                let mut block_no_fc = block;
+                                block_no_fc.fee_collector_block_index = None;
+                                rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block_no_fc.encode()), added_index as u64).unwrap());
                                 added_index += 1;
                             }
                         }
@@ -694,7 +699,7 @@ mod test {
                         if blockchain.is_empty() {
                             assert!(block_res.is_err());
                         } else {
-                            assert!(block_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {} could not be found",invalid_block_idx)));
+                            assert!(block_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {invalid_block_idx} could not be found")));
                         }
 
                         block_identifier = PartialBlockIdentifier{
@@ -786,7 +791,7 @@ mod test {
 
                             // If the block identifier index is invalid and the hash is valid the service should return an error
                             let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
-                            assert!(block_res.unwrap_err().0.description.unwrap().contains(format!("Block at index {} could not be found",invalid_block_idx).as_str()));
+                            assert!(block_res.unwrap_err().0.description.unwrap().contains(format!("Block at index {invalid_block_idx} could not be found").as_str()));
 
                             block_identifier = PartialBlockIdentifier{
                                 index: None,
@@ -836,7 +841,7 @@ mod test {
                 if blockchain.is_empty() {
                     assert!(block_transaction_res.is_err());
                 } else {
-                    assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {} could not be found",invalid_block_idx)));
+                    assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {invalid_block_idx} could not be found")));
                 }
 
                 if !blockchain.is_empty() {
@@ -1228,12 +1233,14 @@ mod test {
                             .iter()
                             .map(|op| op.account.clone().unwrap())
                             .collect::<Vec<AccountIdentifier>>();
-                        assert!(involved_accounts.contains(
-                            &search_transactions_request
-                                .account_identifier
-                                .clone()
-                                .unwrap()
-                        ));
+                        assert!(
+                            involved_accounts.contains(
+                                &search_transactions_request
+                                    .account_identifier
+                                    .clone()
+                                    .unwrap()
+                            )
+                        );
 
                         search_transactions_request.account_identifier = Some(
                             Account {
@@ -1529,6 +1536,7 @@ mod test {
                     operation: IcrcOperation::Mint {
                         to: main_account,
                         amount: Nat::from(1000u64),
+                        fee: None,
                     },
                     created_at_time: Some(1000),
                     memo: None,
@@ -1570,8 +1578,11 @@ mod test {
         match result.unwrap_err() {
             Error(err) => {
                 let description = err.description.as_ref().unwrap();
-                assert!(description
-                    .contains("Cannot specify subaccount when aggregate_all_subaccounts is true"));
+                assert!(
+                    description.contains(
+                        "Cannot specify subaccount when aggregate_all_subaccounts is true"
+                    )
+                );
             }
         }
 
@@ -1593,6 +1604,7 @@ mod test {
                         operation: IcrcOperation::Mint {
                             to: main_account,
                             amount: Nat::from(500u64),
+                            fee: None,
                         },
                         created_at_time: Some(1000),
                         memo: None,
@@ -1611,6 +1623,7 @@ mod test {
                         operation: IcrcOperation::Mint {
                             to: account1,
                             amount: Nat::from(1000u64),
+                            fee: None,
                         },
                         created_at_time: Some(2000),
                         memo: None,
@@ -1760,6 +1773,7 @@ mod test {
                         operation: IcrcOperation::Mint {
                             to: main_account,
                             amount: Nat::from(1000u64),
+                            fee: None,
                         },
                         created_at_time: Some(1000),
                         memo: None,
@@ -1939,15 +1953,15 @@ mod test {
             subaccount: Some(to_subaccount),
         };
 
-        println!("Original from_account: {:?}", from_account);
-        println!("Original to_account: {:?}", to_account);
+        println!("Original from_account: {from_account:?}");
+        println!("Original to_account: {to_account:?}");
 
         // Step 1: Convert accounts to AccountIdentifiers (like the client would)
         let from_account_identifier: AccountIdentifier = from_account.into();
         let to_account_identifier: AccountIdentifier = to_account.into();
 
-        println!("from_account_identifier: {:?}", from_account_identifier);
-        println!("to_account_identifier: {:?}", to_account_identifier);
+        println!("from_account_identifier: {from_account_identifier:?}");
+        println!("to_account_identifier: {to_account_identifier:?}");
 
         // Step 2: Build Rosetta operations (like the client would)
         let currency = Currency {
@@ -2000,8 +2014,8 @@ mod test {
             crate::common::storage::types::IcrcOperation::Transfer {
                 from, to, amount, ..
             } => {
-                println!("Converted from: {:?}", from);
-                println!("Converted to: {:?}", to);
+                println!("Converted from: {from:?}");
+                println!("Converted to: {to:?}");
 
                 assert_eq!(
                     from, from_account,
@@ -2040,8 +2054,8 @@ mod test {
         let account_identifier_none: AccountIdentifier = account_none.into();
         let converted_back_none: Account = account_identifier_none.try_into().unwrap();
 
-        println!("Original account (None): {:?}", account_none);
-        println!("Converted back (None): {:?}", converted_back_none);
+        println!("Original account (None): {account_none:?}");
+        println!("Converted back (None): {converted_back_none:?}");
 
         // This should pass with correct code, fail with buggy code
         assert_eq!(
@@ -2059,8 +2073,8 @@ mod test {
         let account_identifier_nonzero: AccountIdentifier = account_nonzero.into();
         let converted_back_nonzero: Account = account_identifier_nonzero.try_into().unwrap();
 
-        println!("Original account (non-zero): {:?}", account_nonzero);
-        println!("Converted back (non-zero): {:?}", converted_back_nonzero);
+        println!("Original account (non-zero): {account_nonzero:?}");
+        println!("Converted back (non-zero): {converted_back_nonzero:?}");
 
         // This should pass with correct code, fail with buggy code
         assert_eq!(
@@ -2115,6 +2129,7 @@ mod test {
                         operation: IcrcOperation::Mint {
                             to: main_account,
                             amount: Nat::from(6000000u64), // 0.06 tokens
+                            fee: None,
                         },
                         created_at_time: Some(1),
                         memo: None,
@@ -2134,6 +2149,7 @@ mod test {
                         operation: IcrcOperation::Mint {
                             to: explicit_zero_account,
                             amount: Nat::from(1000000u64), // 0.01 tokens
+                            fee: None,
                         },
                         created_at_time: Some(2),
                         memo: None,
@@ -2153,6 +2169,7 @@ mod test {
                         operation: IcrcOperation::Mint {
                             to: account1,
                             amount: Nat::from(1000000u64), // 0.01 tokens
+                            fee: None,
                         },
                         created_at_time: Some(3),
                         memo: None,
@@ -2186,9 +2203,9 @@ mod test {
             .unwrap_or(Nat::from(0u64));
 
         println!("Individual balances:");
-        println!("  Main account (None): {}", main_balance);
-        println!("  Explicit [0;32] account: {}", explicit_zero_balance);
-        println!("  Account1 (non-zero): {}", account1_balance);
+        println!("  Main account (None): {main_balance}");
+        println!("  Explicit [0;32] account: {explicit_zero_balance}");
+        println!("  Account1 (non-zero): {account1_balance}");
 
         // Check aggregated balance
         let aggregated_balance = storage_client
@@ -2198,21 +2215,22 @@ mod test {
             )
             .unwrap();
 
-        println!("Aggregated balance: {}", aggregated_balance);
+        println!("Aggregated balance: {aggregated_balance}");
 
         // Expected: 6000000 + 1000000 + 1000000 = 8000000
         let expected_total = Nat::from(8000000u64);
-        println!("Expected total: {}", expected_total);
+        println!("Expected total: {expected_total}");
 
         // Debug: Let's manually check what the SQL query returns by using the storage operations directly
-        println!("Debug: This demonstrates the bug where DISTINCT subaccounts causes incorrect aggregation");
+        println!(
+            "Debug: This demonstrates the bug where DISTINCT subaccounts causes incorrect aggregation"
+        );
         println!("Both None and Some([0;32]) get stored as [0;32] in the database");
         println!("The DISTINCT clause in the aggregation query then treats them as one account");
 
         // Use a simpler approach - just check if the aggregated balance matches expected
         println!(
-            "Checking if aggregated balance ({}) matches expected ({})",
-            aggregated_balance, expected_total
+            "Checking if aggregated balance ({aggregated_balance}) matches expected ({expected_total})"
         );
 
         // This should FAIL due to the bug - aggregated balance will be less than expected
@@ -2221,11 +2239,132 @@ mod test {
             println!("✓ Aggregated balance matches expected total!");
         } else {
             println!(
-                "✗ BUG CONFIRMED: Aggregated balance mismatch: got {}, expected {}",
-                aggregated_balance, expected_total
+                "✗ BUG CONFIRMED: Aggregated balance mismatch: got {aggregated_balance}, expected {expected_total}"
             );
-            println!("This happens because both None and Some([0;32]) are stored as [0;32] in the database");
-            println!("The DISTINCT clause in the aggregation SQL treats them as one account instead of two");
+            println!(
+                "This happens because both None and Some([0;32]) are stored as [0;32] in the database"
+            );
+            println!(
+                "The DISTINCT clause in the aggregation SQL treats them as one account instead of two"
+            );
         }
+    }
+
+    #[test]
+    fn test_mint_and_burn_fees() {
+        use crate::common::storage::types::{
+            IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock,
+        };
+        use candid::{Nat, Principal};
+        use icrc_ledger_types::icrc1::account::Account;
+        use rosetta_core::identifiers::AccountIdentifier;
+
+        let storage_client = StorageClient::new_in_memory().unwrap();
+        let symbol = "ICP";
+        let decimals = 8;
+
+        let principal = Principal::anonymous();
+
+        // First, add some blocks to the database so we can test the validation logic
+        let main_account = Account {
+            owner: principal,
+            subaccount: None,
+        };
+        let main_account_id = AccountIdentifier::from(main_account);
+
+        let add_mint_block =
+            |block_id: u64, amount: u64, fee: Option<u64>, effective_fee: Option<u64>| {
+                let blocks = vec![RosettaBlock::from_icrc_ledger_block(
+                    IcrcBlock {
+                        parent_hash: None,
+                        transaction: IcrcTransaction {
+                            operation: IcrcOperation::Mint {
+                                to: main_account,
+                                amount: Nat::from(amount),
+                                fee: fee.map(Into::into),
+                            },
+                            created_at_time: None,
+                            memo: None,
+                        },
+                        effective_fee: effective_fee.map(Into::into),
+                        timestamp: 1,
+                        fee_collector: None,
+                        fee_collector_block_index: None,
+                    },
+                    block_id,
+                )];
+
+                storage_client.store_blocks(blocks).unwrap();
+                storage_client.update_account_balances().unwrap();
+            };
+
+        let add_burn_block =
+            |block_id: u64, amount: u64, fee: Option<u64>, effective_fee: Option<u64>| {
+                let blocks = vec![RosettaBlock::from_icrc_ledger_block(
+                    IcrcBlock {
+                        parent_hash: None,
+                        transaction: IcrcTransaction {
+                            operation: IcrcOperation::Burn {
+                                from: main_account,
+                                amount: Nat::from(amount),
+                                fee: fee.map(Into::into),
+                                spender: None,
+                            },
+                            created_at_time: None,
+                            memo: None,
+                        },
+                        effective_fee: effective_fee.map(Into::into),
+                        timestamp: 1,
+                        fee_collector: None,
+                        fee_collector_block_index: None,
+                    },
+                    block_id,
+                )];
+
+                storage_client.store_blocks(blocks).unwrap();
+                storage_client.update_account_balances().unwrap();
+            };
+
+        let check_account_balance = |expected_balance: &str| {
+            let result = account_balance(
+                &storage_client,
+                &main_account_id,
+                &None,
+                decimals,
+                symbol.to_string(),
+            );
+
+            assert!(result.is_ok());
+            let balance_response = result.unwrap();
+            assert_eq!(balance_response.balances.len(), 1);
+            assert_eq!(
+                balance_response.balances[0].value.to_string(),
+                expected_balance
+            );
+        };
+
+        // The operation fee of 100 is applied
+        add_mint_block(0, 1000, Some(100), None);
+        check_account_balance("900");
+        add_burn_block(1, 100, Some(100), None);
+        check_account_balance("700");
+
+        // The block effective_fee of 100 is applied
+        add_mint_block(2, 200, Some(200), Some(100));
+        check_account_balance("800");
+        add_burn_block(3, 200, Some(200), Some(100));
+        check_account_balance("500");
+
+        // The block effective_fee of 100 is applied
+        add_mint_block(4, 200, None, Some(100));
+        check_account_balance("600");
+        add_burn_block(5, 200, None, Some(100));
+        check_account_balance("300");
+
+        // No fee
+        add_mint_block(6, 200, None, None);
+        check_account_balance("500");
+        add_burn_block(7, 200, None, None);
+        check_account_balance("300");
     }
 }

@@ -18,6 +18,9 @@ use ic_registry_keys::{
 use ic_test_utilities_types::ids::subnet_test_id;
 
 use assert_matches::assert_matches;
+use ic_protobuf::registry::replica_version::v1::{
+    GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
+};
 use ic_types::ReplicaVersion;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
@@ -27,7 +30,26 @@ use registry_canister::{
     },
 };
 
-const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
+const MOCK_HASH: &str = "acdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdcacdc";
+
+fn guest_launch_measurements_for_test() -> Option<GuestLaunchMeasurements> {
+    Some(GuestLaunchMeasurements {
+        guest_launch_measurements: vec![
+            GuestLaunchMeasurement {
+                measurement: vec![0x01, 0x02, 0x03],
+                metadata: Some(GuestLaunchMeasurementMetadata {
+                    kernel_cmdline: "foo=bar".into(),
+                }),
+            },
+            GuestLaunchMeasurement {
+                measurement: vec![0x04, 0x05, 0x06],
+                metadata: Some(GuestLaunchMeasurementMetadata {
+                    kernel_cmdline: "hello=world".into(),
+                }),
+            },
+        ],
+    })
+}
 
 #[test]
 fn test_the_anonymous_user_cannot_elect_a_version() {
@@ -44,7 +66,7 @@ fn test_the_anonymous_user_cannot_elect_a_version() {
             replica_version_to_elect: Some("version_43".into()),
             release_package_sha256_hex: None,
             release_package_urls: vec![],
-            guest_launch_measurement_sha256_hex: None,
+            guest_launch_measurements: None,
             replica_versions_to_unelect: vec![],
         };
         // The anonymous end-user tries to bless a version, bypassing the proposals
@@ -119,7 +141,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_bless_a_version() {
             replica_version_to_elect: Some("version_43".into()),
             release_package_sha256_hex: Some(MOCK_HASH.into()),
             release_package_urls: vec!["http://release_package.tar.zst".into()],
-            guest_launch_measurement_sha256_hex: None,
+            guest_launch_measurements: None,
             replica_versions_to_unelect: vec![],
         };
         // The attacker canister tries to bless a version, pretending to be the
@@ -171,7 +193,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             replica_version_to_elect: Some("version_43".into()),
             release_package_sha256_hex: Some(MOCK_HASH.into()),
             release_package_urls: vec!["http://release_package.tar.zst".into()],
-            guest_launch_measurement_sha256_hex: None,
+            guest_launch_measurements: guest_launch_measurements_for_test(),
             replica_versions_to_unelect: vec![],
         };
         assert!(
@@ -202,7 +224,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             replica_version_to_elect: Some("version_43".into()),
             release_package_sha256_hex: None,
             release_package_urls: vec![],
-            guest_launch_measurement_sha256_hex: None,
+            guest_launch_measurements: guest_launch_measurements_for_test(),
             replica_versions_to_unelect: vec![],
         };
         assert!(
@@ -219,13 +241,13 @@ fn test_accepted_proposal_mutates_the_registry() {
         assert_eq!(
             get_value_or_panic::<ReplicaVersionRecord>(
                 &registry,
-                make_replica_version_key(ReplicaVersion::default()).as_bytes()
+                make_replica_version_key("version_43").as_bytes()
             )
             .await,
             ReplicaVersionRecord {
                 release_package_sha256_hex: MOCK_HASH.into(),
                 release_package_urls: vec![release_package_url.clone()],
-                guest_launch_measurement_sha256_hex: None,
+                guest_launch_measurements: guest_launch_measurements_for_test(),
             }
         );
 

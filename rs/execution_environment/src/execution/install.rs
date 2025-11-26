@@ -8,8 +8,8 @@ use crate::canister_manager::types::{
 };
 use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};
 use crate::execution::install_code::{
-    canister_layout, finish_err, CanisterMemoryHandling, InstallCodeHelper, MemoryHandling,
-    OriginalContext, PausedInstallCodeHelper,
+    CanisterMemoryHandling, InstallCodeHelper, MemoryHandling, OriginalContext,
+    PausedInstallCodeHelper, canister_layout, finish_err,
 };
 use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::PrincipalId;
@@ -18,9 +18,9 @@ use ic_embedders::{
     wasmtime_embedder::system_api::ApiType,
 };
 use ic_interfaces::execution_environment::WasmExecutionOutput;
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_replicated_state::{
-    metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState,
+    CanisterState, metadata_state::subnet_call_context_manager::InstallCodeCallId,
 };
 use ic_types::funds::Cycles;
 use ic_types::messages::{CanisterCall, RequestMetadata};
@@ -175,6 +175,7 @@ pub(crate) fn execute_install(
             RequestMetadata::for_new_call_tree(original.time),
             round_limits,
             round.network_topology,
+            round.cost_schedule,
         );
 
         match wasm_execution_result {
@@ -296,6 +297,7 @@ fn install_stage_2b_continue_install_after_start(
         RequestMetadata::for_new_call_tree(original.time),
         round_limits,
         round.network_topology,
+        round.cost_schedule,
     );
     match wasm_execution_result {
         WasmExecutionResult::Finished(slice, output, canister_state_changes) => {

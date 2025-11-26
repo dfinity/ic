@@ -1,8 +1,8 @@
-use candid::types::Serializer;
-use candid::types::Type;
 use candid::CandidType;
 use candid::Deserialize;
 use candid::Func;
+use candid::types::Serializer;
+use candid::types::Type;
 use std::cell::RefCell;
 
 thread_local! {
@@ -81,7 +81,7 @@ pub struct Callback(Func);
 impl From<&str> for Callback {
     fn from(method: &str) -> Self {
         Callback(Func {
-            principal: ic_cdk::api::id(),
+            principal: ic_cdk::api::canister_self(),
             method: method.into(),
         })
     }

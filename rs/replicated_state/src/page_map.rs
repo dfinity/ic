@@ -7,22 +7,22 @@ pub mod test_utils;
 use bit_vec::BitVec;
 pub use checkpoint::{CheckpointSerialization, MappingSerialization};
 use ic_config::state_manager::LsmtConfig;
-use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_metrics::MetricsRegistry;
+use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_sys::PageBytes;
-pub use ic_sys::{PageIndex, PAGE_SIZE};
+pub use ic_sys::{PAGE_SIZE, PageIndex};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 pub use page_allocator::{
-    allocated_pages_count, PageAllocator, PageAllocatorRegistry, PageAllocatorSerialization,
-    PageDeltaSerialization, PageSerialization,
+    PageAllocator, PageAllocatorRegistry, PageAllocatorSerialization, PageDeltaSerialization,
+    PageSerialization, allocated_pages_count,
 };
 pub use storage::{
-    BaseFileSerialization, MergeCandidate, OverlayFileSerialization, Shard, StorageLayout,
-    StorageResult, StorageSerialization, MAX_NUMBER_OF_FILES,
+    BaseFileSerialization, MAX_NUMBER_OF_FILES, MergeCandidate, OverlayFileSerialization, Shard,
+    StorageLayout, StorageResult, StorageSerialization,
 };
 use storage::{OverlayFile, OverlayVersion, Storage};
 
-use ic_types::{Height, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES};
+use ic_types::{Height, MAX_STABLE_MEMORY_IN_BYTES, NumOsPages};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use int_map::{Bounds, IntMap};
@@ -148,7 +148,7 @@ impl PageDelta {
     /// Returns (lower, upper), where:
     /// - lower is the largest index/page smaller or equal to the given page index.
     /// - upper is the smallest index/page larger or equal to the given page index.
-    fn bounds(&self, page_index: PageIndex) -> Bounds<PageIndex, Page> {
+    fn bounds(&self, page_index: PageIndex) -> Bounds<'_, PageIndex, Page> {
         self.0.bounds(&page_index)
     }
 
@@ -210,14 +210,23 @@ pub enum PersistenceError {
         page_size: usize,
     },
     /// Overlay data is broken.
-    InvalidOverlay { path: String, message: String },
+    InvalidOverlay {
+        path: String,
+        message: String,
+    },
     /// (Slice) size is not equal to page size.
-    BadPageSize { expected: usize, actual: usize },
+    BadPageSize {
+        expected: usize,
+        actual: usize,
+    },
     /// Some overlay file has a larger version number than the replica supports
     VersionMismatch {
         path: String,
         file_version: u32,
         supported: OverlayVersion,
+    },
+    NonEmptyDelta {
+        delta_size: usize,
     },
 }
 
@@ -243,12 +252,11 @@ impl std::fmt::Display for PersistenceError {
             } => {
                 write!(
                     f,
-                    "File system error for file {}: {} {}",
-                    path, context, internal_error
+                    "File system error for file {path}: {context} {internal_error}"
                 )
             }
             PersistenceError::MmapError { path, len, .. } => {
-                write!(f, "Failed to memory map file {} of length {}", path, len)
+                write!(f, "Failed to memory map file {path} of length {len}")
             }
             PersistenceError::InvalidHeapFile {
                 path,
@@ -256,26 +264,25 @@ impl std::fmt::Display for PersistenceError {
                 page_size,
             } => write!(
                 f,
-                "Size of heap file {} is {}, which is not a multiple of the page size {}",
-                path, file_size, page_size
+                "Size of heap file {path} is {file_size}, which is not a multiple of the page size {page_size}"
             ),
             PersistenceError::InvalidOverlay { path, message } => {
-                write!(f, "Overlay file {} is broken: {}", path, message)
+                write!(f, "Overlay file {path} is broken: {message}")
             }
-            PersistenceError::BadPageSize { expected, actual } => write!(
-                f,
-                "Bad slice size: expected {}, actual {}",
-                expected, actual
-            ),
+            PersistenceError::BadPageSize { expected, actual } => {
+                write!(f, "Bad slice size: expected {expected}, actual {actual}")
+            }
             PersistenceError::VersionMismatch {
                 path,
                 file_version,
                 supported,
             } => write!(
                 f,
-                "Unsupported overlay version for {}: file version {}, max supported {:?}",
-                path, file_version, supported,
+                "Unsupported overlay version for {path}: file version {file_version}, max supported {supported:?}",
             ),
+            PersistenceError::NonEmptyDelta { delta_size } => {
+                write!(f, "The page delta is not empty (size = {})", delta_size)
+            }
         }
     }
 }
@@ -632,7 +639,7 @@ impl PageMap {
         &self,
         min_range: Range<PageIndex>,
         max_range: Range<PageIndex>,
-    ) -> MemoryInstructions {
+    ) -> MemoryInstructions<'_> {
         debug_assert!(min_range.start >= max_range.start && min_range.end <= max_range.end);
 
         let mut delta_instructions = Vec::new();
@@ -775,7 +782,7 @@ impl PageMap {
     /// These instructions are generally cheap and are supposed to be used to initialize a memory region.
     /// The intention is that the instructions from this function are applied first and only once. The more expensive
     /// instructions from `get_memory_instructions(range)` are then applied on top.
-    pub fn get_base_memory_instructions(&self) -> MemoryInstructions {
+    pub fn get_base_memory_instructions(&self) -> MemoryInstructions<'_> {
         self.storage.get_base_memory_instructions()
     }
 
@@ -859,6 +866,29 @@ impl PageMap {
     /// Returns the number of delta pages included in this PageMap.
     pub fn num_delta_pages(&self) -> usize {
         self.page_delta.len()
+    }
+
+    /// Returns a clean copy of this PageMap, i.e. a PageMap without any page delta
+    /// and using a fresh page allocator.
+    ///
+    /// Returns an error if the page map has a non-empty page delta.
+    pub fn clean_copy(
+        &self,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    ) -> Result<Self, PersistenceError> {
+        if !self.page_delta_is_empty() {
+            return Err(PersistenceError::NonEmptyDelta {
+                delta_size: self.page_delta.len(),
+            });
+        }
+        Ok(Self {
+            storage: self.storage.clone(),
+            base_height: self.base_height,
+            page_delta: Default::default(),
+            unflushed_delta: Default::default(),
+            has_stripped_unflushed_deltas: self.has_stripped_unflushed_deltas,
+            page_allocator: PageAllocator::new(fd_factory),
+        })
     }
 }
 
@@ -1003,7 +1033,7 @@ impl std::fmt::Debug for PageMap {
                 let idx = PageIndex::from(i as u64);
                 ic_utils::rle::display(self.get_page(idx))
             })
-            .try_for_each(|s| write!(f, "[{:?}]", s))?;
+            .try_for_each(|s| write!(f, "[{s:?}]"))?;
         write!(f, "}}")
     }
 }
@@ -1040,8 +1070,7 @@ impl PageAllocatorFileDescriptor for TestPageAllocatorFileDescriptorImpl {
             Ok(file) => file.into_raw_fd(),
             Err(err) => {
                 panic!(
-                    "TempPageAllocatorFileDescriptorImpl failed to create the backing file {}",
-                    err
+                    "TempPageAllocatorFileDescriptorImpl failed to create the backing file {err}"
                 )
             }
         }

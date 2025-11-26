@@ -78,8 +78,7 @@ pub fn decode_wasm(
         WasmEncoding::Gzip => {
             let decoder = libflate::gzip::Decoder::new(module_bytes).map_err(|e| {
                 WasmValidationError::DecodingError(format!(
-                    "failed to decode compressed Wasm module: {}",
-                    e
+                    "failed to decode compressed Wasm module: {e}"
                 ))
             })?;
 
@@ -95,8 +94,7 @@ pub fn decode_wasm(
                 .read_to_end(&mut buf)
                 .map_err(|e| {
                     WasmValidationError::DecodingError(format!(
-                        "failed to decode compressed Wasm module: {}",
-                        e
+                        "failed to decode compressed Wasm module: {e}"
                     ))
                 })?;
 

@@ -9,6 +9,7 @@ use crate::{
         firewall::check_firewall_invariants,
         hostos_version::check_hostos_version_invariants,
         node_operator::check_node_operator_invariants,
+        node_record::check_node_record_invariants,
         replica_version::check_replica_version_invariants,
         routing_table::{check_canister_migrations_invariants, check_routing_table_invariants},
         subnet::check_subnet_invariants,
@@ -23,12 +24,12 @@ use dfn_core::println;
 use ic_nervous_system_string::clamp_debug_len;
 use ic_registry_canister_chunkify::dechunkify;
 use ic_registry_transport::pb::v1::{
-    high_capacity_registry_value, registry_mutation::Type, RegistryMutation,
+    RegistryMutation, high_capacity_registry_value, registry_mutation::Type,
 };
 
 impl Registry {
     pub fn check_changelog_version_invariants(&self) {
-        println!("{}check_changelog_version_invariants", LOG_PREFIX);
+        println!("{LOG_PREFIX}check_changelog_version_invariants");
 
         let mut sorted_changelog_versions = self
             .changelog()
@@ -51,9 +52,7 @@ impl Registry {
             assert_eq!(
                 *version_a,
                 version_b - 1,
-                "Found a non-sequential version in the Registry changelog, between versions {} and {}",
-                version_a,
-                version_b
+                "Found a non-sequential version in the Registry changelog, between versions {version_a} and {version_b}"
             );
         }
     }
@@ -114,6 +113,9 @@ impl Registry {
 
         // Unassigned node invariants
         result = result.and(check_unassigned_nodes_config_invariants(&snapshot));
+
+        // NodeRecord invariants.
+        result = result.and(check_node_record_invariants(&snapshot));
 
         if let Err(e) = result {
             panic!(
@@ -190,8 +192,8 @@ mod tests {
         },
     };
     use ic_registry_keys::{
-        make_canister_migrations_record_key, make_node_operator_record_key,
-        make_routing_table_record_key,
+        make_canister_migrations_record_key, make_canister_ranges_key,
+        make_node_operator_record_key,
     };
     use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
     use ic_registry_transport::{
@@ -273,25 +275,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "No routing table in snapshot")]
-    fn routing_table_invariants_do_not_hold() {
-        let key = make_node_operator_record_key(*TEST_USER1_PRINCIPAL);
-        let value = NodeOperatorRecord {
-            node_operator_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
-            node_allowance: 0,
-            node_provider_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
-            dc_id: "".into(),
-            rewardable_nodes: BTreeMap::new(),
-            ipv6: None,
-            max_rewardable_nodes: BTreeMap::new(),
-        }
-        .encode_to_vec();
-        let registry = Registry::new();
-        let mutation = vec![insert(key.as_bytes(), value)];
-        registry.check_global_state_invariants(&mutation);
-    }
-
-    #[test]
     #[should_panic(expected = "not hosted by any subnet")]
     fn invalid_canister_migrations_invariants_check_panic() {
         let routing_table = RoutingTable::try_from(btreemap! {
@@ -301,8 +284,8 @@ mod tests {
         }).unwrap();
 
         let routing_table = PbRoutingTable::from(routing_table);
-        let key1 = make_routing_table_record_key();
-        let value1 = routing_table.encode_to_vec();
+        let routing_table_shard_key = make_canister_ranges_key(CanisterId::from(0));
+        let routing_table_value = routing_table.encode_to_vec();
 
         // The canister ID range {0x200:0x2ff} in `canister_migrations` is not hosted by any subnet in trace according to the routing table.
         let canister_migrations = CanisterMigrations::try_from(btreemap! {
@@ -310,12 +293,15 @@ mod tests {
         }).unwrap();
 
         let canister_migrations = PbCanisterMigrations::from(canister_migrations);
-        let key2 = make_canister_migrations_record_key();
-        let value2 = canister_migrations.encode_to_vec();
+        let canister_migrations_key = make_canister_migrations_record_key();
+        let canister_migrations_value = canister_migrations.encode_to_vec();
 
         let mutations = vec![
-            insert(key1.as_bytes(), value1),
-            insert(key2.as_bytes(), value2),
+            insert(routing_table_shard_key.as_bytes(), &routing_table_value),
+            insert(
+                canister_migrations_key.as_bytes(),
+                &canister_migrations_value,
+            ),
         ];
 
         let registry = Registry::new();
@@ -324,11 +310,11 @@ mod tests {
 
     #[test]
     fn snapshot_reflects_latest_registry_state() {
-        let key1 = make_routing_table_record_key();
-        let value1 = PbRoutingTable { entries: vec![] }.encode_to_vec();
+        let routing_table_shard_key = make_canister_ranges_key(CanisterId::from(0));
+        let routing_table_value = PbRoutingTable { entries: vec![] }.encode_to_vec();
 
-        let key2 = make_node_operator_record_key(*TEST_USER1_PRINCIPAL);
-        let value2 = NodeOperatorRecord {
+        let node_operator_key = make_node_operator_record_key(*TEST_USER1_PRINCIPAL);
+        let node_operator_value = NodeOperatorRecord {
             node_operator_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             node_allowance: 0,
             node_provider_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
@@ -340,18 +326,18 @@ mod tests {
         .encode_to_vec();
 
         let mutations = vec![
-            insert(key1.as_bytes(), &value1),
-            insert(key2.as_bytes(), &value2),
+            insert(routing_table_shard_key.as_bytes(), &routing_table_value),
+            insert(node_operator_key.as_bytes(), &node_operator_value),
         ];
         let snapshot = Registry::new().take_latest_snapshot_with_mutations(&mutations);
 
-        let snapshot_data = snapshot.get(key1.as_bytes());
+        let snapshot_data = snapshot.get(routing_table_shard_key.as_bytes());
         assert!(snapshot_data.is_some());
-        assert_eq!(snapshot_data.unwrap(), &value1);
+        assert_eq!(snapshot_data.unwrap(), &routing_table_value);
 
-        let snapshot_data = snapshot.get(key2.as_bytes());
+        let snapshot_data = snapshot.get(node_operator_key.as_bytes());
         assert!(snapshot_data.is_some());
-        assert_eq!(snapshot_data.unwrap(), &value2);
+        assert_eq!(snapshot_data.unwrap(), &node_operator_value);
     }
 
     #[test]

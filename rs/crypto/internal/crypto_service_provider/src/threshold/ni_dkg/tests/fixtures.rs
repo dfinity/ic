@@ -4,14 +4,14 @@ pub mod cache;
 use super::*;
 use crate::LocalCspVault;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+use ic_types::NodeId;
+use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
 use ic_types::crypto::threshold_sig::ni_dkg::config::dealers::NiDkgDealers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
-use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
-use ic_types::crypto::AlgorithmId;
-use ic_types::NodeId;
 use ic_types_test_utils::ids::node_test_id;
-use rand::seq::IteratorRandom;
 use rand::SeedableRng;
+use rand::seq::IteratorRandom;
 use rand_chacha::ChaCha20Rng;
 use strum::IntoEnumIterator;
 
@@ -28,11 +28,11 @@ pub struct MockNode {
 }
 impl MockNode {
     pub fn random(rng: &mut ChaCha20Rng) -> Self {
-        let node_id = node_test_id(rng.gen::<u64>());
+        let node_id = node_test_id(rng.r#gen::<u64>());
         Self::from_node_id(rng, node_id)
     }
     pub fn from_node_id(rng: &mut ChaCha20Rng, node_id: NodeId) -> Self {
-        let csprng = ChaCha20Rng::from_seed(rng.gen::<[u8; 32]>());
+        let csprng = ChaCha20Rng::from_seed(rng.r#gen::<[u8; 32]>());
         let csp = Csp::builder_for_test()
             .with_vault(LocalCspVault::builder_for_test().with_rng(csprng).build())
             .build();
@@ -88,7 +88,7 @@ impl MockNetwork {
         let forward_secure_keys: BTreeMap<NodeId, CspFsEncryptionPublicKey> = nodes_by_node_id
             .iter_mut()
             .map(|(node_id, node)| {
-                println!("Creating fs keys for {}", node_id);
+                println!("Creating fs keys for {node_id}");
                 let (id, (pubkey, _pop)) = (
                     *node_id,
                     node.csp
@@ -96,8 +96,7 @@ impl MockNetwork {
                         .gen_dealing_encryption_key_pair(*node_id)
                         .unwrap_or_else(|_| {
                             panic!(
-                                "Failed to create forward secure encryption key for NodeId {}",
-                                node_id
+                                "Failed to create forward secure encryption key for NodeId {node_id}"
                             )
                         }),
                 );
@@ -143,15 +142,11 @@ impl MockDkgConfig {
         let min_dealers = 1;
         assert!(
             min_receivers <= num_nodes,
-            "min_receivers({}) !<= num_nodes({})",
-            min_receivers,
-            num_nodes
+            "min_receivers({min_receivers}) !<= num_nodes({num_nodes})"
         );
         assert!(
             min_dealers <= num_nodes,
-            "min_dealers({}) !<= num_nodes({})",
-            min_dealers,
-            num_nodes
+            "min_dealers({min_dealers}) !<= num_nodes({num_nodes})"
         );
 
         // Node IDs
@@ -180,7 +175,7 @@ impl MockDkgConfig {
         let algorithm_id = AlgorithmId::NiDkg_Groth20_Bls12_381;
         let max_corrupt_dealers = rng.gen_range(0..num_dealers); // Need at least one honest dealer.
         let threshold = rng.gen_range(min_threshold..=num_receivers); // threshold <= num_receivers
-        let epoch = Epoch::from(rng.gen::<u32>());
+        let epoch = Epoch::from(rng.r#gen::<u32>());
 
         let receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey> = receivers
             .iter()

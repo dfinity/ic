@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use evm_rpc_client::Nat256;
+use evm_rpc_types::Nat256;
 use minicbor;
 use rlp::RlpStream;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -189,7 +189,7 @@ impl<Unit> TryFrom<candid::Nat> for CheckedAmountOf<Unit> {
         if value_bytes.len() <= 32 {
             value_u256[32 - value_bytes.len()..].copy_from_slice(&value_bytes);
         } else {
-            return Err(format!("Nat does not fit in a U256: {}", value));
+            return Err(format!("Nat does not fit in a U256: {value}"));
         }
         Ok(Self::from_inner(ethnum::u256::from_be_bytes(value_u256)))
     }

@@ -1,12 +1,12 @@
 use dfn_candid::candid_one;
 use dfn_core::{over_async, println};
 
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn canister_init() {
     println!("Playground Canister Init!");
 }
 
-#[export_name = "canister_update test"]
+#[unsafe(export_name = "canister_update test")]
 fn test() {
     over_async(candid_one, |_: ()| async move { test_().await })
 }

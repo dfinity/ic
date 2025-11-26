@@ -6,9 +6,9 @@ use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_transport::{
-    dechunkify_delta, deserialize_get_changes_since_response,
+    GetChunk, dechunkify_delta, deserialize_get_changes_since_response,
     deserialize_get_latest_version_response, pb::v1::RegistryDelta,
-    serialize_get_changes_since_request, GetChunk,
+    serialize_get_changes_since_request,
 };
 
 #[async_trait]
@@ -67,8 +67,7 @@ impl Registry for RegistryCanister {
     ) -> Result<Vec<RegistryDelta>, NervousSystemError> {
         let bytes = serialize_get_changes_since_request(version.get()).map_err(|e| {
             NervousSystemError::new_with_message(format!(
-                "Could not encode request for get_changes_since for version {:?}: {}",
-                version, e
+                "Could not encode request for get_changes_since for version {version:?}: {e}"
             ))
         })?;
 
@@ -84,8 +83,7 @@ impl Registry for RegistryCanister {
         let (high_capacity_deltas, _version) = deserialize_get_changes_since_response(result)
             .map_err(|err| {
                 NervousSystemError::new_with_message(format!(
-                    "Unable to deserialize get_changes_since response (from Registry): {}",
-                    err,
+                    "Unable to deserialize get_changes_since response (from Registry): {err}",
                 ))
             })?;
 
@@ -113,8 +111,8 @@ impl GetChunk for RegistryCanister {
         let request = GetChunkRequest {
             content_sha256: Some(chunk_content_sha256.to_vec()),
         };
-        let request = Encode!(&request)
-            .map_err(|err| format!("Unable to encode GetChunkRequest: {}", err,))?;
+        let request =
+            Encode!(&request).map_err(|err| format!("Unable to encode GetChunkRequest: {err}",))?;
 
         // Call get_chunk.
         let callee = self.canister_id;
@@ -144,15 +142,14 @@ impl GetChunk for RegistryCanister {
 
         // Handle canister does not like the call.
         let chunk: Chunk =
-            reply.map_err(|err| format!("Registry canister replied with Err: {}", err,))?;
+            reply.map_err(|err| format!("Registry canister replied with Err: {err}",))?;
 
         // Unpack reply.
         let Chunk { content } = chunk;
         let Some(content) = content else {
             return Err(format!(
                 "Registry returned a chunk, but did not include its content?! \
-                 chunk content SHA256: {:?}",
-                chunk_content_sha256,
+                 chunk content SHA256: {chunk_content_sha256:?}",
             ));
         };
 
@@ -169,12 +166,12 @@ pub mod fake {
     use async_trait::async_trait;
     use ic_base_types::RegistryVersion;
     use ic_nervous_system_common::NervousSystemError;
+    use ic_registry_transport::Error;
     use ic_registry_transport::pb::v1::registry_mutation::Type;
     use ic_registry_transport::pb::v1::{RegistryDelta, RegistryMutation, RegistryValue};
-    use ic_registry_transport::Error;
     use std::collections::BTreeMap;
     use std::sync::atomic::AtomicU64;
-    use std::sync::{atomic, Arc, Mutex};
+    use std::sync::{Arc, Mutex, atomic};
 
     type FakeGetChangesSince = BTreeMap<u64, Result<Vec<RegistryDelta>, Error>>;
     type FakeGetLatestVersion = Vec<Result<u64, Error>>;

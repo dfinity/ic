@@ -212,6 +212,7 @@ pub trait IDkgProtocol {
     ///   is different from the one included in the dealing.
     /// * [`IDkgVerifyDealingPublicError::InvalidDealing`] if the internal dealing is invalid.
     /// * [`IDkgVerifyDealingPublicError::InvalidSignature`] if the signature on the dealing is invalid.
+    #[allow(clippy::result_large_err)]
     fn verify_dealing_public(
         &self,
         params: &IDkgTranscriptParams,
@@ -264,6 +265,7 @@ pub trait IDkgProtocol {
     ///   `params` are equal to the params of `initial_dealings`.
     /// * [`IDkgVerifyInitialDealingsError::PublicVerificationFailure`] if public
     ///   dealing verification fails for some dealing in `initial_dealings`.
+    #[allow(clippy::result_large_err)]
     fn verify_initial_dealings(
         &self,
         params: &IDkgTranscriptParams,
@@ -318,6 +320,7 @@ pub trait IDkgProtocol {
     ///   internal dealings in the verified dealings in `transcript`.
     /// * [`IDkgVerifyTranscriptError::InvalidTranscript`] if the re-creation of an internal
     ///   transcript does not match the internal transcript in `transcript`.
+    #[allow(clippy::result_large_err)]
     fn verify_transcript(
         &self,
         params: &IDkgTranscriptParams,

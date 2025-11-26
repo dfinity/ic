@@ -18,6 +18,7 @@ use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
+    IC_CONSENSUS_POOL_PATH, IC_REGISTRY_LOCAL_STORE, NeuronArgs, Recovery, RecoveryArgs,
     cli::{consent_given, read_optional, wait_for_confirmation},
     error::{RecoveryError, RecoveryResult},
     get_node_heights_from_metrics,
@@ -25,19 +26,18 @@ use ic_recovery::{
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryPollingStrategy,
     steps::{AdminStep, Step, UploadAndRestartStep},
-    util::DataLocation,
-    NeuronArgs, Recovery, RecoveryArgs, IC_REGISTRY_LOCAL_STORE,
+    util::{DataLocation, SshUser},
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use serde::{Deserialize, Serialize};
-use slog::{error, warn, Logger};
+use slog::{Logger, error, warn};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 use url::Url;
 
-use std::{collections::HashMap, iter::Peekable, net::IpAddr};
+use std::{collections::HashMap, iter::Peekable, net::IpAddr, path::PathBuf};
 
 const SUBNET_TYPE_ALLOW_LIST: [SubnetType; 2] =
     [SubnetType::Application, SubnetType::VerifiedApplication];
@@ -92,7 +92,11 @@ pub struct SubnetSplittingArgs {
 
     /// Public ssh key to be deployed to the subnet for read only access.
     #[clap(long)]
-    pub pub_key: Option<String>,
+    pub readonly_pub_key: Option<String>,
+
+    /// The path to a file containing the private key associated with `readonly_pub_key`.
+    #[clap(long)]
+    pub readonly_key_file: Option<PathBuf>,
 
     /// If the downloaded state should be backed up locally.
     #[clap(long)]
@@ -225,8 +229,7 @@ impl SubnetSplitting {
     ) -> RecoveryResult<SubnetRecord> {
         let validation_error = |error_message| {
             Err(RecoveryError::ValidationFailed(format!(
-                "Subnet {}: {}",
-                subnet_id, error_message
+                "Subnet {subnet_id}: {error_message}"
             )))
         };
 
@@ -250,8 +253,7 @@ impl SubnetSplitting {
 
         if !SUBNET_TYPE_ALLOW_LIST.contains(&subnet_type) {
             return validation_error(format!(
-                "Subnet's type ({:?}) is not allowed for subnet splitting. Allowlist: {:?}",
-                subnet_type, SUBNET_TYPE_ALLOW_LIST,
+                "Subnet's type ({subnet_type:?}) is not allowed for subnet splitting. Allowlist: {SUBNET_TYPE_ALLOW_LIST:?}",
             ));
         }
 
@@ -294,10 +296,6 @@ impl SubnetSplitting {
         Ok(subnet_record)
     }
 
-    pub fn get_recovery_api(&self) -> &Recovery {
-        &self.recovery
-    }
-
     fn split_state_step(&self, target_subnet: TargetSubnet) -> SplitStateStep {
         let state_split_strategy = match target_subnet {
             TargetSubnet::Source => {
@@ -317,7 +315,7 @@ impl SubnetSplitting {
         }
     }
 
-    fn unhalt(&self, target_subnet: TargetSubnet) -> impl Step {
+    fn unhalt(&self, target_subnet: TargetSubnet) -> impl Step + use<> {
         self.recovery.halt_subnet(
             self.subnet_id(target_subnet),
             /*is_halted=*/ false,
@@ -325,7 +323,7 @@ impl SubnetSplitting {
         )
     }
 
-    fn propose_cup(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step> {
+    fn propose_cup(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step + use<>> {
         let checkpoints_dir = self.layout.checkpoints_dir(target_subnet);
 
         let (max_name, max_height) =
@@ -344,7 +342,10 @@ impl SubnetSplitting {
         )
     }
 
-    fn upload_and_restart_step(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step> {
+    fn upload_and_restart_step(
+        &self,
+        target_subnet: TargetSubnet,
+    ) -> RecoveryResult<impl Step + use<>> {
         match self.upload_node(target_subnet) {
             Some(node_ip) => Ok(UploadAndRestartStep {
                 logger: self.recovery.logger.clone(),
@@ -352,14 +353,14 @@ impl SubnetSplitting {
                 work_dir: self.layout.work_dir(target_subnet),
                 data_src: self.layout.ic_state_dir(target_subnet),
                 require_confirmation: !self.recovery_args.skip_prompts,
-                key_file: self.recovery.key_file.clone(),
+                key_file: self.recovery.admin_key_file.clone(),
                 check_ic_replay_height: false,
             }),
             None => Err(RecoveryError::StepSkipped),
         }
     }
 
-    fn wait_for_cup_step(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step> {
+    fn wait_for_cup_step(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step + use<>> {
         match self.upload_node(target_subnet) {
             Some(node_ip) => Ok(WaitForCUPStep {
                 logger: self.recovery.logger.clone(),
@@ -431,8 +432,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                     "Please check the dashboard to see if it is safe to begin subnet splitting",
                 );
 
-                if self.params.pub_key.is_none() {
-                    self.params.pub_key = read_optional(
+                if self.params.readonly_pub_key.is_none() {
+                    self.params.readonly_pub_key = read_optional(
                         &self.logger,
                         "Enter public key to add readonly SSH access to subnet. Ensure the right format.\n\
                         Format:   ssh-ed25519 <pubkey> <identity>\n\
@@ -535,7 +536,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 ic_admin_cmd: get_halt_subnet_at_cup_height_command(
                     &self.recovery.admin_helper,
                     self.params.source_subnet_id,
-                    &self.params.pub_key,
+                    &self.params.readonly_pub_key,
                 ),
             }
             .into(),
@@ -583,13 +584,24 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                     return Err(RecoveryError::StepSkipped);
                 };
 
+                let (ssh_user, key_file) = if self.params.readonly_pub_key.is_some() {
+                    (SshUser::Readonly, self.params.readonly_key_file.clone())
+                } else {
+                    (SshUser::Admin, self.recovery.admin_key_file.clone())
+                };
+
                 self.recovery
                     .get_download_state_step(
                         node_ip,
-                        self.params.pub_key.is_some(),
+                        ssh_user,
+                        key_file,
                         self.params.keep_downloaded_state == Some(true),
                         /*additional_excludes=*/
-                        vec!["orchestrator", "ic_consensus_pool", IC_REGISTRY_LOCAL_STORE],
+                        vec![
+                            "orchestrator",
+                            IC_CONSENSUS_POOL_PATH,
+                            IC_REGISTRY_LOCAL_STORE,
+                        ],
                     )
                     .into()
             }

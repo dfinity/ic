@@ -1,20 +1,22 @@
 use crate::{
-    fetch_canister_controllers, get_identity, use_test_neuron_1_owner_identity,
     MakeProposalResponse, NnsGovernanceCanister, SaveOriginalDfxIdentityAndRestoreOnExit,
+    fetch_canister_controllers, get_identity, use_test_neuron_1_owner_identity,
 };
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::{ArgGroup, Parser};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_ID;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::ROOT_CANISTER_ID;
-use ic_nns_governance_api::{manage_neuron::NeuronIdOrSubaccount, proposal::Action, Proposal};
+use ic_nns_governance_api::{
+    MakeProposalRequest, ProposalActionRequest, manage_neuron::NeuronIdOrSubaccount,
+};
 use itertools::Itertools;
 use std::{
     collections::HashSet,
     fmt::{Debug, Display, Formatter},
-    fs::{write, OpenOptions},
+    fs::{OpenOptions, write},
     path::{Path, PathBuf},
 };
 
@@ -134,7 +136,7 @@ pub fn exec(args: ProposeArgs) -> Result<()> {
         }) => {
             println!("🚀 Success!");
             if let Some(message) = message {
-                println!("Message from NNS governance: {:?}", message);
+                println!("Message from NNS governance: {message:?}");
             }
             if network == "ic" {
                 println!("View the proposal here:");
@@ -147,11 +149,11 @@ pub fn exec(args: ProposeArgs) -> Result<()> {
                 println!("Proposal ID: {}", proposal_id.id);
             }
 
-            if let Some(save_to) = &save_to {
-                if let Err(err) = save_proposal_id_to_file(save_to.as_path(), &proposal_id) {
-                    bail!("{}", err);
-                };
-            }
+            if let Some(save_to) = &save_to
+                && let Err(err) = save_proposal_id_to_file(save_to.as_path(), &proposal_id)
+            {
+                bail!("{}", err);
+            };
         }
         err => {
             bail!(
@@ -178,9 +180,9 @@ fn functions_disallowed_in_pre_initialization_swap() -> Vec<&'static str> {
     ]
 }
 
-fn confirmation_messages(proposal: &Proposal) -> Result<Vec<String>> {
+fn confirmation_messages(proposal: &MakeProposalRequest) -> Result<Vec<String>> {
     let csns = match &proposal.action {
-        Some(Action::CreateServiceNervousSystem(csns)) => csns,
+        Some(ProposalActionRequest::CreateServiceNervousSystem(csns)) => csns,
         _ => {
             return Err(anyhow!(
                 "Internal error: Somehow a proposal was made not of type CreateServiceNervousSystem",
@@ -190,14 +192,14 @@ fn confirmation_messages(proposal: &Proposal) -> Result<Vec<String>> {
     let fallback_controllers = csns
         .fallback_controller_principal_ids
         .iter()
-        .map(|id| format!("  - {}", id))
+        .map(|id| format!("  - {id}"))
         .join("\n");
     let dapp_canister_controllers = if !csns.dapp_canisters.is_empty() {
         let canisters = csns
             .dapp_canisters
             .iter()
             .filter_map(|canister| canister.id.as_ref())
-            .map(|id| format!("  - {}", id))
+            .map(|id| format!("  - {id}"))
             .join("\n");
         format!(
             r#"A CreateServiceNervousSystem proposal will be submitted.
@@ -214,7 +216,7 @@ Then, if the swap completes successfully, the SNS will take sole control. If the
 
     let disallowed_types = functions_disallowed_in_pre_initialization_swap()
         .into_iter()
-        .map(|t| format!("  - {}", t))
+        .map(|t| format!("  - {t}"))
         .join("\n");
     let allowed_proposals = format!(
         r#"After the proposal is adopted, a swap is started. While the swap is running, the SNS will be in a restricted mode.
@@ -226,11 +228,14 @@ Once the swap is completed, the SNS will be in normal mode and these proposal ac
     Ok(vec![dapp_canister_controllers, allowed_proposals])
 }
 
-fn inform_user_of_sns_behavior(proposal: &Proposal, skip_confirmation: bool) -> Result<()> {
+fn inform_user_of_sns_behavior(
+    proposal: &MakeProposalRequest,
+    skip_confirmation: bool,
+) -> Result<()> {
     let messages = confirmation_messages(proposal)?;
     for message in messages {
         println!();
-        println!("{}", message);
+        println!("{message}");
         confirm_understanding(skip_confirmation)?;
     }
     Ok(())
@@ -266,7 +271,7 @@ fn confirm_understanding(skip_confirmation: bool) -> Result<()> {
 fn load_configuration_and_validate(
     network: &str,
     configuration_file_path: &PathBuf,
-) -> Result<Proposal> {
+) -> Result<MakeProposalRequest> {
     // Read the file.
     let init_config_file = std::fs::read_to_string(configuration_file_path).map_err(|err| {
         let current_dir = std::env::current_dir().expect("cannot read env::current_dir");
@@ -313,7 +318,7 @@ fn load_configuration_and_validate(
     // Validate that NNS root is one of the controllers of all dapp canisters,
     // as listed in the configuration file.
     let canister_ids = match &proposal.action {
-        Some(Action::CreateServiceNervousSystem(csns)) => csns
+        Some(ProposalActionRequest::CreateServiceNervousSystem(csns)) => csns
             .dapp_canisters
             .iter()
             .map(|canister| -> Result<CanisterId> {
@@ -423,24 +428,20 @@ impl Display for SaveToErrors {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let error_string = match self {
             SaveToErrors::FileOpenFailed(path_buf, reason) => {
-                format!(
-                    "could not open file for writing {:?} due to {}",
-                    path_buf, reason
-                )
+                format!("could not open file for writing {path_buf:?} due to {reason}")
             }
             SaveToErrors::FileWriteFailed(path_buf, reason) => {
-                format!("could not write to file {:?} due to {}", path_buf, reason)
+                format!("could not write to file {path_buf:?} due to {reason}")
             }
             SaveToErrors::InvalidData(reason) => {
-                format!("could not format data to JSON scheme due to {}", reason)
+                format!("could not format data to JSON scheme due to {reason}")
             }
         };
 
         write!(
             f,
-            "Unable to save ProposalId to file because {}. \
-            The proposal may or may not have been submitted",
-            error_string
+            "Unable to save ProposalId to file because {error_string}. \
+            The proposal may or may not have been submitted"
         )
     }
 }
@@ -459,7 +460,7 @@ fn ensure_file_exists_and_is_writeable(path: &Path) -> Result<(), SaveToErrors> 
             return Err(SaveToErrors::FileOpenFailed(
                 path.to_path_buf(),
                 e.to_string(),
-            ))
+            ));
         }
     }
 
@@ -498,9 +499,9 @@ mod test {
             .try_convert_to_create_service_nervous_system(test_root_dir)
             .unwrap();
 
-        let proposal = Proposal {
+        let proposal = MakeProposalRequest {
             title: Some("Test Proposal".to_string()),
-            action: Some(Action::CreateServiceNervousSystem(
+            action: Some(ProposalActionRequest::CreateServiceNervousSystem(
                 create_service_nervous_system,
             )),
             summary: "Test Proposal Summary".to_string(),
@@ -550,9 +551,9 @@ Once the swap is completed, the SNS will be in normal mode and these proposal ac
             create_service_nervous_system
         };
 
-        let proposal = Proposal {
+        let proposal = MakeProposalRequest {
             title: Some("Test Proposal".to_string()),
-            action: Some(Action::CreateServiceNervousSystem(
+            action: Some(ProposalActionRequest::CreateServiceNervousSystem(
                 create_service_nervous_system,
             )),
             summary: "Test Proposal Summary".to_string(),

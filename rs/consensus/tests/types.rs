@@ -24,7 +24,7 @@ fn ensure_equality_of_signed_bytes_of_catch_up_package_wrappers() {
     write_protobuf_using_tmp_file(&filepath, &protobuf).unwrap();
 
     let read_from_file = pb::CatchUpPackage::read_from_file(&filepath)
-        .map_err(|e| panic!("Failed to read CUP {}", e))
+        .map_err(|e| panic!("Failed to read CUP {e}"))
         .unwrap();
 
     // Ensure that the value we get after transforming into protobuf, writing to

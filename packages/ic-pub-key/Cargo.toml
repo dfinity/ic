@@ -1,0 +1,27 @@
+[package]
+name = "ic-pub-key"
+version = "0.2.0"
+description = "A package created for the Internet Computer Protocol for (offline) derivation of threshold public keys"
+license = "Apache-2.0"
+readme = "README.md"
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+repository = "https://github.com/dfinity/ic"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+[features]
+default = ["secp256k1", "ed25519", "vetkeys"]
+
+secp256k1 = ["dep:ic-secp256k1"]
+ed25519 = ["dep:ic-ed25519"]
+vetkeys = ["dep:ic-vetkeys"]
+
+[dependencies]
+ic-secp256k1 = { workspace = true, optional = true }
+ic-ed25519 = { workspace = true, optional = true }
+ic-vetkeys = { workspace = true, optional = true }
+ic-management-canister-types = "0.3.2"
+
+[dev-dependencies]
+hex = "0.4"

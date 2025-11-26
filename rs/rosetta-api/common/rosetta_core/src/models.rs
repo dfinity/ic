@@ -1,6 +1,6 @@
 pub use crate::objects::CurveType;
-use anyhow::anyhow;
 use anyhow::Context;
+use anyhow::anyhow;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::identity::Identity;
 use ic_ed25519::{
@@ -99,7 +99,7 @@ impl RosettaSupportedKeyPair for Ed25519KeyPair {
         hex::encode(self.public_key.serialize_raw())
     }
     fn hex_decode_pk(pk_encoded: &str) -> anyhow::Result<Vec<u8>> {
-        hex::decode(pk_encoded).context(format!("Could not decode public key {}", pk_encoded))
+        hex::decode(pk_encoded).context(format!("Could not decode public key {pk_encoded}"))
     }
 
     fn get_principal_id(pk_encoded: &str) -> anyhow::Result<PrincipalId> {
@@ -108,7 +108,7 @@ impl RosettaSupportedKeyPair for Ed25519KeyPair {
                 let pub_der = Ed25519KeyPair::der_encode_pk(pk_decoded)?;
                 Ok(PrincipalId::new_self_authenticating(&pub_der))
             }
-            Err(e) => Err(e.context(format!("Could not decode public key {}", pk_encoded))),
+            Err(e) => Err(e.context(format!("Could not decode public key {pk_encoded}"))),
         }
     }
     fn der_encode_pk(pk: Vec<u8>) -> anyhow::Result<Vec<u8>> {
@@ -151,25 +151,22 @@ impl RosettaSupportedKeyPair for Secp256k1KeyPair {
             Ok(pk_decoded) => {
                 let public_key_der = Secp256k1PublicKey::deserialize_sec1(&pk_decoded)
                     .with_context(|| {
-                        format!("Could not deserialize sec1 public key: {:?}.", pk_decoded,)
+                        format!("Could not deserialize sec1 public key: {pk_decoded:?}.",)
                     })?
                     .serialize_der();
                 Ok(PrincipalId::new_self_authenticating(&public_key_der))
             }
-            Err(e) => Err(e.context(format!(
-                "Could not decode hex public key {}",
-                pk_hex_encoded
-            ))),
+            Err(e) => Err(e.context(format!("Could not decode hex public key {pk_hex_encoded}"))),
         }
     }
     fn der_encode_pk(pk_sec1: Vec<u8>) -> anyhow::Result<Vec<u8>> {
         Ok(Secp256k1PublicKey::deserialize_sec1(&pk_sec1)
-            .with_context(|| format!("Could not deserialize sec1 public key: {:?}.", pk_sec1,))?
+            .with_context(|| format!("Could not deserialize sec1 public key: {pk_sec1:?}.",))?
             .serialize_der())
     }
     fn der_decode_pk(pk_der: Vec<u8>) -> anyhow::Result<Vec<u8>> {
         Ok(Secp256k1PublicKey::deserialize_der(&pk_der)
-            .with_context(|| format!("Could not deserialize der public key: {:?}.", pk_der,))?
+            .with_context(|| format!("Could not deserialize der public key: {pk_der:?}.",))?
             .serialize_sec1(false))
     }
 }

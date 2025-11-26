@@ -3,8 +3,8 @@ use assert_matches::assert_matches;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
-use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript_and_master_key, InitialNiDkgConfig};
-use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+use ic_crypto_test_utils_ni_dkg::{InitialNiDkgConfig, initial_dkg_transcript_and_master_key};
+use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
 use ic_crypto_utils_ni_dkg::extract_threshold_sig_public_key;
 use ic_nns_test_utils::registry::new_current_node_crypto_keys_mutations;
 use ic_protobuf::registry::node::v1::NodeRecord;
@@ -14,9 +14,9 @@ use ic_protobuf::registry::subnet::v1::{
 use ic_registry_keys::make_catch_up_package_contents_key;
 use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key};
 use ic_registry_transport::insert;
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript};
-use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::RegistryVersion;
+use ic_types::crypto::CurrentNodePublicKeys;
+use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript};
 use ic_types_test_utils::ids::{SUBNET_1, SUBNET_2};
 use prost::Message;
 use rand::RngCore;
@@ -429,8 +429,8 @@ fn high_threshold_public_key_invariant_unable_to_parse_cup() {
 }
 
 #[test]
-fn high_threshold_public_key_invariant_unable_to_parse_initial_ni_dkg_transcript_high_threshold_in_cup(
-) {
+fn high_threshold_public_key_invariant_unable_to_parse_initial_ni_dkg_transcript_high_threshold_in_cup()
+ {
     let mut setup = HighThresholdPublicKeySetup::new();
     let mut snapshot = registry_snapshot_from_threshold_sig_pk_and_cup(
         Some(setup.threshold_sig_pk),
@@ -591,8 +591,7 @@ fn run_test_orphaned_crypto_keys(
     assert_eq!(
         err.to_string(),
         format!(
-            "InvariantCheckError: There are {} or {} entries without a corresponding {} entry: [{}]",
-            CRYPTO_RECORD_KEY_PREFIX, CRYPTO_TLS_CERT_KEY_PREFIX, NODE_RECORD_KEY_PREFIX, missing_node_id
+            "InvariantCheckError: There are {CRYPTO_RECORD_KEY_PREFIX} or {CRYPTO_TLS_CERT_KEY_PREFIX} entries without a corresponding {NODE_RECORD_KEY_PREFIX} entry: [{missing_node_id}]"
         )
     );
 }
@@ -600,7 +599,7 @@ fn run_test_orphaned_crypto_keys(
 mod chain_key_enabled_subnet_lists {
     use super::*;
     use crate::common::test_helpers::invariant_compliant_registry;
-    use ic_base_types::{subnet_id_into_protobuf, SubnetId};
+    use ic_base_types::{SubnetId, subnet_id_into_protobuf};
     use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
     use ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList;
     use ic_protobuf::registry::subnet::v1::{
@@ -608,7 +607,7 @@ mod chain_key_enabled_subnet_lists {
         SubnetRecord as SubnetRecordPb,
     };
     use ic_protobuf::types::v1::{
-        self as pb, master_public_key_id, MasterPublicKeyId as MasterPublicKeyIdPb,
+        self as pb, MasterPublicKeyId as MasterPublicKeyIdPb, master_public_key_id,
     };
     use ic_registry_keys::CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX;
     use ic_registry_subnet_features::KeyConfig;
@@ -655,6 +654,7 @@ mod chain_key_enabled_subnet_lists {
             ],
             signature_request_timeout_ns: Some(10_000),
             idkg_key_rotation_period_ms: Some(20_000),
+            max_parallel_pre_signature_transcripts_in_creation: Some(30_000),
         }
     }
 
@@ -812,8 +812,8 @@ mod chain_key_enabled_subnet_lists {
     }
 
     #[test]
-    fn should_fail_subnet_existence_check_for_funky_key_id_lengths_and_characters_but_without_subnet_record(
-    ) {
+    fn should_fail_subnet_existence_check_for_funky_key_id_lengths_and_characters_but_without_subnet_record()
+     {
         const NUM_KEY_IDS: usize = 100;
         let rng = &mut ic_crypto_test_utils_reproducible_rng::reproducible_rng();
         for _ in 0..NUM_KEY_IDS {
@@ -855,7 +855,7 @@ mod chain_key_enabled_subnet_lists {
         let key_id = "some_key1";
         let invalid_curves = vec!["bogus_curve", ""];
         for invalid_curve in invalid_curves {
-            let ecdsa_key_id_string = format!("{}:{}", invalid_curve, key_id);
+            let ecdsa_key_id_string = format!("{invalid_curve}:{key_id}");
             let setup = Setup::builder()
                 .with_custom_curve_and_key_id(ecdsa_key_id_string.clone())
                 .without_subnet_record()
@@ -865,9 +865,7 @@ mod chain_key_enabled_subnet_lists {
                 check_node_crypto_keys_invariants(&setup.snapshot),
                 Err(err) if err.to_string().contains(
                     format!(
-                        "Scheme {} in master public key id {} is not supported",
-                        invalid_curve,
-                        ecdsa_key_id_string,
+                        "Scheme {invalid_curve} in master public key id {ecdsa_key_id_string} is not supported",
                     ).as_str())
             );
         }
@@ -886,7 +884,7 @@ mod chain_key_enabled_subnet_lists {
             assert_matches!(
                 check_node_crypto_keys_invariants(&setup.snapshot),
                 Err(err) if err.to_string().contains(
-                    format!("Master public key id {} does not contain a ':'", ecdsa_key_id_string).as_str()
+                    format!("Master public key id {ecdsa_key_id_string} does not contain a ':'").as_str()
                 )
             );
         }
@@ -1030,7 +1028,7 @@ mod chain_key_enabled_subnet_lists {
                 }
             };
             let chain_key_enabled_subnet_list_key =
-                format!("{}{}", CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, key_id);
+                format!("{CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX}{key_id}");
 
             let subnet_id = subnet_test_id(1);
             let mut subnets = vec![subnet_id_into_protobuf(subnet_id)];

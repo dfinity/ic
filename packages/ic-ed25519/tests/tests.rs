@@ -9,7 +9,7 @@ fn test_rng_with_seed(seed: [u8; 32]) -> ChaCha20Rng {
 }
 
 fn test_rng() -> ChaCha20Rng {
-    let seed = rand::thread_rng().gen::<[u8; 32]>();
+    let seed = rand::thread_rng().r#gen::<[u8; 32]>();
     // If a test ever fails, reproduce it using
     // let mut rng = test_rng_with_seed(hex!("SEED"));
     println!("RNG seed: {}", hex::encode(seed));
@@ -17,7 +17,7 @@ fn test_rng() -> ChaCha20Rng {
 }
 
 fn random_key<R: rand::CryptoRng + rand::Rng>(rng: &mut R) -> PrivateKey {
-    PrivateKey::generate_from_seed(&rng.gen::<[u8; 32]>())
+    PrivateKey::generate_from_seed(&rng.r#gen::<[u8; 32]>())
 }
 
 #[test]
@@ -91,7 +91,7 @@ fn signatures_we_generate_will_verify() {
         let sk = random_key(&mut rng);
         let pk = sk.public_key();
 
-        let msg = rng.gen::<[u8; 32]>();
+        let msg = rng.r#gen::<[u8; 32]>();
 
         let sig = sk.sign_message(&msg);
         assert_eq!(sig.len(), 64);
@@ -137,10 +137,10 @@ fn batch_verification_works() {
     fn two_positions<R: Rng>(max: usize, rng: &mut R) -> (usize, usize) {
         assert!(max > 1);
 
-        let pos0 = rng.gen::<usize>() % max;
+        let pos0 = rng.r#gen::<usize>() % max;
 
         loop {
-            let pos1 = rng.gen::<usize>() % max;
+            let pos1 = rng.r#gen::<usize>() % max;
             if pos0 != pos1 {
                 return (pos0, pos1);
             }
@@ -157,7 +157,7 @@ fn batch_verification_works() {
         let mut pk = sk.iter().map(|k| k.public_key()).collect::<Vec<_>>();
 
         let mut msg = (0..batch_size)
-            .map(|_| rng.gen::<[u8; 32]>())
+            .map(|_| rng.r#gen::<[u8; 32]>())
             .collect::<Vec<_>>();
         let mut sigs = (0..batch_size)
             .map(|i| sk[i].sign_message(&msg[i]))
@@ -166,9 +166,9 @@ fn batch_verification_works() {
         assert!(batch_verifies(&msg, &sigs, &pk, rng));
 
         // Corrupt a random signature and check that the batch fails:
-        let corrupted_sig_idx = rng.gen::<usize>() % batch_size;
-        let corrupted_sig_byte = rng.gen::<usize>() % 64;
-        let corrupted_sig_mask = std::cmp::max(1, rng.gen::<u8>());
+        let corrupted_sig_idx = rng.r#gen::<usize>() % batch_size;
+        let corrupted_sig_byte = rng.r#gen::<usize>() % 64;
+        let corrupted_sig_mask = std::cmp::max(1, rng.r#gen::<u8>());
         sigs[corrupted_sig_idx][corrupted_sig_byte] ^= corrupted_sig_mask;
         assert!(!batch_verifies(&msg, &sigs, &pk, rng));
 
@@ -177,9 +177,9 @@ fn batch_verification_works() {
         // We fixed the signature so the batch should verify again:
         debug_assert!(batch_verifies(&msg, &sigs, &pk, rng));
 
-        let corrupted_msg_idx = rng.gen::<usize>() % batch_size;
-        let corrupted_msg_byte = rng.gen::<usize>() % 32;
-        let corrupted_msg_mask = std::cmp::max(1, rng.gen::<u8>());
+        let corrupted_msg_idx = rng.r#gen::<usize>() % batch_size;
+        let corrupted_msg_byte = rng.r#gen::<usize>() % 32;
+        let corrupted_msg_mask = std::cmp::max(1, rng.r#gen::<u8>());
         msg[corrupted_msg_idx][corrupted_msg_byte] ^= corrupted_msg_mask;
         assert!(!batch_verifies(&msg, &sigs, &pk, rng));
 
@@ -187,7 +187,7 @@ fn batch_verification_works() {
         msg[corrupted_msg_idx][corrupted_msg_byte] ^= corrupted_msg_mask;
 
         // Corrupt a random public key and check that the batch fails:
-        let corrupted_pk_idx = rng.gen::<usize>() % batch_size;
+        let corrupted_pk_idx = rng.r#gen::<usize>() % batch_size;
         let correct_pk = pk[corrupted_pk_idx];
         let wrong_pk = random_key(rng).public_key();
         assert_ne!(correct_pk, wrong_pk);
@@ -218,10 +218,18 @@ fn batch_verification_works() {
 #[test]
 fn test_der_public_key_conversions() {
     let test_data = [
-        (hex!("b3997656ba51ff6da37b61d8d549ec80717266ecf48fb5da52b654412634844c"),
-         hex!("302a300506032b6570032100b3997656ba51ff6da37b61d8d549ec80717266ecf48fb5da52b654412634844c")),
-        (hex!("a5afb5feb6dfb6ddf5dd6563856fff5484f5fe304391d9ed06697861f220c610"),
-         hex!("302a300506032b6570032100a5afb5feb6dfb6ddf5dd6563856fff5484f5fe304391d9ed06697861f220c610")),
+        (
+            hex!("b3997656ba51ff6da37b61d8d549ec80717266ecf48fb5da52b654412634844c"),
+            hex!(
+                "302a300506032b6570032100b3997656ba51ff6da37b61d8d549ec80717266ecf48fb5da52b654412634844c"
+            ),
+        ),
+        (
+            hex!("a5afb5feb6dfb6ddf5dd6563856fff5484f5fe304391d9ed06697861f220c610"),
+            hex!(
+                "302a300506032b6570032100a5afb5feb6dfb6ddf5dd6563856fff5484f5fe304391d9ed06697861f220c610"
+            ),
+        ),
     ];
 
     for (raw, der) in &test_data {
@@ -240,7 +248,9 @@ fn test_der_public_key_conversions() {
 
 #[test]
 fn can_parse_pkcs8_v1_der_secret_key() {
-    let pkcs8_v1 = hex!("302e020100300506032b657004220420d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842");
+    let pkcs8_v1 = hex!(
+        "302e020100300506032b657004220420d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842"
+    );
     let sk = PrivateKey::deserialize_pkcs8(&pkcs8_v1).unwrap();
 
     assert_eq!(
@@ -268,7 +278,9 @@ cj1BoSMDIQD1+si816/7QQVbbOqgIFv+zizVvGq1QOMLg20pABvT8Q==
 #[test]
 fn can_parse_pkcs8_v2_der_secret_key() {
     // From ring test data
-    let pkcs8_v2 = hex!("3051020101300506032b657004220420d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f4475584281210019bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1");
+    let pkcs8_v2 = hex!(
+        "3051020101300506032b657004220420d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f4475584281210019bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1"
+    );
 
     let sk = PrivateKey::deserialize_pkcs8(&pkcs8_v2).unwrap();
 
@@ -284,7 +296,7 @@ fn can_parse_dfx_created_private_key() {
 
     match PrivateKey::deserialize_pkcs8_pem(dfx_key) {
         Ok(_sk) => { /* success */ }
-        Err(e) => panic!("Unexpected error serializing DFX generated key {:?}", e),
+        Err(e) => panic!("Unexpected error serializing DFX generated key {e:?}"),
     }
 }
 
@@ -307,17 +319,26 @@ fn can_pass_old_basic_sig_utils_parsing_tests() {
     }
 
     let tests = [
-        PublicKeyParsingTest::new(hex!("B3997656BA51FF6DA37B61D8D549EC80717266ECF48FB5DA52B654412634844C"),
-                                  hex!("302A300506032B6570032100B3997656BA51FF6DA37B61D8D549EC80717266ECF48FB5DA52B654412634844C"),
-                                  "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAs5l2VrpR/22je2HY1UnsgHFyZuz0j7XaUrZUQSY0hEw=\n-----END PUBLIC KEY-----\n"
+        PublicKeyParsingTest::new(
+            hex!("B3997656BA51FF6DA37B61D8D549EC80717266ECF48FB5DA52B654412634844C"),
+            hex!(
+                "302A300506032B6570032100B3997656BA51FF6DA37B61D8D549EC80717266ECF48FB5DA52B654412634844C"
+            ),
+            "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAs5l2VrpR/22je2HY1UnsgHFyZuz0j7XaUrZUQSY0hEw=\n-----END PUBLIC KEY-----\n",
         ),
-        PublicKeyParsingTest::new(hex!("A5AFB5FEB6DFB6DDF5DD6563856FFF5484F5FE304391D9ED06697861F220C610"),
-                                  hex!("302A300506032B6570032100A5AFB5FEB6DFB6DDF5DD6563856FFF5484F5FE304391D9ED06697861F220C610"),
-                                  "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEApa+1/rbftt313WVjhW//VIT1/jBDkdntBml4YfIgxhA=\n-----END PUBLIC KEY-----\n"
+        PublicKeyParsingTest::new(
+            hex!("A5AFB5FEB6DFB6DDF5DD6563856FFF5484F5FE304391D9ED06697861F220C610"),
+            hex!(
+                "302A300506032B6570032100A5AFB5FEB6DFB6DDF5DD6563856FFF5484F5FE304391D9ED06697861F220C610"
+            ),
+            "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEApa+1/rbftt313WVjhW//VIT1/jBDkdntBml4YfIgxhA=\n-----END PUBLIC KEY-----\n",
         ),
-        PublicKeyParsingTest::new(hex!("C8413108F121CB794A10804D15F613E40ECC7C78A4EC567040DDF78467C71DFF"),
-                                  hex!("302A300506032B6570032100C8413108F121CB794A10804D15F613E40ECC7C78A4EC567040DDF78467C71DFF"),
-                                  "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAyEExCPEhy3lKEIBNFfYT5A7MfHik7FZwQN33hGfHHf8=\n-----END PUBLIC KEY-----\n"
+        PublicKeyParsingTest::new(
+            hex!("C8413108F121CB794A10804D15F613E40ECC7C78A4EC567040DDF78467C71DFF"),
+            hex!(
+                "302A300506032B6570032100C8413108F121CB794A10804D15F613E40ECC7C78A4EC567040DDF78467C71DFF"
+            ),
+            "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAyEExCPEhy3lKEIBNFfYT5A7MfHik7FZwQN33hGfHHf8=\n-----END PUBLIC KEY-----\n",
         ),
     ];
 
@@ -404,8 +425,8 @@ fn private_derivation_is_compatible_with_public_derivation() {
     let rng = &mut test_rng();
 
     fn random_path<R: Rng>(rng: &mut R) -> DerivationPath {
-        let l = 1 + rng.gen::<usize>() % 9;
-        let path = (0..l).map(|_| rng.gen::<u32>()).collect::<Vec<u32>>();
+        let l = 1 + rng.r#gen::<usize>() % 9;
+        let path = (0..l).map(|_| rng.r#gen::<u32>()).collect::<Vec<u32>>();
         DerivationPath::new_bip32(&path)
     }
 
@@ -415,7 +436,7 @@ fn private_derivation_is_compatible_with_public_derivation() {
 
         let path = random_path(rng);
 
-        let chain_code = rng.gen::<[u8; 32]>();
+        let chain_code = rng.r#gen::<[u8; 32]>();
 
         let (derived_pk, cc_pk) = master_pk.derive_subkey_with_chain_code(&path, &chain_code);
 
@@ -428,7 +449,7 @@ fn private_derivation_is_compatible_with_public_derivation() {
 
         assert_eq!(hex::encode(cc_pk), hex::encode(cc_sk));
 
-        let msg = rng.gen::<[u8; 32]>();
+        let msg = rng.r#gen::<[u8; 32]>();
         let derived_sig = derived_sk.sign_message(&msg);
 
         assert!(derived_pk.verify_signature(&msg, &derived_sig).is_ok());
@@ -442,10 +463,10 @@ fn private_derivation_also_works_for_derived_keys() {
     for _ in 0..100 {
         let master_sk = random_key(rng);
 
-        let chain_code = rng.gen::<[u8; 32]>();
-        let path_len = 2 + rng.gen::<usize>() % 32;
+        let chain_code = rng.r#gen::<[u8; 32]>();
+        let path_len = 2 + rng.r#gen::<usize>() % 32;
         let path = (0..path_len)
-            .map(|_| rng.gen::<u32>())
+            .map(|_| rng.r#gen::<u32>())
             .collect::<Vec<u32>>();
 
         // First derive directly from a normal key
@@ -454,7 +475,7 @@ fn private_derivation_also_works_for_derived_keys() {
 
         // Now derive with the path split in half
 
-        let split = rng.gen::<usize>() % (path_len - 1);
+        let split = rng.r#gen::<usize>() % (path_len - 1);
         let path1 = DerivationPath::new_bip32(&path[..split]);
         let path2 = DerivationPath::new_bip32(&path[split..]);
 
@@ -579,7 +600,7 @@ fn verification_follows_zip215() {
 
             for _ in 0..n {
                 // Note this intentionally allows repeats!
-                let idx = rng.gen::<usize>() % testcases.len();
+                let idx = rng.r#gen::<usize>() % testcases.len();
                 keys.push(testcases[idx].0);
                 sigs.push(&testcases[idx].1[..]);
             }
@@ -591,4 +612,102 @@ fn verification_follows_zip215() {
             ic_ed25519::PublicKey::batch_verify(&bmsg[..], &bsigs[..], &bkeys[..], rng).is_ok()
         );
     }
+}
+
+#[test]
+fn offline_key_derivation_matches_mainnet_for_key_1() {
+    use std::str::FromStr;
+
+    let canister_id = ic_ed25519::CanisterId::from_str("h5jwf-5iaaa-aaaan-qmvoa-cai").unwrap();
+    let derivation_path = [hex!("ABCDEF").to_vec(), hex!("012345").to_vec()];
+
+    let dpk = PublicKey::derive_mainnet_key(
+        ic_ed25519::MasterPublicKeyId::Key1,
+        &canister_id,
+        &derivation_path,
+    );
+
+    assert_eq!(
+        hex::encode(dpk.0.serialize_raw()),
+        "43f0008b26564b6da51f585ad47669dfeb1db6d94d7dd216bd304fc1f5f5e997"
+    );
+}
+
+#[test]
+fn offline_key_derivation_matches_mainnet_for_test_key_1() {
+    use std::str::FromStr;
+
+    let canister_id = ic_ed25519::CanisterId::from_str("h5jwf-5iaaa-aaaan-qmvoa-cai").unwrap();
+    let derivation_path = [
+        "Hello".as_bytes().to_vec(),
+        "Threshold".as_bytes().to_vec(),
+        "Signatures".as_bytes().to_vec(),
+    ];
+    let dpk = PublicKey::derive_mainnet_key(
+        ic_ed25519::MasterPublicKeyId::TestKey1,
+        &canister_id,
+        &derivation_path,
+    );
+
+    assert_eq!(
+        hex::encode(dpk.0.serialize_raw()),
+        "d9a2ce6a3cd33fe16dce37e045609e51ff516e93bb51013823d6d7a915e3cfb9"
+    );
+}
+
+#[test]
+fn offline_ecdsa_key_derivation_matches_pocketic_for_key_1() {
+    use std::str::FromStr;
+
+    let canister_id = ic_ed25519::CanisterId::from_str("uzt4z-lp777-77774-qaabq-cai").unwrap();
+    let derivation_path = [];
+
+    let dpk = PublicKey::derive_pocketic_key(
+        ic_ed25519::PocketIcMasterPublicKeyId::Key1,
+        &canister_id,
+        &derivation_path,
+    );
+
+    assert_eq!(
+        hex::encode(dpk.0.serialize_raw()),
+        "f419977bb61ca6c95ae6ec5b58189ab82e2681f3dbc8fc5d09ce3c6f6103c107",
+    );
+}
+
+#[test]
+fn offline_ecdsa_key_derivation_matches_pocketic_for_test_key_1() {
+    use std::str::FromStr;
+
+    let canister_id = ic_ed25519::CanisterId::from_str("uzt4z-lp777-77774-qaabq-cai").unwrap();
+    let derivation_path = [];
+
+    let dpk = PublicKey::derive_pocketic_key(
+        ic_ed25519::PocketIcMasterPublicKeyId::TestKey1,
+        &canister_id,
+        &derivation_path,
+    );
+
+    assert_eq!(
+        hex::encode(dpk.0.serialize_raw()),
+        "c4afcb035090ab7dcc6aae48ff7b7df1a3d1120a3d8cbdc37a8d280e5e36ea6a",
+    );
+}
+
+#[test]
+fn offline_ecdsa_key_derivation_matches_pocketic_for_dfx_test_key() {
+    use std::str::FromStr;
+
+    let canister_id = ic_ed25519::CanisterId::from_str("uzt4z-lp777-77774-qaabq-cai").unwrap();
+    let derivation_path = [];
+
+    let dpk = PublicKey::derive_pocketic_key(
+        ic_ed25519::PocketIcMasterPublicKeyId::DfxTestKey,
+        &canister_id,
+        &derivation_path,
+    );
+
+    assert_eq!(
+        hex::encode(dpk.0.serialize_raw()),
+        "17eb4d719c3c27cdfd7505e38142de4cebea1fc64352aa8b7a41b3d9c6574915",
+    );
 }

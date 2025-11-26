@@ -1,15 +1,15 @@
 use super::query_call_graph::evaluate_query_call_graph;
 use crate::{
+    NonReplicatedQueryKind, RoundInstructions,
     execution::common::{self, validate_method},
     execution::nonreplicated_query::execute_non_replicated_query,
-    execution_environment::{as_round_instructions, RoundLimits},
+    execution_environment::{RoundLimits, as_round_instructions},
     hypervisor::Hypervisor,
     metrics::{
-        CallTreeMetricsNoOp, MeasurementScope, QueryHandlerMetrics, QUERY_HANDLER_CRITICAL_ERROR,
+        CallTreeMetricsNoOp, MeasurementScope, QUERY_HANDLER_CRITICAL_ERROR, QueryHandlerMetrics,
         SYSTEM_API_CANISTER_CYCLE_BALANCE, SYSTEM_API_CANISTER_CYCLE_BALANCE128,
         SYSTEM_API_DATA_CERTIFICATE_COPY, SYSTEM_API_TIME,
     },
-    NonReplicatedQueryKind, RoundInstructions,
 };
 use ic_base_types::NumBytes;
 use ic_config::flag_status::FlagStatus;
@@ -19,26 +19,26 @@ use ic_embedders::wasmtime_embedder::system_api::{
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
-    ExecutionMode, HypervisorError, SubnetAvailableMemory, SystemApiCallCounters,
+    ExecutionMode, HypervisorError, MessageMemoryUsage, SubnetAvailableMemory,
+    SystemApiCallCounters,
 };
 use ic_interfaces_state_manager::Labeled;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::execution_state::WasmExecutionMode, CallContextAction, CallOrigin,
-    CanisterState, MessageMemoryUsage, NetworkTopology, ReplicatedState,
+    CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
 };
 use ic_types::{
-    batch::QueryStats,
+    CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, Time,
+    batch::{CanisterCyclesCostSchedule, QueryStats},
     ingress::WasmResult,
     messages::{
-        CallContextId, CallbackId, Payload, Query, QuerySource, RejectContext, Request,
-        RequestOrResponse, Response, NO_DEADLINE,
+        CallContextId, CallbackId, NO_DEADLINE, Payload, Query, QuerySource, RejectContext,
+        Request, RequestOrResponse, Response,
     },
     methods::{FuncRef, WasmClosure, WasmMethod},
-    CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, Time,
 };
 use prometheus::IntCounter;
 use std::{
@@ -59,6 +59,7 @@ pub(super) enum QueryResponse {
 /// The result of execution of a query or a response callback.
 /// The execution either produces a response or returns a possibly empty set of
 /// outgoing calls with the new canister state and the call origin.
+#[allow(clippy::large_enum_variant)]
 pub(super) enum ExecutionResult {
     Response(QueryResponse),
     Calls(CanisterState, CallOrigin, VecDeque<Arc<Request>>),
@@ -95,9 +96,7 @@ pub(super) struct QueryContext<'a> {
     state: Labeled<Arc<ReplicatedState>>,
     network_topology: Arc<NetworkTopology>,
     // Certificate for certified queries + canister ID of the root query of this context
-    data_certificate: (Vec<u8>, CanisterId),
-    max_canister_memory_size_wasm32: NumBytes,
-    max_canister_memory_size_wasm64: NumBytes,
+    data_certificate: Option<(Vec<u8>, CanisterId)>,
     max_instructions_per_query: NumInstructions,
     max_query_call_graph_depth: usize,
     instruction_overhead_per_query_call: RoundInstructions,
@@ -127,12 +126,11 @@ impl<'a> QueryContext<'a> {
         hypervisor: &'a Hypervisor,
         own_subnet_type: SubnetType,
         state: Labeled<Arc<ReplicatedState>>,
-        data_certificate: Vec<u8>,
+        data_certificate: Option<Vec<u8>>,
         subnet_available_memory: SubnetAvailableMemory,
         subnet_available_callbacks: i64,
+        subnet_memory_reservation: NumBytes,
         canister_guaranteed_callback_quota: u64,
-        max_canister_memory_size_wasm32: NumBytes,
-        max_canister_memory_size_wasm64: NumBytes,
         max_instructions_per_query: NumInstructions,
         max_query_call_graph_depth: usize,
         max_query_call_graph_instructions: NumInstructions,
@@ -151,6 +149,7 @@ impl<'a> QueryContext<'a> {
             subnet_available_callbacks,
             // Ignore compute allocation
             compute_allocation_used: 0,
+            subnet_memory_reservation,
         };
         Self {
             log,
@@ -158,9 +157,8 @@ impl<'a> QueryContext<'a> {
             own_subnet_type,
             state,
             network_topology,
-            data_certificate: (data_certificate, canister_id),
-            max_canister_memory_size_wasm32,
-            max_canister_memory_size_wasm64,
+            data_certificate: data_certificate
+                .map(|data_certificate| (data_certificate, canister_id)),
             max_instructions_per_query,
             max_query_call_graph_depth,
             instruction_overhead_per_query_call: as_round_instructions(
@@ -200,7 +198,7 @@ impl<'a> QueryContext<'a> {
     ) -> Result<WasmResult, UserError> {
         let canister_id = query.receiver;
         let old_canister = self.state.get_ref().get_active_canister(&canister_id)?;
-        let call_origin = CallOrigin::Query(query.source().into());
+        let call_origin = CallOrigin::Query(query.source().into(), query.method_name.clone());
 
         let method = match wasm_query_method(old_canister, query.method_name.to_string()) {
             Ok(method) => method,
@@ -222,10 +220,6 @@ impl<'a> QueryContext<'a> {
         match query.source {
             QuerySource::System => {
                 if let WasmMethod::CompositeQuery(_) = &method {
-                    info!(
-                        self.log,
-                        "Running composite canister http transform on canister {}.", query.receiver
-                    );
                     return Err(UserError::new(
                         ErrorCode::CompositeQueryCalledInReplicatedMode,
                         "Composite query cannot be used as transform in canister http outcalls.",
@@ -311,23 +305,21 @@ impl<'a> QueryContext<'a> {
         let canister_id = canister.canister_id();
 
         let outgoing_messages: Vec<_> = canister.output_into_iter().collect();
-        let call_context_manager =
-            canister
-                .system_state
-                .call_context_manager()
-                .ok_or_else(|| {
-                    error!(
+        let call_context_manager = canister.system_state.call_context_manager().ok_or_else(
+            || {
+                error!(
                     self.log,
                     "[EXC-BUG] Canister {} does not have a call context manager. This is a bug @{}",
                     canister_id,
                     QUERY_HANDLER_CRITICAL_ERROR,
                 );
-                    self.query_critical_error.inc();
-                    UserError::new(
-                        ErrorCode::QueryCallGraphInternal,
-                        "Composite query: canister does not have a call context manager",
-                    )
-                })?;
+                self.query_critical_error.inc();
+                UserError::new(
+                    ErrorCode::QueryCallGraphInternal,
+                    "Composite query: canister does not have a call context manager",
+                )
+            },
+        )?;
 
         // When we deserialize the canister state from the replicated state, it
         // is possible that it already had some messages in its output queues.
@@ -358,7 +350,7 @@ impl<'a> QueryContext<'a> {
                         | Some(CallOrigin::Ingress(..))
                         | Some(CallOrigin::SystemTask) => {}
 
-                        Some(CallOrigin::Query(_)) | Some(CallOrigin::CanisterQuery(_, _)) => {
+                        Some(CallOrigin::Query(..)) | Some(CallOrigin::CanisterQuery(..)) => {
                             // We never serialize messages of such types in the
                             // canister's state so these must have been produced
                             // by this module.
@@ -385,18 +377,18 @@ impl<'a> QueryContext<'a> {
         query_kind: NonReplicatedQueryKind,
         measurement_scope: &MeasurementScope,
     ) -> (CanisterState, Result<Option<WasmResult>, UserError>) {
-        if let WasmMethod::CompositeQuery(_) = &method_name {
-            if self.composite_queries == FlagStatus::Disabled {
-                return (
-                    canister,
-                    Err(UserError::new(
-                        ErrorCode::CanisterContractViolation,
-                        "Composite queries are not enabled yet",
-                    )),
-                );
-            }
+        if let WasmMethod::CompositeQuery(_) = &method_name
+            && self.composite_queries == FlagStatus::Disabled
+        {
+            return (
+                canister,
+                Err(UserError::new(
+                    ErrorCode::CanisterContractViolation,
+                    "Composite queries are not enabled yet",
+                )),
+            );
         }
-
+        let cost_schedule = self.get_cost_schedule();
         let subnet_size = self
             .network_topology
             .get_subnet_size(&self.cycles_account_manager.get_subnet_id())
@@ -408,21 +400,26 @@ impl<'a> QueryContext<'a> {
             canister.message_memory_usage(),
             canister.scheduler_state.compute_allocation,
             subnet_size,
+            self.get_cost_schedule(),
             canister.system_state.reserved_balance(),
         ) > canister.system_state.balance()
         {
             let canister_id = canister.canister_id();
-            return (canister, Err(UserError::new(
-                ErrorCode::CanisterOutOfCycles,
-                format!("Canister {} is unable to process query calls because it's frozen. Please top up the canister with cycles and try again.", canister_id))
-            ));
+            return (
+                canister,
+                Err(UserError::new(
+                    ErrorCode::CanisterOutOfCycles,
+                    format!(
+                        "Canister {canister_id} is unable to process query calls because it's frozen. Please top up the canister with cycles and try again."
+                    ),
+                )),
+            );
         }
 
         let instruction_limit = self.max_instructions_per_query.min(NumInstructions::new(
             self.round_limits.instructions.get().max(0) as u64,
         ));
-        let instruction_limits =
-            InstructionLimits::new(FlagStatus::Disabled, instruction_limit, instruction_limit);
+        let instruction_limits = InstructionLimits::new(instruction_limit, instruction_limit);
         let execution_parameters = self.execution_parameters(&canister, instruction_limits);
 
         let data_certificate = self.get_data_certificate(&canister.canister_id());
@@ -439,6 +436,7 @@ impl<'a> QueryContext<'a> {
                 self.hypervisor,
                 &mut self.round_limits,
                 self.query_critical_error,
+                cost_schedule,
             );
         self.add_system_api_call_counters(system_api_call_counters);
         let instructions_executed = instruction_limit - instructions_left;
@@ -507,10 +505,10 @@ impl<'a> QueryContext<'a> {
 
     /// Accumulates transient errors from payload.
     pub fn accumulate_transient_errors_from_payload(&mut self, payload: &Payload) {
-        if let Payload::Reject(context) = payload {
-            if context.code() == RejectCode::SysTransient {
-                self.transient_errors += 1;
-            }
+        if let Payload::Reject(context) = payload
+            && context.code() == RejectCode::SysTransient
+        {
+            self.transient_errors += 1;
         }
     }
 
@@ -607,12 +605,10 @@ impl<'a> QueryContext<'a> {
             Payload::Reject(_) => callback.on_reject.clone(),
         };
         let func_ref = match call_origin {
-            CallOrigin::Ingress(_, _)
-            | CallOrigin::CanisterUpdate(_, _, _)
-            | CallOrigin::SystemTask => unreachable!("Unreachable in the QueryContext."),
-            CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
-                FuncRef::QueryClosure(closure)
+            CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
+                unreachable!("Unreachable in the QueryContext.")
             }
+            CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => FuncRef::QueryClosure(closure),
         };
 
         let time = self.state.get_ref().time();
@@ -622,8 +618,7 @@ impl<'a> QueryContext<'a> {
         let instruction_limit = self.max_instructions_per_query.min(NumInstructions::new(
             self.round_limits.instructions.get().max(0) as u64,
         ));
-        let instruction_limits =
-            InstructionLimits::new(FlagStatus::Disabled, instruction_limit, instruction_limit);
+        let instruction_limits = InstructionLimits::new(instruction_limit, instruction_limit);
         let mut execution_parameters = self.execution_parameters(&canister, instruction_limits);
         let api_type = match response.response_payload {
             Payload::Data(payload) => ApiType::composite_reply_callback(
@@ -646,6 +641,8 @@ impl<'a> QueryContext<'a> {
             ),
         };
 
+        let cost_schedule = self.get_cost_schedule();
+
         let (output, output_execution_state, output_system_state) = self.hypervisor.execute(
             api_type,
             time,
@@ -660,6 +657,7 @@ impl<'a> QueryContext<'a> {
             self.query_critical_error,
             &CallTreeMetricsNoOp,
             call_context.time(),
+            cost_schedule,
         );
 
         self.add_system_api_call_counters(output.system_api_call_counters);
@@ -737,13 +735,14 @@ impl<'a> QueryContext<'a> {
         call_context_instructions_executed: NumInstructions,
     ) -> (NumInstructions, Result<Option<WasmResult>, HypervisorError>) {
         let func_ref = match call_origin {
-            CallOrigin::Ingress(_, _)
-            | CallOrigin::CanisterUpdate(_, _, _)
-            | CallOrigin::SystemTask => unreachable!("Unreachable in the QueryContext."),
-            CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
+            CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
+                unreachable!("Unreachable in the QueryContext.")
+            }
+            CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => {
                 FuncRef::QueryClosure(cleanup_closure)
             }
         };
+        let cost_schedule = self.get_cost_schedule();
         let (cleanup_output, output_execution_state, output_system_state) =
             self.hypervisor.execute(
                 ApiType::CompositeCleanup {
@@ -763,6 +762,7 @@ impl<'a> QueryContext<'a> {
                 self.query_critical_error,
                 &CallTreeMetricsNoOp,
                 time,
+                cost_schedule,
             );
 
         self.add_system_api_call_counters(cleanup_output.system_api_call_counters);
@@ -825,7 +825,11 @@ impl<'a> QueryContext<'a> {
             }
         };
 
-        let call_origin = CallOrigin::CanisterQuery(request.sender, request.sender_reply_callback);
+        let call_origin = CallOrigin::CanisterQuery(
+            request.sender,
+            request.sender_reply_callback,
+            request.method_name.clone(),
+        );
 
         let method = match wasm_query_method(canister, request.method_name.clone()) {
             Ok(method) => method,
@@ -899,7 +903,7 @@ impl<'a> QueryContext<'a> {
             NoResponse { refund } => (
                 Some(Err(UserError::new(
                     ErrorCode::CanisterDidNotReply,
-                    format!("Canister {} did not produce a response", canister_id),
+                    format!("Canister {canister_id} did not produce a response"),
                 ))),
                 refund,
             ),
@@ -963,9 +967,7 @@ impl<'a> QueryContext<'a> {
             };
 
         match call_origin {
-            CallOrigin::CanisterUpdate(_, _, _)
-            | CallOrigin::Ingress(_, _)
-            | CallOrigin::SystemTask => {
+            CallOrigin::CanisterUpdate(..) | CallOrigin::Ingress(..) | CallOrigin::SystemTask => {
                 error!(
                     self.log,
                     "[EXC-BUG] Canister {}: unexpected callback with an update origin. This is a bug @{}",
@@ -979,7 +981,7 @@ impl<'a> QueryContext<'a> {
                 ))
             }
 
-            CallOrigin::Query(_) => match self.action_to_result(canister.canister_id(), action) {
+            CallOrigin::Query(..) => match self.action_to_result(canister.canister_id(), action) {
                 Some(Ok(wasm_result)) => {
                     ExecutionResult::Response(QueryResponse::UserResponse(wasm_result))
                 }
@@ -989,7 +991,7 @@ impl<'a> QueryContext<'a> {
                     Err(err) => ExecutionResult::SystemError(err),
                 },
             },
-            CallOrigin::CanisterQuery(originator, callback_id) => {
+            CallOrigin::CanisterQuery(originator, callback_id, ref _method_name) => {
                 let canister_id = canister.canister_id();
                 let to_query_result = |payload| {
                     let response = Response {
@@ -1046,16 +1048,14 @@ impl<'a> QueryContext<'a> {
     ) -> QueryResponse {
         let error = UserError::new(
             ErrorCode::CanisterDidNotReply,
-            format!("Canister {} did not produce a response", canister_id),
+            format!("Canister {canister_id} did not produce a response"),
         );
         match call_origin {
-            CallOrigin::Ingress(_, _)
-            | CallOrigin::CanisterUpdate(_, _, _)
-            | CallOrigin::SystemTask => {
+            CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
                 unreachable!("Expected a query call context");
             }
-            CallOrigin::Query(_) => QueryResponse::UserError(error),
-            CallOrigin::CanisterQuery(originator, callback_id) => {
+            CallOrigin::Query(..) => QueryResponse::UserError(error),
+            CallOrigin::CanisterQuery(originator, callback_id, _method_name) => {
                 let response = Response {
                     originator,
                     respondent: canister_id,
@@ -1075,19 +1075,8 @@ impl<'a> QueryContext<'a> {
         canister: &CanisterState,
         instruction_limits: InstructionLimits,
     ) -> ExecutionParameters {
-        let wasm_execution_mode = canister
-            .execution_state
-            .as_ref()
-            .map_or(WasmExecutionMode::Wasm32, |state| state.wasm_execution_mode);
-
-        let max_canister_memory_size = match wasm_execution_mode {
-            WasmExecutionMode::Wasm32 => self.max_canister_memory_size_wasm32,
-            WasmExecutionMode::Wasm64 => self.max_canister_memory_size_wasm64,
-        };
-
         ExecutionParameters {
             instruction_limits,
-            canister_memory_limit: canister.memory_limit(max_canister_memory_size),
             wasm_memory_limit: canister.wasm_memory_limit(),
             memory_allocation: canister.memory_allocation(),
             canister_guaranteed_callback_quota: self.canister_guaranteed_callback_quota,
@@ -1100,11 +1089,15 @@ impl<'a> QueryContext<'a> {
     }
 
     fn get_data_certificate(&self, canister_id: &CanisterId) -> Option<Vec<u8>> {
-        if canister_id != &self.data_certificate.1 {
-            None
-        } else {
-            Some(self.data_certificate.0.clone())
-        }
+        self.data_certificate.as_ref().and_then(
+            |(data_certificate, data_certificate_canister_id)| {
+                if canister_id != data_certificate_canister_id {
+                    None
+                } else {
+                    Some(data_certificate.clone())
+                }
+            },
+        )
     }
 
     /// Returns how many times each tracked System API call was invoked.
@@ -1120,5 +1113,9 @@ impl<'a> QueryContext<'a> {
     /// Returns a number of transient errors.
     pub fn transient_errors(&self) -> usize {
         self.transient_errors
+    }
+
+    pub fn get_cost_schedule(&self) -> CanisterCyclesCostSchedule {
+        self.state.get_ref().get_own_cost_schedule()
     }
 }

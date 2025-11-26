@@ -278,7 +278,7 @@ pub fn is(expected: Value) -> ValuePredicate {
         if v.as_ref() == &expected {
             Ok(())
         } else {
-            Err(Fail::new(format!("expected {}", expected)))
+            Err(Fail::new(format!("expected {expected}")))
         }
     })
 }
@@ -297,8 +297,8 @@ pub fn is_equal_to(n: impl Into<BigInt>) -> ValuePredicate {
 
     let n: BigInt = n.into();
     Arc::new(move |v: Cow<Value>| match value_to_num(v.into_owned()) {
-        None => Err(Fail::new(format!("expected a number to check for = {}", n))),
-        Some(num) if num != n => Err(Fail::new(format!("the number {} is not = {}", num, n))),
+        None => Err(Fail::new(format!("expected a number to check for = {n}"))),
+        Some(num) if num != n => Err(Fail::new(format!("the number {num} is not = {n}"))),
         Some(_) => Ok(()),
     })
 }
@@ -308,8 +308,8 @@ pub fn is_more_than(n: impl Into<BigInt>) -> ValuePredicate {
 
     let n: BigInt = n.into();
     Arc::new(move |v: Cow<Value>| match value_to_num(v.into_owned()) {
-        None => Err(Fail::new(format!("expected a number to check for > {}", n))),
-        Some(num) if num <= n => Err(Fail::new(format!("the number {} is not > {}", num, n))),
+        None => Err(Fail::new(format!("expected a number to check for > {n}"))),
+        Some(num) if num <= n => Err(Fail::new(format!("the number {num} is not > {n}"))),
         Some(_) => Ok(()),
     })
 }
@@ -319,8 +319,8 @@ pub fn is_less_than(n: impl Into<BigInt>) -> ValuePredicate {
 
     let n: BigInt = n.into();
     Arc::new(move |v: Cow<Value>| match value_to_num(v.into_owned()) {
-        None => Err(Fail::new(format!("expected a number to check for < {}", n))),
-        Some(num) if num >= n => Err(Fail::new(format!("the number {} is not < {}", num, n))),
+        None => Err(Fail::new(format!("expected a number to check for < {n}"))),
+        Some(num) if num >= n => Err(Fail::new(format!("the number {num} is not < {n}"))),
         Some(_) => Ok(()),
     })
 }
@@ -341,7 +341,7 @@ pub fn len(p: ValuePredicate) -> ValuePredicate {
             Value::Nat(_) | Value::Nat64(_) | Value::Int(_) => {
                 return Err(Fail::new(
                     "expected a collection (blob, text, array or map)",
-                ))
+                ));
             }
             Value::Blob(bs) => Value::Nat64(bs.len() as u64),
             Value::Text(s) => Value::Nat64(s.len() as u64),
@@ -364,8 +364,7 @@ pub fn element(idx: usize, p: ValuePredicate) -> ValuePredicate {
                 p(Cow::Owned(Value::Nat64(*b as u64))).map_err(|f| Fail::item(idx.to_string(), f))
             }
             None => Err(Fail::new(format!(
-                "index {} is out of bounds for the given blob",
-                idx
+                "index {idx} is out of bounds for the given blob"
             ))),
         },
         Value::Text(s) => match s.chars().nth(idx) {
@@ -373,15 +372,13 @@ pub fn element(idx: usize, p: ValuePredicate) -> ValuePredicate {
                 p(Cow::Owned(Value::text(subs))).map_err(|f| Fail::item(idx.to_string(), f))
             }
             None => Err(Fail::new(format!(
-                "index {} is out of bounds for the given string",
-                idx
+                "index {idx} is out of bounds for the given string"
             ))),
         },
         Value::Array(array) => match array.get(idx) {
             Some(e) => p(Cow::Borrowed(e)).map_err(|f| Fail::item(idx.to_string(), f)),
             None => Err(Fail::new(format!(
-                "index {} is out of bounds for the given array",
-                idx
+                "index {idx} is out of bounds for the given array"
             ))),
         },
     })

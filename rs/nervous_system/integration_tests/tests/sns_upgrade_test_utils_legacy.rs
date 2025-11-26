@@ -127,17 +127,11 @@ pub async fn test_sns_upgrade_legacy(sns_canisters_to_upgrade: Vec<SnsCanisterTy
 
     // Every canister we are testing has two upgrades.  We are just making sure the counts match
     for canister_type in &sns_canisters_to_upgrade {
-        eprintln!(
-            "1st upgrade_sns_to_next_version_and_assert_change {:?} ...",
-            canister_type
-        );
+        eprintln!("1st upgrade_sns_to_next_version_and_assert_change {canister_type:?} ...");
         sns::upgrade_sns_to_next_version_and_assert_change(&pocket_ic, &sns, *canister_type).await;
     }
     for canister_type in sns_canisters_to_upgrade {
-        eprintln!(
-            "2nd upgrade_sns_to_next_version_and_assert_change {:?} ...",
-            canister_type
-        );
+        eprintln!("2nd upgrade_sns_to_next_version_and_assert_change {canister_type:?} ...");
         sns::upgrade_sns_to_next_version_and_assert_change(&pocket_ic, &sns, canister_type).await;
     }
 }

@@ -3,7 +3,15 @@ use candid::{CandidType, Deserialize};
 use ic_base_types::{CanisterId, PrincipalId};
 use num_traits::ToPrimitive;
 
-/// Struct used for encoding/decoding `(record { amount : opt nat; })`
+/// Struct used for encoding/decoding
+/// ```text
+/// record {
+///   amount : opt nat;
+///   settings : opt canister_settings;
+///   specified_id : opt principal;
+///   sender_canister_version : opt nat64;
+/// }
+/// ```
 #[derive(Debug, CandidType, Deserialize)]
 pub struct ProvisionalCreateCanisterWithCyclesArgs {
     pub amount: Option<candid::Nat>,
@@ -37,10 +45,12 @@ impl ProvisionalCreateCanisterWithCyclesArgs {
 impl Payload<'_> for ProvisionalCreateCanisterWithCyclesArgs {}
 
 /// Struct used for encoding/decoding
-/// `(record {
-///     canister_id : principal;
-///     amount: nat;
-/// })`
+/// ```text
+/// record {
+///   canister_id : principal;
+///   amount : nat;
+/// }
+/// ```
 #[derive(Debug, CandidType, Deserialize)]
 pub struct ProvisionalTopUpCanisterArgs {
     canister_id: PrincipalId,

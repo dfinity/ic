@@ -14,7 +14,7 @@ use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
 use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
 use ic_sns_governance::pb::v1::neuron;
 use ic_sns_governance::pb::v1::{Neuron, NeuronId, ProposalData, ProposalId};
-use ic_sns_governance_api::pb::v1::{self as sns_gov, get_metrics_response, GetMetricsRequest};
+use ic_sns_governance_api::pb::v1::{self as sns_gov, GetMetricsRequest, get_metrics_response};
 use ic_sns_test_utils::{
     itest_helpers::SnsTestsInitPayloadBuilder,
     state_test_helpers::state_machine_builder_for_sns_tests,
@@ -337,10 +337,7 @@ fn test_sns_metrics() {
             genesis_timestamp_seconds,
         }) = get_metrics_result
         else {
-            panic!(
-                "Expected to get an Ok() from the response, got {:?}",
-                get_metrics_result
-            );
+            panic!("Expected to get an Ok() from the response, got {get_metrics_result:?}");
         };
 
         {
@@ -432,9 +429,11 @@ fn test_sns_metrics() {
 
             // This is quite a weak assertion. Once we get treasury valuations (and this test) to work
             // deterministically, we should make this assertion stronger.
-            assert!(voting_power_metrics
-                .governance_total_potential_voting_power
-                .is_some());
+            assert!(
+                voting_power_metrics
+                    .governance_total_potential_voting_power
+                    .is_some()
+            );
         }
 
         assert_eq!(

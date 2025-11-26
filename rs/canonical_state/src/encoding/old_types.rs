@@ -15,34 +15,30 @@ use crate::CertificationVersion;
 
 use super::types;
 use crate::encoding::types::{
-    Bytes, Cycles, Funds, StreamFlagBits as StreamFlagBitsV17,
-    STREAM_SUPPORTED_FLAGS as STREAM_SUPPORTED_FLAGS_V17,
+    Bytes, Cycles, Funds, Payload, RejectSignals, STREAM_SUPPORTED_FLAGS, StreamFlagBits,
 };
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_types::messages::NO_DEADLINE;
-use ic_types::xnet::{RejectReason, RejectSignal, StreamIndex};
+use ic_types::time::CoarseTime;
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
 
-/// Copy of `types::RequestOrResponse` at canonical version 17 (before the
-/// addition of `deadline` to `types::Request` and `types::Response`).
+/// Canonical representation of `ic_types::messages::RequestOrResponse` at certification version V19.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct RequestOrResponseV17 {
+pub struct RequestOrResponseV21 {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub request: Option<RequestV17>,
+    pub request: Option<RequestV19>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub response: Option<ResponseV17>,
+    pub response: Option<ResponseV19>,
 }
 
-impl From<(&ic_types::messages::RequestOrResponse, CertificationVersion)> for RequestOrResponseV17 {
+impl From<(&ic_types::messages::StreamMessage, CertificationVersion)> for RequestOrResponseV21 {
     fn from(
         (message, certification_version): (
-            &ic_types::messages::RequestOrResponse,
+            &ic_types::messages::StreamMessage,
             CertificationVersion,
         ),
     ) -> Self {
-        use ic_types::messages::RequestOrResponse::*;
+        use ic_types::messages::StreamMessage::*;
         match message {
             Request(request) => Self {
                 request: Some((request.as_ref(), certification_version).into()),
@@ -52,35 +48,35 @@ impl From<(&ic_types::messages::RequestOrResponse, CertificationVersion)> for Re
                 request: None,
                 response: Some((response.as_ref(), certification_version).into()),
             },
+            Refund(_) => unreachable!("No `Refund` variant before certification version V22"),
         }
     }
 }
 
-impl TryFrom<RequestOrResponseV17> for ic_types::messages::RequestOrResponse {
+impl TryFrom<RequestOrResponseV21> for ic_types::messages::StreamMessage {
     type Error = ProxyDecodeError;
 
-    fn try_from(message: RequestOrResponseV17) -> Result<Self, Self::Error> {
+    fn try_from(message: RequestOrResponseV21) -> Result<Self, Self::Error> {
         match message {
-          RequestOrResponseV17 {
-              request: Some(request),
-              response: None,
-          } => Ok(Self::Request(Arc::new(request.try_into()?))),
-          RequestOrResponseV17 {
-              request: None,
-              response: Some(response),
-          } => Ok(Self::Response(Arc::new(response.try_into()?))),
-          other => Err(ProxyDecodeError::Other(format!(
-              "RequestOrResponse: expected exactly one of `request` or `response` to be `Some(_)`, got `{:?}`",
-              other
-          )))
-      }
+            RequestOrResponseV21 {
+                request: Some(request),
+                response: None,
+            } => Ok(Self::Request(Arc::new(request.try_into()?))),
+            RequestOrResponseV21 {
+                request: None,
+                response: Some(response),
+            } => Ok(Self::Response(Arc::new(response.try_into()?))),
+            other => Err(ProxyDecodeError::Other(format!(
+                "RequestOrResponse: expected exactly one of `request` or `response` to be `Some(_)`, got `{other:?}`"
+            ))),
+        }
     }
 }
 
-/// Copy of `types::Request` at canonical version 17 (before the addition of `deadline`).
+/// Canonical representation of `ic_types::messages::Request` at certification version V19.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct RequestV17 {
+pub struct RequestV19 {
     #[serde(with = "serde_bytes")]
     pub receiver: Bytes,
     #[serde(with = "serde_bytes")]
@@ -92,11 +88,14 @@ pub struct RequestV17 {
     pub method_payload: Bytes,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cycles_payment: Option<Cycles>,
+    // TODO(MR-642): Remove `Option` from `metadata`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<types::RequestMetadata>,
+    #[serde(skip_serializing_if = "types::is_zero", default)]
+    pub deadline: u32,
 }
 
-impl From<(&ic_types::messages::Request, CertificationVersion)> for RequestV17 {
+impl From<(&ic_types::messages::Request, CertificationVersion)> for RequestV19 {
     fn from(
         (request, certification_version): (&ic_types::messages::Request, CertificationVersion),
     ) -> Self {
@@ -104,7 +103,6 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for RequestV17 {
             cycles: (&request.payment, certification_version).into(),
             icp: 0,
         };
-
         Self {
             receiver: request.receiver.get().to_vec(),
             sender: request.sender.get().to_vec(),
@@ -114,14 +112,15 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for RequestV17 {
             method_payload: request.method_payload.clone(),
             cycles_payment: None,
             metadata: Some((&request.metadata).into()),
+            deadline: request.deadline.as_secs_since_unix_epoch(),
         }
     }
 }
 
-impl TryFrom<RequestV17> for ic_types::messages::Request {
+impl TryFrom<RequestV19> for ic_types::messages::Request {
     type Error = ProxyDecodeError;
 
-    fn try_from(request: RequestV17) -> Result<Self, Self::Error> {
+    fn try_from(request: RequestV19) -> Result<Self, Self::Error> {
         let payment = match request.cycles_payment {
             Some(cycles) => cycles,
             None => request.payment.cycles,
@@ -140,27 +139,29 @@ impl TryFrom<RequestV17> for ic_types::messages::Request {
             method_name: request.method_name,
             method_payload: request.method_payload,
             metadata: request.metadata.map_or_else(Default::default, From::from),
-            deadline: NO_DEADLINE,
+            deadline: CoarseTime::from_secs_since_unix_epoch(request.deadline),
         })
     }
 }
 
-/// Copy of `types::Response` at canonical version 17 (before the addition of `deadline`).
+/// Canonical representation of `ic_types::messages::Response` at certification version V19.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct ResponseV17 {
+pub struct ResponseV19 {
     #[serde(with = "serde_bytes")]
     pub originator: Bytes,
     #[serde(with = "serde_bytes")]
     pub respondent: Bytes,
     pub originator_reply_callback: u64,
     pub refund: Funds,
-    pub response_payload: types::Payload,
+    pub response_payload: Payload,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cycles_refund: Option<Cycles>,
+    #[serde(skip_serializing_if = "types::is_zero", default)]
+    pub deadline: u32,
 }
 
-impl From<(&ic_types::messages::Response, CertificationVersion)> for ResponseV17 {
+impl From<(&ic_types::messages::Response, CertificationVersion)> for ResponseV19 {
     fn from(
         (response, certification_version): (&ic_types::messages::Response, CertificationVersion),
     ) -> Self {
@@ -168,7 +169,6 @@ impl From<(&ic_types::messages::Response, CertificationVersion)> for ResponseV17
             cycles: (&response.refund, certification_version).into(),
             icp: 0,
         };
-
         Self {
             originator: response.originator.get().to_vec(),
             respondent: response.respondent.get().to_vec(),
@@ -176,14 +176,15 @@ impl From<(&ic_types::messages::Response, CertificationVersion)> for ResponseV17
             refund: funds,
             response_payload: (&response.response_payload, certification_version).into(),
             cycles_refund: None,
+            deadline: response.deadline.as_secs_since_unix_epoch(),
         }
     }
 }
 
-impl TryFrom<ResponseV17> for ic_types::messages::Response {
+impl TryFrom<ResponseV19> for ic_types::messages::Response {
     type Error = ProxyDecodeError;
 
-    fn try_from(response: ResponseV17) -> Result<Self, Self::Error> {
+    fn try_from(response: ResponseV19) -> Result<Self, Self::Error> {
         let refund = match response.cycles_refund {
             Some(cycles) => cycles,
             None => response.refund.cycles,
@@ -200,111 +201,80 @@ impl TryFrom<ResponseV17> for ic_types::messages::Response {
             originator_reply_callback: response.originator_reply_callback.into(),
             refund,
             response_payload: response.response_payload.try_into()?,
-            deadline: NO_DEADLINE,
+            deadline: CoarseTime::from_secs_since_unix_epoch(response.deadline),
         })
     }
 }
 
-pub fn is_zero<T>(v: &T) -> bool
-where
-    T: Into<u64> + Copy,
-{
-    (*v).into() == 0
-}
-
-/// Copy of `types::StreamHeader` at canonical version 18 (before the addition of
-/// `reject_signals` and deprecation of `reject_signal_deltas`.
+/// Canonical representation of `ic_types::xnet::StreamHeader` at certification version V19.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct StreamHeaderV18 {
+pub struct StreamHeaderV19 {
     pub begin: u64,
     pub end: u64,
     pub signals_end: u64,
-    /// Delta encoded reject signals: the last signal is encoded as the delta
-    /// between `signals_end` and the stream index of the rejected message; all
-    /// other signals are encoded as the delta between the next stream index and
-    /// the current one.
-    ///
-    /// Note that `signals_end` is NOT part of the reject signals.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub reject_signal_deltas: Vec<u64>,
-    #[serde(default, skip_serializing_if = "is_zero")]
+    #[serde(default, skip_serializing_if = "types::is_zero")]
+    pub reserved_3: u64,
+    #[serde(default, skip_serializing_if = "types::is_zero")]
     pub flags: u64,
+    #[serde(default, skip_serializing_if = "types::RejectSignals::is_empty")]
+    pub reject_signals: RejectSignals,
 }
 
-impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeaderV18 {
+impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeaderV19 {
     fn from(
-        (header, _certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
+        (header, certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
     ) -> Self {
-        let mut next_index = header.signals_end();
-        let mut reject_signal_deltas = vec![0; header.reject_signals().len()];
-        for (i, stream_index) in header
-            .reject_signals()
-            .iter()
-            .enumerate()
-            .map(|(i, signal)| {
-                // Reject signals at certification version < 19 may not produce signals other than
-                // `CanisterMigrating`.
-                assert_eq!(signal.reason, RejectReason::CanisterMigrating);
-                (i, signal.index)
-            })
-            .rev()
-        {
-            assert!(next_index > stream_index);
-            reject_signal_deltas[i] = next_index.get() - stream_index.get();
-            next_index = stream_index;
-        }
-
         let mut flags = 0;
         let ic_types::xnet::StreamFlags {
             deprecated_responses_only,
         } = *header.flags();
         if deprecated_responses_only {
-            flags |= StreamFlagBitsV17::DeprecatedResponsesOnly as u64;
+            flags |= StreamFlagBits::DeprecatedResponsesOnly as u64;
         }
+
+        // Generate deltas representation based on `certification_version` to ensure unique
+        // encoding.
+        let reject_signals = (
+            header.reject_signals(),
+            header.signals_end(),
+            certification_version,
+        )
+            .into();
 
         Self {
             begin: header.begin().get(),
             end: header.end().get(),
             signals_end: header.signals_end().get(),
-            reject_signal_deltas,
+            reserved_3: 0,
             flags,
+            reject_signals,
         }
     }
 }
 
-impl TryFrom<StreamHeaderV18> for ic_types::xnet::StreamHeader {
+impl TryFrom<StreamHeaderV19> for ic_types::xnet::StreamHeader {
     type Error = ProxyDecodeError;
-    fn try_from(header: StreamHeaderV18) -> Result<Self, Self::Error> {
-        let mut reject_signals = VecDeque::with_capacity(header.reject_signal_deltas.len());
-        let mut stream_index = StreamIndex::new(header.signals_end);
-        for delta in header.reject_signal_deltas.iter().rev() {
-            if stream_index < StreamIndex::new(*delta) {
-                // Reject signal deltas are invalid.
-                return Err(ProxyDecodeError::Other(format!(
-                    "StreamHeader: reject signals are invalid, got `signals_end` {:?}, `reject_signal_deltas` {:?}",
-                    header.signals_end,
-                    header.reject_signal_deltas,
-                )));
-            }
-            stream_index -= StreamIndex::new(*delta);
-            reject_signals.push_front(RejectSignal::new(
-                RejectReason::CanisterMigrating,
-                stream_index,
-            ));
+    fn try_from(header: StreamHeaderV19) -> Result<Self, Self::Error> {
+        if header.reserved_3 != 0 {
+            return Err(ProxyDecodeError::Other(format!(
+                "StreamHeader: field index 3 is populated: {:?}",
+                header.reserved_3,
+            )));
         }
-
-        if header.flags & !STREAM_SUPPORTED_FLAGS_V17 != 0 {
+        if header.flags & !STREAM_SUPPORTED_FLAGS != 0 {
             return Err(ProxyDecodeError::Other(format!(
                 "StreamHeader: unsupported flags: got `flags` {:#b}, `supported_flags` {:#b}",
-                header.flags, STREAM_SUPPORTED_FLAGS_V17,
+                header.flags, STREAM_SUPPORTED_FLAGS,
             )));
         }
         let flags = ic_types::xnet::StreamFlags {
             deprecated_responses_only: header.flags
-                & StreamFlagBitsV17::DeprecatedResponsesOnly as u64
+                & StreamFlagBits::DeprecatedResponsesOnly as u64
                 != 0,
         };
+
+        let reject_signals = types::try_from_deltas(&header.reject_signals, header.signals_end)?;
 
         Ok(Self::new(
             header.begin.into(),

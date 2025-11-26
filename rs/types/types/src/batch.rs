@@ -11,23 +11,26 @@ mod xnet;
 pub use self::{
     canister_http::{CanisterHttpPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE},
     execution_environment::{
-        CanisterQueryStats, LocalQueryStats, QueryStats, QueryStatsPayload, RawQueryStats,
-        TotalQueryStats,
+        CanisterCyclesCostSchedule, CanisterQueryStats, LocalQueryStats, QueryStats,
+        QueryStatsPayload, RawQueryStats, TotalQueryStats,
     },
     ingress::{IngressPayload, IngressPayloadError},
-    self_validating::{SelfValidatingPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES},
+    self_validating::{MAX_BITCOIN_PAYLOAD_IN_BYTES, SelfValidatingPayload},
     vetkd::{
-        bytes_to_vetkd_payload, vetkd_payload_to_bytes, VetKdAgreement, VetKdErrorCode,
-        VetKdPayload,
+        VetKdAgreement, VetKdErrorCode, VetKdPayload, bytes_to_vetkd_payload,
+        vetkd_payload_to_bytes,
     },
     xnet::XNetPayload,
 };
 use crate::{
-    consensus::idkg::PreSigId,
-    crypto::{canister_threshold_sig::MasterPublicKey, threshold_sig::ni_dkg::NiDkgId},
+    Height, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time,
+    consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
+    crypto::{
+        canister_threshold_sig::{MasterPublicKey, idkg::IDkgTranscript},
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgMasterPublicKeyId},
+    },
     messages::{CallbackId, Payload, SignedIngress},
     xnet::CertifiedStreamSlice,
-    Height, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time,
 };
 use ic_base_types::{NodeId, NumBytes};
 use ic_btc_replica_types::BitcoinAdapterResponse;
@@ -35,13 +38,29 @@ use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
-use prost::{bytes::BufMut, DecodeError, Message};
+use prost::{DecodeError, Message, bytes::BufMut};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    convert::TryInto,
-    hash::Hash,
-};
+use std::{collections::BTreeMap, convert::TryInto, hash::Hash};
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum BatchContent {
+    /// The payload messages to be processed.
+    Data {
+        batch_messages: BatchMessages,
+        /// Responses to subnet calls that require consensus' involvement.
+        consensus_responses: Vec<ConsensusResponse>,
+        /// Data required by the chain key service
+        chain_key_data: ChainKeyData,
+    },
+    /// During subnet splitting we don't include any messages with the batch.
+    Splitting {
+        /// The id of the subnet the replica is assigned to after subnet splitting.
+        new_subnet_id: SubnetId,
+        /// The id of the subnet which will have the other half of the state.
+        // Used for sanity checks
+        other_subnet_id: SubnetId,
+    },
+}
 
 /// The `Batch` provided to Message Routing for deterministic processing.
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -54,22 +73,14 @@ pub struct Batch {
     /// Whether the state obtained by executing this batch needs to be fully
     /// hashed to be eligible for StateSync.
     pub requires_full_state_hash: bool,
-    /// The payload messages to be processed.
-    pub messages: BatchMessages,
+    /// Content, such as ingress messages, to be processed by the Message Routing.
+    pub content: BatchContent,
     /// A source of randomness for processing the Batch.
     pub randomness: Randomness,
-    /// The Master public keys of the subnet.
-    pub chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-    /// The pre-signature Ids available to be matched with signature requests.
-    pub idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
-    /// The NiDKG Ids corresponding to available transcripts to be used to answer vetkd requests
-    pub ni_dkg_ids: BTreeMap<MasterPublicKeyId, NiDkgId>,
     /// The version of the registry to be referenced when processing the batch.
     pub registry_version: RegistryVersion,
     /// A clock time to be used for processing messages.
     pub time: Time,
-    /// Responses to subnet calls that require consensus' involvement.
-    pub consensus_responses: Vec<ConsensusResponse>,
     /// Information about block makers
     pub blockmaker_metrics: BlockmakerMetrics,
     /// The current replica version.
@@ -107,6 +118,25 @@ impl ValidationContext {
             && self.certified_height >= other.certified_height
             && self.time > other.time
     }
+}
+
+/// Available pre-signatures that can be delivered to execution
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct AvailablePreSignatures {
+    /// The key transcript corresponding to these pre-signatures
+    pub key_transcript: IDkgTranscript,
+    /// Newly available pre-signatures to be delivered to execution
+    pub pre_signatures: BTreeMap<PreSigId, PreSignature>,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct ChainKeyData {
+    /// The Master public keys of the subnet.
+    pub master_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    /// The pre-signatures available to be matched with signature requests.
+    pub idkg_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,
+    /// The NiDKG Ids corresponding to available transcripts to be used to answer vetkd requests
+    pub nidkg_ids: BTreeMap<NiDkgMasterPublicKeyId, NiDkgId>,
 }
 
 /// The payload of a batch.

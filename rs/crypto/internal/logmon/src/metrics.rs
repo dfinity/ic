@@ -1,5 +1,6 @@
 //! Metrics exported by crypto
 
+mod bls12_381_point_cache;
 mod bls12_381_sig_cache;
 
 use ic_metrics::MetricsRegistry;
@@ -91,9 +92,9 @@ impl CryptoMetrics {
                 .crypto_duration_seconds
                 .with_label_values(&[
                     method_name,
-                    &format!("{}", scope),
-                    &format!("{}", domain),
-                    &format!("{}", result),
+                    &format!("{scope}"),
+                    &format!("{domain}"),
+                    &format!("{result}"),
                 ])
                 .observe(start_time.elapsed().as_secs_f64());
 
@@ -123,7 +124,7 @@ impl CryptoMetrics {
         if let (Some(metrics), Some(start_time)) = (&self.metrics, start_time) {
             metrics
                 .crypto_iccsa_verification_duration_seconds
-                .with_label_values(&[&format!("{}", result)])
+                .with_label_values(&[&format!("{result}")])
                 .observe(start_time.elapsed().as_secs_f64());
         }
     }
@@ -137,7 +138,7 @@ impl CryptoMetrics {
         if let Some(metrics) = &self.metrics {
             metrics
                 .crypto_idkg_dealing_encryption_pubkey_count
-                .with_label_values(&[&format!("{}", result)])
+                .with_label_values(&[&format!("{result}")])
                 .set(idkg_dealing_encryption_pubkey_count as i64);
         }
     }
@@ -157,18 +158,18 @@ impl CryptoMetrics {
         if let Some(metrics) = &self.metrics {
             metrics
                 .crypto_key_counts
-                .with_label_values(&[&format!("{}", KeyType::PublicLocal), &format!("{}", result)])
+                .with_label_values(&[&format!("{}", KeyType::PublicLocal), &format!("{result}")])
                 .set(key_counts.get_pk_local() as i64);
             metrics
                 .crypto_key_counts
                 .with_label_values(&[
                     &format!("{}", KeyType::PublicRegistry),
-                    &format!("{}", result),
+                    &format!("{result}"),
                 ])
                 .set(key_counts.get_pk_registry() as i64);
             metrics
                 .crypto_key_counts
-                .with_label_values(&[&format!("{}", KeyType::SecretSKS), &format!("{}", result)])
+                .with_label_values(&[&format!("{}", KeyType::SecretSKS), &format!("{result}")])
                 .set(key_counts.get_sk_local() as i64);
         }
     }
@@ -178,7 +179,7 @@ impl CryptoMetrics {
         if let Some(metrics) = &self.metrics {
             metrics
                 .crypto_key_rotation_results
-                .with_label_values(&[&format!("{}", result)])
+                .with_label_values(&[&format!("{result}")])
                 .inc();
         }
     }
@@ -195,7 +196,7 @@ impl CryptoMetrics {
         if let Some(metrics) = &self.metrics {
             metrics
                 .crypto_boolean_results
-                .with_label_values(&[&format!("{}", operation), &format!("{}", result)])
+                .with_label_values(&[&format!("{operation}"), &format!("{result}")])
                 .inc();
         }
     }
@@ -222,8 +223,8 @@ impl CryptoMetrics {
                 .with_label_values(&[
                     method_name,
                     parameter_name,
-                    &format!("{}", domain),
-                    &format!("{}", result),
+                    &format!("{domain}"),
+                    &format!("{result}"),
                 ])
                 .observe(parameter_size as f64);
         }
@@ -239,9 +240,9 @@ impl CryptoMetrics {
         start_time: Option<Instant>,
     ) {
         if let Some(metrics) = &self.metrics {
-            let service_type_string = &format!("{}", service_type);
-            let message_type_string = &format!("{}", message_type);
-            let domain_string = &format!("{}", domain);
+            let service_type_string = &format!("{service_type}");
+            let message_type_string = &format!("{message_type}");
+            let domain_string = &format!("{domain}");
             metrics
                 .crypto_vault_message_sizes
                 .with_label_values(&[
@@ -270,6 +271,22 @@ impl CryptoMetrics {
     pub fn observe_bls12_381_sig_cache_stats(&self, size: usize, hits: u64, misses: u64) {
         if let Some(metrics) = &self.metrics {
             let m = &metrics.crypto_bls12_381_sig_cache_metrics;
+            m.cache_size.set(size as i64);
+
+            let prev_hits = m.cache_hits.get();
+            debug_assert!(prev_hits <= hits);
+            m.cache_hits.inc_by(hits - prev_hits);
+
+            let prev_misses = m.cache_misses.get();
+            debug_assert!(prev_misses <= misses);
+            m.cache_misses.inc_by(misses - prev_misses);
+        }
+    }
+
+    /// Observes the cache statistics for the verification of threshold BLS12-381 signatures.
+    pub fn observe_bls12_381_point_cache_stats(&self, size: usize, hits: u64, misses: u64) {
+        if let Some(metrics) = &self.metrics {
+            let m = &metrics.crypto_bls12_381_point_cache_metrics;
             m.cache_size.set(size as i64);
 
             let prev_hits = m.cache_hits.get();
@@ -589,6 +606,9 @@ struct Metrics {
     /// Metrics for the cache of successfully verified BLS12-381 threshold signatures.
     pub crypto_bls12_381_sig_cache_metrics: bls12_381_sig_cache::Metrics,
 
+    /// Metrics for the cache of successfully decoded BLS12-381 points
+    pub crypto_bls12_381_point_cache_metrics: bls12_381_point_cache::Metrics,
+
     /// Gauge for the minimum epoch in active NI-DKG transcripts.
     observe_minimum_epoch_in_active_nidkg_transcripts: Gauge,
 
@@ -635,7 +655,7 @@ impl Metrics {
             &["result"],
         );
         for result in MetricsResult::iter() {
-            idkg_dealing_encryption_pubkey_count.with_label_values(&[&format!("{}", result)]);
+            idkg_dealing_encryption_pubkey_count.with_label_values(&[&format!("{result}")]);
         }
         let key_counts = r.int_gauge_vec(
             "crypto_key_counts",
@@ -644,7 +664,7 @@ impl Metrics {
         );
         for key_type in KeyType::iter() {
             for result in MetricsResult::iter() {
-                key_counts.with_label_values(&[&format!("{}", key_type), &format!("{}", result)]);
+                key_counts.with_label_values(&[&format!("{key_type}"), &format!("{result}")]);
             }
         }
         let boolean_results = r.int_counter_vec(
@@ -654,8 +674,7 @@ impl Metrics {
         );
         for operation in BooleanOperation::iter() {
             for result in BooleanResult::iter() {
-                boolean_results
-                    .with_label_values(&[&format!("{}", operation), &format!("{}", result)]);
+                boolean_results.with_label_values(&[&format!("{operation}"), &format!("{result}")]);
             }
         }
         let rotation_results = r.int_counter_vec(
@@ -664,7 +683,7 @@ impl Metrics {
             &["result"],
         );
         for result in KeyRotationResult::iter() {
-            rotation_results.with_label_values(&[&format!("{}", result)]);
+            rotation_results.with_label_values(&[&format!("{result}")]);
         }
         Self {
             crypto_lock_acquisition_duration_seconds: r.histogram_vec(
@@ -720,8 +739,8 @@ impl Metrics {
                 "crypto_vault_message_sizes",
                 "Byte sizes of crypto vault messages",
                 vec![
-                    1000.0, 10000.0, 100000.0, 1000000.0, 2000000.0, 4000000.0, 8000000.0,
-                    16000000.0, 20000000.0, 24000000.0, 28000000.0, 30000000.0,
+                    500.0, 1000.0, 5000.0, 10000.0, 50000.0, 100000.0, 250000.0,
+                    500000.0, 1000000.0, 8000000.0, 16000000.0, 32000000.0,
                 ],
                 &["service_type", "message_type", "domain", "method_name"],
             ),
@@ -742,6 +761,18 @@ impl Metrics {
                 cache_misses: r.int_counter(
                     "crypto_bls12_381_sig_cache_misses",
                 "Number of cache misses for successfully verified BLS12-381 threshold signatures"),
+            },
+            crypto_bls12_381_point_cache_metrics: bls12_381_point_cache::Metrics {
+                cache_size: r.int_gauge(
+                    "crypto_bls12_381_point_cache_size",
+                    "Size of cache for successfully decoded BLS12-381 points",
+                ),
+                cache_hits: r.int_counter(
+                    "crypto_bls12_381_point_cache_hits",
+                "Number of cache hits for successfully decoded BLS12-381 points"),
+                cache_misses: r.int_counter(
+                    "crypto_bls12_381_point_cache_misses",
+                "Number of cache misses for successfully decoded BLS12-381 points"),
             },
             observe_minimum_epoch_in_active_nidkg_transcripts: r.gauge(
                 "crypto_minimum_epoch_in_active_nidkg_transcripts",

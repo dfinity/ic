@@ -1,25 +1,26 @@
+pub use crate::DefaultEffectiveCanisterIdError;
 use crate::common::rest::{
     ApiResponse, AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest,
     CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
-    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpFeatures, InstanceConfig, InstanceId,
-    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
-    RawCanisterResult, RawCycles, RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId,
-    RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
-    RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
+    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpConfig, IcpFeatures, InitialTime,
+    InstanceConfig, InstanceHttpGatewayConfig, InstanceId, MockCanisterHttpResponse, RawAddCycles,
+    RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult,
+    RawCanisterSnapshotDownload, RawCanisterSnapshotId, RawCanisterSnapshotUpload, RawCycles,
+    RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
+    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime,
+    RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
 };
 #[cfg(windows)]
 use crate::wsl_path;
-pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{
-    copy_dir, start_or_reuse_server, IngressStatusResult, PocketIcBuilder, PocketIcState,
-    RejectResponse, Time,
+    IngressStatusResult, PocketIcBuilder, PocketIcState, RejectResponse, StartServerParams, Time,
+    copy_dir, start_server,
 };
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use candid::{
-    decode_args, encode_args,
+    Principal, decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
-    Principal,
 };
 use ic_certification::{Certificate, Label, LookupResult};
 use ic_management_canister_types::{
@@ -27,18 +28,17 @@ use ic_management_canister_types::{
     CanisterStatusResult, ChunkHash, DeleteCanisterSnapshotArgs, FetchCanisterLogsResult,
     InstallChunkedCodeArgs, InstallCodeArgs, LoadCanisterSnapshotArgs,
     ProvisionalCreateCanisterWithCyclesArgs, Snapshot, StoredChunksResult,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UpgradeFlags as CanisterInstallModeUpgradeInner,
-    UploadChunkArgs, UploadChunkResult,
-    WasmMemoryPersistence as CanisterInstallModeUpgradeInnerWasmMemoryPersistenceInner,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UpgradeFlags, UploadChunkArgs, UploadChunkResult,
+    WasmMemoryPersistence,
 };
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::ReadState;
 use ic_transport_types::{ReadStateResponse, SubnetMetrics};
 use reqwest::{StatusCode, Url};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 use slog::Level;
-use std::fs::{read_dir, File};
+use std::fs::read_dir;
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
@@ -129,6 +129,7 @@ impl PocketIc {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn from_components(
         subnet_config_set: impl Into<ExtendedSubnetConfigSet>,
         server_url: Option<Url>,
@@ -136,21 +137,27 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
         read_only_state_dir: Option<PathBuf>,
         mut state_dir: Option<PocketIcState>,
-        nonmainnet_features: bool,
+        icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
+        dogecoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
+        initial_time: Option<InitialTime>,
+        http_gateway_config: Option<InstanceHttpGatewayConfig>,
     ) -> Self {
         let server_url = if let Some(server_url) = server_url {
             server_url
         } else {
-            start_or_reuse_server(server_binary).await
+            let (_, server_url) = start_server(StartServerParams {
+                server_binary,
+                reuse: true,
+                ttl: None,
+            })
+            .await;
+            server_url
         };
 
-        let subnet_config_set = subnet_config_set
-            .into()
-            .try_with_icp_features(&icp_features)
-            .unwrap();
+        let subnet_config_set: ExtendedSubnetConfigSet = subnet_config_set.into();
 
         // copy the read-only state dir to the state dir
         // (creating an empty temp dir to serve as the state dir if no state dir is provided)
@@ -175,38 +182,29 @@ impl PocketIc {
             .expect("Failed to copy state directory");
         };
 
-        // now that we initialized the state dir, we check if it contains a topology file
-        let has_topology = state_dir
-            .as_ref()
-            .map(|state_dir| File::open(state_dir.state_dir().join("topology.json")).is_ok())
-            .unwrap_or_default();
-
-        // if there is no topology to fetch from the state dir,
-        // the topology will be derived from the provided subnet config set
-        // that we need to validate
-        if !has_topology {
-            subnet_config_set.validate().unwrap();
-        }
-
         let instance_config = InstanceConfig {
             subnet_config_set,
+            http_gateway_config,
             #[cfg(not(windows))]
             state_dir: state_dir.as_ref().map(|state_dir| state_dir.state_dir()),
             #[cfg(windows)]
             state_dir: state_dir
                 .as_ref()
                 .map(|state_dir| wsl_path(&state_dir.state_dir(), "state directory").into()),
-            nonmainnet_features,
+            icp_config: Some(icp_config),
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
+            dogecoind_addr,
             icp_features: Some(icp_features),
+            incomplete_state: None,
+            initial_time,
         };
 
         let test_driver_pid = std::process::id();
         let log_guard = setup_tracing(test_driver_pid);
 
         let reqwest_client = reqwest::Client::new();
-        let instance_id = match reqwest_client
+        let (instance_id, http_gateway_info) = match reqwest_client
             .post(server_url.join("instances").unwrap())
             .json(&instance_config)
             .send()
@@ -216,7 +214,11 @@ impl PocketIc {
             .await
             .expect("Could not parse response for create instance request")
         {
-            CreateInstanceResponse::Created { instance_id, .. } => instance_id,
+            CreateInstanceResponse::Created {
+                instance_id,
+                http_gateway_info,
+                ..
+            } => (instance_id, http_gateway_info),
             CreateInstanceResponse::Error { message } => panic!("{}", message),
         };
         debug!("instance_id={} New instance created.", instance_id);
@@ -224,7 +226,7 @@ impl PocketIc {
         Self {
             instance_id,
             max_request_time_ms,
-            http_gateway: None,
+            http_gateway: http_gateway_info,
             server_url,
             reqwest_client,
             owns_instance: true,
@@ -314,7 +316,12 @@ impl PocketIc {
     /// List all instances and their status.
     #[instrument(ret)]
     pub async fn list_instances() -> Vec<String> {
-        let url = start_or_reuse_server(None).await.join("instances").unwrap();
+        let (_, server_url) = start_server(StartServerParams {
+            reuse: true,
+            ..Default::default()
+        })
+        .await;
+        let url = server_url.join("instances").unwrap();
         let instances: Vec<String> = reqwest::Client::new()
             .get(url)
             .send()
@@ -449,7 +456,9 @@ impl PocketIc {
         if let Some(url) = self.url() {
             return url;
         }
-        self.auto_progress().await;
+        if !self.auto_progress_enabled().await {
+            self.auto_progress().await;
+        }
         self.start_http_gateway(
             ip_addr.map(|ip_addr| ip_addr.to_string()),
             listen_at,
@@ -506,7 +515,7 @@ impl PocketIc {
                 .unwrap()
             }
             CreateHttpGatewayResponse::Error { message } => {
-                panic!("Failed to crate http gateway: {}", message)
+                panic!("Failed to create http gateway: {message}")
             }
         }
     }
@@ -534,12 +543,6 @@ impl PocketIc {
     pub async fn stop_live(&mut self) {
         self.stop_http_gateway().await;
         self.stop_progress().await;
-    }
-
-    #[deprecated(note = "Use `stop_live` instead.")]
-    /// Use `stop_live` instead.
-    pub async fn make_deterministic(&mut self) {
-        self.stop_live().await;
     }
 
     /// Get the root key of this IC instance. Returns `None` if the IC has no NNS subnet.
@@ -696,10 +699,9 @@ impl PocketIc {
         match status {
             IngressStatusResult::NotAvailable => None,
             IngressStatusResult::Success(status) => Some(status),
-            IngressStatusResult::Forbidden(err) => panic!(
-                "Retrieving ingress status was forbidden: {}. This is a bug!",
-                err
-            ),
+            IngressStatusResult::Forbidden(err) => {
+                panic!("Retrieving ingress status was forbidden: {err}. This is a bug!")
+            }
         }
     }
 
@@ -732,7 +734,11 @@ impl PocketIc {
             Ok(None) => IngressStatusResult::NotAvailable,
             Ok(Some(result)) => IngressStatusResult::Success(result.into()),
             Err((status, message)) => {
-                assert_eq!(status, StatusCode::FORBIDDEN, "HTTP error code {} for /read/ingress_status is not StatusCode::FORBIDDEN. This is a bug!", status);
+                assert_eq!(
+                    status,
+                    StatusCode::FORBIDDEN,
+                    "HTTP error code {status} for /read/ingress_status is not StatusCode::FORBIDDEN. This is a bug!"
+                );
                 IngressStatusResult::Forbidden(message)
             }
         }
@@ -943,7 +949,7 @@ impl PocketIc {
             Ok(CanisterIdRecord {
                 canister_id: actual_canister_id,
             }) => Ok(actual_canister_id),
-            Err(e) => Err(format!("{:?}", e)),
+            Err(e) => Err(format!("{e:?}")),
         }
     }
 
@@ -1147,11 +1153,28 @@ impl PocketIc {
         sender: Option<Principal>,
     ) -> Result<(), RejectResponse> {
         self.install_canister_helper(
-            CanisterInstallMode::Upgrade(Some(CanisterInstallModeUpgradeInner {
-                wasm_memory_persistence: Some(
-                    CanisterInstallModeUpgradeInnerWasmMemoryPersistenceInner::Replace,
-                ),
-                skip_pre_upgrade: Some(false),
+            CanisterInstallMode::Upgrade(None),
+            canister_id,
+            wasm_module,
+            arg,
+            sender,
+        )
+        .await
+    }
+
+    /// Upgrade a Motoko EOP canister with a new WASM module.
+    #[instrument(skip(self, wasm_module, arg), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), wasm_module_len = %wasm_module.len(), arg_len = %arg.len(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn upgrade_eop_canister(
+        &self,
+        canister_id: CanisterId,
+        wasm_module: Vec<u8>,
+        arg: Vec<u8>,
+        sender: Option<Principal>,
+    ) -> Result<(), RejectResponse> {
+        self.install_canister_helper(
+            CanisterInstallMode::Upgrade(Some(UpgradeFlags {
+                wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+                skip_pre_upgrade: None,
             })),
             canister_id,
             wasm_module,
@@ -1463,13 +1486,14 @@ impl PocketIc {
     }
 
     pub(crate) async fn do_drop(&mut self) {
-        self.stop_http_gateway().await;
         if self.owns_instance {
             self.reqwest_client
                 .delete(self.instance_url())
                 .send()
                 .await
                 .expect("Failed to send delete request");
+        } else {
+            self.stop_http_gateway().await;
         }
     }
 
@@ -1530,13 +1554,23 @@ impl PocketIc {
                         "instance_id={} Instance has Started: state_label: {}, op_id: {}",
                         self.instance_id, state_label, op_id
                     );
+                    let cleanup = || {
+                        tokio::spawn(
+                            reqwest_client
+                                .delete(
+                                    self.server_url
+                                        .join(&format!("/prune_graph/{state_label}/{op_id}"))
+                                        .unwrap(),
+                                )
+                                .send(),
+                        );
+                    };
                     loop {
                         std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
-                        let reqwest_client = &self.reqwest_client;
                         let result = reqwest_client
                             .get(
                                 self.server_url
-                                    .join(&format!("/read_graph/{}/{}", state_label, op_id))
+                                    .join(&format!("/read_graph/{state_label}/{op_id}"))
                                     .unwrap(),
                             )
                             .send()
@@ -1550,9 +1584,11 @@ impl PocketIc {
                             let status = result.status();
                             match ApiResponse::<_>::from_response(result).await {
                                 ApiResponse::Error { message } => {
+                                    cleanup();
                                     return Err((status, message));
                                 }
                                 ApiResponse::Success(t) => {
+                                    cleanup();
                                     return Ok(t);
                                 }
                                 ApiResponse::Started { state_label, op_id } => {
@@ -1569,21 +1605,19 @@ impl PocketIc {
                                 }
                             }
                         }
-                        if let Some(max_request_time_ms) = self.max_request_time_ms {
-                            if start.elapsed().unwrap_or_default()
+                        if let Some(max_request_time_ms) = self.max_request_time_ms
+                            && start.elapsed().unwrap_or_default()
                                 > Duration::from_millis(max_request_time_ms)
-                            {
-                                panic!("request to PocketIC server timed out.");
-                            }
+                        {
+                            panic!("request to PocketIC server timed out.");
                         }
                     }
                 }
             }
-            if let Some(max_request_time_ms) = self.max_request_time_ms {
-                if start.elapsed().unwrap_or_default() > Duration::from_millis(max_request_time_ms)
-                {
-                    panic!("request to PocketIC server timed out.");
-                }
+            if let Some(max_request_time_ms) = self.max_request_time_ms
+                && start.elapsed().unwrap_or_default() > Duration::from_millis(max_request_time_ms)
+            {
+                panic!("request to PocketIC server timed out.");
             }
             std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
         }
@@ -1658,6 +1692,60 @@ impl PocketIc {
         let raw_mock_canister_http_response: RawMockCanisterHttpResponse =
             mock_canister_http_response.into();
         self.post(endpoint, raw_mock_canister_http_response).await
+    }
+
+    /// Download a canister snapshot to a given snapshot directory.
+    /// The sender must be a controller of the canister.
+    /// The snapshot directory must be empty if it exists.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
+    pub async fn canister_snapshot_download(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        snapshot_id: Vec<u8>,
+        snapshot_dir: PathBuf,
+    ) {
+        let endpoint = "update/canister_snapshot_download";
+        #[cfg(not(windows))]
+        let snapshot_dir = snapshot_dir;
+        #[cfg(windows)]
+        let snapshot_dir = wsl_path(&snapshot_dir, "snapshot directory").into();
+        let raw_canister_snapshot_download = RawCanisterSnapshotDownload {
+            sender: sender.into(),
+            canister_id: canister_id.into(),
+            snapshot_id,
+            snapshot_dir,
+        };
+        self.post(endpoint, raw_canister_snapshot_download).await
+    }
+
+    /// Upload a canister snapshot from a given snapshot directory.
+    /// The sender must be a controller of the canister.
+    /// Returns the snapshot ID of the uploaded snapshot.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
+    pub async fn canister_snapshot_upload(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        replace_snapshot: Option<Vec<u8>>,
+        snapshot_dir: PathBuf,
+    ) -> Vec<u8> {
+        let endpoint = "update/canister_snapshot_upload";
+        let replace_snapshot =
+            replace_snapshot.map(|snapshot_id| RawCanisterSnapshotId { snapshot_id });
+        #[cfg(not(windows))]
+        let snapshot_dir = snapshot_dir;
+        #[cfg(windows)]
+        let snapshot_dir = wsl_path(&snapshot_dir, "snapshot directory").into();
+        let raw_canister_snapshot_upload = RawCanisterSnapshotUpload {
+            sender: sender.into(),
+            canister_id: canister_id.into(),
+            replace_snapshot,
+            snapshot_dir,
+        };
+        self.post::<RawCanisterSnapshotId, _>(endpoint, raw_canister_snapshot_upload)
+            .await
+            .snapshot_id
     }
 }
 
@@ -1817,12 +1905,14 @@ fn setup_tracing(pid: u32) -> Option<WorkerGuard> {
                 tracing_subscriber::EnvFilter::try_from_env(LOG_DIR_LEVELS_ENV_NAME)
                     .unwrap_or_else(|_| "trace".parse().unwrap());
 
-            let layers = vec![tracing_subscriber::fmt::layer()
-                .with_writer(non_blocking_appender)
-                // disable color escape codes in files
-                .with_ansi(false)
-                .with_filter(log_dir_filter)
-                .boxed()];
+            let layers = vec![
+                tracing_subscriber::fmt::layer()
+                    .with_writer(non_blocking_appender)
+                    // disable color escape codes in files
+                    .with_ansi(false)
+                    .with_filter(log_dir_filter)
+                    .boxed(),
+            ];
             let _ = tracing_subscriber::registry().with(layers).try_init();
             Some(guard)
         }

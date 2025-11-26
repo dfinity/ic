@@ -1,5 +1,5 @@
-use anyhow::bail;
 use anyhow::Context;
+use anyhow::bail;
 use candid::Nat;
 use ic_icrc_rosetta::common::types::ApproveMetadata;
 use ic_icrc_rosetta::common::types::Error;
@@ -9,6 +9,7 @@ use ic_rosetta_api::models::Amount;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::account::Subaccount;
 use num_bigint::BigInt;
+use prometheus_parse::Scrape;
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::*;
 use rosetta_core::models::CurveType;
@@ -143,6 +144,18 @@ impl RosettaClient {
             .await
             .unwrap()
             .status()
+    }
+
+    pub async fn metrics(&self) -> Result<Scrape, Error> {
+        let body = self
+            .http_client
+            .get(self.url("/metrics"))
+            .send()
+            .await?
+            .text()
+            .await?;
+        let lines: Vec<_> = body.lines().map(|s| Ok(s.to_string())).collect();
+        Scrape::parse(lines.into_iter()).map_err(|err| Error::parsing_unsuccessful(&err))
     }
 
     pub async fn make_submit_and_wait_for_transaction<T: RosettaSupportedKeyPair>(

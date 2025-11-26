@@ -3,10 +3,15 @@
 
 use std::time::Duration;
 
-use crate::execution_environment::SUBNET_HEAP_DELTA_CAPACITY;
+use crate::{
+    execution_environment::{NUMBER_OF_EXECUTION_THREADS, SUBNET_HEAP_DELTA_CAPACITY},
+    flag_status::FlagStatus,
+};
 use ic_base_types::NumBytes;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{Cycles, ExecutionRound, NumInstructions};
+use ic_types::{
+    Cycles, ExecutionRound, NumInstructions, consensus::idkg::STORE_PRE_SIGNATURES_IN_STATE,
+};
 use serde::{Deserialize, Serialize};
 
 const GIB: u64 = 1024 * 1024 * 1024;
@@ -91,18 +96,6 @@ const HEAP_DELTA_INITIAL_RESERVE: NumBytes = NumBytes::new(32 * GIB);
 // Log all messages that took more than this value to execute.
 pub const MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS: f64 = 5.0;
 
-// The gen 1 production machines should have 64 cores.
-// We could in theory use 32 threads, leaving other threads for query handling,
-// Wasm compilation, and other replica components. We currently use only four
-// threads for two reasons:
-// 1) Due to poor scaling of syscalls and signals with the number of threads
-//    in a process, four threads yield the maximum overall execution throughput.
-// 2) The memory capacity of a subnet is divided between the number of threads.
-//    We needs to ensure:
-//    `SUBNET_MEMORY_CAPACITY / number_of_threads >= max_canister_memory`
-//    If you change this number please adjust other constants as well.
-const NUMBER_OF_EXECUTION_THREADS: usize = 4;
-
 /// Maximum number of concurrent long-running executions.
 /// In the worst case there will be no more than 11 running canisters during the round:
 ///
@@ -136,7 +129,7 @@ pub const VETKD_FEE: Cycles = Cycles::new(10 * B as u128);
 ///
 /// All initial costs were calculated with the assumption that a subnet had 13 replicas.
 /// IMPORTANT: never set this value to zero.
-const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
+pub const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
 
 /// Costs for each newly created dirty page in stable memory.
 const DEFAULT_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(1_000);
@@ -280,6 +273,9 @@ pub struct SchedulerConfig {
 
     /// Number of instructions to count when uploading or downloading binary snapshot data.
     pub canister_snapshot_data_baseline_instructions: NumInstructions,
+
+    /// Whether to store pre-signatures in the replicated state.
+    pub store_pre_signatures_in_state: FlagStatus,
 }
 
 impl SchedulerConfig {
@@ -311,6 +307,11 @@ impl SchedulerConfig {
                 DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS,
             canister_snapshot_data_baseline_instructions:
                 DEFAULT_CANISTERS_SNAPSHOT_DATA_BASELINE_INSTRUCTIONS,
+            store_pre_signatures_in_state: if STORE_PRE_SIGNATURES_IN_STATE {
+                FlagStatus::Enabled
+            } else {
+                FlagStatus::Disabled
+            },
         }
     }
 
@@ -355,6 +356,11 @@ impl SchedulerConfig {
             upload_wasm_chunk_instructions: NumInstructions::from(0),
             canister_snapshot_baseline_instructions: NumInstructions::from(0),
             canister_snapshot_data_baseline_instructions: NumInstructions::from(0),
+            store_pre_signatures_in_state: if STORE_PRE_SIGNATURES_IN_STATE {
+                FlagStatus::Enabled
+            } else {
+                FlagStatus::Disabled
+            },
         }
     }
 
@@ -446,6 +452,12 @@ pub struct CyclesAccountManagerConfig {
     /// The default value of the reserved balance limit for the case when the
     /// canister doesn't have it set in the settings.
     pub default_reserved_balance_limit: Cycles,
+
+    /// Base fee for fetching canister logs.
+    pub fetch_canister_logs_base_fee: Cycles,
+
+    /// Fee per byte for fetching canister logs.
+    pub fetch_canister_logs_per_byte_fee: Cycles,
 }
 
 impl CyclesAccountManagerConfig {
@@ -482,6 +494,8 @@ impl CyclesAccountManagerConfig {
             http_response_per_byte_fee: Cycles::new(800),
             max_storage_reservation_period: Duration::from_secs(300_000_000),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
+            fetch_canister_logs_base_fee: Cycles::new(1_000_000),
+            fetch_canister_logs_per_byte_fee: Cycles::new(800),
         }
     }
 
@@ -522,6 +536,8 @@ impl CyclesAccountManagerConfig {
             // This effectively disables the storage reservation mechanism on system subnets.
             max_storage_reservation_period: Duration::from_secs(0),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
+            fetch_canister_logs_base_fee: Cycles::new(0),
+            fetch_canister_logs_per_byte_fee: Cycles::new(0),
         }
     }
 
@@ -548,6 +564,8 @@ impl CyclesAccountManagerConfig {
             http_response_per_byte_fee: Cycles::zero(),
             max_storage_reservation_period: Duration::from_secs(u64::MAX),
             default_reserved_balance_limit: Cycles::zero(),
+            fetch_canister_logs_base_fee: Cycles::zero(),
+            fetch_canister_logs_per_byte_fee: Cycles::zero(),
         }
     }
 }

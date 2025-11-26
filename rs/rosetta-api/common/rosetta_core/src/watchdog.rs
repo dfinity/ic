@@ -1,11 +1,11 @@
 //! Module providing a simple watchdog that monitors a thread via periodic heartbeats.
 
 use std::sync::{
-    atomic::{AtomicBool, AtomicU64, Ordering},
     Arc,
+    atomic::{AtomicBool, AtomicU64, Ordering},
 };
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tracing::{error, info, info_span, Instrument};
+use tracing::{Instrument, error, info, info_span};
 
 /// A watchdog thread that monitors a monitored task by checking periodic heartbeats.
 /// If the heartbeat is not updated within a specified timeout, the watchdog will trigger
@@ -165,8 +165,8 @@ impl WatchdogThread {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::AtomicUsize;
     use std::sync::Arc;
+    use std::sync::atomic::AtomicUsize;
     use tokio::time::sleep;
 
     #[tokio::test]

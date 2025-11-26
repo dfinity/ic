@@ -18,8 +18,10 @@ ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
+ic-utils = { path = "../../utils" }
 prometheus = { workspace = true }
 rand = { workspace = true }
 slog = { workspace = true }
@@ -29,13 +31,13 @@ ic-artifact-pool = { path = "../../artifact_pool" }
 ic-consensus-mocks = { path = "../../consensus/mocks" }
 ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-test-utilities-state = { path = "../../test_utilities/state" }
 ic-test-utilities-time = { path = "../../test_utilities/time" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
+assert_matches = { workspace = true }
 mockall = { workspace = true }
 proptest = { workspace = true }
 rand_chacha = { workspace = true }

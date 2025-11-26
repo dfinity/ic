@@ -20,23 +20,13 @@
 
 UNIT_DIR="$1"
 
-# Reads properties "boot_alternative" and "boot_cycle" from the grubenv
-# file. The properties are stored as global variables.
-#
-# Arguments:
-# $1 - name of grubenv file
-read_grubenv() {
-    local GRUBENV_FILE="$1"
-
-    while IFS="=" read -r key value; do
-        case "$key" in
-            '#'*) ;;
-            'boot_alternative' | 'boot_cycle')
-                eval "$key=\"$value\""
-                ;;
-            *) ;;
-        esac
-    done <"$GRUBENV_FILE"
+function get_boot_arg_value() {
+    local ARGNAME="$1"
+    for ARG in $(cat /proc/cmdline); do
+        echo "$ARG" | while IFS='=' read KEY VALUE; do
+            if [ "$ARGNAME" == "$KEY" ]; then echo "$VALUE"; fi
+        done
+    done
 }
 
 function make_requires() {
@@ -86,7 +76,10 @@ function make_var_cryptsetup() {
     echo "Wants=blockdev@dev-mapper-var_crypt.target"
     echo "Conflicts=umount.target"
     echo "Before=cryptsetup.target"
-    echo "RequiresMountsFor=/boot/config/store.keyfile"
+    echo "Requires=init-config.service"
+    echo "After=init-config.service"
+    # We need /boot/config for the decryption key (unless SEV is enabled)
+    echo "RequiresMountsFor=/boot/config"
     echo "BindsTo=dev-${DEVICE}.device"
     echo "After=dev-${DEVICE}.device"
     echo "Before=umount.target"
@@ -96,20 +89,16 @@ function make_var_cryptsetup() {
     echo "RemainAfterExit=yes"
     echo "TimeoutSec=0"
     echo "KeyringMode=shared"
-    echo "OOMScoreAdjust=500"
     echo "ExecStart=/opt/ic/bin/setup-var-encryption.sh /dev/${DEVICE} /dev/${ALT_DEVICE}"
     echo "ExecStop=/lib/systemd/systemd-cryptsetup detach var_crypt"
 }
 
-# Read current state
-mount /grub
-read_grubenv "/grub/grubenv"
-umount /grub
-CURRENT_SYSTEM="${boot_alternative}"
+CURRENT_SYSTEM=$(get_boot_arg_value dfinity.system)
 
 make_boot_mount "$CURRENT_SYSTEM" >"$UNIT_DIR"/boot.mount
 make_requires localfs.target boot.mount
 make_requires boot-efi.mount boot.mount
+make_requires boot-grub.mount boot.mount
 
 make_var_cryptsetup "$CURRENT_SYSTEM" >"$UNIT_DIR"/systemd-cryptsetup@var_crypt.service
 make_requires dev-mapper-var_crypt.device systemd-cryptsetup@var_crypt.service

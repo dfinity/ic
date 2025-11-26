@@ -4,8 +4,8 @@ use ic_registry_common_proto::pb::local_store::v1::{
     MutationType,
 };
 use ic_sys::fs::{sync_path, write_protobuf_simple, write_protobuf_using_tmp_file};
-use ic_types::registry::RegistryDataProviderError;
 use ic_types::RegistryVersion;
+use ic_types::registry::RegistryDataProviderError;
 use prost::Message;
 use std::{
     io::{self},
@@ -118,7 +118,7 @@ impl LocalStoreImpl {
     fn get_path(&self, version: u64) -> PathBuf {
         assert!(version > 0);
 
-        let path_str = format!("{:016x}.pb", version);
+        let path_str = format!("{version:016x}.pb");
         // 00 01 02 03 04 / 05 / 06 / 07.pb
         let v_path = &[
             &path_str[0..10],
@@ -133,8 +133,7 @@ impl LocalStoreImpl {
 
     fn read_changelog_entry<P: AsRef<Path>>(p: P) -> io::Result<PbChangelogEntry> {
         let bytes = std::fs::read(p)?;
-        PbChangelogEntry::decode(bytes.as_slice())
-            .map_err(|e| io::Error::new(std::io::ErrorKind::Other, e))
+        PbChangelogEntry::decode(bytes.as_slice()).map_err(io::Error::other)
     }
 
     // precondition: version > 0
@@ -208,7 +207,7 @@ impl RegistryDataProvider for LocalStoreImpl {
     ) -> Result<Vec<RegistryRecord>, RegistryDataProviderError> {
         let changelog = self.get_changelog_since_version(version).map_err(|e| {
             RegistryDataProviderError::Transfer {
-                source: format!("Error when reading changelog from local storage: {:?}", e),
+                source: format!("Error when reading changelog from local storage: {e:?}"),
             }
         })?;
         let res: Vec<_> = changelog
@@ -248,7 +247,7 @@ fn key_mutation_try_from_proto(value: &PbKeyMutation) -> Result<KeyMutation, io:
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Invalid mutation type.",
-            ))
+            ));
         }
     };
     let res = match mut_type {
@@ -291,7 +290,7 @@ pub fn compact_delta_to_changelog(source: &[u8]) -> std::io::Result<(RegistryVer
         .map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Protobuf encoding for registry delta failed: {:?}", e),
+                format!("Protobuf encoding for registry delta failed: {e:?}"),
             )
         })
         .and_then(|delta| {
@@ -370,10 +369,12 @@ mod tests {
 
         store.clear().unwrap();
 
-        assert!(store
-            .get_changelog_since_version(RegistryVersion::from(0))
-            .unwrap()
-            .is_empty());
+        assert!(
+            store
+                .get_changelog_since_version(RegistryVersion::from(0))
+                .unwrap()
+                .is_empty()
+        );
 
         let changelog = get_random_changelog(1, &mut rng);
         store
@@ -441,7 +442,7 @@ mod tests {
         // some pseudo random entries
         (0..n)
             .map(|_i| {
-                let k = rng.gen::<usize>() % 64 + 2;
+                let k = rng.r#gen::<usize>() % 64 + 2;
                 (0..(k + 2)).map(|k| key_mutation(k, rng)).collect()
             })
             .collect()
@@ -449,7 +450,7 @@ mod tests {
 
     fn key_mutation(k: usize, rng: &mut ThreadRng) -> KeyMutation {
         let s = rng.next_u64() & 64;
-        let set: bool = rng.gen();
+        let set: bool = rng.r#gen();
         KeyMutation {
             key: k.to_string(),
             value: if set {

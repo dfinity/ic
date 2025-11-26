@@ -4,11 +4,11 @@ use ic_base_types::PrincipalId;
 use ic_nervous_system_common::E8;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::{
+    Followees, ManageNeuron, Topic, VotingPowerEconomics,
     governance_error::ErrorType,
     manage_neuron::{
-        set_following::FolloweesForTopic, Command, NeuronIdOrSubaccount, SetFollowing,
+        Command, NeuronIdOrSubaccount, SetFollowing, set_following::FolloweesForTopic,
     },
-    Followees, ManageNeuron, Topic, VotingPowerEconomics,
 };
 use ic_nns_governance_api as api;
 use maplit::hashmap;
@@ -255,13 +255,11 @@ fn test_set_following() {
             for key_word in ["invalid", "topic", "code", "123", "456", "789"] {
                 assert!(
                     error_message.contains(key_word),
-                    "{:?} not in {:?}",
-                    key_word,
-                    error_message,
+                    "{key_word:?} not in {error_message:?}",
                 );
             }
         }
-        _ => panic!("{:?}", set_following_result_3),
+        _ => panic!("{set_following_result_3:?}"),
     }
 
     // Step 3.4: Verify that the 4th call (also) had no effect on the neuron's following.
@@ -289,13 +287,11 @@ fn test_set_following() {
             ] {
                 assert!(
                     error_message.contains(key_word),
-                    "{:?} not in {:?}",
-                    key_word,
-                    error_message,
+                    "{key_word:?} not in {error_message:?}",
                 );
             }
         }
-        _ => panic!("{:?}", set_following_result_4),
+        _ => panic!("{set_following_result_4:?}"),
     }
 
     // Step 3.5: Verify that the 5th call (also) had no effect on the neuron's following.
@@ -316,12 +312,10 @@ fn test_set_following() {
             for key_word in ["too", "many", "followees"] {
                 assert!(
                     error_message.contains(key_word),
-                    "{:?} not in {:?}",
-                    key_word,
-                    error_message,
+                    "{key_word:?} not in {error_message:?}",
                 );
             }
         }
-        _ => panic!("{:?}", set_following_result_5),
+        _ => panic!("{set_following_result_5:?}"),
     }
 }

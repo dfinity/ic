@@ -3,15 +3,17 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use bitcoin::{block::Header as BlockHeader, BlockHash, Network};
+use bitcoin::{BlockHash, consensus::Encodable};
 use ic_metrics::MetricsRegistry;
 use static_assertions::const_assert_eq;
 use tokio::sync::mpsc::Sender;
 use tonic::Status;
 
 use crate::{
-    blockchainstate::SerializedBlock, common::BlockHeight, config::Config,
-    metrics::GetSuccessorMetrics, BlockchainManagerRequest, BlockchainState,
+    BlockchainManagerRequest, BlockchainState,
+    blockchainstate::SerializedBlock,
+    common::{BlockHeight, BlockchainHeader, BlockchainNetwork},
+    metrics::GetSuccessorMetrics,
 };
 
 // Max size of the `GetSuccessorsResponse` message.
@@ -34,13 +36,13 @@ const MAX_NEXT_BLOCK_HEADERS_LENGTH: usize = 100;
 const MAX_BLOCKS_LENGTH: usize = 100;
 
 // The maximum number of get blocks requests that can be in-flight at any given time.
-const MAX_IN_FLIGHT_BLOCKS: usize = 100;
+pub(crate) const MAX_IN_FLIGHT_BLOCKS: usize = 100;
 
 // The maximum number of get blocks requests that can be in-flight at any given time.
 // The number of blocks outside of the main chain easily exceeds 100 currently on testnet4.
 // Setting this to 100 would prevent the adapter from making progress,
 // as it gets stuck on these blocks, whose requests timeout indefinitely.
-const TESTNET4_MAX_IN_FLIGHT_BLOCKS: usize = 1000;
+pub(crate) const TESTNET4_MAX_IN_FLIGHT_BLOCKS: usize = 1000;
 
 const BLOCK_HEADER_SIZE: usize = 80;
 
@@ -50,9 +52,9 @@ const MAX_NEXT_BYTES: usize = MAX_NEXT_BLOCK_HEADERS_LENGTH * BLOCK_HEADER_SIZE;
 // The maximum number of bytes the `blocks` in a response can take.
 // NOTE: This is a soft limit, and is only honored if there's > 1 blocks already in the response.
 // Having this as a soft limit as necessary to prevent large blocks from stalling consensus.
-const MAX_BLOCKS_BYTES: usize = MAX_RESPONSE_SIZE - MAX_NEXT_BYTES;
+pub(crate) const MAX_BLOCKS_BYTES: usize = MAX_RESPONSE_SIZE - MAX_NEXT_BYTES;
 
-const TESTNET4_MAX_BLOCKS_BYTES: usize = TESTNET4_MAX_RESPONSE_SIZE - MAX_NEXT_BYTES;
+pub(crate) const TESTNET4_MAX_BLOCKS_BYTES: usize = TESTNET4_MAX_RESPONSE_SIZE - MAX_NEXT_BYTES;
 
 const_assert_eq!(MAX_NEXT_BYTES + MAX_BLOCKS_BYTES, MAX_RESPONSE_SIZE);
 const_assert_eq!(
@@ -61,7 +63,10 @@ const_assert_eq!(
 );
 
 // Max height for sending multiple blocks when connecting the Bitcoin mainnet.
-const MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 750_000;
+pub(crate) const BTC_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 750_000;
+
+// Max height for sending multiple blocks when connecting the Dogecoin mainnet.
+pub(crate) const DOGE_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 5_000_000;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct GetSuccessorsRequest {
@@ -72,35 +77,37 @@ pub struct GetSuccessorsRequest {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub struct GetSuccessorsResponse {
+pub struct GetSuccessorsResponse<Header> {
     /// Blocks found in the block cache.
     pub blocks: Vec<Arc<SerializedBlock>>,
     /// Next set of headers to be sent to the canister.
-    pub next: Vec<BlockHeader>,
+    pub next: Vec<Header>,
 }
 /// Contains the functionality to respond to GetSuccessorsRequests via the RPC
 /// server.
-pub struct GetSuccessorsHandler {
-    state: Arc<Mutex<BlockchainState>>,
+pub struct GetSuccessorsHandler<Network: BlockchainNetwork> {
+    state: Arc<BlockchainState<Network>>,
     blockchain_manager_tx: Sender<BlockchainManagerRequest>,
     network: Network,
     metrics: GetSuccessorMetrics,
+    pruning_task_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
-impl GetSuccessorsHandler {
+impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
     /// Creates a GetSuccessorsHandler to be used to access the blockchain state
     /// inside of the adapter when a `GetSuccessorsRequest` is received.
     pub fn new(
-        config: &Config,
-        state: Arc<Mutex<BlockchainState>>,
+        network: Network,
+        state: Arc<BlockchainState<Network>>,
         blockchain_manager_tx: Sender<BlockchainManagerRequest>,
         metrics_registry: &MetricsRegistry,
     ) -> Self {
         Self {
             state,
             blockchain_manager_tx,
-            network: config.network,
+            network,
             metrics: GetSuccessorMetrics::new(metrics_registry),
+            pruning_task_handle: Mutex::new(None),
         }
     }
 
@@ -113,31 +120,48 @@ impl GetSuccessorsHandler {
     pub async fn get_successors(
         &self,
         request: GetSuccessorsRequest,
-    ) -> Result<GetSuccessorsResponse, Status> {
+    ) -> Result<GetSuccessorsResponse<Network::Header>, Status> {
         self.metrics
             .processed_block_hashes
             .observe(request.processed_block_hashes.len() as f64);
 
-        let (blocks, next, obsolete_blocks) = {
-            let state = self.state.lock().unwrap();
-            let anchor_height = state
-                .get_cached_header(&request.anchor)
-                .map_or(0, |cached| cached.height);
+        let anchor_height = self
+            .state
+            .get_cached_header(&request.anchor)
+            .map_or(0, |cached| cached.data.height);
 
-            let allow_multiple_blocks = are_multiple_blocks_allowed(self.network, anchor_height);
+        // Spawn persist-to-disk task without waiting for it to finish, and make sure there
+        // is only one task running at a time.
+        let mut handle = self.pruning_task_handle.lock().unwrap();
+        let is_finished = handle
+            .as_ref()
+            .map(|handle| handle.is_finished())
+            .unwrap_or(true);
+        if is_finished {
+            self.metrics
+                .prune_headers_anchor_height
+                .set(anchor_height as i64);
+            *handle = Some(
+                self.state
+                    .persist_and_prune_headers_below_anchor(request.anchor),
+            );
+        }
+
+        let (blocks, next, obsolete_blocks) = {
+            let allow_multiple_blocks = self.network.are_multiple_blocks_allowed(anchor_height);
             let blocks = get_successor_blocks(
-                &state,
+                &self.state,
                 &request.anchor,
                 &request.processed_block_hashes,
                 allow_multiple_blocks,
-                self.network,
+                &self.network,
             );
             let next = get_next_headers(
-                &state,
+                &self.state,
                 &request.anchor,
                 &request.processed_block_hashes,
                 &blocks,
-                self.network,
+                &self.network,
             );
             // If no blocks are returned, this means that nothing that is in the cache could be reached from the anchor.
             // We can safely remove everything that is in the cache then, as those blocks are no longer needed.
@@ -146,12 +170,32 @@ impl GetSuccessorsHandler {
             // There is also a chance that they are reachable from the anchor, just not through the cache.
             // Meaning that we still need to download some other blocks first. (hence we need to free the cache).
             let mut obsolete_blocks = request.processed_block_hashes;
-            if blocks.is_empty() && state.is_block_cache_full() {
-                obsolete_blocks.extend(state.get_cached_blocks())
+            if blocks.is_empty() && self.state.is_block_cache_full() {
+                obsolete_blocks.extend(self.state.get_cached_blocks())
             }
             (blocks, next, obsolete_blocks)
         };
-        let response_next = &next[..next.len().min(MAX_NEXT_BLOCK_HEADERS_LENGTH)];
+        // Because Dogecoin headers can have variable length, we must choose
+        // next headers that can fit within MAX_NEXT_BYTES.
+        // TODO(XC-478): add tests for auxpow headers
+        let mut response_next = Vec::with_capacity(MAX_NEXT_BLOCK_HEADERS_LENGTH);
+        let mut response_next_bytes = 0;
+        let mut bytes = Vec::with_capacity(MAX_NEXT_BYTES);
+        for header in next.iter() {
+            match header.consensus_encode(&mut bytes) {
+                Ok(size) => {
+                    response_next_bytes += size;
+                    if response_next_bytes <= MAX_NEXT_BYTES {
+                        response_next.push(header.clone())
+                    } else {
+                        break;
+                    }
+                }
+                Err(_) => {
+                    break;
+                }
+            }
+        }
         let response = GetSuccessorsResponse {
             blocks: blocks.into_iter().map(|(_, block)| block).collect(),
             next: response_next.to_vec(),
@@ -163,7 +207,9 @@ impl GetSuccessorsHandler {
         if !next.is_empty() {
             // TODO: better handling of full channel as the receivers are never closed.
             self.blockchain_manager_tx
-                .try_send(BlockchainManagerRequest::EnqueueNewBlocksToDownload(next))
+                .try_send(BlockchainManagerRequest::EnqueueNewBlocksToDownload(
+                    next.into_iter().map(|x| x.into_pure_header()).collect(),
+                ))
                 .ok();
         }
         // TODO: better handling of full channel as the receivers are never closed.
@@ -183,27 +229,24 @@ impl GetSuccessorsHandler {
 // If blocks are available and `allow_multiple_blocks` is `true`, then as many blocks are returned
 // as possible that fit in the `MAX_BLOCKS_BYTES` limit, with a minimum of one block.  Otherwise, a
 // single block is returned.
-fn get_successor_blocks(
-    state: &BlockchainState,
+fn get_successor_blocks<Network: BlockchainNetwork>(
+    state: &BlockchainState<Network>,
     anchor: &BlockHash,
     processed_block_hashes: &[BlockHash],
     allow_multiple_blocks: bool,
-    network: Network,
+    network: &Network,
 ) -> Vec<(BlockHash, Arc<SerializedBlock>)> {
     let seen: HashSet<BlockHash> = processed_block_hashes.iter().copied().collect();
 
     let mut successor_blocks = vec![];
     // Block hashes that should be looked at in subsequent breadth-first searches.
     let mut response_block_size: usize = 0;
-    let mut queue: VecDeque<&BlockHash> = state
+    let mut queue: VecDeque<BlockHash> = state
         .get_cached_header(anchor)
-        .map(|c| c.children.iter().collect())
+        .map(|c| c.children.into_iter().collect())
         .unwrap_or_default();
 
-    let max_blocks_size = match network {
-        Network::Testnet4 => TESTNET4_MAX_BLOCKS_BYTES,
-        _ => MAX_BLOCKS_BYTES,
-    };
+    let max_blocks_bytes = network.max_blocks_bytes();
 
     let max_blocks_length = if allow_multiple_blocks {
         MAX_BLOCKS_LENGTH
@@ -213,9 +256,9 @@ fn get_successor_blocks(
 
     // Compute the blocks by starting a breadth-first search.
     while let Some(block_hash) = queue.pop_front() {
-        if !seen.contains(block_hash) {
+        if !seen.contains(&block_hash) {
             // Retrieve the block from the cache.
-            let Some(block) = state.get_block(block_hash) else {
+            let Some(block) = state.get_block(&block_hash) else {
                 // If the block is not in the cache, we skip it and all its subtree.
                 // We don't want to return orphaned blocks to the canister.
                 continue;
@@ -223,19 +266,19 @@ fn get_successor_blocks(
             let block_size = block.len();
             // If we have at least one block in the response, and we can't fit another block, we stop.
             if response_block_size > 0
-                && (response_block_size + block_size > max_blocks_size
+                && (response_block_size + block_size > max_blocks_bytes
                     || successor_blocks.len() + 1 > max_blocks_length)
             {
                 break;
             }
-            successor_blocks.push((*block_hash, block));
+            successor_blocks.push((block_hash, block));
             response_block_size += block_size;
         }
 
         queue.extend(
             state
-                .get_cached_header(block_hash)
-                .map(|header| header.children.iter())
+                .get_cached_header(&block_hash)
+                .map(|header| header.children.into_iter())
                 .unwrap_or_default(),
         );
     }
@@ -247,38 +290,34 @@ fn get_successor_blocks(
 /// This returns the first MAX_IN_FLIGHT_BLOCKS / TESTNET4_MAX_IN_FLIGHT_BLOCKS headers from the anchor in BFS fashion
 /// which are not in processed nor are they in the current response. Essentially representing the
 /// blocks that should be returned in the next response.
-fn get_next_headers(
-    state: &BlockchainState,
+fn get_next_headers<Network: BlockchainNetwork>(
+    state: &BlockchainState<Network>,
     anchor: &BlockHash,
     processed_block_hashes: &[BlockHash],
     blocks: &[(BlockHash, Arc<SerializedBlock>)],
-    network: Network,
-) -> Vec<BlockHeader> {
+    network: &Network,
+) -> Vec<Network::Header> {
     let seen: HashSet<BlockHash> = processed_block_hashes
         .iter()
         .copied()
         .chain(blocks.iter().map(|(hash, _)| *hash))
         .collect();
 
-    let mut queue: VecDeque<&BlockHash> = state
+    let mut queue: VecDeque<BlockHash> = state
         .get_cached_header(anchor)
-        .map(|c| c.children.iter().collect())
+        .map(|c| c.children.into_iter().collect())
         .unwrap_or_default();
 
-    let max_in_flight_blocks = match network {
-        Network::Testnet4 => TESTNET4_MAX_IN_FLIGHT_BLOCKS,
-        _ => MAX_IN_FLIGHT_BLOCKS,
-    };
-
+    let max_in_flight_blocks = network.max_in_flight_blocks();
     let mut next_headers = vec![];
     while let Some(block_hash) = queue.pop_front() {
         if next_headers.len() >= max_in_flight_blocks {
             break;
         }
 
-        if let Some(header_node) = state.get_cached_header(block_hash) {
-            if !seen.contains(block_hash) {
-                next_headers.push(header_node.header);
+        if let Some(header_node) = state.get_cached_header(&block_hash) {
+            if !seen.contains(&block_hash) {
+                next_headers.push(header_node.data.header.clone());
             }
             queue.extend(header_node.children.iter());
         }
@@ -286,26 +325,16 @@ fn get_next_headers(
     next_headers
 }
 
-/// Helper used to determine if multiple blocks should be returned.
-fn are_multiple_blocks_allowed(network: Network, anchor_height: BlockHeight) -> bool {
-    match network {
-        Network::Bitcoin => anchor_height <= MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT,
-        Network::Testnet | Network::Signet | Network::Regtest | Network::Testnet4 => true,
-        other => unreachable!("Unsupported network: {:?}", other),
-    }
-}
-
+// TODO(XC-478): add tests for auxpow headers
 #[cfg(test)]
 mod test {
     use super::*;
 
-    use std::sync::{Arc, Mutex};
-
-    use bitcoin::{consensus::Decodable, Block, Network};
+    use bitcoin::{Block, consensus::Decodable};
+    use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use tokio::sync::mpsc::channel;
 
-    use crate::config::test::ConfigBuilder;
     use ic_btc_adapter_test_utils::{
         generate_headers, generate_large_block_blockchain, headers_to_hashes,
     };
@@ -314,19 +343,24 @@ mod test {
         Block::consensus_decode(&mut (*serialized_block).as_slice()).unwrap()
     }
 
+    fn new_blockchain_state<Network: BlockchainNetwork>(
+        network: Network,
+    ) -> BlockchainState<Network> {
+        BlockchainState::new(network, None, &MetricsRegistry::default(), no_op_logger())
+    }
+
     /// This tests ensures that `BlockchainManager::get_successors(...)` will return relevant blocks
     /// with the next headers of many forks and enqueue missing block hashes.
     #[tokio::test]
     async fn test_get_successors() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
-        let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = *blockchain_state.genesis();
+        let network = bitcoin::Network::Regtest;
+        let blockchain_state = new_blockchain_state(network);
+        let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
-        let (blockchain_manager_tx, _blockchain_manager_rx) =
-            channel::<BlockchainManagerRequest>(10);
+        let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
+            network,
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
@@ -369,16 +403,20 @@ mod test {
         };
 
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            blockchain.add_headers(&main_chain);
-            blockchain.add_headers(&side_chain);
-            blockchain.add_headers(&side_chain_2);
+            let blockchain = &handler.state;
+            blockchain.add_headers(&main_chain).await;
+            blockchain.add_headers(&side_chain).await;
+            blockchain.add_headers(&side_chain_2).await;
 
             // Add main block 2
-            blockchain.add_block(main_block_2).expect("invalid block");
+            blockchain
+                .add_block(main_block_2)
+                .await
+                .expect("invalid block");
             // Add side block 1
             blockchain
                 .add_block(side_block_1.clone())
+                .await
                 .expect("invalid block");
         }
 
@@ -427,15 +465,14 @@ mod test {
 
     #[tokio::test]
     async fn test_get_successors_wait_header_sync_regtest() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
-        let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = *blockchain_state.genesis();
+        let network = bitcoin::Network::Regtest;
+        let blockchain_state = new_blockchain_state(network);
+        let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
-        let (blockchain_manager_tx, _blockchain_manager_rx) =
-            channel::<BlockchainManagerRequest>(10);
+        let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
+            network,
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
@@ -452,13 +489,15 @@ mod test {
             txdata: vec![],
         };
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            blockchain.add_headers(&main_chain);
+            let blockchain = &handler.state;
+            blockchain.add_headers(&main_chain).await;
             blockchain
                 .add_block(main_block_1.clone())
+                .await
                 .expect("invalid block");
             blockchain
                 .add_block(main_block_2.clone())
+                .await
                 .expect("invalid block");
         }
         let request = GetSuccessorsRequest {
@@ -476,15 +515,14 @@ mod test {
     /// blocks from the main chain and a fork. Order should be preserved.
     #[tokio::test]
     async fn test_get_successors_multiple_blocks() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
-        let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = *blockchain_state.genesis();
+        let network = bitcoin::Network::Regtest;
+        let blockchain_state = new_blockchain_state(network);
+        let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
-        let (blockchain_manager_tx, _blockchain_manager_rx) =
-            channel::<BlockchainManagerRequest>(10);
+        let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
+            network,
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
@@ -513,17 +551,20 @@ mod test {
             txdata: vec![],
         };
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            blockchain.add_headers(&main_chain);
-            blockchain.add_headers(&side_chain);
+            let blockchain = &handler.state;
+            blockchain.add_headers(&main_chain).await;
+            blockchain.add_headers(&side_chain).await;
             blockchain
                 .add_block(main_block_1.clone())
+                .await
                 .expect("invalid block");
             blockchain
                 .add_block(main_block_2.clone())
+                .await
                 .expect("invalid block");
             blockchain
                 .add_block(side_block_1.clone())
+                .await
                 .expect("invalid block");
         }
         //             |-> 1'
@@ -548,28 +589,27 @@ mod test {
     /// This tests ensures that `get_successor` returns no more than MAX_BLOCKS_LENGTH blocks.
     #[tokio::test]
     async fn test_get_successors_max_num_blocks() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
-        let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = *blockchain_state.genesis();
+        let network = bitcoin::Network::Regtest;
+        let blockchain_state = new_blockchain_state(network);
+        let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
-        let (blockchain_manager_tx, _blockchain_manager_rx) =
-            channel::<BlockchainManagerRequest>(10);
+        let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
+            network,
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
         let main_chain = generate_headers(genesis_hash, genesis.time, 120, &[]);
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            blockchain.add_headers(&main_chain);
+            let blockchain = &handler.state;
+            blockchain.add_headers(&main_chain).await;
             for header in main_chain {
                 let block = Block {
                     header,
                     txdata: vec![],
                 };
-                blockchain.add_block(block).expect("invalid block");
+                blockchain.add_block(block).await.expect("invalid block");
             }
         }
 
@@ -585,15 +625,14 @@ mod test {
     /// blocks from the main chain and a fork. Order should be preserved.
     #[tokio::test]
     async fn test_get_successors_multiple_blocks_out_of_order() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
-        let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = *blockchain_state.genesis();
+        let network = bitcoin::Network::Regtest;
+        let blockchain_state = new_blockchain_state(network);
+        let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
-        let (blockchain_manager_tx, _blockchain_manager_rx) =
-            channel::<BlockchainManagerRequest>(10);
+        let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
+            network,
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
@@ -618,24 +657,26 @@ mod test {
             txdata: vec![],
         };
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            let (_, maybe_err) = blockchain.add_headers(&main_chain);
+            let blockchain = &handler.state;
+            let (_, maybe_err) = blockchain.add_headers(&main_chain).await;
             assert!(
                 maybe_err.is_none(),
-                "Error was found in main chain: {:#?}",
-                maybe_err
+                "Error was found in main chain: {maybe_err:#?}"
             );
 
-            let (_, maybe_err) = blockchain.add_headers(&side_chain);
+            let (_, maybe_err) = blockchain.add_headers(&side_chain).await;
             assert!(
                 maybe_err.is_none(),
-                "Error was found in side chain: {:#?}",
-                maybe_err
+                "Error was found in side chain: {maybe_err:#?}"
             );
-            blockchain.add_block(main_block_2).expect("invalid block");
+            blockchain
+                .add_block(main_block_2)
+                .await
+                .expect("invalid block");
 
             blockchain
                 .add_block(side_block_1.clone())
+                .await
                 .expect("invalid block");
         }
 
@@ -678,22 +719,21 @@ mod test {
     /// This test ensures that the 2MB limit is enforced by `BlockchainManager.get_successors(...)`.
     #[tokio::test]
     async fn test_get_successors_large_block() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
-        let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = *blockchain_state.genesis();
+        let network = bitcoin::Network::Regtest;
+        let blockchain_state = new_blockchain_state(network);
+        let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
-        let (blockchain_manager_tx, _blockchain_manager_rx) =
-            channel::<BlockchainManagerRequest>(10);
+        let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
+            network,
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
         // Generate a blockchain with one large block.
         let large_blocks = generate_large_block_blockchain(genesis_hash, genesis.time, 1);
         let large_block = large_blocks.first().cloned().unwrap();
-        let headers: Vec<BlockHeader> = large_blocks.iter().map(|b| b.header).collect();
+        let headers: Vec<_> = large_blocks.iter().map(|b| b.header).collect();
 
         let previous_hashes = headers.iter().map(|h| h.block_hash()).collect::<Vec<_>>();
         let additional_headers = generate_headers(
@@ -709,16 +749,20 @@ mod test {
         };
 
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            let (added_headers, _) = blockchain.add_headers(&headers);
+            let blockchain = &handler.state;
+            let (added_headers, _) = blockchain.add_headers(&headers).await;
             assert_eq!(added_headers.len(), 1);
-            let (added_headers, _) = blockchain.add_headers(&additional_headers);
+            let (added_headers, _) = blockchain.add_headers(&additional_headers).await;
             assert_eq!(added_headers.len(), 1);
 
             blockchain
                 .add_block(large_block.clone())
+                .await
                 .expect("invalid block");
-            blockchain.add_block(small_block).expect("invalid block");
+            blockchain
+                .add_block(small_block)
+                .await
+                .expect("invalid block");
         };
 
         let request = GetSuccessorsRequest {
@@ -741,15 +785,14 @@ mod test {
     /// This test ensures that `BlockchainManager::get_successors(...)` sends blocks up to the cap limit.
     #[tokio::test]
     async fn test_get_successors_many_blocks_until_size_cap_is_met() {
-        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
-        let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = *blockchain_state.genesis();
+        let network = bitcoin::Network::Regtest;
+        let blockchain_state = new_blockchain_state(network);
+        let genesis = blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
-        let (blockchain_manager_tx, _blockchain_manager_rx) =
-            channel::<BlockchainManagerRequest>(10);
+        let (blockchain_manager_tx, _blockchain_manager_rx) = channel(10);
         let handler = GetSuccessorsHandler::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
+            network,
+            Arc::new(blockchain_state),
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
@@ -759,8 +802,8 @@ mod test {
             generate_large_block_blockchain(main_chain[4].block_hash(), main_chain[4].time, 1);
 
         {
-            let mut blockchain = handler.state.lock().unwrap();
-            let (added_headers, _) = blockchain.add_headers(&main_chain);
+            let blockchain = &handler.state;
+            let (added_headers, _) = blockchain.add_headers(&main_chain).await;
             assert_eq!(added_headers.len(), 5);
             let main_blocks = main_chain
                 .iter()
@@ -770,11 +813,11 @@ mod test {
                 })
                 .collect::<Vec<_>>();
             for block in main_blocks {
-                blockchain.add_block(block).unwrap();
+                blockchain.add_block(block).await.unwrap();
             }
 
             for block in &large_blocks {
-                blockchain.add_block(block.clone()).unwrap();
+                blockchain.add_block(block.clone()).await.unwrap();
             }
         };
 
@@ -802,37 +845,37 @@ mod test {
     fn test_are_multiple_blocks_allowed() {
         // Mainnet
         assert!(
-            are_multiple_blocks_allowed(Network::Bitcoin, 100_500),
+            bitcoin::Network::Bitcoin.are_multiple_blocks_allowed(100_500),
             "Multiple blocks are allowed at 100_500"
         );
         assert!(
-            are_multiple_blocks_allowed(Network::Bitcoin, MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT),
-            "Multiple blocks are allowed at {}",
-            MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT
+            bitcoin::Network::Bitcoin
+                .are_multiple_blocks_allowed(BTC_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT),
+            "Multiple blocks are allowed at {BTC_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT}"
         );
         assert!(
-            !are_multiple_blocks_allowed(Network::Bitcoin, 900_000),
+            !bitcoin::Network::Bitcoin.are_multiple_blocks_allowed(900_000),
             "Multiple blocks are not allowed at 900_000"
         );
 
         // Testnet
         assert!(
-            are_multiple_blocks_allowed(Network::Testnet, 1_000_000),
+            bitcoin::Network::Testnet.are_multiple_blocks_allowed(1_000_000),
             "Multiple blocks are allowed at 1_000_000"
         );
         assert!(
-            are_multiple_blocks_allowed(Network::Testnet, u32::MAX),
+            bitcoin::Network::Testnet.are_multiple_blocks_allowed(u32::MAX),
             "Multiple blocks are allowed at {}",
             u32::MAX
         );
 
         // Regtest
         assert!(
-            are_multiple_blocks_allowed(Network::Regtest, 1),
+            bitcoin::Network::Regtest.are_multiple_blocks_allowed(1),
             "Multiple blocks are allowed at 1"
         );
         assert!(
-            are_multiple_blocks_allowed(Network::Regtest, u32::MAX),
+            bitcoin::Network::Regtest.are_multiple_blocks_allowed(u32::MAX),
             "Multiple blocks are allowed at {}",
             u32::MAX
         );

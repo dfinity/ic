@@ -1,13 +1,13 @@
 use crate::common::{
-    default_archive_options, index_ng_wasm, install_index_ng, install_ledger,
-    wait_until_sync_is_completed, MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT, STARTING_CYCLES_PER_CANISTER,
+    MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT, STARTING_CYCLES_PER_CANISTER, default_archive_options,
+    index_ng_wasm, install_index_ng, install_ledger, wait_until_sync_is_completed,
 };
 use candid::{CandidType, Deserialize, Encode, Nat, Principal};
 use ic_agent::Identity;
 use ic_base_types::CanisterId;
 use ic_icrc1_index_ng::{IndexArg, InitArg, UpgradeArg};
 use ic_icrc1_test_utils::{arb_account, minter_identity};
-use ic_ledger_suite_state_machine_tests::send_transfer;
+use ic_ledger_suite_state_machine_helpers::send_transfer;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, UserError};
 use ic_types::{Cycles, Time};
@@ -111,9 +111,7 @@ fn should_install_and_upgrade_with_valid_values() {
             assert_eq!(
                 install_and_upgrade(*install_interval, *upgrade_interval),
                 Ok(()),
-                "install_interval: {:?}, upgrade_interval: {:?}",
-                install_interval,
-                upgrade_interval
+                "install_interval: {install_interval:?}, upgrade_interval: {upgrade_interval:?}"
             );
         }
     }

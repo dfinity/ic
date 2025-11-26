@@ -31,7 +31,7 @@ use ic_system_test_driver::{
     },
     nns::remove_nodes_via_endpoint,
     util::{
-        assert_nodes_health_statuses, assert_subnet_can_make_progress, block_on, EndpointsStatus,
+        EndpointsStatus, assert_nodes_health_statuses, assert_subnet_can_make_progress, block_on,
     },
 };
 use ic_types::Height;

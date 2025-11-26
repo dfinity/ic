@@ -33,6 +33,17 @@ type CanisterSettings = record {
   wasm_memory_threshold : opt nat;
 };
 
+type MemoryMetrics = record {
+  wasm_memory_size : opt nat;
+  stable_memory_size : opt nat;
+  global_memory_size : opt nat;
+  wasm_binary_size : opt nat;
+  custom_sections_size : opt nat;
+  canister_history_size : opt nat;
+  wasm_chunk_store_size : opt nat;
+  snapshots_size : opt nat;
+};
+
 type CanisterStatusResult = record {
   status : CanisterStatusType;
   memory_size : nat;
@@ -42,6 +53,7 @@ type CanisterStatusResult = record {
   module_hash : opt blob;
   reserved_cycles : opt nat;
   query_stats : opt QueryStats;
+  memory_metrics : opt MemoryMetrics;
 };
 
 type CanisterStatusType = variant {
@@ -133,16 +145,25 @@ type UpdateCanisterSettingsResponse = variant {
   Err : UpdateCanisterSettingsError;
 };
 
-service : {
-  add_nns_canister : (AddCanisterRequest) -> ();
+type CallCanisterRequest = record {
+  canister_id : principal;
+  method_name : text;
+  payload : blob;
+};
+
+service : () -> {
   canister_status : (CanisterIdRecord) -> (CanisterStatusResult);
+  get_build_metadata : () -> (text) query;
+
+  // Below are methods that can only be called by other NNS canisters.
+  add_nns_canister : (AddCanisterRequest) -> ();
   change_canister_controllers : (ChangeCanisterControllersRequest) -> (
       ChangeCanisterControllersResponse,
     );
   change_nns_canister : (ChangeCanisterRequest) -> ();
-  get_build_metadata : () -> (text) query;
   stop_or_start_nns_canister : (StopOrStartCanisterRequest) -> ();
   update_canister_settings : (UpdateCanisterSettingsRequest) -> (
       UpdateCanisterSettingsResponse,
     );
+  call_canister : (CallCanisterRequest) -> ();
 }

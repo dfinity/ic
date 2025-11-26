@@ -1,5 +1,5 @@
 use candid::CandidType;
-use ic_stable_structures::{storable::Bound, Storable};
+use ic_stable_structures::{Storable, storable::Bound};
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -87,7 +87,7 @@ impl Sub<Duration> for TimeStamp {
 }
 
 impl Storable for TimeStamp {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(self.as_nanos_since_unix_epoch().to_le_bytes().to_vec())
     }
 

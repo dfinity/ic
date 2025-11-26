@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::api::{call_context_instruction_counter, instruction_counter};
 use ic_cdk::query;
@@ -36,7 +37,7 @@ fn is_call_context_over_threshold(_call_context_threshold: u64) -> bool {
 /// Returns true if call context is over the threshold provided.
 /// In wasm32 environments, we check the call_context_instruction_counter to see if we are over the threshold.
 /// Note, this threshold is not for each individual message, but for all the messages executed
-/// in this call context.  
+/// in this call context.
 #[cfg(target_arch = "wasm32")]
 fn is_call_context_over_threshold(call_context_threshold: u64) -> bool {
     let total_instructions_used = call_context_instruction_counter();
@@ -104,10 +105,10 @@ pub async fn noop_self_call_if_over_instructions(
         make_noop_call().await;
     }
 
-    if let Some(upper_bound) = call_context_threshold {
-        if is_call_context_over_threshold(upper_bound) {
-            return Err(OverCallContextError { limit: upper_bound });
-        }
+    if let Some(upper_bound) = call_context_threshold
+        && is_call_context_over_threshold(upper_bound)
+    {
+        return Err(OverCallContextError { limit: upper_bound });
     }
 
     Ok(())

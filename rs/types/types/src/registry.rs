@@ -23,7 +23,7 @@ impl fmt::Display for RegistryDataProviderError {
             RegistryDataProviderError::Timeout => write!(f, "Registry transport client timed out."),
             RegistryDataProviderError::Transfer { source } => write!(
                 f,
-                "Registry transport client failed to fetch registry update from registry canister: {}", source
+                "Registry transport client failed to fetch registry update from registry canister: {source}"
             ),
         }
     }
@@ -34,6 +34,9 @@ impl fmt::Display for RegistryDataProviderError {
 pub enum RegistryClientError {
     #[error("the requested version is not available locally: {version}")]
     VersionNotAvailable { version: RegistryVersion },
+
+    #[error("no versions before the requested timestamp: {timestamp_nanoseconds}")]
+    NoVersionsBefore { timestamp_nanoseconds: u64 },
 
     #[error("failed to query data provider: {source}")]
     DataProviderQueryFailed {

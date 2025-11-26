@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -7,11 +7,7 @@ CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS = ["//rs/boundary_node/certificate_issuanc
 
 system_test_nns(
     name = "api_bn_integration_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    tags = [
-        "k8s",
-    ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/integration_test_common",
@@ -24,11 +20,19 @@ system_test_nns(
 
 system_test_nns(
     name = "api_bn_update_workload_test",
-    tags = [
-        "long_test",
+    additional_colocate_tags = [
+        "system_test_benchmark",
     ],
-    test_timeout = "long",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    colocated_test_driver_vm_required_host_features = ["performance"],
+    colocated_test_driver_vm_resources = {
+        "vcpus": 16,
+    },
+    enable_head_nns_variant = False,
+    tags = [
+        "colocate",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/networking/subnet_update_workload",
@@ -41,11 +45,7 @@ system_test_nns(
     env = {
         "CERTIFICATE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator)",
     },
-    tags = [
-        "k8s",
-    ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS +
-                   UNIVERSAL_VM_RUNTIME_DEPS +
+    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS +
                    CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -70,10 +70,7 @@ system_test_nns(
         "SALT_SHARING_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/salt_sharing:salt_sharing_canister)",
     },
     proc_macro_deps = [],
-    tags = [
-        "k8s",
-    ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + [
+    runtime_deps = [
         "//rs/boundary_node/salt_sharing:salt_sharing_canister",
     ],
     deps = [
@@ -103,9 +100,9 @@ system_test_nns(
     },
     proc_macro_deps = ["@crate_index//:async-trait"],
     tags = [
-        "k8s",
+        "long_test",  # the P90 duration was over 5 minutes for the week starting on 2025-08-25.
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + [
+    runtime_deps = [
         "//rs/boundary_node/rate_limits:rate_limit_canister",
     ],
     deps = [
@@ -141,7 +138,7 @@ system_test_nns(
         "boot_image_minimal_size_gibibytes": 500,
     },
     tags = ["manual"],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/performance_test_common",
@@ -161,10 +158,9 @@ system_test(
     },
     env_inherit = ["BOUNDARY_NODE_IPV6"],
     tags = [
-        "k8s",
         "manual",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/performance_test_common",
@@ -183,10 +179,9 @@ system_test(
     },
     env_inherit = ["BOUNDARY_NODE_IPV6"],
     tags = [
-        "k8s",
         "manual",
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/performance_test_common",
@@ -197,12 +192,10 @@ system_test(
 
 system_test_nns(
     name = "api_bn_decentralization_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/canister_client",

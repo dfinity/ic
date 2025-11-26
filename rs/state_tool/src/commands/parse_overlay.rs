@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 pub fn do_parse_overlay(path: PathBuf) -> Result<(), String> {
     let overlay = OverlayFile::load(&path).map_err(|_| "Unable to open file")?;
-    println!("{:#?}", overlay);
+    println!("{overlay:#?}");
 
     let mut ranges: Vec<_> = overlay.index_iter().collect();
     println!("{} pages in {} ranges", overlay.num_pages(), ranges.len(),);

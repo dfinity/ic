@@ -7,24 +7,28 @@ members = [
     "packages/ic-ed25519",
     "packages/ic-error-types",
     "packages/ic-ethereum-types",
+    "packages/ic-heap-bytes",
+    "packages/ic-heap-bytes-derive",
     "packages/ic-hpke",
     "packages/ic-http-types",
     "packages/ic-ledger-hash-of",
     "packages/ic-metrics-assert",
-    "packages/ic-secp256k1",
-    "packages/ic-secp256r1",
-    "packages/ic-sha3",
-    "packages/ic-signature-verification",
+    "packages/ic-pub-key",
     "packages/icrc-cbor",
     "packages/icrc-ledger-agent",
     "packages/icrc-ledger-client",
     "packages/icrc-ledger-client-cdk",
     "packages/icrc-ledger-types",
+    "packages/ic-secp256k1",
+    "packages/ic-secp256r1",
+    "packages/ic-sha3",
+    "packages/ic-signature-verification",
     "packages/pocket-ic",
     "packages/pocket-ic/test_canister",
     "rs/artifact_pool",
     "rs/backup",
     "rs/bitcoin/adapter",
+    "rs/bitcoin/adapter/test_utils",
     "rs/bitcoin/checker",
     "rs/bitcoin/ckbtc/agent",
     "rs/bitcoin/ckbtc/minter",
@@ -34,9 +38,10 @@ members = [
     "rs/bitcoin/replica_types",
     "rs/bitcoin/service",
     "rs/bitcoin/validation",
-    "rs/boundary_node/canary_proxy",
     "rs/boundary_node/certificate_issuance/certificate_issuer",
     "rs/boundary_node/certificate_issuance/certificate_orchestrator",
+    "rs/boundary_node/certificate_issuance/certificate_orchestrator_interface",
+    "rs/boundary_node/certificate_issuance/create_acme_account",
     "rs/boundary_node/ic_boundary",
     "rs/boundary_node/rate_limits",
     "rs/boundary_node/rate_limits/api",
@@ -45,12 +50,12 @@ members = [
     "rs/boundary_node/salt_sharing",
     "rs/boundary_node/salt_sharing/api",
     "rs/boundary_node/salt_sharing/integration_tests",
-    "rs/boundary_node/systemd_journal_gatewayd_shim",
     "rs/canister_client",
     "rs/canister_client/read_state_response_parser",
     "rs/canister_client/sender",
     "rs/canister_sandbox",
     "rs/canonical_state",
+    "rs/canonical_state/certification_version",
     "rs/canonical_state/tree_hash",
     "rs/canonical_state/tree_hash/test_utils",
     "rs/certification",
@@ -58,15 +63,19 @@ members = [
     "rs/config",
     "rs/consensus",
     "rs/consensus/certification",
+    "rs/consensus/cup_utils",
     "rs/consensus/dkg",
     "rs/consensus/idkg",
     "rs/consensus/mocks",
     "rs/consensus/utils",
+    "rs/consensus/vetkd",
     "rs/criterion_time",
     "rs/cross-chain/proposal-cli",
     "rs/crypto",
     "rs/crypto/for_verification_only",
     "rs/crypto/iccsa",
+    "rs/crypto/interfaces/sig_verification",
+    "rs/crypto/internal/crypto_lib/basic_sig/cose",
     "rs/crypto/internal/crypto_lib/basic_sig/der_utils",
     "rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
     "rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
@@ -82,26 +91,38 @@ members = [
     "rs/crypto/internal/crypto_lib/sha2",
     "rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig",
+    "rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig/fe-derive",
     "rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig/test_utils",
     "rs/crypto/internal/crypto_lib/tls",
     "rs/crypto/internal/crypto_lib/types",
     "rs/crypto/internal/crypto_service_provider",
+    "rs/crypto/internal/crypto_service_provider/csp_proptest_utils",
     "rs/crypto/internal/crypto_service_provider/protobuf_generator",
     "rs/crypto/internal/csp_test_utils",
     "rs/crypto/internal/logmon",
     "rs/crypto/internal/test_vectors",
     "rs/crypto/node_key_generation",
     "rs/crypto/node_key_validation",
+    "rs/crypto/node_key_validation/tls_cert_validation",
     "rs/crypto/prng",
     "rs/crypto/secrets_containers",
     "rs/crypto/sha2",
+    "rs/crypto/standalone-sig-verifier",
     "rs/crypto/temp_crypto",
+    "rs/crypto/temp_crypto/temp_vault",
     "rs/crypto/test_utils",
     "rs/crypto/test_utils/canister_sigs",
     "rs/crypto/test_utils/canister_threshold_sigs",
+    "rs/crypto/test_utils/crypto_returning_ok",
+    "rs/crypto/test_utils/csp",
+    "rs/crypto/test_utils/keygen",
+    "rs/crypto/test_utils/keys",
+    "rs/crypto/test_utils/local_csp_vault",
     "rs/crypto/test_utils/metrics",
+    "rs/crypto/test_utils/multi_sigs",
     "rs/crypto/test_utils/ni-dkg",
     "rs/crypto/test_utils/reproducible_rng",
+    "rs/crypto/test_utils/root_of_trust",
     "rs/crypto/test_utils/tls",
     "rs/crypto/test_utils/vetkd",
     "rs/crypto/tls_interfaces",
@@ -118,24 +139,30 @@ members = [
     "rs/cycles_account_manager",
     "rs/depcheck",
     "rs/determinism_test",
-    "rs/drun",
+    "rs/dogecoin/ckdoge/minter",
     "rs/embedders",
+    "rs/embedders/benches/embedders_bench",
     "rs/ethereum/cketh/minter",
-    "rs/ethereum/evm-rpc-client",
+    "rs/ethereum/cketh/test_utils",
     "rs/ethereum/ledger-suite-orchestrator",
+    "rs/ethereum/ledger-suite-orchestrator/test_utils",
     "rs/execution_environment",
     "rs/execution_environment/benches/lib",
+    "rs/execution_environment/benches/management_canister/test_canister",
     "rs/execution_environment/tools",
     "rs/http_endpoints/async_utils",
     "rs/http_endpoints/metrics",
+    "rs/http_endpoints/nns_delegation_manager",
     "rs/http_endpoints/public",
     "rs/http_endpoints/test_agent",
     "rs/http_endpoints/xnet",
-    "rs/http_utils",
     "rs/https_outcalls/adapter",
     "rs/https_outcalls/client",
     "rs/https_outcalls/consensus",
     "rs/https_outcalls/service",
+    "rs/http_utils",
+    "rs/ic_os/attestation",
+    "rs/ic_os/attestation/testing",
     "rs/ic_os/build_tools/dflate",
     "rs/ic_os/build_tools/diroid",
     "rs/ic_os/build_tools/inject_files",
@@ -144,20 +171,27 @@ members = [
     "rs/ic_os/config_types",
     "rs/ic_os/config_types/compatibility_tests",
     "rs/ic_os/deterministic_ips",
-    "rs/ic_os/dev_test_tools/launch-single-vm",
+    "rs/ic_os/device",
+    "rs/ic_os/dev_test_tools/bare_metal_deployment",
     "rs/ic_os/dev_test_tools/setupos-disable-checks",
     "rs/ic_os/dev_test_tools/setupos-image-config",
     "rs/ic_os/fstrim_tool",
     "rs/ic_os/grub",
+    "rs/ic_os/guest_upgrade/client",
+    "rs/ic_os/guest_upgrade/server",
+    "rs/ic_os/guest_upgrade/shared",
+    "rs/ic_os/guest_upgrade/tests",
     "rs/ic_os/linux_kernel_command_line",
     "rs/ic_os/metrics_tool",
     "rs/ic_os/network",
     "rs/ic_os/nft_exporter",
     "rs/ic_os/nss_icos",
-    "rs/ic_os/os_tools/guest_vm_runner",
+    "rs/ic_os/os_tools/guest_disk",
     "rs/ic_os/os_tools/guestos_tool",
+    "rs/ic_os/os_tools/guest_vm_runner",
     "rs/ic_os/os_tools/hostos_tool",
     "rs/ic_os/os_tools/setupos_tool",
+    "rs/ic_os/sev",
     "rs/ic_os/utils",
     "rs/ic_os/vsock/guest",
     "rs/ic_os/vsock/host",
@@ -180,28 +214,35 @@ members = [
     "rs/ledger_suite/icp/ledger",
     "rs/ledger_suite/icp/protobuf_generator",
     "rs/ledger_suite/icp/test_utils",
-    "rs/ledger_suite/icp/test_utils",
     "rs/ledger_suite/icrc1",
     "rs/ledger_suite/icrc1/archive",
     "rs/ledger_suite/icrc1/index-ng",
     "rs/ledger_suite/icrc1/ledger",
     "rs/ledger_suite/icrc1/test_utils",
+    "rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger",
     "rs/ledger_suite/icrc1/tokens_u256",
     "rs/ledger_suite/icrc1/tokens_u64",
     "rs/ledger_suite/tests/sm-tests",
+    "rs/ledger_suite/tests/sm-tests/constants",
+    "rs/ledger_suite/test_utils/in_memory_ledger",
+    "rs/ledger_suite/test_utils/state_machine_helpers",
     "rs/limits",
     "rs/memory_tracker",
     "rs/messaging",
+    "rs/migration_canister",
     "rs/monitoring/adapter_metrics/client",
     "rs/monitoring/adapter_metrics/server",
     "rs/monitoring/adapter_metrics/service",
     "rs/monitoring/logger",
     "rs/monitoring/metrics",
     "rs/monitoring/pprof",
+    "rs/monitoring/tracing",
     "rs/monitoring/tracing/jaeger_exporter",
     "rs/monitoring/tracing/logging_layer",
+    "rs/nervous_system/access_list",
     "rs/nervous_system/agent",
     "rs/nervous_system/candid_utils",
+    "rs/nervous_system/canisters",
     "rs/nervous_system/chunks",
     "rs/nervous_system/clients",
     "rs/nervous_system/collections/union_multi_map",
@@ -211,26 +252,32 @@ members = [
     "rs/nervous_system/common/test_keys",
     "rs/nervous_system/common/test_utils",
     "rs/nervous_system/common/validation",
+    "rs/nervous_system/governance",
     "rs/nervous_system/histogram",
     "rs/nervous_system/humanize",
     "rs/nervous_system/initial_supply",
     "rs/nervous_system/instruction_stats",
-    "rs/nervous_system/instruction_stats_update_attribute",
     "rs/nervous_system/integration_tests",
     "rs/nervous_system/linear_map",
     "rs/nervous_system/lock",
+    "rs/nervous_system/long_message",
     "rs/nervous_system/neurons_fund",
     "rs/nervous_system/neurons_fund/nfplot",
     "rs/nervous_system/proto",
     "rs/nervous_system/proto/protobuf_generator",
     "rs/nervous_system/proxied_canister_calls_tracker",
+    "rs/nervous_system/rate_limits",
     "rs/nervous_system/root",
     "rs/nervous_system/runtime",
     "rs/nervous_system/string",
     "rs/nervous_system/temporary",
     "rs/nervous_system/time_helpers",
     "rs/nervous_system/timers",
+    "rs/nervous_system/timer_task",
+    "rs/nervous_system/timestamp",
+    "rs/nervous_system/tools/neuron-subaccount",
     "rs/nervous_system/tools/release-runscript",
+    "rs/nervous_system/tools/submit-motion-proposal",
     "rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
     "rs/nns/cmc",
     "rs/nns/common",
@@ -241,8 +288,8 @@ members = [
     "rs/nns/governance/init",
     "rs/nns/governance/protobuf_generator",
     "rs/nns/gtc",
-    "rs/nns/gtc/protobuf_generator",
     "rs/nns/gtc_accounts",
+    "rs/nns/gtc/protobuf_generator",
     "rs/nns/handlers/lifeline/impl",
     "rs/nns/handlers/lifeline/interface",
     "rs/nns/handlers/root/impl",
@@ -257,12 +304,14 @@ members = [
     "rs/nns/test_utils",
     "rs/nns/test_utils/golden_nns_state",
     "rs/nns/test_utils_macros",
+    "rs/nns/test_utils/prepare_golden_state",
     "rs/node_rewards/canister",
     "rs/node_rewards/canister/api",
     "rs/node_rewards/canister/protobuf_generator",
     "rs/node_rewards/rewards_calculation",
     "rs/orchestrator",
     "rs/orchestrator/dashboard",
+    "rs/orchestrator/image_upgrader",
     "rs/orchestrator/registry_replicator",
     "rs/p2p/artifact_downloader",
     "rs/p2p/artifact_manager",
@@ -277,14 +326,15 @@ members = [
     "rs/prep",
     "rs/protobuf",
     "rs/protobuf/generator",
+    "rs/query_stats",
     "rs/recovery",
     "rs/recovery/subnet_splitting",
     "rs/registry/admin",
     "rs/registry/admin-derive",
     "rs/registry/canister",
-    "rs/registry/canister-client",
     "rs/registry/canister/api",
     "rs/registry/canister/chunkify",
+    "rs/registry/canister-client",
     "rs/registry/canister/protobuf_generator",
     "rs/registry/client",
     "rs/registry/fake",
@@ -298,8 +348,8 @@ members = [
     "rs/registry/nns_data_provider_wrappers",
     "rs/registry/node_provider_rewards",
     "rs/registry/proto",
-    "rs/registry/proto/generator",
     "rs/registry/proto_data_provider",
+    "rs/registry/proto/generator",
     "rs/registry/provisional_whitelist",
     "rs/registry/regedit",
     "rs/registry/routing_table",
@@ -310,23 +360,26 @@ members = [
     "rs/replay",
     "rs/replica",
     "rs/replica/setup_ic_network",
-    "rs/replica_tests",
     "rs/replicated_state",
+    "rs/replica_tests",
     "rs/rosetta-api/common/rosetta_core",
     "rs/rosetta-api/icp",
     "rs/rosetta-api/icp/client",
     "rs/rosetta-api/icp/ledger_canister_blocks_synchronizer",
     "rs/rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils",
     "rs/rosetta-api/icp/runner",
-    "rs/rosetta-api/icp/test_utils/sender_canister",
     "rs/rosetta-api/icp/tests/integration_tests",
+    "rs/rosetta-api/icp/test_utils",
+    "rs/rosetta-api/icp/test_utils/sender_canister",
     "rs/rosetta-api/icrc1",
     "rs/rosetta-api/icrc1/client",
     "rs/rosetta-api/icrc1/runner",
-    "rs/rosetta-api/tvl/xrc_mock",
+    "rs/rust_canisters/backtrace_canister",
+    "rs/rust_canisters/call_loop_canister",
     "rs/rust_canisters/call_tree_test",
     "rs/rust_canisters/canister_creator",
     "rs/rust_canisters/canister_log",
+    "rs/rust_canisters/canister_profiler",
     "rs/rust_canisters/canister_serve",
     "rs/rust_canisters/canister_test",
     "rs/rust_canisters/dfn_candid",
@@ -334,20 +387,21 @@ members = [
     "rs/rust_canisters/dfn_http",
     "rs/rust_canisters/dfn_http_metrics",
     "rs/rust_canisters/dfn_json",
-    "rs/rust_canisters/dfn_macro",
     "rs/rust_canisters/dfn_protobuf",
-    "rs/rust_canisters/downstream_calls_test",
     "rs/rust_canisters/ecdsa",
     "rs/rust_canisters/load_simulator",
     "rs/rust_canisters/memory_test",
+    "rs/rust_canisters/messaging_test",
     "rs/rust_canisters/on_wire",
     "rs/rust_canisters/proxy_canister",
     "rs/rust_canisters/response_payload_test",
+    "rs/rust_canisters/stable_memory_integrity",
     "rs/rust_canisters/stable_reader",
     "rs/rust_canisters/stable_structures",
     "rs/rust_canisters/statesync_test",
     "rs/rust_canisters/tests",
     "rs/rust_canisters/xnet_test",
+    "rs/rust_canisters/xrc_mock",
     "rs/sns/audit",
     "rs/sns/cli",
     "rs/sns/governance",
@@ -363,27 +417,17 @@ members = [
     "rs/sns/root",
     "rs/sns/root/protobuf_generator",
     "rs/sns/swap",
+    "rs/sns/swap/protobuf_generator",
     "rs/sns/swap/proto_library",
-    "rs/sns/test_utils",
     "rs/sns/testing",
+    "rs/sns/test_utils",
+    "rs/sns/treasury_manager",
+    "rs/sns/treasury_manager/mock",
     "rs/state_layout",
     "rs/state_machine_tests",
     "rs/state_manager",
     "rs/state_tool",
     "rs/sys",
-    "rs/test_utilities",
-    "rs/test_utilities/artifact_pool",
-    "rs/test_utilities/compare_dirs",
-    "rs/test_utilities/consensus",
-    "rs/test_utilities/execution_environment",
-    "rs/test_utilities/load_wasm",
-    "rs/test_utilities/logger",
-    "rs/test_utilities/metrics",
-    "rs/test_utilities/serialization",
-    "rs/test_utilities/state",
-    "rs/test_utilities/time",
-    "rs/test_utilities/tmpdir",
-    "rs/test_utilities/types",
     "rs/tests/boundary_nodes",
     "rs/tests/boundary_nodes/integration_test_common",
     "rs/tests/boundary_nodes/performance_test_common",
@@ -391,18 +435,23 @@ members = [
     "rs/tests/ckbtc",
     "rs/tests/consensus",
     "rs/tests/consensus/backup",
+    "rs/tests/consensus/catch_up_test_common",
+    "rs/tests/consensus/liveness_test_common",
     "rs/tests/consensus/orchestrator",
     "rs/tests/consensus/subnet_recovery",
     "rs/tests/consensus/tecdsa",
+    "rs/tests/consensus/tecdsa/utils",
     "rs/tests/consensus/upgrade",
     "rs/tests/consensus/utils",
     "rs/tests/consensus/vetkd",
     "rs/tests/cross_chain",
     "rs/tests/crypto",
+    "rs/tests/dre",
+    "rs/tests/dre/utils",
     "rs/tests/driver",
     "rs/tests/execution",
     "rs/tests/financial_integrations",
-    "rs/tests/financial_integrations/rosetta/",
+    "rs/tests/financial_integrations/rosetta",
     "rs/tests/financial_integrations/rosetta/rosetta_test_lib",
     "rs/tests/httpbin-rs",
     "rs/tests/idx",
@@ -412,6 +461,7 @@ members = [
     "rs/tests/message_routing/xnet",
     "rs/tests/message_routing/xnet/slo_test_lib",
     "rs/tests/nested",
+    "rs/tests/nested/nns_recovery",
     "rs/tests/networking",
     "rs/tests/networking/canister_http",
     "rs/tests/networking/canisters",
@@ -422,35 +472,61 @@ members = [
     "rs/tests/nns/sns",
     "rs/tests/nns/sns/lib",
     "rs/tests/node",
-    "rs/tests/research",
-    "rs/tests/research/spec_compliance",
+    "rs/tests/query_stats/lib",
     "rs/tests/sdk",
     "rs/tests/test_canisters/http_counter",
     "rs/tests/test_canisters/kv_store",
     "rs/tests/test_canisters/message",
+    "rs/tests/test_canisters/signer",
     "rs/tests/testnets",
+    "rs/test_utilities",
+    "rs/test_utilities/artifact_pool",
+    "rs/test_utilities/compare_dirs",
+    "rs/test_utilities/consensus",
+    "rs/test_utilities/embedders",
+    "rs/test_utilities/execution_environment",
+    "rs/test_utilities/identity",
+    "rs/test_utilities/in_memory_logger",
+    "rs/test_utilities/io",
+    "rs/test_utilities/load_wasm",
+    "rs/test_utilities/logger",
+    "rs/test_utilities/metrics",
+    "rs/test_utilities/registry",
+    "rs/test_utilities/serialization",
+    "rs/test_utilities/state",
+    "rs/test_utilities/time",
+    "rs/test_utilities/tmpdir",
+    "rs/test_utilities/types",
     "rs/tla_instrumentation/local_key",
     "rs/tla_instrumentation/tla_instrumentation",
     "rs/tla_instrumentation/tla_instrumentation_proc_macros",
     "rs/tree_deserializer",
     "rs/types/base_types",
     "rs/types/base_types/protobuf_generator",
+    "rs/types/exhaustive_derive",
     "rs/types/management_canister_types",
     "rs/types/types",
     "rs/types/types_test_utils",
     "rs/types/wasm_types",
+    "rs/universal_canister/impl",
     "rs/universal_canister/lib",
     "rs/utils",
     "rs/utils/ensure",
     "rs/utils/lru_cache",
     "rs/utils/rustfmt",
+    "rs/utils/thread",
+    "rs/utils/validate_eq",
+    "rs/utils/validate_eq_derive",
     "rs/validator",
     "rs/validator/http_request_arbitrary",
+    "rs/validator/http_request_test_utils",
     "rs/validator/ingress_message",
     "rs/validator/ingress_message/test_canister",
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
+    "rs/ic_os/remote_attestation/shared",
+    "rs/ic_os/remote_attestation/server",
 ]
 
 resolver = "2"
@@ -462,7 +538,7 @@ version = "0.9.0"
 authors = ["The Internet Computer Project Developers"]
 description = "Autonomous serverless cloud functionality for the public Internet."
 documentation = "https://internetcomputer.org/docs/"
-edition = "2021"
+edition = "2024"
 
 [profile.release]
 # Add debug information to the release build (does NOT reduce the level of optimization!)
@@ -515,20 +591,24 @@ assert_cmd = "2.0.16"
 assert_matches = "1.5.0"
 async-recursion = "1.0.5"
 async-stream = "0.3.6"
-async-trait = "0.1.83"
+async-trait = "0.1.89"
 axum = { version = "0.8.4", features = ["ws"] }
 axum-extra = { version = "0.10.1", features = ["typed-header"] }
 axum-server = { version = "0.7.2", features = ["tls-rustls-no-provider"] }
 backoff = "0.4"
 base64 = { version = "0.13.1" }
 bincode = "1.3.3"
-bitcoin = { version = "0.32.5", features = ["default", "rand", "serde"] }
-bitcoincore-rpc = "0.19.0"
+bitcoin = { git = "https://github.com/dfinity/rust-dogecoin", rev = "cda2b5ec270017c82abd6ef2e71b7fe583a133fd", features = [
+    "default",
+    "rand",
+    "serde",
+] }
 # build-info and build-info-build MUST be kept in sync!
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default-features = false }
 bytes = "1.9.0"
-candid = { version = "0.10.6" }
+canbench-rs = "0.2.1"
+candid = { version = "0.10.20" }
 candid_parser = { version = "0.1.2" }
 chrono = { version = "0.4.38", default-features = false, features = [
     "alloc",
@@ -548,9 +628,11 @@ curve25519-dalek = { version = "4.1.3", features = [
     "group",
     "precomputed-tables",
 ] }
+der = { version = "0.7", default-features = false, features = ["derive"] }
 derive-new = "0.7.0"
+devicemapper = "0.34"
 dfx-core = { version = "0.1.4" }
-ed25519-dalek = { version = "2.1.1", features = [
+ed25519-dalek = { version = "2.2.0", features = [
     "std",
     "zeroize",
     "digest",
@@ -560,13 +642,17 @@ ed25519-dalek = { version = "2.1.1", features = [
     "hazmat",
 ] }
 ethnum = { version = "1.3.2", features = ["serde"] }
+evm_rpc_types = "3.0.0"
 flate2 = "1.0.31"
+fs_extra = "1.2.0"
 futures = "0.3.31"
 futures-util = "0.3.31"
+get_if_addrs = "0.5.3"
 getrandom = { version = "0.2", features = ["custom"] }
 goldenfile = "1.8.0"
 gpt = "4.1"
 hex = { version = "0.4.3", features = ["serde"] }
+hkdf = "^0.12"
 http = "1.3.1"
 http-body = "1.0.1"
 http-body-util = "0.1.3"
@@ -582,27 +668,32 @@ hyper-rustls = { version = "0.27.5", default-features = false, features = [
 ] }
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.12", features = ["full"] }
+ic0 = "1.0.0"
 ic-agent = { version = "0.40.1", features = ["pem", "ring"] }
 ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "620fb49a238b3d8a2caa436b5742ed7ca7012098", features = [
     "acme_alpn",
 ] }
-ic-btc-interface = "0.2.2"
-ic-canister-sig-creation = { git = "https://github.com/dfinity/ic-canister-sig-creation", rev = "7f9e931954637526295269155881207f6c832d6d" }
+ic-btc-interface = "0.2.3"
+ic-canister-sig-creation = "1.3.0"
 ic-cbor = "3"
-ic-cdk = "0.17.2"
-ic-cdk-timers = "0.11.0"
+ic-cdk = "0.18.7"
+ic-cdk-timers = "0.12.2"
 ic-certificate-verification = "3"
 ic-certification = "3"
+ic-doge-interface = { git = "https://github.com/dfinity/dogecoin-canister", rev = "74e6dc9a10ba64d2dbad013282c26d74cd49863f" }
+ic-ed25519 = "0.4.0"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "b78562340bd00f05f9c055dcba3ec0f74758c927", default-features = false }
 ic-http-certification = "3.0.3"
 ic-http-gateway = "0.3.0"
+ic-identity-hsm = "0.40.1"
 ic-management-canister-types = "0.3.0"
 ic-response-verification = "3"
+ic-secp256k1 = "0.3.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.40.1" }
 ic-utils = { version = "0.40.1", features = ["raw"] }
-ic-vetkeys = { git = "https://github.com/dfinity/vetkeys", rev = "5885675b6ccb5269cfac9740dc3da6f14f75347f" }
+ic-vetkeys = "0.4.0"
 ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
     "groups",
     "pairings",
@@ -612,9 +703,12 @@ ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
 ] }
 ic_principal = { version = "0.1.1", default-features = false }
 idna = "1.0.2"
+indexmap = "2.10.0"
+indoc = "1.0.9"
 inferno = "0.12.0"
 ipnet = { version = "2.10.1", features = ["serde"] }
 itertools = "0.12.0"
+jsonrpc = "0.18.0"
 k256 = { version = "0.13.4", default-features = false, features = [
     "arithmetic",
     "ecdsa",
@@ -624,26 +718,29 @@ k256 = { version = "0.13.4", default-features = false, features = [
     "schnorr",
     "std",
 ] }
-# kube is used by our test driver
-k8s-openapi = { version = "0.22.0", features = ["v1_28", "schemars"] }
-kube = { version = "0.94.0", features = ["client", "derive"] }
 lazy_static = "1.4.0"
 leb128 = "0.2.5"
 libc = "0.2.158"
+libcryptsetup-rs = "0.13"
 libflate = "2.1.0"
 libnss = "0.5.0"
+lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "4d952c8f1dca79de855af892b444d7112567b58d" }
+lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "4d952c8f1dca79de855af892b444d7112567b58d" }
 local-ip-address = "0.5.6"
+loopdev-3 = "0.5"
 macaddr = "1.0"
+memchr = "2.7"
 memmap2 = "0.9.5"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
 mockall = "0.13.0"
 mockito = "1.6.1"
 nftables = "0.4"
-nix = { version = "0.24.3", features = ["ptrace"] }
+nix = { version = "0.24.3", features = ["ptrace", "user"] }
 num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
 num_cpus = "1.16.0"
+object = "0.37.3"
 opentelemetry = { version = "0.27.0", features = ["metrics", "trace"] }
 opentelemetry-otlp = { version = "0.27.0", features = ["grpc-tonic"] }
 opentelemetry_sdk = { version = "0.27.0", features = ["trace", "rt-tokio"] }
@@ -653,9 +750,11 @@ p256 = { version = "0.13.2", default-features = false, features = [
     "pem",
     "pkcs8",
 ] }
+p384 = "0.13"
 pairing = "0.23"
 parking_lot = "0.12.3"
 paste = "1.0.15"
+pem = { version = "^3", default-features = false, features = ["std"] }
 ping = "0.5.0"
 pkcs8 = "0.10.2"
 pprof = { version = "0.14.0", default-features = false, features = [
@@ -665,6 +764,7 @@ pprof = { version = "0.14.0", default-features = false, features = [
 ] }
 predicates = "3.1.2"
 pretty_assertions = "1.4.0"
+procfs = { version = "^0.9" }
 proc-macro2 = "1.0.89"
 prometheus = { version = "0.13.4", features = ["process"] }
 prometheus-parse = { version = "0.2.4" }
@@ -673,6 +773,7 @@ proptest-derive = "0.5.0"
 prost = "0.13.3"
 prost-build = "0.13.3"
 protobuf = "2.28.0"
+ring = { version = "^0.17.7", features = ["std"] }
 quinn = { version = "0.11.5", default-features = false, features = [
     "ring",
     "log",
@@ -683,9 +784,12 @@ quinn-udp = "0.5.5"
 quote = "1.0.37"
 rand = { version = "0.8.5", features = ["small_rng"] }
 rand_chacha = "0.3.1"
+ratatui = "0.29"
 rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"
+serde_regex = "1.1.0"
+rexpect = "0.6"
 reqwest = { version = "0.12.15", default-features = false, features = [
     "blocking",
     "http2",
@@ -697,22 +801,29 @@ reqwest = { version = "0.12.15", default-features = false, features = [
     "stream",
 ] }
 rolling-file = "0.2.0"
-rsa = { version = "0.9.6", features = ["sha2"] }
+rsa = { version = "0.9.6", features = ["sha2", "getrandom"] }
 rstest = "0.19.0"
+rust-ini = "0.21.1"
 rustc-demangle = { version = "0.1.16" }
 rustls = { version = "0.23.18", default-features = false, features = [
     "ring",
     "std",
     "brotli",
+    "tls12",
 ] }
 schemars = { version = "0.8.21", features = ["derive"] }
 scopeguard = "1.2.0"
+semver = { version = "1.0.9", features = ["serde"] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"
 serde_cbor = "0.11.2"
 serde_json = { version = "^1.0.107" }
 serde_with = "1.14.0"
 serde_yaml = "0.9.33"
+sev = { version = "7.1", default-features = false, features = [
+    "crypto_nossl",
+    "snp",
+] }
 sha2 = "0.10.9"
 sha3 = "0.10.8"
 signature = "2.2.0"
@@ -732,7 +843,7 @@ static_assertions = "1.1.0"
 strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"
 subtle = "2.6.1"
-syn = { version = "1.0.109", features = ["fold", "full"] }
+syn = { version = "2.0.110", features = ["fold", "full"] }
 sys-mount = "3.0"
 systemd = "0.10"
 tar = "0.4.39"
@@ -754,6 +865,7 @@ tonic = "0.12.3"
 tonic-build = "0.12.3"
 tower = { version = "0.5.2", features = ["full"] }
 tower-http = { version = "0.6.4", features = [
+    "add-extension",
     "cors",
     "limit",
     "trace",
@@ -781,12 +893,13 @@ uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.23.3"
-wasm-encoder = { version = "0.228.0", features = ["wasmparser"] }
-wasmparser = "0.228.0"
-wasmprinter = "0.228.0"
-wast = "228.0.0"
-wat = "1.228.0"
+wasm-encoder = { version = "0.240.0", features = ["wasmparser"] }
+wasmparser = "0.240.0"
+wasmprinter = "0.240.0"
+wast = "240.0.0"
+wat = "1.240.0"
 which = "6.0.3"
+wirm = { version = "2.1.0", features = ["parallel"] }
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }

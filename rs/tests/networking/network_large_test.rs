@@ -26,7 +26,7 @@ use ic_system_test_driver::{
         },
     },
     systest,
-    util::{assert_create_agent, block_on, MessageCanister},
+    util::{MessageCanister, assert_create_agent, block_on},
 };
 use ic_types::Height;
 use slog::info;
@@ -168,7 +168,7 @@ pub fn test(env: TestEnv) {
         )
         .await
     }) {
-        panic!("expected the update to fail, got {:?}", result);
+        panic!("expected the update to fail, got {result:?}");
     };
 
     info!(log, "Step 8: Restart one node again",);
@@ -176,7 +176,15 @@ pub fn test(env: TestEnv) {
     for n in nodes.iter().skip(FAULTY) {
         n.await_status_is_healthy().unwrap();
     }
+    ic_consensus_system_test_utils::assert_node_is_making_progress(
+        &nodes[FAULTY],
+        &log,
+        Height::new(1),
+    );
+
+    info!(log, "Storing message '{}' ...", UPDATE_MSG_5);
     block_on(message_canister.try_store_msg(UPDATE_MSG_5)).expect("Update canister call failed.");
+    info!(log, "Reading message '{}' ...", UPDATE_MSG_5);
     assert_eq!(
         block_on(message_canister.try_read_msg()),
         Ok(Some(UPDATE_MSG_5.to_string()))

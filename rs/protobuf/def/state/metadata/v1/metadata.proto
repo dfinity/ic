@@ -31,6 +31,7 @@ message SubnetTopology {
   reserved 5;
   reserved "ecdsa_keys_held";
   repeated types.v1.MasterPublicKeyId chain_keys_held = 6;
+  registry.subnet.v1.CanisterCyclesCostSchedule canister_cycles_cost_schedule = 7;
 }
 
 message SubnetsEntry {
@@ -73,12 +74,14 @@ message SetupInitialDkgContextTree {
 message EcdsaArguments {
   types.v1.EcdsaKeyId key_id = 1;
   bytes message_hash = 2;
+  types.v1.EcdsaMatchedPreSignature pre_signature = 3;
 }
 
 message SchnorrArguments {
   types.v1.SchnorrKeyId key_id = 1;
   bytes message = 2;
   optional bytes taproot_tree_root = 3;
+  types.v1.SchnorrMatchedPreSignature pre_signature = 4;
 }
 
 message VetKdArguments {
@@ -147,7 +150,15 @@ message CanisterHttpRequestContext {
   optional uint64 max_response_bytes = 9;
   google.protobuf.BytesValue transform_context = 10;
   optional Replication replication = 11;
+  optional PricingVersion pricing_version = 12;
   reserved 5;
+}
+
+message PricingVersion {
+  oneof version {
+    google.protobuf.Empty legacy = 1;
+    google.protobuf.Empty pay_as_you_go = 2;
+  }
 }
 
 message Replication {
@@ -371,6 +382,9 @@ message SystemMetadata {
   BlockmakerMetricsTimeSeries blockmaker_metrics_time_series = 20;
 
   repeated ApiBoundaryNodeEntry api_boundary_nodes = 21;
+
+  // TODO: deprecate in favour of information in NetworkTopology
+  registry.subnet.v1.CanisterCyclesCostSchedule canister_cycles_cost_schedule = 22;
 }
 
 message StableMemory {

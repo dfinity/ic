@@ -7,11 +7,12 @@
 
 use crate::execution::common::{validate_canister, validate_method};
 use crate::execution_environment::RoundLimits;
-use crate::{metrics::CallTreeMetricsNoOp, Hypervisor, NonReplicatedQueryKind};
+use crate::{Hypervisor, NonReplicatedQueryKind, metrics::CallTreeMetricsNoOp};
 use ic_embedders::wasmtime_embedder::system_api::{ApiType, ExecutionParameters};
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallContextId, RequestMetadata};
 use ic_types::methods::{FuncRef, WasmMethod};
@@ -32,6 +33,7 @@ pub fn execute_non_replicated_query(
     hypervisor: &Hypervisor,
     round_limits: &mut RoundLimits,
     state_changes_error: &IntCounter,
+    cost_schedule: CanisterCyclesCostSchedule,
 ) -> (
     CanisterState,
     NumInstructions,
@@ -80,8 +82,8 @@ pub fn execute_non_replicated_query(
         NonReplicatedQueryKind::Stateful { call_origin } => {
             preserve_changes = true;
             let caller = match call_origin {
-                CallOrigin::Query(source) => source.get(),
-                CallOrigin::CanisterQuery(sender, _) => sender.get(),
+                CallOrigin::Query(source, ..) => source.get(),
+                CallOrigin::CanisterQuery(sender, ..) => sender.get(),
                 _ => panic!("Unexpected call origin for execute_non_replicated_query"),
             };
             let call_context_id = canister
@@ -124,6 +126,7 @@ pub fn execute_non_replicated_query(
         state_changes_error,
         &CallTreeMetricsNoOp,
         time,
+        cost_schedule,
     );
     canister.system_state = output_system_state;
     if preserve_changes {

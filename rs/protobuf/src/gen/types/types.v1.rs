@@ -552,6 +552,8 @@ pub struct CanisterHttpResponseMetadata {
     pub content_hash: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "4")]
     pub registry_version: u64,
+    #[prost(string, tag = "5")]
+    pub replica_version: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseContent {
@@ -590,6 +592,8 @@ pub struct CanisterHttpResponseWithConsensus {
     pub hash: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "3")]
     pub registry_version: u64,
+    #[prost(string, tag = "8")]
+    pub replica_version: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "7")]
     pub signatures: ::prost::alloc::vec::Vec<CanisterHttpResponseSignature>,
 }
@@ -624,6 +628,13 @@ pub mod canister_http_response_message {
         #[prost(message, tag = "3")]
         DivergenceResponse(super::CanisterHttpResponseDivergence),
     }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpArtifact {
+    #[prost(message, optional, tag = "1")]
+    pub share: ::core::option::Option<CanisterHttpShare>,
+    #[prost(message, optional, tag = "2")]
+    pub response: ::core::option::Option<CanisterHttpResponse>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgPayload {
@@ -858,6 +869,28 @@ pub mod pre_signature {
         #[prost(message, tag = "2")]
         Schnorr(super::SchnorrPreSignatureTranscript),
     }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EcdsaMatchedPreSignature {
+    #[prost(uint64, tag = "1")]
+    pub pre_signature_id: u64,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+    #[prost(message, optional, tag = "3")]
+    pub pre_signature: ::core::option::Option<EcdsaPreSignatureQuadruple>,
+    #[prost(message, optional, tag = "4")]
+    pub key_transcript: ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SchnorrMatchedPreSignature {
+    #[prost(uint64, tag = "1")]
+    pub pre_signature_id: u64,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+    #[prost(message, optional, tag = "3")]
+    pub pre_signature: ::core::option::Option<SchnorrPreSignatureTranscript>,
+    #[prost(message, optional, tag = "4")]
+    pub key_transcript: ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QuadrupleInCreation {

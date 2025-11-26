@@ -1,11 +1,11 @@
 use crate::flags::temporarily_enable_chunkifying_large_values;
 use crate::invariants::routing_table::check_routing_table_invariants;
 use crate::registry::Registry;
-use canbench_rs::{bench, bench_fn, BenchResult};
+use canbench_rs::{BenchResult, bench, bench_fn};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_protobuf::registry::routing_table::v1::routing_table::Entry;
 use ic_protobuf::registry::routing_table::v1::RoutingTable;
-use ic_registry_keys::{make_canister_ranges_key, make_routing_table_record_key};
+use ic_protobuf::registry::routing_table::v1::routing_table::Entry;
+use ic_registry_keys::make_canister_ranges_key;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_transport::upsert;
 use prost::Message;
@@ -97,14 +97,7 @@ fn measure_snapshot_creation_with_100_segments_of_1000_entries() -> BenchResult 
 #[bench(raw)]
 fn measure_routing_table_invariant_checks_shards_and_unsharded() -> BenchResult {
     let _feature = temporarily_enable_chunkifying_large_values();
-    let mut registry = setup_registry_with_rt_segments_with_x_entries_each(1000, 20);
-
-    let rt = registry.get_routing_table_or_panic(registry.latest_version());
-    let rt_mutation = upsert(
-        make_routing_table_record_key(),
-        RoutingTable::from(rt).encode_to_vec(),
-    );
-    registry.apply_mutations_for_test(vec![rt_mutation]);
+    let registry = setup_registry_with_rt_segments_with_x_entries_each(1000, 20);
 
     let snapshot = registry.take_latest_snapshot();
 

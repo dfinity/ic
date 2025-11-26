@@ -11,10 +11,10 @@ use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
 use ic_test_state_machine_client::{CanisterCall, RawCanisterId, Request, Request::*};
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use serde::Serialize;
-use std::io::{stdin, stdout, Read, Write};
+use std::io::{Read, Write, stdin, stdout};
 
 macro_rules! debug_print {
-    ($opts:expr, $msg:expr $(,$args:expr)* $(,)*) => {
+    ($opts:expr_2021, $msg:expr_2021 $(,$args:expr_2021)* $(,)*) => {
         if $opts.debug {
             eprintln!($msg $(,$args)*);
         }
@@ -142,8 +142,7 @@ fn main() {
                     Err(err) => {
                         send_response(
                             VerificationResult::Err(format!(
-                                "failed to parse DER encoded public key: {:?}",
-                                err
+                                "failed to parse DER encoded public key: {err:?}"
                             )),
                             &opts,
                         );
@@ -155,8 +154,7 @@ fn main() {
                     Err(err) => {
                         send_response(
                             VerificationResult::Err(format!(
-                                "failed to parse DER encoded root public key: {:?}",
-                                err
+                                "failed to parse DER encoded root public key: {err:?}"
                             )),
                             &opts,
                         );
@@ -167,8 +165,7 @@ fn main() {
                     Ok(()) => send_response(VerificationResult::Ok(()), &opts),
                     Err(err) => send_response(
                         VerificationResult::Err(format!(
-                            "canister signature verification failed: {:?}",
-                            err
+                            "canister signature verification failed: {err:?}"
                         )),
                         &opts,
                     ),

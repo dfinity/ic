@@ -1,5 +1,5 @@
-use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::PublicKeyGenerationTimestamps;
+use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::{
     PublicKeyAddError, PublicKeyRetainCheckError, PublicKeyRetainError, PublicKeySetOnceError,
     PublicKeyStore,

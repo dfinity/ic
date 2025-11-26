@@ -11,6 +11,7 @@ filegroup(
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-ed25519",
     "//rs/config",
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
@@ -84,7 +85,6 @@ DEV_DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
-    "@crate_index//:lazy_static",
     "@crate_index//:mockall",
     "@crate_index//:num_cpus",
     "@crate_index//:proptest",

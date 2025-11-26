@@ -1,9 +1,9 @@
 [package]
 name = "ic-rosetta-api"
-version = "2.1.6"
+version = "2.1.8"
 authors = ["The Internet Computer Project Developers"]
 description = "Build Once. Integrate Your Blockchain Everywhere. "
-edition = "2021"
+edition.workspace = true
 default-run = "ic-rosetta-api"
 
 [dependencies]
@@ -32,6 +32,7 @@ ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-sys = { path = "../../sys" }
 ic-types = { path = "../../types/types" }
 icp-ledger = { path = "../../ledger_suite/icp" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lazy_static = { workspace = true }
 num-bigint = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
@@ -59,6 +60,7 @@ futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-ed25519 = { path = "../../../packages/ic-ed25519" }
 ic-ledger-canister-blocks-synchronizer-test-utils = { path = "ledger_canister_blocks_synchronizer/test_utils" }
+ic-ledger-suite-state-machine-tests-constants = { path = "../../ledger_suite/tests/sm-tests/constants" }
 ic-rosetta-test-utils = { path = "test_utils" }
 ic-types = { path = "../../types/types" }
 proptest = { workspace = true }
@@ -66,15 +68,12 @@ rand_chacha = { workspace = true }
 ic-icp-rosetta-runner = { path = "runner" }
 ic-icp-rosetta-client = { path = "client" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
-ic-ledger-test-utils = { path = "../../ledger_suite/icp/test_utils" }
 ic-icrc1-test-utils = { path = "../../ledger_suite/icrc1/test_utils" }
 tempfile = { workspace = true }
 icrc-ledger-agent = { path = "../../../packages/icrc-ledger-agent" }
-icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
 ic-icrc1 = { path = "../../ledger_suite/icrc1" }
 ic-icrc1-tokens-u256 = { path = "../../ledger_suite/icrc1/tokens_u256" }
-ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-nns-governance-init = { path = "../../nns/governance/init" }
 ic-nns-handler-root = { path = "../../nns/handlers/root/impl" }
 prost = { workspace = true }

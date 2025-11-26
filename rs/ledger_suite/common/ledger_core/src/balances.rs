@@ -1,6 +1,6 @@
 use num_traits::Bounded;
 use serde::{Deserialize, Serialize};
-use std::collections::{btree_map::Entry, BTreeMap};
+use std::collections::{BTreeMap, btree_map::Entry};
 
 use crate::tokens::{CheckedAdd, CheckedSub, TokensType, Zero};
 

@@ -10,8 +10,7 @@ fn test_int_map_consecutive_inserts() {
         assert_eq!(
             m.get(&i).cloned(),
             Some(i + 100),
-            "failed to find inserted values, map: {:?}",
-            m
+            "failed to find inserted values, map: {m:?}"
         );
     }
 }
@@ -43,7 +42,7 @@ fn test_int_map_union() {
         assert_eq!(m.get(&i).cloned(), Some(i));
     }
     for i in 50..150u64 {
-        assert_eq!(m.get(&i).cloned(), Some(i + 100), "Map: {:?}", m);
+        assert_eq!(m.get(&i).cloned(), Some(i + 100), "Map: {m:?}");
     }
     assert!(m.get(&150).is_none());
 }
@@ -316,7 +315,7 @@ fn test_eq(#[strategy(proptest::collection::vec(0u64..20u64, 0..10))] keys: Vec<
     impl ValidateEq for Foo {
         fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
             if self.0 != rhs.0 {
-                return Err(format!("lhs = {:#?}, rhs = {:#?}", self, rhs));
+                return Err(format!("lhs = {self:#?}, rhs = {rhs:#?}"));
             }
             Ok(())
         }

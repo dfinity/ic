@@ -75,11 +75,10 @@ mod test {
         let (reg, nodes, _) = create_fake_registry_client(4, 1, None);
         let reg = Arc::new(reg);
         let snapshot = Arc::new(ArcSwapOption::empty());
-        let dns_resolver = DnsResolver::new(Arc::clone(&snapshot));
+        let dns_resolver = DnsResolver::new(snapshot.clone());
 
         let (channel_send, _) = tokio::sync::watch::channel(None);
-        let snapshotter =
-            Snapshotter::new(Arc::clone(&snapshot), channel_send, reg, Duration::ZERO);
+        let snapshotter = Snapshotter::new(snapshot.clone(), channel_send, reg, Duration::ZERO);
         snapshotter.snapshot()?;
 
         // Check that resolved node's IPs match expected ones

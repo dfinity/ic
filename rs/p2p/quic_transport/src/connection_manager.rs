@@ -30,8 +30,8 @@ use std::{
 };
 
 use axum::{
-    body::Body, body::HttpBody, extract::Request, extract::State, middleware::from_fn_with_state,
-    middleware::Next, Router,
+    Router, body::Body, body::HttpBody, extract::Request, extract::State, middleware::Next,
+    middleware::from_fn_with_state,
 };
 use futures::StreamExt;
 use ic_base_types::NodeId;
@@ -39,12 +39,12 @@ use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig};
 use ic_crypto_utils_tls::node_id_from_certificate_der;
 use ic_http_endpoints_async_utils::JoinMap;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_metrics::MetricsRegistry;
 use quinn::{
-    crypto::rustls::{QuicClientConfig, QuicServerConfig},
     AsyncUdpSocket, ConnectError, Connection, ConnectionError, Endpoint, EndpointConfig, Incoming,
     Runtime, TokioRuntime, VarInt,
+    crypto::rustls::{QuicClientConfig, QuicServerConfig},
 };
 use rustls::pki_types::CertificateDer;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
@@ -54,9 +54,9 @@ use tokio::{runtime::Handle, select, task::JoinSet};
 use tokio_util::{sync::CancellationToken, time::DelayQueue};
 
 use crate::{
+    Shutdown, SubnetTopology,
     connection_handle::ConnectionHandle,
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
-    Shutdown, SubnetTopology,
 };
 use crate::{metrics::QuicTransportMetrics, request_handler::start_stream_acceptor};
 
@@ -107,7 +107,7 @@ struct ConnectionManager {
     connect_queue: DelayQueue<NodeId>,
 
     // Authentication
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig>,
 
     // Shared state
     watcher: tokio::sync::watch::Receiver<SubnetTopology>,
@@ -141,7 +141,9 @@ enum ConnectionEstablishError {
         cause: ConnectionError,
     },
     // The following errors should be infallible/internal.
-    #[error("Failed to establish outbound connection to peer {peer_id:?} due to errors in the parameters being used. {cause:?}")]
+    #[error(
+        "Failed to establish outbound connection to peer {peer_id:?} due to errors in the parameters being used. {cause:?}"
+    )]
     BadConnectParameters {
         peer_id: NodeId,
         cause: ConnectError,
@@ -180,7 +182,7 @@ pub(crate) fn start_connection_manager(
     log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
     rt: &Handle,
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig>,
     registry_client: Arc<dyn RegistryClient>,
     node_id: NodeId,
     peer_map: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
@@ -291,23 +293,6 @@ impl ConnectionManager {
                 () = cancellation.cancelled() => {
                     break;
                 },
-                Some(reconnect) = self.connect_queue.next() => {
-                    self.handle_outbound_conn_attemp(reconnect.into_inner())
-                },
-                // Ignore the case if the sender is dropped. It is not transport's responsibility to make
-                // sure topology senders are up and running.
-                Ok(()) = self.watcher.changed() => {
-                    self.handle_topology_change();
-                },
-                incoming = self.endpoint.accept() => {
-                    if let Some(incoming) = incoming {
-                        self.handle_inbound_conn_attemp(incoming);
-                    } else {
-                        error!(self.log, "Quic endpoint closed. Stopping transport.");
-                        // Endpoint is closed. This indicates NOT graceful shutdown.
-                        break;
-                    }
-                },
                 Some(conn_res) = self.outbound_connecting.join_next() => {
                     match conn_res {
                         Ok((Ok(conn), peer_id)) => self.handle_established_connection(conn, peer_id),
@@ -362,6 +347,23 @@ impl ConnectionManager {
                             }
                         }
                     }
+                },
+                Some(reconnect) = self.connect_queue.next() => {
+                    self.handle_outbound_conn_attemp(reconnect.into_inner())
+                },
+                incoming = self.endpoint.accept() => {
+                    if let Some(incoming) = incoming {
+                        self.handle_inbound_conn_attemp(incoming);
+                    } else {
+                        error!(self.log, "Quic endpoint closed. Stopping transport.");
+                        // Endpoint is closed. This indicates NOT graceful shutdown.
+                        break;
+                    }
+                },
+                // Ignore the case if the sender is dropped. It is not transport's responsibility to make
+                // sure topology senders are up and running.
+                Ok(()) = self.watcher.changed() => {
+                    self.handle_topology_change();
                 },
             }
             // Collect metrics

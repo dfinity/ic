@@ -17,13 +17,13 @@ pub fn do_list(config: PathBuf) -> Result<(), String> {
     let state_layout = utils::locate_state_root(config)?;
     let verified_heights = state_layout
         .checkpoint_heights()
-        .map_err(|e| format!("failed to enumerate checkpoints: {}", e))?
+        .map_err(|e| format!("failed to enumerate checkpoints: {e}"))?
         .into_iter()
         .map(|h| (h, CheckpointStatus::Verified));
 
     let unverified_heights = state_layout
         .unfiltered_checkpoint_heights()
-        .map_err(|e| format!("failed to enumerate unverified checkpoints: {}", e))?
+        .map_err(|e| format!("failed to enumerate unverified checkpoints: {e}"))?
         .into_iter()
         .filter_map(|h| match state_layout.checkpoint_verification_status(h) {
             Ok(false) => Some((h, CheckpointStatus::Unverified)),
@@ -32,13 +32,13 @@ pub fn do_list(config: PathBuf) -> Result<(), String> {
 
     let diverged_heights = state_layout
         .diverged_checkpoint_heights()
-        .map_err(|e| format!("failed to enumerate diverged checkpoints: {}", e))?
+        .map_err(|e| format!("failed to enumerate diverged checkpoints: {e}"))?
         .into_iter()
         .map(|h| (h, CheckpointStatus::Diverged));
 
     let backups = state_layout
         .backup_heights()
-        .map_err(|e| format!("failed to enumerate backed up checkpoints: {}", e))?
+        .map_err(|e| format!("failed to enumerate backed up checkpoints: {e}"))?
         .into_iter()
         .map(|h| (h, CheckpointStatus::Backup));
 
@@ -61,13 +61,13 @@ pub fn do_list(config: PathBuf) -> Result<(), String> {
             CheckpointStatus::Verified => {
                 let cp_layout = state_layout
                     .checkpoint_verified(h)
-                    .map_err(|e| format!("failed to access verified checkpoint @{}: {}", h, e))?;
+                    .map_err(|e| format!("failed to access verified checkpoint @{h}: {e}"))?;
                 ("verified", cp_layout.raw_path().to_path_buf())
             }
             CheckpointStatus::Unverified => {
                 let cp_layout = state_layout
                     .checkpoint_in_verification(h)
-                    .map_err(|e| format!("failed to access unverified checkpoint @{}: {}", h, e))?;
+                    .map_err(|e| format!("failed to access unverified checkpoint @{h}: {e}"))?;
                 ("unverified", cp_layout.raw_path().to_path_buf())
             }
             CheckpointStatus::Diverged => ("diverged", state_layout.diverged_checkpoint_path(h)),

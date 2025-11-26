@@ -4,31 +4,31 @@ use std::{
 };
 
 use axum::{
+    Router,
     extract::{DefaultBodyLimit, State},
     http::{Request, StatusCode},
     routing::any,
-    Router,
 };
-use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
+use backoff::{ExponentialBackoffBuilder, backoff::Backoff};
 use bytes::Bytes;
 use ic_interfaces::p2p::consensus::{Peers, ValidatedPoolReader};
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_protobuf::{proxy::ProtoProxy, types::v1 as pb};
 use ic_quic_transport::Transport;
 use ic_types::{
+    NodeId,
     artifact::ConsensusMessageId,
     consensus::{BlockPayload, ConsensusMessage},
     messages::{SignedIngress, SignedRequestBytes},
-    NodeId,
 };
-use rand::{rngs::SmallRng, seq::IteratorRandom, SeedableRng};
-use tokio::time::{sleep_until, timeout_at, Instant};
+use rand::{SeedableRng, rngs::SmallRng, seq::IteratorRandom};
+use tokio::time::{Instant, sleep_until, timeout_at};
 
 use super::{
     metrics::{FetchStrippedConsensusArtifactMetrics, IngressSenderMetrics},
     types::{
-        rpc::{GetIngressMessageInBlockRequest, GetIngressMessageInBlockResponse},
         SignedIngressId,
+        rpc::{GetIngressMessageInBlockRequest, GetIngressMessageInBlockResponse},
     },
 };
 

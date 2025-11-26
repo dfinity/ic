@@ -3,8 +3,8 @@ use std::borrow::Cow;
 use crate::icrc::{
     generic_value::Value,
     generic_value_predicate::{
-        and, element, is, is_array, is_blob, is_equal_to, is_int, is_less_or_equal_to, is_map,
-        is_more_than, is_nat, is_nat64, item, len, or, ItemRequirement, ValuePredicateFailures,
+        ItemRequirement, ValuePredicateFailures, and, element, is, is_array, is_blob, is_equal_to,
+        is_int, is_less_or_equal_to, is_map, is_more_than, is_nat, is_nat64, item, len, or,
     },
 };
 

@@ -2,10 +2,9 @@ use candid::{Decode, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icp_archive::ArchiveUpgradeArgument;
+use ic_ledger_core::Tokens;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_ledger_core::timestamp::TimeStamp;
-use ic_ledger_core::Tokens;
-use ic_ledger_test_utils::build_ledger_archive_wasm;
 use icp_ledger::Operation::Mint;
 use icp_ledger::{AccountIdentifier, Block, Memo, Transaction};
 use pocket_ic::PocketIcBuilder;
@@ -23,7 +22,9 @@ struct Setup {
 impl Setup {
     fn new(archive_memory_size: u64) -> Setup {
         let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build();
-        let archive_wasm = build_ledger_archive_wasm().bytes();
+        let archive_wasm =
+            std::fs::read(std::env::var("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH").unwrap())
+                .expect("Could not read archive wasm");
         let canister_id = CanisterId::from_u64(100);
         let created_canister_id = pocket_ic
             .create_canister_with_id(None, None, Principal::from(canister_id))
@@ -204,9 +205,10 @@ fn large_http_request() {
             large_http_request_bytes,
         )
         .unwrap_err();
-    assert!(err
-        .reject_message
-        .contains("failed to decode call arguments"));
+    assert!(
+        err.reject_message
+            .contains("Decoding cost exceeds the limit")
+    );
 }
 
 #[test]

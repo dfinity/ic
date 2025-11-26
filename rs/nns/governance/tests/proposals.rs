@@ -7,8 +7,8 @@ use ic_nns_governance::timer_tasks::schedule_tasks;
 use ic_nns_governance::{
     governance::{Governance, REWARD_DISTRIBUTION_PERIOD_SECONDS},
     pb::v1::{
-        proposal::Action, Ballot, Proposal, ProposalData, ProposalRewardStatus, Topic, Vote,
-        WaitForQuietState,
+        Ballot, Proposal, ProposalData, ProposalRewardStatus, Topic, Vote, WaitForQuietState,
+        proposal::Action,
     },
     proposals::sum_weighted_voting_power,
 };
@@ -176,7 +176,7 @@ fn test_sum_weighted_voting_power() {
     // Step 1: Prepare the world.
 
     // Step 2: Call code under test.
-    let result = sum_weighted_voting_power(PROPOSALS.iter().map(|(_id, proposal)| proposal));
+    let result = sum_weighted_voting_power(PROPOSALS.values());
 
     // Step 3: Inspect result(s).
     #[rustfmt::skip]
@@ -269,11 +269,7 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
 
         assert!(
             relative_error.abs() < epsilon,
-            "{}: {:?} vs. {:?} (relative error = {})",
-            msg,
-            observed,
-            expected,
-            relative_error,
+            "{msg}: {observed:?} vs. {expected:?} (relative error = {relative_error})",
         );
     }
 

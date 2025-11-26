@@ -3,7 +3,7 @@ name = "ic-icp-rosetta-client"
 version = "0.1.0"
 authors = ["The Internet Computer Project Developers"]
 description = "Build Once. Integrate Your Blockchain Everywhere. "
-edition = "2021"
+edition.workspace = true
 
 [lib]
 path = "src/lib.rs"
@@ -30,5 +30,5 @@ ic-nns-governance-api = { path = "../../../nns/governance/api" }
 ic-icp-rosetta-runner = { path = "../runner" }
 pocket-ic = { path = "../../../../packages/pocket-ic" }
 tempfile = { workspace = true }
-ic-ledger-test-utils = { path = "../../../ledger_suite/icp/test_utils" }
+ic-nns-constants = { path = "../../../nns/constants" }
 ic-rosetta-test-utils = { path = "../test_utils" }

@@ -1,7 +1,7 @@
 use ic_canister_sandbox_backend_lib::{
+    RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG,
     canister_sandbox_main, compiler_sandbox::compiler_sandbox_main,
-    launcher::sandbox_launcher_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG,
-    RUN_AS_SANDBOX_LAUNCHER_FLAG,
+    launcher::sandbox_launcher_main,
 };
 use libfuzzer_sys::test_input_wrap;
 use std::ffi::CString;
@@ -10,16 +10,19 @@ use std::os::raw::c_char;
 #[cfg(target_os = "linux")]
 use {
     nix::{
-        sys::ptrace, sys::ptrace::Options, sys::wait::waitpid, sys::wait::WaitPidFlag,
-        sys::wait::WaitStatus, unistd::fork, unistd::ForkResult, unistd::Pid,
+        sys::ptrace, sys::ptrace::Options, sys::wait::WaitPidFlag, sys::wait::WaitStatus,
+        sys::wait::waitpid, unistd::ForkResult, unistd::Pid, unistd::fork,
     },
     procfs::process::Process,
     std::collections::BTreeSet,
     syscalls::Sysno,
 };
 
+#[cfg(all(target_os = "linux", feature = "fuzzing_code"))]
+use ic_canister_sandbox_backend_lib::{SANDBOX_MAGIC_BYTES, embed_sandbox_signature};
+
 #[allow(improper_ctypes)]
-extern "C" {
+unsafe extern "C" {
     fn LLVMFuzzerRunDriver(
         argc: *const isize,
         argv: *const *const *const u8,
@@ -32,6 +35,9 @@ extern "C" {
 pub struct SandboxFeatures {
     pub syscall_tracing: bool,
 }
+
+#[cfg(all(target_os = "linux", feature = "fuzzing_code"))]
+embed_sandbox_signature!();
 
 // In general, fuzzers don't include `main()` and the initialisation logic is deferred to libfuzzer.
 // However, to enable canister sandboxing, we override the initialisation by providing our own `main()`
@@ -46,6 +52,12 @@ pub struct SandboxFeatures {
 // See https://github.com/rust-fuzz/libfuzzer/blob/c8275d1517933765b56a6de61a371bb1cc4268cb/src/lib.rs#L62
 
 pub fn fuzzer_main(features: SandboxFeatures) {
+    // Compiler hack to prevent the section from being removed.
+    #[cfg(all(target_os = "linux", feature = "fuzzing_code"))]
+    unsafe {
+        core::ptr::read_volatile(&SANDBOX_SIGNATURE);
+    }
+
     if std::env::args().any(|arg| arg == RUN_AS_CANISTER_SANDBOX_FLAG) {
         #[cfg(not(fuzzing))]
         if features.syscall_tracing {
@@ -186,12 +198,10 @@ fn trace(name: String, child: Pid, allowed_syscalls: BTreeSet<Sysno>) {
                 }
             }
             WaitStatus::PtraceSyscall(_) => {
-                if is_syscall_entry {
-                    if let Ok(regs) = ptrace::getregs(child) {
-                        let sysno = Sysno::from(regs.orig_rax as u32);
-                        if !allowed_syscalls.contains(&sysno) {
-                            panic!("Syscall not present: {:?} {}::{}", sysno, name, child,);
-                        }
+                if is_syscall_entry && let Ok(regs) = ptrace::getregs(child) {
+                    let sysno = Sysno::from(regs.orig_rax as u32);
+                    if !allowed_syscalls.contains(&sysno) {
+                        panic!("Syscall not present: {:?} {}::{}", sysno, name, child,);
                     }
                 }
 
@@ -229,12 +239,12 @@ fn trace(name: String, child: Pid, allowed_syscalls: BTreeSet<Sysno>) {
 fn get_children(parent_pid: i32) -> BTreeSet<i32> {
     let mut pids = BTreeSet::new();
 
-    if let Ok(process) = Process::new(parent_pid) {
-        if let Ok(tasks) = process.tasks() {
-            for task in tasks.flatten() {
-                let child_pid = task.tid;
-                pids.insert(child_pid);
-            }
+    if let Ok(process) = Process::new(parent_pid)
+        && let Ok(tasks) = process.tasks()
+    {
+        for task in tasks.flatten() {
+            let child_pid = task.tid;
+            pids.insert(child_pid);
         }
     }
     pids.remove(&parent_pid);

@@ -5,7 +5,7 @@ use ic_protobuf::registry::node_rewards::v2::{
     NodeRewardsTable, UpdateNodeRewardsTableProposalPayload,
 };
 use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
+use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue, registry_mutation};
 use prost::Message;
 
 impl Registry {

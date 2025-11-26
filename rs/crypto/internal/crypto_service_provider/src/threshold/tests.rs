@@ -1,9 +1,9 @@
 //! Tests for threshold signature implementations
 
+use crate::Csp;
 use crate::api::ThresholdSignatureCspClient;
 use crate::key_id::KeyId;
 use crate::types::{CspPublicCoefficients, CspSignature, ThresBls12_381_Signature};
-use crate::Csp;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::test_utils::select_n;
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
@@ -16,9 +16,9 @@ use strum::IntoEnumIterator;
 
 pub mod util {
     use super::*;
-    use crate::api::CspThresholdSignError;
     use crate::LocalCspVault;
-    use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::conversions::try_number_of_nodes_from_csp_pub_coeffs;
+    use crate::api::CspThresholdSignError;
+    use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::try_number_of_nodes_from_csp_pub_coeffs;
 
     /// Test that a set of threshold signatures behaves correctly.
     ///
@@ -49,7 +49,7 @@ pub mod util {
         let verifier = Csp::builder_for_test()
             .with_vault(
                 LocalCspVault::builder_for_test()
-                    .with_rng(ChaChaRng::from_seed(rng.gen::<[u8; 32]>()))
+                    .with_rng(ChaChaRng::from_seed(rng.r#gen::<[u8; 32]>()))
                     .build(),
             )
             .build();
@@ -70,22 +70,21 @@ pub mod util {
             // But:
             // * Signatures cannot be generated with an incorrect AlgorithmId:
             for algorithm_id in AlgorithmId::iter() {
-                if algorithm_id != AlgorithmId::ThresBls12_381 {
-                    if let Some((csp, key_id)) = signers.first() {
-                        assert!(
-                            csp.csp_vault
-                                .threshold_sign(algorithm_id, message.to_vec(), *key_id)
-                                .is_err(),
-                            "Managed to threshold sign with algorithm ID {:?}",
-                            algorithm_id
-                        )
-                    }
+                if algorithm_id != AlgorithmId::ThresBls12_381
+                    && let Some((csp, key_id)) = signers.first()
+                {
+                    assert!(
+                        csp.csp_vault
+                            .threshold_sign(algorithm_id, message.to_vec(), *key_id)
+                            .is_err(),
+                        "Managed to threshold sign with algorithm ID {algorithm_id:?}"
+                    )
                 }
             }
             //
             // * Signatures cannot be generated with an incorrect key_id:
             if let Some((csp, _key_id)) = signers.first() {
-                let wrong_key_id = KeyId::from(rng.gen::<[u8; 32]>());
+                let wrong_key_id = KeyId::from(rng.r#gen::<[u8; 32]>());
                 let mut key_ids = signers.iter().map(|(_, key_id)| *key_id);
 
                 assert!(
@@ -109,7 +108,7 @@ pub mod util {
                 (*public_coefficients).clone(),
             ) {
                 Ok(public_key) => public_key,
-                Err(error) => panic!("Could not calculate individual public key: {:?}", error),
+                Err(error) => panic!("Could not calculate individual public key: {error:?}"),
             };
 
             // Correct values validate:
@@ -142,23 +141,37 @@ pub mod util {
                     )
                     .expect("Should be able to compute the wrong public key.");
                 assert!(
-                            verifier.threshold_verify_individual_signature(AlgorithmId::ThresBls12_381, message, signature.clone(), wrong_public_key).is_err(),
-                            "Individual signature verification accepted incorrect signatory {} instead of {}/{}",
-                            wrong_index,
-                            index,
-                            signers.len()
-                        );
+                    verifier
+                        .threshold_verify_individual_signature(
+                            AlgorithmId::ThresBls12_381,
+                            message,
+                            signature.clone(),
+                            wrong_public_key
+                        )
+                        .is_err(),
+                    "Individual signature verification accepted incorrect signatory {} instead of {}/{}",
+                    wrong_index,
+                    index,
+                    signers.len()
+                );
             }
             // Incorrect message fails to validate:
             if threshold > NumberOfNodes::from(0)
             // threshold > 0 otherwise all signatures are the same
             {
                 assert!(
-                            verifier.threshold_verify_individual_signature(AlgorithmId::ThresBls12_381, &incorrect_message, signature.clone(), public_key).is_err(),
-                            "Individual signature verification accepted incorrect message '{:?}' instead of '{:?}'",
+                    verifier
+                        .threshold_verify_individual_signature(
+                            AlgorithmId::ThresBls12_381,
                             &incorrect_message,
-                            message
-                        );
+                            signature.clone(),
+                            public_key
+                        )
+                        .is_err(),
+                    "Individual signature verification accepted incorrect message '{:?}' instead of '{:?}'",
+                    &incorrect_message,
+                    message
+                );
             }
         }
 
@@ -187,14 +200,16 @@ pub mod util {
         if threshold > NumberOfNodes::from(0) {
             // threshold > 0, otherwise all signatures are the same.
             // Incorrect message:
-            assert!(verifier
-                .threshold_verify_combined_signature(
-                    AlgorithmId::ThresBls12_381,
-                    &incorrect_message,
-                    signature.clone(),
-                    public_coefficients.clone()
-                )
-                .is_err());
+            assert!(
+                verifier
+                    .threshold_verify_combined_signature(
+                        AlgorithmId::ThresBls12_381,
+                        &incorrect_message,
+                        signature.clone(),
+                        public_coefficients.clone()
+                    )
+                    .is_err()
+            );
             // Incorrect signature:
             let incorrect_signature = {
                 if let CspSignature::ThresBls12_381(ThresBls12_381_Signature::Combined(
@@ -209,29 +224,30 @@ pub mod util {
                     unreachable!()
                 }
             };
-            assert!(verifier
-                .threshold_verify_combined_signature(
-                    AlgorithmId::ThresBls12_381,
-                    message,
-                    incorrect_signature,
-                    public_coefficients.clone()
-                )
-                .is_err());
+            assert!(
+                verifier
+                    .threshold_verify_combined_signature(
+                        AlgorithmId::ThresBls12_381,
+                        message,
+                        incorrect_signature,
+                        public_coefficients.clone()
+                    )
+                    .is_err()
+            );
         }
         if threshold > NumberOfNodes::from(1) {
             // Otherwise all secret keys are the same.
             let some_individual_signature = signatures[0].clone();
             assert!(
-                verifier.threshold_verify_combined_signature(
-                    AlgorithmId::ThresBls12_381,
-                    message,
-                    some_individual_signature.clone(),
-                    public_coefficients.clone()
-                )
-                .is_err(),
-                "Combined signature verification passed with an individual signature: Used signature: {:?} Correct signature: {:?}",
-                some_individual_signature,
-                signature
+                verifier
+                    .threshold_verify_combined_signature(
+                        AlgorithmId::ThresBls12_381,
+                        message,
+                        some_individual_signature.clone(),
+                        public_coefficients.clone()
+                    )
+                    .is_err(),
+                "Combined signature verification passed with an individual signature: Used signature: {some_individual_signature:?} Correct signature: {signature:?}"
             );
         }
     }

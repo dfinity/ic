@@ -1,12 +1,13 @@
 //! Ingress types.
 
 use crate::artifact::IngressMessageId;
-use crate::{CanisterId, MemoryDiskBytes, PrincipalId, Time, UserId};
+use crate::{CanisterId, PrincipalId, Time, UserId};
 use ic_error_types::{ErrorCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     state::ingress::v1 as pb_ingress,
     types::v1 as pb_types,
 };
@@ -107,7 +108,7 @@ impl IngressStatus {
     pub fn payload_bytes(&self) -> usize {
         match self {
             IngressStatus::Known { state, .. } => match state {
-                IngressState::Completed(result) => result.memory_bytes(),
+                IngressState::Completed(result) => result.deterministic_heap_bytes(),
                 IngressState::Failed(error) => error.description().len(),
                 _ => 0,
             },
@@ -166,7 +167,18 @@ impl IngressSets {
 
 /// This struct describes the different types that executing a Wasm function in
 /// a canister can produce
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone,
+    Eq,
+    DeterministicHeapBytes,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    Deserialize,
+    Serialize,
+)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum WasmResult {
     /// Raw response, returned in a "happy" case
@@ -174,19 +186,6 @@ pub enum WasmResult {
     /// Returned with an error message when the canister decides to reject the
     /// message
     Reject(String),
-}
-
-impl MemoryDiskBytes for WasmResult {
-    fn memory_bytes(&self) -> usize {
-        match self {
-            WasmResult::Reply(bytes) => bytes.len(),
-            WasmResult::Reject(string) => string.len(),
-        }
-    }
-
-    fn disk_bytes(&self) -> usize {
-        0
-    }
 }
 
 impl WasmResult {
@@ -218,7 +217,7 @@ impl fmt::Display for WasmResult {
         match &self {
             WasmResult::Reply(_) => write!(f, "reply"),
             WasmResult::Reject(reject_str) => {
-                write!(f, "reject with error message => [{}]", reject_str)
+                write!(f, "reject with error message => [{reject_str}]")
             }
         }
     }

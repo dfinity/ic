@@ -4,7 +4,7 @@ use ic_crypto_internal_basic_sig_ecdsa_secp256k1::{types, *};
 //   openssl ecparam -name secp256k1 -genkey -noout -out private.ec.key
 //   openssl ec -in private.ec.key -pubout -outform DER -out ecpubkey.der
 //   hexdump -ve '1/1 "%.2x"' ecpubkey.der
-const SECP256K1_PK_1_DER_HEX : &str = "3056301006072a8648ce3d020106052b8104000a034200049fed1d3dac50db2191af972b9fa594256b21da7437611adf2ea255b72cd442b71b9d008d602869ab5fbe24cca28ed76f2eb2a1eba7f4dfc848c3507c4ad51f97";
+const SECP256K1_PK_1_DER_HEX: &str = "3056301006072a8648ce3d020106052b8104000a034200049fed1d3dac50db2191af972b9fa594256b21da7437611adf2ea255b72cd442b71b9d008d602869ab5fbe24cca28ed76f2eb2a1eba7f4dfc848c3507c4ad51f97";
 
 // A DER-encoded Ed25519 public key, to test that parsing non-SECP256K1 keys
 // gracefully fails.
@@ -75,7 +75,7 @@ mod keygen {
     //     -conv_form compressed
     #[test]
     fn rejects_compressed_points() {
-        const COMPRESSED : &str = "3036301006072a8648ce3d020106052b8104000a032200026589a94a8dd58659c16aae75abceea86990a20b883a7ebfa1435a4e4cac5221a";
+        const COMPRESSED: &str = "3036301006072a8648ce3d020106052b8104000a032200026589a94a8dd58659c16aae75abceea86990a20b883a7ebfa1435a4e4cac5221a";
         let pk_der = hex::decode(COMPRESSED).unwrap();
         let pk_result = public_key_from_der(&pk_der);
         assert!(pk_result.is_err());
@@ -177,36 +177,41 @@ mod verify {
 
         let test_vectors = [
             // From https://crypto.stackexchange.com/questions/41316/complete-set-of-test-vectors-for-ecdsa-secp256k1
-            TestVector::new("4d61617274656e20426f64657765732067656e6572617465642074686973207465737420766563746f72206f6e20323031362d31312d3038",
-                            "241097efbf8b63bf145c8961dbdf10c310efbb3b2676bbc0f8b08505c9e2f795",
-                            "021006b7838609339e8b415a7f9acb1b661828131aef1ecbc7955dfb01f3ca0e",
-                            "779dd197a5df977ed2cf6cb31d82d43328b790dc6b3b7d4437a427bd5847dfcd",
-                            "e94b724a555b6d017bb7607c3e3281daf5b1699d6ef4124975c9237b917d426f",
-                            true),
-
+            TestVector::new(
+                "4d61617274656e20426f64657765732067656e6572617465642074686973207465737420766563746f72206f6e20323031362d31312d3038",
+                "241097efbf8b63bf145c8961dbdf10c310efbb3b2676bbc0f8b08505c9e2f795",
+                "021006b7838609339e8b415a7f9acb1b661828131aef1ecbc7955dfb01f3ca0e",
+                "779dd197a5df977ed2cf6cb31d82d43328b790dc6b3b7d4437a427bd5847dfcd",
+                "e94b724a555b6d017bb7607c3e3281daf5b1699d6ef4124975c9237b917d426f",
+                true,
+            ),
             // Same as above except r and s are swapped in the signature
-            TestVector::new("4d61617274656e20426f64657765732067656e6572617465642074686973207465737420766563746f72206f6e20323031362d31312d3038",
-                            "021006b7838609339e8b415a7f9acb1b661828131aef1ecbc7955dfb01f3ca0e",
-                            "241097efbf8b63bf145c8961dbdf10c310efbb3b2676bbc0f8b08505c9e2f795",
-                            "779dd197a5df977ed2cf6cb31d82d43328b790dc6b3b7d4437a427bd5847dfcd",
-                            "e94b724a555b6d017bb7607c3e3281daf5b1699d6ef4124975c9237b917d426f",
-                            false),
-
+            TestVector::new(
+                "4d61617274656e20426f64657765732067656e6572617465642074686973207465737420766563746f72206f6e20323031362d31312d3038",
+                "021006b7838609339e8b415a7f9acb1b661828131aef1ecbc7955dfb01f3ca0e",
+                "241097efbf8b63bf145c8961dbdf10c310efbb3b2676bbc0f8b08505c9e2f795",
+                "779dd197a5df977ed2cf6cb31d82d43328b790dc6b3b7d4437a427bd5847dfcd",
+                "e94b724a555b6d017bb7607c3e3281daf5b1699d6ef4124975c9237b917d426f",
+                false,
+            ),
             // Same as the first except the message is empty
-            TestVector::new("",
-                            "241097efbf8b63bf145c8961dbdf10c310efbb3b2676bbc0f8b08505c9e2f795",
-                            "021006b7838609339e8b415a7f9acb1b661828131aef1ecbc7955dfb01f3ca0e",
-                            "779dd197a5df977ed2cf6cb31d82d43328b790dc6b3b7d4437a427bd5847dfcd",
-                            "e94b724a555b6d017bb7607c3e3281daf5b1699d6ef4124975c9237b917d426f",
-                            false),
-
+            TestVector::new(
+                "",
+                "241097efbf8b63bf145c8961dbdf10c310efbb3b2676bbc0f8b08505c9e2f795",
+                "021006b7838609339e8b415a7f9acb1b661828131aef1ecbc7955dfb01f3ca0e",
+                "779dd197a5df977ed2cf6cb31d82d43328b790dc6b3b7d4437a427bd5847dfcd",
+                "e94b724a555b6d017bb7607c3e3281daf5b1699d6ef4124975c9237b917d426f",
+                false,
+            ),
             // A test with the high bit set in s (since we do not verify non-malleability)
-            TestVector::new("74657374",
-                            "6471F8E5E63D6055AA6F6D3A8EBF49935D1316D6A54B9B09465B3BEB38E3AC14",
-                            "CE0FFBABD8E3248BEEBD568DCBCC7861126B1AB88E721D0206E9D67ECD878C7C",
-                            "E38257CE81AB62AB1DF591E360AB0021D2D24E737299CF48317DBF31A3996A2A",
-                            "78DD07EA1996F24FE829B4EE968BA2700632D8F165E793E41AE37B8911FC83C9",
-                            true)
+            TestVector::new(
+                "74657374",
+                "6471F8E5E63D6055AA6F6D3A8EBF49935D1316D6A54B9B09465B3BEB38E3AC14",
+                "CE0FFBABD8E3248BEEBD568DCBCC7861126B1AB88E721D0206E9D67ECD878C7C",
+                "E38257CE81AB62AB1DF591E360AB0021D2D24E737299CF48317DBF31A3996A2A",
+                "78DD07EA1996F24FE829B4EE968BA2700632D8F165E793E41AE37B8911FC83C9",
+                true,
+            ),
         ];
 
         for tv in &test_vectors {
@@ -217,8 +222,7 @@ mod verify {
             assert_eq!(
                 verify_result.is_ok(),
                 tv.is_valid,
-                "Unexpected verification result for test vector {:?}",
-                tv,
+                "Unexpected verification result for test vector {tv:?}",
             );
             if verify_result.is_err() {
                 assert!(verify_result.unwrap_err().is_signature_verification_error());
@@ -336,9 +340,11 @@ mod sig_conv {
         let bytes = vec![0; SignatureBytes::SIZE + 1];
         let result = SignatureBytes::try_from(bytes);
         assert!(result.is_err());
-        assert!(result
-            .expect_err("Unexpected success.")
-            .is_malformed_signature());
+        assert!(
+            result
+                .expect_err("Unexpected success.")
+                .is_malformed_signature()
+        );
     }
 
     #[test]
@@ -346,8 +352,10 @@ mod sig_conv {
         let bytes = vec![0; SignatureBytes::SIZE - 1];
         let result = SignatureBytes::try_from(bytes);
         assert!(result.is_err());
-        assert!(result
-            .expect_err("Unexpected success.")
-            .is_malformed_signature());
+        assert!(
+            result
+                .expect_err("Unexpected success.")
+                .is_malformed_signature()
+        );
     }
 }

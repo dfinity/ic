@@ -13,6 +13,8 @@ type CanisterStatusArgs = CanisterIdRecord;
 type CanisterStatusResult = CanisterStatusResultV2;
 type CanisterInfoArgs = CanisterInfoRequest;
 type CanisterInfoResult = CanisterInfoResponse;
+type CanisterMetadataArgs = CanisterMetadataRequest;
+type CanisterMetadataResult = CanisterMetadataResponse;
 type SubnetInfoResult = SubnetInfoResponse;
 type DeleteCanisterArgs = CanisterIdRecord;
 type DepositCyclesArgs = CanisterIdRecord;
@@ -90,6 +92,11 @@ fn canister_status(_: CanisterStatusArgs) -> CanisterStatusResult {
 
 #[candid_method(update)]
 fn canister_info(_: CanisterInfoArgs) -> CanisterInfoResult {
+    unreachable!()
+}
+
+#[candid_method(update)]
+fn canister_metadata(_: CanisterMetadataArgs) -> CanisterMetadataResult {
     unreachable!()
 }
 
@@ -214,7 +221,7 @@ fn rename_canister(_: RenameCanisterArgs) {
 #[cfg(test)]
 mod test {
     use crate::*;
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
     use ic_management_canister_types_private::*;
 
     #[test]

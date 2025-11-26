@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use ic_cdk::api::stable;
 use std::cell::RefCell;
 use std::time::Duration;

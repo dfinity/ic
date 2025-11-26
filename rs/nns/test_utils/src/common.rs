@@ -1,17 +1,14 @@
 use crate::{
     gtc_helpers::GenesisTokenCanisterInitPayloadBuilder, registry::invariant_compliant_mutation,
+    subnet_rental::SubnetRentalCanisterInitPayloadBuilder,
 };
 use canister_test::{Project, Wasm};
-use core::{
-    option::Option::{None, Some},
-    time::Duration,
-};
+use core::option::Option::{None, Some};
 use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_common::init::{LifelineCanisterInitPayload, LifelineCanisterInitPayloadBuilder};
 use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, CYCLES_LEDGER_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
-    ROOT_CANISTER_ID,
 };
 use ic_nns_governance_api::{Governance, NetworkEconomics, Neuron};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
@@ -22,9 +19,8 @@ use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_sns_wasm::init::{SnsWasmCanisterInitPayload, SnsWasmCanisterInitPayloadBuilder};
 use ic_utils::byte_slice_fmt::truncate_and_format;
 use icp_ledger::{
-    self as ledger,
+    self as ledger, LedgerCanisterInitPayload, LedgerCanisterInitPayloadBuilder, Tokens,
     account_identifier::{AccountIdentifier, Subaccount},
-    LedgerCanisterInitPayload, Tokens, DEFAULT_TRANSFER_FEE,
 };
 use lifeline::LIFELINE_CANISTER_WASM;
 use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
@@ -42,6 +38,11 @@ pub struct NnsInitPayloads {
     pub genesis_token: Gtc,
     pub sns_wasms: SnsWasmCanisterInitPayload,
     pub index: ic_icp_index::InitArg,
+
+    // Optional canister(s). Unlike others above, these are of type
+    // Option<${CANISTER}InitPayload>. When an optional canister is enabled,
+    // these fields contain Some (otherwise, they contain None).
+    pub subnet_rental: Option<()>,
 }
 
 /// Builder to help create the initial payloads for the NNS canisters.
@@ -55,6 +56,7 @@ pub struct NnsInitPayloadsBuilder {
     pub genesis_token: GenesisTokenCanisterInitPayloadBuilder,
     pub sns_wasms: SnsWasmCanisterInitPayloadBuilder,
     pub index: ic_icp_index::InitArg,
+    pub subnet_rental: SubnetRentalCanisterInitPayloadBuilder,
 }
 
 #[allow(clippy::new_without_default)]
@@ -63,25 +65,8 @@ impl NnsInitPayloadsBuilder {
         NnsInitPayloadsBuilder {
             registry: RegistryCanisterInitPayloadBuilder::new(),
             governance: GovernanceCanisterInitPayloadBuilder::new(),
-            ledger: LedgerCanisterInitPayload::builder()
-                .minting_account(GOVERNANCE_CANISTER_ID.get().into())
-                .archive_options(ledger::ArchiveOptions {
-                    trigger_threshold: 2000,
-                    num_blocks_to_archive: 1000,
-                    // 1 GB, which gives us 3 GB space when upgrading
-                    node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
-                    // 128kb
-                    max_message_size_bytes: Some(128 * 1024),
-                    controller_id: ROOT_CANISTER_ID.into(),
-                    more_controller_ids: None,
-                    cycles_for_archive_creation: Some(0),
-                    max_transactions_per_response: None,
-                })
-                .max_message_size_bytes(128 * 1024)
-                // 24 hour transaction window
-                .transaction_window(Duration::from_secs(24 * 60 * 60))
+            ledger: LedgerCanisterInitPayloadBuilder::new_with_mainnet_settings()
                 .send_whitelist(ALL_NNS_CANISTER_IDS.iter().map(|&x| *x).collect())
-                .transfer_fee(DEFAULT_TRANSFER_FEE)
                 .build()
                 .unwrap(),
             root: RootCanisterInitPayloadBuilder::new(),
@@ -99,6 +84,7 @@ impl NnsInitPayloadsBuilder {
             index: ic_icp_index::InitArg {
                 ledger_id: LEDGER_CANISTER_ID.get().into(),
             },
+            subnet_rental: SubnetRentalCanisterInitPayloadBuilder::new(),
         }
     }
 
@@ -243,20 +229,27 @@ impl NnsInitPayloadsBuilder {
         self
     }
 
+    pub fn with_subnet_rental_canister(&mut self) -> &mut Self {
+        self.subnet_rental.enable();
+        self
+    }
+
     pub fn build(&mut self) -> NnsInitPayloads {
-        assert!(!self
-            .ledger
-            .init_args()
-            .unwrap()
-            .initial_values
-            .contains_key(&GOVERNANCE_CANISTER_ID.get().into()));
+        assert!(
+            !self
+                .ledger
+                .init_args()
+                .unwrap()
+                .initial_values
+                .contains_key(&GOVERNANCE_CANISTER_ID.get().into())
+        );
         for n in self.governance.proto.neurons.values() {
             let sub = Subaccount(n.account.as_slice().try_into().unwrap_or_else(|e| {
                 panic!(
                     "Subaccounts should be exactly 32 bytes in length. Got {} for neuron {}. {}",
                     truncate_and_format(n.account.as_slice(), 80),
                     n.id.as_ref()
-                        .unwrap_or_else(|| panic!("Couldn't get id of neuron: {:?}", n))
+                        .unwrap_or_else(|| panic!("Couldn't get id of neuron: {n:?}"))
                         .id,
                     e
                 )
@@ -281,6 +274,7 @@ impl NnsInitPayloadsBuilder {
             genesis_token: self.genesis_token.build(),
             sns_wasms: self.sns_wasms.build(),
             index: self.index.clone(),
+            subnet_rental: self.subnet_rental.build(),
         }
     }
 }
@@ -357,8 +351,7 @@ pub fn build_mainnet_governance_wasm() -> Wasm {
 
 /// Build Wasm for NNS Ledger canister
 pub fn build_ledger_wasm() -> Wasm {
-    let features = ["notify-method"];
-    Project::cargo_bin_maybe_from_env("ledger-canister", &features)
+    Project::cargo_bin_maybe_from_env("ledger-canister", &[])
 }
 
 /// Build mainnet Wasm for NNS Ledger Canister

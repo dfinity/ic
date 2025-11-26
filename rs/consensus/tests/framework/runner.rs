@@ -6,11 +6,11 @@ use ic_consensus_utils::{
     crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::{consensus_pool::ConsensusPoolCache, time_source::TimeSource};
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_test_utilities_time::FastForwardTimeSource;
-use ic_types::{malicious_flags::MaliciousFlags, Height, Time};
-use rand::{thread_rng, Rng, RngCore};
-use rand_chacha::{rand_core::SeedableRng, ChaChaRng};
+use ic_types::{Height, Time, malicious_flags::MaliciousFlags};
+use rand::{Rng, RngCore, thread_rng};
+use rand_chacha::{ChaChaRng, rand_core::SeedableRng};
 use slog::Drain;
 use std::{
     cell::{RefCell, RefMut},
@@ -159,6 +159,7 @@ impl<'a> ConsensusRunner<'a> {
             dkg_key_manager.clone(),
             deps.message_routing.clone(),
             deps.state_manager.clone(),
+            deps.thread_pool.clone(),
             Arc::clone(&self.time) as Arc<_>,
             0,
             malicious_flags.clone(),

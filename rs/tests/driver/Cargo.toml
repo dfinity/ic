@@ -42,7 +42,6 @@ ic-icrc1 = { path = "../../ledger_suite/icrc1" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
-ic-management-canister-types = { workspace = true }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-message = { path = "../test_canisters/message" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
@@ -83,8 +82,6 @@ icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
 json5 = "0.4.1"
-k8s-openapi = { workspace = true }
-kube = { workspace = true }
 lazy_static = { workspace = true }
 macaddr = { workspace = true }
 maplit = "1.0.2"
@@ -97,6 +94,7 @@ prost = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 regex = { workspace = true }
+serde_regex = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 reqwest = { workspace = true }
 ring = { version = "0.17.7", features = ["std"] }
@@ -105,6 +103,7 @@ serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
+setupos-image-config = { path = "../../ic_os/dev_test_tools/setupos-image-config" }
 slog = { workspace = true }
 slog-async = { workspace = true }
 slog-term = { workspace = true }

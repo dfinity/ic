@@ -1,31 +1,8 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "IC_GATEWAY_RUNTIME_DEPS", "MAINNET_ENV")
+load("//rs/tests:common.bzl", "IC_GATEWAY_RUNTIME_DEPS", "MAINNET_ENV")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
-
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/canister_client",
-    "//rs/nervous_system/common/test_keys",
-    "//rs/nns/common",
-    "//rs/nns/test_utils",
-    "//rs/registry/subnet_type",
-    "//rs/rust_canisters/canister_test",
-    "//rs/tests/consensus/utils",
-    "//rs/tests/driver:ic-system-test-driver",
-    "//rs/types/types",
-    "@crate_index//:anyhow",
-    "@crate_index//:slog",
-    "@crate_index//:url",
-]
-
-RUNNER_DEPENDENCIES = [
-    # Keep sorted.
-    "nested",
-    "//rs/tests/driver:ic-system-test-driver",
-    "@crate_index//:anyhow",
-]
 
 rust_library(
     name = "nested",
@@ -33,7 +10,26 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     crate_name = "nested",
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/canister_client",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nns/common",
+        "//rs/protobuf",
+        "//rs/registry/keys",
+        "//rs/registry/nns_data_provider",
+        "//rs/registry/subnet_type",
+        "//rs/registry/transport",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:prost",
+        "@crate_index//:regex",
+        "@crate_index//:reqwest",
+        "@crate_index//:slog",
+    ],
 )
 
 genrule(
@@ -51,77 +47,106 @@ genrule(
 system_test_nns(
     name = "registration",
     env = MAINNET_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,  # flakiness rate of over 2% over the month from 2025-02-11 till 2025-03-11.
     tags = ["long_test"],  # since it takes longer than 5 minutes.
     test_timeout = "eternal",
-    use_empty_image = True,
-    uses_guestos_dev = True,
-    uses_setupos_dev = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS,
-    deps = RUNNER_DEPENDENCIES,
+    uses_setupos_img = True,
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        ":nested",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
 )
 
 rust_binary(
-    name = "upgrade_test_bin",
+    name = "guestos_upgrade_test_bin",
     testonly = True,
-    srcs = ["upgrade.rs"],
-    deps = DEPENDENCIES + [":nested"],
+    srcs = ["guestos_upgrade.rs"],
+    deps = [
+        # Keep sorted.
+        ":nested",
+        "//rs/registry/nns_data_provider",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:reqwest",
+        "@crate_index//:slog",
+    ],
+)
+
+# Tests if current commit is "upgradeable" and can be used as an upgrade image
+system_test_nns(
+    name = "guestos_upgrade_smoke_test",
+    env = MAINNET_ENV,
+    flaky = True,
+    tags = ["long_test"],
+    test_driver_target = ":guestos_upgrade_test_bin",
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
+    uses_setupos_img = True,
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
+)
+
+# Tests if "latest_release" in mainnet-icos-revisions.json can successfully guestos upgrade to current commit
+system_test_nns(
+    name = "guestos_upgrade_from_latest_release_to_current",
+    env = MAINNET_ENV | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
+    },
+    flaky = True,
+    tags = ["long_test"],
+    test_driver_target = ":guestos_upgrade_test_bin",
+    test_timeout = "eternal",
+    uses_dev_mainnet = True,  # necessary for configuring NNS public key
+    uses_guestos_img = False,
+    uses_guestos_mainnet_latest_img = True,
+    uses_guestos_update = True,
+    uses_setupos_mainnet_latest_img = True,
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
+)
+
+rust_binary(
+    name = "hostos_upgrade_test_bin",
+    testonly = True,
+    srcs = ["hostos_upgrade.rs"],
+    deps = [
+        # Keep sorted.
+        ":nested",
+        "//rs/registry/nns_data_provider",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
 )
 
 # Tests if current commit is "upgradeable" and can be used as an upgrade image
 system_test_nns(
     name = "hostos_upgrade_smoke_test",
     env = MAINNET_ENV,
-    extra_head_nns_tags = [],
     flaky = True,
     tags = ["long_test"],
-    test_driver_target = ":upgrade_test_bin",
+    test_driver_target = ":hostos_upgrade_test_bin",
     test_timeout = "eternal",
-    use_empty_image = True,
-    uses_guestos_dev = True,
-    uses_hostos_dev_test = True,
-    uses_setupos_dev = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS,
-    deps = RUNNER_DEPENDENCIES,
+    uses_hostos_test_update = True,
+    uses_setupos_img = True,
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
 )
 
-# Tests if "latest_release" in mainnet-icos-revisions.json can successfully upgrade to current commit
+# Tests if "latest_release" in mainnet-icos-revisions.json can successfully hostos upgrade to current commit
 system_test_nns(
     name = "hostos_upgrade_from_latest_release_to_current",
     env = MAINNET_ENV | {
         "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
     },
-    extra_head_nns_tags = [],
     flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
-    tags = ["manual"],  # TODO: remove after next release that includes the deployment.json changes
-    test_driver_target = ":upgrade_test_bin",
+    tags = ["long_test"],
+    test_driver_target = ":hostos_upgrade_test_bin",
     test_timeout = "eternal",
-    use_empty_image = True,
-    uses_guestos_dev = True,
-    uses_hostos_dev_test = True,
-    uses_setupos_mainnet = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
-    deps = RUNNER_DEPENDENCIES,
-)
-
-# Used to manually test if can upgrade
-# *from* an arbitrary mainnet version (mainnet_setupos_disk_image target)
-# *to* an arbitrary mainnet version ("latest_release" in mainnet-icos-revisions.json)
-system_test_nns(
-    name = "hostos_upgrade_from_mainnet_to_mainnet",
-    env = MAINNET_ENV | {
-        "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
-    },
-    extra_head_nns_tags = [],
-    flaky = True,
-    tags = ["manual"],
-    test_driver_target = ":upgrade_test_bin",
-    test_timeout = "eternal",
-    use_empty_image = True,
-    uses_guestos_dev = True,
-    uses_hostos_mainnet_update_img = True,
-    uses_setupos_mainnet = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
-    deps = RUNNER_DEPENDENCIES,
+    uses_dev_mainnet = True,  # necessary for configuring NNS public key
+    uses_guestos_img = False,
+    uses_guestos_mainnet_latest_img = True,
+    uses_hostos_update = True,
+    uses_setupos_mainnet_latest_img = True,
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
 )

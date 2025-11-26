@@ -1,6 +1,7 @@
 use ic_base_types::CanisterId;
 use ic_ledger_core::block::BlockIndex;
 use ic_nns_governance_api::Proposal;
+use ic_rosetta_api::models::LegacySignedTransaction;
 use ic_rosetta_api::{
     convert::to_model_account_identifier,
     ledger_client::pending_proposals_response::PendingProposalsResponse,
@@ -27,7 +28,7 @@ use rosetta_core::{
     identifiers::NetworkIdentifier, objects::ObjectMap, request_types::MetadataRequest,
     response_types::NetworkListResponse,
 };
-use slog::{debug, info, Logger};
+use slog::{Logger, debug, info};
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -121,12 +122,12 @@ impl RosettaApiClient {
                 .body(body.clone())
                 .send()
                 .await
-                .map_err(|err| format!("sending post request failed with {}: ", err))?;
+                .map_err(|err| format!("sending post request failed with {err}: "))?;
             let response_status = response.status();
             let response_body = response
                 .bytes()
                 .await
-                .map_err(|err| format!("receive post response failed with {}: ", err))?
+                .map_err(|err| format!("receive post response failed with {err}: "))?
                 .to_vec();
             if response_status.is_success() || now.elapsed().unwrap() >= TIMEOUT {
                 debug!(
@@ -306,6 +307,24 @@ impl RosettaApiClient {
         }
 
         let req = ConstructionSubmitRequest::new(self.network_id(), signed_transaction.to_string());
+
+        to_rosetta_response::<ConstructionSubmitResponse>(
+            self.post_json_request(
+                &format!("{}/construction/submit", self.api_url),
+                serde_json::to_vec(&req).unwrap(),
+            )
+            .await,
+        )
+    }
+
+    pub async fn construction_submit_legacy(
+        &self,
+        signed_transaction: LegacySignedTransaction,
+    ) -> Result<Result<ConstructionSubmitResponse, Error>, String> {
+        let req = ConstructionSubmitRequest::new(
+            self.network_id(),
+            hex::encode(serde_cbor::to_vec(&signed_transaction).unwrap()),
+        );
 
         to_rosetta_response::<ConstructionSubmitResponse>(
             self.post_json_request(
@@ -519,14 +538,14 @@ impl RosettaApiClient {
         let timeout = std::time::Duration::from_secs(5);
         let now = std::time::SystemTime::now();
         while now.elapsed().unwrap() < timeout {
-            if let Ok(Ok(resp)) = self.block_at(idx).await {
-                if let Some(b) = resp.block {
-                    return Ok(b);
-                }
+            if let Ok(Ok(resp)) = self.block_at(idx).await
+                && let Some(b) = resp.block
+            {
+                return Ok(b);
             }
             sleep(Duration::from_millis(100)).await;
         }
-        Err(format!("Timeout on waiting for block at {}", idx))
+        Err(format!("Timeout on waiting for block at {idx}"))
     }
 
     pub async fn wait_for_tip_sync(&self, tip_idx: BlockIndex) -> Result<(), String> {
@@ -537,14 +556,14 @@ impl RosettaApiClient {
         let timeout = std::time::Duration::from_secs(5);
         let now = std::time::SystemTime::now();
         while now.elapsed().unwrap() < timeout {
-            if let Ok(Ok(resp)) = self.network_status().await {
-                if resp.current_block_identifier.index >= tip_idx {
-                    return Ok(());
-                }
+            if let Ok(Ok(resp)) = self.network_status().await
+                && resp.current_block_identifier.index >= tip_idx
+            {
+                return Ok(());
             }
             sleep(Duration::from_millis(100)).await;
         }
-        Err(format!("Timeout on waiting for tip at {}", tip_idx))
+        Err(format!("Timeout on waiting for tip at {tip_idx}"))
     }
 
     pub async fn raw_construction_endpoint(

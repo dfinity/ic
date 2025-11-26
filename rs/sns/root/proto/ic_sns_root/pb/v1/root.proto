@@ -26,6 +26,9 @@ message SnsRootCanister {
   // Dapp canister IDs.
   repeated ic_base_types.pb.v1.PrincipalId dapp_canister_ids = 3;
 
+  // Extension canister IDs.
+  optional Extensions extensions = 11;
+
   // Required.
   //
   // The swap canister ID.
@@ -50,6 +53,32 @@ message SnsRootCanister {
 
   // Information about the timers that perform periodic tasks of this Root canister.
   optional ic_nervous_system.pb.v1.Timers timers = 10;
+}
+
+message RegisterExtensionRequest {
+  ic_base_types.pb.v1.PrincipalId canister_id = 1;
+}
+
+message RegisterExtensionResponse {
+  message Ok {}
+
+  oneof result {
+    Ok ok = 1;
+    CanisterCallError err = 2;
+  }
+}
+
+message CleanUpFailedRegisterExtensionRequest {
+  ic_base_types.pb.v1.PrincipalId canister_id = 1;
+}
+
+message CleanUpFailedRegisterExtensionResponse {
+  message Ok {}
+
+  oneof result {
+    Ok ok = 1;
+    CanisterCallError err = 2;
+  }
 }
 
 message RegisterDappCanisterRequest {
@@ -97,6 +126,10 @@ message ListSnsCanistersRequest {
   // This struct intentionally left blank (for now).
 }
 
+message Extensions {
+  repeated ic_base_types.pb.v1.PrincipalId extension_canister_ids = 1;
+}
+
 // Response struct for the ListSnsCanisters API on the
 // SNS Root canister. ListSnsCanisters will return Principals
 // of all the associated canisters in an SNS.
@@ -108,6 +141,7 @@ message ListSnsCanistersResponse {
   repeated ic_base_types.pb.v1.PrincipalId dapps = 5;
   repeated ic_base_types.pb.v1.PrincipalId archives = 6;
   ic_base_types.pb.v1.PrincipalId index = 7;
+  optional Extensions extensions = 8;
 }
 
 enum LogVisibility {

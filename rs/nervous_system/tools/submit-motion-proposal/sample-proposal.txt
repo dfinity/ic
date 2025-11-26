@@ -1,0 +1,28 @@
+title: A Tale of Two Motion Proposals
+url: https://forum.dfinity.org/whatever
+
+--------------------------------------------------------------------------------
+This might just be the most wonderous motion proposals your eyes have ever
+beheld.
+
+# Rationale
+
+1. It uses Markdown.
+2. It makes so much sense.
+3. Daniel Wong deserves a phat raise.
+
+# Usage
+
+```
+bazel build \
+    //rs/nervous_system/tools/submit-motion-proposal \
+
+./bazel-bin/rs/nervous_system/tools/submit-motion-proposal/submit-motion-proposal \
+    --neuron-id=42 \
+    --proposal-file=rs/nervous_system/tools/submit-motion-proposal/sample-proposal.txt \
+    --verbose
+```
+
+Note that the above can be run even if you do not have a dfx identity named
+"hsm" (which must be based on an HSM device). What it would do is confirm that
+your proposal file follows the required format.

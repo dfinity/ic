@@ -7,12 +7,12 @@
 
 use super::*;
 use candid::{
+    Encode,
     de::IDLDeserialize,
     decode_args, encode_args,
     ser::IDLBuilder,
     types::principal::Principal,
     utils::{ArgumentDecoder, ArgumentEncoder},
-    Encode,
 };
 use cycles_minting_canister::IcpXdrConversionRate;
 use ic_base_types::PrincipalId;
@@ -101,7 +101,7 @@ async fn test_icps_per_sns_token_client() {
             return "sns_token_ledger".to_string();
         }
 
-        format!("{}", canister_id)
+        format!("{canister_id}")
     }
 
     const INITIAL_ICPS_PER_SNS_TOKEN: f64 = 12.34;
@@ -155,6 +155,7 @@ async fn test_icps_per_sns_token_client() {
                                     },
                                     created_at_time: Some(GENESIS_TIMESTAMP_NANOSECONDS),
                                     memo: None,
+                                    fee: None,
                                 }),
                                 timestamp: GENESIS_TIMESTAMP_NANOSECONDS,
                                 kind: "mint".to_string(),
@@ -162,6 +163,7 @@ async fn test_icps_per_sns_token_client() {
                                 burn: None,
                                 approve: None,
                                 transfer: None,
+                                fee_collector: None,
                             },
                         ],
 

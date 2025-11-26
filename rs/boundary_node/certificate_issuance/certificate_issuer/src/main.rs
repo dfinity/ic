@@ -3,14 +3,15 @@ use std::{
     net::{IpAddr, SocketAddr},
     path::PathBuf,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicU64, Ordering},
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{Context, Error, anyhow};
 use axum::{
+    Extension, Router,
     body::Body,
     extract::MatchedPath,
     handler::Handler,
@@ -18,22 +19,21 @@ use axum::{
     middleware::{self, Next},
     response::IntoResponse,
     routing::{delete, get, post, put},
-    Extension, Router,
 };
 use candid::{DecoderConfig, Principal};
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
 use clap::Parser;
-use ic_agent::{identity::Secp256k1Identity, Agent};
+use ic_agent::{Agent, identity::Secp256k1Identity};
 use instant_acme::{Account, AccountCredentials, NewAccount};
 use prometheus::{
-    labels, CounterVec, Encoder as PrometheusEncoder, HistogramVec, Registry, TextEncoder,
+    CounterVec, Encoder as PrometheusEncoder, HistogramVec, Registry, TextEncoder, labels,
 };
 use tokio::{net::TcpListener, sync::Semaphore, task, time::sleep};
 use tower::ServiceBuilder;
 use tracing::info;
 use trust_dns_resolver::{
-    config::{NameServerConfigGroup, ResolverConfig, ResolverOpts, GOOGLE_IPS},
     TokioAsyncResolver,
+    config::{GOOGLE_IPS, NameServerConfigGroup, ResolverConfig, ResolverOpts},
 };
 
 use crate::{
@@ -252,7 +252,7 @@ async fn main() -> Result<(), Error> {
     let cipher = Arc::new({
         let f = std::fs::read(cli.key_path).context("failed to open key file")?;
         let p = pem::parse(f).context("failed to parse pem file")?;
-        XChaCha20Poly1305::new_from_slice(&p.contents).context("failed to init symmetric key")?
+        XChaCha20Poly1305::new_from_slice(p.contents()).context("failed to init symmetric key")?
     });
 
     let encoder = Encoder::new(cipher.clone());
@@ -469,7 +469,7 @@ async fn main() -> Result<(), Error> {
         (Some(_), None) | (None, Some(_)) => {
             return Err(anyhow!(
                 "must provide both acme_account_id and acme_account_key"
-            ))
+            ));
         }
 
         // Create new ACME cccount

@@ -37,7 +37,11 @@ runs:
           # the upload list can get quite big, so we wrap it in details/summary
           {
             echo '<details><summary>Uploaded '"$n_uploaded"' Artifacts for ${{ inputs.name }}</summary>';
+            echo
+            echo '```'
             cat "$upload_output"
+            echo '```'
+            echo
             echo '</details>';
           } >>"$GITHUB_STEP_SUMMARY"
 

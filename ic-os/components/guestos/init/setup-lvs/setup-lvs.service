@@ -1,0 +1,16 @@
+[Unit]
+Description=Set up logical volumes on first boot
+DefaultDependencies=no
+Requires=setup-data-encryption.service
+After=setup-data-encryption.service init-config.service
+ConditionPathExists=/run/config/guest_vm_type/default
+
+[Install]
+WantedBy=local-fs.target
+
+[Service]
+StandardOutput=journal+console
+StandardError=journal+console
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-lvs.sh

@@ -5,16 +5,81 @@
 //! only for serialization/deserialization of the ReplicatedState.
 
 use candid::CandidType;
-use ic_btc_interface::Network;
 use ic_error_types::RejectCode;
+use ic_interfaces_adapter_client::RpcAdapterClient;
 use ic_protobuf::{
     bitcoin::v1,
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     types::v1::RejectCode as pbRejectCode,
 };
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::mem::size_of_val;
+
+// NOTE: The network variants for Bitcoin need to be named without the bitcoin prefix,
+// because these variants need to be backwards compatible with the bitcoin canister.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, CandidType)]
+pub enum Network {
+    #[serde(rename = "mainnet")]
+    BitcoinMainnet,
+    #[serde(rename = "testnet")]
+    BitcoinTestnet,
+    #[serde(rename = "regtest")]
+    BitcoinRegtest,
+    #[serde(rename = "dogecoin_mainnet")]
+    DogecoinMainnet,
+    #[serde(rename = "dogecoin_testnet")]
+    DogecoinTestnet,
+    #[serde(rename = "dogecoin_regtest")]
+    DogecoinRegtest,
+}
+
+impl From<Network> for v1::Network {
+    fn from(network: Network) -> Self {
+        match network {
+            Network::BitcoinMainnet => v1::Network::BitcoinMainnet,
+            Network::BitcoinTestnet => v1::Network::BitcoinTestnet,
+            Network::BitcoinRegtest => v1::Network::BitcoinRegtest,
+            Network::DogecoinMainnet => v1::Network::DogecoinMainnet,
+            Network::DogecoinTestnet => v1::Network::DogecoinTestnet,
+            Network::DogecoinRegtest => v1::Network::DogecoinRegtest,
+        }
+    }
+}
+
+impl From<Network> for i32 {
+    fn from(network: Network) -> Self {
+        v1::Network::from(network).into()
+    }
+}
+
+impl TryFrom<v1::Network> for Network {
+    type Error = ProxyDecodeError;
+
+    fn try_from(network: v1::Network) -> Result<Self, Self::Error> {
+        match network {
+            v1::Network::BitcoinTestnet => Ok(Network::BitcoinTestnet),
+            v1::Network::BitcoinMainnet => Ok(Network::BitcoinMainnet),
+            v1::Network::BitcoinRegtest => Ok(Network::BitcoinRegtest),
+            v1::Network::DogecoinMainnet => Ok(Network::DogecoinMainnet),
+            v1::Network::DogecoinTestnet => Ok(Network::DogecoinTestnet),
+            v1::Network::DogecoinRegtest => Ok(Network::DogecoinRegtest),
+            _ => Err(ProxyDecodeError::MissingField("network")),
+        }
+    }
+}
+
+impl TryFrom<i32> for Network {
+    type Error = ProxyDecodeError;
+
+    fn try_from(network: i32) -> Result<Self, Self::Error> {
+        Network::try_from(
+            v1::Network::try_from(network).map_err(|_| {
+                ProxyDecodeError::Other("Failed to decode network enum".to_string())
+            })?,
+        )
+    }
+}
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct SendTransactionRequest {
@@ -26,11 +91,7 @@ pub struct SendTransactionRequest {
 impl From<&SendTransactionRequest> for v1::SendTransactionRequest {
     fn from(request: &SendTransactionRequest) -> Self {
         Self {
-            network: match request.network {
-                Network::Testnet => 1,
-                Network::Mainnet => 2,
-                Network::Regtest => 3,
-            },
+            network: request.network.into(),
             transaction: request.transaction.clone(),
         }
     }
@@ -40,20 +101,15 @@ impl TryFrom<v1::SendTransactionRequest> for SendTransactionRequest {
     type Error = ProxyDecodeError;
     fn try_from(request: v1::SendTransactionRequest) -> Result<Self, Self::Error> {
         Ok(SendTransactionRequest {
-            network: match request.network {
-                1 => Network::Testnet,
-                2 => Network::Mainnet,
-                3 => Network::Regtest,
-                _ => {
-                    return Err(ProxyDecodeError::MissingField(
-                        "SendTransactionRequest::network",
-                    ))
-                }
-            },
+            network: Network::try_from(request.network)?,
             transaction: request.transaction,
         })
     }
 }
+
+pub type AdapterClient = Box<
+    dyn RpcAdapterClient<BitcoinAdapterRequestWrapper, Response = BitcoinAdapterResponseWrapper>,
+>;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum BitcoinAdapterRequestWrapper {
@@ -69,7 +125,7 @@ impl BitcoinAdapterRequestWrapper {
         }
     }
 
-    /// Returns which bitcoin network the request is for.
+    /// Returns which network the request is for.
     pub fn network(&self) -> Network {
         match self {
             BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
@@ -654,11 +710,7 @@ pub struct GetSuccessorsRequestInitial {
 impl From<&GetSuccessorsRequestInitial> for v1::GetSuccessorsRequestInitial {
     fn from(request: &GetSuccessorsRequestInitial) -> Self {
         Self {
-            network: match request.network {
-                Network::Testnet => 1,
-                Network::Mainnet => 2,
-                Network::Regtest => 3,
-            },
+            network: request.network.into(),
             anchor: request.anchor.clone(),
             processed_block_hashes: request.processed_block_hashes.clone(),
         }
@@ -669,16 +721,7 @@ impl TryFrom<v1::GetSuccessorsRequestInitial> for GetSuccessorsRequestInitial {
     type Error = ProxyDecodeError;
     fn try_from(request: v1::GetSuccessorsRequestInitial) -> Result<Self, Self::Error> {
         Ok(GetSuccessorsRequestInitial {
-            network: match request.network {
-                1 => Network::Testnet,
-                2 => Network::Mainnet,
-                3 => Network::Regtest,
-                _ => {
-                    return Err(ProxyDecodeError::MissingField(
-                        "GetSuccessorsRequestInitial::network",
-                    ))
-                }
-            },
+            network: Network::try_from(request.network)?,
             anchor: request.anchor,
             processed_block_hashes: request.processed_block_hashes,
         })

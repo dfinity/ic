@@ -75,7 +75,7 @@ fn test_encode_metrics() {
 
     let latency_ms = name_to_sample.get("latency_ms").unwrap();
     let Value::Histogram(latency_ms_value) = &latency_ms.value else {
-        panic!("{:#?}", latency_ms);
+        panic!("{latency_ms:#?}");
     };
     assert_eq!(
         latency_ms_value,

@@ -4,7 +4,7 @@
 use crate::governance::RandomnessGenerator;
 use crate::{
     governance::{Environment, HeapGrowthPotential, RngError},
-    pb::v1::{ExecuteNnsFunction, GovernanceError, OpenSnsTokenSwap},
+    pb::v1::{GovernanceError, OpenSnsTokenSwap},
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -12,7 +12,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_canisters::ledger::IcpLedger;
-use ic_nervous_system_common::{NervousSystemError, E8};
+use ic_nervous_system_common::{E8, NervousSystemError};
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_swap::pb::{
     v1 as sns_swap_pb,
@@ -105,6 +105,18 @@ impl IcpLedger for StubIcpLedger {
     }
 
     fn canister_id(&self) -> CanisterId {
+        unimplemented!()
+    }
+
+    async fn icrc2_approve(
+        &self,
+        _spender: icrc_ledger_types::icrc1::account::Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<candid::Nat, NervousSystemError> {
         unimplemented!()
     }
 
@@ -201,7 +213,7 @@ impl MockEnvironment {
         }
     }
 
-    pub fn now_setter(&self) -> impl Fn(u64) {
+    pub fn now_setter(&self) -> impl Fn(u64) + use<> {
         let arc = self.now.clone();
         move |new_now| {
             let mut now = arc.lock().unwrap();
@@ -245,7 +257,7 @@ impl Environment for MockEnvironment {
     fn execute_nns_function(
         &self,
         _proposal_id: u64,
-        _update: &ExecuteNnsFunction,
+        _update: &crate::proposals::execute_nns_function::ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         Ok(())
     }
@@ -277,38 +289,34 @@ impl Environment for MockEnvironment {
                 )
             });
 
-        let decode_request_bytes = |bytes| {
-            match method_name {
-                "get_state" => {
-                    match Decode!(bytes, sns_swap_pb::GetStateRequest) {
-                        Ok(ok) => format!("{:#?}", ok),
-                        Err(err) => format!(
-                            "Unable to decode request bytes as GetStateRequest because of {:?}: {}",
-                            err, default_request_bytes_format(bytes),
-                        ),
-                    }
-                }
+        let decode_request_bytes = |bytes| match method_name {
+            "get_state" => match Decode!(bytes, sns_swap_pb::GetStateRequest) {
+                Ok(ok) => format!("{ok:#?}"),
+                Err(err) => format!(
+                    "Unable to decode request bytes as GetStateRequest because of {:?}: {}",
+                    err,
+                    default_request_bytes_format(bytes),
+                ),
+            },
 
-                "list_deployed_snses" => {
-                    match Decode!(bytes, ListDeployedSnsesRequest) {
-                        Ok(ok) => format!("{:#?}", ok),
-                        Err(err) => format!(
-                            "Unable to decode request bytes as ListDeployedSnsesRequest because of {:?}: {}",
-                            err, default_request_bytes_format(bytes),
-                        ),
-                    }
-                }
+            "list_deployed_snses" => match Decode!(bytes, ListDeployedSnsesRequest) {
+                Ok(ok) => format!("{ok:#?}"),
+                Err(err) => format!(
+                    "Unable to decode request bytes as ListDeployedSnsesRequest because of {:?}: {}",
+                    err,
+                    default_request_bytes_format(bytes),
+                ),
+            },
 
-                _ => default_request_bytes_format(bytes)
-            }
+            _ => default_request_bytes_format(bytes),
         };
         fn default_request_bytes_format(bytes: &[u8]) -> String {
             let truncated = if bytes.len() > 16 {
                 let head = &bytes[..8];
                 let tail = &bytes[(bytes.len() - 8)..];
-                format!("head = {:?}, tail = {:?}", head, tail)
+                format!("head = {head:?}, tail = {tail:?}")
             } else {
-                format!("content = {:?}", bytes)
+                format!("content = {bytes:?}")
             };
 
             format!("<len = {}, {}>", bytes.len(), truncated)

@@ -3,11 +3,10 @@ use ic_base_types::PrincipalId;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_governance_api::{
-    self as api,
+    self as api, BallotInfo, ListNeurons, Topic, Vote,
     governance_error::ErrorType,
     manage_neuron_response::{Command, RegisterVoteResponse},
     neuron::{DissolveState, Followees},
-    BallotInfo, ListNeurons, Topic, Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -420,7 +419,7 @@ fn test_voting_can_span_multiple_rounds() {
 
     // No recent ballots, bc ran out of instructions, should wait til next round.
     for neuron in listed_neurons.full_neurons {
-        assert_eq!(neuron.recent_ballots, vec![], "Neuron: {:?}", neuron);
+        assert_eq!(neuron.recent_ballots, vec![], "Neuron: {neuron:?}");
     }
 
     // The timer should run, which should record all the ballots.
@@ -453,8 +452,7 @@ fn test_voting_can_span_multiple_rounds() {
                 proposal_id: Some(ic_nns_common::pb::v1::ProposalId { id: 1 }),
                 vote: 1
             }],
-            "Neuron: {:?}",
-            neuron
+            "Neuron: {neuron:?}"
         );
     }
 }

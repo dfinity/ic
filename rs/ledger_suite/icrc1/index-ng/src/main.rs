@@ -1,6 +1,7 @@
-use candid::{candid_method, CandidType, Decode, Encode, Nat, Principal};
+#![allow(deprecated)]
+use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_canister_log::{export as export_logs, log};
-use ic_canister_profiler::{measure_span, SpanName, SpanStats};
+use ic_canister_profiler::{SpanName, SpanStats, measure_span};
 use ic_cdk::trap;
 use ic_cdk::{init, post_upgrade, query};
 use ic_cdk_timers::TimerId;
@@ -10,9 +11,9 @@ use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_
 use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc1::{Block, Operation};
 use ic_icrc1_index_ng::{
-    FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
-    GetAccountTransactionsResult, GetBlocksMethod, IndexArg, InitArg, ListSubaccountsArgs, Log,
-    LogEntry, Status, TransactionWithId, UpgradeArg, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+    DEFAULT_MAX_BLOCKS_PER_RESPONSE, FeeCollectorRanges, GetAccountTransactionsArgs,
+    GetAccountTransactionsResponse, GetAccountTransactionsResult, GetBlocksMethod, IndexArg,
+    InitArg, ListSubaccountsArgs, Log, LogEntry, Status, TransactionWithId, UpgradeArg,
 };
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex as BlockIndex64, BlockType, EncodedBlock};
@@ -20,8 +21,8 @@ use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, Zero};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::storable::{Blob, Bound};
 use ic_stable_structures::{
-    memory_manager::MemoryManager, DefaultMemoryImpl, StableBTreeMap, StableCell, StableLog,
-    Storable,
+    DefaultMemoryImpl, StableBTreeMap, StableCell, StableLog, Storable,
+    memory_manager::MemoryManager,
 };
 use icrc_ledger_types::icrc::generic_value::Value;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
@@ -110,6 +111,9 @@ thread_local! {
     /// Cache of the canister, i.e. ephemeral data that doesn't need to be
     /// persistent between upgrades
     static CACHE: RefCell<Cache> = RefCell::new(Cache::default());
+
+    /// The ID of the block sync timer.
+    static TIMER_ID: RefCell<TimerId> = RefCell::new(TimerId::default());
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -136,6 +140,12 @@ struct State {
     /// index. Lower values will result in a more responsive UI, but higher costs due to increased
     /// cycle burn for the index, ledger and archive(s).
     retrieve_blocks_from_ledger_interval: Option<Duration>,
+
+    /// The ICRC-107 fee collector. Example values:
+    /// - `None` - legacy fee collector is used.
+    /// - `Some(None)` - 107 fee collector is enabled but fees are burned.
+    /// - `Some(Some(account1))` - 107 fee collector is enabled, `account1` collects the fees.
+    fee_collector_107: Option<Option<Account>>,
 }
 
 impl State {
@@ -157,12 +167,13 @@ impl Default for State {
             fee_collectors: Default::default(),
             last_fee: None,
             retrieve_blocks_from_ledger_interval: None,
+            fee_collector_107: None,
         }
     }
 }
 
 impl Storable for State {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(self, &mut buf).expect("failed to encode index config");
         Cow::Owned(buf)
@@ -212,6 +223,11 @@ impl Storable for AccountDataType {
 #[derive(Clone, Debug, Default)]
 struct Cache {
     pub get_blocks_method: Option<GetBlocksMethod>,
+}
+
+struct SyncError {
+    message: String,
+    retriable: bool,
 }
 
 #[test]
@@ -295,7 +311,6 @@ fn balance_key(account: Account) -> (AccountDataType, (Blob<29>, [u8; 32])) {
 }
 
 #[init]
-#[candid_method(init)]
 fn init(index_arg: Option<IndexArg>) {
     let InitArg {
         ledger_id,
@@ -415,7 +430,9 @@ async fn get_supported_standards_from_ledger() -> Vec<String> {
             log!(
                 P0,
                 "[get_supported_standards_from_ledger]: failed to call get_supported_standards_from_ledger on ledger {}. Error code: {:?} message: {}",
-                ledger_id, code, msg
+                ledger_id,
+                code,
+                msg
             );
             vec![]
         }
@@ -434,15 +451,15 @@ where
     O: CandidType + Debug + for<'a> Deserialize<'a>,
 {
     let req = measure_span(&PROFILING_DATA, encode_span_name, || Encode!(i))
-        .map_err(|err| format!("failed to candid encode the input {:?}: {}", i, err))?;
+        .map_err(|err| format!("failed to candid encode the input {i:?}: {err}"))?;
     let res = ic_cdk::api::call::call_raw(id, method, &req, 0)
         .await
-        .map_err(|(code, str)| format!("code: {:#?} message: {}", code, str))?;
+        .map_err(|(code, str)| format!("code: {code:#?} message: {str}"))?;
     measure_span(&PROFILING_DATA, decode_span_name, || Decode!(&res, O))
-        .map_err(|err| format!("failed to candid decode the output: {}", err))
+        .map_err(|err| format!("failed to candid decode the output: {err}"))
 }
 
-async fn get_blocks_from_ledger(start: u64) -> Option<GetBlocksResponse> {
+async fn get_blocks_from_ledger(start: u64) -> Result<GetBlocksResponse, SyncError> {
     let (ledger_id, length) = with_state(|state| (state.ledger_id, state.max_blocks_per_response));
     let req = GetBlocksRequest {
         start: Nat::from(start),
@@ -458,17 +475,20 @@ async fn get_blocks_from_ledger(start: u64) -> Option<GetBlocksResponse> {
     )
     .await;
     match res {
-        Ok(res) => Some(res),
+        Ok(res) => Ok(res),
         Err(err) => {
-            log!(P0, "[get_blocks_from_ledger] failed to get blocks: {}", err);
-            None
+            let message = format!("[get_blocks_from_ledger] failed to get blocks: {}", err);
+            Err(SyncError {
+                message,
+                retriable: true,
+            })
         }
     }
 }
 
 async fn get_blocks_from_archive(
     archived: &ArchivedRange<QueryBlockArchiveFn>,
-) -> Option<BlockRange> {
+) -> Result<BlockRange, SyncError> {
     let req = GetBlocksRequest {
         start: archived.start.clone(),
         length: archived.length.clone(),
@@ -482,19 +502,18 @@ async fn get_blocks_from_archive(
     )
     .await;
     match res {
-        Ok(res) => Some(res),
+        Ok(res) => Ok(res),
         Err(err) => {
-            log!(
-                P0,
-                "[get_blocks_from_archive] failed to get blocks: {}",
-                err
-            );
-            None
+            let message = format!("[get_blocks_from_archive] failed to get blocks: {}", err);
+            Err(SyncError {
+                message,
+                retriable: true,
+            })
         }
     }
 }
 
-async fn icrc3_get_blocks_from_ledger(start: u64) -> Option<GetBlocksResult> {
+async fn icrc3_get_blocks_from_ledger(start: u64) -> Result<GetBlocksResult, SyncError> {
     let (ledger_id, length) = with_state(|state| (state.ledger_id, state.max_blocks_per_response));
     let req = vec![GetBlocksRequest {
         start: Nat::from(start),
@@ -510,19 +529,23 @@ async fn icrc3_get_blocks_from_ledger(start: u64) -> Option<GetBlocksResult> {
     )
     .await;
     match res {
-        Ok(res) => Some(res),
+        Ok(res) => Ok(res),
         Err(err) => {
-            log!(
-                P0,
+            let message = format!(
                 "[icrc3_get_blocks_from_ledger] failed to get blocks: {}",
                 err
             );
-            None
+            Err(SyncError {
+                message,
+                retriable: true,
+            })
         }
     }
 }
 
-async fn icrc3_get_blocks_from_archive(archived: &ArchivedBlocks) -> Option<GetBlocksResult> {
+async fn icrc3_get_blocks_from_archive(
+    archived: &ArchivedBlocks,
+) -> Result<GetBlocksResult, SyncError> {
     let res = measured_call(
         "build_index.icrc3_get_blocks_from_archive.encode",
         "build_index.icrc3_get_blocks_from_archive.decode",
@@ -532,14 +555,16 @@ async fn icrc3_get_blocks_from_archive(archived: &ArchivedBlocks) -> Option<GetB
     )
     .await;
     match res {
-        Ok(res) => Some(res),
+        Ok(res) => Ok(res),
         Err(err) => {
-            log!(
-                P0,
+            let message = format!(
                 "[icrc3_get_blocks_from_archive] failed to get blocks: {}",
                 err
             );
-            None
+            Err(SyncError {
+                message,
+                retriable: true,
+            })
         }
     }
 }
@@ -571,21 +596,36 @@ pub async fn build_index() -> Option<()> {
         });
     });
     let num_indexed = match find_get_blocks_method().await {
-        GetBlocksMethod::GetBlocks => fetch_blocks_via_get_blocks().await?,
-        GetBlocksMethod::ICRC3GetBlocks => fetch_blocks_via_icrc3().await?,
+        GetBlocksMethod::GetBlocks => fetch_blocks_via_get_blocks().await,
+        GetBlocksMethod::ICRC3GetBlocks => fetch_blocks_via_icrc3().await,
     };
-    let retrieve_blocks_from_ledger_interval =
-        with_state(|state| state.retrieve_blocks_from_ledger_interval());
-    log!(
-        P1,
-        "Indexed: {} waiting : {:?}",
-        num_indexed,
-        retrieve_blocks_from_ledger_interval
-    );
+    match num_indexed {
+        Ok(num_indexed) => {
+            let retrieve_blocks_from_ledger_interval =
+                with_state(|state| state.retrieve_blocks_from_ledger_interval());
+            log!(
+                P1,
+                "Indexed: {} waiting : {:?}",
+                num_indexed,
+                retrieve_blocks_from_ledger_interval
+            );
+        }
+        Err(error) => {
+            log!(P0, "{}", error.message);
+            ic_cdk::eprintln!("{}", error.message);
+            if !error.retriable {
+                log!(P0, "Stopping the indexing timer.");
+                ic_cdk::eprintln!("Stopping the indexing timer.");
+                let timer_id = TIMER_ID.with(|tid| *tid.borrow());
+                ic_cdk_timers::clear_timer(timer_id);
+            }
+        }
+    };
+
     Some(())
 }
 
-async fn fetch_blocks_via_get_blocks() -> Option<u64> {
+async fn fetch_blocks_via_get_blocks() -> Result<u64, SyncError> {
     let mut num_indexed = 0;
     let next_id = with_blocks(|blocks| blocks.len());
     let res = get_blocks_from_ledger(next_id).await?;
@@ -602,15 +642,15 @@ async fn fetch_blocks_via_get_blocks() -> Option<u64> {
             next_archived_txid += res.blocks.len();
             num_indexed += res.blocks.len();
             remaining -= res.blocks.len();
-            append_blocks(res.blocks);
+            append_blocks(res.blocks)?;
         }
     }
     num_indexed += res.blocks.len();
-    append_blocks(res.blocks);
-    Some(num_indexed as u64)
+    append_blocks(res.blocks)?;
+    Ok(num_indexed as u64)
 }
 
-async fn fetch_blocks_via_icrc3() -> Option<u64> {
+async fn fetch_blocks_via_icrc3() -> Result<u64, SyncError> {
     // The current number of blocks is also the id of the next
     // block to query from the Ledger.
     let previous_num_blocks = with_blocks(|blocks| blocks.len());
@@ -635,13 +675,14 @@ async fn fetch_blocks_via_icrc3() -> Option<u64> {
             // one, i.e. next_id + num_indexed
             let expected_id = with_blocks(|blocks| blocks.len());
             if arg.start != expected_id {
-                log!(
-                    P0,
+                let error = format!(
                     "[fetch_blocks_via_icrc3]: wrong start index in archive args. Expected: {} actual: {}",
-                    expected_id,
-                    arg.start,
+                    expected_id, arg.start,
                 );
-                return None;
+                return Err(SyncError {
+                    message: error,
+                    retriable: false,
+                });
             }
 
             let archived = ArchivedBlocks {
@@ -652,14 +693,16 @@ async fn fetch_blocks_via_icrc3() -> Option<u64> {
 
             // sanity check: the index does not support nested archives
             if !res.archived_blocks.is_empty() {
-                log!(
-                    P0,
+                let error = format!(
                     "[fetch_blocks_via_icrc3]: The archive callback {:?} with arg {:?} returned one or more archived blocks and the index is currently not supporting nested archived blocks. Archived blocks returned are {:?}",
                     callback.clone(),
                     arg.clone(),
                     res.archived_blocks,
                 );
-                return None;
+                return Err(SyncError {
+                    message: error,
+                    retriable: false,
+                });
             }
 
             // change `arg` for the next iteration
@@ -673,22 +716,65 @@ async fn fetch_blocks_via_icrc3() -> Option<u64> {
     append_icrc3_blocks(res.blocks)?;
     let num_blocks = with_blocks(|blocks| blocks.len());
     match num_blocks.checked_sub(previous_num_blocks) {
-        None => panic!("The number of blocks {} is smaller than the number of blocks before indexing {}. This is impossible. I'm trapping to reset the state", num_blocks, previous_num_blocks),
-        Some(new_blocks_indexed) => Some(new_blocks_indexed),
+        None => panic!(
+            "The number of blocks {} is smaller than the number of blocks before indexing {}. This is impossible. I'm trapping to reset the state",
+            num_blocks, previous_num_blocks
+        ),
+        Some(new_blocks_indexed) => Ok(new_blocks_indexed),
     }
 }
 
-fn set_build_index_timer(after: Duration) -> TimerId {
-    ic_cdk_timers::set_timer_interval(after, || {
+fn set_build_index_timer(after: Duration) {
+    let timer_id = ic_cdk_timers::set_timer_interval(after, || {
         ic_cdk::spawn(async {
             let _ = build_index().await;
         })
-    })
+    });
+    TIMER_ID.with(|tid| *tid.borrow_mut() = timer_id);
 }
 
-fn append_block(block_index: BlockIndex64, block: GenericBlock) {
+fn append_block(block_index: BlockIndex64, block: GenericBlock) -> Result<(), SyncError> {
     measure_span(&PROFILING_DATA, "append_blocks", move || {
-        let block = generic_block_to_encoded_block_or_trap(block_index, block);
+        let original_block = block.clone();
+
+        let block = match generic_block_to_encoded_block(block) {
+            Ok(block) => block,
+            Err(e) => {
+                let message = format!(
+                    "Unable to decode generic block at index {block_index}: {}. Error: {e}",
+                    original_block
+                );
+                return Err(SyncError {
+                    message,
+                    retriable: false,
+                });
+            }
+        };
+
+        let decoded_block = match Block::<Tokens>::decode(block.clone()) {
+            Ok(block) => block,
+            Err(e) => {
+                let message = format!(
+                    "Unable to decode encoded block at index {block_index}: {}. Error: {e}",
+                    original_block
+                );
+                return Err(SyncError {
+                    message,
+                    retriable: false,
+                });
+            }
+        };
+        let decoded_value = encoded_block_to_generic_block(&decoded_block.clone().encode());
+        if original_block.hash() != decoded_value.hash() {
+            let message = format!(
+                "Block at index {block_index} has unknown fields. Original block: {}, decoded block: {}.",
+                original_block, decoded_value
+            );
+            return Err(SyncError {
+                message,
+                retriable: false,
+            });
+        }
 
         // append the encoded block to the block log
         with_blocks(|blocks| {
@@ -697,8 +783,6 @@ fn append_block(block_index: BlockIndex64, block: GenericBlock) {
                 .unwrap_or_else(|_| trap("no space left"))
         });
 
-        let decoded_block = decode_encoded_block_or_trap(block_index, block);
-
         // add the block idx to the indices
         with_account_block_ids(|account_block_ids| {
             for account in get_accounts(&decoded_block) {
@@ -706,49 +790,66 @@ fn append_block(block_index: BlockIndex64, block: GenericBlock) {
             }
         });
 
+        // change the fee collector if block is a 107 block
+        process_fee_collector_block(&decoded_block);
+
         // add the block to the fee_collector if one is set
-        index_fee_collector(block_index, &decoded_block);
+        index_fee_collector(block_index);
 
         // change the balance of the involved accounts
         process_balance_changes(block_index, &decoded_block);
-    });
+
+        Ok(())
+    })
 }
 
-fn append_blocks(new_blocks: Vec<GenericBlock>) {
+fn append_blocks(new_blocks: Vec<GenericBlock>) -> Result<(), SyncError> {
     // the index of the next block that we
     // are going to append
     let mut block_index = with_blocks(|blocks| blocks.len());
     for block in new_blocks {
-        append_block(block_index, block);
+        append_block(block_index, block)?;
         block_index += 1;
     }
+    Ok(())
 }
 
-fn append_icrc3_blocks(new_blocks: Vec<BlockWithId>) -> Option<()> {
+fn append_icrc3_blocks(new_blocks: Vec<BlockWithId>) -> Result<(), SyncError> {
     let mut blocks = vec![];
     let start_id = with_blocks(|blocks| blocks.len());
     for BlockWithId { id, block } in new_blocks {
         // sanity check
         let expected_id = start_id + blocks.len() as u64;
         if id != expected_id {
-            log!(
-                P0,
+            let error = format!(
                 "[fetch_blocks_via_icrc3]: wrong block index returned by ledger. Expected: {} actual: {}",
-                expected_id,
-                id,
+                expected_id, id
             );
-            return None;
+            return Err(SyncError {
+                message: error,
+                retriable: false,
+            });
         }
         // This conversion is safe as `Value`
         // can represent any `ICRC3Value`.
         blocks.push(Value::from(block));
     }
-    append_blocks(blocks);
-    Some(())
+    append_blocks(blocks)?;
+    Ok(())
 }
 
-fn index_fee_collector(block_index: BlockIndex64, block: &Block<Tokens>) {
-    if let Some(fee_collector) = get_fee_collector(block_index, block) {
+fn process_fee_collector_block(block: &Block<Tokens>) {
+    if let Operation::FeeCollector {
+        fee_collector,
+        caller: _,
+    } = block.transaction.operation
+    {
+        mutate_state(|s| s.fee_collector_107 = Some(fee_collector));
+    }
+}
+
+fn index_fee_collector(block_index: BlockIndex64) {
+    if let Some(fee_collector) = get_fee_collector() {
         mutate_state(|s| {
             s.fee_collectors
                 .entry(fee_collector)
@@ -782,8 +883,40 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
         &PROFILING_DATA,
         "append_blocks.process_balance_changes",
         move || match block.transaction.operation {
-            Operation::Burn { from, amount, .. } => debit(block_index, from, amount),
-            Operation::Mint { to, amount } => credit(block_index, to, amount),
+            Operation::Burn {
+                from, amount, fee, ..
+            } => {
+                let mut amount_with_fee = amount;
+                let effective_fee = block.effective_fee.or(fee);
+                if let Some(fee) = effective_fee {
+                    amount_with_fee = amount.checked_add(&fee).unwrap_or_else(|| {
+                        trap(format!(
+                            "token amount overflow while indexing block {block_index}"
+                        ))
+                    });
+                    mutate_state(|s| s.last_fee = Some(fee));
+                    if let Some(fee_collector) = get_fee_collector() {
+                        credit(block_index, fee_collector, fee);
+                    }
+                }
+                debit(block_index, from, amount_with_fee);
+            }
+            Operation::Mint { to, amount, fee } => {
+                let mut amount_without_fee = amount;
+                let effective_fee = block.effective_fee.or(fee);
+                if let Some(fee) = effective_fee {
+                    amount_without_fee = amount.checked_sub(&fee).unwrap_or_else(|| {
+                        trap(format!(
+                            "token amount underflow while indexing block {block_index}"
+                        ))
+                    });
+                    mutate_state(|s| s.last_fee = Some(fee));
+                    if let Some(fee_collector) = get_fee_collector() {
+                        credit(block_index, fee_collector, fee);
+                    }
+                }
+                credit(block_index, to, amount_without_fee)
+            }
             Operation::Transfer {
                 from,
                 to,
@@ -792,9 +925,8 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                 ..
             } => {
                 let fee = block.effective_fee.or(fee).unwrap_or_else(|| {
-                    ic_cdk::trap(&format!(
-                        "Block {} is of type Transfer but has no fee or effective fee!",
-                        block_index
+                    ic_cdk::trap(format!(
+                        "Block {block_index} is of type Transfer but has no fee or effective fee!"
                     ))
                 });
                 mutate_state(|s| s.last_fee = Some(fee));
@@ -802,13 +934,13 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                     block_index,
                     from,
                     amount.checked_add(&fee).unwrap_or_else(|| {
-                        ic_cdk::trap(&format!(
+                        ic_cdk::trap(format!(
                             "token amount overflow while indexing block {block_index}"
                         ))
                     }),
                 );
                 credit(block_index, to, amount);
-                if let Some(fee_collector) = get_fee_collector(block_index, block) {
+                if let Some(fee_collector) = get_fee_collector() {
                     credit(block_index, fee_collector, fee);
                 }
             }
@@ -829,8 +961,10 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                             );
                             last_fee
                         }
-                        None => ic_cdk::trap(&format!("bug: index is stuck because block with index {block_index} doesn't contain a fee and no fee has been recorded before")),
-                    }
+                        None => ic_cdk::trap(format!(
+                            "bug: index is stuck because block with index {block_index} doesn't contain a fee and no fee has been recorded before"
+                        )),
+                    },
                 };
 
                 // It is possible that the spender account has not existed prior to this approve transaction.
@@ -840,6 +974,16 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                 change_balance(spender, |balance| balance);
 
                 debit(block_index, from, fee);
+
+                if let Some(fee_collector_107) = get_fee_collector_107().flatten() {
+                    credit(block_index, fee_collector_107, fee);
+                }
+            }
+            Operation::FeeCollector {
+                fee_collector: _,
+                caller: _,
+            } => {
+                // Does not affect the balance
             }
         },
     );
@@ -848,8 +992,7 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
 fn debit(block_index: BlockIndex64, account: Account, amount: Tokens) {
     change_balance(account, |balance| {
         balance.checked_sub(&amount).unwrap_or_else(|| {
-            ic_cdk::trap(&format!("Block {} caused an underflow for account {} when calculating balance {} - amount {}",
-                block_index, account, balance, amount));
+            ic_cdk::trap(format!("Block {block_index} caused an underflow for account {account} when calculating balance {balance} - amount {amount}"));
         })
     })
 }
@@ -857,51 +1000,63 @@ fn debit(block_index: BlockIndex64, account: Account, amount: Tokens) {
 fn credit(block_index: BlockIndex64, account: Account, amount: Tokens) {
     change_balance(account, |balance| {
         balance.checked_add(&amount).unwrap_or_else(|| {
-            ic_cdk::trap(&format!("Block {} caused an overflow for account {} when calculating balance {} + amount {}",
-                block_index, account, balance, amount))
+            ic_cdk::trap(format!("Block {block_index} caused an overflow for account {account} when calculating balance {balance} + amount {amount}"))
         })
     });
 }
 
-fn generic_block_to_encoded_block_or_trap(
-    block_index: BlockIndex64,
-    block: GenericBlock,
-) -> EncodedBlock {
-    generic_block_to_encoded_block(block).unwrap_or_else(|e| {
-        trap(&format!(
-            "Unable to decode generic block at index {}. Error: {}",
-            block_index, e
-        ))
-    })
-}
-
 fn decode_encoded_block_or_trap(block_index: BlockIndex64, block: EncodedBlock) -> Block<Tokens> {
     Block::<Tokens>::decode(block).unwrap_or_else(|e| {
-        trap(&format!(
-            "Unable to decode encoded block at index {}. Error: {}",
-            block_index, e
+        trap(format!(
+            "Unable to decode encoded block at index {block_index}. Error: {e}"
         ))
     })
 }
 
+/// Get the accounts whose balances are affected by the transaction in a block. Any affected
+/// block is returned at most once - in particular, this applies to self-transfers.
 fn get_accounts(block: &Block<Tokens>) -> Vec<Account> {
     match block.transaction.operation {
         Operation::Burn { from, .. } => vec![from],
         Operation::Mint { to, .. } => vec![to],
-        Operation::Transfer { from, to, .. } => vec![from, to],
+        Operation::Transfer { from, to, .. } => {
+            match from == to {
+                // For self-transfers, only return the affected account once.
+                true => vec![from],
+                false => vec![from, to],
+            }
+        }
         Operation::Approve { from, .. } => vec![from],
+        Operation::FeeCollector { .. } => vec![],
     }
 }
 
-fn get_fee_collector(block_index: BlockIndex64, block: &Block<Tokens>) -> Option<Account> {
+fn get_fee_collector() -> Option<Account> {
+    get_fee_collector_107().unwrap_or_else(get_legacy_fee_collector)
+}
+
+fn get_fee_collector_107() -> Option<Option<Account>> {
+    with_state(|s| s.fee_collector_107)
+}
+
+fn get_legacy_fee_collector() -> Option<Account> {
+    let chain_length = with_blocks(|blocks| blocks.len());
+    if chain_length == 0 {
+        return None;
+    }
+    let last_block_index = chain_length - 1;
+    let block = get_decoded_block(last_block_index)
+        .expect("chain_length is positive, should have at least one block");
     if block.fee_collector.is_some() {
         block.fee_collector
     } else if let Some(fee_collector_block_index) = block.fee_collector_block_index {
         let block = get_decoded_block(fee_collector_block_index)
             .unwrap_or_else(||
-                ic_cdk::trap(&format!("Block at index {} has fee_collector_block_index {} but there is no block at that index", block_index, fee_collector_block_index)));
+                ic_cdk::trap(format!("Block at index {last_block_index} has fee_collector_block_index {fee_collector_block_index} but there is no block at that index")));
         if block.fee_collector.is_none() {
-            ic_cdk::trap(&format!("Block at index {} has fee_collector_block_index {} but that block has no fee_collector set", block_index, fee_collector_block_index))
+            ic_cdk::trap(format!(
+                "Block at index {last_block_index} has fee_collector_block_index {fee_collector_block_index} but that block has no fee_collector set"
+            ))
         } else {
             block.fee_collector
         }
@@ -926,7 +1081,6 @@ fn decode_icrc1_block(_txid: u64, bytes: Vec<u8>) -> GenericBlock {
 }
 
 #[query]
-#[candid_method(query)]
 fn get_blocks(req: GetBlocksRequest) -> ic_icrc1_index_ng::GetBlocksResponse {
     let chain_length = with_blocks(|blocks| blocks.len());
     let (start, length) = req
@@ -951,13 +1105,11 @@ fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>)
 }
 
 #[query]
-#[candid_method(query)]
 fn ledger_id() -> Principal {
     with_state(|state| state.ledger_id)
 }
 
 #[query]
-#[candid_method(query)]
 fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransactionsResult {
     let length = arg
         .max_results
@@ -977,17 +1129,16 @@ fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransa
             .range(key..)
             // old txs of the requested account and skip the start index
             .take_while(|(k, _)| k.0 == key.0)
-            .filter(|(k, _)| k.1 .0 < start)
+            .filter(|(k, _)| k.1.0 < start)
             .take(length)
-            .map(|(k, _)| k.1 .0)
+            .map(|(k, _)| k.1.0)
             .collect::<Vec<BlockIndex64>>()
     });
     for id in indices {
         let block = with_blocks(|blocks| {
             blocks.get(id).unwrap_or_else(|| {
-                trap(&format!(
-                    "Block {} not found in the block log, account blocks map is corrupted!",
-                    id
+                trap(format!(
+                    "Block {id} not found in the block log, account blocks map is corrupted!"
                 ))
             })
         });
@@ -1012,9 +1163,8 @@ fn encoded_block_bytes_to_flat_transaction(
     block: Vec<u8>,
 ) -> Transaction {
     let block = Block::<Tokens>::decode(EncodedBlock::from(block)).unwrap_or_else(|e| {
-        trap(&format!(
-            "Unable to decode encoded block at index {}. Error: {}",
-            block_index, e
+        trap(format!(
+            "Unable to decode encoded block at index {block_index}. Error: {e}"
         ))
     });
     block.into()
@@ -1033,26 +1183,23 @@ fn get_oldest_tx_id(account: Account) -> Option<BlockIndex64> {
                 .iter_upper_bound(&last_key)
                 .take_while(|(k, _)| k.0 == account_sha256(account))
                 .next()
-                .map(|(key, _)| key.1 .0)
+                .map(|(key, _)| key.1.0)
         })
     })
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_balance_of(account: Account) -> Nat {
     get_balance(account).into()
 }
 
 #[query]
-#[candid_method(query)]
 fn status() -> Status {
     let num_blocks_synced = with_blocks(|blocks| blocks.len().into());
     Status { num_blocks_synced }
 }
 
 #[query]
-#[candid_method(query)]
 fn list_subaccounts(args: ListSubaccountsArgs) -> Vec<Subaccount> {
     let start_key = balance_key(Account {
         owner: args.owner,
@@ -1078,7 +1225,10 @@ fn list_subaccounts(args: ListSubaccountsArgs) -> Vec<Subaccount> {
     })
 }
 
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -1091,7 +1241,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
-                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
                     .build()
             }
         }
@@ -1163,7 +1313,6 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
     Ok(())
 }
 
-#[candid_method(query)]
 #[query]
 fn get_fee_collectors_ranges() -> FeeCollectorRanges {
     let ranges = with_state(|s| {
@@ -1187,7 +1336,7 @@ candid::export_service!();
 
 #[test]
 fn check_candid_interface() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
     use std::path::PathBuf;
 
     let new_interface = __export_service();

@@ -1,10 +1,10 @@
+use crate::GuestVMType;
 use crate::boot_args::read_boot_args;
 use crate::guest_vm_config::DirectBootConfig;
-use crate::mount::{FileSystem, MountOptions, PartitionProvider};
-use crate::GuestVMType;
 use anyhow::Context;
 use anyhow::Result;
 use grub::{BootAlternative, BootCycle, GrubEnv, WithDefault};
+use ic_device::mount::{FileSystem, MountOptions, PartitionProvider};
 use std::fs::File;
 use tempfile::NamedTempFile;
 use uuid::Uuid;
@@ -33,6 +33,8 @@ pub struct DirectBoot {
     pub kernel: NamedTempFile,
     /// The initrd file
     pub initrd: NamedTempFile,
+    /// The OVMF_SEV.fd file
+    pub ovmf_sev: NamedTempFile,
     /// Kernel command line parameters
     pub kernel_cmdline: String,
 }
@@ -42,6 +44,7 @@ impl DirectBoot {
         DirectBootConfig {
             kernel: self.kernel.path().to_path_buf(),
             initrd: self.initrd.path().to_path_buf(),
+            ovmf_sev: self.ovmf_sev.path().to_path_buf(),
             kernel_cmdline: self.kernel_cmdline.clone(),
         }
     }
@@ -79,8 +82,9 @@ pub async fn prepare_direct_boot(
         .context("Could not mount grub partition")?;
 
     let grubenv_path = grub_partition.mount_point().join("grubenv");
-    let mut grubenv =
-        GrubEnv::read_from(File::open(&grubenv_path).context("Could not open grubenv")?)?;
+    let grubenv_file = File::open(&grubenv_path).context("Could not open grubenv")?;
+
+    let mut grubenv = GrubEnv::read_from(grubenv_file)?;
 
     let grubenv_is_changing = should_refresh_grubenv
         && refresh_grubenv(&mut grubenv).context("Failed to refresh grubenv")?;
@@ -113,21 +117,35 @@ pub async fn prepare_direct_boot(
         .with_context(|| format!("Could not mount boot partition {boot_alternative}"))?;
 
     let boot_args_path = boot_partition.mount_point().join("boot_args");
-    // Older GuestOS releases do not have the boot_args file. If the file exists, we have a modern
-    // enough GuestOS that supports direct boot. If not, abandon direct boot by returning None.
+    let ovmf_sev_path = boot_partition.mount_point().join("OVMF_SEV.fd");
+    // Older GuestOS releases do not have the boot_args and OVMF.fd files. If the files exist,
+    // we have a modern enough GuestOS that supports direct boot. If not, abandon direct boot by
+    // returning None.
     // Also note that we decide about abandoning direct boot before writing out grubenv below since
     // booting with GRUB will also try to refresh the grubenv and it's *not* an idempotent
     // operation. Therefore, we don't write out grubenv until we can ensure that we'll do a direct
     // boot.
     if !boot_args_path.exists() {
+        println!(
+            "No boot_args file found in boot partition {boot_alternative}. Cannot prepare \
+             direct boot."
+        );
+        return Ok(None);
+    }
+    if !ovmf_sev_path.exists() {
+        println!(
+            "No OVMF.fd file found in boot partition {boot_alternative}. Cannot prepare \
+             direct boot."
+        );
         return Ok(None);
     }
 
     let boot_args =
         read_boot_args(&boot_args_path, boot_args_var_name).context("Failed to read boot args")?;
 
-    let kernel = NamedTempFile::new()?;
-    let initrd = NamedTempFile::new()?;
+    let kernel = NamedTempFile::with_prefix("kernel")?;
+    let initrd = NamedTempFile::with_prefix("initrd")?;
+    let ovmf_sev = NamedTempFile::with_prefix("ovmf_sev")?;
 
     tokio::fs::copy(boot_partition.mount_point().join("vmlinuz"), &kernel)
         .await
@@ -135,6 +153,9 @@ pub async fn prepare_direct_boot(
     tokio::fs::copy(boot_partition.mount_point().join("initrd.img"), &initrd)
         .await
         .context("Could not copy initrd.img")?;
+    tokio::fs::copy(ovmf_sev_path, &ovmf_sev)
+        .await
+        .context("Could not copy OVMF.fd")?;
 
     // We defer writing out the updated grubenv until we can ensure that the direct boot preparation
     // was successful.
@@ -147,6 +168,7 @@ pub async fn prepare_direct_boot(
     Ok(Some(DirectBoot {
         kernel,
         initrd,
+        ovmf_sev,
         kernel_cmdline: boot_args,
     }))
 }
@@ -182,57 +204,84 @@ fn refresh_grubenv(grub_env: &mut GrubEnv) -> Result<bool> {
     Ok(changed)
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "skip_default_tests")))]
 mod tests {
     use super::*;
-    use crate::mount::testing::MockPartitionProvider;
     use grub::GrubEnvVariableError;
+    use ic_device::mount::testing::MockPartitionProvider;
     use std::collections::HashMap;
     use std::fs;
     use std::io::Write;
     use std::sync::Arc;
     use tempfile::TempDir;
 
-    /// Builder for creating test setups with fluent interface
-    struct TestSetupBuilder {
+    struct GrubConf {
         boot_alternative: Option<BootAlternative>,
         boot_cycle: Option<BootCycle>,
+    }
+
+    #[derive(Clone)]
+    struct ArgsConf {
         boot_args_a: String,
         boot_args_b: String,
-        create_boot_args_files: bool,
+    }
+
+    /// Builder for creating test setups with fluent interface
+    struct TestSetupBuilder {
+        grub_conf: Option<GrubConf>,
+        args_conf: Option<ArgsConf>,
         create_kernel_files: bool,
+        create_ovmf_sev_file: bool,
     }
 
     impl TestSetupBuilder {
         fn new() -> Self {
             Self {
-                boot_alternative: None,
-                boot_cycle: None,
-                boot_args_a: "args_a".to_string(),
-                boot_args_b: "args_b".to_string(),
-                create_boot_args_files: true,
+                grub_conf: Some(GrubConf {
+                    boot_alternative: None,
+                    boot_cycle: None,
+                }),
+                args_conf: Some(ArgsConf {
+                    boot_args_a: "args_a".to_string(),
+                    boot_args_b: "args_b".to_string(),
+                }),
                 create_kernel_files: true,
+                create_ovmf_sev_file: true,
             }
         }
 
         fn with_grubenv(
             mut self,
-            boot_alternative: BootAlternative,
-            boot_cycle: BootCycle,
+            boot_alternative: Option<BootAlternative>,
+            boot_cycle: Option<BootCycle>,
         ) -> Self {
-            self.boot_alternative = Some(boot_alternative);
-            self.boot_cycle = Some(boot_cycle);
+            self.grub_conf = Some(GrubConf {
+                boot_alternative,
+                boot_cycle,
+            });
+            self
+        }
+
+        fn without_grubenv(mut self) -> Self {
+            self.grub_conf = None;
             self
         }
 
         fn with_boot_args(mut self, args_a: &str, args_b: &str) -> Self {
-            self.boot_args_a = args_a.to_string();
-            self.boot_args_b = args_b.to_string();
+            self.args_conf = Some(ArgsConf {
+                boot_args_a: args_a.to_string(),
+                boot_args_b: args_b.to_string(),
+            });
             self
         }
 
         fn without_boot_args_files(mut self) -> Self {
-            self.create_boot_args_files = false;
+            self.args_conf = None;
+            self
+        }
+
+        fn without_ovmf_sev(mut self) -> Self {
+            self.create_ovmf_sev_file = false;
             self
         }
 
@@ -242,19 +291,23 @@ mod tests {
         }
 
         fn build(self) -> TestSetup {
-            let grub_partition = create_grub_partition(self.boot_alternative, self.boot_cycle);
+            let grub_partition = create_grub_partition(self.grub_conf);
 
             let a_boot_partition = create_boot_partition(
-                &self.boot_args_a,
-                "SHOULD NOT BE USED",
-                self.create_boot_args_files,
+                self.args_conf.as_ref().map(|v| ArgsConf {
+                    boot_args_b: "SHOULD NOT BE USED".to_string(),
+                    ..v.clone()
+                }),
                 self.create_kernel_files,
+                self.create_ovmf_sev_file,
             );
             let b_boot_partition = create_boot_partition(
-                "SHOULD NOT BE USED",
-                &self.boot_args_b,
-                self.create_boot_args_files,
+                self.args_conf.map(|v| ArgsConf {
+                    boot_args_a: "SHOULD NOT BE USED".to_string(),
+                    ..v
+                }),
                 self.create_kernel_files,
+                self.create_ovmf_sev_file,
             );
 
             let mut partitions = HashMap::new();
@@ -299,34 +352,40 @@ mod tests {
         }
     }
 
-    fn create_grub_partition(
-        boot_alternative: Option<BootAlternative>,
-        boot_cycle: Option<BootCycle>,
-    ) -> Arc<TempDir> {
+    fn create_grub_partition(grub_conf: Option<GrubConf>) -> Arc<TempDir> {
         let grub_dir = Arc::new(TempDir::new().expect("Failed to create temp dir"));
         let grubenv_path = grub_dir.path().join("grubenv");
 
-        let grubenv = GrubEnv {
-            boot_alternative: boot_alternative.ok_or(GrubEnvVariableError::Undefined),
-            boot_cycle: boot_cycle.ok_or(GrubEnvVariableError::Undefined),
-            ..GrubEnv::default()
-        };
-        grubenv
-            .write_to_file(&grubenv_path)
-            .expect("Failed to write grubenv");
+        if let Some(GrubConf {
+            boot_alternative,
+            boot_cycle,
+        }) = grub_conf
+        {
+            let grubenv = GrubEnv {
+                boot_alternative: boot_alternative.ok_or(GrubEnvVariableError::Undefined),
+                boot_cycle: boot_cycle.ok_or(GrubEnvVariableError::Undefined),
+                ..GrubEnv::default()
+            };
+            grubenv
+                .write_to_file(&grubenv_path)
+                .expect("Failed to write grubenv");
+        }
 
         grub_dir
     }
 
     fn create_boot_partition(
-        boot_args_a: &str,
-        boot_args_b: &str,
-        create_boot_args: bool,
+        args_conf: Option<ArgsConf>,
         create_kernel_files: bool,
+        create_ovmf_sev_file: bool,
     ) -> Arc<TempDir> {
         let boot_dir = Arc::new(TempDir::new().expect("Failed to create temp dir"));
 
-        if create_boot_args {
+        if let Some(ArgsConf {
+            boot_args_a,
+            boot_args_b,
+        }) = args_conf
+        {
             let mut boot_args_file = File::create(boot_dir.path().join("boot_args")).unwrap();
             writeln!(boot_args_file, "BOOT_ARGS_A=\"{boot_args_a}\"").unwrap();
             writeln!(boot_args_file, "BOOT_ARGS_B=\"{boot_args_b}\"").unwrap();
@@ -337,13 +396,17 @@ mod tests {
             fs::write(boot_dir.path().join("initrd.img"), b"fake initrd").unwrap();
         }
 
+        if create_ovmf_sev_file {
+            fs::write(boot_dir.path().join("OVMF_SEV.fd"), b"fake OVMF").unwrap();
+        }
+
         boot_dir
     }
 
     #[tokio::test]
     async fn test_boot_alternative_a() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::A, BootCycle::Stable)
+            .with_grubenv(Some(BootAlternative::A), Some(BootCycle::Stable))
             .build();
 
         let direct_boot = setup
@@ -360,7 +423,7 @@ mod tests {
     #[tokio::test]
     async fn test_boot_alternative_b() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::B, BootCycle::Stable)
+            .with_grubenv(Some(BootAlternative::B), Some(BootCycle::Stable))
             .with_boot_args("args_a", "args_b extra")
             .build();
 
@@ -374,6 +437,7 @@ mod tests {
     }
 
     // Test empty grubenv (happens on the very first boot)
+    // NOTE: This grubenv has contents (filler '#'s), but no variables.
     #[tokio::test]
     async fn test_empty_grubenv() {
         let setup = TestSetupBuilder::new().build();
@@ -391,7 +455,7 @@ mod tests {
     #[tokio::test]
     async fn test_grubenv_refresh_stable_no_change() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::A, BootCycle::Stable)
+            .with_grubenv(Some(BootAlternative::A), Some(BootCycle::Stable))
             .build();
 
         setup
@@ -406,7 +470,7 @@ mod tests {
     #[tokio::test]
     async fn test_grubenv_refresh_install_to_stable() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::A, BootCycle::Install)
+            .with_grubenv(Some(BootAlternative::A), Some(BootCycle::Install))
             .build();
 
         setup
@@ -421,7 +485,7 @@ mod tests {
     #[tokio::test]
     async fn test_grubenv_refresh_firstboot_to_failsafecheck() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::B, BootCycle::FirstBoot)
+            .with_grubenv(Some(BootAlternative::B), Some(BootCycle::FirstBoot))
             .build();
 
         setup
@@ -436,7 +500,7 @@ mod tests {
     #[tokio::test]
     async fn test_grubenv_refresh_failsafecheck_to_stable_opposite() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::A, BootCycle::FailsafeCheck)
+            .with_grubenv(Some(BootAlternative::A), Some(BootCycle::FailsafeCheck))
             .build();
 
         setup
@@ -451,7 +515,7 @@ mod tests {
     #[tokio::test]
     async fn test_grubenv_refresh_failsafecheck_b_to_stable_a() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::B, BootCycle::FailsafeCheck)
+            .with_grubenv(Some(BootAlternative::B), Some(BootCycle::FailsafeCheck))
             .build();
 
         setup
@@ -466,7 +530,7 @@ mod tests {
     #[tokio::test]
     async fn test_no_grubenv_refresh_if_upgrade() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::A, BootCycle::FirstBoot)
+            .with_grubenv(Some(BootAlternative::A), Some(BootCycle::FirstBoot))
             .build();
 
         setup
@@ -487,32 +551,55 @@ mod tests {
 
         let result = prepare_direct_boot(GuestVMType::Default, &provider).await;
 
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Could not mount grub partition"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Could not mount grub partition")
+        );
     }
 
     #[tokio::test]
     async fn test_missing_boot_partition() {
-        let grub_partition =
-            create_grub_partition(Some(BootAlternative::A), Some(BootCycle::Stable));
+        let grub_partition = create_grub_partition(Some(GrubConf {
+            boot_alternative: Some(BootAlternative::A),
+            boot_cycle: Some(BootCycle::Stable),
+        }));
         let mut partitions = HashMap::new();
         partitions.insert(GRUB_PARTITION_UUID, grub_partition);
         let provider = MockPartitionProvider::new(partitions);
 
         let result = prepare_direct_boot(GuestVMType::Default, &provider).await;
 
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Could not mount boot partition A"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Could not mount boot partition A")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_missing_grubenv() {
+        let setup = TestSetupBuilder::new().without_grubenv().build();
+
+        // NOTE: The default formatter does not include multiple levels of
+        // context. Debug representation is used if the error makes it all of
+        // the way out of main.
+        let debug_error = format!(
+            "{:?}",
+            setup
+                .prepare_direct_boot(GuestVMType::Default)
+                .await
+                .expect_err("prepare_direct_boot should fail")
+        );
+        assert!(debug_error.contains("Could not open grubenv"));
     }
 
     #[tokio::test]
     async fn test_missing_boot_args_file() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::B, BootCycle::FailsafeCheck)
+            .with_grubenv(Some(BootAlternative::B), Some(BootCycle::FailsafeCheck))
             .without_boot_args_files()
             .build();
 
@@ -531,31 +618,49 @@ mod tests {
     #[tokio::test]
     async fn test_missing_kernel_file() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::B, BootCycle::Stable)
+            .with_grubenv(Some(BootAlternative::B), Some(BootCycle::Stable))
             .without_kernel_files()
             .build();
 
-        assert!(setup
+        assert!(
+            setup
+                .prepare_direct_boot(GuestVMType::Default)
+                .await
+                .expect_err("prepare_direct_boot should fail")
+                .to_string()
+                .contains("vmlinuz")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_missing_ovmf_file() {
+        let setup = TestSetupBuilder::new()
+            .with_grubenv(Some(BootAlternative::B), Some(BootCycle::Stable))
+            .without_ovmf_sev()
+            .build();
+
+        let result = setup
             .prepare_direct_boot(GuestVMType::Default)
             .await
-            .expect_err("prepare_direct_boot should fail")
-            .to_string()
-            .contains("vmlinuz"));
+            .expect("prepare_direct_boot failed");
+        assert!(result.is_none());
     }
 
     #[tokio::test]
     async fn test_opposite_boot_alternative_in_upgrade_vm() {
         let setup = TestSetupBuilder::new()
-            .with_grubenv(BootAlternative::A, BootCycle::Stable)
+            .with_grubenv(Some(BootAlternative::A), Some(BootCycle::Stable))
             .with_boot_args("args_a", "args_b")
             .build();
 
-        assert!(setup
-            .prepare_direct_boot(GuestVMType::Upgrade)
-            .await
-            .expect("prepare_direct_boot failed")
-            .expect("prepare_direct_boot returned None")
-            .kernel_cmdline
-            .contains("args_b"));
+        assert!(
+            setup
+                .prepare_direct_boot(GuestVMType::Upgrade)
+                .await
+                .expect("prepare_direct_boot failed")
+                .expect("prepare_direct_boot returned None")
+                .kernel_cmdline
+                .contains("args_b")
+        );
     }
 }

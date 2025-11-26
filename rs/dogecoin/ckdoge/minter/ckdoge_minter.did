@@ -1,0 +1,254 @@
+type MinterArg = variant {
+    Init : InitArgs;
+};
+
+// The initialization parameters of the minter canister.
+type InitArgs = record {
+    // The minter will interact with this Dogecoin network.
+    doge_network : Network;
+
+    // The principal of the ledger that handles ckDOGE transfers.
+    // The default account of the ckDOGE minter must be configured as
+    // the minting account of the ledger.
+    ledger_id : principal;
+
+    // The name of the ECDSA key to use.
+    // E.g., "dfx_test_key" on the local replica.
+    ecdsa_key_name : text;
+
+    // The minimal amount of ckDOGE that can be converted to DOGE.
+    retrieve_doge_min_amount : nat64;
+
+    /// Maximum time in nanoseconds that a transaction should spend in the queue
+    /// before being sent.
+    max_time_in_queue_nanos : nat64;
+
+    /// The minimum number of confirmations required for the minter to
+    /// accept a Dogecoin transaction.
+    min_confirmations : opt nat32;
+
+    /// The minter's operation mode.
+    mode : Mode;
+
+    /// The expiration duration (in seconds) for cached entries in the get_utxos cache.
+    get_utxos_cache_expiration_seconds: opt nat64;
+};
+
+type Network = variant {
+    // The public Dogecoin mainnet.
+    Mainnet;
+    // The public Dogecoin testnet.
+    Testnet;
+    // A local Dogecoin regtest installation.
+    Regtest;
+};
+
+type Mode = variant {
+    // The minter does not allow any state modifications.
+    ReadOnly;
+    // Only specified principals can modify minter's state.
+    RestrictedTo : vec principal;
+    // Only specified principals can convert DOGE to ckDOGE.
+    DepositsRestrictedTo : vec principal;
+    // Anyone can interact with the minter.
+    GeneralAvailability;
+};
+
+type RetrieveDogeWithApprovalArgs = record {
+    // The address to which the ckDOGE minter should deposit DOGE.
+    address : text;
+    // The amount of ckDOGE in koinu (smallest denomination of DOGE) that the client wants to withdraw.
+    amount : nat64;
+    // The subaccount to burn ckDOGE from.
+    from_subaccount : opt blob;
+};
+
+type RetrieveDogeOk = record {
+    // Returns the burn transaction index corresponding to the withdrawal.
+    // You can use this index to query the withdrawal status.
+    block_index : nat64
+};
+
+type RetrieveDogeWithApprovalError = variant {
+    // The minter failed to parse the destination address.
+    MalformedAddress : text;
+    // The minter is already processing another retrieval request for the same
+    // principal.
+    AlreadyProcessing;
+    // The withdrawal amount is too low.
+    // The payload contains the minimal withdrawal amount.
+    AmountTooLow : nat64;
+    // The ckDOGE balance of the withdrawal account is too low.
+    InsufficientFunds : record { balance : nat64 };
+    // The allowance given to the minter is too low.
+    InsufficientAllowance : record { allowance : nat64 };
+    // The minter is overloaded, retry the request.
+    // The payload contains a human-readable message explaining what caused the unavailability.
+    TemporarilyUnavailable : text;
+    // A generic error reserved for future extensions.
+    GenericError : record { error_message : text; error_code : nat64 };
+};
+
+// The result of an [update_balance] call.
+type UtxoStatus = variant {
+    // The minter ignored this UTXO because UTXO's value is too small to pay
+    // the check fees.
+    ValueTooSmall : Utxo;
+    // The Dogecoin checker considered this UTXO to be tainted.
+    Tainted : Utxo;
+    // The UTXO passed the Dogecoin check, but the minter failed to mint ckDOGE
+    // because the Ledger was unavailable. Retrying the [update_balance] call
+    // should eventually advance the UTXO to the [Minted] state.
+    Checked : Utxo;
+    // The UTXO passed the Dogecoin check, and ckDOGE has been minted.
+    Minted : record {
+        block_index : nat64;
+        minted_amount : nat64;
+        utxo : Utxo;
+    };
+};
+
+type UpdateBalanceError = variant {
+    // There are no new UTXOs to process.
+    NoNewUtxos : record {
+        current_confirmations: opt nat32;
+        required_confirmations: nat32;
+        pending_utxos: opt vec PendingUtxo;
+        suspended_utxos: opt vec SuspendedUtxo;
+    };
+    // The minter is already processing another update balance request for the caller.
+    AlreadyProcessing;
+    // The minter is overloaded, retry the request.
+    // The payload contains a human-readable message explaining what caused the unavailability.
+    TemporarilyUnavailable : text;
+    // A generic error reserved for future extensions.
+    GenericError : record { error_message : text; error_code : nat64 };
+};
+
+// Utxos that don't have enough confirmations to be processed.
+type PendingUtxo = record {
+    outpoint : record { txid : vec nat8; vout : nat32 };
+    value : nat64;
+    confirmations: nat32;
+};
+
+type SuspendedUtxo = record {
+    utxo : Utxo;
+    reason : SuspendedReason;
+    earliest_retry: Timestamp;
+};
+
+type SuspendedReason = variant {
+    // The minter ignored this UTXO because UTXO's value is too small to pay
+    // the check fees.
+    ValueTooSmall;
+    // The Dogecoin checker considered this UTXO to be tainted.
+    Quarantined;
+};
+
+// Number of nanoseconds since the Unix Epoch
+type Timestamp = nat64;
+
+type Utxo = record {
+    outpoint : record { txid : vec nat8; vout : nat32 };
+    value : nat64;
+    height : nat32;
+};
+
+// Represents an account on the ckDOGE ledger.
+type Account = record { owner : principal; subaccount : opt blob };
+
+type ReimbursementReason = variant {
+    CallFailed;
+    TaintedDestination : record {
+        kyt_fee : nat64;
+        kyt_provider: principal;
+    };
+};
+
+type ReimbursementRequest = record {
+  account : Account;
+  amount : nat64;
+  reason : ReimbursementReason;
+};
+
+type ReimbursedDeposit = record {
+  account : Account;
+  mint_block_index : nat64;
+  amount : nat64;
+  reason : ReimbursementReason;
+};
+
+type RetrieveDogeStatus = variant {
+    // The minter does not have any information on the specified
+    // retrieval request.  It can be that nobody submitted the
+    // request or the minter pruned the relevant information from the
+    // history to save space.
+    Unknown;
+    // The minter did not send a Dogecoin transaction for this request yet.
+    Pending;
+    // The minter is obtaining all required ECDSA signatures on the
+    // Dogecoin transaction for this request.
+    Signing;
+    // The minter signed the transaction and is waiting for a reply
+    // from the Dogecoin canister.
+    Sending : record { txid : blob };
+    // The minter sent a transaction for the retrieve request.
+    // The payload contains the identifier of the transaction on the Dogecoin network.
+    Submitted : record { txid : blob };
+    // The amount was too low to cover the transaction fees.
+    AmountTooLow;
+    // The minter received enough confirmations for the Dogecoin
+    // transaction for this request.  The payload contains the
+    // identifier of the transaction on the Dogecoin network.
+    Confirmed : record { txid : blob };
+    /// The retrieve Dogecoin request has been reimbursed.
+    Reimbursed : ReimbursedDeposit;
+    /// The minter will try to reimburse this transaction.
+    WillReimburse : ReimbursementRequest;
+};
+
+service : (minter_arg : MinterArg) -> {
+    // Returns the Dogecoin address to which the owner should send DOGE
+    // before converting the amount to ckDOGE using the [update_balance]
+    // endpoint.
+    //
+    // If the owner is not set, it defaults to the caller's principal.
+    // The resolved owner must be a non-anonymous principal.
+    get_doge_address : (record { owner: opt principal; subaccount : opt blob }) -> (text);
+
+    // Returns UTXOs of the given account known by the minter (with no
+    // guarantee in the ordering of the returned values).
+    //
+    // If the owner is not set, it defaults to the caller's principal.
+    get_known_utxos: (record { owner: opt principal; subaccount : opt blob }) -> (vec Utxo) query;
+
+
+    // Mints ckDOGE for newly deposited UTXOs.
+    //
+    // If the owner is not set, it defaults to the caller's principal.
+    //
+    // # Preconditions
+    //
+    // * The owner deposited some DOGE to the address that the
+    //   [get_doge_address] endpoint returns.
+    update_balance : (record { owner: opt principal; subaccount : opt blob }) -> (variant { Ok : vec UtxoStatus; Err : UpdateBalanceError });
+
+    // Submits a request to convert ckDOGE to DOGE.
+    //
+    // # Note
+    //
+    // The DOGE retrieval process is slow.  Instead of
+    // synchronously waiting for a DOGE transaction to settle, this
+    // method returns a request ([block_index]) that the caller can use
+    // to query the request status.
+    //
+    // # Preconditions
+    //
+    // * The caller allowed the minter's principal to spend its funds
+    //   using [icrc2_approve] on the ckDOGE ledger.
+    retrieve_doge_with_approval : (RetrieveDogeWithApprovalArgs) -> (variant { Ok : RetrieveDogeOk; Err : RetrieveDogeWithApprovalError });
+
+    /// Returns the status of a withdrawal request.
+    retrieve_doge_status : (record { block_index : nat64 }) -> (RetrieveDogeStatus) query;
+}

@@ -11,6 +11,72 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-11-07: Proposal 139316
+
+https://dashboard.internetcomputer.org/proposal/139316
+
+Just a "maintenance" release, i.e. no behavior changes, just making sure that we
+do not become too behind, and avoid too many changes piling up in for the next
+"real" upgrade.
+
+
+# 2025-09-19: Proposal 138584
+
+https://dashboard.internetcomputer.org/proposal/138584
+
+## Added
+
+* The feature flag `SNS_EXTENSIONS_ENABLED` is turned on. Enabling it allows for deployment of SNS extensions.
+
+# 2025-09-05: Proposal 138373
+
+http://dashboard.internetcomputer.org/proposal/138373
+
+## Added
+
+* Added extension_operations to list_topics, which exposes the operations of each registered extension underneath the
+  topic which allows voters to correctly understand the impact of following on particular topics. Extensions are
+  canisters that add additional functionality to an SNS through a privileged integration.
+
+
+# 2025-08-11: Proposal 137819
+
+http://dashboard.internetcomputer.org/proposal/137819
+
+## Fixed
+
+* Fixed a bug with the topic follower index.
+
+
+# 2025-08-01: Proposal 137687
+
+http://dashboard.internetcomputer.org/proposal/137687
+
+## Fixed
+
+Fixed multiple issues in `disburse_neuron` functionality:
+
+- Fixed a bug that could allow an SNS Neuron to burn fees that would have been refunded after proposal acceptance.
+- Fees are now only recorded as burned when they exceed the transaction fee threshold and are actually burned.
+- Added comprehensive tests to ensure the correct behavior in the future.
+
+
+# 2025-07-25: Proposal 137584
+
+http://dashboard.internetcomputer.org/proposal/137584
+
+## Added
+
+RegisterExtension proposals can now be used in the test version of SNS Governance; submitting
+these proposals on mainnet is still disabled until further notice.
+
+
+## Fixed
+
+Fixed a bug due to which governance cached metrics could be recomputed once every 10 seconds
+rather than with the intended rate of once per hour.
+
+
 # 2025-07-08: Proposal 137282
 
 http://dashboard.internetcomputer.org/proposal/137282

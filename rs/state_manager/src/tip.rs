@@ -1,18 +1,18 @@
 use crate::{
+    CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS, CheckpointError, NUMBER_OF_CHECKPOINT_THREADS,
+    PageMapType, SharedState, StateManagerMetrics,
     checkpoint::validate_and_finalize_checkpoint_and_remove_unverified_marker,
     compute_bundled_manifest,
-    manifest::{ManifestDelta, RehashManifest},
+    manifest::{BaseManifestInfo, RehashManifest},
     release_lock_and_persist_metadata,
     state_sync::types::{
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
     },
-    CheckpointError, PageMapType, SharedState, StateManagerMetrics,
-    CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS, NUMBER_OF_CHECKPOINT_THREADS,
 };
-use crossbeam_channel::{bounded, unbounded, Sender};
+use crossbeam_channel::{Sender, bounded, unbounded};
 use ic_base_types::subnet_id_into_protobuf;
 use ic_config::state_manager::LsmtConfig;
-use ic_logger::{error, fatal, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, fatal, info, warn};
 use ic_protobuf::state::{
     stats::v1::Stats,
     system_metadata::v1::{SplitFrom, SystemMetadata},
@@ -20,21 +20,21 @@ use ic_protobuf::state::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::SandboxMemory;
 use ic_replicated_state::{
+    CanisterState, NumWasmPages, PageMap, ReplicatedState,
+    page_map::{PAGE_SIZE, StorageLayout},
+};
+use ic_replicated_state::{
     canister_snapshots::CanisterSnapshot,
-    page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
+    page_map::{MAX_NUMBER_OF_FILES, MergeCandidate, StorageMetrics, StorageResult},
 };
 use ic_replicated_state::{
     metadata_state::UnflushedCheckpointOp, page_map::PageAllocatorFileDescriptor,
 };
-use ic_replicated_state::{
-    page_map::{StorageLayout, PAGE_SIZE},
-    CanisterState, NumWasmPages, PageMap, ReplicatedState,
-};
 use ic_state_layout::{
-    error::LayoutError, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout,
-    ExecutionStateBits, PageMapLayout, ReadOnly, RwPolicy, StateLayout, TipHandler, WasmFile,
+    CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, ExecutionStateBits, PageMapLayout,
+    ReadOnly, RwPolicy, StateLayout, TipHandler, WasmFile, error::LayoutError,
 };
-use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height, SnapshotId};
+use ic_types::{CanisterId, Height, SnapshotId, malicious_flags::MaliciousFlags};
 use ic_utils::thread::parallel_map;
 use ic_utils_thread::JoinOnDrop;
 use ic_wasm_types::{CanisterModule, ModuleLoadingStatus};
@@ -45,9 +45,18 @@ use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-/// We merge starting from MAX_NUMBER_OF_FILES, we take up to 4 rounds to iterate over whole state,
-/// there are 2 overlays created each checkpoint.
-const NUMBER_OF_FILES_HARD_LIMIT: usize = MAX_NUMBER_OF_FILES + 8;
+/// Maximum amount of files per shard. If we exceed this number we merge regardless whether
+/// we block checkpointing for the merge duration.
+/// If we don't reach the MERGE_SOFT_BUDGET_BYTES, the number of files should not exceed
+/// MAX_NUMBER_OF_FILES + 8, since we add at most 2 overlays per checkpoint and iterate over all
+/// shards in 4 checkpoints at most.
+const NUMBER_OF_FILES_HARD_LIMIT: usize = 20;
+
+const GIB: u64 = 1024 * 1024 * 1024;
+
+/// Maximum amount of data we can safely write during merge without expecting blocking of
+/// checkpointing.
+const MERGE_SOFT_BUDGET_BYTES: u64 = 250 * GIB;
 
 #[derive(Clone, Debug, Default)]
 struct CheckpointState {
@@ -73,13 +82,19 @@ pub(crate) struct PageMapToFlush {
 }
 
 /// Request for the Tip directory handling thread.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum TipRequest {
     /// Create checkpoint from the current tip for the given height.
+    ///
     /// Sends the created checkpoint and the ReplicatedState switched to the
     /// checkpoint or error into the sender.
-    /// Serializes protos to the newly created checkpoint after sending to `sender`
-    /// State: latest_checkpoint_state = tip_folder_state
-    ///        tip_folder_state = default
+    /// Serializes protos to the newly created checkpoint after sending to `sender`.
+    ///
+    /// State:
+    /// ```text
+    ///     latest_checkpoint_state = tip_folder_state
+    ///     tip_folder_state = default
+    /// ```
     TipToCheckpointAndSwitch {
         height: Height,
         state: ReplicatedState,
@@ -93,13 +108,15 @@ pub(crate) enum TipRequest {
         >,
     },
     /// Filter canisters in tip. Remove ones not present in the set.
-    /// State: tip_folder_state.has_filtered_canisters = true
+    ///
+    /// State: `tip_folder_state.has_filtered_canisters = true`
     FilterTipCanisters {
         height: Height,
         ids: BTreeSet<CanisterId>,
     },
     /// Flush PageMaps's unflushed delta on disc.
-    /// State: tip_folder_state.has_pagemaps = Some(height)
+    ///
+    /// State: `tip_folder_state.has_pagemaps = Some(height)`
     FlushPageMapDelta {
         height: Height,
         pagemaps: Vec<PageMapToFlush>,
@@ -107,22 +124,25 @@ pub(crate) enum TipRequest {
     },
     /// Reset tip folder to the checkpoint with given height.
     /// Merge overlays in tip folder if necessary.
-    /// State: tip_folder_state = latest_checkpoint_state
+    ///
+    /// State: `tip_folder_state = latest_checkpoint_state`
     ResetTipAndMerge {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
         pagemaptypes: Vec<PageMapType>,
     },
     /// Compute manifest, store result into states and persist metadata as result.
-    /// State: latest_checkpoint_state.has_manifest = true
+    ///
+    /// State: `latest_checkpoint_state.has_manifest = true`
     ComputeManifest {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
-        manifest_delta: Option<crate::manifest::ManifestDelta>,
+        base_manifest_info: Option<crate::manifest::BaseManifestInfo>,
         states: Arc<parking_lot::RwLock<SharedState>>,
         persist_metadata_guard: Arc<Mutex<()>>,
     },
     /// Validate the checkpointed state is valid and identical to the execution state.
     /// Crash if diverges.
-    /// State: latest_checkpoint_state.verified = true
+    ///
+    /// State: `latest_checkpoint_state.verified = true`
     ValidateReplicatedStateAndFinalize {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
         reference_state: Arc<ReplicatedState>,
@@ -130,7 +150,8 @@ pub(crate) enum TipRequest {
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     },
     /// Wait for the message to be executed and notify back via sender.
-    /// State: *
+    ///
+    /// State: `*`
     Wait { sender: Sender<()> },
 }
 
@@ -390,18 +411,18 @@ pub(crate) fn spawn_tip_thread(
 
                         TipRequest::ComputeManifest {
                             checkpoint_layout,
-                            manifest_delta,
+                            base_manifest_info,
                             states,
                             persist_metadata_guard,
                         } => {
                             let _timer = request_timer(&metrics, "compute_manifest_total");
-                            if let Some(manifest_delta) = &manifest_delta {
+                            if let Some(base_manifest_info) = &base_manifest_info {
                                 info!(
                                     log,
                                     "Computing manifest for checkpoint @{} incrementally \
                                         from checkpoint @{}",
                                     checkpoint_layout.height(),
-                                    manifest_delta.base_height
+                                    base_manifest_info.base_height
                                 );
                             } else {
                                 info!(
@@ -418,7 +439,7 @@ pub(crate) fn spawn_tip_thread(
                                 &states,
                                 &state_layout,
                                 &checkpoint_layout,
-                                manifest_delta,
+                                base_manifest_info,
                                 &persist_metadata_guard,
                                 &malicious_flags,
                                 &mut rehash_divergence,
@@ -872,9 +893,9 @@ fn merge_candidates_and_storage_info(
 /// merging the head of the sorted vector, which contains either all MergeCandidates with more than
 /// Storage::MAX_NUMBER_OF_FILES or top ones till accumulated write_size_bytes is more than one
 /// quarter of `sum(storage_size_bytes_before)`. This way we iterate through all page maps with more
-/// than MAX_NUMBER_OF_FILES at most in 4 checkpoint intervals. Since we produce at most 2 overlays
-/// per checkpoint per `PageMap`, we have a cap of `MAX_NUMBER_OF_FILES` + 2 * 4 files per `PageMap`
-/// at any checkpoint.
+/// than MAX_NUMBER_OF_FILES at most in 4 checkpoint intervals, provided we don't reach MERGE_SOFT_BUDGET_BYTES.
+/// Since we produce at most 2 overlays per checkpoint per `PageMap`, we have a cap of
+/// `MAX_NUMBER_OF_FILES` + 2 * 4 files per `PageMap` at any checkpoint.
 ///
 /// Then we need to take care of storage overhead. Storage overhead is the ratio
 /// `sum(storage_size_bytes_after)` / `sum(page_map_size_bytes)`. In other words, we need
@@ -889,7 +910,7 @@ fn merge_candidates_and_storage_info(
 /// (`storage_size_bytes_before` - `storage_size_bytes_after`) / `write_size_bytes`.
 ///
 /// Write size calculation.
-/// The merges for number of files are at most 1/4 of allowed state size.
+/// The merges for number of files are at most 1/4 of allowed state size, capped by MERGE_SOFT_LIMIT_BYTES.
 /// Merges for overhead have input with overhead >= 2.5 and output being == 1.0. Meaning by writing
 /// 1 MiB to disk during merge, we replace what used to be >= 2.5 MiB on disk with 1 MiB.
 /// In other words, 1 MiB of write during merge reduces storage by at least 1.5 MiB.
@@ -901,8 +922,9 @@ fn merge_candidates_and_storage_info(
 /// For a more general estimate, the data written to disk during checkpoint interval is at most
 /// max_dirty_pages, meaning we need to write max_dirty_pages / 1.5 + one canister size to reduce
 /// the overhead under 2.5 again.
-/// The total write is at most 1/4 state size + 2/3 * max_dirty_pages + the size of the last
-/// `PageMap`. Note that if canisters are removed, upgraded, or otherwise delete data, this can
+/// The total write is at most
+/// min(MERGE_SOFT_BUDGET_BYTES, 1/4 state size) + 2/3 * max_dirty_pages + the size of the last`PageMap`.
+/// Note that if canisters are removed, upgraded, or otherwise delete data, this can
 /// further increase the amount of data written in order to enforce the storage overhead.
 fn merge(
     tip_handler: &mut TipHandler,
@@ -933,7 +955,8 @@ fn merge(
     let max_storage = storage_info.mem_size * 2 + storage_info.mem_size / 2;
 
     merge_candidates.sort_by_key(|m| -(m.num_files_before() as i64));
-    let storage_to_merge_for_filenum = storage_info.mem_size / 4;
+    let storage_to_merge_for_filenum =
+        std::cmp::min(MERGE_SOFT_BUDGET_BYTES, storage_info.mem_size / 4);
     let min_storage_to_merge = storage_info.mem_size / 50;
     let merges_by_filenum = merge_candidates
         .iter()
@@ -1064,6 +1087,10 @@ fn serialize_protos_to_checkpoint_readwrite(
     checkpoint_readwrite
         .subnet_queues()
         .serialize((state.subnet_queues()).into())?;
+
+    checkpoint_readwrite
+        .refunds()
+        .serialize((state.refunds()).into())?;
 
     checkpoint_readwrite.stats().serialize(Stats {
         query_stats: state.query_stats().as_query_stats(),
@@ -1249,7 +1276,6 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
         CanisterStateBits {
             controllers: canister_state.system_state.controllers.clone(),
             last_full_execution_round: canister_state.scheduler_state.last_full_execution_round,
-            call_context_manager: canister_state.system_state.call_context_manager().cloned(),
             compute_allocation: canister_state.scheduler_state.compute_allocation,
             priority_credit: canister_state.scheduler_state.priority_credit,
             long_execution_mode: canister_state.scheduler_state.long_execution_mode,
@@ -1308,6 +1334,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .clone(),
             total_query_stats: canister_state.scheduler_state.total_query_stats.clone(),
             log_visibility: canister_state.system_state.log_visibility.clone(),
+            log_memory_limit: canister_state.system_state.log_memory_limit,
             canister_log: canister_state.system_state.canister_log.clone(),
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id,
@@ -1364,15 +1391,15 @@ fn handle_compute_manifest_request(
     states: &parking_lot::RwLock<SharedState>,
     state_layout: &StateLayout,
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
-    manifest_delta: Option<crate::manifest::ManifestDelta>,
+    base_manifest_info: Option<crate::manifest::BaseManifestInfo>,
     persist_metadata_guard: &Arc<Mutex<()>>,
     #[allow(unused_variables)] malicious_flags: &MaliciousFlags,
     rehash_divergence: &mut bool,
 ) {
-    let manifest_delta = if *rehash_divergence {
+    let base_manifest_info = if *rehash_divergence {
         None
     } else {
-        manifest_delta
+        base_manifest_info
     };
     let system_metadata = checkpoint_layout
         .system_metadata()
@@ -1390,10 +1417,8 @@ fn handle_compute_manifest_request(
 
     assert!(
         state_sync_version <= MAX_SUPPORTED_STATE_SYNC_VERSION,
-        "Unable to compute a manifest with version {:?}. \
-                    Maximum supported StateSync version is {:?}",
-        state_sync_version,
-        MAX_SUPPORTED_STATE_SYNC_VERSION
+        "Unable to compute a manifest with version {state_sync_version:?}. \
+                    Maximum supported StateSync version is {MAX_SUPPORTED_STATE_SYNC_VERSION:?}"
     );
 
     // According to the current checkpointing workflow, encountering a checkpoint with the unverified marker should not happen.
@@ -1412,7 +1437,7 @@ fn handle_compute_manifest_request(
     }
 
     let start = Instant::now();
-    let manifest_is_incremental = manifest_delta.is_some();
+    let manifest_is_incremental = base_manifest_info.is_some();
     let manifest = crate::manifest::compute_manifest(
         thread_pool,
         &metrics.manifest_metrics,
@@ -1420,7 +1445,7 @@ fn handle_compute_manifest_request(
         state_sync_version,
         checkpoint_layout,
         crate::state_sync::types::DEFAULT_CHUNK_SIZE,
-        manifest_delta,
+        base_manifest_info.as_ref(),
         RehashManifest::No,
     )
     .unwrap_or_else(|err| {
@@ -1467,8 +1492,6 @@ fn handle_compute_manifest_request(
         checkpoint_layout.height(),
     );
 
-    let num_file_group_chunks = crate::manifest::build_file_group_chunks(&manifest).len();
-
     let bundled_manifest = compute_bundled_manifest(manifest.clone());
 
     #[cfg(feature = "malicious_code")]
@@ -1483,27 +1506,6 @@ fn handle_compute_manifest_request(
         bundled_manifest.root_hash,
         checkpoint_layout.height()
     );
-
-    metrics
-        .manifest_metrics
-        .file_group_chunks
-        .set(num_file_group_chunks as i64);
-
-    let file_group_chunk_id_range_length =
-        (MANIFEST_CHUNK_ID_OFFSET - FILE_GROUP_CHUNK_ID_OFFSET) as usize;
-    if num_file_group_chunks > file_group_chunk_id_range_length / 2 {
-        error!(
-            log,
-            "{}: The number of file group chunks is greater than half of the available ID space in state sync. Number of file group chunks: {}, file group chunk ID range length: {}",
-            CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
-            num_file_group_chunks,
-            file_group_chunk_id_range_length,
-        );
-        metrics
-            .manifest_metrics
-            .chunk_id_usage_nearing_limits_critical
-            .inc();
-    }
 
     let num_sub_manifest_chunks = bundled_manifest.meta_manifest.sub_manifest_hashes.len();
     metrics
@@ -1534,12 +1536,56 @@ fn handle_compute_manifest_request(
 
     release_lock_and_persist_metadata(log, metrics, state_layout, states, persist_metadata_guard);
 
+    let timer = request_timer(metrics, "observe_build_file_group_chunks");
+    let num_file_group_chunks = crate::manifest::build_file_group_chunks(&manifest).len();
+    metrics
+        .manifest_metrics
+        .file_group_chunks
+        .set(num_file_group_chunks as i64);
+
+    let file_group_chunk_id_range_length =
+        (MANIFEST_CHUNK_ID_OFFSET - FILE_GROUP_CHUNK_ID_OFFSET) as usize;
+    if num_file_group_chunks > file_group_chunk_id_range_length / 2 {
+        error!(
+            log,
+            "{}: The number of file group chunks is greater than half of the available ID space in state sync. Number of file group chunks: {}, file group chunk ID range length: {}",
+            CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
+            num_file_group_chunks,
+            file_group_chunk_id_range_length,
+        );
+        metrics
+            .manifest_metrics
+            .chunk_id_usage_nearing_limits_critical
+            .inc();
+    }
+    drop(timer);
+
+    let timer = request_timer(metrics, "observe_duplicated_chunks");
+    crate::manifest::observe_duplicated_chunks(&manifest, &metrics.manifest_metrics);
+    drop(timer);
+
+    let timer = request_timer(metrics, "observe_file_sizes");
+    if let Some(base_manifest_info) = &base_manifest_info {
+        crate::manifest::observe_file_sizes(
+            &manifest,
+            &base_manifest_info.base_manifest,
+            &metrics.manifest_metrics,
+        );
+    }
+    drop(timer);
+
     if !manifest_is_incremental {
         *rehash_divergence = false;
         return;
     }
     let _timer = request_timer(metrics, "compute_manifest_rehash");
     let start = Instant::now();
+    let rehash_manifest_info = BaseManifestInfo {
+        base_manifest: manifest.clone(),
+        base_checkpoint: checkpoint_layout.clone(),
+        base_height: checkpoint_layout.height(),
+        target_height: checkpoint_layout.height(),
+    };
     let rehashed_manifest = crate::manifest::compute_manifest(
         thread_pool,
         &metrics.manifest_metrics,
@@ -1547,12 +1593,7 @@ fn handle_compute_manifest_request(
         state_sync_version,
         checkpoint_layout,
         crate::state_sync::types::DEFAULT_CHUNK_SIZE,
-        Some(ManifestDelta {
-            base_manifest: manifest.clone(),
-            base_checkpoint: checkpoint_layout.clone(),
-            base_height: checkpoint_layout.height(),
-            target_height: checkpoint_layout.height(),
-        }),
+        Some(&rehash_manifest_info),
         RehashManifest::Yes,
     )
     .unwrap_or_else(|err| {

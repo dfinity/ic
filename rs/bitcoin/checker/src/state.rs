@@ -1,12 +1,11 @@
 use crate::{
-    providers::{parse_authorization_header_from_url, Provider},
     BtcNetwork, CheckMode,
+    providers::{Provider, parse_authorization_header_from_url},
 };
 use bitcoin::{Address, Transaction};
 use ic_btc_interface::Txid;
-use ic_cdk::api::call::RejectionCode;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::{storable::Bound, Cell, DefaultMemoryImpl, Storable};
+use ic_stable_structures::{Cell, DefaultMemoryImpl, Storable, storable::Bound};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -20,29 +19,23 @@ mod tests;
 #[derive(Debug, Clone)]
 pub enum HttpGetTxError {
     TxEncoding(String),
-    TxidMismatch {
-        expected: Txid,
-        decoded: Txid,
-    },
+    TxidMismatch { expected: Txid, decoded: Txid },
     ResponseTooLarge,
-    Rejected {
-        code: RejectionCode,
-        message: String,
-    },
+    Rejected { code: u32, message: String },
+    CallPerformFailed,
 }
 
 impl fmt::Display for HttpGetTxError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use HttpGetTxError::*;
         match self {
-            TxEncoding(s) => write!(f, "TxEncoding: {}", s),
-            TxidMismatch { expected, decoded } => write!(
-                f,
-                "TxidMismatch: expected {} but decoded {}",
-                expected, decoded
-            ),
+            TxEncoding(s) => write!(f, "TxEncoding: {s}"),
+            TxidMismatch { expected, decoded } => {
+                write!(f, "TxidMismatch: expected {expected} but decoded {decoded}")
+            }
             ResponseTooLarge => write!(f, "ResponseTooLarge"),
-            Rejected { code, message } => write!(f, "Rejected: code {:?}, {}", code, message),
+            Rejected { code, message } => write!(f, "Rejected: code {code:?}, {message}"),
+            CallPerformFailed => write!(f, "CallPerformedFailed"),
         }
     }
 }
@@ -318,7 +311,7 @@ pub enum ConfigState {
 }
 
 impl Storable for ConfigState {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(self, &mut buf).expect("failed to encode ConfigState");
         Cow::Owned(buf)

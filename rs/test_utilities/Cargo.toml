@@ -10,47 +10,29 @@ documentation.workspace = true
 hex-literal = "0.4.1"
 ic-btc-replica-types = { path = "../bitcoin/replica_types" }
 ic-config = { path = "../config" }
-ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
-ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
-ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
-ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
-ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
-ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
-ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
-ic-protobuf = { path = "../protobuf" }
-ic-registry-client-fake = { path = "../registry/fake" }
-ic-registry-keys = { path = "../registry/keys" }
-ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-test-utilities-types = { path = "./types" }
 ic-types = { path = "../types/types" }
-ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 lazy_static = { workspace = true }
 nix = { workspace = true }
-parking_lot = { workspace = true }
-rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
-slog = { workspace = true }
 socket2 = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true }
-tower = { workspace = true }
 wat = { workspace = true }
 
 [dev-dependencies]
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-test-utilities-logger = { path = "./logger" }
-ic-test-utilities-registry = { path = "./registry" }
 rusty-fork = "0.3.0"
 wasmprinter = { workspace = true }

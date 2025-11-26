@@ -1,18 +1,22 @@
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test_nns(
     name = "rosetta_test",
-    tags = ["experimental_system_test_colocation"],
-    test_timeout = "long",
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS + [
-            "//rs/rosetta-api/icp:ic-rosetta-api",
-            "//rs/tests:rosetta_workspace",
-            "@rosetta-cli//:rosetta-cli",
-        ],
+    env = {
+        "ROSETTA_CLI_PATH": "$(rootpath //:rosetta-cli)",
+    },
+    tags = [
+        "colocate",
+        "long_test",  # the P90 duration was over 7 minutes in the week starting on 2025-08-21
+    ],
+    runtime_deps = [
+        "//:rosetta-cli",
+        "//rs/rosetta-api/icp:ic-rosetta-api",
+        "//rs/tests:rosetta_workspace",
+    ],
     deps = [
         "//rs/canister_client",
         "//rs/ledger_suite/icp:icp_ledger",
@@ -36,18 +40,18 @@ system_test_nns(
 
 system_test_nns(
     name = "rosetta_neuron_follow_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
+    env = {
+        "ROSETTA_CLI_PATH": "$(rootpath //:rosetta-cli)",
+    },
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
+            "//:rosetta-cli",
             "//rs/rosetta-api/icp:ic-rosetta-api",
             "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
-            "@rosetta-cli//:rosetta-cli",
         ],
     deps = [
         "//rs/ledger_suite/common/ledger_core",

@@ -248,8 +248,8 @@ fn test_scalar_comparison() {
     }
 
     for _ in 0..300 {
-        let a = Scalar::from_u32(rng.gen::<u32>());
-        let b = Scalar::from_u32(rng.gen::<u32>());
+        let a = Scalar::from_u32(rng.r#gen::<u32>());
+        let b = Scalar::from_u32(rng.r#gen::<u32>());
 
         assert_eq!(a.serialize().cmp(&b.serialize()), a.cmp(&b));
         assert_eq!(b.serialize().cmp(&a.serialize()), b.cmp(&a));
@@ -278,7 +278,7 @@ fn test_scalar_from_integer_type() {
     );
 
     for _ in 0..30 {
-        let r = rng.gen::<u32>();
+        let r = rng.r#gen::<u32>();
         assert_eq!(Scalar::from_u32(r), Scalar::from_u64(r as u64));
 
         let bytes = Scalar::from_u32(r).serialize();
@@ -288,7 +288,7 @@ fn test_scalar_from_integer_type() {
     }
 
     for _ in 0..30 {
-        let r = rng.gen::<i32>();
+        let r = rng.r#gen::<i32>();
 
         let s = Scalar::from_i32(r);
 
@@ -399,16 +399,36 @@ fn test_scalar_inverse() {
 }
 
 #[test]
+fn test_scalar_batch_inverse() {
+    let rng = &mut reproducible_rng();
+
+    for cnt in 1..30 {
+        let scalars = (0..cnt).map(|_| Scalar::random(rng)).collect::<Vec<_>>();
+
+        assert_eq!(scalars.len(), cnt);
+        if let Some(inv) = Scalar::batch_inverse_vartime(&scalars) {
+            for i in 0..cnt {
+                assert_eq!(&scalars[i] * &inv[i], Scalar::one());
+            }
+        }
+    }
+}
+
+#[test]
 fn test_impl_debugs() {
     assert_eq!(
         format!("{:?}", Scalar::one().neg()),
         "Scalar(73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000000)"
     );
 
-    assert_eq!(format!("{:?}", G1Affine::generator()),
-               "G1Affine(97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb)");
-    assert_eq!(format!("{:?}", G2Affine::generator()),
-               "G2Affine(93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8)");
+    assert_eq!(
+        format!("{:?}", G1Affine::generator()),
+        "G1Affine(97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb)"
+    );
+    assert_eq!(
+        format!("{:?}", G2Affine::generator()),
+        "G2Affine(93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8)"
+    );
 }
 
 #[test]
@@ -439,7 +459,7 @@ fn test_gt_mul_u16_is_correct() {
     // just perform some random trials.
 
     for _ in 0..500 {
-        let i = rng.gen::<u16>();
+        let i = rng.r#gen::<u16>();
         let fast = Gt::g_mul_u16(i);
         let refv = Gt::generator() * Scalar::from_usize(i as usize);
         assert_eq!(fast, refv);
@@ -580,14 +600,18 @@ fn test_g1_generator_is_expected_value() {
     assert_eq!(g1, *G1Projective::generator());
     assert_eq!(G1Affine::from(g1), *G1Affine::generator());
 
-    assert_eq!(hex::encode(G1Affine::generator().serialize()),
-               "97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb");
+    assert_eq!(
+        hex::encode(G1Affine::generator().serialize()),
+        "97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
+    );
 }
 
 #[test]
 fn test_g2_generator_is_expected_value() {
-    assert_eq!(hex::encode(G2Affine::generator().serialize()),
-               "93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8");
+    assert_eq!(
+        hex::encode(G2Affine::generator().serialize()),
+        "93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
+    );
 }
 
 #[test]
@@ -670,6 +694,7 @@ fn test_g2_deserialize_rejects_infinity_bit_with_nonzero_x() {
 
     assert!(G2Affine::deserialize(&g2_bytes).is_err());
     assert!(G2Affine::deserialize_unchecked(&g2_bytes).is_err());
+    assert!(G2Affine::deserialize_cached(&g2_bytes).is_err());
 }
 
 #[test]
@@ -699,11 +724,13 @@ fn test_g2_deserialize_rejects_out_of_range_x_value() {
         hex::decode("9a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").unwrap();
 
     assert!(G2Affine::deserialize_unchecked(&invalid_x0).is_err());
+    assert!(G2Affine::deserialize_cached(&invalid_x0).is_err());
 
     let invalid_x1 =
         hex::decode("8000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab").unwrap();
 
     assert!(G2Affine::deserialize_unchecked(&invalid_x1).is_err());
+    assert!(G2Affine::deserialize_cached(&invalid_x1).is_err());
 }
 
 #[test]
@@ -819,16 +846,16 @@ fn test_g2_test_vectors() {
     ];
     /// Negative numbers: `g2_generator * [-1, -2, -3, ..., -9]`
     const NEGATIVE_NUMBERS: &[&str] = &[
-    "b3e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8",
-    "8a4edef9c1ed7f729f520e47730a124fd70662a904ba1074728114d1031e1572c6c886f6b57ec72a6178288c47c335771638533957d540a9d2370f17cc7ed5863bc0b995b8825e0ee1ea1e1e4d00dbae81f14b0bf3611b78c952aacab827a053",
-    "a9380275bbc8e5dcea7dc4dd7e0550ff2ac480905396eda55062650f8d251c96eb480673937cc6d9d6a44aaa56ca66dc122915c824a0857e2ee414a3dccb23ae691ae54329781315a0c75df1c04d6d7a50a030fc866f09d516020ef82324afae",
-    "a70227d3f13684fdb7ce31b8065ba3acb35f7bde6fe2ddfefa359f8b35d08a9ab9537b43e24f4ffb720b5a0bda2a82f20e7a30979a8853a077454eb63b8dcee75f106221b262886bb8e01b0abb043368da82f60899cc1412e33e4120195fc557",
-    "a0fb837804dba8213329db46608b6c121d973363c1234a86dd183baff112709cf97096c5e9a1a770ee9d7dc641a894d60411a5de6730ffece671a9f21d65028cc0f1102378de124562cb1ff49db6f004fcd14d683024b0548eff3d1468df2688",
-    "a3f4b4e761936d90fd5f55f99087138a07a69755ad4a46e4dd1c2cfe6d11371e1cc033111a0595e3bba98d0f538db45119e384121b7d70927c49e6d044fd8517c36bc6ed2813a8956dd64f049869e8a77f7e46930240e6984abe26fa6a89658f",
-    "ad0273f6bf31ed37c3b8d68083ec3d8e20b5f2cc170fa24b9b5be35b34ed013f9a921f1cad1644d4bdb14674247234c8049cd1dbb2d2c3581e54c088135fef36505a6823d61b859437bfc79b617030dc8b40e32bad1fa85b9c0f368af6d38d3c",
-    "b2be651a5fa620340d418834526d37a8c932652345400b4cd9d43c8f41c080f41a6d9558118ebeab9d4268bb73e850e102142a58bae275564a6d63cb6bd6266ca66bef07a6ab8ca37b9d0ba2d4effbccfd89c169649f7d0e8a3eb006846579ad",
-    "8c48e0d4f9404ae0a7f10774c55a9e838bb09d3bae85b5eaa6b16b0f4dc2354368117f3799c37f3f7126d8b54d3f8393018405e4b67f957b6465ead9f5afc47832d45643dc3aa03af7314c6cf980fa23dd3bb8db3358693ad06011f6a6b1a5ff",
-];
+        "b3e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8",
+        "8a4edef9c1ed7f729f520e47730a124fd70662a904ba1074728114d1031e1572c6c886f6b57ec72a6178288c47c335771638533957d540a9d2370f17cc7ed5863bc0b995b8825e0ee1ea1e1e4d00dbae81f14b0bf3611b78c952aacab827a053",
+        "a9380275bbc8e5dcea7dc4dd7e0550ff2ac480905396eda55062650f8d251c96eb480673937cc6d9d6a44aaa56ca66dc122915c824a0857e2ee414a3dccb23ae691ae54329781315a0c75df1c04d6d7a50a030fc866f09d516020ef82324afae",
+        "a70227d3f13684fdb7ce31b8065ba3acb35f7bde6fe2ddfefa359f8b35d08a9ab9537b43e24f4ffb720b5a0bda2a82f20e7a30979a8853a077454eb63b8dcee75f106221b262886bb8e01b0abb043368da82f60899cc1412e33e4120195fc557",
+        "a0fb837804dba8213329db46608b6c121d973363c1234a86dd183baff112709cf97096c5e9a1a770ee9d7dc641a894d60411a5de6730ffece671a9f21d65028cc0f1102378de124562cb1ff49db6f004fcd14d683024b0548eff3d1468df2688",
+        "a3f4b4e761936d90fd5f55f99087138a07a69755ad4a46e4dd1c2cfe6d11371e1cc033111a0595e3bba98d0f538db45119e384121b7d70927c49e6d044fd8517c36bc6ed2813a8956dd64f049869e8a77f7e46930240e6984abe26fa6a89658f",
+        "ad0273f6bf31ed37c3b8d68083ec3d8e20b5f2cc170fa24b9b5be35b34ed013f9a921f1cad1644d4bdb14674247234c8049cd1dbb2d2c3581e54c088135fef36505a6823d61b859437bfc79b617030dc8b40e32bad1fa85b9c0f368af6d38d3c",
+        "b2be651a5fa620340d418834526d37a8c932652345400b4cd9d43c8f41c080f41a6d9558118ebeab9d4268bb73e850e102142a58bae275564a6d63cb6bd6266ca66bef07a6ab8ca37b9d0ba2d4effbccfd89c169649f7d0e8a3eb006846579ad",
+        "8c48e0d4f9404ae0a7f10774c55a9e838bb09d3bae85b5eaa6b16b0f4dc2354368117f3799c37f3f7126d8b54d3f8393018405e4b67f957b6465ead9f5afc47832d45643dc3aa03af7314c6cf980fa23dd3bb8db3358693ad06011f6a6b1a5ff",
+    ];
 
     let g = G2Affine::generator();
     let identity = G2Affine::identity();
@@ -890,27 +917,61 @@ fn test_g1_augmented_hash_test_vectors() {
      * values were generated by zkcrypto/bls12_381
      */
     let test_vectors = [
-        ("c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", "ce900db33cb4f6bc3db0b3ce0c462e78", "816c73d8098a07f0584d2e5a9a13abd98fe0536b86e921bebaa953577a03300453764e88b6383e442e10a7fed0de37f0"),
-
-        ("864ed23497b7c6bf4b95f981f6a8ebc5de6e303ad90e1dad71a1a8b7676912bfeaa7a3b61eeabf2a5d728ec298c268fb18ab9f32c0ee43d99bc4901eb8d3815cd1a8cef6591931dd706f212691bba1ad3490e0fa2e7c593d978e920566486066", "a7eed036705827efec713b65533b9b10", "9900f2cd31147dda4400ba954849eba5785730d62010b38a0ebaabf93281f49d8b24eb839493b9563ed8a422e2de3337"),
-
-        ("8ac83f419f09283c558cb9630ceeb887de1c646cb249ae9e5a5777699127d9044b37a8a34de665b98aa6ff3954cefc270f15e4e7fc38f2c317b726326c01a7fd679c6bcfa14bf0575b971e14705ef3d874281360586d86fb5ced64a568eb7c6c", "8be4fa4a80dcaa0621cfe00face73486", "ade977d871dcb7ff69ec2a154ff9b0aff750ea3872057bf0721ae0c3fd7a086e5086793dd72256d993acc630c5dba61d"),
-
-        ("a43ac20c81f7c3a88a49913bc9dc11c736088af78715a438f1e72d6a006f2a90761c0b5f0cb9ae1e5828d6e7abde5b7a058f75435777ea0bdf0d52e9c03b11f6a0683351cd9b8d28e8657b3fb2ac1f24087bada88b7c5168a0a1468d52cf5842", "6bdf244fded974ef5833df52b70db200", "a19250e0e4fe6b1ef839c3f3edab385f56e9d991566f3bc19a250df09b087b695e39d59c05dc5a58921afe17e57823cb"),
-
-        ("8d73306394bbc5646a195507ac6424ea852a8f8e5928ab8dd108d6d9fdecce9e0b22204209fd16ccefde1d6f1b73ca1718950972a2b74f2a0aac0ee4d9d72dd2102726ba047405d0377dc8f714e563f99e37a9ee3b31263b002793fc206e5771", "b1f88617c75b527152977ac506b8d46f", "a9b3056b47b56613445def1729ea323ec883dd856ac36f2eefb56ad7c40353c19f9f23f0bafaa5a65322c4cc7437e5f2"),
-
-        ("980cf164639279acee275350c22686ab48e2eb6e79eca03ca409b4c160e72530a42eef3668bc8d997b7b103515d902610ff7bf3a1793c3445b24006c863fbdf1713652fbab371a1813037a1c2ab35804ec1973aafd6ee51b4602143e10685bb0", "2d5ba3c198d8728c64ccd660353561fe", "b23869d704e064f8a60870b3aaa2d3a81a2e2f965504aa9d64f60a945e4ed1d872ea9736f202a5029926a80450f9872d"),
-
-        ("832e3b180d3ca7f787327b5d615804b7e883f911ddda48da42e58e45d779f0788d9cd563f4d4b65ed2573b5a50641efe1873bca56f0836c156b3e82787a18881b9f8c7aa130e67b28c2762bbc1c8d19506b91150ecdedbccce8e07da6e74c014", "6a86af2c8226707d25bfa649cb9223ec", "8e775d6c996f1c8f9902d8f19193694f387c6e453eea4ade39f541c484c15f3a8e47f0d2fbd98f1f590aaa04e3dcd41a"),
-
-        ("95f90c37e583863c6e7d8e17f64dda7ecf56b3568c5558362ebdb39b6b9304fabc4ef91efc92e0932abc9d87b44a3fdd08d6f23cc0f547ef35cdf975c5eb2b37c00095b5e818587cd08ae9ee4fe76b6de5fc07a79c046ef68d6fbde8db3631b6", "042259be774dc136482d40f3587103f8", "99c74b44d6e1092173e62358faa7d388cc15d5bcbffa17511d30fb2699b4d2dc58d33ed346fa4fec317da4d51f7cd8d8"),
-
-        ("85fcc79dbcd6ad60b2ceb7d2759fd3a165c1a4cfc9a3813e32eb9a4e13148d3b74cfc18331eb82a0ec82f5947dec5f2d16e517fefedc0123e36f93ca758ff9b23810a692e80ecc40ca97edb76d210fe037339c4fb2e4151ccb9721f91cd124d3", "10d4bd96176d6368c45349277369909c", "a76b58c80a52efcd1c91ece11b13b60b21d533713f689721b4ca6bedb214a124b3619ee41ad73c255d72590e25d44631"),
-
-        ("999986ca521874abf02735b50647f9890cf194214cbaaa6f9f6fb6ac924e397699227c5ac15ce6574d7b989ebaa17fb4103d7403ada1e927fadc413c4e0aa4286e29572261628c708e90c89e8825679ef6c977e5290e83c9b96af7251a4e1c75", "6936ad26ab5ca7c291287827e3388e55", "a420355356cb7d91af6be049123e93212340d601f068ab99d62f568a63255e2f6991d6b4f5a2cafc92669a925ce17783"),
-
-        ("8a02185f6a780cae9264a3cb6e811122faa01c50d9cb2b359cc7bbb8de2527aed3f8048f289de6d4d2d8d7eeafb8d08804be0d1a26e8f4a573d8fc87ebc8475beefbfa4f0221493f80b51e75bcd3c6403a2e872601cc5c33ce1c9938d2264de5", "33f280df9b7638f9b4785524961c0af6", "8abb3a215edabeee131d6ab3e2f6666b39636d177b103e9aea73c33d672cd37959aefe9c88a3fc1aaa179bc63f5ba503")
+        (
+            "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "ce900db33cb4f6bc3db0b3ce0c462e78",
+            "816c73d8098a07f0584d2e5a9a13abd98fe0536b86e921bebaa953577a03300453764e88b6383e442e10a7fed0de37f0",
+        ),
+        (
+            "864ed23497b7c6bf4b95f981f6a8ebc5de6e303ad90e1dad71a1a8b7676912bfeaa7a3b61eeabf2a5d728ec298c268fb18ab9f32c0ee43d99bc4901eb8d3815cd1a8cef6591931dd706f212691bba1ad3490e0fa2e7c593d978e920566486066",
+            "a7eed036705827efec713b65533b9b10",
+            "9900f2cd31147dda4400ba954849eba5785730d62010b38a0ebaabf93281f49d8b24eb839493b9563ed8a422e2de3337",
+        ),
+        (
+            "8ac83f419f09283c558cb9630ceeb887de1c646cb249ae9e5a5777699127d9044b37a8a34de665b98aa6ff3954cefc270f15e4e7fc38f2c317b726326c01a7fd679c6bcfa14bf0575b971e14705ef3d874281360586d86fb5ced64a568eb7c6c",
+            "8be4fa4a80dcaa0621cfe00face73486",
+            "ade977d871dcb7ff69ec2a154ff9b0aff750ea3872057bf0721ae0c3fd7a086e5086793dd72256d993acc630c5dba61d",
+        ),
+        (
+            "a43ac20c81f7c3a88a49913bc9dc11c736088af78715a438f1e72d6a006f2a90761c0b5f0cb9ae1e5828d6e7abde5b7a058f75435777ea0bdf0d52e9c03b11f6a0683351cd9b8d28e8657b3fb2ac1f24087bada88b7c5168a0a1468d52cf5842",
+            "6bdf244fded974ef5833df52b70db200",
+            "a19250e0e4fe6b1ef839c3f3edab385f56e9d991566f3bc19a250df09b087b695e39d59c05dc5a58921afe17e57823cb",
+        ),
+        (
+            "8d73306394bbc5646a195507ac6424ea852a8f8e5928ab8dd108d6d9fdecce9e0b22204209fd16ccefde1d6f1b73ca1718950972a2b74f2a0aac0ee4d9d72dd2102726ba047405d0377dc8f714e563f99e37a9ee3b31263b002793fc206e5771",
+            "b1f88617c75b527152977ac506b8d46f",
+            "a9b3056b47b56613445def1729ea323ec883dd856ac36f2eefb56ad7c40353c19f9f23f0bafaa5a65322c4cc7437e5f2",
+        ),
+        (
+            "980cf164639279acee275350c22686ab48e2eb6e79eca03ca409b4c160e72530a42eef3668bc8d997b7b103515d902610ff7bf3a1793c3445b24006c863fbdf1713652fbab371a1813037a1c2ab35804ec1973aafd6ee51b4602143e10685bb0",
+            "2d5ba3c198d8728c64ccd660353561fe",
+            "b23869d704e064f8a60870b3aaa2d3a81a2e2f965504aa9d64f60a945e4ed1d872ea9736f202a5029926a80450f9872d",
+        ),
+        (
+            "832e3b180d3ca7f787327b5d615804b7e883f911ddda48da42e58e45d779f0788d9cd563f4d4b65ed2573b5a50641efe1873bca56f0836c156b3e82787a18881b9f8c7aa130e67b28c2762bbc1c8d19506b91150ecdedbccce8e07da6e74c014",
+            "6a86af2c8226707d25bfa649cb9223ec",
+            "8e775d6c996f1c8f9902d8f19193694f387c6e453eea4ade39f541c484c15f3a8e47f0d2fbd98f1f590aaa04e3dcd41a",
+        ),
+        (
+            "95f90c37e583863c6e7d8e17f64dda7ecf56b3568c5558362ebdb39b6b9304fabc4ef91efc92e0932abc9d87b44a3fdd08d6f23cc0f547ef35cdf975c5eb2b37c00095b5e818587cd08ae9ee4fe76b6de5fc07a79c046ef68d6fbde8db3631b6",
+            "042259be774dc136482d40f3587103f8",
+            "99c74b44d6e1092173e62358faa7d388cc15d5bcbffa17511d30fb2699b4d2dc58d33ed346fa4fec317da4d51f7cd8d8",
+        ),
+        (
+            "85fcc79dbcd6ad60b2ceb7d2759fd3a165c1a4cfc9a3813e32eb9a4e13148d3b74cfc18331eb82a0ec82f5947dec5f2d16e517fefedc0123e36f93ca758ff9b23810a692e80ecc40ca97edb76d210fe037339c4fb2e4151ccb9721f91cd124d3",
+            "10d4bd96176d6368c45349277369909c",
+            "a76b58c80a52efcd1c91ece11b13b60b21d533713f689721b4ca6bedb214a124b3619ee41ad73c255d72590e25d44631",
+        ),
+        (
+            "999986ca521874abf02735b50647f9890cf194214cbaaa6f9f6fb6ac924e397699227c5ac15ce6574d7b989ebaa17fb4103d7403ada1e927fadc413c4e0aa4286e29572261628c708e90c89e8825679ef6c977e5290e83c9b96af7251a4e1c75",
+            "6936ad26ab5ca7c291287827e3388e55",
+            "a420355356cb7d91af6be049123e93212340d601f068ab99d62f568a63255e2f6991d6b4f5a2cafc92669a925ce17783",
+        ),
+        (
+            "8a02185f6a780cae9264a3cb6e811122faa01c50d9cb2b359cc7bbb8de2527aed3f8048f289de6d4d2d8d7eeafb8d08804be0d1a26e8f4a573d8fc87ebc8475beefbfa4f0221493f80b51e75bcd3c6403a2e872601cc5c33ce1c9938d2264de5",
+            "33f280df9b7638f9b4785524961c0af6",
+            "8abb3a215edabeee131d6ab3e2f6666b39636d177b103e9aea73c33d672cd37959aefe9c88a3fc1aaa179bc63f5ba503",
+        ),
     ];
 
     for (g2, data, g1) in &test_vectors {
@@ -929,7 +990,7 @@ fn test_verify_bls_signature() {
 
     let sk = Scalar::random(rng);
     let pk = G2Affine::from(G2Affine::generator() * &sk);
-    let message = G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>());
+    let message = G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>());
     let signature = G1Affine::from(&message * &sk);
 
     assert!(verify_bls_signature(&signature, &pk, &message));
@@ -972,7 +1033,7 @@ fn with_random_new_msgs_signed_by_existing_keys(
         let in_index = rng.gen_range(0..sigs.len());
         let out_index = rng.gen_range(0..result_sigs.len() + 1);
 
-        let rand_new_msg = G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>());
+        let rand_new_msg = G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>());
 
         let rand_selected_pk = pks[in_index].clone();
         let rand_selected_sk = sks[in_index].clone();
@@ -1031,7 +1092,7 @@ macro_rules! generic_test_verify_bls_signature_batch {
                 .map(|sk| G2Affine::from(G2Affine::generator() * sk))
                 .collect();
             let msgs: Vec<_> = (0..num_inputs)
-                .map(|_| G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>()))
+                .map(|_| G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>()))
                 .collect();
             let sigs: Vec<_> = sks
                 .iter()
@@ -1122,7 +1183,7 @@ macro_rules! generic_test_verify_bls_signature_batch {
                         .map(|(j, sig)| {
                             if j == i {
                                 // corrupt signature i
-                                G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>())
+                                G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>())
                             } else {
                                 sig.clone()
                             }
@@ -1183,7 +1244,7 @@ fn test_verify_bls_signature_batch_with_same_msg() {
             .iter()
             .map(|sk| G2Affine::from(G2Affine::generator() * sk))
             .collect();
-        let msg = G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>());
+        let msg = G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>());
         let sigs: Vec<_> = sks.iter().map(|sk| G1Affine::from(&msg * sk)).collect();
 
         for i in 0..num_inputs {
@@ -1209,7 +1270,7 @@ fn test_verify_bls_signature_batch_with_same_msg() {
 
         assert!(!verify_bls_signature_batch_same_msg(
             &sigs.iter().zip(pks.iter()).collect::<Vec<_>>()[..],
-            &G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>()),
+            &G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>()),
             rng
         ));
 
@@ -1261,7 +1322,7 @@ fn test_verify_bls_signature_batch_with_same_pk() {
         let sk = Scalar::random(rng);
         let pk = G2Affine::from(G2Affine::generator() * &sk);
         let msgs: Vec<_> = (0..num_inputs)
-            .map(|_| G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>()))
+            .map(|_| G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>()))
             .collect();
         let sigs: Vec<_> = msgs.iter().map(|msg| G1Affine::from(msg * &sk)).collect();
 
@@ -1386,12 +1447,12 @@ fn test_hash_to_g1_matches_draft() {
 
     g1_test_encoding(
         G1Affine::hash(&dst[..], b""),
-        "852926add2207b76ca4fa57a8734416c8dc95e24501772c814278700eed6d1e4e8cf62d9c09db0fac349612b759e79a1"
+        "852926add2207b76ca4fa57a8734416c8dc95e24501772c814278700eed6d1e4e8cf62d9c09db0fac349612b759e79a1",
     );
 
     g1_test_encoding(
         G1Affine::hash(&dst[..], b"abc"),
-        "83567bc5ef9c690c2ab2ecdf6a96ef1c139cc0b2f284dca0a9a7943388a49a3aee664ba5379a7655d3c68900be2f6903"
+        "83567bc5ef9c690c2ab2ecdf6a96ef1c139cc0b2f284dca0a9a7943388a49a3aee664ba5379a7655d3c68900be2f6903",
     );
 
     g1_test_encoding(
@@ -1426,27 +1487,27 @@ fn test_hash_to_g2_matches_draft() {
 
     g2_test_encoding(
         G2Affine::hash(&dst[..], b""),
-        "a5cb8437535e20ecffaef7752baddf98034139c38452458baeefab379ba13dff5bf5dd71b72418717047f5b0f37da03d0141ebfbdca40eb85b87142e130ab689c673cf60f1a3e98d69335266f30d9b8d4ac44c1038e9dcdd5393faf5c41fb78a"
+        "a5cb8437535e20ecffaef7752baddf98034139c38452458baeefab379ba13dff5bf5dd71b72418717047f5b0f37da03d0141ebfbdca40eb85b87142e130ab689c673cf60f1a3e98d69335266f30d9b8d4ac44c1038e9dcdd5393faf5c41fb78a",
     );
 
     g2_test_encoding(
         G2Affine::hash(&dst[..], b"abc"),
-        "939cddbccdc5e91b9623efd38c49f81a6f83f175e80b06fc374de9eb4b41dfe4ca3a230ed250fbe3a2acf73a41177fd802c2d18e033b960562aae3cab37a27ce00d80ccd5ba4b7fe0e7a210245129dbec7780ccc7954725f4168aff2787776e6"
+        "939cddbccdc5e91b9623efd38c49f81a6f83f175e80b06fc374de9eb4b41dfe4ca3a230ed250fbe3a2acf73a41177fd802c2d18e033b960562aae3cab37a27ce00d80ccd5ba4b7fe0e7a210245129dbec7780ccc7954725f4168aff2787776e6",
     );
 
     g2_test_encoding(
         G2Affine::hash(&dst[..], b"abcdef0123456789"),
-        "990d119345b94fbd15497bcba94ecf7db2cbfd1e1fe7da034d26cbba169fb3968288b3fafb265f9ebd380512a71c3f2c121982811d2491fde9ba7ed31ef9ca474f0e1501297f68c298e9f4c0028add35aea8bb83d53c08cfc007c1e005723cd0"
+        "990d119345b94fbd15497bcba94ecf7db2cbfd1e1fe7da034d26cbba169fb3968288b3fafb265f9ebd380512a71c3f2c121982811d2491fde9ba7ed31ef9ca474f0e1501297f68c298e9f4c0028add35aea8bb83d53c08cfc007c1e005723cd0",
     );
 
     g2_test_encoding(
         G2Affine::hash(&dst[..], format!("q128_{}", "q".repeat(128)).as_bytes()),
-        "8934aba516a52d8ae479939a91998299c76d39cc0c035cd18813bec433f587e2d7a4fef038260eef0cef4d02aae3eb9119a84dd7248a1066f737cc34502ee5555bd3c19f2ecdb3c7d9e24dc65d4e25e50d83f0f77105e955d78f4762d33c17da"
+        "8934aba516a52d8ae479939a91998299c76d39cc0c035cd18813bec433f587e2d7a4fef038260eef0cef4d02aae3eb9119a84dd7248a1066f737cc34502ee5555bd3c19f2ecdb3c7d9e24dc65d4e25e50d83f0f77105e955d78f4762d33c17da",
     );
 
     g2_test_encoding(
         G2Affine::hash(&dst[..], format!("a512_{}", "a".repeat(512)).as_bytes()),
-        "91fca2ff525572795a801eed17eb12785887c7b63fb77a42be46ce4a34131d71f7a73e95fee3f812aea3de78b4d0156901a6ba2f9a11fa5598b2d8ace0fbe0a0eacb65deceb476fbbcb64fd24557c2f4b18ecfc5663e54ae16a84f5ab7f62534"
+        "91fca2ff525572795a801eed17eb12785887c7b63fb77a42be46ce4a34131d71f7a73e95fee3f812aea3de78b4d0156901a6ba2f9a11fa5598b2d8ace0fbe0a0eacb65deceb476fbbcb64fd24557c2f4b18ecfc5663e54ae16a84f5ab7f62534",
     );
 }
 
@@ -1457,7 +1518,7 @@ fn random_node_indexes<R: rand::Rng>(
     let mut set = std::collections::BTreeSet::new();
 
     while set.len() != count {
-        let r = rng.gen::<NodeIndex>();
+        let r = rng.r#gen::<NodeIndex>();
         set.insert(r);
     }
 
@@ -1559,7 +1620,7 @@ trait BiasedValue {
 impl BiasedValue for Scalar {
     type Output = Scalar;
     fn biased<R: RngCore + CryptoRng>(rng: &mut R) -> Self::Output {
-        let coin = rng.gen::<u8>();
+        let coin = rng.r#gen::<u8>();
 
         // With ~4% probability each use -1, 0, or 1. Otherwise random
         if coin < 10 {
@@ -1577,7 +1638,7 @@ impl BiasedValue for Scalar {
 impl BiasedValue for G1Projective {
     type Output = G1Projective;
     fn biased<R: RngCore + CryptoRng>(rng: &mut R) -> Self::Output {
-        let coin = rng.gen::<u8>();
+        let coin = rng.r#gen::<u8>();
 
         // With ~4% probability each use identity, g, or -g. Otherwise random
         if coin < 10 {
@@ -1587,7 +1648,7 @@ impl BiasedValue for G1Projective {
         } else if coin < 30 {
             Self::generator().neg()
         } else {
-            Self::hash(b"random-g1-val-for-testing", &rng.gen::<[u8; 32]>())
+            Self::hash(b"random-g1-val-for-testing", &rng.r#gen::<[u8; 32]>())
         }
     }
 }
@@ -1595,7 +1656,7 @@ impl BiasedValue for G1Projective {
 impl BiasedValue for G2Projective {
     type Output = G2Projective;
     fn biased<R: RngCore + CryptoRng>(rng: &mut R) -> Self::Output {
-        let coin = rng.gen::<u8>();
+        let coin = rng.r#gen::<u8>();
 
         // With ~4% probability each use identity, g, or -g. Otherwise random
         if coin < 10 {
@@ -1605,7 +1666,7 @@ impl BiasedValue for G2Projective {
         } else if coin < 30 {
             Self::generator().neg()
         } else {
-            Self::hash(b"random-g2-val-for-testing", &rng.gen::<[u8; 32]>())
+            Self::hash(b"random-g2-val-for-testing", &rng.r#gen::<[u8; 32]>())
         }
     }
 }
@@ -1653,7 +1714,7 @@ test_point_operation!(serialization_round_trip, [g1, g2], {
     let rng = &mut reproducible_rng();
 
     for _ in 1..30 {
-        let orig = Projective::hash(b"serialization-round-trip-test", &rng.gen::<[u8; 32]>());
+        let orig = Projective::hash(b"serialization-round-trip-test", &rng.r#gen::<[u8; 32]>());
         let bits = orig.serialize();
 
         let d = Projective::deserialize(&bits).expect("Invalid serialization");
@@ -1743,7 +1804,7 @@ test_point_operation!(sum, [g1, g2], {
         let mut inputs = Vec::with_capacity(t);
         let mut elements = Vec::with_capacity(t);
         for _ in 0..t {
-            let r = rng.gen::<u32>() as u64;
+            let r = rng.r#gen::<u32>() as u64;
             inputs.push(r);
             elements.push(pt * Scalar::from_u64(r));
         }
@@ -1761,8 +1822,8 @@ test_point_operation!(multiply, [g1, g2, gt], {
     let pt = Affine::generator();
 
     for _ in 1..300 {
-        let lhs = rng.gen::<u32>() as u64;
-        let rhs = rng.gen::<u32>() as u64;
+        let lhs = rng.r#gen::<u32>() as u64;
+        let rhs = rng.r#gen::<u32>() as u64;
         let integer_prod = lhs * rhs;
         let product = (pt * Scalar::from_u64(lhs)) * Scalar::from_u64(rhs);
 
@@ -1773,7 +1834,7 @@ test_point_operation!(multiply, [g1, g2, gt], {
 test_point_operation!(mul_with_precompute, [g1, g2], {
     let rng = &mut reproducible_rng();
 
-    let g = Affine::hash(b"random-point-for-mul-precompute", &rng.gen::<[u8; 32]>());
+    let g = Affine::hash(b"random-point-for-mul-precompute", &rng.r#gen::<[u8; 32]>());
 
     let mut g_with_precompute = g.clone();
     g_with_precompute.precompute();
@@ -1795,7 +1856,7 @@ test_point_operation!(mul_with_precompute, [g1, g2], {
 test_point_operation!(batch_mul, [g1, g2], {
     let rng = &mut reproducible_rng();
 
-    let pt = Affine::hash(b"ic-crypto-batch-mul-test", &rng.gen::<[u8; 32]>());
+    let pt = Affine::hash(b"ic-crypto-batch-mul-test", &rng.r#gen::<[u8; 32]>());
 
     for i in 0..20 {
         let scalars = Scalar::batch_random(rng, i);

@@ -1,6 +1,6 @@
 use ic_crypto_internal_seed::Seed;
-use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::forward_secure::SecretKey;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::Epoch;
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::forward_secure::SecretKey;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::{
     types::FsEncryptionSecretKey, *,
 };
@@ -79,7 +79,7 @@ fn create_receiver_keys(
 
     for node_index in 0..count {
         let node_key_seed =
-            Seed::from_bytes(format!("ic-crypto-kgen-seed-node-{}", node_index).as_bytes());
+            Seed::from_bytes(format!("ic-crypto-kgen-seed-node-{node_index}").as_bytes());
         let key_and_pop =
             create_forward_secure_key_pair(node_key_seed, b"ic-crypto-kgen-assoc-data");
         pk.insert(node_index as u32, key_and_pop.public_key);
@@ -96,11 +96,10 @@ fn create_and_verify_dealing(
     epoch: Epoch,
     resharing_secret: Option<SecretKeyBytes>,
 ) -> Dealing {
-    let keygen_seed = Seed::from_bytes(
-        format!("ic-crypto-create-dealing-keygen-seed-{}", dealer_index).as_bytes(),
-    );
+    let keygen_seed =
+        Seed::from_bytes(format!("ic-crypto-create-dealing-keygen-seed-{dealer_index}").as_bytes());
     let encryption_seed = Seed::from_bytes(
-        format!("ic-crypto-create-dealing-encryption-seed-{}", dealer_index).as_bytes(),
+        format!("ic-crypto-create-dealing-encryption-seed-{dealer_index}").as_bytes(),
     );
 
     let dealing = create_dealing(

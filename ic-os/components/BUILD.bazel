@@ -7,7 +7,6 @@ load("setupos.bzl", setupos_component_files = "component_files")
 package(default_visibility = ["//ic-os:__subpackages__"])
 
 PUBLIC_GUESTOS_EXPORTS = [
-    "ic/generate-ic-config/ic.json5.template",
     "networking/dev-certs/canister_http_test_ca.cert",
     "networking/dev-certs/canister_http_test_ca.key",
 ]
@@ -23,11 +22,13 @@ exports_files(
         "//ic-os/guestos:__subpackages__",
         "//ic-os/hostos:__subpackages__",
         "//ic-os/setupos:__subpackages__",
+        "//ic-os/testing:__subpackages__",
     ],
 )
 
 write_info_file_var(
     name = "commit_timestamp_txt",
+    tags = ["manual"],
     varname = "STABLE_COMMIT_TIMESTAMP",
 )
 
@@ -49,6 +50,12 @@ ignored_repo_components = [
     "networking/dev-certs/root_cert_gen.sh",
     "misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh",
     "misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service",
+    "guestos/selinux/guestos-recovery-engine/guestos-recovery-engine.fc",
+    "guestos/selinux/guestos-recovery-engine/guestos-recovery-engine.te",
+    "misc/console-getty@/hostos-dev/override.conf",
+    "misc/console-getty@/hostos-prod/override.conf",
+    "misc/serial-getty@/guestos-dev/override.conf",
+    "misc/serial-getty@/guestos-prod/override.conf",
 ]
 
 check_unused_components_test(
@@ -56,32 +63,4 @@ check_unused_components_test(
     ignored_repo_components = ignored_repo_components,
     repo_components = REPO_COMPONENTS,
     used_components = used_components.keys(),
-)
-
-genrule(
-    name = "validate-ic-json5-script",
-    testonly = True,
-    outs = ["validate-ic-json5.sh"],
-    cmd = """
-    cat <<EOF > $@
-#!/bin/bash
-set -eux
-TEMPFILE=\\$$(mktemp)
-# The version of 'json5' available on CI containers does not support
-# the '--validate' argument so we have to copy to a temporary file
-# and compile in place with the '-c' argument to check validity.
-sed <"\\$${1?missing json5 file}" 's/{{[^}]*}}/0/g' >"\\$$TEMPFILE"
-echo "Validating: \\$$1"
-json5 -c "\\$$TEMPFILE"
-rm "\\$$TEMPFILE"
-EOF
-    """,
-    tags = ["manual"],
-)
-
-sh_test(
-    name = "validate-ic-json5",
-    srcs = ["validate-ic-json5-script"],
-    args = ["$(execpath ic/generate-ic-config/ic.json5.template)"],
-    data = ["ic/generate-ic-config/ic.json5.template"],
 )

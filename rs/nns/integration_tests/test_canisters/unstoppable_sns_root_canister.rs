@@ -1,15 +1,15 @@
 use async_trait::async_trait;
-use dfn_candid::{candid_one, CandidOne};
+use dfn_candid::{CandidOne, candid_one};
 use dfn_core::{over_async, over_init, println};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_clients::management_canister_client::ManagementCanisterClientImpl;
 use ic_nervous_system_common::NANO_SECONDS_PER_SECOND;
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_sns_root::{
-    pb::v1::{CanisterCallError, SnsRootCanister},
-    types::Environment,
     ArchiveInfo, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
     LedgerCanisterClient,
+    pb::v1::{CanisterCallError, SnsRootCanister},
+    types::Environment,
 };
 use std::{cell::RefCell, time::Duration};
 
@@ -37,7 +37,7 @@ thread_local! {
     static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
 }
 
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn canister_init() {
     println!("Unstoppable Canister Init!");
 
@@ -60,7 +60,7 @@ fn canister_init() {
     });
 }
 
-#[export_name = "canister_update get_sns_canisters_summary"]
+#[unsafe(export_name = "canister_update get_sns_canisters_summary")]
 fn get_sns_canisters_summary() {
     over_async(
         candid_one,
@@ -91,7 +91,7 @@ async fn get_sns_canisters_summary_impl(
         &ledger_client,
         &canister_env,
         false,
-        PrincipalId(ic_cdk::api::id()),
+        PrincipalId(ic_cdk::api::canister_self()),
     )
     .await
 }

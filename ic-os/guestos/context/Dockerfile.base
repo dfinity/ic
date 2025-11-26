@@ -29,12 +29,6 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     curl \
     perl
 
-# Download and verify filebeat
-RUN cd /tmp/ && \
-    curl -L -O https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-oss-8.9.1-linux-x86_64.tar.gz && \
-    echo "ce199f350704c21dbb23dc72ce2a4ecd2e6acb9ed7d4cc338489d72ddea5f3d7  filebeat-oss-8.9.1-linux-x86_64.tar.gz" > filebeat.sha256 && \
-    sha256sum -c filebeat.sha256
-
 # Download and verify node_exporter
 RUN cd /tmp/ && \
     curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.8.1/node_exporter-1.8.1.linux-amd64.tar.gz && \
@@ -43,7 +37,7 @@ RUN cd /tmp/ && \
 
 #
 # Second build stage:
-# - Download and cache minimal Ubuntu Server 20.04 LTS Docker image
+# - Download and cache minimal Ubuntu Server 24.04 LTS Docker image
 # - Install and cache upstream packages from built-in Ubuntu repositories
 # - Copy downloaded archives from first build stage into the target image
 #
@@ -71,14 +65,6 @@ RUN apt-get -y update && \
         ${_KERNEL_PACKAGE} \
         linux-modules-extra-$(apt-cache depends ${_KERNEL_PACKAGE} | sed -n -e 's/  Depends: linux-image-\(.*\)-generic/\1/p')-generic && \
     rm /tmp/packages.*
-
-# Install filebeat
-COPY --from=download /tmp/filebeat-oss-8.9.1-linux-x86_64.tar.gz /tmp/filebeat-oss-8.9.1-linux-x86_64.tar.gz
-RUN cd /tmp/ && \
-    mkdir -p /var/lib/filebeat \
-             /var/log/filebeat && \
-    tar --strip-components=1 -C /usr/local/bin/ -zvxf filebeat-oss-8.9.1-linux-x86_64.tar.gz filebeat-8.9.1-linux-x86_64/filebeat && \
-    rm /tmp/filebeat-oss-8.9.1-linux-x86_64.tar.gz
 
 # Install node_exporter
 COPY --from=download /tmp/node_exporter-1.8.1.linux-amd64.tar.gz /tmp/node_exporter-1.8.1.linux-amd64.tar.gz

@@ -1,5 +1,5 @@
 use crate::{
-    pb::v1::{governance_error::ErrorType, GovernanceError},
+    pb::v1::{GovernanceError, governance_error::ErrorType},
     storage::validate_stable_btree_map,
 };
 
@@ -105,7 +105,7 @@ impl<M: Memory> NeuronSubaccountIndex<M> {
     // Dead code while the TLA test is temporarily being disabled.
     #[allow(dead_code)]
     #[cfg(feature = "test")]
-    pub fn iter(&self) -> SBTIter<[u8; 32], NeuronId, M> {
+    pub fn iter(&self) -> SBTIter<'_, [u8; 32], NeuronId, M> {
         self.subaccount_to_id.iter()
     }
 }
@@ -121,9 +121,11 @@ mod tests {
     fn add_single_neuron() {
         let mut index = NeuronSubaccountIndex::new(VectorMemory::default());
 
-        assert!(index
-            .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
-            .is_ok());
+        assert!(
+            index
+                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
+                .is_ok()
+        );
 
         assert_eq!(
             index.get_neuron_id_by_subaccount(&Subaccount([1u8; 32])),
@@ -135,12 +137,16 @@ mod tests {
     fn add_and_remove_neuron() {
         let mut index = NeuronSubaccountIndex::new(VectorMemory::default());
 
-        assert!(index
-            .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
-            .is_ok());
-        assert!(index
-            .remove_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
-            .is_ok());
+        assert!(
+            index
+                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
+                .is_ok()
+        );
+        assert!(
+            index
+                .remove_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
+                .is_ok()
+        );
 
         assert_eq!(
             index.get_neuron_id_by_subaccount(&Subaccount([1u8; 32])),
@@ -152,9 +158,11 @@ mod tests {
     fn add_neuron_with_same_subaccount_fails() {
         let mut index = NeuronSubaccountIndex::new(VectorMemory::default());
 
-        assert!(index
-            .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
-            .is_ok());
+        assert!(
+            index
+                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
+                .is_ok()
+        );
         assert_matches!(
             index.add_neuron_subaccount(NeuronId { id: 2 }, &Subaccount([1u8; 32])),
             Err(GovernanceError{error_type, error_message: message})
@@ -184,9 +192,11 @@ mod tests {
     fn remove_neuron_with_wrong_neuron_id_fails() {
         let mut index = NeuronSubaccountIndex::new(VectorMemory::default());
 
-        assert!(index
-            .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
-            .is_ok());
+        assert!(
+            index
+                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
+                .is_ok()
+        );
         assert_matches!(
             index.remove_neuron_subaccount(NeuronId { id: 2 }, &Subaccount([1u8; 32])),
             Err(GovernanceError{error_type, error_message: message})
@@ -204,12 +214,16 @@ mod tests {
     fn add_multiple_neurons() {
         let mut index = NeuronSubaccountIndex::new(VectorMemory::default());
 
-        assert!(index
-            .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
-            .is_ok());
-        assert!(index
-            .add_neuron_subaccount(NeuronId { id: 2 }, &Subaccount([2u8; 32]))
-            .is_ok());
+        assert!(
+            index
+                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
+                .is_ok()
+        );
+        assert!(
+            index
+                .add_neuron_subaccount(NeuronId { id: 2 }, &Subaccount([2u8; 32]))
+                .is_ok()
+        );
 
         assert_eq!(
             index.get_neuron_id_by_subaccount(&Subaccount([1u8; 32])),
@@ -227,9 +241,11 @@ mod tests {
 
         assert_eq!(index.num_entries(), 0);
 
-        assert!(index
-            .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
-            .is_ok());
+        assert!(
+            index
+                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
+                .is_ok()
+        );
 
         assert_eq!(index.num_entries(), 1);
     }
@@ -238,9 +254,11 @@ mod tests {
     fn index_contains() {
         let mut index = NeuronSubaccountIndex::new(VectorMemory::default());
 
-        assert!(index
-            .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
-            .is_ok());
+        assert!(
+            index
+                .add_neuron_subaccount(NeuronId { id: 1 }, &Subaccount([1u8; 32]))
+                .is_ok()
+        );
 
         assert!(index.contains_entry(NeuronId { id: 1 }, &Subaccount([1u8; 32])));
     }

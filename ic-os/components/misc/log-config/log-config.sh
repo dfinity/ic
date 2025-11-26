@@ -1,7 +1,14 @@
 #!/bin/bash
 
 CONFIG_DIR="/boot/config"
-CONFIG="/boot/config/config.json"
+if [[ "$1" == "hostos" ]]; then
+    CONFIG_OBJECT="/boot/config/config.json"
+elif [[ "$1" == "guestos" ]]; then
+    CONFIG_OBJECT="/run/config/config.json"
+else
+    echo "ERROR: Invalid environment: $1"
+    exit 1
+fi
 
 log_directory_structure() {
     local dir=$1
@@ -29,4 +36,4 @@ log_file_contents() {
 
 echo "Logging config partition"
 log_directory_structure "$CONFIG_DIR"
-log_file_contents "$CONFIG"
+log_file_contents "$CONFIG_OBJECT"

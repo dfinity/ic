@@ -1,16 +1,14 @@
-use bitcoincore_rpc::{bitcoin::Address, Auth, Client, RpcApi};
 use candid::{CandidType, Encode, Principal};
-use ic_btc_interface::{Config, Network};
-use ic_config::execution_environment::BITCOIN_TESTNET_CANISTER_ID;
-use ic_nns_constants::ROOT_CANISTER_ID;
-use pocket_ic::{update_candid, PocketIc, PocketIcBuilder};
-use std::fs::{create_dir, File};
-use std::io::Write;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::process::Command;
+use ic_btc_adapter_test_utils::{
+    bitcoin::{Address, Network as BtcNetwork},
+    bitcoind::{Conf, Daemon},
+    rpc_client::RpcError,
+};
+use ic_btc_interface::Network;
+use pocket_ic::common::rest::{IcpFeatures, IcpFeaturesConfig};
+use pocket_ic::{PocketIc, PocketIcBuilder, update_candid};
 use std::str::FromStr;
 use std::time::SystemTime;
-use tempfile::tempdir;
 
 #[derive(CandidType, serde::Deserialize)]
 pub struct SendRequest {
@@ -18,40 +16,17 @@ pub struct SendRequest {
     pub amount_in_satoshi: u64,
 }
 
-fn deploy_btc_canister(pic: &PocketIc) {
-    let nns_root_canister_id: Principal = ROOT_CANISTER_ID.into();
-    let btc_canister_id = Principal::from_text(BITCOIN_TESTNET_CANISTER_ID).unwrap();
-    let actual_canister_id = pic
-        .create_canister_with_id(Some(nns_root_canister_id), None, btc_canister_id)
-        .unwrap();
-    assert_eq!(actual_canister_id, btc_canister_id);
-
-    let btc_path =
-        std::env::var_os("BTC_WASM").expect("Missing BTC_WASM (path to BTC canister wasm) in env.");
-    let btc_wasm = std::fs::read(btc_path).expect("Could not read BTC canister wasm file.");
-    let args = Config {
-        network: Network::Regtest,
-        ..Default::default()
-    };
-    pic.install_canister(
-        btc_canister_id,
-        btc_wasm,
-        Encode!(&args).unwrap(),
-        Some(nns_root_canister_id),
-    );
-}
-
-fn deploy_basic_bitcoin_canister(pic: &PocketIc) -> Principal {
+fn deploy_bitcoin_example_canister(pic: &PocketIc) -> Principal {
     const T: u128 = 1_000_000_000_000;
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, 100 * T);
-    let basic_bitcoin_path = std::env::var_os("BASIC_BITCOIN_WASM")
-        .expect("Missing BASIC_BITCOIN_WASM (path to basic_bitcoin canister wasm) in env.");
-    let basic_bitcoin_wasm = std::fs::read(basic_bitcoin_path)
-        .expect("Could not read basic_bitcoin canister wasm file.");
+    let bitcoin_example_canister_path = std::env::var_os("BITCOIN_EXAMPLE_CANISTER_WASM")
+        .expect("Missing BITCOIN_EXAMPLE_CANISTER_WASM environment variable (path to bitcoin example canister WASM file).");
+    let bitcoin_example_canister_wasm = std::fs::read(bitcoin_example_canister_path)
+        .expect("Could not read bitcoin example canister WASM file.");
     pic.install_canister(
         canister_id,
-        basic_bitcoin_wasm.to_vec(),
+        bitcoin_example_canister_wasm.to_vec(),
         Encode!(&Network::Regtest).unwrap(),
         None,
     );
@@ -60,13 +35,13 @@ fn deploy_basic_bitcoin_canister(pic: &PocketIc) -> Principal {
 
 fn get_balance(
     pic: &PocketIc,
-    basic_bitcoin_canister_id: Principal,
+    bitcoin_example_canister_id: Principal,
     bitcoin_address: String,
 ) -> u64 {
     loop {
         if let Ok((balance,)) = update_candid::<_, (u64,)>(
             pic,
-            basic_bitcoin_canister_id,
+            bitcoin_example_canister_id,
             "get_balance",
             (bitcoin_address.clone(),),
         ) {
@@ -77,69 +52,53 @@ fn get_balance(
 
 #[test]
 fn bitcoin_integration_test() {
-    let tmp_dir = tempdir().unwrap();
-
-    let bitcoind_path = std::env::var_os("BITCOIND_BIN")
+    let bitcoind_path = std::env::var("BITCOIND_BIN")
         .expect("Missing BITCOIND_BIN (path to bitcoind executable) in env.");
+    let conf = Conf {
+        p2p: true,
+        ..Conf::default()
+    };
+    let bitcoind = Daemon::new(&bitcoind_path, BtcNetwork::Regtest, conf);
 
-    let conf_path = tmp_dir.path().join("bitcoin.conf");
-    let mut conf = File::create(conf_path.clone()).unwrap();
-    conf.write_all(r#"regtest=1
-# Dummy credentials for bitcoin RPC.
-rpcuser=ic-btc-integration
-rpcpassword=QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=
-rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dce2b30671123fa561932992ce377585e8e08bb0c11dfa"#.as_bytes()).unwrap();
-    drop(conf);
-
-    let data_dir_path = tmp_dir.path().join("data");
-    create_dir(data_dir_path.clone()).unwrap();
-
-    let mut bitcoin_d_process = Command::new(bitcoind_path)
-        .arg(format!("-conf={}", conf_path.display()))
-        .arg(format!("-datadir={}", data_dir_path.display()))
-        .spawn()
-        .unwrap();
-
+    let icp_features = IcpFeatures {
+        bitcoin: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
     let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_ii_subnet() // to have tECDSA keys available
         .with_bitcoin_subnet()
-        .with_ii_subnet()
-        .with_application_subnet()
-        .with_bitcoind_addr(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            18444,
-        ))
+        .with_application_subnet() // to deploy the test dapp
+        .with_bitcoind_addr(bitcoind.p2p_socket().unwrap().into())
+        .with_icp_features(icp_features)
         .build();
+
     pic.set_time(SystemTime::now().into());
 
-    deploy_btc_canister(&pic);
-
-    let basic_bitcoin_canister_id = deploy_basic_bitcoin_canister(&pic);
-    let bitcoin_address =
-        update_candid::<_, (String,)>(&pic, basic_bitcoin_canister_id, "get_p2pkh_address", ((),))
-            .unwrap()
-            .0;
-
-    let another_basic_bitcoin_canister_id = deploy_basic_bitcoin_canister(&pic);
-    let another_bitcoin_address = update_candid::<_, (String,)>(
+    let bitcoin_example_canister_id = deploy_bitcoin_example_canister(&pic);
+    let bitcoin_address = update_candid::<_, (String,)>(
         &pic,
-        another_basic_bitcoin_canister_id,
+        bitcoin_example_canister_id,
         "get_p2pkh_address",
         ((),),
     )
     .unwrap()
     .0;
 
-    let btc_rpc = Client::new(
-        "http://127.0.0.1:18443",
-        Auth::UserPass(
-            "ic-btc-integration".to_string(),
-            "QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=".to_string(),
-        ),
+    let another_bitcoin_example_canister_id = deploy_bitcoin_example_canister(&pic);
+    let another_bitcoin_address = update_candid::<_, (String,)>(
+        &pic,
+        another_bitcoin_example_canister_id,
+        "get_p2pkh_address",
+        ((),),
     )
-    .unwrap();
+    .unwrap()
+    .0;
+
+    let btc_rpc = &bitcoind.rpc_client;
 
     // `n` must be more than 100 (Coinbase maturity rule) so that the reward for the first block can be sent out
-    let mut n = 101;
+    let n = 101;
     // retry generating blocks until the bitcoind is up and running
     let start = std::time::Instant::now();
     loop {
@@ -150,20 +109,20 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
                 .assume_checked(),
         ) {
             Ok(_) => break,
-            Err(bitcoincore_rpc::Error::JsonRpc(err)) => {
+            Err(RpcError::JsonRpc(err)) => {
                 if start.elapsed() > std::time::Duration::from_secs(30) {
-                    panic!("Timed out when waiting for bitcoind; last error: {}", err);
+                    panic!("Timed out when waiting for bitcoind; last error: {err}");
                 }
                 std::thread::sleep(std::time::Duration::from_millis(100));
             }
-            Err(err) => panic!("Unexpected error when talking to bitcoind: {}", err),
+            Err(err) => panic!("Unexpected error when talking to bitcoind: {err:?}"),
         }
     }
 
     let reward = 50 * 100_000_000; // 50 BTC
 
     loop {
-        if get_balance(&pic, basic_bitcoin_canister_id, bitcoin_address.clone()) == n * reward {
+        if get_balance(&pic, bitcoin_example_canister_id, bitcoin_address.clone()) == n * reward {
             break;
         }
     }
@@ -175,8 +134,8 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
     };
     update_candid::<_, (String,)>(
         &pic,
-        basic_bitcoin_canister_id,
-        "send_from_p2pkh",
+        bitcoin_example_canister_id,
+        "send_from_p2pkh_address",
         (send_request,),
     )
     .unwrap();
@@ -184,7 +143,7 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
     loop {
         if get_balance(
             &pic,
-            basic_bitcoin_canister_id,
+            bitcoin_example_canister_id,
             another_bitcoin_address.clone(),
         ) == send_amount
         {
@@ -198,11 +157,6 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
                         .assume_checked(),
                 )
                 .unwrap();
-            n += 1;
         }
     }
-
-    // Kill the task to avoid zombie process.
-    bitcoin_d_process.kill().unwrap();
-    bitcoin_d_process.wait().unwrap();
 }

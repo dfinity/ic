@@ -1,14 +1,6 @@
 use crate::{
-    certification::recertify_registry, missing_node_types_map::MISSING_NODE_TYPES_MAP,
-    mutations::node_management::common::get_key_family, pb::v1::RegistryCanisterStableStorage,
-    registry::Registry,
+    certification::recertify_registry, pb::v1::RegistryCanisterStableStorage, registry::Registry,
 };
-use ic_base_types::{NodeId, PrincipalId};
-use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
-use ic_registry_keys::{make_node_record_key, NODE_RECORD_KEY_PREFIX};
-use ic_registry_transport::{pb::v1::RegistryMutation, update};
-use prost::Message;
-use std::str::FromStr;
 
 pub fn canister_post_upgrade(
     registry: &mut Registry,
@@ -26,7 +18,8 @@ pub fn canister_post_upgrade(
 
     // Registry data migrations should be implemented as follows:
     let mutation_batches_due_to_data_migrations = {
-        let mutations = add_missing_node_types_to_nodes(registry);
+        let mutations: Vec<_> = vec![];
+
         if mutations.is_empty() {
             0 // No mutations required for this data migration.
         } else {
@@ -62,37 +55,6 @@ pub fn canister_post_upgrade(
     }
 }
 
-// This will be used one additional time before being removed, after node_reward_type is enforced
-// for newly added nodes, therefore we are allowing dead code here.
-#[allow(dead_code)]
-fn add_missing_node_types_to_nodes(registry: &Registry) -> Vec<RegistryMutation> {
-    let missing_node_types_map = &MISSING_NODE_TYPES_MAP;
-
-    let mut mutations = Vec::new();
-
-    for (id, record) in get_key_family::<NodeRecord>(registry, NODE_RECORD_KEY_PREFIX).into_iter() {
-        if record.node_reward_type.is_none() {
-            let reward_type = missing_node_types_map
-                .get(id.as_str())
-                .map(|t| NodeRewardType::from(t.to_string()));
-
-            if let Some(reward_type) = reward_type {
-                if reward_type != NodeRewardType::Unspecified {
-                    let mut record = record;
-                    record.node_reward_type = Some(reward_type as i32);
-                    let node_id = NodeId::from(PrincipalId::from_str(&id).unwrap());
-                    mutations.push(update(
-                        make_node_record_key(node_id),
-                        record.encode_to_vec(),
-                    ));
-                }
-            }
-        }
-    }
-
-    mutations
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -101,9 +63,7 @@ mod test {
         registry::{EncodedVersion, Version},
         registry_lifecycle::Registry,
     };
-    use ic_base_types::{NodeId, PrincipalId};
-    use ic_registry_keys::make_node_record_key;
-    use ic_registry_transport::insert;
+    use prost::Message;
 
     fn stable_storage_from_registry(
         registry: &Registry,
@@ -170,7 +130,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "No routing table in snapshot")]
+    #[should_panic(expected = "[Registry] invariant check failed with message: no system subnet")]
     fn post_upgrade_fails_on_global_state_invariant_check_failure() {
         // We only check a single failure mode here,
         // since the rest should be under other test coverage
@@ -226,53 +186,5 @@ mod test {
             RegistryCanisterStableStorage::decode(stable_storage_bytes.as_slice())
                 .expect("Error decoding from stable.");
         canister_post_upgrade(&mut new_registry, registry_storage);
-    }
-
-    #[test]
-    fn test_migration_works_correctly() {
-        use std::str::FromStr;
-        let mut registry = invariant_compliant_registry(0);
-
-        let mut node_additions = Vec::new();
-        for (id, _) in MISSING_NODE_TYPES_MAP.iter() {
-            let record = NodeRecord {
-                xnet: None,
-                http: None,
-                node_operator_id: PrincipalId::new_anonymous().to_vec(),
-                chip_id: None,
-                hostos_version_id: None,
-                public_ipv4_config: None,
-                domain: None,
-                node_reward_type: None,
-            };
-
-            node_additions.push(insert(
-                make_node_record_key(NodeId::new(PrincipalId::from_str(id).unwrap())),
-                record.encode_to_vec(),
-            ));
-        }
-
-        let nodes_expected = node_additions.len();
-        assert_eq!(nodes_expected, 485);
-
-        registry.apply_mutations_for_test(node_additions);
-
-        let mutations = add_missing_node_types_to_nodes(&registry);
-        assert_eq!(mutations.len(), nodes_expected);
-
-        registry.apply_mutations_for_test(mutations);
-
-        for (id, reward_type) in MISSING_NODE_TYPES_MAP.iter() {
-            let record =
-                registry.get_node_or_panic(NodeId::from(PrincipalId::from_str(id).unwrap()));
-
-            let expected_reward_type = NodeRewardType::from(reward_type.clone());
-            assert_eq!(
-                record.node_reward_type,
-                Some(expected_reward_type as i32),
-                "Assertion for Node {} failed",
-                id
-            );
-        }
     }
 }

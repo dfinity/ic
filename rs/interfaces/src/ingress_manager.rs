@@ -4,6 +4,7 @@ use crate::{
     validation::{ValidationError, ValidationResult},
 };
 use ic_types::{
+    CanisterId, Height, NumBytes,
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     consensus::Payload,
@@ -11,7 +12,6 @@ use ic_types::{
     messages::MessageId,
     state_manager::StateManagerError,
     time::{Time, UNIX_EPOCH},
-    CanisterId, Height, NumBytes,
 };
 use std::collections::HashSet;
 

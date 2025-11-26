@@ -1,16 +1,16 @@
 use crate::{
+    HasTimestamp, IntoInner,
     consensus_pool::{MutablePoolSection, PoolSectionOp, PoolSectionOps},
     height_index::{HeightIndex, Indexes, SelectIndex},
-    HasTimestamp, IntoInner,
 };
 use ic_interfaces::consensus_pool::{
     HeightIndexedPool, HeightRange, OnlyError, PoolSection, PurgeableArtifactType,
 };
 use ic_types::{
+    Height, Time,
     artifact::ConsensusMessageId,
     consensus::*,
     crypto::{CryptoHash, CryptoHashOf},
-    Height, Time,
 };
 use std::collections::BTreeMap;
 
@@ -131,10 +131,8 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
     }
 }
 
-impl<
-        T: ConsensusMessageHashable + 'static,
-        S: IntoInner<ConsensusMessage> + HasTimestamp + Clone,
-    > HeightIndexedPool<T> for InMemoryPoolSection<S>
+impl<T: ConsensusMessageHashable + 'static, S: IntoInner<ConsensusMessage> + HasTimestamp + Clone>
+    HeightIndexedPool<T> for InMemoryPoolSection<S>
 where
     CryptoHashOf<T>: SelectIndex,
 {

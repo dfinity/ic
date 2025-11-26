@@ -1,4 +1,3 @@
-load("//bazel:defs.bzl", "file_size_check")
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/guestos:defs.bzl", "image_deps")
 
@@ -6,7 +5,7 @@ load("//ic-os/guestos:defs.bzl", "image_deps")
 # Check
 #       //ic-os/guestos/BUILD.bazel for examples
 #    or //ic-os/defs.bzl for the full list of targets.
-icos_images = icos_build(
+icos_build(
     name = "dev-malicious",
     image_deps_func = image_deps,
     malicious = True,
@@ -15,22 +14,4 @@ icos_images = icos_build(
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
     ],
-)
-
-file_size_check(
-    name = "disk_img_size_check",
-    file = icos_images.disk_image,
-    max_file_size = 600 * 1000 * 1000,  # 584 MB on 2025-06-26
-)
-
-file_size_check(
-    name = "update_img_size_check",
-    file = icos_images.update_image,
-    max_file_size = 600 * 1000 * 1000,  # 583 MB on 2025-06-26
-)
-
-file_size_check(
-    name = "update_img_test_size_check",
-    file = icos_images.update_image_test,
-    max_file_size = 600 * 1000 * 1000,  # 583 MB on 2025-06-26
 )

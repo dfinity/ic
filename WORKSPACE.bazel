@@ -3,116 +3,11 @@ workspace(
 )
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-load("//bazel:mainnet-canisters.bzl", "canisters")
-load("//bazel:mainnet-icos-images.bzl", "mainnet_icos_images")
-load("//third_party/jemalloc:repository.bzl", "jemalloc_repository")
-load("//third_party/libfuzzer:repository.bzl", "libfuzzer_repository")
-load("//third_party/lmdb:repository.bzl", "lmdb_repository")
-load("//third_party/openssl:repository.bzl", "openssl_repository")
-
-# We cannot derive the Bazel repository names (e.g. @mainnet_nns_registry_canister) directly
-# from the canister names because we use inconsistent repo names. Same goes for filenames.
-# For each new canister defined in the source JSON file (see `path`) a mapping can be added
-# from canister name (as per JSON) to filename (and to repo name, resp.).
-canisters(
-    name = "canisters",
-    filenames = {
-        "registry": "registry-canister.wasm.gz",
-        "governance": "governance-canister.wasm.gz",
-        "ledger": "ledger-canister_notify-method.wasm.gz",
-        "archive": "ledger-archive-node-canister.wasm.gz",
-        "index": "ic-icp-index-canister.wasm.gz",
-        "root": "root-canister.wasm.gz",
-        "lifeline": "lifeline_canister.wasm.gz",
-        "genesis-token": "genesis-token-canister.wasm.gz",
-        "cycles-minting": "cycles-minting-canister.wasm.gz",
-        "sns-wasm": "sns-wasm-canister.wasm.gz",
-        "ck_btc_archive": "ic-icrc1-archive.wasm.gz",
-        "ck_btc_ledger": "ic-icrc1-ledger.wasm.gz",
-        "ck_btc_ledger_v1": "ic-icrc1-ledger.wasm.gz",
-        "ck_btc_ledger_v2": "ic-icrc1-ledger.wasm.gz",
-        "ck_btc_ledger_v2_noledgerversion": "ic-icrc1-ledger.wasm.gz",
-        "ck_btc_ledger_v3": "ic-icrc1-ledger.wasm.gz",
-        "ck_btc_index": "ic-icrc1-index-ng.wasm.gz",
-        "ck_eth_archive": "ic-icrc1-archive-u256.wasm.gz",
-        "ck_eth_ledger": "ic-icrc1-ledger-u256.wasm.gz",
-        "ck_eth_ledger_v1": "ic-icrc1-ledger-u256.wasm.gz",
-        "ck_eth_ledger_v2": "ic-icrc1-ledger-u256.wasm.gz",
-        "ck_eth_ledger_v2_noledgerversion": "ic-icrc1-ledger-u256.wasm.gz",
-        "ck_eth_ledger_v3": "ic-icrc1-ledger-u256.wasm.gz",
-        "ck_eth_index": "ic-icrc1-index-ng-u256.wasm.gz",
-        "sns_root": "sns-root-canister.wasm.gz",
-        "sns_governance": "sns-governance-canister.wasm.gz",
-        "swap": "sns-swap-canister.wasm.gz",
-        "sns_ledger": "ic-icrc1-ledger.wasm.gz",
-        "sns_ledger_v2": "ic-icrc1-ledger.wasm.gz",
-        "sns_archive": "ic-icrc1-archive.wasm.gz",
-        "sns_index": "ic-icrc1-index-ng.wasm.gz",
-        "node-rewards": "node-rewards-canister.wasm.gz",
-    },
-    path = "//:mainnet-canister-revisions.json",
-    reponames = {
-        "registry": "mainnet_nns_registry_canister",
-        "governance": "mainnet_nns_governance_canister",
-        "ledger": "mainnet_icp_ledger_canister",
-        "archive": "mainnet_icp_ledger-archive-node-canister",
-        "index": "mainnet_icp_index_canister",
-        "root": "mainnet_nns_root-canister",
-        "lifeline": "mainnet_nns_lifeline_canister",
-        "genesis-token": "mainnet_nns_genesis-token-canister",
-        "cycles-minting": "mainnet_nns_cycles-minting-canister",
-        "sns-wasm": "mainnet_nns_sns-wasm-canister",
-        "ck_btc_archive": "mainnet_ckbtc_ic-icrc1-archive",
-        "ck_btc_ledger": "mainnet_ckbtc_ic-icrc1-ledger",
-        "ck_btc_ledger_v1": "mainnet_ckbtc_ic-icrc1-ledger-v1",
-        "ck_btc_ledger_v2": "mainnet_ckbtc_ic-icrc1-ledger-v2",
-        "ck_btc_ledger_v2_noledgerversion": "mainnet_ckbtc_ic-icrc1-ledger-v2-noledgerversion",
-        "ck_btc_ledger_v3": "mainnet_ckbtc_ic-icrc1-ledger-v3",
-        "ck_btc_index": "mainnet_ckbtc-index-ng",
-        "ck_eth_archive": "mainnet_cketh_ic-icrc1-archive-u256",
-        "ck_eth_ledger": "mainnet_cketh_ic-icrc1-ledger-u256",
-        "ck_eth_ledger_v1": "mainnet_cketh_ic-icrc1-ledger-u256-v1",
-        "ck_eth_ledger_v2": "mainnet_cketh_ic-icrc1-ledger-u256-v2",
-        "ck_eth_ledger_v2_noledgerversion": "mainnet_cketh_ic-icrc1-ledger-u256-v2-noledgerversion",
-        "ck_eth_ledger_v3": "mainnet_cketh_ic-icrc1-ledger-u256-v3",
-        "ck_eth_index": "mainnet_cketh-index-ng",
-        "sns_root": "mainnet_sns-root-canister",
-        "sns_governance": "mainnet_sns-governance-canister",
-        "swap": "mainnet_sns-swap-canister",
-        "sns_ledger": "mainnet_ic-icrc1-ledger",
-        "sns_ledger_v2": "mainnet_ic-icrc1-ledger-v2",
-        "sns_archive": "mainnet_ic-icrc1-archive",
-        "sns_index": "mainnet_ic-icrc1-index-ng",
-        "node-rewards": "mainnet_node-rewards-canister",
-    },
-)
-
-load("@canisters//:defs.bzl", "canister_deps")
-
-canister_deps()
-
-http_archive(
-    name = "aspect_rules_sol",
-    sha256 = "4e98a4572cd2c5f9e0a4118be3b8d2f0be148c80779ea9da646d0afabe2d609c",
-    strip_prefix = "rules_sol-0.1.0",
-    url = "https://github.com/aspect-build/rules_sol/releases/download/v0.1.0/rules_sol-v0.1.0.tar.gz",
-)
-
-load("@aspect_rules_sol//sol:repositories.bzl", "rules_sol_dependencies", "sol_register_toolchains")
-
-rules_sol_dependencies()
-
-sol_register_toolchains(
-    name = "solc",
-    sol_version = "0.8.18",
-)
 
 http_archive(
     name = "rules_rust",
-    integrity = "sha256-U8G6x+xI985IxMHGqgBvJ1Fa3SrrBXJZNyJObgDsfOo=",
-    patch_args = ["-p1"],
-    patches = ["//bazel:rules_rust.patch"],
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.61.0/rules_rust-0.61.0.tar.gz"],
+    integrity = "sha256-3Ch+PsqAsp1cyV4mHK4nPu3xr0oAqWrpN+I0U02tskw=",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.67.0/rules_rust-0.67.0.tar.gz"],
 )
 
 load("@rules_rust//crate_universe:repositories.bzl", "crate_universe_dependencies")
@@ -126,196 +21,23 @@ rust_analyzer_dependencies()
 crate_universe_dependencies()
 
 rust_register_toolchains(
-    edition = "2021",
+    edition = "2024",
     strip_level = {"x86_64-unknown-linux-gnu": {
         "dbg": "none",
         "fastbuild": "none",
         "opt": "none",
     }},
-    # The nightly version is required to compile fuzz tests from Bazel.
-    # The version below is chosen so that it is in sync with the non-nightly version.
-    versions = [
-        "1.86.0",
-        # Use the nightly version from the day before the branch.
-        "nightly/2025-03-08",
-    ],
+    versions = ["1.90.0"],
 )
 
 load("//bazel:external_crates.bzl", "external_crates_repository")
-load("//bazel/sanitizers_enabled_env:defs.bzl", "sanitizers_enabled_env")
-
-sanitizers_enabled_env(name = "sanitizers_enabled_env")
-
-load("@sanitizers_enabled_env//:defs.bzl", "SANITIZERS_ENABLED")
 
 external_crates_repository(
     name = "crate_index",
-    cargo_lockfile = "//:Cargo.Bazel.Fuzzing.toml.lock" if SANITIZERS_ENABLED else "//:Cargo.Bazel.toml.lock",
-    lockfile = "//:Cargo.Bazel.Fuzzing.json.lock" if SANITIZERS_ENABLED else "//:Cargo.Bazel.json.lock",
-    sanitizers_enabled = SANITIZERS_ENABLED,
+    cargo_lockfile = "//:Cargo.Bazel.toml.lock",
+    lockfile = "//:Cargo.Bazel.json.lock",
 )
 
 load("@crate_index//:defs.bzl", "crate_repositories")
 
 crate_repositories()
-
-# Motoko support
-
-http_archive(
-    name = "rules_motoko",
-    sha256 = "f7cb0a906c8efe9d2ad8d27f0f6ac11f6409a771d74874f7e47d45959063dfe3",
-    strip_prefix = "rules_motoko-0.2.1",
-    urls = ["https://github.com/dfinity/rules_motoko/archive/refs/tags/v0.2.1.tar.gz"],
-)
-
-load("@rules_motoko//motoko:repositories.bzl", "rules_motoko_dependencies")
-
-rules_motoko_dependencies()
-
-# Third party dependencies that require special treatment
-
-lmdb_repository()
-
-jemalloc_repository()
-
-openssl_repository()
-
-libfuzzer_repository()
-
-http_archive(
-    name = "buildifier_prebuilt",
-    sha256 = "72b5bb0853aac597cce6482ee6c62513318e7f2c0050bc7c319d75d03d8a3875",
-    strip_prefix = "buildifier-prebuilt-6.3.3",
-    urls = [
-        "http://github.com/keith/buildifier-prebuilt/archive/6.3.3.tar.gz",
-    ],
-)
-
-load("@buildifier_prebuilt//:deps.bzl", "buildifier_prebuilt_deps")
-
-buildifier_prebuilt_deps()
-
-load("@buildifier_prebuilt//:defs.bzl", "buildifier_prebuilt_register_toolchains")
-
-buildifier_prebuilt_register_toolchains()
-
-# Rosetta CLI
-
-load("//bazel:rosetta_cli.bzl", "rosetta_cli_repository")
-
-rosetta_cli_repository(name = "rosetta-cli")
-
-# Closure compiler for JavaScript
-http_archive(
-    name = "io_bazel_rules_closure",
-    sha256 = "a3bef45d4d052adfd7b0146efdfe55989753adbb66e1f4fa4fa8c4f9df4f8196",
-    strip_prefix = "rules_closure-4326045ee6c941f12518a2ad5ad990504cf3df9d",
-    urls = [
-        "https://github.com/bazelbuild/rules_closure/archive/4326045ee6c941f12518a2ad5ad990504cf3df9d.zip",
-    ],
-)
-
-load("@io_bazel_rules_closure//closure:repositories.bzl", "rules_closure_dependencies", "rules_closure_toolchains")
-
-# we instruct rules_closure to omit some dependencies that we already
-# pull via MODULE.bazel
-rules_closure_dependencies(
-    omit_com_google_protobuf = True,
-    omit_rules_java = True,
-    omit_rules_proto = True,
-)
-
-rules_closure_toolchains()
-
-# rclone binary for upload_artifacts
-load("//bazel:rclone.bzl", "rclone_repository")
-
-rclone_repository(name = "rclone")
-
-# trivy binary for vulnerability scanning
-load("//bazel:trivy.bzl", "trivy_scan")
-
-trivy_scan(name = "trivy")
-
-# shfmt binary for fast shell formatting
-load("//bazel:shfmt.bzl", "shfmt")
-
-shfmt(name = "shfmt")
-
-# ruff binary for fast python linting
-load("//pre-commit:ruff.bzl", "ruff")
-
-ruff(name = "ruff")
-
-# ormolu binary for haskell linting
-load("//pre-commit:ormolu.bzl", "ormolu")
-
-ormolu(name = "ormolu")
-
-# buf binary for protobuf linting
-load("//pre-commit:buf.bzl", "buf")
-
-buf(name = "buf")
-
-# candid binary
-load("//pre-commit:candid.bzl", "candid")
-
-candid(name = "candid")
-
-# dfx binary for haskell linting
-load("//bazel:dfx.bzl", "dfx")
-
-dfx(name = "dfx")
-
-# sns-quill for SNS testing
-load("//bazel:sns_quill.bzl", "sns_quill")
-
-sns_quill(name = "sns_quill")
-
-# idl2json for SNS testing
-load("//bazel:idl2json.bzl", "idl_to_json")
-
-idl_to_json(name = "idl2json")
-
-mainnet_icos_images()
-
-# Use libsystemd from the host environment
-# Ideally this is pulled hermetically, but as this is only used by infogetty
-# within IC images, we have less compatibility to worry about, and packaging it
-# this way is easier.
-new_local_repository(
-    name = "libsystemd",
-    build_file_content = """
-cc_import(
-    name = "libsystemd-internal",
-    hdrs = glob(["include/systemd/*.h"]),
-    interface_library = "lib/x86_64-linux-gnu/libsystemd.so",
-    system_provided = True,
-    visibility = ["//visibility:private"],
-)
-
-# Use an extra cc_library to hide the depth of the include folder
-cc_library(
-    name = "libsystemd",
-    includes = ["include"],
-    deps = ["libsystemd-internal"],
-    visibility = ["//visibility:public"],
-)
-""",
-    path = "/usr",
-)
-
-# Use libvirt from the host environment
-# Used for managing virtual machines programmatically.
-new_local_repository(
-    name = "libvirt",
-    build_file_content = """
-cc_import(
-    name = "libvirt",
-    hdrs = glob(["include/libvirt/*.h"]),
-    shared_library = "lib/x86_64-linux-gnu/libvirt.so",
-    visibility = ["//visibility:public"],
-)
-""",
-    path = "/usr",
-)

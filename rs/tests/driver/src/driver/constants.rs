@@ -47,7 +47,9 @@ pub const GROUP_TTL: Duration = Duration::from_secs(90);
 pub const LOG_CLOSE_TIMEOUT: Duration = Duration::from_secs(10);
 
 fn node_logs(infra_group_name: &str) -> String {
-    format!("/app/discover#/?_g=(time:(from:now-1y,to:now))&_a=(columns:!(host.name,message,level),filters:!(('$state':(store:appState),query:(match_phrase:(tags:{infra_group_name})))),grid:(columns:(host.name:(width:513))),index:'535335e8-7195-4af7-95ab-e59ab3bb8056',interval:auto,query:(language:kuery,query:''),sort:!(!('@timestamp',desc)))")
+    format!(
+        "/app/discover#/?_g=(time:(from:now-1y,to:now))&_a=(columns:!(host.name,message,level),filters:!(('$state':(store:appState),query:(match_phrase:(tags:{infra_group_name})))),grid:(columns:(host.name:(width:513))),index:'535335e8-7195-4af7-95ab-e59ab3bb8056',interval:auto,query:(language:kuery,query:''),sort:!(!('@timestamp',desc)))"
+    )
 }
 const KIBANA_BASE_URL: &str = "https://kibana.testnet.dfinity.network";
 

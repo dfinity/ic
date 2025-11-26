@@ -1,13 +1,13 @@
 //! Defines types used for certification.
 
 use crate::{
+    CryptoHashOfPartialState, Height,
     artifact::{CertificationMessageId, IdentifiableArtifact, PbArtifact},
     consensus::{
         Committee, CountBytes, HasCommittee, HasHeight, IsShare, ThresholdSignature,
         ThresholdSignatureShare,
     },
     crypto::{CryptoHash, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator},
-    CryptoHashOfPartialState, Height,
 };
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;

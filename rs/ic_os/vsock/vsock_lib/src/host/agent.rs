@@ -50,30 +50,53 @@ fn get_hostos_vsock_version() -> Response {
     Ok(Payload::HostOSVsockVersion(VSOCK_VERSION))
 }
 
+fn is_manual_recovery_running() -> bool {
+    match procfs::process::all_processes() {
+        Ok(processes) => processes.into_iter().any(|process| {
+            process.cmdline().is_ok_and(|args| {
+                let cmd = args.join(" ");
+                cmd.contains("hostos_tool") && cmd.contains("manual-recovery")
+            })
+        }),
+        Err(_) => false,
+    }
+}
+
 fn notify(notify_data: &NotifyData) -> Response {
-    let mut terminal_device_file =
-        OpenOptions::new()
-            .write(true)
-            .open("/dev/tty1")
-            .map_err(|err| {
-                println!("Error opening terminal device file: {}", err);
-                err.to_string()
-            })?;
+    // Skip logging if manual recovery TUI is running to avoid interfering with the display
+    if is_manual_recovery_running() {
+        return Ok(Payload::NoPayload);
+    }
 
     let message_output_count = std::cmp::min(notify_data.count, 10);
-    let message_clone = notify_data.message.clone();
+    let message = notify_data.message.clone();
 
-    let write_lambda = move || -> Result<(), String> {
-        for _ in 0..message_output_count {
-            match terminal_device_file.write_all(format!("\n{}\n", message_clone).as_bytes()) {
-                Ok(_) => std::thread::sleep(std::time::Duration::from_secs(2)),
-                Err(err) => return Err(err.to_string()),
+    for device_path in &["/dev/tty1", "/dev/ttyS0"] {
+        let mut terminal_device_file =
+            OpenOptions::new()
+                .write(true)
+                .open(device_path)
+                .map_err(|err| {
+                    println!(
+                        "Error opening terminal device file {}: {}",
+                        device_path, err
+                    );
+                    err.to_string()
+                })?;
+
+        let message_clone = message.clone();
+        let write_lambda = move || -> Result<(), String> {
+            for _ in 0..message_output_count {
+                match terminal_device_file.write_all(format!("\n{message_clone}\n").as_bytes()) {
+                    Ok(_) => std::thread::sleep(std::time::Duration::from_secs(2)),
+                    Err(err) => return Err(err.to_string()),
+                }
             }
-        }
-        Ok(())
-    };
+            Ok(())
+        };
 
-    std::thread::spawn(write_lambda);
+        std::thread::spawn(write_lambda);
+    }
 
     Ok(Payload::NoPayload)
 }
@@ -111,10 +134,7 @@ fn run_upgrade() -> Response {
 }
 
 async fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
-    println!(
-        "Trying to fetch hostOS upgrade file from request: {:?}",
-        upgrade_data
-    );
+    println!("Trying to fetch hostOS upgrade file from request: {upgrade_data:?}");
     create_hostos_upgrade_file(
         &upgrade_data.url,
         UPGRADE_FILE_PATH,

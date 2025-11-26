@@ -5,12 +5,12 @@ use ic_crypto_prng::{Csprng, RandomnessPurpose};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces_registry::RegistryClient;
 use ic_types::{
+    Height, NodeId, SubnetId,
     consensus::{
-        get_committee_size, get_faults_tolerated, Committee, HasHeight, RandomBeacon, Rank,
-        Threshold,
+        Committee, HasHeight, RandomBeacon, Rank, Threshold, get_committee_size,
+        get_faults_tolerated,
     },
     registry::RegistryClientError,
-    Height, NodeId, SubnetId,
 };
 use rand::seq::SliceRandom;
 use std::sync::Arc;
@@ -198,10 +198,7 @@ impl Membership {
         height: Height,
         node_id: NodeId,
     ) -> Result<bool, MembershipError> {
-        Ok(self
-            .get_canister_http_committee(height)?
-            .iter()
-            .any(|id| *id == node_id))
+        Ok(self.get_canister_http_committee(height)?.contains(&node_id))
     }
 
     /// Return true if the given node ID is in the low threshold committee at
@@ -330,10 +327,7 @@ pub mod test {
                 // threshold, which shows that no other height-h block can be notarized.
                 c - (t_fin - f) < t_not,
                 "The thresholds violate the safety property of consensus. \
-                    committee_size = {}, f = {}, t_not = t_fin = {}",
-                c,
-                f,
-                t_not
+                    committee_size = {c}, f = {f}, t_not = t_fin = {t_not}"
             );
 
             assert!(
@@ -341,10 +335,7 @@ pub mod test {
                                  * participate, so we must be able to reach the threshold with
                                  * only the honest nodes. */
                 "The thresholds violate the liveness property of consensus. \
-                    committee_size = {}, f = {}, t_not = t_fin = {}",
-                c,
-                f,
-                t_not
+                    committee_size = {c}, f = {f}, t_not = t_fin = {t_not}"
             );
         }
     }

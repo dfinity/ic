@@ -50,7 +50,7 @@ for version in "${VERSIONS[@]}"; do
     echo "Updated $REVISIONS_FILE for version $version."
 
     echo "Running hostos_upgrade_from_latest_release_to_current test for version $version ..."
-    if bazel test --config=systest //rs/tests/nested:hostos_upgrade_from_latest_release_to_current; then
+    if bazel test //rs/tests/nested:hostos_upgrade_from_latest_release_to_current; then
         echo "Test for version $version PASSED."
         results["$version"]="Passed"
     else

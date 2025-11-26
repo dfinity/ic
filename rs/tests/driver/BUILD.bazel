@@ -1,12 +1,10 @@
-load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-bool_flag(
-    name = "k8s",
-    build_setting_default = False,
-)
+exports_files([
+    "assets/vector.toml",
+])
 
 rust_library(
     name = "ic-system-test-driver",
@@ -16,7 +14,7 @@ rust_library(
         "//rs/utils": "utils",
     },
     compile_data = [
-        "//ic-os/components:ic/generate-ic-config/ic.json5.template",
+        ":assets/vector.toml",
     ],
     crate_name = "ic_system_test_driver",
     proc_macro_deps = [
@@ -27,7 +25,6 @@ rust_library(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     visibility = [
         "//rs:system-tests-pkg",
-        "//rs/ic_os/dev_test_tools/launch-single-vm:__pkg__",
     ],
     deps = [
         # Keep sorted.
@@ -40,6 +37,7 @@ rust_library(
         "//rs/ic_os/config:config_lib_dev",
         "//rs/ic_os/config_types",
         "//rs/ic_os/deterministic_ips",
+        "//rs/ic_os/dev_test_tools/setupos-image-config",
         "//rs/interfaces",
         "//rs/interfaces/registry",
         "//rs/ledger_suite/common/ledger_core",
@@ -105,12 +103,9 @@ rust_library(
         "@crate_index//:humantime-serde",
         "@crate_index//:ic-agent",
         "@crate_index//:ic-cdk",
-        "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-utils",
         "@crate_index//:itertools",
         "@crate_index//:json5",
-        "@crate_index//:k8s-openapi",
-        "@crate_index//:kube",
         "@crate_index//:lazy_static",
         "@crate_index//:macaddr",
         "@crate_index//:maplit",
@@ -127,6 +122,7 @@ rust_library(
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_cbor",
         "@crate_index//:serde_json",
+        "@crate_index//:serde_regex",
         "@crate_index//:serde_yaml",
         "@crate_index//:slog",
         "@crate_index//:slog-async",

@@ -5,7 +5,7 @@ use std::{
 };
 
 use candid::{Decode, Nat, Principal};
-use ic_agent::{agent::EnvelopeContent, Agent, Identity, Signature};
+use ic_agent::{Agent, Identity, Signature, agent::EnvelopeContent};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::ed25519_public_key_to_der;
 use ic_icrc1_test_utils::KeyPairGenerator;
@@ -14,6 +14,7 @@ use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1::Canister;
 use ic_nns_governance_api::CreateServiceNervousSystem;
 use ic_rosetta_test_utils::EdKeypair;
+use ic_sns_swap::{pb::v1::new_sale_ticket_response, swap::principal_to_subaccount};
 use ic_system_test_driver::{
     canister_agent::{CanisterAgent, HasCanisterAgentCapability},
     canister_api::{
@@ -38,25 +39,19 @@ use ic_system_test_driver::{
     types::{CanisterStatusResult, CreateCanisterResult},
     util::UniversalCanister,
 };
-use rosetta_core::models::RosettaSupportedKeyPair;
-
-use ic_sns_governance::pb::v1::governance::Mode;
-use ic_sns_swap::{
-    pb::v1::{new_sale_ticket_response, Lifecycle},
-    swap::principal_to_subaccount,
-};
 use ic_types::{Cycles, Height};
 use ic_universal_canister::{management, wasm};
 use icp_ledger::{AccountIdentifier, Subaccount};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
+use rosetta_core::models::RosettaSupportedKeyPair;
 use serde::{Deserialize, Serialize};
 use slog::info;
 use tokio::runtime::Builder;
 
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_system_test_driver::{
-    sns_client::{SnsClient, SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S},
+    sns_client::{SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S, SnsClient},
     util::{assert_create_agent_with_identity, block_on},
 };
 
@@ -564,6 +559,7 @@ pub fn install_nns(
                 .collect(),
         ),
         install_at_ids: false,
+        registry_canister_init_payload: Default::default(),
     };
 
     install_nns_with_customizations_and_check_progress(env.topology_snapshot(), nns_customizations);
@@ -598,36 +594,6 @@ pub fn install_sns(
         (Installation was performed using the one-proposal flow.)",
         start_time.elapsed()
     );
-}
-
-/// Initiates a token swap using the given parameters. Specifically, it creates
-/// an OpenSnsTokenSwap proposal and executes it, then asserts that the SNS swap
-/// is open.
-pub fn initiate_token_swap(
-    env: TestEnv,
-    create_service_nervous_system_proposal: CreateServiceNervousSystem,
-) {
-    let log = env.logger();
-    let start_time = Instant::now();
-
-    let sns_client = SnsClient::read_attribute(&env);
-    sns_client.initiate_token_swap_immediately(&env, create_service_nervous_system_proposal);
-    block_on(sns_client.assert_state(&env, Lifecycle::Open, Mode::PreInitializationSwap));
-    info!(
-        log,
-        "==== The SNS token swap has been initialized successfully in {:?} ====",
-        start_time.elapsed()
-    );
-}
-
-/// Like [`initiate_token_swap`], but initiates the token swap with "openchat-ish"
-/// parameters. (Not guaranteed to be exactly the same as the actual parameters
-/// used by openchat.)
-///
-/// This function should be the one used "by default" for most tests, to ensure
-/// that the tests are using realistic parameters.
-pub fn initiate_token_swap_with_oc_parameters(env: TestEnv) {
-    initiate_token_swap(env, openchat_create_service_nervous_system_proposal());
 }
 
 pub fn workload_many_users_rps20_refresh_buyer_tokens(env: TestEnv) {
@@ -698,17 +664,6 @@ pub fn generate_sns_workload_with_many_users<T, R>(
         block_on(workload.execute(aggr, fun)).expect("Workload execution has failed.")
     };
     env.emit_report(format!("{metrics}"));
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct SnsUsers {
-    participants: Vec<SaleParticipant>,
-}
-
-impl TestEnvAttribute for SnsUsers {
-    fn attribute_name() -> String {
-        "sns_users".to_string()
-    }
 }
 
 /// An SNS sale participant.
@@ -864,7 +819,10 @@ pub fn add_one_participant(env: TestEnv) {
         start_time.elapsed()
     );
 
-    info!(log, "Checking that buyer identity is correctly set up by calling `sns_sale.refresh_buyer_tokens` in two different ways ...");
+    info!(
+        log,
+        "Checking that buyer identity is correctly set up by calling `sns_sale.refresh_buyer_tokens` in two different ways ..."
+    );
     // Use the default identity to call refresh_buyer_tokens for the wealthy user
     let res_1 = {
         let request = sns_request_provider
@@ -935,7 +893,11 @@ pub fn add_one_participant(env: TestEnv) {
         let block_idx = block_on(wealthy_ledger_agent.transfer(transfer_arg))
             .unwrap()
             .unwrap();
-        info!(log, "Transaction 1: from {:?} to {sns_sale_canister_id:?} (subaccount {sns_subaccount:?}) returned block_idx={block_idx:?}", wealthy_user_identity.principal_id);
+        info!(
+            log,
+            "Transaction 1: from {:?} to {sns_sale_canister_id:?} (subaccount {sns_subaccount:?}) returned block_idx={block_idx:?}",
+            wealthy_user_identity.principal_id
+        );
         block_idx
     };
     info!(
@@ -955,7 +917,11 @@ pub fn add_one_participant(env: TestEnv) {
         let block_idx = block_on(wealthy_ledger_agent.transfer(transfer_arg))
             .unwrap()
             .unwrap();
-        info!(log, "Transaction 2: from {:?} to {sns_sale_canister_id:?} (subaccount {sns_subaccount:?}) returned block_idx={block_idx:?}", wealthy_user_identity.principal_id);
+        info!(
+            log,
+            "Transaction 2: from {:?} to {sns_sale_canister_id:?} (subaccount {sns_subaccount:?}) returned block_idx={block_idx:?}",
+            wealthy_user_identity.principal_id
+        );
         block_idx
     };
     info!(
@@ -965,7 +931,10 @@ pub fn add_one_participant(env: TestEnv) {
     );
     assert_eq!(block_idx_1 + 1u8, block_idx_2);
 
-    info!(log, "Validating the participation setup by calling `sns_sale.refresh_buyer_tokens` in two different ways ...");
+    info!(
+        log,
+        "Validating the participation setup by calling `sns_sale.refresh_buyer_tokens` in two different ways ..."
+    );
     // Use the default identity to call refresh_buyer_tokens for the wealthy user
     let res_4 = {
         let request = sns_request_provider
@@ -991,8 +960,15 @@ pub fn add_one_participant(env: TestEnv) {
         "Fourth update call to `sns_sale.refresh_buyer_tokens` returned {res_5:?} (elapsed {:?})",
         start_time.elapsed()
     );
-    assert_eq!(res_4, res_5, "sns_sale.refresh_buyer_tokens(Some({:?}), None) = {res_4:?}, but sns_sale.refresh_buyer_tokens(None, None) = {res_5:?}", wealthy_user_identity.principal_id);
-    info!(log, "After setting up sale participation, the response from `sns_sale.refresh_buyer_tokens` is {res_4:?}");
+    assert_eq!(
+        res_4, res_5,
+        "sns_sale.refresh_buyer_tokens(Some({:?}), None) = {res_4:?}, but sns_sale.refresh_buyer_tokens(None, None) = {res_5:?}",
+        wealthy_user_identity.principal_id
+    );
+    info!(
+        log,
+        "After setting up sale participation, the response from `sns_sale.refresh_buyer_tokens` is {res_4:?}"
+    );
 
     info!(
         log,
@@ -1212,9 +1188,9 @@ async fn create_one_sale_participant(
             memo: None,
             amount: Nat::from(contribution),
         };
-        ledger_agent.call_and_parse(&Icrc1TransferRequest::new(ledger_canister_id, transfer_arg))
+        let request = Icrc1TransferRequest::new(ledger_canister_id, transfer_arg);
+        ledger_agent.call_and_parse(&request).await
     }
-    .await
     .context("error performing an ICP ledger transfer")
     .map(|_| ())
     .with_workflow_position(2)

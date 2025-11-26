@@ -5,7 +5,7 @@ use crate::eth_logs::{LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent};
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::Wei;
-use crate::state::audit::{replay_events_internal, Event};
+use crate::state::audit::{Event, replay_events_internal};
 use crate::state::transactions::{
     Erc20WithdrawalRequest, Reimbursed, ReimbursementIndex, ReimbursementRequest,
 };
@@ -56,7 +56,7 @@ enum GetEventsFile {
 }
 
 impl GetEventsFile {
-    fn deserialize(&self) -> impl Iterator<Item = Event> {
+    fn deserialize(&self) -> impl Iterator<Item = Event> + use<> {
         use crate::endpoints::events::GetEventsResult;
         use candid::Decode;
         use flate2::read::GzDecoder;
@@ -93,9 +93,9 @@ impl GetEventsFile {
             TransactionStatus as CandidTransactionStatus,
         };
         use crate::eth_logs::EventSource;
+        use crate::state::TransactionStatus;
         use crate::state::audit::EventType as ET;
         use crate::state::transactions::EthWithdrawalRequest;
-        use crate::state::TransactionStatus;
 
         fn map_event_source(
             CandidEventSource {
@@ -194,7 +194,7 @@ impl GetEventsFile {
             ))
             .map(|(tx, sig)| match tx {
                 TypedTransaction::Eip1559(eip1559_tx) => (eip1559_tx, sig),
-                _ => panic!("BUG: unexpected sent ETH transaction type {:?}", tx),
+                _ => panic!("BUG: unexpected sent ETH transaction type {tx:?}"),
             })
             .expect("BUG: failed to deserialize sent ETH transaction");
 
@@ -479,8 +479,8 @@ impl GetEventsFile {
     async fn retrieve_and_store_events(&self) {
         use crate::endpoints::events::GetEventsResult;
         use candid::{CandidType, Decode, Encode};
-        use flate2::bufread::GzEncoder;
         use flate2::Compression;
+        use flate2::bufread::GzEncoder;
         use ic_agent::Agent;
         use std::fs::File;
         use std::io::{BufReader, BufWriter, Read, Write};

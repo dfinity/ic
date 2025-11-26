@@ -14,6 +14,7 @@ backoff = { workspace = true }
 bytes = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-interfaces = { path = "../../interfaces" }
+ic-limits = { path = "../../limits" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }
@@ -29,7 +30,6 @@ tokio-util = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-anyhow = { workspace = true }
 futures = { workspace = true }
 ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }

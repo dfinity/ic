@@ -5,84 +5,6 @@ load("//rs/tests:common.bzl", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNT
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-error-types",
-    "//rs/config",
-    "//rs/cycles_account_manager",
-    "//rs/interfaces",
-    "//rs/limits",
-    "//rs/memory_tracker",
-    "//rs/monitoring/logger",
-    "//rs/monitoring/metrics",
-    "//rs/nns/constants",
-    "//rs/registry/subnet_type",
-    "//rs/replicated_state",
-    "//rs/sys",
-    "//rs/types/base_types",
-    "//rs/types/management_canister_types",
-    "//rs/types/types",
-    "//rs/types/wasm_types",
-    "//rs/utils",
-    "//rs/utils/lru_cache",
-    "//rs/wasm_transform",
-    "@crate_index//:anyhow",
-    "@crate_index//:bincode",
-    "@crate_index//:ic-btc-interface",
-    "@crate_index//:itertools",
-    "@crate_index//:libc",
-    "@crate_index//:libflate",
-    "@crate_index//:nix",
-    "@crate_index//:num-traits",
-    "@crate_index//:prometheus",
-    "@crate_index//:rayon",
-    "@crate_index//:rustc-demangle",
-    "@crate_index//:scopeguard",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:slog",
-    "@crate_index//:slog-term",
-    "@crate_index//:tempfile",
-    "@crate_index//:wasm-encoder",
-    "@crate_index//:wasmparser",
-    "@crate_index//:wasmprinter",
-    "@crate_index//:wasmtime",
-    "@crate_index//:wasmtime-environ",
-]
-
-MACRO_DEPENDENCIES = []
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/registry/routing_table",
-    "//rs/rust_canisters/canister_test",
-    "//rs/test_utilities",
-    "//rs/test_utilities/embedders",
-    "//rs/test_utilities/execution_environment",
-    "//rs/test_utilities/logger",
-    "//rs/test_utilities/state",
-    "//rs/test_utilities/time",
-    "//rs/test_utilities/types",
-    "@crate_index//:assert_matches",
-    "@crate_index//:candid",
-    "@crate_index//:criterion",
-    "@crate_index//:insta",
-    "@crate_index//:lazy_static",
-    "@crate_index//:maplit",
-    "@crate_index//:more-asserts",
-    "@crate_index//:pretty_assertions",
-    "@crate_index//:proptest",
-    "@crate_index//:strum",
-    "@crate_index//:wast",
-    "@crate_index//:wat",
-]
-
-MACRO_DEV_DEPENDENCIES = [
-    "@crate_index//:strum_macros",
-]
-
-ALIASES = {}
-
 DATA = [
     "//rs/rust_canisters/stable_structures:stable_structures_canister",
     "//rs/nns/governance:governance-bench-canister",
@@ -96,48 +18,121 @@ ENV = {
 rust_library(
     name = "embedders",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_name = "ic_embedders",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     rustc_flags = select({
         "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
         "//conditions:default": [],
     }),
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-error-types",
+        "//packages/ic-heap-bytes",
+        "//rs/config",
+        "//rs/cycles_account_manager",
+        "//rs/interfaces",
+        "//rs/limits",
+        "//rs/memory_tracker",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/nns/constants",
+        "//rs/registry/subnet_type",
+        "//rs/replicated_state",
+        "//rs/sys",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "//rs/types/wasm_types",
+        "//rs/utils",
+        "//rs/utils/lru_cache",
+        "@crate_index//:anyhow",
+        "@crate_index//:bincode",
+        "@crate_index//:candid",
+        "@crate_index//:ic-btc-interface",
+        "@crate_index//:itertools",
+        "@crate_index//:libc",
+        "@crate_index//:libflate",
+        "@crate_index//:nix",
+        "@crate_index//:num-traits",
+        "@crate_index//:prometheus",
+        "@crate_index//:rustc-demangle",
+        "@crate_index//:scopeguard",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:slog",
+        "@crate_index//:tempfile",
+        "@crate_index//:wasm-encoder",
+        "@crate_index//:wasmparser",
+        "@crate_index//:wasmprinter",
+        "@crate_index//:wasmtime",
+        "@crate_index//:wasmtime-environ",
+        "@crate_index//:wirm",
+    ],
 )
 
 rust_binary(
     name = "instrument-wasm",
     srcs = ["bin/instrument_wasm.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [
+    deps = [
+        # Keep sorted.
         ":embedders",
+        "//rs/config",
+        "@crate_index//:bincode",
         "@crate_index//:clap",
+        "@crate_index//:slog",
+        "@crate_index//:slog-term",
     ],
 )
 
 rust_test(
     name = "embedders_test",
-    aliases = ALIASES,
     crate = ":embedders",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/interfaces",
+        "//rs/test_utilities",
+        "//rs/test_utilities/types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:lazy_static",
+        "@crate_index//:maplit",
+        "@crate_index//:proptest",
+        "@crate_index//:wat",
+    ],
 )
 
 rust_test(
     name = "instrumentation",
     srcs = ["tests/instrumentation.rs"],
-    aliases = ALIASES,
     crate_root = "tests/instrumentation.rs",
     data = glob(["tests/instrumentation-test-data/*"]) + glob(["tests/snapshots/*"]),
     env = {
         "CARGO_MANIFEST_DIR": "rs/embedders",
         "INSTA_WORKSPACE_ROOT": ".",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # "@crate_index//:strum_macros",
+    ],
+    deps = [
+        # Keep sorted.
+        ":embedders",
+        "//rs/config",
+        "//rs/interfaces",
+        "//rs/monitoring/logger",
+        "//rs/replicated_state",
+        "//rs/sys",
+        "//rs/test_utilities/embedders",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "//rs/types/wasm_types",
+        "@crate_index//:insta",
+        "@crate_index//:itertools",
+        "@crate_index//:pretty_assertions",
+        "@crate_index//:wasmparser",
+        "@crate_index//:wasmprinter",
+        "@crate_index//:wat",
+        "@crate_index//:wirm",
+    ],
 )
 
 # Run some tests using wasm spec files.
@@ -157,7 +152,6 @@ rust_ic_test_suite_with_extra_srcs(
             "tests/sandbox_safe_system_state.rs",
         ],
     ),
-    aliases = ALIASES,
     compile_data = glob(["tests/instrumentation-test-data/*"]),
     data = DATA + [
         "//rs/universal_canister/impl:universal_canister.module",
@@ -182,8 +176,45 @@ rust_ic_test_suite_with_extra_srcs(
         "tests/wasmtime_simple.rs",
         "tests/instrumentation.rs",
     ],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":embedders",
+        "//packages/ic-error-types",
+        "//rs/config",
+        "//rs/cycles_account_manager",
+        "//rs/interfaces",
+        "//rs/monitoring/logger",
+        "//rs/nns/constants",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/replicated_state",
+        "//rs/rust_canisters/canister_test",
+        "//rs/sys",
+        "//rs/test_utilities",
+        "//rs/test_utilities/embedders",
+        "//rs/test_utilities/execution_environment",
+        "//rs/test_utilities/logger",
+        "//rs/test_utilities/state",
+        "//rs/test_utilities/types",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "//rs/types/wasm_types",
+        "@crate_index//:anyhow",
+        "@crate_index//:assert_matches",
+        "@crate_index//:lazy_static",
+        "@crate_index//:libc",
+        "@crate_index//:maplit",
+        "@crate_index//:proptest",
+        "@crate_index//:wasm-encoder",
+        "@crate_index//:wasmparser",
+        "@crate_index//:wasmprinter",
+        "@crate_index//:wasmtime",
+        "@crate_index//:wasmtime-environ",
+        "@crate_index//:wast",
+        "@crate_index//:wat",
+        "@crate_index//:wirm",
+    ],
 )
 
 rust_test(
@@ -193,7 +224,29 @@ rust_test(
         "tests/system_api.rs",
     ],
     crate_root = "tests/system_api.rs",
-    deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":embedders",
+        "//packages/ic-error-types",
+        "//rs/config",
+        "//rs/cycles_account_manager",
+        "//rs/interfaces",
+        "//rs/limits",
+        "//rs/monitoring/logger",
+        "//rs/nns/constants",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/replicated_state",
+        "//rs/test_utilities",
+        "//rs/test_utilities/state",
+        "//rs/test_utilities/types",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:maplit",
+        "@crate_index//:more-asserts",
+        "@crate_index//:strum",
+    ],
 )
 
 rust_test(
@@ -203,7 +256,27 @@ rust_test(
         "tests/sandbox_safe_system_state.rs",
     ],
     crate_root = "tests/sandbox_safe_system_state.rs",
-    deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":embedders",
+        "//rs/config",
+        "//rs/cycles_account_manager",
+        "//rs/interfaces",
+        "//rs/limits",
+        "//rs/monitoring/logger",
+        "//rs/nns/constants",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/replicated_state",
+        "//rs/test_utilities",
+        "//rs/test_utilities/state",
+        "//rs/test_utilities/types",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:maplit",
+        "@crate_index//:prometheus",
+    ],
 )
 
 rust_library(
@@ -212,10 +285,16 @@ rust_library(
     srcs = [
         "benches/embedders_bench/src/lib.rs",
     ],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/rust_canisters/canister_test",
+        "//rs/test_utilities/execution_environment",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:criterion",
+        "@crate_index//:wirm",
+    ],
 )
 
 UNIVERSAL_CANISTER_TEST_DEPS = UNIVERSAL_CANISTER_RUNTIME_DEPS + [
@@ -236,9 +315,20 @@ rust_ic_bench(
     test_name = "compilation_bench_test",
     test_timeout = "long",
     deps = [
+        # Keep sorted.
         ":embedders",
         ":embedders_bench",
-    ] + DEPENDENCIES + DEV_DEPENDENCIES,
+        "//rs/config",
+        "//rs/monitoring/logger",
+        "//rs/rust_canisters/canister_test",
+        "//rs/types/wasm_types",
+        "@crate_index//:candid",
+        "@crate_index//:criterion",
+        "@crate_index//:lazy_static",
+        "@crate_index//:libflate",
+        "@crate_index//:rayon",
+        "@crate_index//:wat",
+    ],
 )
 
 rust_ic_bench(
@@ -250,7 +340,14 @@ rust_ic_bench(
     deps = [
         # Keep sorted.
         ":embedders_bench",
-    ] + DEPENDENCIES + DEV_DEPENDENCIES,
+        "//rs/replicated_state",
+        "//rs/rust_canisters/canister_test",
+        "//rs/sys",
+        "@crate_index//:candid",
+        "@crate_index//:criterion",
+        "@crate_index//:lazy_static",
+        "@crate_index//:wat",
+    ],
 )
 
 rust_ic_bench(
@@ -260,9 +357,17 @@ rust_ic_bench(
     compile_data = glob(["benches/test-data/*"]),
     data = DATA + UNIVERSAL_CANISTER_TEST_DEPS,
     env = ENV | UNIVERSAL_CANISTER_TEST_ENV,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:strum_macros",
+    ],
     deps = [
         # Keep sorted.
         ":embedders_bench",
-    ] + DEPENDENCIES + DEV_DEPENDENCIES,
+        "//rs/replicated_state",
+        "//rs/sys",
+        "@crate_index//:criterion",
+        "@crate_index//:strum",
+        "@crate_index//:wat",
+    ],
 )

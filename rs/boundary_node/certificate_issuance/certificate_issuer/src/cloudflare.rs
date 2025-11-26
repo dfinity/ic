@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Error};
+use anyhow::{Context, Error, anyhow};
 use async_trait::async_trait;
 use cloudflare::{
     endpoints::{
@@ -8,7 +8,7 @@ use cloudflare::{
         },
         zone::{ListZones, ListZonesParams, Zone},
     },
-    framework::{async_api::Client, auth::Credentials, Environment, HttpApiClientConfig},
+    framework::{Environment, HttpApiClientConfig, async_api::Client, auth::Credentials},
 };
 
 use crate::dns::{Create, Delete, Record};
@@ -76,7 +76,7 @@ impl Create for Cloudflare {
                 zone_identifier: zone_id,
                 params: ListDnsRecordsParams {
                     record_type: None,
-                    name: Some(format!("{}.{}", name, zone)),
+                    name: Some(format!("{name}.{zone}")),
                     page: None,
                     per_page: None,
                     order: None,
@@ -176,7 +176,7 @@ impl Delete for Cloudflare {
                 zone_identifier: zone_id,
                 params: ListDnsRecordsParams {
                     record_type: None,
-                    name: Some(format!("{}.{}", name, zone)),
+                    name: Some(format!("{name}.{zone}")),
                     page: None,
                     per_page: None,
                     order: None,

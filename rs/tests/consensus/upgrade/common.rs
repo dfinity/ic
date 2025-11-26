@@ -17,10 +17,10 @@ use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, cert_state_makes_progress_with_retries, store_message,
 };
+use ic_consensus_system_test_utils::ssh_access::execute_bash_command;
 use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
-    UpdateImageType,
 };
 use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
 use ic_management_canister_types_private::MasterPublicKeyId;
@@ -28,11 +28,11 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::util::create_agent;
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
-    util::{block_on, MessageCanister},
+    util::{MessageCanister, block_on},
 };
-use ic_types::SubnetId;
+use ic_types::{ReplicaVersion, SubnetId};
 use ic_utils::interfaces::ManagementCanister;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
@@ -41,46 +41,26 @@ const ALLOWED_FAILURES: usize = 1;
 pub const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);
 pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 
-pub fn bless_branch_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
+pub fn bless_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> ReplicaVersion {
     let logger = env.logger();
 
-    let original_branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
-        .expect("tip-of-branch IC version");
-    let branch_version = format!("{}-test", original_branch_version);
+    let target_version = get_guestos_update_img_version();
 
-    // Bless branch version
-    let sha256 = get_ic_os_update_img_test_sha256().unwrap();
-    let upgrade_url = get_ic_os_update_img_test_url().unwrap();
+    // Bless target version
+    let sha256 = get_guestos_update_img_sha256();
+    let upgrade_url = get_guestos_update_img_url();
+    let guest_launch_measurements = get_guestos_launch_measurements();
     block_on(bless_replica_version(
         nns_node,
-        &original_branch_version,
-        UpdateImageType::ImageTest,
+        &target_version,
         &logger,
-        &sha256,
+        sha256,
+        Some(guest_launch_measurements),
         vec![upgrade_url.to_string()],
     ));
-    info!(&logger, "Blessed branch version");
-    branch_version
-}
+    info!(&logger, "Blessed target version");
 
-pub fn bless_mainnet_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
-    let logger = env.logger();
-
-    let mainnet_version = get_mainnet_nns_revision();
-
-    // Bless mainnet version
-    let sha256 = env.get_mainnet_ic_os_update_img_sha256().unwrap();
-    let upgrade_url = get_mainnet_ic_os_update_img_url().unwrap();
-    block_on(bless_replica_version(
-        nns_node,
-        &mainnet_version,
-        UpdateImageType::Image,
-        &logger,
-        &sha256,
-        vec![upgrade_url.to_string()],
-    ));
-    info!(&logger, "Blessed mainnet version");
-    mainnet_version
+    target_version
 }
 
 // Enable ECDSA signing on the first subnet of the given type, and
@@ -119,9 +99,10 @@ pub fn get_chain_key_canister_and_public_key<'a>(
 pub fn upgrade(
     env: &TestEnv,
     nns_node: &IcNodeSnapshot,
-    upgrade_version: &str,
+    upgrade_version: &ReplicaVersion,
     subnet_type: SubnetType,
     ecdsa_canister_key: Option<&(MessageCanister, BTreeMap<MasterPublicKeyId, Vec<u8>>)>,
+    assert_graceful_orchestrator_tasks_exits: bool,
 ) -> (IcNodeSnapshot, Principal, String) {
     let logger = env.logger();
     let (subnet_id, subnet_node, faulty_node, redundant_nodes) =
@@ -157,12 +138,14 @@ pub fn upgrade(
     faulty_node.await_status_is_healthy().unwrap();
 
     let msg = &format!("hello before upgrade to {upgrade_version}");
+    info!(logger, "Storing message: '{}'", msg);
     let can_id = store_message(
         &subnet_node.get_public_url(),
         subnet_node.effective_canister_id(),
         msg,
         &logger,
     );
+    info!(logger, "Reading message: '{}'", msg);
     assert!(can_read_msg(
         &logger,
         &subnet_node.get_public_url(),
@@ -171,7 +154,7 @@ pub fn upgrade(
     ));
     info!(logger, "Could store and read message '{}'", msg);
 
-    // Create canister snapshot before upgrading.
+    info!(logger, "Creating canister snapshot before upgrading ...");
     block_on(async {
         let agent = create_agent(subnet_node.get_public_url().as_str())
             .await
@@ -180,17 +163,36 @@ pub fn upgrade(
         mgr.take_canister_snapshot(&can_id, None).await.unwrap();
     });
 
+    info!(logger, "Stopping faulty node {} ...", faulty_node.node_id);
     stop_node(&logger, &faulty_node);
 
     info!(logger, "Upgrade to version {}", upgrade_version);
-    upgrade_to(nns_node, subnet_id, &subnet_node, upgrade_version, &logger);
+    upgrade_to(
+        nns_node,
+        subnet_id,
+        &subnet_node,
+        upgrade_version,
+        assert_graceful_orchestrator_tasks_exits,
+        &logger,
+    );
 
+    info!(logger, "Stopping redundant nodes ...");
     // Killing redundant nodes should not prevent the `faulty_node` from upgrading
     // and catching up after restarting.
     for redundant_node in &redundant_nodes {
+        info!(
+            logger,
+            "Stopping redundant node: {} ...", redundant_node.node_id
+        );
         stop_node(&logger, redundant_node);
     }
+    info!(logger, "Starting faulty node: {} ...", faulty_node.node_id);
     start_node(&logger, &faulty_node);
+
+    info!(
+        logger,
+        "Asserting that the faulty node is running the expected version: {} ...", upgrade_version
+    );
     assert_assigned_replica_version(&faulty_node, upgrade_version, env.logger());
 
     // make sure that state sync is completed
@@ -231,8 +233,12 @@ pub fn upgrade(
         }
     }
 
-    // Start redundant nodes.
+    info!(logger, "Starting redundant nodes ...");
     for redundant_node in &redundant_nodes {
+        info!(
+            logger,
+            "Starting redundant node: {} ...", redundant_node.node_id
+        );
         start_node(&logger, redundant_node);
     }
 
@@ -243,7 +249,8 @@ fn upgrade_to(
     nns_node: &IcNodeSnapshot,
     subnet_id: SubnetId,
     subnet_node: &IcNodeSnapshot,
-    target_version: &str,
+    target_version: &ReplicaVersion,
+    assert_graceful_orchestrator_tasks_exits: bool,
     logger: &Logger,
 ) {
     info!(
@@ -252,9 +259,21 @@ fn upgrade_to(
     );
     block_on(deploy_guestos_to_all_subnet_nodes(
         nns_node,
-        &ic_types::ReplicaVersion::try_from(target_version).unwrap(),
+        target_version,
         subnet_id,
     ));
+
+    if assert_graceful_orchestrator_tasks_exits {
+        info!(
+            logger,
+            "Checking if the node {} has produced a log \
+            indicating that the orchestrator has gracefully shut down the tasks",
+            subnet_node.get_ip_addr(),
+        );
+        block_on(assert_orchestrator_stopped_gracefully(subnet_node.clone()));
+        info!(logger, "The orchestrator shut down the tasks gracefully");
+    }
+
     assert_assigned_replica_version(subnet_node, target_version, logger.clone());
     info!(
         logger,
@@ -286,4 +305,16 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
         .await_status_is_healthy()
         .expect("Node not healthy");
     info!(logger, "Node started: {}", app_node.get_ip_addr());
+}
+
+async fn assert_orchestrator_stopped_gracefully(node: IcNodeSnapshot) {
+    const MESSAGE: &str = r"Orchestrator shut down gracefully";
+
+    let script = format!("journalctl -f | grep -q \"{MESSAGE}\"");
+
+    let ssh_session = node
+        .block_on_ssh_session()
+        .expect("Failed to establish SSH session");
+
+    execute_bash_command(&ssh_session, script).expect("Didn't find the appropriate log entry");
 }

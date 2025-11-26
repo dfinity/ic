@@ -27,12 +27,12 @@ fn main() {
 pub struct GuestOSTemplateProps {{
     pub domain_name: String,
     pub domain_uuid: String,
-    pub disk_device: String,
     pub cpu_domain: String,
     pub console_log_path: String,
     pub vm_memory: u32,
     pub nr_of_vcpus: u32,
     pub mac_address: macaddr::MacAddr6,
+    pub disk_device: PathBuf,
     pub config_media_path: PathBuf,
     pub enable_sev: bool,
     pub direct_boot: Option<DirectBootConfig>

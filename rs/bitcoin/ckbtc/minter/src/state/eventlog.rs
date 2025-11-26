@@ -1,16 +1,19 @@
+use crate::WithdrawalFee;
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
+use crate::reimbursement::ReimburseWithdrawalTask;
 use crate::state::invariants::CheckInvariants;
 use crate::state::{
     ChangeOutput, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, Overdraft,
-    RetrieveBtcRequest, SubmittedBtcTransaction, SuspendedReason,
+    RetrieveBtcRequest, SubmittedBtcTransaction, SubmittedWithdrawalRequests, SuspendedReason,
 };
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit, ReimbursementReason};
 use candid::Principal;
-pub use event::EventType;
+pub use event::{EventType, ReplacedReason};
 use ic_btc_interface::{Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 
 #[derive(Deserialize, candid::CandidType)]
 pub struct GetEventsArg {
@@ -26,7 +29,21 @@ pub struct GetEventsArg {
 #[allow(deprecated)]
 mod event {
     use super::*;
+    use crate::reimbursement::WithdrawalReimbursementReason;
     use crate::state::SuspendedReason;
+
+    #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
+    pub enum ReplacedReason {
+        /// Indicates the old transaction has to be resend with a higher fee.
+        #[serde(rename = "to_retry")]
+        ToRetry,
+        /// Indicates the old transaction has to be to canceled.
+        #[serde(rename = "to_cancel")]
+        ToCancel {
+            /// Reason why the old transaction has to be canceled.
+            reason: WithdrawalReimbursementReason,
+        },
+    }
 
     #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
     pub enum EventType {
@@ -93,6 +110,10 @@ mod event {
             #[serde(rename = "fee")]
             #[serde(skip_serializing_if = "Option::is_none")]
             fee_per_vbyte: Option<u64>,
+            /// The total fee for this transaction
+            #[serde(rename = "withdrawal_fee")]
+            #[serde(skip_serializing_if = "Option::is_none")]
+            withdrawal_fee: Option<WithdrawalFee>,
         },
 
         /// Indicates that the minter sent out a new transaction to replace an older transaction
@@ -114,6 +135,17 @@ mod event {
             /// The fee per vbyte (in millisatoshi) that we used for the transaction.
             #[serde(rename = "fee")]
             fee_per_vbyte: u64,
+            /// The total fee for this transaction
+            #[serde(rename = "withdrawal_fee")]
+            #[serde(skip_serializing_if = "Option::is_none")]
+            withdrawal_fee: Option<WithdrawalFee>,
+            /// The reason why it was replaced
+            reason: Option<ReplacedReason>,
+            /// The UTXOs of the new transaction. If not available, we'll use the same
+            /// UTXOs from the old transaction it replaces.
+            #[serde(rename = "new_utxos")]
+            #[serde(skip_serializing_if = "Option::is_none")]
+            new_utxos: Option<Vec<Utxo>>,
         },
 
         /// Indicates that the minter received enough confirmations for a bitcoin
@@ -206,6 +238,36 @@ mod event {
         /// Indicates an UTXO is checked to be clean and pre-mint
         #[serde(rename = "checked_utxo_mint_unknown")]
         CheckedUtxoMintUnknown { account: Account, utxo: Utxo },
+
+        /// Indicates a reimbursement.
+        #[serde(rename = "schedule_withdrawal_reimbursement")]
+        ScheduleWithdrawalReimbursement {
+            /// The beneficiary.
+            account: Account,
+            /// The token amount to reimburse.
+            amount: u64,
+            /// The reason of the reimbursement.
+            reason: WithdrawalReimbursementReason,
+            /// The corresponding burn block on the ledger.
+            burn_block_index: u64,
+        },
+
+        /// The minter unexpectedly panicked while processing a reimbursement.
+        /// The reimbursement is quarantined to prevent any double minting and
+        /// will not be processed without further manual intervention.
+        #[serde(rename = "quarantined_withdrawal_reimbursement")]
+        QuarantinedWithdrawalReimbursement {
+            /// The burn block on the ledger for that withdrawal that should have been reimbursed
+            burn_block_index: u64,
+        },
+        /// Indicates that a reimbursement has been executed.
+        #[serde(rename = "reimbursed_withdrawal")]
+        ReimbursedWithdrawal {
+            /// The burn block on the ledger.
+            burn_block_index: u64,
+            /// The mint block on the ledger.
+            mint_block_index: u64,
+        },
     }
 }
 
@@ -215,16 +277,6 @@ pub struct Event {
     pub timestamp: Option<u64>,
     /// The event type.
     pub payload: EventType,
-}
-
-// TODO XC-261: Inline logic
-impl From<EventType> for Event {
-    fn from(value: EventType) -> Self {
-        Self {
-            timestamp: None,
-            payload: value,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -245,9 +297,8 @@ pub fn replay<I: CheckInvariants>(
             EventType::Init(args) => CkBtcMinterState::from(args),
             payload => {
                 return Err(ReplayLogError::InconsistentLog(format!(
-                    "The first event is not Init: {:?}",
-                    payload
-                )))
+                    "The first event is not Init: {payload:?}"
+                )));
             }
         },
         None => return Err(ReplayLogError::EmptyLog),
@@ -288,8 +339,7 @@ pub fn replay<I: CheckInvariants>(
             EventType::RemovedRetrieveBtcRequest { block_index } => {
                 let request = state.remove_pending_request(block_index).ok_or_else(|| {
                     ReplayLogError::InconsistentLog(format!(
-                        "Attempted to remove a non-pending retrieve_btc request {}",
-                        block_index
+                        "Attempted to remove a non-pending retrieve_btc request {block_index}"
                     ))
                 })?;
 
@@ -305,27 +355,30 @@ pub fn replay<I: CheckInvariants>(
                 fee_per_vbyte,
                 change_output,
                 submitted_at,
+                withdrawal_fee,
             } => {
-                let mut retrieve_btc_requests = Vec::with_capacity(request_block_indices.len());
+                let mut retrieve_btc_requests = BTreeSet::new();
                 for block_index in request_block_indices {
                     let request = state.remove_pending_request(block_index).ok_or_else(|| {
                         ReplayLogError::InconsistentLog(format!(
-                            "Attempted to send a non-pending retrieve_btc request {}",
-                            block_index
+                            "Attempted to send a non-pending retrieve_btc request {block_index}"
                         ))
                     })?;
-                    retrieve_btc_requests.push(request);
+                    retrieve_btc_requests.insert(request);
                 }
                 for utxo in utxos.iter() {
                     state.available_utxos.remove(utxo);
                 }
                 state.push_submitted_transaction(SubmittedBtcTransaction {
-                    requests: retrieve_btc_requests,
+                    requests: SubmittedWithdrawalRequests::ToConfirm {
+                        requests: retrieve_btc_requests,
+                    },
                     txid,
                     used_utxos: utxos,
                     fee_per_vbyte,
                     change_output,
                     submitted_at,
+                    withdrawal_fee,
                 });
             }
             EventType::ReplacedBtcTransaction {
@@ -334,8 +387,11 @@ pub fn replay<I: CheckInvariants>(
                 change_output,
                 submitted_at,
                 fee_per_vbyte,
+                withdrawal_fee,
+                reason,
+                new_utxos,
             } => {
-                let (requests, used_utxos) = match state
+                let (old_requests, old_utxos) = match state
                     .submitted_transactions
                     .iter()
                     .find(|tx| tx.txid == old_txid)
@@ -345,8 +401,32 @@ pub fn replay<I: CheckInvariants>(
                         return Err(ReplayLogError::InconsistentLog(format!(
                             "Cannot replace a non-existent transaction {}",
                             &old_txid
-                        )))
+                        )));
                     }
+                };
+                let requests = match reason {
+                    Some(ReplacedReason::ToCancel { reason }) => match old_requests {
+                        SubmittedWithdrawalRequests::ToCancel { .. } => {
+                            panic!("Cannot cancel a cancelation request")
+                        }
+                        SubmittedWithdrawalRequests::ToConfirm { requests } => {
+                            assert!(
+                                new_utxos.is_some(),
+                                "BUG: Cancel transaction {new_txid} must have `new_utxos` to use different UTXOs than the transaction it tries to cancel"
+                            );
+                            debug_assert!(
+                                new_utxos
+                                    .as_ref()
+                                    .unwrap()
+                                    .iter()
+                                    .collect::<BTreeSet<_>>()
+                                    .is_subset(&old_utxos.iter().collect::<BTreeSet<_>>()),
+                                "BUG: UTXOs from cancel transaction must be a subset of the UTXOS from the transaction to cancel. New UTXOs {new_utxos:?}. Old UTXOs: {old_utxos:?}"
+                            );
+                            SubmittedWithdrawalRequests::ToCancel { requests, reason }
+                        }
+                    },
+                    Some(ReplacedReason::ToRetry) | None => old_requests,
                 };
 
                 state.replace_transaction(
@@ -354,10 +434,11 @@ pub fn replay<I: CheckInvariants>(
                     SubmittedBtcTransaction {
                         txid: new_txid,
                         requests,
-                        used_utxos,
+                        used_utxos: new_utxos.unwrap_or(old_utxos),
                         change_output: Some(change_output),
                         submitted_at,
                         fee_per_vbyte: Some(fee_per_vbyte),
+                        withdrawal_fee,
                     },
                 );
             }
@@ -400,12 +481,13 @@ pub fn replay<I: CheckInvariants>(
                 amount,
                 ..
             } => {
-                if Some(kyt_provider) != kyt_principal {
-                    if let Err(Overdraft(overdraft)) =
+                if Some(kyt_provider) != kyt_principal
+                    && let Err(Overdraft(overdraft)) =
                         state.distribute_kyt_fee(kyt_provider, amount)
-                    {
-                        return Err(ReplayLogError::InconsistentLog(format!("Attempted to distribute {amount} to {kyt_provider}, causing an overdraft of {overdraft}")));
-                    }
+                {
+                    return Err(ReplayLogError::InconsistentLog(format!(
+                        "Attempted to distribute {amount} to {kyt_provider}, causing an overdraft of {overdraft}"
+                    )));
                 }
             }
             #[allow(deprecated)]
@@ -447,6 +529,28 @@ pub fn replay<I: CheckInvariants>(
             }
             EventType::CheckedUtxoMintUnknown { utxo, account } => {
                 state.mark_utxo_checked_mint_unknown(utxo, &account);
+            }
+            EventType::ScheduleWithdrawalReimbursement {
+                account,
+                amount,
+                reason,
+                burn_block_index,
+            } => state.schedule_withdrawal_reimbursement(
+                burn_block_index,
+                ReimburseWithdrawalTask {
+                    account,
+                    amount,
+                    reason,
+                },
+            ),
+            EventType::QuarantinedWithdrawalReimbursement { burn_block_index } => {
+                state.quarantine_withdrawal_reimbursement(burn_block_index);
+            }
+            EventType::ReimbursedWithdrawal {
+                burn_block_index,
+                mint_block_index,
+            } => {
+                state.reimburse_withdrawal_completed(burn_block_index, mint_block_index);
             }
         }
     }

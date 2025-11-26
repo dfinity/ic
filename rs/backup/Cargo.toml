@@ -12,11 +12,10 @@ chrono = { workspace = true }
 clap = { workspace = true }
 ic-config = { path = "../config" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
+ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-logger = { path = "../monitoring/logger" }
 ic-recovery = { path = "../recovery" }
-ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
-ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-replicator = { path = "../orchestrator/registry_replicator" }
 ic-types = { path = "../types/types" }
 rand = { workspace = true }
@@ -27,9 +26,12 @@ slog = { workspace = true }
 slog-async = { workspace = true }
 slog-term = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
+ic-registry-client = { path = "../registry/client" }
+ic-registry-local-store = { path = "../registry/local_store" }
 ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
 
 [[bin]]

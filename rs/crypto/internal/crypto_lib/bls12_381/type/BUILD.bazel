@@ -1,15 +1,19 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:defs.bzl", "rust_bench")
 
-package(default_visibility = ["//rs/crypto:__subpackages__"])
+package(default_visibility = [
+    "//rs/crypto:__subpackages__",
+    "//rs/tests/crypto:__subpackages__",
+])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "@crate_index//:cached",
     "@crate_index//:hex",
     "@crate_index//:ic_bls12_381",
     "@crate_index//:itertools",
-    "@crate_index//:lazy_static",
     "@crate_index//:pairing",
+    "@crate_index//:parking_lot",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
     "@crate_index//:sha2",

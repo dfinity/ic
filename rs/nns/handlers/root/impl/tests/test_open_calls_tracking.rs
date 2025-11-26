@@ -27,14 +27,16 @@ fn test_canister_status_call_tracking() {
     let universal = set_up_universal_canister(&machine, None);
 
     // Canister status call should fail as NNS Root is not a controller.
-    assert!(update_with_sender::<_, CanisterStatusResult>(
-        &machine,
-        ROOT_CANISTER_ID,
-        "canister_status",
-        CanisterIdRecord::from(universal),
-        PrincipalId::new_anonymous(),
-    )
-    .is_err());
+    assert!(
+        update_with_sender::<_, CanisterStatusResult>(
+            &machine,
+            ROOT_CANISTER_ID,
+            "canister_status",
+            CanisterIdRecord::from(universal),
+            PrincipalId::new_anonymous(),
+        )
+        .is_err()
+    );
 
     // Queries the HTTP metrics endpoint.
     let response_bytes = query(

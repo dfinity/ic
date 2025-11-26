@@ -1,7 +1,7 @@
 use super::errors::ErrorInfo;
 use super::requests::ConsentMessageRequest;
+use super::requests::DisplayMessageType;
 use super::responses::{ConsentInfo, ConsentMessage};
-use super::{requests::DisplayMessageType, responses::LineDisplayPage};
 use crate::icrc1::account::Account;
 use crate::icrc1::transfer::TransferArg;
 use crate::icrc2::approve::ApproveArgs;
@@ -10,9 +10,8 @@ use crate::icrc21::errors::Icrc21Error;
 use crate::icrc21::requests::ConsentMessageMetadata;
 use candid::Decode;
 use candid::{Nat, Principal};
-use itertools::Itertools;
-use num_traits::{Pow, ToPrimitive};
 use serde_bytes::ByteBuf;
+use std::fmt::{self, Display};
 use strum::{self, IntoEnumIterator};
 use strum_macros::{Display, EnumIter, EnumString};
 
@@ -20,13 +19,44 @@ use strum_macros::{Display, EnumIter, EnumString};
 pub const MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES: u16 = 500;
 
 #[derive(Debug, EnumString, EnumIter, Display)]
-enum Icrc21Function {
+pub enum Icrc21Function {
     #[strum(serialize = "icrc1_transfer")]
     Transfer,
     #[strum(serialize = "icrc2_approve")]
     Approve,
     #[strum(serialize = "icrc2_transfer_from")]
     TransferFrom,
+    #[strum(serialize = "transfer")]
+    GenericTransfer,
+}
+
+pub enum AccountOrId {
+    Account(Account),
+    AccountIdAddress(Option<String>),
+}
+
+impl AccountOrId {
+    pub fn is_anonymous(&self) -> bool {
+        match self {
+            AccountOrId::Account(account) => account.owner == Principal::anonymous(),
+            AccountOrId::AccountIdAddress(addr) => addr.is_none(),
+        }
+    }
+}
+
+impl Display for AccountOrId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AccountOrId::Account(account) => write!(f, "{account}"),
+            AccountOrId::AccountIdAddress(Some(str)) => write!(f, "{str}"),
+            AccountOrId::AccountIdAddress(None) => write!(f, ""),
+        }
+    }
+}
+
+pub enum GenericMemo {
+    Icrc1Memo(ByteBuf),
+    IntMemo(u64),
 }
 
 pub struct ConsentMessageBuilder {
@@ -34,12 +64,13 @@ pub struct ConsentMessageBuilder {
     display_type: Option<DisplayMessageType>,
     approver: Option<Account>,
     spender: Option<Account>,
-    from: Option<Account>,
-    receiver: Option<Account>,
+    from: Option<AccountOrId>,
+    receiver: Option<AccountOrId>,
     amount: Option<Nat>,
     token_symbol: Option<String>,
+    token_name: Option<String>,
     ledger_fee: Option<Nat>,
-    memo: Option<ByteBuf>,
+    memo: Option<GenericMemo>,
     expected_allowance: Option<Nat>,
     expires_at: Option<u64>,
     utc_offset_minutes: Option<i16>,
@@ -63,6 +94,7 @@ impl ConsentMessageBuilder {
             receiver: None,
             amount: None,
             token_symbol: None,
+            token_name: None,
             ledger_fee: None,
             utc_offset_minutes: None,
             memo: None,
@@ -82,12 +114,12 @@ impl ConsentMessageBuilder {
         self
     }
 
-    pub fn with_from_account(mut self, from: Account) -> Self {
+    pub fn with_from_account(mut self, from: AccountOrId) -> Self {
         self.from = Some(from);
         self
     }
 
-    pub fn with_receiver_account(mut self, receiver: Account) -> Self {
+    pub fn with_receiver_account(mut self, receiver: AccountOrId) -> Self {
         self.receiver = Some(receiver);
         self
     }
@@ -102,12 +134,17 @@ impl ConsentMessageBuilder {
         self
     }
 
+    pub fn with_token_name(mut self, token_name: String) -> Self {
+        self.token_name = Some(token_name);
+        self
+    }
+
     pub fn with_ledger_fee(mut self, ledger_fee: Nat) -> Self {
         self.ledger_fee = Some(ledger_fee);
         self
     }
 
-    pub fn with_memo(mut self, memo: ByteBuf) -> Self {
+    pub fn with_memo(mut self, memo: GenericMemo) -> Self {
         self.memo = Some(memo);
         self
     }
@@ -133,24 +170,16 @@ impl ConsentMessageBuilder {
     }
 
     pub fn build(self) -> Result<ConsentMessage, Icrc21Error> {
-        let mut message = "".to_string();
-        let extract_subaccount = |account: Account| -> Result<String, Icrc21Error> {
-            Ok(match account.subaccount {
-                None => hex::encode(account.effective_subaccount().as_slice()),
-                Some(_) => account
-                    .to_string()
-                    .split('.')
-                    .next_back()
-                    .ok_or(Icrc21Error::GenericError {
-                        error_code: Nat::from(500u64),
-                        description: "Subaccount has an unexpected format.".to_owned(),
-                    })?
-                    .to_string(),
-            })
+        let mut message = match self.display_type {
+            Some(DisplayMessageType::GenericDisplay) | None => {
+                ConsentMessage::GenericDisplayMessage(Default::default())
+            }
+            Some(DisplayMessageType::FieldsDisplay) => {
+                ConsentMessage::FieldsDisplayMessage(Default::default())
+            }
         };
         match self.function {
-            Icrc21Function::Transfer => {
-                message.push_str("# Approve the transfer of funds");
+            Icrc21Function::Transfer | Icrc21Function::GenericTransfer => {
                 let from_account = self.from.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
                     description: "From account has to be specified.".to_owned(),
@@ -159,39 +188,30 @@ impl ConsentMessageBuilder {
                     error_code: Nat::from(500u64),
                     description: "Receiver account has to be specified.".to_owned(),
                 })?;
-                let fee = convert_tokens_to_string_representation(
-                    self.ledger_fee.ok_or(Icrc21Error::GenericError {
-                        error_code: Nat::from(500u64),
-                        description: "Ledger fee must be specified.".to_owned(),
-                    })?,
-                    self.decimals,
-                )?;
+
                 let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
                     description: "Token Symbol must be specified.".to_owned(),
                 })?;
-                let amount = convert_tokens_to_string_representation(
-                    self.amount.ok_or(Icrc21Error::GenericError {
-                        error_code: Nat::from(500u64),
-                        description: "Amount has to be specified.".to_owned(),
-                    })?,
-                    self.decimals,
-                )?;
+                let token_name = self.token_name.ok_or(Icrc21Error::GenericError {
+                    error_code: Nat::from(500u64),
+                    description: "Token Name must be specified.".to_owned(),
+                })?;
 
-                message.push_str(&format!("\n\n**Amount:**\n{} {}", amount, token_symbol));
-                if from_account.owner == Principal::anonymous() {
-                    message.push_str(&format!(
-                        "\n\n**From subaccount:**\n{}",
-                        extract_subaccount(from_account)?
-                    ));
-                } else {
-                    message.push_str(&format!("\n\n**From:**\n{}", from_account));
+                message.add_intent(Icrc21Function::Transfer, Some(token_name));
+                if !from_account.is_anonymous() {
+                    message.add_account("From", from_account.to_string());
                 }
-                message.push_str(&format!("\n\n**To:**\n{}", receiver_account));
-                message.push_str(&format!("\n\n**Fee:**\n{} {}", fee, token_symbol));
+                message.add_amount(self.amount, self.decimals, &token_symbol)?;
+                message.add_account("To", receiver_account.to_string());
+                message.add_fee(
+                    Icrc21Function::Transfer,
+                    self.ledger_fee,
+                    self.decimals,
+                    &token_symbol,
+                )?;
             }
             Icrc21Function::Approve => {
-                message.push_str("# Authorize another address to withdraw from your account");
                 let approver_account = self.approver.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
                     description: "Approver account has to be specified.".to_owned(),
@@ -200,91 +220,36 @@ impl ConsentMessageBuilder {
                     error_code: Nat::from(500u64),
                     description: "Spender account has to be specified.".to_owned(),
                 })?;
-                let fee = convert_tokens_to_string_representation(
-                    self.ledger_fee.ok_or(Icrc21Error::GenericError {
-                        error_code: Nat::from(500u64),
-                        description: "Ledger fee must be specified.".to_owned(),
-                    })?,
-                    self.decimals,
-                )?;
                 let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
                     description: "Token symbol must be specified.".to_owned(),
                 })?;
-                let amount = convert_tokens_to_string_representation(
-                    self.amount.ok_or(Icrc21Error::GenericError {
-                        error_code: Nat::from(500u64),
-                        description: "Amount has to be specified.".to_owned(),
-                    })?,
-                    self.decimals,
-                )?;
-                let expires_at = self
-                    .expires_at
-                    .map(|ts| {
-                        let seconds = (ts as i64) / 10_i64.pow(9);
-                        let nanos = ((ts as i64) % 10_i64.pow(9)) as u32;
 
-                        let utc_dt = match (match time::OffsetDateTime::from_unix_timestamp(seconds)
-                        {
-                            Ok(dt) => dt,
-                            Err(_) => return format!("Invalid timestamp: {}", ts),
-                        })
-                        .replace_nanosecond(nanos)
-                        {
-                            Ok(dt) => dt,
-                            Err(_) => return format!("Invalid nanosecond: {}", nanos),
-                        };
-
-                        // Apply the offset minutes
-                        let offset = time::UtcOffset::from_whole_seconds(
-                            (self.utc_offset_minutes.unwrap_or(0) * 60).into(),
-                        )
-                        .expect("Invalid offset");
-                        let offset_dt = utc_dt.to_offset(offset);
-
-                        // Format as a string including the offset
-                        match offset_dt.format(&time::format_description::well_known::Rfc2822) {
-                            Ok(formatted) => formatted,
-                            Err(_) => format!("Invalid timestamp: {}", ts),
-                        }
-                    })
-                    .unwrap_or("No expiration.".to_owned());
-
-                message.push_str(&format!(
-                    "\n\n**The following address is allowed to withdraw from your account:**\n{}",
-                    spender_account
-                ));
-                if approver_account.owner == Principal::anonymous() {
-                    message.push_str(&format!(
-                        "\n\n**Your subaccount:**\n{}",
-                        extract_subaccount(approver_account)?
-                    ));
-                } else {
-                    message.push_str(&format!("\n\n**Your account:**\n{}", approver_account));
+                message.add_intent(Icrc21Function::Approve, None);
+                if approver_account.owner != Principal::anonymous() {
+                    message.add_account("From", approver_account.to_string());
                 }
-                message.push_str(&format!(
-                    "\n\n**Requested withdrawal allowance:**\n{} {}",
-                    amount, token_symbol
-                ));
-                message.push_str(&match self.expected_allowance{
-                    Some(expected_allowance) => format!("\n\n**Current withdrawal allowance:**\n{} {}", convert_tokens_to_string_representation(expected_allowance,self.decimals)?,token_symbol),
-                    None => format!("\n\u{26A0} The allowance will be set to {} {} independently of any previous allowance. Until this transaction has been executed the spender can still exercise the previous allowance (if any) to it's full amount.",amount,token_symbol)});
-                message.push_str(&format!("\n\n**Expiration date:**\n{}", expires_at));
-                message.push_str(&format!("\n\n**Approval fee:**\n{} {}", fee, token_symbol));
-                if approver_account.owner == Principal::anonymous() {
-                    message.push_str(&format!(
-                        "\n\n**Transaction fees to be paid by your subaccount:**\n{}",
-                        extract_subaccount(approver_account)?
-                    ));
-                } else {
-                    message.push_str(&format!(
-                        "\n\n**Transaction fees to be paid by:**\n{}",
-                        approver_account
-                    ));
+                message.add_account("Approve to spender", spender_account.to_string());
+                message.add_allowance(self.amount, self.decimals, &token_symbol)?;
+                if let Some(expected_allowance) = self.expected_allowance {
+                    message.add_existing_allowance(
+                        expected_allowance,
+                        self.decimals,
+                        &token_symbol,
+                    )?;
+                }
+                message.add_expiration(self.expires_at, self.utc_offset_minutes);
+                message.add_fee(
+                    Icrc21Function::Approve,
+                    self.ledger_fee,
+                    self.decimals,
+                    &token_symbol,
+                )?;
+                if approver_account.owner != Principal::anonymous() {
+                    message.add_account("Fees paid by", approver_account.to_string());
                 }
             }
             Icrc21Function::TransferFrom => {
-                message.push_str("# Transfer from a withdrawal account");
                 let from_account = self.from.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
                     description: "From account has to be specified.".to_owned(),
@@ -297,123 +262,44 @@ impl ConsentMessageBuilder {
                     error_code: Nat::from(500u64),
                     description: "Spender account has to be specified.".to_owned(),
                 })?;
-                let fee = convert_tokens_to_string_representation(
-                    self.ledger_fee.ok_or(Icrc21Error::GenericError {
-                        error_code: Nat::from(500u64),
-                        description: "Ledger fee must be specified.".to_owned(),
-                    })?,
-                    self.decimals,
-                )?;
 
                 let token_symbol = self.token_symbol.ok_or(Icrc21Error::GenericError {
                     error_code: Nat::from(500u64),
                     description: "Token symbol must be specified.".to_owned(),
                 })?;
-                let amount = convert_tokens_to_string_representation(
-                    self.amount.ok_or(Icrc21Error::GenericError {
-                        error_code: Nat::from(500u64),
-                        description: "Amount has to be specified.".to_owned(),
-                    })?,
-                    self.decimals,
-                )?;
-
-                message.push_str(&format!("\n\n**Withdrawal account:**\n{}", from_account));
-                if spender_account.owner == Principal::anonymous() {
-                    message.push_str(&format!(
-                        "\n\n**Subaccount sending the transfer request:**\n{}",
-                        extract_subaccount(spender_account)?
-                    ));
-                } else {
-                    message.push_str(&format!(
-                        "\n\n**Account sending the transfer request:**\n{}",
-                        spender_account
-                    ));
+                let token_name = self.token_name.ok_or(Icrc21Error::GenericError {
+                    error_code: Nat::from(500u64),
+                    description: "Token Name must be specified.".to_owned(),
+                })?;
+                message.add_intent(Icrc21Function::TransferFrom, Some(token_name));
+                message.add_account("From", from_account.to_string());
+                message.add_amount(self.amount, self.decimals, &token_symbol)?;
+                if spender_account.owner != Principal::anonymous() {
+                    message.add_account("Spender", spender_account.to_string());
                 }
-                message.push_str(&format!(
-                    "\n\n**Amount to withdraw:**\n{} {}",
-                    amount, token_symbol
-                ));
-                message.push_str(&format!("\n\n**To:**\n{}", receiver_account));
-                message.push_str(&format!(
-                    "\n\n**Fee paid by withdrawal account:**\n{} {}",
-                    fee, token_symbol
-                ));
+                message.add_account("To", receiver_account.to_string());
+                message.add_fee(
+                    Icrc21Function::TransferFrom,
+                    self.ledger_fee,
+                    self.decimals,
+                    &token_symbol,
+                )?;
             }
         };
 
         if let Some(memo) = self.memo {
-            message.push_str(&format!(
-                "\n\n**Memo:**\n{}",
-                // Check if the memo is a valid UTF-8 string and display it as such if it is.
-                &match std::str::from_utf8(memo.as_slice()) {
-                    Ok(valid_str) => valid_str.to_string(),
-                    Err(_) => hex::encode(memo.as_slice()),
-                }
-            ));
+            message.add_memo(memo);
         }
 
-        match self.display_type {
-            Some(DisplayMessageType::GenericDisplay) | None => {
-                Ok(ConsentMessage::GenericDisplayMessage(message))
-            }
-            Some(DisplayMessageType::LineDisplay {
-                lines_per_page,
-                characters_per_line,
-            }) => {
-                let pages = consent_msg_text_pages(&message, characters_per_line, lines_per_page);
-                Ok(ConsentMessage::LineDisplayMessage { pages })
-            }
-        }
+        Ok(message)
     }
 }
 
-/// This function was taken from the reference implementation: https://github.com/dfinity/wg-identity-authentication/blob/3ed140225b283c0a1cc88344d0cfb9912aec73cd/reference-implementations/ICRC-21/src/lib.rs#L73
-pub fn consent_msg_text_pages(
-    message: &str,
-    characters_per_line: u16,
-    lines_per_page: u16,
-) -> Vec<LineDisplayPage> {
-    if characters_per_line == 0 || lines_per_page == 0 {
-        return vec![];
-    }
-
-    // Split text into word chunks that fit on a line (breaking long words)
-    let words = message.split_whitespace().flat_map(|word| {
-        word.chars()
-            .chunks(characters_per_line as usize)
-            .into_iter()
-            .map(|chunk| chunk.collect::<String>())
-            .collect::<Vec<String>>()
-    });
-
-    // Add words to lines until the line is full
-    let mut lines = vec![];
-    let mut current_line = "".to_string();
-    for word in words {
-        if current_line.is_empty() {
-            // all words are guaranteed to fit on a line
-            current_line = word;
-            continue;
-        }
-        if current_line.len() + word.len() < characters_per_line as usize {
-            current_line.push(' ');
-            current_line.push_str(word.as_str());
-        } else {
-            lines.push(current_line);
-            current_line = word;
-        }
-    }
-    lines.push(current_line);
-
-    // Group lines into pages
-    lines
-        .into_iter()
-        .chunks(lines_per_page as usize)
-        .into_iter()
-        .map(|page| LineDisplayPage {
-            lines: page.collect(),
-        })
-        .collect()
+pub struct GenericTransferArgs {
+    pub from: AccountOrId,
+    pub receiver: AccountOrId,
+    pub amount: Nat,
+    pub memo: Option<GenericMemo>,
 }
 
 pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
@@ -421,13 +307,33 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
     caller_principal: Principal,
     ledger_fee: Nat,
     token_symbol: String,
+    token_name: String,
     decimals: u8,
+) -> Result<ConsentInfo, Icrc21Error> {
+    build_icrc21_consent_info(
+        consent_msg_request,
+        caller_principal,
+        ledger_fee,
+        token_symbol,
+        token_name,
+        decimals,
+        None,
+    )
+}
+
+pub fn build_icrc21_consent_info(
+    consent_msg_request: ConsentMessageRequest,
+    caller_principal: Principal,
+    ledger_fee: Nat,
+    token_symbol: String,
+    token_name: String,
+    decimals: u8,
+    transfer_args: Option<GenericTransferArgs>,
 ) -> Result<ConsentInfo, Icrc21Error> {
     if consent_msg_request.arg.len() > MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize {
         return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
             description: format!(
-                "The argument size is too large. The maximum allowed size is {} bytes.",
-                MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES
+                "The argument size is too large. The maximum allowed size is {MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES} bytes."
             ),
         }));
     }
@@ -443,8 +349,9 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
 
     let mut display_message_builder =
         ConsentMessageBuilder::new(&consent_msg_request.method, decimals)?
-            .with_ledger_fee(ledger_fee)
-            .with_token_symbol(token_symbol);
+            .with_ledger_fee(ledger_fee.clone())
+            .with_token_symbol(token_symbol)
+            .with_token_name(token_name);
 
     if let Some(offset) = consent_msg_request
         .user_preferences
@@ -455,17 +362,6 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
     }
 
     if let Some(display_type) = consent_msg_request.user_preferences.device_spec {
-        if let DisplayMessageType::LineDisplay {
-            lines_per_page,
-            characters_per_line,
-        } = display_type
-        {
-            if lines_per_page == 0 || characters_per_line == 0 {
-                return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                description: "Invalid display type. Lines per page and characters per line must be greater than 0.".to_string()
-            }));
-            }
-        }
         display_message_builder = display_message_builder.with_display_type(display_type);
     }
 
@@ -476,24 +372,26 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
                 amount,
                 from_subaccount,
                 to,
-                fee: _,
+                fee,
                 created_at_time: _,
             } = Decode!(&consent_msg_request.arg, TransferArg).map_err(|e| {
                 Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                    description: format!("Failed to decode TransferArg: {}", e),
+                    description: format!("Failed to decode TransferArg: {e}"),
                 })
             })?;
+            icrc21_check_fee(&fee, &ledger_fee)?;
             let sender = Account {
                 owner: caller_principal,
                 subaccount: from_subaccount,
             };
             display_message_builder = display_message_builder
                 .with_amount(amount)
-                .with_receiver_account(to)
-                .with_from_account(sender);
+                .with_receiver_account(AccountOrId::Account(to))
+                .with_from_account(AccountOrId::Account(sender));
 
             if let Some(memo) = memo {
-                display_message_builder = display_message_builder.with_memo(memo.0);
+                display_message_builder =
+                    display_message_builder.with_memo(GenericMemo::Icrc1Memo(memo.0));
             }
             display_message_builder.build()
         }
@@ -504,25 +402,27 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
                 from,
                 to,
                 spender_subaccount,
-                fee: _,
+                fee,
                 created_at_time: _,
             } = Decode!(&consent_msg_request.arg, TransferFromArgs).map_err(|e| {
                 Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                    description: format!("Failed to decode TransferFromArgs: {}", e),
+                    description: format!("Failed to decode TransferFromArgs: {e}"),
                 })
             })?;
+            icrc21_check_fee(&fee, &ledger_fee)?;
             let spender = Account {
                 owner: caller_principal,
                 subaccount: spender_subaccount,
             };
             display_message_builder = display_message_builder
                 .with_amount(amount)
-                .with_receiver_account(to)
-                .with_from_account(from)
+                .with_receiver_account(AccountOrId::Account(to))
+                .with_from_account(AccountOrId::Account(from))
                 .with_spender_account(spender);
 
             if let Some(memo) = memo {
-                display_message_builder = display_message_builder.with_memo(memo.0);
+                display_message_builder =
+                    display_message_builder.with_memo(GenericMemo::Icrc1Memo(memo.0));
             }
             display_message_builder.build()
         }
@@ -534,13 +434,14 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
                 spender,
                 expires_at,
                 expected_allowance,
-                fee: _,
+                fee,
                 created_at_time: _,
             } = Decode!(&consent_msg_request.arg, ApproveArgs).map_err(|e| {
                 Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                    description: format!("Failed to decode ApproveArgs: {}", e),
+                    description: format!("Failed to decode ApproveArgs: {e}"),
                 })
             })?;
+            icrc21_check_fee(&fee, &ledger_fee)?;
             let approver = Account {
                 owner: caller_principal,
                 subaccount: from_subaccount,
@@ -555,7 +456,8 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
                 .with_spender_account(spender);
 
             if let Some(memo) = memo {
-                display_message_builder = display_message_builder.with_memo(memo.0);
+                display_message_builder =
+                    display_message_builder.with_memo(GenericMemo::Icrc1Memo(memo.0));
             }
             if let Some(expires_at) = expires_at {
                 display_message_builder = display_message_builder.with_expires_at(expires_at);
@@ -563,6 +465,24 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
             if let Some(expected_allowance) = expected_allowance {
                 display_message_builder =
                     display_message_builder.with_expected_allowance(expected_allowance);
+            }
+            display_message_builder.build()
+        }
+        Icrc21Function::GenericTransfer => {
+            let transfer_args = match transfer_args {
+                Some(args) => args,
+                None => {
+                    return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                        description: "transfer args should be provided".to_string(),
+                    }));
+                }
+            };
+            display_message_builder = display_message_builder
+                .with_amount(transfer_args.amount)
+                .with_receiver_account(transfer_args.receiver)
+                .with_from_account(transfer_args.from);
+            if let Some(memo) = transfer_args.memo {
+                display_message_builder = display_message_builder.with_memo(memo);
             }
             display_message_builder.build()
         }
@@ -574,13 +494,15 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
     })
 }
 
-fn convert_tokens_to_string_representation(
-    tokens: Nat,
-    decimals: u8,
-) -> Result<String, Icrc21Error> {
-    let tokens = tokens.0.to_f64().ok_or(Icrc21Error::GenericError {
-        error_code: Nat::from(500u64),
-        description: "Failed to convert tokens to u64".to_owned(),
-    })?;
-    Ok(format!("{}", tokens / 10_f64.pow(decimals)))
+pub fn icrc21_check_fee(fee: &Option<Nat>, ledger_fee: &Nat) -> Result<(), Icrc21Error> {
+    if let Some(fee) = fee
+        && fee != ledger_fee
+    {
+        return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+            description: format!(
+                "The fee specified in the arguments ({fee}) is different than the ledger fee ({ledger_fee})"
+            ),
+        }));
+    }
+    Ok(())
 }

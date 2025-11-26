@@ -6,7 +6,9 @@ DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:curve25519-dalek",
     "@crate_index//:ed25519-dalek",
+    "@crate_index//:hex-literal",
     "@crate_index//:hkdf",
+    "@crate_index//:ic_principal",
     "@crate_index//:pem",
     "@crate_index//:rand",
     "@crate_index//:thiserror",
@@ -18,7 +20,6 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:hex",
-    "@crate_index//:hex-literal",
     "@crate_index//:rand_chacha",
     "@crate_index//:wycheproof",
 ]
@@ -34,7 +35,7 @@ rust_library(
     crate_features = ["rand"],
     crate_name = "ic_ed25519",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.2.0",
+    version = "0.5.0",
     deps = DEPENDENCIES,
 )
 

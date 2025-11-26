@@ -89,7 +89,7 @@ pub mod ed25519 {
     impl fmt::Debug for Signature {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             let hex_sig = hex::encode(&self.0[..]);
-            write!(f, "Signature(0x{})", hex_sig)
+            write!(f, "Signature(0x{hex_sig})")
         }
     }
     impl PartialEq for Signature {

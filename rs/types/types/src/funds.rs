@@ -4,7 +4,7 @@ mod cycles;
 
 pub use cycles::Cycles;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     state::queues::v1::Cycles as PbCycles,
     state::queues::v1::Funds as PbFunds,
 };

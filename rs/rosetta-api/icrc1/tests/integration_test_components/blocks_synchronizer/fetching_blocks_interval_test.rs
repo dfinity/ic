@@ -6,13 +6,13 @@ use crate::common::local_replica::{
 use candid::{Encode, Nat};
 use ic_agent::Identity;
 use ic_base_types::PrincipalId;
-use ic_icrc1_ledger::InitArgsBuilder;
-use ic_icrc1_ledger::LedgerArgument;
-use ic_icrc1_test_utils::{transfer_args_with_sender, DEFAULT_TRANSFER_FEE};
 use ic_icrc_rosetta::common::storage::storage_client::StorageClient;
 use ic_icrc_rosetta::ledger_blocks_synchronization::blocks_synchronizer::{
-    self, blocks_verifier, RecurrencyMode,
+    self, RecurrencyMode, blocks_verifier,
 };
+use ic_icrc1_ledger::InitArgsBuilder;
+use ic_icrc1_ledger::LedgerArgument;
+use ic_icrc1_test_utils::{DEFAULT_TRANSFER_FEE, transfer_args_with_sender};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
@@ -53,10 +53,13 @@ fn check_storage_validity(storage_client: Arc<StorageClient>, highest_index: u64
     assert_eq!(blocks_stored.len() as u64, highest_index + 1);
 
     // Make sure the blocks that are stored are valid
-    assert!(blocks_verifier::is_valid_blockchain(
-        &blocks_stored,
-        &blocks_stored.last().unwrap().clone().get_block_hash()
-    ));
+    assert!(
+        blocks_verifier::is_valid_blockchain(
+            &blocks_stored,
+            &blocks_stored.last().unwrap().clone().get_block_hash()
+        )
+        .is_ok()
+    );
 }
 
 proptest! {
@@ -348,7 +351,7 @@ fn test_gaps_handling() {
 
         // Create a connection to the database
         let connection = Connection::open_with_flags(
-            format!("'file:{}?mode=memory&cache=shared', uri=True", DB_NAME),
+            format!("'file:{DB_NAME}?mode=memory&cache=shared', uri=True"),
             OpenFlags::default(),
         )
         .unwrap();

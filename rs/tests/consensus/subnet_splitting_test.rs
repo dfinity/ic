@@ -34,7 +34,7 @@ use ic_consensus_system_test_utils::{
     },
     set_sandbox_env_vars,
 };
-use ic_recovery::{file_sync_helper, get_node_metrics, RecoveryArgs};
+use ic_recovery::{RecoveryArgs, file_sync_helper, get_node_metrics};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_splitting::subnet_splitting::{StepType, SubnetSplitting, SubnetSplittingArgs};
@@ -53,7 +53,7 @@ use ic_types::{CanisterId, Height, PrincipalId, ReplicaVersion};
 
 use anyhow::Result;
 use candid::Principal;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::{thread, time::Duration};
 
 const DKG_INTERVAL: u64 = 9;
@@ -98,9 +98,7 @@ fn subnet_splitting_test(env: TestEnv) {
     //
     let logger = env.logger();
 
-    let initial_replica_version = env
-        .get_initial_replica_version()
-        .expect("Failed to get master version");
+    let initial_replica_version = get_guestos_img_version();
 
     let (source_subnet, destination_subnet) = get_subnets(&env);
 
@@ -129,14 +127,18 @@ fn subnet_splitting_test(env: TestEnv) {
         "Starting splitting of subnet {}", source_subnet.subnet_id,
     );
 
+    let ssh_priv_key_path = env
+        .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
+        .join(SSH_USERNAME);
+    let readonly_pub_key =
+        file_sync_helper::read_file(&env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR).join(SSH_USERNAME))
+            .expect("Couldn't read public key");
+
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: get_nns_node(&env.topology_snapshot()).get_public_url(),
         replica_version: Some(initial_replica_version.clone()),
-        key_file: Some(
-            env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
-                .join(SSH_USERNAME),
-        ),
+        admin_key_file: Some(ssh_priv_key_path.clone()),
         test_mode: true,
         skip_prompts: true,
         use_local_binaries: false,
@@ -145,12 +147,8 @@ fn subnet_splitting_test(env: TestEnv) {
     let subnet_splitting_args = SubnetSplittingArgs {
         source_subnet_id: source_subnet.subnet_id,
         destination_subnet_id: destination_subnet.subnet_id,
-        pub_key: Some(
-            file_sync_helper::read_file(
-                &env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR).join(SSH_USERNAME),
-            )
-            .expect("Couldn't read public key"),
-        ),
+        readonly_pub_key: Some(readonly_pub_key),
+        readonly_key_file: Some(ssh_priv_key_path),
         keep_downloaded_state: Some(true),
         download_node_source: Some(download_node_source.get_ip_addr()),
         upload_node_source: Some(upload_node_source.get_ip_addr()),
@@ -175,7 +173,7 @@ fn subnet_splitting_test(env: TestEnv) {
 
         info!(logger, "{}", step.descr());
         step.exec()
-            .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
+            .unwrap_or_else(|e| panic!("Execution of step {step_type:?} failed: {e}"));
 
         if step_type == StepType::HaltSourceSubnetAtCupHeight {
             wait_until_halted_at_cup_height(&source_subnet, &logger);
@@ -325,18 +323,22 @@ fn verify_common(
     info!(logger, "Verifying the subnet record in the registry");
     assert!(!subnet.raw_subnet_record().halt_at_cup_height);
     assert!(!subnet.raw_subnet_record().is_halted);
-    assert!(subnet
-        .subnet_canister_ranges()
-        .iter()
-        .any(|canister_id_range| canister_id_range
-            .contains(&canister_id_from_principal(canister_id))));
+    assert!(
+        subnet
+            .subnet_canister_ranges()
+            .iter()
+            .any(|canister_id_range| canister_id_range
+                .contains(&canister_id_from_principal(canister_id)))
+    );
 
     info!(logger, "Verifying that the subnet is healthy");
+    let new_msg = "New message in the canister!";
     assert_subnet_is_healthy(
         &nodes,
-        replica_version.into(),
+        replica_version,
         canister_id,
         canister_message,
+        new_msg,
         logger,
     );
     info!(logger, "Success!");

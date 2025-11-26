@@ -20,7 +20,7 @@ fn base_config(out: &Path, prefix: &str) -> Config {
 
 /// Derives fields for protobuf log messages and optional fields
 macro_rules! add_log_proto_derives {
-    ($prost_build:expr, $message_type:ident, $package:expr, $log_entry_field:ident $(,$message_field:ident)*) => {{
+    ($prost_build:expr_2021, $message_type:ident, $package:expr_2021, $log_entry_field:ident $(,$message_field:ident)*) => {{
         $prost_build.type_attribute(
             std::concat!($package, ".", std::stringify!($message_type)),
             "#[derive(serde::Serialize, serde::Deserialize)]"
@@ -161,9 +161,9 @@ fn build_log_proto(def: &Path, out: &Path) {
 
     add_log_proto_derives!(
         config,
-        MaliciousBehaviourLogEntry,
-        "log.malicious_behaviour_log_entry.v1",
-        malicious_behaviour
+        MaliciousBehaviorLogEntry,
+        "log.malicious_behavior_log_entry.v1",
+        malicious_behavior
     );
 
     compile_protos(config, def, &[def.join("log/log_entry/v1/log_entry.proto")]);
@@ -214,16 +214,24 @@ fn build_registry_proto(def: &Path, out: &Path) {
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
     config.type_attribute(
-        ".registry.subnet.v1.EcdsaConfig",
-        "#[derive(candid::CandidType, Eq)]",
-    );
-    config.type_attribute(
         ".registry.subnet.v1.SubnetFeatures",
         "#[derive(candid::CandidType, Eq)]",
     );
     config.type_attribute(
         ".registry.replica_version",
         "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+    config.type_attribute(
+        ".registry.replica_version.v1.GuestLaunchMeasurement",
+        "#[derive(candid::CandidType, Eq)]",
+    );
+    config.type_attribute(
+        ".registry.replica_version.v1.GuestLaunchMeasurements",
+        "#[derive(candid::CandidType, Eq)]",
+    );
+    config.type_attribute(
+        ".registry.replica_version.v1.GuestLaunchMeasurementMetadata",
+        "#[derive(candid::CandidType, Eq)]",
     );
     config.type_attribute(
         ".registry.hostos_version",

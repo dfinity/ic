@@ -78,10 +78,10 @@ impl Config {
     }
     pub fn save_config(&self, config_path: PathBuf) -> Result<(), String> {
         let json = serde_json::to_string_pretty(self)
-            .map_err(|err| format!("Error serializing config: {:?}", err))?;
+            .map_err(|err| format!("Error serializing config: {err:?}"))?;
         let mut file = File::create(config_path)
-            .map_err(|err| format!("Error creating config file: {:?}", err))?;
+            .map_err(|err| format!("Error creating config file: {err:?}"))?;
         file.write_all(json.as_bytes())
-            .map_err(|err| format!("Error writing config: {:?}", err))
+            .map_err(|err| format!("Error writing config: {err:?}"))
     }
 }

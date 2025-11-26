@@ -1,4 +1,4 @@
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use prometheus::{Histogram, HistogramVec, IntCounterVec};
 
 // Constants for metric label names

@@ -1,4 +1,4 @@
-use crate::blocklist::{is_blocked, ETH_ADDRESS_BLOCKLIST, SAMPLE_BLOCKED_ADDRESS};
+use crate::blocklist::{ETH_ADDRESS_BLOCKLIST, SAMPLE_BLOCKED_ADDRESS, is_blocked};
 use ic_ethereum_types::Address;
 use std::str::FromStr;
 
@@ -12,9 +12,9 @@ fn check_blocklist_is_sorted() {
 
 #[test]
 fn should_find_blocked_address() {
-    let blocked_address = Address::from_str(&format!("{:x}", SAMPLE_BLOCKED_ADDRESS)).unwrap(); // Lowercase
+    let blocked_address = Address::from_str(&format!("{SAMPLE_BLOCKED_ADDRESS:x}")).unwrap(); // Lowercase
     assert!(is_blocked(&blocked_address));
-    let blocked_address = Address::from_str(&format!("{:X}", SAMPLE_BLOCKED_ADDRESS)).unwrap(); // Uppercase
+    let blocked_address = Address::from_str(&format!("{SAMPLE_BLOCKED_ADDRESS:X}")).unwrap(); // Uppercase
     assert!(is_blocked(&blocked_address));
 
     let not_blocked_address =

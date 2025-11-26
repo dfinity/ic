@@ -1,6 +1,6 @@
 # https://hub.docker.com/_/ubuntu
-# ubuntu:noble-20250415.1
-FROM ghcr.io/dfinity/library/ubuntu@sha256:6015f66923d7afbc53558d7ccffd325d43b4e249f41a6e93eef074c9505d2233
+# ubuntu:noble-20250910
+FROM ghcr.io/dfinity/library/ubuntu@sha256:985be7c735afdf6f18aaa122c23f87d989c30bba4e9aa24c8278912aac339a8d
 ENV TZ=UTC
 
 ARG PACKAGE_FILE=ci/container/files/packages.common
@@ -10,10 +10,7 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
 
-RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
-    apt -yq update && \
-    apt -yqq install --no-install-recommends docker-ce-cli podman containernetworking-plugins buildah zip fuse-overlayfs xtail
+RUN apt -yqq install --no-install-recommends podman containernetworking-plugins buildah zip fuse-overlayfs xtail
 
 # install afl & gsutils deps for bazel-fuzzers
 RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
@@ -44,14 +41,6 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
     cd .. && \
     rm -rf e2fsdroid
 
-# Install an older libtinfo for rules_haskell
-RUN mkdir libtinfo && \
-    cd libtinfo && \
-    wget "http://mirrors.kernel.org/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb" && \
-    apt -yqq install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
-    cd .. && \
-    rm -rf libtinfo
-
 ARG mkcert_version=1.4.4
 ARG mkcert_sha=6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52
 RUN curl -fsSL https://github.com/FiloSottile/mkcert/releases/download/v${mkcert_version}/mkcert-v${mkcert_version}-linux-amd64 -o /usr/local/bin/mkcert && \
@@ -62,14 +51,6 @@ ARG bazelisk_sha=fd8fdff418a1758887520fa42da7e6ae39aefc788cf5e7f7bb8db6934d279fc
 RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.25.0/bazelisk-linux-amd64 -o /usr/bin/bazel && \
     echo "$bazelisk_sha /usr/bin/bazel" | sha256sum --check && \
     chmod 777 /usr/bin/bazel
-
-ARG nvm_version=v0.39.1
-ARG dependency_mgmt_nns_dapp_node_version=18.20.5
-ARG dependency_mgmt_default_node_version=20
-ARG dependency_mgmt_oisy_wallet_node_version=22.11.0
-ENV NVM_DIR=/opt/nvm
-RUN mkdir $NVM_DIR && \
-    curl --fail https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh -sSf | bash
 
 # Add cocogitto
 ARG COCOGITTO_VERSION="5.4.0"
@@ -119,11 +100,6 @@ RUN curl -sSL "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kub
     echo "7506a0ae7a59b35089853e1da2b0b9ac0258c5309ea3d165c3412904a9051d48  ${KUBECTL_BIN}" | sha256sum -c - && \
     chmod +x "${KUBECTL_BIN}"
 
-RUN . /opt/nvm/nvm.sh && \
-    nvm install ${dependency_mgmt_nns_dapp_node_version} && \
-    nvm install ${dependency_mgmt_default_node_version} && \
-    nvm install ${dependency_mgmt_oisy_wallet_node_version}
-
 # Create user groups needed for github actions runner
 RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
     # CI before script requires sudo \
@@ -153,10 +129,7 @@ COPY ./ci/container/files/generate-bazel-completion.sh /tmp/
 RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-completion.sh && \
     echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
 
-RUN mv /usr/bin/docker /usr/bin/docker-bin
 COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
-COPY ./ci/container/files/docker.sh /usr/bin/docker
-COPY ./ci/container/files/entrypoint.sh /entrypoint.sh
 
 USER ubuntu
 
@@ -186,9 +159,6 @@ RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
 # Add zshrc generated from zsh-newuser-install (option 2)
 COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
 
-# Whitelist some SSH keys
-COPY --chmod=0700 ./ci/container/files/known_hosts /etc/ssh/ssh_known_hosts
-
 # Read in the build-ci script
 COPY ./ci/container/TAG /home/ubuntu/.DFINITY-TAG
 
@@ -197,5 +167,4 @@ WORKDIR /
 # In GitHub that is the case and we need 1001 and we set it via ARG.
 ARG CI_USER="root"
 USER $CI_USER
-ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]

@@ -10,7 +10,7 @@ use ic_registry_client_helpers::{
     subnet::SubnetRegistry,
 };
 use prometheus::{GaugeVec, IntCounter, Opts};
-use rand::{thread_rng, Rng};
+use rand::{Rng, thread_rng};
 use std::{
     collections::BTreeMap,
     convert::TryFrom,
@@ -18,7 +18,7 @@ use std::{
     time::Duration,
 };
 
-use super::{get_node_operator_id, Error};
+use super::{Error, get_node_operator_id};
 
 /// Function that generates a random value in the range [`low`, `high`), i.e.
 /// inclusive of `low` and exclusive of `high`
@@ -151,12 +151,11 @@ impl ProximityMap {
         for (i, node) in nodes.iter().enumerate() {
             if let Some(node_operator) =
                 get_node_operator_id(node, self.registry.as_ref(), &version, &self.log)
+                && let Some(node_weight) = self.weight(&node_operator)
             {
-                if let Some(node_weight) = self.weight(&node_operator) {
-                    node_weights[i] = node_weight;
-                    total_weight += node_weight;
-                    weighted_nodes += 1;
-                }
+                node_weights[i] = node_weight;
+                total_weight += node_weight;
+                weighted_nodes += 1;
             }
         }
 

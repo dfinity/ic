@@ -1,31 +1,32 @@
+use crate::Config;
 use crate::metrics::{
     AdapterMetrics, LABEL_BODY_RECEIVE_SIZE, LABEL_CONNECT, LABEL_DOWNLOAD,
     LABEL_HEADER_RECEIVE_SIZE, LABEL_HTTP_METHOD, LABEL_REQUEST_HEADERS, LABEL_RESPONSE_HEADERS,
-    LABEL_SOCKS_PROXY_ERROR, LABEL_SOCKS_PROXY_OK, LABEL_UPLOAD, LABEL_URL_PARSE,
+    LABEL_UPLOAD, LABEL_URL_PARSE,
 };
-use crate::Config;
 use core::convert::TryFrom;
-use http::{header::USER_AGENT, HeaderName, HeaderValue, Uri};
+use futures::TryFutureExt;
+use http::{HeaderName, HeaderValue, Uri, header::USER_AGENT};
 use http_body_util::{BodyExt, Full};
 use hyper::body::Incoming;
 use hyper::{
+    Method,
     body::Bytes,
     header::{HeaderMap, ToStrError},
-    Method,
 };
 use hyper_rustls::HttpsConnector;
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_socks2::SocksConnector;
-use hyper_util::client::legacy::{connect::HttpConnector, Client};
+use hyper_util::client::legacy::{Client, connect::HttpConnector};
 use hyper_util::rt::TokioExecutor;
 use ic_https_outcalls_service::{
-    https_outcalls_service_server::HttpsOutcallsService, HttpHeader, HttpMethod,
-    HttpsOutcallRequest, HttpsOutcallResponse,
+    HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse,
+    https_outcalls_service_server::HttpsOutcallsService,
 };
-use ic_logger::{debug, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, info};
 use ic_metrics::MetricsRegistry;
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
-use rand::{seq::SliceRandom, thread_rng, Rng};
+use rand::{seq::SliceRandom, thread_rng};
 use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
@@ -50,9 +51,6 @@ const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
 /// The maximum number of times we will try to connect to a SOCKS proxy.
 const MAX_SOCKS_PROXY_TRIES: usize = 2;
 
-/// TODO(NET-1765): Inline this constant into the code and remove the feature flag.
-const NEW_SOCKS_PROXY_ROLLOUT: u32 = 100;
-
 type OutboundRequestBody = Full<Bytes>;
 
 type Cache =
@@ -60,19 +58,10 @@ type Cache =
 
 pub struct CanisterHttp {
     client: Client<HttpsConnector<HttpConnector>, OutboundRequestBody>,
-    socks_client: Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>,
     cache: Arc<RwLock<Cache>>,
     logger: ReplicaLogger,
     metrics: AdapterMetrics,
     http_connect_timeout_secs: u64,
-}
-
-fn should_only_use_new_socks_proxy() -> bool {
-    // This is a temporary feature flag to allow us to test the new socks proxy implementation
-    // without affecting the existing implementation.
-    let mut rng = rand::thread_rng();
-    let random_number: u32 = rng.gen_range(0..100);
-    random_number < NEW_SOCKS_PROXY_ROLLOUT
 }
 
 impl CanisterHttp {
@@ -82,27 +71,6 @@ impl CanisterHttp {
         http_connector.enforce_http(false);
         http_connector
             .set_connect_timeout(Some(Duration::from_secs(config.http_connect_timeout_secs)));
-        // The proxy connnector requires a the URL scheme to be specified. I.e socks5://
-        // Config validity check ensures that url includes scheme, host and port.
-        // Therefore the parse 'Uri' will be in the correct format. I.e socks5://somehost.com:1080
-        let proxy_connector = SocksConnector {
-            proxy_addr: config
-                .socks_proxy
-                .parse()
-                .expect("Failed to parse socks url."),
-            auth: None,
-            connector: http_connector.clone(),
-        };
-        let proxied_builder = HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .expect("Failed to set native roots");
-        #[cfg(not(feature = "http"))]
-        let proxied_builder = proxied_builder.https_only();
-        #[cfg(feature = "http")]
-        let proxied_builder = proxied_builder.https_or_http();
-        let proxied_https_connector = proxied_builder
-            .enable_all_versions()
-            .wrap_connector(proxy_connector);
 
         // Https client setup.
         let builder = HttpsConnectorBuilder::new()
@@ -116,15 +84,12 @@ impl CanisterHttp {
         let builder = builder.enable_all_versions();
         let direct_https_connector = builder.wrap_connector(http_connector);
 
-        let socks_client =
-            Client::builder(TokioExecutor::new()).build::<_, Full<Bytes>>(proxied_https_connector);
         let client = Client::builder(TokioExecutor::new())
             .http2_max_header_list_size(MAX_HEADER_LIST_SIZE)
             .build::<_, Full<Bytes>>(direct_https_connector);
 
         Self {
             client,
-            socks_client,
             cache: Arc::new(RwLock::new(BTreeMap::new())),
             logger,
             metrics: AdapterMetrics::new(metrics),
@@ -159,57 +124,6 @@ impl CanisterHttp {
                     connector: http_connector,
                 }),
         )
-    }
-
-    fn compare_results(
-        &self,
-        result: &Result<http::Response<Incoming>, String>,
-        dark_launch_result: &Result<http::Response<Incoming>, String>,
-    ) {
-        match (result, dark_launch_result) {
-            (Ok(result), Ok(dark_launch_result)) => {
-                self.metrics
-                    .socks_proxy_dl_requests
-                    .with_label_values(&[LABEL_SOCKS_PROXY_OK, LABEL_SOCKS_PROXY_OK])
-                    .inc();
-                if result.status() != dark_launch_result.status() {
-                    info!(
-                        self.logger,
-                        "SOCKS_PROXY_DL: status code mismatch: {} vs {}",
-                        result.status(),
-                        dark_launch_result.status(),
-                    );
-                }
-            }
-            (Err(_), Err(_)) => {
-                self.metrics
-                    .socks_proxy_dl_requests
-                    .with_label_values(&[LABEL_SOCKS_PROXY_ERROR, LABEL_SOCKS_PROXY_ERROR])
-                    .inc();
-            }
-            (Ok(_), Err(err)) => {
-                self.metrics
-                    .socks_proxy_dl_requests
-                    .with_label_values(&[LABEL_SOCKS_PROXY_OK, LABEL_SOCKS_PROXY_ERROR])
-                    .inc();
-                info!(
-                    self.logger,
-                    "SOCKS_PROXY_DL: regular request succeeded, DL request failed with error {}",
-                    err,
-                );
-            }
-            (Err(err), Ok(_)) => {
-                self.metrics
-                    .socks_proxy_dl_requests
-                    .with_label_values(&[LABEL_SOCKS_PROXY_ERROR, LABEL_SOCKS_PROXY_OK])
-                    .inc();
-                info!(
-                    self.logger,
-                    "SOCKS_PROXY_DL: DL request succeeded, regular request failed with error {}",
-                    err,
-                );
-            }
-        }
     }
 
     // Attempts to load the socks client from the cache. If not present, creates a new socks client and adds it to the cache.
@@ -316,7 +230,7 @@ impl CanisterHttp {
         }
 
         if let Some(last_error) = last_error {
-            Err(format!("{:?}", last_error))
+            Err(format!("{last_error:?}"))
         } else {
             Err("No SOCKS proxy addresses provided".to_string())
         }
@@ -341,7 +255,7 @@ impl HttpsOutcallsService for CanisterHttp {
                 .inc();
             Status::new(
                 tonic::Code::InvalidArgument,
-                format!("Failed to parse URL: {}", err),
+                format!("Failed to parse URL: {err}"),
             )
         })?;
 
@@ -380,7 +294,7 @@ impl HttpsOutcallsService for CanisterHttp {
                         .inc();
                     Err(Status::new(
                         tonic::Code::InvalidArgument,
-                        format!("Unsupported HTTP method {:?}", method),
+                        format!("Unsupported HTTP method {method:?}"),
                     ))
                 }
             })?;
@@ -402,122 +316,43 @@ impl HttpsOutcallsService for CanisterHttp {
             .map(|(name, value)| name.as_str().len() + value.len())
             .sum::<usize>();
 
-        // If we are allowed to use socks and condition described in `should_use_socks_proxy` hold,
-        // we do the requests through the socks proxy. If not we use the default IPv6 route.
-        let http_resp = if req.socks_proxy_allowed { // System subnet
-            // Http request does not implement clone. So we have to manually construct a clone.
-            let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
-            *http_req.headers_mut() = headers;
-            *http_req.method_mut() = method;
-            *http_req.uri_mut() = uri.clone();
-            let http_req_clone = http_req.clone();
+        // Http request does not implement clone. So we have to manually construct a clone.
+        let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
+        *http_req.headers_mut() = headers;
+        *http_req.method_mut() = method;
+        *http_req.uri_mut() = uri.clone();
+        let http_req_clone = http_req.clone();
 
-            match self.client.request(http_req).await {
-                // If we fail we try with the socks proxy. For destinations that are ipv4 only this should
+        let http_resp = self
+            .client
+            .request(http_req)
+            .or_else(|direct_err| async move {
+                // If we fail, we try with the socks proxy. For destinations that are ipv4 only this should
                 // fail fast because our interface does not have an ipv4 assigned.
-                Err(direct_err) => {
-                    self.metrics.requests_socks.inc();
-
-                    let deprecated_result =  if should_only_use_new_socks_proxy() {
-                        None
-                    } else {
-                        Some(self
-                            .socks_client
-                            .request(http_req_clone.clone())
-                            .await
-                            .map_err(|socks_err| {
-                                format!(
-                                    "Request failed direct connect {:?} and connect through socks {:?}",
-                                    direct_err, socks_err
-                                )
-                            }))
-                        };
-
-                    //TODO(NET-1765): Remove the compare_results once we are confident in the SOCKS proxy implementation.
-                    if !req.socks_proxy_addrs.is_empty() {
-                        let dark_launch_result = self
-                            .do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone)
-                            .await;
-                        match deprecated_result {
-                            Some(deprecated_result) => {
-                                // We compare the results of the deprecated socks proxy implementation with the new one.
-                                self.compare_results(&deprecated_result, &dark_launch_result);
-                                if deprecated_result.is_err() && dark_launch_result.is_ok() {
-                                    // If dl found something, return that.
-                                    dark_launch_result
-                                } else {
-                                    deprecated_result
-                                }
-                            }
-                            None => {
-                                // Eventually only this branch should be active. 
-                                dark_launch_result
-                            }
-                        }
-                    } else {
-                        // We didn't receive any proxy addresses to use; this could mean one of several things:
-                        // 1. There is an issue somewhere in the registry
-                        // 2. There really are no active API boundary nodes
-                        // 3. The caller does not want to proxy requests via the socks server.
-                        // TODO: consider using the already stored socks clients.
-                        match deprecated_result {
-                            Some(resp) => {
-                                warn!(self.logger, "SOCKS_PROXY_DL: No socks proxy addresses provided, falling back to old socks client");
-                                resp
-                            }
-                            None => {
-                                warn!(self.logger, "SOCKS_PROXY_DL: No socks proxy addresses provided, old socks client not available");
-                                Err("No socks proxy addresses provided".to_string())
-                            }
-                        }
-                    }
-                }
-                Ok(resp) => Ok(resp),
-            }
-        } else { // Application subnet. 
-            // TODO: as technically socks proxies are now tried all the time, instead of using
-            // the "socks_proxy_allowed" flag, we should instead send the relevant URLs in the 
-            // "socks_proxy_addrs" param. Particularly, the caller should send the API BNs in 
-            // the case of system subnets, and the socks5.ic0.app URL in the case of app subnets.
-            let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
-            *http_req.headers_mut() = headers;
-            *http_req.method_mut() = method;
-            *http_req.uri_mut() = uri.clone();
-            let http_req_clone = http_req.clone();
-            match self.client
-                .request(http_req)
-                .await {
-                Ok(http_resp) => Ok(http_resp),
-                Err(direct_err) => {
-                    self.metrics.requests_socks.inc();
-                    self
-                        .socks_client
-                        .request(http_req_clone)
-                        .await
-                        .map_err(|socks_err| {
+                self.metrics.requests_socks.inc();
+                info!(
+                    self.logger,
+                    "Direct connection failed, trying via socks proxies with addsrs: {:?}",
+                    req.socks_proxy_addrs
+                );
+                self.do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone)
+                    .await
+                    .map_err(|socks_err| {
+                        self.metrics
+                            .request_errors
+                            .with_label_values(&[LABEL_CONNECT])
+                            .inc();
+                        Status::new(
+                            tonic::Code::Unavailable,
                             format!(
-                                "Request failed direct connect {:?} and connect through socks {:?} (Please note that the canister HTTPS outcalls feature is an IPv6-only feature. While IPv4 is an experimental feature, it cannot be relied upon for this functionality. For more information, please consult the Internet Computer developer documentation)",
-                                direct_err, socks_err
-                            )
-                        })
-                    }
-            }
-        }
-        .map_err(|err| {
-            debug!(self.logger, "Failed to connect: {}", err);
-            self.metrics
-                .request_errors
-                .with_label_values(&[LABEL_CONNECT])
-                .inc();
-            Status::new(
-                tonic::Code::Unavailable,
-                format!(
-                    "Connecting to {:.50} failed: {}",
-                    uri.host().unwrap_or(""),
-                    err,
-                ),
-            )
-        })?;
+                                "Connecting to {:.50} failed: direct connect {direct_err:?} 
+                                and connect through socks {socks_err:?}",
+                                uri.host().unwrap_or(""),
+                            ),
+                        )
+                    })
+            })
+            .await?;
         self.metrics
             .network_traffic
             .with_label_values(&[LABEL_UPLOAD])
@@ -547,7 +382,7 @@ impl HttpsOutcallsService for CanisterHttp {
                     .inc();
                 Status::new(
                     tonic::Code::Unavailable,
-                    format!("Failed to parse headers: {}", err),
+                    format!("Failed to parse headers: {err}"),
                 )
             })?;
 
@@ -600,12 +435,13 @@ impl HttpsOutcallsService for CanisterHttp {
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn validate_headers(raw_headers: Vec<HttpHeader>) -> Result<HeaderMap, Status> {
     // Check we are within limit for number of headers.
     if raw_headers.len() > HEADERS_LIMIT {
         return Err(Status::new(
             tonic::Code::InvalidArgument,
-            format!("Too many headers. Maximum allowed: {}", HEADERS_LIMIT),
+            format!("Too many headers. Maximum allowed: {HEADERS_LIMIT}"),
         ));
     }
     // Check that header name and values are within limit.
@@ -615,10 +451,7 @@ fn validate_headers(raw_headers: Vec<HttpHeader>) -> Result<HeaderMap, Status> {
     {
         return Err(Status::new(
             tonic::Code::InvalidArgument,
-            format!(
-                "Header name or value exceeds size limit of {}",
-                HEADER_NAME_VALUE_LIMIT
-            ),
+            format!("Header name or value exceeds size limit of {HEADER_NAME_VALUE_LIMIT}"),
         ));
     }
 
@@ -661,7 +494,7 @@ fn add_fallback_user_agent_header(header_map: &mut HeaderMap) {
 mod tests {
     use super::*;
     use rand::distributions::Alphanumeric;
-    use rand::{thread_rng, Rng};
+    use rand::{Rng, thread_rng};
 
     #[test]
     // Verify that hyper does not panic within header limits.

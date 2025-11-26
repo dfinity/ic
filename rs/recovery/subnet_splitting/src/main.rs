@@ -1,13 +1,13 @@
 use clap::Parser;
 use ic_base_types::SubnetId;
-use ic_recovery::{cli, error::RecoveryResult, util, NeuronArgs, RecoveryArgs};
+use ic_recovery::{NeuronArgs, RecoveryArgs, cli, error::RecoveryResult, util};
 use ic_subnet_splitting::{
     subnet_splitting::{SubnetSplitting, SubnetSplittingArgs},
     utils::canister_id_ranges_to_strings,
     validation::validate_artifacts,
 };
 use ic_types::ReplicaVersion;
-use slog::{info, warn, Logger};
+use slog::{Logger, info, warn};
 use url::Url;
 
 use std::path::PathBuf;
@@ -35,9 +35,9 @@ struct SplitArgs {
     #[clap(long)]
     dir: PathBuf,
 
-    /// The path to a private key to be considered for SSH connections
+    /// The path to a private key to be considered for admin SSH connections
     #[clap(long)]
-    key_file: Option<PathBuf>,
+    admin_key_file: Option<PathBuf>,
 
     /// Flag to enter test mode
     #[clap(long)]
@@ -148,7 +148,7 @@ fn do_split(args: SplitArgs, logger: Logger) -> RecoveryResult<()> {
         dir: args.dir,
         nns_url: args.nns_url,
         replica_version: args.replica_version,
-        key_file: args.key_file,
+        admin_key_file: args.admin_key_file,
         test_mode: args.test,
         skip_prompts: args.skip_prompts,
         use_local_binaries: args.use_local_binaries,

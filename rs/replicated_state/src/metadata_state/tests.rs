@@ -1,43 +1,47 @@
 use super::*;
 use crate::metadata_state::subnet_call_context_manager::{
-    InstallCodeCall, PreSignatureStash, RawRandContext, StopCanisterCall, SubnetCallContext,
-    SubnetCallContextManager,
+    EcdsaArguments, EcdsaMatchedPreSignature, InstallCodeCall, PreSignatureStash, RawRandContext,
+    SchnorrArguments, SchnorrMatchedPreSignature, SignWithThresholdContext, StopCanisterCall,
+    SubnetCallContext, SubnetCallContextManager, ThresholdArguments,
 };
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    generate_ecdsa_presig_quadruple, generate_key_transcript, setup_unmasked_random_params,
-    CanisterThresholdSigTestEnvironment, IDkgParticipants,
+    CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_ecdsa_presig_quadruple,
+    generate_key_transcript, setup_unmasked_random_params,
 };
-use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
 use ic_error_types::{ErrorCode, UserError};
 use ic_limits::MAX_INGRESS_TTL;
 use ic_management_canister_types_private::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, IC_00,
+    EcdsaCurve, EcdsaKeyId, IC_00, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
+use ic_protobuf::proxy::ProxyDecodeError;
+use ic_protobuf::state::queues::v1 as pb_queues;
+use ic_protobuf::state::system_metadata::v1 as pb_metadata;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_test_utilities_types::{
     ids::{
-        canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id, SUBNET_0,
-        SUBNET_1, SUBNET_2,
+        SUBNET_0, SUBNET_1, SUBNET_2, canister_test_id, message_test_id, node_test_id,
+        subnet_test_id, user_test_id,
     },
     messages::{RequestBuilder, ResponseBuilder},
     xnet::{StreamHeaderBuilder, StreamSliceBuilder},
 };
 use ic_types::{
+    Cycles, ExecutionRound, Height,
     batch::BlockmakerMetrics,
-    canister_http::{CanisterHttpMethod, CanisterHttpRequestContext, Replication},
-    consensus::idkg::{common::PreSignature, PreSigId},
+    canister_http::{CanisterHttpMethod, CanisterHttpRequestContext, PricingVersion, Replication},
+    consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
     crypto::{
-        canister_threshold_sig::{
-            idkg::{IDkgDealers, IDkgReceivers, IDkgTranscript},
-            SchnorrPreSignatureTranscript,
-        },
         AlgorithmId,
+        canister_threshold_sig::{
+            SchnorrPreSignatureTranscript,
+            idkg::{IDkgDealers, IDkgReceivers, IDkgTranscript},
+        },
     },
     ingress::WasmResult,
-    messages::{CallbackId, CanisterCall, Payload, Request, RequestMetadata},
+    messages::{CallbackId, CanisterCall, Payload, Refund, Request, RequestMetadata},
     time::CoarseTime,
-    Cycles, ExecutionRound,
 };
 use ic_types::{canister_http::Transform, time::current_time};
 use lazy_static::lazy_static;
@@ -84,6 +88,7 @@ fn can_prune_old_ingress_history_entries() {
         },
         time,
         NumBytes::from(u64::MAX),
+        |_| {},
     );
     ingress_history.insert(
         message_id2.clone(),
@@ -95,6 +100,7 @@ fn can_prune_old_ingress_history_entries() {
         },
         time,
         NumBytes::from(u64::MAX),
+        |_| {},
     );
     ingress_history.insert(
         message_id3.clone(),
@@ -106,6 +112,7 @@ fn can_prune_old_ingress_history_entries() {
         },
         time + MAX_INGRESS_TTL / 2,
         NumBytes::from(u64::MAX),
+        |_| {},
     );
 
     // Pretend that the time has advanced
@@ -133,6 +140,7 @@ fn entries_sorted_lexicographically() {
             },
             time,
             NumBytes::from(u64::MAX),
+            |_| {},
         );
     }
     let mut expected: Vec<_> = (0..10u64).map(message_test_id).collect();
@@ -426,16 +434,11 @@ fn system_metadata_split() {
     const CANISTER_1: CanisterId = CanisterId::from_u64(1);
     const CANISTER_2: CanisterId = CanisterId::from_u64(2);
 
-    // Ingress history with 4 Received messages, addressed to canisters 1 and 2;
-    // `IC_00`; and respectively `SUBNET_A`.
+    // Ingress history with 3 Received messages, addressed to canisters 1 and 2;
+    // and `IC_00` (i.e., `SUBNET_A`).
     let mut ingress_history = IngressHistoryState::new();
     let time = UNIX_EPOCH;
-    let receivers = [
-        CANISTER_1.get(),
-        CANISTER_2.get(),
-        IC_00.get(),
-        SUBNET_A.get(),
-    ];
+    let receivers = [CANISTER_1.get(), CANISTER_2.get(), IC_00.get()];
     for (i, receiver) in receivers.into_iter().enumerate().rev() {
         ingress_history.insert(
             message_test_id(i as u64),
@@ -447,6 +450,7 @@ fn system_metadata_split() {
             },
             time,
             NumBytes::from(u64::MAX),
+            |_| {},
         );
     }
     let mut subnet_queues = CanisterQueues::default();
@@ -454,7 +458,7 @@ fn system_metadata_split() {
     // `CANISTER_1` remains on `SUBNET_A`.
     let is_canister_on_subnet_a = |canister_id: CanisterId| canister_id == CANISTER_1;
     // All ingress messages except the one addressed to `CANISTER_2` (including the
-    // ones for `IC_00` and `SUBNET_A`) should remain on `SUBNET_A` after the split.
+    // ones for `IC_00`, i.e., `SUBNET_A`) should remain on `SUBNET_A` after the split.
     let is_receiver_on_subnet_a = |canister_id: CanisterId| canister_id != CANISTER_2;
     // Only ingress messages for `CANISTER_2` should be retained on `SUBNET_B`.
     let is_canister_on_subnet_b = |canister_id: CanisterId| canister_id == CANISTER_2;
@@ -599,6 +603,7 @@ fn subnet_call_contexts_deserialization() {
         transform: Some(transform.clone()),
         time: UNIX_EPOCH,
         replication: Replication::FullyReplicated,
+        pricing_version: PricingVersion::Legacy,
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,
@@ -724,38 +729,37 @@ pub fn generate_pre_signature(
     }
 }
 
+fn make_key_ids() -> Vec<IDkgMasterPublicKeyId> {
+    [
+        MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "key1".into(),
+        }),
+        MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Ed25519,
+            name: "key1".into(),
+        }),
+        MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+            name: "key1".into(),
+        }),
+    ]
+    .into_iter()
+    .map(|key_id| IDkgMasterPublicKeyId::try_from(key_id).unwrap())
+    .collect()
+}
+
 #[test]
 fn pre_signature_stash_roundtrip() {
     let rng = &mut reproducible_rng();
-    let env = CanisterThresholdSigTestEnvironment::new(34, rng);
+    let env = CanisterThresholdSigTestEnvironment::new(4, rng);
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
-    let key_id_alg = [
-        (
-            MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: "key1".into(),
-            }),
-            AlgorithmId::ThresholdEcdsaSecp256k1,
-        ),
-        (
-            MasterPublicKeyId::Schnorr(SchnorrKeyId {
-                algorithm: SchnorrAlgorithm::Ed25519,
-                name: "key1".into(),
-            }),
-            AlgorithmId::ThresholdEd25519,
-        ),
-        (
-            MasterPublicKeyId::Schnorr(SchnorrKeyId {
-                algorithm: SchnorrAlgorithm::Bip340Secp256k1,
-                name: "key1".into(),
-            }),
-            AlgorithmId::ThresholdSchnorrBip340,
-        ),
-    ];
+    let key_ids = make_key_ids();
     let mut stashes = BTreeMap::new();
     // create some stashes with pre-signatures
-    for (key_id, alg) in key_id_alg {
+    for key_id in key_ids {
+        let alg = AlgorithmId::from(key_id.inner());
         let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
         let mut pre_signatures = BTreeMap::new();
         for i in 1..10 {
@@ -774,7 +778,7 @@ fn pre_signature_stash_roundtrip() {
     }
     // insert empty stash
     stashes.insert(
-        MasterPublicKeyId::Ecdsa(make_key_id()),
+        MasterPublicKeyId::Ecdsa(make_key_id()).try_into().unwrap(),
         PreSignatureStash {
             pre_signatures: BTreeMap::new(),
             key_transcript: Arc::new(generate_key_transcript(
@@ -790,6 +794,101 @@ fn pre_signature_stash_roundtrip() {
     let mut subnet_call_context_manager: SubnetCallContextManager =
         SubnetCallContextManager::default();
     subnet_call_context_manager.pre_signature_stashes = stashes;
+
+    // Encode and decode.
+    let subnet_call_context_manager_proto: ic_protobuf::state::system_metadata::v1::SubnetCallContextManager = (&subnet_call_context_manager).into();
+    let deserialized_subnet_call_context_manager: SubnetCallContextManager =
+        SubnetCallContextManager::try_from((UNIX_EPOCH, subnet_call_context_manager_proto))
+            .unwrap();
+
+    assert_eq!(
+        subnet_call_context_manager,
+        deserialized_subnet_call_context_manager
+    );
+}
+
+#[test]
+fn sign_with_threshold_context_roundtrip() {
+    let rng = &mut reproducible_rng();
+    let env = CanisterThresholdSigTestEnvironment::new(4, rng);
+    let (dealers, receivers) =
+        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
+    let transcripts = make_key_ids().into_iter().map(|key_id| {
+        let alg = AlgorithmId::from(key_id.inner());
+        let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
+        let pre_signature =
+            generate_pre_signature(&env, &dealers, &receivers, &key_transcript, rng);
+        (key_id, key_transcript, pre_signature)
+    });
+    let mut contexts = BTreeMap::new();
+    let mut id = 1;
+
+    // create some contexts with and without pre-signatures
+    for (key_id, key_transcript, pre_signature) in transcripts {
+        let arguments = match (key_id.inner(), pre_signature) {
+            (MasterPublicKeyId::Ecdsa(key_id), PreSignature::Ecdsa(ecdsa)) => {
+                let message_hash = [1; 32];
+                let args_matched = ThresholdArguments::Ecdsa(EcdsaArguments {
+                    key_id: key_id.clone(),
+                    message_hash,
+                    pre_signature: Some(EcdsaMatchedPreSignature {
+                        id: PreSigId(id),
+                        height: Height::new(id),
+                        pre_signature: ecdsa,
+                        key_transcript: Arc::new(key_transcript),
+                    }),
+                });
+                let args_empty = ThresholdArguments::Ecdsa(EcdsaArguments {
+                    key_id: key_id.clone(),
+                    message_hash,
+                    pre_signature: None,
+                });
+                [args_matched, args_empty]
+            }
+            (MasterPublicKeyId::Schnorr(key_id), PreSignature::Schnorr(schnorr)) => {
+                let message = Arc::new(vec![1; 32]);
+                let args_matched = ThresholdArguments::Schnorr(SchnorrArguments {
+                    key_id: key_id.clone(),
+                    message: message.clone(),
+                    pre_signature: Some(SchnorrMatchedPreSignature {
+                        id: PreSigId(id),
+                        height: Height::new(id),
+                        pre_signature: schnorr,
+                        key_transcript: Arc::new(key_transcript),
+                    }),
+                    taproot_tree_root: Some(Arc::new(vec![2; 32])),
+                });
+                let args_empty = ThresholdArguments::Schnorr(SchnorrArguments {
+                    key_id: key_id.clone(),
+                    message,
+                    pre_signature: None,
+                    taproot_tree_root: None,
+                });
+                [args_matched, args_empty]
+            }
+            _ => panic!("unexpected combination"),
+        };
+        for args in arguments {
+            id += 1;
+            contexts.insert(
+                CallbackId::new(id),
+                SignWithThresholdContext {
+                    request: RequestBuilder::new().build(),
+                    args,
+                    derivation_path: Arc::new(vec![]),
+                    pseudo_random_id: [1; 32],
+                    batch_time: UNIX_EPOCH,
+                    matched_pre_signature: None,
+                    nonce: Some([3; 32]),
+                },
+            );
+        }
+    }
+
+    assert_eq!(contexts.len(), 6);
+    let mut subnet_call_context_manager: SubnetCallContextManager =
+        SubnetCallContextManager::default();
+    subnet_call_context_manager.sign_with_threshold_contexts = contexts;
 
     // Encode and decode.
     let subnet_call_context_manager_proto: ic_protobuf::state::system_metadata::v1::SubnetCallContextManager = (&subnet_call_context_manager).into();
@@ -856,7 +955,7 @@ fn test_status_terminal(i: u64) -> IngressStatus {
         state: IngressState::Failed(UserError::new(ErrorCode::SubnetOversubscribed, "Error")),
     };
 
-    if i % 2 == 0 {
+    if i.is_multiple_of(2) {
         test_status_completed(i)
     } else {
         test_status_failed(i)
@@ -886,6 +985,7 @@ fn ingress_history_insert_beyond_limit_will_succeed() {
             status.clone(),
             Time::from_nanos_since_unix_epoch(i),
             limit,
+            |_| {},
         );
         (message_id, status)
     };
@@ -980,12 +1080,14 @@ fn ingress_history_forget_completed_does_not_touch_other_statuses() {
             status.clone(),
             Time::from_nanos_since_unix_epoch(0),
             NumBytes::from(0),
+            |_| {},
         );
         ingress_history_no_limit.insert(
             message_test_id(i as u64),
             status,
             Time::from_nanos_since_unix_epoch(0),
             NumBytes::from(u64::MAX),
+            |_| {},
         );
     });
 
@@ -995,7 +1097,11 @@ fn ingress_history_forget_completed_does_not_touch_other_statuses() {
 
     // Forgetting terminal statuses when the ingress history only contains non-terminal
     // statuses should be a no-op.
-    ingress_history_limit.forget_terminal_statuses(NumBytes::from(0));
+    ingress_history_limit.forget_terminal_statuses(
+        NumBytes::from(0),
+        Time::from_nanos_since_unix_epoch(0),
+        |_| {},
+    );
     // ... except the next_terminal_time is updated to the first key in the `pruning_times` map.
     ingress_history_before.next_terminal_time =
         *ingress_history_limit.pruning_times().next().unwrap().0;
@@ -1019,6 +1125,7 @@ fn ingress_history_respects_limits() {
                 test_status_terminal(i),
                 Time::from_nanos_since_unix_epoch(i),
                 terminal_size,
+                |_| {},
             );
 
             let terminal_count = ingress_history
@@ -1077,13 +1184,18 @@ fn ingress_history_insert_before_next_complete_time_resets_it() {
             test_status_terminal(i),
             Time::from_nanos_since_unix_epoch(i),
             NumBytes::from(u64::MAX),
+            |_| {},
         );
     }
 
     // ... and trigger forgetting terminal statuses with a limit sufficient
     // for 5 non-terminal entries
     let status_size = NumBytes::from(5 * test_status_terminal(0).payload_bytes() as u64);
-    ingress_history.forget_terminal_statuses(status_size);
+    ingress_history.forget_terminal_statuses(
+        status_size,
+        Time::from_nanos_since_unix_epoch(0),
+        |_| {},
+    );
 
     // ... which should lead to the next_terminal_time pointing to 6 + TTL.
     assert_eq!(
@@ -1097,6 +1209,7 @@ fn ingress_history_insert_before_next_complete_time_resets_it() {
         test_status_terminal(11),
         Time::from_nanos_since_unix_epoch(3),
         NumBytes::from(u64::MAX),
+        |_| {},
     );
 
     // ... should lead to resetting the next_terminal_time to 3 + TTL.
@@ -1108,7 +1221,11 @@ fn ingress_history_insert_before_next_complete_time_resets_it() {
     // At this point forgetting terminal statuses with a limit sufficient
     // for 5 statuses should lead to "forgetting" the terminal status
     // we just inserted above.
-    ingress_history.forget_terminal_statuses(status_size);
+    ingress_history.forget_terminal_statuses(
+        status_size,
+        Time::from_nanos_since_unix_epoch(0),
+        |_| {},
+    );
 
     let expected_forgotten = ingress_history.get(&message_test_id(11)).unwrap();
 
@@ -1138,13 +1255,18 @@ fn ingress_history_forget_behaves_the_same_with_reset_next_complete_time() {
             test_status_terminal(i),
             Time::from_nanos_since_unix_epoch(i),
             NumBytes::from(u64::MAX),
+            |_| {},
         );
     }
 
     // ... and trigger forgetting terminal statuses with a limit sufficient
     // for 5 non-terminal entries
     let status_size = NumBytes::from(5 * test_status_terminal(0).payload_bytes() as u64);
-    ingress_history.forget_terminal_statuses(status_size);
+    ingress_history.forget_terminal_statuses(
+        status_size,
+        Time::from_nanos_since_unix_epoch(0),
+        |_| {},
+    );
 
     // ... which should lead to the next_terminal_time pointing to 6 + TTL.
     assert_eq!(
@@ -1167,18 +1289,28 @@ fn ingress_history_forget_behaves_the_same_with_reset_next_complete_time() {
         test_status_terminal(11),
         Time::from_nanos_since_unix_epoch(3),
         NumBytes::from(u64::MAX),
+        |_| {},
     );
     ingress_history_reset.insert(
         message_test_id(11),
         test_status_terminal(11),
         Time::from_nanos_since_unix_epoch(3),
         NumBytes::from(u64::MAX),
+        |_| {},
     );
 
     // ... and trigger forgetting terminal statuses with a limit sufficient
     // for 5 non-terminal entries
-    ingress_history.forget_terminal_statuses(status_size);
-    ingress_history_reset.forget_terminal_statuses(status_size);
+    ingress_history.forget_terminal_statuses(
+        status_size,
+        Time::from_nanos_since_unix_epoch(0),
+        |_| {},
+    );
+    ingress_history_reset.forget_terminal_statuses(
+        status_size,
+        Time::from_nanos_since_unix_epoch(0),
+        |_| {},
+    );
 
     // ... which should bring both versions of the ingress history in the
     // same state.
@@ -1198,13 +1330,18 @@ fn ingress_history_roundtrip_encode() {
             test_status_terminal(i),
             Time::from_nanos_since_unix_epoch(i),
             NumBytes::from(u64::MAX),
+            |_| {},
         );
     }
 
     // ... and trigger forgetting terminal statuses with a limit sufficient
     // for 5 non-terminal entries
     let status_size = NumBytes::from(5 * test_status_terminal(0).payload_bytes() as u64);
-    ingress_history.forget_terminal_statuses(status_size);
+    ingress_history.forget_terminal_statuses(
+        status_size,
+        Time::from_nanos_since_unix_epoch(0),
+        |_| {},
+    );
 
     let ingress_history_proto = pb::IngressHistoryState::from(&ingress_history);
 
@@ -1250,6 +1387,7 @@ fn ingress_history_split() {
                     },
                     time,
                     NumBytes::from(u64::MAX),
+                    |_| {},
                 );
             }
         }
@@ -1259,7 +1397,11 @@ fn ingress_history_split() {
     // We should have 10 messages, 5 for each canister.
     assert_eq!(10, ingress_history.len());
     // Bump `next_terminal_time` to the time of the oldest terminal state (canister_1, Completed).
-    ingress_history.forget_terminal_statuses(NumBytes::from(u64::MAX));
+    ingress_history.forget_terminal_statuses(
+        NumBytes::from(u64::MAX),
+        Time::from_nanos_since_unix_epoch(0),
+        |_| {},
+    );
     assert_ne!(
         0,
         ingress_history
@@ -1287,7 +1429,11 @@ fn ingress_history_split() {
     // We should only have 8 messages, 3 terminal ones for canister_1 and 5 for canister_2.
     assert_eq!(8, expected.len());
     // Bump `next_terminal_time` to the time of the oldest terminal state (canister_1, Completed).
-    expected.forget_terminal_statuses(NumBytes::from(u64::MAX));
+    expected.forget_terminal_statuses(
+        NumBytes::from(u64::MAX),
+        Time::from_nanos_since_unix_epoch(0),
+        |_| {},
+    );
 
     ingress_history.prune_after_split(is_local_canister);
     assert_eq!(expected, ingress_history);
@@ -1395,6 +1541,40 @@ fn stream_discard_messages_before_returns_expected_messages() {
 
     assert_eq!(expected_stream, stream);
     assert_eq!(rejected_messages, expected_rejected_messages);
+}
+
+#[test]
+fn stream_discard_messages_before_returns_expected_refunds() {
+    // A stream with 3 refund messages at indices 30..=32.
+    let mut messages = StreamIndexedQueue::with_begin(30.into());
+    let refund30 = Arc::new(Refund::anonymous(*LOCAL_CANISTER, Cycles::new(1_000_000)));
+    let refund31 = Arc::new(Refund::anonymous(*LOCAL_CANISTER, Cycles::new(2_000_000)));
+    let refund32 = Arc::new(Refund::anonymous(*LOCAL_CANISTER, Cycles::new(3_000_000)));
+    messages.push(StreamMessage::Refund(refund30.clone()));
+    messages.push(StreamMessage::Refund(refund31.clone()));
+    messages.push(StreamMessage::Refund(refund32.clone()));
+    let mut stream = Stream::new(messages, 42.into());
+
+    // Discard messages before index 32, rejecting refund @31.
+    let reject_signal = RejectSignal::new(RejectReason::CanisterMigrating, 31.into());
+    let slice_reject_signals: VecDeque<RejectSignal> = vec![reject_signal.clone()].into();
+    let slice_signals_end = 32.into();
+
+    let rejected_messages =
+        stream.discard_messages_before(slice_signals_end, &slice_reject_signals);
+
+    // Expect refund @32 to remain in the stream, refund @31 to be rejected.
+    let mut expected_messages = StreamIndexedQueue::with_begin(32.into());
+    expected_messages.push(StreamMessage::Refund(refund32.clone()));
+    let expected_stream = Stream::new(expected_messages, 42.into());
+    assert_eq!(expected_stream, stream);
+    assert_eq!(
+        vec![(
+            RejectReason::CanisterMigrating,
+            StreamMessage::Refund(refund31)
+        )],
+        rejected_messages
+    );
 }
 
 #[test]
@@ -1606,6 +1786,9 @@ fn stream_roundtrip_encoding() {
         .into(),
     );
 
+    // Push an anonymous refund.
+    messages.push(Refund::anonymous(*LOCAL_CANISTER, Cycles::from(3_456_789_u128)).into());
+
     let mut stream = Stream::with_signals(
         messages,
         153.into(),
@@ -1693,6 +1876,15 @@ fn compatibility_for_reject_reason() {
             .collect::<Vec<i32>>(),
         [1, 2, 3, 4, 5, 6, 7]
     );
+}
+
+#[test]
+fn refund_proto_roundtrip() {
+    let initial = Refund::anonymous(*LOCAL_CANISTER, Cycles::new(1_000_000));
+    let encoded = pb_queues::Refund::from(&initial);
+    let round_trip = Refund::try_from(encoded).unwrap();
+
+    assert_eq!(initial, round_trip);
 }
 
 #[test]
@@ -1883,10 +2075,12 @@ fn blockmaker_metrics_time_series_check_observe_works() {
     );
 
     // Check `metrics_since()` returns nothing for a time after the last observation.
-    assert!(metrics
-        .metrics_since(later_batch_time + Duration::from_secs(365 * 24 * 3600))
-        .next()
-        .is_none());
+    assert!(
+        metrics
+            .metrics_since(later_batch_time + Duration::from_secs(365 * 24 * 3600))
+            .next()
+            .is_none()
+    );
 
     // Check `observe()` does nothing with a batch time before the last obseration.
     let metrics_before = metrics.clone();
@@ -1952,9 +2146,11 @@ fn blockmaker_metrics_time_series_observe_prunes() {
             subnet_stats: (1, 0).into(),
         },
     );
-    assert!(metrics
-        .metrics_since(batch_time)
-        .eq(expected_snapshots.iter()));
+    assert!(
+        metrics
+            .metrics_since(batch_time)
+            .eq(expected_snapshots.iter())
+    );
     // Check `test_id_2` was observed in the running stats.
     assert_eq!(
         metrics.running_stats(),
@@ -1990,9 +2186,11 @@ fn blockmaker_metrics_time_series_observe_prunes() {
             subnet_stats: (2, 0).into(),
         },
     );
-    assert!(metrics
-        .metrics_since(batch_time)
-        .eq(expected_snapshots.iter()));
+    assert!(
+        metrics
+            .metrics_since(batch_time)
+            .eq(expected_snapshots.iter())
+    );
     // `test_id_1` should be pruned from the running stats.
     assert_eq!(
         metrics.running_stats(),
@@ -2054,9 +2252,11 @@ fn blockmaker_metrics_time_series_observe_prunes() {
             subnet_stats: (4, 0).into(),
         },
     );
-    assert!(metrics
-        .metrics_since(batch_time)
-        .eq(expected_snapshots.iter()));
+    assert!(
+        metrics
+            .metrics_since(batch_time)
+            .eq(expected_snapshots.iter())
+    );
     assert_eq!(
         metrics.running_stats(),
         Some((

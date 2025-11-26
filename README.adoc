@@ -112,15 +112,17 @@ The Internet Computer provides a robust system for verifying the build reproduci
 
 To verify an IC OS Version Election proposal:
 
+IMPORTANT: Always use versioned repro-check URLs (replace `{COMMIT_ID}` with the actual commit hash) instead of `master` to ensure compatibility between the repro-check script and the build system for that specific commit.
+
 [source,bash]
 ----
 # Verify by proposal number
-curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check | \
+curl -fsSL https://raw.githubusercontent.com/dfinity/ic/{COMMIT_ID}/ci/scripts/repro-check | \
     python3 - -p <proposal_number>
 
 # Verify by git commit
-curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check | \
-    python3 - -c <git-commit>
+curl -fsSL https://raw.githubusercontent.com/dfinity/ic/{COMMIT_ID}/ci/scripts/repro-check | \
+    python3 - -c {COMMIT_ID}
 ----
 
 === Component-Specific Verification
@@ -130,16 +132,16 @@ You can verify specific components individually:
 [source,bash]
 ----
 # Verify GuestOS only
-curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check | \
-    python3 - -c <git-commit> --guestos
+curl -fsSL https://raw.githubusercontent.com/dfinity/ic/{COMMIT_ID}/ci/scripts/repro-check | \
+    python3 - -c {COMMIT_ID} --guestos
 
 # Verify HostOS only
-curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check | \
-    python3 - -c <git-commit> --hostos
+curl -fsSL https://raw.githubusercontent.com/dfinity/ic/{COMMIT_ID}/ci/scripts/repro-check | \
+    python3 - -c {COMMIT_ID} --hostos
 
 # Verify SetupOS only
-curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/tools/repro-check | \
-    python3 - -c <git-commit> --setupos
+curl -fsSL https://raw.githubusercontent.com/dfinity/ic/{COMMIT_ID}/ci/scripts/repro-check | \
+    python3 - -c {COMMIT_ID} --setupos
 ----
 
 == Contributing
@@ -161,9 +163,7 @@ and verify that it derives from the same binary image that is referenced in
 upgrade proposals published via the Network Nervous System (NNS).
 
 All code of the Internet Computer is be licensed under the Apache 2.0 license, except for a
-few components licensed under the http://dfinity.org/licenses/IC-1.0[Internet Computer Community
-Source License] and http://dfinity.org/licenses/IC-shared-1.0[Internet Computer Shared Community Source License] which are more restrictive than the Apache 2.0 license to protect the Intellectual Property (IP) of the DFINITY Foundation.
-
+few components licensed under the link:licenses/IC-1.0.txt[Internet Computer Community Source License] and link:licenses/IC-shared-1.0.txt[Internet Computer Shared Community Source License] which are more restrictive than the Apache 2.0 license to protect the Intellectual Property (IP) of the DFINITY Foundation.
 
 While we adapt our development processes and security reviews for a world of developing with our code in the open, we are not accepting any pull requests at this time. For now, please join our developer community at https://forum.dfinity.org. If you discover any bugs and vulnerabilities, please follow the procedure at https://dfinity.org/vulnerability-disclosure-program/.
 

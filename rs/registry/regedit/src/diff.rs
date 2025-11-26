@@ -1,8 +1,8 @@
 use crate::{
     json, protobuf,
-    snapshot::{Snapshot, SPECIAL_FIELD_PREFIX, VERSION_FIELD},
+    snapshot::{SPECIAL_FIELD_PREFIX, Snapshot, VERSION_FIELD},
 };
-use anyhow::{anyhow, ensure, Result};
+use anyhow::{Result, anyhow, ensure};
 use ic_base_types::RegistryVersion;
 use ic_registry_local_store::{ChangelogEntry, KeyMutation};
 use serde_json::Value;

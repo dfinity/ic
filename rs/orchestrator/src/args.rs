@@ -84,7 +84,7 @@ impl OrchestratorArgs {
 
     /// Parse `self.replica_config_file` and persist in
     /// [`TempDir`][tempfile::TempDir] "ic_config"
-    pub(crate) fn get_ic_config(&self) -> Config {
+    pub fn get_ic_config(&self) -> Config {
         let tmpdir = tempfile::Builder::new()
             .prefix("ic_config")
             .tempdir()

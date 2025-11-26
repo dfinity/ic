@@ -7,19 +7,20 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_governance_api::{
+    AddOrRemoveNodeProvider, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, NnsFunction, NodeProvider, ProposalActionRequest, ProposalStatus,
     add_or_remove_node_provider::Change, manage_neuron::NeuronIdOrSubaccount,
-    manage_neuron_response::Command as CommandResponse, AddOrRemoveNodeProvider,
-    MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
-    NnsFunction, NodeProvider, ProposalActionRequest, ProposalStatus,
+    manage_neuron_response::Command as CommandResponse,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{submit_external_update_proposal, wait_for_final_state},
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
     registry::{get_value, get_value_or_panic, prepare_add_node_payload},
 };
-use ic_protobuf::registry::node::v1::NodeRecord;
+use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_registry_keys::make_node_record_key;
+use maplit::btreemap;
 use registry_canister::mutations::{
     do_add_node_operator::AddNodeOperatorPayload,
     node_management::do_remove_nodes::RemoveNodesPayload,
@@ -82,10 +83,9 @@ fn test_add_and_remove_nodes_from_registry() {
             .unwrap()
         {
             CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
-            some_error => panic!(
-                "Cannot find proposal id in response. The response is: {:?}",
-                some_error
-            ),
+            some_error => {
+                panic!("Cannot find proposal id in response. The response is: {some_error:?}")
+            }
         };
 
         // Wait for the proposal to be accepted and executed.
@@ -98,12 +98,14 @@ fn test_add_and_remove_nodes_from_registry() {
 
         let proposal_payload = AddNodeOperatorPayload {
             node_operator_principal_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-            node_allowance: 5,
             node_provider_principal_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
             dc_id: "an1".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: Some("0:0:0:0:0:0:0:0".into()),
-            max_rewardable_nodes: None,
+            max_rewardable_nodes: Some(btreemap! {
+                NodeRewardType::Type1.to_string() => 5
+            }),
+            ..Default::default()
         };
 
         submit_external_update_proposal(
@@ -117,7 +119,7 @@ fn test_add_and_remove_nodes_from_registry() {
         )
         .await;
 
-        let (payload, _) = prepare_add_node_payload(1);
+        let (payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
         // To fix occasional flakiness similar to this error:
         // invalid TLS certificate: notBefore date (=ASN1Time(2024-12-12 13:17:08.0 +00:00:00)) \
         //      is in the future compared to current time (=ASN1Time(2024-12-12 13:16:39.0 +00:00:00))\"
@@ -145,11 +147,7 @@ fn test_add_and_remove_nodes_from_registry() {
         )
         .await;
         // Check if some fields are present
-        assert!(
-            node_record.http.is_some(),
-            "node_record : {:?}",
-            node_record
-        );
+        assert!(node_record.http.is_some(), "node_record : {node_record:?}");
 
         let proposal_payload = RemoveNodesPayload {
             node_ids: vec![node_id],
@@ -178,7 +176,7 @@ fn test_add_and_remove_nodes_from_registry() {
         )
         .await;
         // Check if record is removed
-        assert!(node_record.is_none(), "node_record : {:?}", node_record);
+        assert!(node_record.is_none(), "node_record : {node_record:?}");
 
         Ok(())
     });

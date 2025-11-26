@@ -24,7 +24,6 @@ DEPENDENCIES = [
     "@crate_index//:num-traits",
     "@crate_index//:scopeguard",
     "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
     "@crate_index//:serde_json",
 ]
 
@@ -102,12 +101,14 @@ rust_test(
         data = [
             conf["index_wasm"],
             conf["ledger_wasm"],
+            "//rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger:icrc3_test_ledger_canister.wasm.gz",
         ],
         env = {
             "RUST_TEST_THREADS": "4",
             "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/index-ng",
             "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath " + conf["index_wasm"] + ")",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath " + conf["ledger_wasm"] + ")",
+            "IC_ICRC3_TEST_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger:icrc3_test_ledger_canister.wasm.gz)",
         },
         extra_srcs = ["tests/common/mod.rs"],
         tags = ["cpu:4"],
@@ -121,10 +122,11 @@ rust_test(
             "//rs/ledger_suite/icrc1",
             "//rs/ledger_suite/icrc1/ledger",
             "//rs/ledger_suite/icrc1/test_utils",
+            "//rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger",
             "//rs/ledger_suite/icrc1/tokens_u64",
+            "//rs/ledger_suite/test_utils/state_machine_helpers:ic-ledger-suite-state-machine-helpers",
             "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
             "//rs/registry/subnet_type",
-            "//rs/rosetta-api/icp/test_utils",
             "//rs/state_machine_tests",
             "//rs/test_utilities/load_wasm",
             "//rs/types/base_types",
@@ -134,7 +136,6 @@ rust_test(
             "@crate_index//:num-traits",
             "@crate_index//:proptest",
             "@crate_index//:serde",
-            "@crate_index//:serde_bytes",
             "@crate_index//:serde_json",
         ],
     )
@@ -212,6 +213,7 @@ rust_ic_test_suite_with_extra_srcs(
         "//rs/ledger_suite/common/ledger_canister_core",
         "//rs/ledger_suite/icrc1/ledger",
         "//rs/ledger_suite/icrc1/test_utils",
+        "//rs/ledger_suite/test_utils/state_machine_helpers:ic-ledger-suite-state-machine-helpers",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
@@ -220,7 +222,6 @@ rust_ic_test_suite_with_extra_srcs(
         "@crate_index//:ic-agent",
         "@crate_index//:num-traits",
         "@crate_index//:serde",
-        "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
     ],
 )

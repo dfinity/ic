@@ -30,8 +30,7 @@ fn test_e8s_to_tokens() {
         assert_eq!(
             denominations_to_tokens(e8s, E8),
             Some(Decimal::from(e8s) / Decimal::from(E8)),
-            "{}",
-            e8s
+            "{e8s}"
         );
     }
 }

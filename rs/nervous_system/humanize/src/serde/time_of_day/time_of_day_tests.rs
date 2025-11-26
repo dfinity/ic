@@ -15,7 +15,7 @@ fn test_round_trip() {
             lunchtime: GlobalTimeOfDay,
         }
 
-        let yaml = format!("lunchtime: {}", original_time_of_day_str);
+        let yaml = format!("lunchtime: {original_time_of_day_str}");
         let t: T = serde_yaml::from_str(&yaml).unwrap();
 
         assert_eq!(
@@ -25,13 +25,12 @@ fn test_round_trip() {
                     seconds_after_utc_midnight: Some(expected_seconds_after_utc_midnight),
                 }
             },
-            "original_time_of_day_str = {:?}",
-            original_time_of_day_str,
+            "original_time_of_day_str = {original_time_of_day_str:?}",
         );
 
         assert_eq!(
             serde_yaml::to_string(&t).unwrap(),
-            format!("lunchtime: {}\n", expected_formatted_str),
+            format!("lunchtime: {expected_formatted_str}\n"),
             "original_time_of_day_str = {:?}",
             original_time_of_day_str,
         );

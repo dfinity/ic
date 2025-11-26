@@ -10,7 +10,7 @@ fn cheating_dlog_instance<R: rand::RngCore + rand::CryptoRng>(
 ) -> (Scalar, Gt) {
     let z = 1069531200 * 16 * m as u64;
 
-    let s = Scalar::from_u64(rng.gen::<u64>() % z);
+    let s = Scalar::from_u64(rng.r#gen::<u64>() % z);
 
     let delta = if use_max_delta {
         // Instead of maximum delta (255) we use the largest
@@ -19,7 +19,7 @@ fn cheating_dlog_instance<R: rand::RngCore + rand::CryptoRng>(
         // the most pessimal delta.
         251
     } else {
-        std::cmp::max(1, rng.gen::<u16>() % 10)
+        std::cmp::max(1, rng.r#gen::<u16>() % 10)
     } as u64;
     let delta = Scalar::from_u64(delta);
 

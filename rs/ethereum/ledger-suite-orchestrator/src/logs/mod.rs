@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use ic_canister_log::{declare_log_buffer, export as export_logs, GlobalBuffer, Sink};
+use ic_canister_log::{GlobalBuffer, Sink, declare_log_buffer, export as export_logs};
 use serde::Deserialize;
 use std::str::FromStr;
 

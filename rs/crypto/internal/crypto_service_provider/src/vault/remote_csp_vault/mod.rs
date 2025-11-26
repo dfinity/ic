@@ -4,9 +4,10 @@ use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
     CspMultiSignatureKeygenError, CspPublicKeyStoreError, CspSecretKeyStoreContainsError,
     CspTlsKeygenError, CspTlsSignError, IDkgCreateDealingVaultError, IDkgDealingInternalBytes,
-    IDkgTranscriptInternalBytes, PksAndSksContainsErrors, PublicRandomSeedGeneratorError,
-    ThresholdSchnorrCreateSigShareVaultError, ThresholdSchnorrSigShareBytes,
-    ValidatePksAndSksError, VetKdEncryptedKeyShareCreationVaultError,
+    IDkgTranscriptInternalBytes, IDkgTranscriptOperationInternalBytes, PksAndSksContainsErrors,
+    PublicRandomSeedGeneratorError, ThresholdSchnorrCreateSigShareVaultError,
+    ThresholdSchnorrSigShareBytes, ValidatePksAndSksError,
+    VetKdEncryptedKeyShareCreationVaultError,
 };
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
@@ -22,15 +23,13 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::crypto::v1::PublicKey;
+use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgTranscriptOperation,
-};
+use ic_types::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealing;
 use ic_types::crypto::vetkd::{VetKdDerivationContext, VetKdEncryptedKeyShareContent};
-use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use serde_bytes::ByteBuf;
@@ -44,16 +43,16 @@ mod robust_unix_socket;
 mod tarpc_csp_vault_client;
 mod tarpc_csp_vault_server;
 
+use crate::ExternalPublicKeys;
 use crate::key_id::KeyId;
 pub use crate::vault::local_csp_vault::ProdLocalCspVault;
-use crate::ExternalPublicKeys;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use std::sync::Arc;
 pub use tarpc_csp_vault_client::{RemoteCspVault, RemoteCspVaultBuilder};
 pub use tarpc_csp_vault_server::{TarpcCspVaultServerImpl, TarpcCspVaultServerImplBuilder};
-use tokio_util::codec::length_delimited::Builder;
 use tokio_util::codec::LengthDelimitedCodec;
+use tokio_util::codec::length_delimited::Builder;
 
 #[cfg(test)]
 mod tests;
@@ -83,8 +82,8 @@ pub trait TarpcCspVault {
     ) -> Result<CspSignature, CspMultiSignatureError>;
 
     // Corresponds to `MultiSignatureCspVault.gen_committee_signing_key_pair()`.
-    async fn gen_committee_signing_key_pair(
-    ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError>;
+    async fn gen_committee_signing_key_pair()
+    -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError>;
 
     // Corresponds to `ThresholdSignatureCspVault.threshold_sign()`.
     async fn threshold_sign(
@@ -137,8 +136,8 @@ pub trait TarpcCspVault {
     async fn current_node_public_keys() -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;
 
     // Corresponds to `PublicKeyStoreCspVault.current_node_public_keys_with_timestamps()`.
-    async fn current_node_public_keys_with_timestamps(
-    ) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;
+    async fn current_node_public_keys_with_timestamps()
+    -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;
 
     // Corresponds to `PublicKeyStoreCspVault.idkg_key_count()`.
     async fn idkg_key_count() -> Result<usize, CspPublicKeyStoreError>;
@@ -165,7 +164,7 @@ pub trait TarpcCspVault {
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
         receiver_keys: Vec<PublicKey>,
-        transcript_operation: IDkgTranscriptOperation,
+        transcript_operation: IDkgTranscriptOperationInternalBytes,
     ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError>;
 
     // Corresponds to `IDkgProtocolCspVault.idkg_verify_dealing_private`
@@ -181,7 +180,7 @@ pub trait TarpcCspVault {
     // Corresponds to `IDkgProtocolCspVault.idkg_load_transcript`
     async fn idkg_load_transcript(
         algorithm_id: AlgorithmId,
-        dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+        dealings: BTreeMap<NodeIndex, IDkgDealingInternalBytes>,
         context_data: ByteBuf,
         receiver_index: NodeIndex,
         key_id: KeyId,

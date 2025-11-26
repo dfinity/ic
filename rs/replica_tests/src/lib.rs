@@ -1,17 +1,17 @@
 use core::future::Future;
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_canister_client_sender::Sender;
-use ic_config::{crypto::CryptoConfig, transport::TransportConfig, Config};
+use ic_canister_client_sender::Sender as CanisterClientSender;
+use ic_config::{Config, crypto::CryptoConfig, transport::TransportConfig};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_interfaces::execution_environment::{
-    IngressHistoryReader, QueryExecutionError, QueryExecutionService,
+    IngressHistoryReader, QueryExecutionError, QueryExecutionInput, QueryExecutionService,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, IC_00,
+    CanisterIdRecord, CanisterInstallMode, IC_00, InstallCodeArgs, Method, Payload,
+    ProvisionalCreateCanisterWithCyclesArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_prep_lib::{
@@ -34,12 +34,12 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
+    CanisterId, Height, NodeId, ReplicaVersion, Time,
     artifact::UnvalidatedArtifactMutation,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{Query, QuerySource, SignedIngress},
     replica_config::NODE_INDEX_DEFAULT,
     time::expiry_time_from_now,
-    CanisterId, Height, NodeId, ReplicaVersion, Time,
 };
 use prost::Message;
 use slog_scope::info;
@@ -53,7 +53,7 @@ use std::{
     thread::sleep,
     time::{Duration, Instant},
 };
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 use tower::ServiceExt;
 
 const CYCLES_BALANCE: u128 = 1 << 120;
@@ -65,14 +65,14 @@ const CYCLES_BALANCE: u128 = 1 << 120;
 /// time.
 #[allow(clippy::await_holding_lock)]
 fn process_ingress(
-    ingress_tx: &UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    ingress_tx: &Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     ingress_hist_reader: &dyn IngressHistoryReader,
     msg: SignedIngress,
     time_limit: Duration,
 ) -> Result<WasmResult, UserError> {
     let msg_id = msg.id();
     ingress_tx
-        .send(UnvalidatedArtifactMutation::Insert((msg, node_test_id(1))))
+        .try_send(UnvalidatedArtifactMutation::Insert((msg, node_test_id(1))))
         .unwrap();
 
     let start = Instant::now();
@@ -152,7 +152,7 @@ where
 /// function calls instead of http calls.
 pub struct LocalTestRuntime {
     pub query_handler: Arc<Mutex<QueryExecutionService>>,
-    pub ingress_sender: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    pub ingress_sender: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     pub ingress_history_reader: Arc<dyn IngressHistoryReader>,
     pub state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     pub node_id: NodeId,
@@ -200,8 +200,8 @@ pub fn get_ic_config() -> IcConfig {
 
     // Choose a temporary directory as the working directory for ic-prep.
     use rand::Rng;
-    let random_suffix = rand::thread_rng().gen::<usize>();
-    let prep_dir = std::env::temp_dir().join(format!("ic_prep_{}", random_suffix));
+    let random_suffix = rand::thread_rng().r#gen::<usize>();
+    let prep_dir = std::env::temp_dir().join(format!("ic_prep_{random_suffix}"));
 
     // Create the secret key store in a node a sub-directory of the ic-prep.
     let node_sks = prep_dir.join("node_sks");
@@ -263,6 +263,7 @@ pub fn get_ic_config() -> IcConfig {
         /* nns_subnet_id= */ Some(subnet_index),
         /* release_package_url= */ None,
         /* release_package_sha256_hex= */ None,
+        /* guest_launch_measurements= */ None,
         /* provisional_whitelist */ Some(provisional_whitelist),
         None,
         None,
@@ -446,7 +447,7 @@ impl LocalTestRuntime {
                 .unwrap()
                 .get_canister_id(),
             // Got an unexpected result.
-            unexpected => panic!("Got unexpected val {:?}", unexpected),
+            unexpected => panic!("Got unexpected val {unexpected:?}"),
         };
 
         Ok(canister_id)
@@ -600,8 +601,11 @@ impl LocalTestRuntime {
             thread::sleep(Duration::from_millis(100));
         }
         let query_svc = self.query_handler.lock().unwrap().clone();
-
-        let result = match query_svc.oneshot((query, None)).await.unwrap() {
+        let input = QueryExecutionInput {
+            query,
+            certificate_delegation_with_metadata: None,
+        };
+        let result = match query_svc.oneshot(input).await.unwrap() {
             Ok((result, _)) => result,
             Err(QueryExecutionError::CertifiedStateUnavailable) => {
                 panic!("Certified state unavailable for query call.")
@@ -638,7 +642,7 @@ impl LocalTestRuntime {
         canister_id: CanisterId,
         method_name: M,
         payload: P,
-        sender: &Sender,
+        sender: &CanisterClientSender,
     ) -> Result<WasmResult, UserError> {
         process_ingress(
             &self.ingress_sender,

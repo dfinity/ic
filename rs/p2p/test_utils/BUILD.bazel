@@ -29,7 +29,6 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/types",
     "//rs/types/types_test_utils",
-    "@crate_index//:anyhow",
     "@crate_index//:axum",
     "@crate_index//:bytes",
     "@crate_index//:futures",

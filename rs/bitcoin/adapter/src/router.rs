@@ -1,20 +1,24 @@
 //! The module is responsible for awaiting messages from bitcoin peers and dispaching them
 //! to the correct component.
 use crate::{
-    blockchainmanager::BlockchainManager, common::DEFAULT_CHANNEL_BUFFER_SIZE, config::Config,
-    connectionmanager::ConnectionManager, metrics::RouterMetrics, stream::handle_stream,
-    transaction_store::TransactionStore, AdapterState, BlockchainManagerRequest, BlockchainState,
-    Channel, ProcessBitcoinNetworkMessage, ProcessBitcoinNetworkMessageError, ProcessEvent,
-    TransactionManagerRequest,
+    AdapterState, BlockchainManagerRequest, BlockchainState, Channel, ProcessEvent,
+    ProcessNetworkMessage, ProcessNetworkMessageError, TransactionManagerRequest,
+    blockchainmanager::BlockchainManager,
+    common::{BlockchainNetwork, DEFAULT_CHANNEL_BUFFER_SIZE, HeaderValidator},
+    config::Config,
+    connectionmanager::ConnectionManager,
+    metrics::RouterMetrics,
+    stream::handle_stream,
+    transaction_store::TransactionStore,
 };
 use bitcoin::p2p::message::NetworkMessage;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::{
-    sync::mpsc::{channel, Receiver},
+    sync::mpsc::{Receiver, channel},
     time::interval,
 };
 
@@ -23,22 +27,35 @@ use tokio::{
 /// Having a design where we have a separate task that awaits on messages from the
 /// ConnectionManager, we keep the ConnectionManager free of dependencies like the
 /// TransactionStore or the BlockchainManager.
-pub fn start_main_event_loop(
-    config: &Config,
+pub fn start_main_event_loop<Network>(
+    config: &Config<Network>,
     logger: ReplicaLogger,
-    blockchain_state: Arc<Mutex<BlockchainState>>,
+    blockchain_state: Arc<BlockchainState<Network>>,
     mut transaction_manager_rx: Receiver<TransactionManagerRequest>,
     mut adapter_state: AdapterState,
     mut blockchain_manager_rx: Receiver<BlockchainManagerRequest>,
     metrics_registry: &MetricsRegistry,
-) {
-    let (network_message_sender, mut network_message_receiver) =
-        channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+) -> tokio::task::JoinHandle<()>
+where
+    Network: BlockchainNetwork + Send + Sync + 'static,
+    Network::Header: Send,
+    Network::Block: Send + Sync,
+    BlockchainState<Network>: HeaderValidator<Network>,
+    <BlockchainState<Network> as HeaderValidator<Network>>::HeaderError: Send + Sync,
+{
+    let (network_message_sender, mut network_message_receiver) = channel::<(
+        SocketAddr,
+        NetworkMessage<Network::Header, Network::Block>,
+    )>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
     let router_metrics = RouterMetrics::new(metrics_registry);
 
-    let mut blockchain_manager =
-        BlockchainManager::new(blockchain_state, logger.clone(), router_metrics.clone());
+    let mut blockchain_manager = BlockchainManager::new(
+        blockchain_state,
+        config.request_timeout(),
+        logger.clone(),
+        router_metrics.clone(),
+    );
     let mut transaction_manager = TransactionStore::new(logger.clone(), metrics_registry);
     let mut connection_manager = ConnectionManager::new(
         config,
@@ -61,7 +78,7 @@ pub fn start_main_event_loop(
             // tokio::time::Interval::tick which are all cancellation safe.
             tokio::select! {
                 event = connection_manager.receive_stream_event() => {
-                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) =
+                    if let Err(ProcessNetworkMessageError::InvalidMessage) =
                         connection_manager.process_event(&event)
                     {
                         connection_manager.discard(&event.address);
@@ -73,15 +90,15 @@ pub fn start_main_event_loop(
                         .bitcoin_messages_received
                         .with_label_values(&[message.cmd()])
                         .inc();
-                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) =
+                    if let Err(ProcessNetworkMessageError::InvalidMessage) =
                         connection_manager.process_bitcoin_network_message(address, &message) {
                         connection_manager.discard(&address);
                     }
 
-                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = blockchain_manager.process_bitcoin_network_message(&mut connection_manager, address, &message) {
+                    if let Err(ProcessNetworkMessageError::InvalidMessage) = blockchain_manager.process_bitcoin_network_message(&mut connection_manager, address, &message).await {
                         connection_manager.discard(&address);
                     }
-                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = transaction_manager.process_bitcoin_network_message(&mut connection_manager, address, &message) {
+                    if let Err(ProcessNetworkMessageError::InvalidMessage) = transaction_manager.process_bitcoin_network_message(&mut connection_manager, address, &message) {
                         connection_manager.discard(&address);
                     }
                 },
@@ -104,11 +121,11 @@ pub fn start_main_event_loop(
                 _ = tick_interval.tick() => {
                     // After an event is dispatched, the managers `tick` method is called to process possible
                     // outgoing messages.
-                    connection_manager.tick(blockchain_manager.get_height(), handle_stream);
+                    connection_manager.tick(blockchain_manager.get_height(), handle_stream).await;
                     blockchain_manager.tick(&mut connection_manager);
                     transaction_manager.advertise_txids(&mut connection_manager);
                 }
             };
         }
-    });
+    })
 }

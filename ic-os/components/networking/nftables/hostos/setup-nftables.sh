@@ -11,8 +11,8 @@ Usage:
 
   Generate nftables config from template file.
 
-  -i infile: input ic.json5.template file
-  -o outfile: output ic.json5 file
+  -i infile: input nftables.template file
+  -o outfile: output nftables.conf file
 EOF
 }
 

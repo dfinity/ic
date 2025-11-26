@@ -1,21 +1,19 @@
 //! This module encapsulates functions required for validating consensus
 //! artifacts.
-
+#![allow(clippy::result_large_err)]
 use crate::consensus::{
-    check_protocol_version,
+    ConsensusMessageId, check_protocol_version,
     metrics::ValidatorMetrics,
     status::{self, Status},
-    ConsensusMessageId,
 };
 use ic_consensus_dkg as dkg;
-use ic_consensus_idkg as idkg;
+use ic_consensus_idkg::{self as idkg};
 use ic_consensus_utils::{
-    active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
+    RoundRobin, active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
     get_oldest_idkg_state_registry_version,
     membership::{Membership, MembershipError},
-    pool_reader::PoolReader,
-    RoundRobin,
+    pool_reader::{PoolReader, UnexpectedChainLength},
 };
 use ic_interfaces::{
     batch_payload::ProposalContext,
@@ -28,26 +26,28 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateHashError, StateManager};
-use ic_logger::{trace, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, trace, warn};
+use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    Height, NodeId, RegistryVersion, SubnetId,
     batch::ValidationContext,
     consensus::{
-        dkg::{DkgPayloadValidationFailure, InvalidDkgPayloadReason},
         Block, BlockMetadata, BlockPayload, BlockProposal, CatchUpContent, CatchUpPackage,
         CatchUpShareContent, Committee, ConsensusMessage, ConsensusMessageHashable,
         EquivocationProof, FinalizationContent, HasCommittee, HasHash, HasHeight, HasRank,
         HasVersion, Notarization, NotarizationContent, RandomBeacon, RandomBeaconShare, RandomTape,
         RandomTapeShare, Rank,
+        dkg::{DkgPayloadValidationFailure, InvalidDkgPayloadReason},
     },
-    crypto::{threshold_sig::ni_dkg::NiDkgId, CryptoError, CryptoHashOf, Signed},
+    crypto::{CryptoError, CryptoHashOf, Signed, threshold_sig::ni_dkg::NiDkgId},
     registry::RegistryClientError,
     replica_config::ReplicaConfig,
     signature::{BasicSigned, MultiSignature, MultiSignatureShare, ThresholdSignatureShare},
     state_manager::StateManagerError,
-    Height, NodeId, RegistryVersion, SubnetId,
 };
 use idkg::{IDkgPayloadValidationFailure, InvalidIDkgPayloadReason};
+use rayon::ThreadPool;
 use std::{
     collections::{BTreeMap, HashSet},
     sync::{Arc, RwLock},
@@ -87,6 +87,7 @@ enum ValidationFailure {
     FailedToGetRegistryVersion,
     ValidationContextNotReached(ValidationContext, ValidationContext),
     CatchUpHeightNegligible,
+    MissingPastPayloads,
 }
 
 /// Possible reasons for invalid artifacts.
@@ -684,6 +685,7 @@ pub struct Validator {
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     message_routing: Arc<dyn MessageRouting>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
+    thread_pool: Arc<ThreadPool>,
     log: ReplicaLogger,
     metrics: ValidatorMetrics,
     schedule: RoundRobin,
@@ -702,8 +704,9 @@ impl Validator {
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         message_routing: Arc<dyn MessageRouting>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
+        thread_pool: Arc<ThreadPool>,
         log: ReplicaLogger,
-        metrics: ValidatorMetrics,
+        metrics_registry: &MetricsRegistry,
         time_source: Arc<dyn TimeSource>,
     ) -> Validator {
         Validator {
@@ -715,8 +718,9 @@ impl Validator {
             state_manager,
             message_routing,
             dkg_pool,
+            thread_pool,
             log,
-            metrics,
+            metrics: ValidatorMetrics::new(metrics_registry),
             schedule: RoundRobin::default(),
             time_source,
         }
@@ -1009,7 +1013,7 @@ impl Validator {
                 if let Err(ValidationError::InvalidArtifact(e)) = verification {
                     change_set.push(ChangeAction::HandleInvalid(
                         notarization.into_message(),
-                        format!("{:?}", e),
+                        format!("{e:?}"),
                     ));
                 } else if verification.is_ok() {
                     if get_notarized_parent(pool_reader, &proposal).is_ok() {
@@ -1044,19 +1048,19 @@ impl Validator {
             // validated through a notarization. We skip the block instead
             // of removing it because a higher-rank proposal might still
             // be notarized in the future.
-            if let Some(min_rank) = valid_ranks.get_lowest_rank(proposal.height()) {
-                if proposal.rank() > min_rank {
-                    let id = proposal.get_id();
-                    if self.unvalidated_for_too_long(pool_reader, &id) {
-                        warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
-                              self.log,
-                              "Due a valid proposal with a lower rank {}, /
-                              skipping validating the proposal: {:?} with rank {}",
-                              min_rank.0, id, proposal.rank().0
-                        );
-                    }
-                    continue;
+            if let Some(min_rank) = valid_ranks.get_lowest_rank(proposal.height())
+                && proposal.rank() > min_rank
+            {
+                let id = proposal.get_id();
+                if self.unvalidated_for_too_long(pool_reader, &id) {
+                    warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
+                          self.log,
+                          "Due a valid proposal with a lower rank {}, /
+                          skipping validating the proposal: {:?} with rank {}",
+                          min_rank.0, id, proposal.rank().0
+                    );
                 }
+                continue;
             }
 
             let Ok(parent) = get_notarized_parent(pool_reader, &proposal) else {
@@ -1258,10 +1262,26 @@ impl Validator {
         }
 
         // Below are all the payload validations
-        let payloads = pool_reader.get_payloads_from_height(
-            proposal.context.certified_height.increment(),
-            parent.clone(),
-        );
+        let start_height = proposal.context.certified_height.increment();
+        let past_payloads = match pool_reader.get_payloads_from_height(start_height, parent.clone())
+        {
+            Ok(past_payloads) => past_payloads,
+            Err(UnexpectedChainLength { expected, returned }) => {
+                // Defer validation if there are some past payloads missing.
+                // This means that we already have a CUP and this block should be verified
+                // using the notarization fast path.
+                warn!(
+                    every_n_seconds => 10,
+                    self.log,
+                    "Missing past payloads when attempting to validate batch payload at height {}. \
+                    Certified height: {}, expected past payloads len: {}, real past payloads len: {}",
+                    proposal.height(), proposal.context.certified_height, expected, returned
+                );
+                return Err(ValidationError::ValidationFailed(
+                    ValidationFailure::MissingPastPayloads,
+                ));
+            }
+        };
 
         self.payload_builder
             .validate_payload(
@@ -1271,7 +1291,7 @@ impl Validator {
                     validation_context: &proposal.context,
                 },
                 &proposal.payload,
-                &payloads,
+                &past_payloads,
             )
             .map_err(|err| {
                 err.map(
@@ -1284,6 +1304,7 @@ impl Validator {
             self.replica_config.subnet_id,
             self.registry_client.as_ref(),
             self.crypto.as_ref(),
+            self.thread_pool.as_ref(),
             pool_reader,
             self.state_manager.as_ref(),
             &proposal.context,
@@ -1604,7 +1625,7 @@ impl Validator {
                         )
                     }
                     Err(ValidationError::InvalidArtifact(err)) => Some(
-                        ChangeAction::HandleInvalid(share.into_message(), format!("{:?}", err)),
+                        ChangeAction::HandleInvalid(share.into_message(), format!("{err:?}")),
                     ),
                     Err(ValidationError::ValidationFailed(err)) => {
                         if self.unvalidated_for_too_long(pool_reader, &share.get_id()) {
@@ -1641,7 +1662,12 @@ impl Validator {
             .get_finalized_block(height)
             .ok_or(ValidationFailure::FinalizedBlockNotFound(height))?;
         if ic_types::crypto::crypto_hash(&block) != share_content.block {
-            warn!(self.log, "Block from received CatchUpShareContent does not match finalized block in the pool: {:?} {:?}", share_content, block);
+            warn!(
+                self.log,
+                "Block from received CatchUpShareContent does not match finalized block in the pool: {:?} {:?}",
+                share_content,
+                block
+            );
             return Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare.into());
         }
         if !block.payload.is_summary() {
@@ -1658,7 +1684,12 @@ impl Validator {
             .get_random_beacon(height)
             .ok_or(ValidationFailure::RandomBeaconNotFound(height))?;
         if &beacon != share_content.random_beacon.get_value() {
-            warn!(self.log, "RandomBeacon from received CatchUpContent does not match RandomBeacon in the pool: {:?} {:?}", share_content, beacon);
+            warn!(
+                self.log,
+                "RandomBeacon from received CatchUpContent does not match RandomBeacon in the pool: {:?} {:?}",
+                share_content,
+                beacon
+            );
             return Err(InvalidArtifactReason::MismatchedRandomBeaconInCatchUpPackageShare.into());
         }
 
@@ -1667,23 +1698,33 @@ impl Validator {
             .get_state_hash_at(height)
             .map_err(ValidationFailure::StateHashError)?;
         if hash != share_content.state_hash {
-            warn!(self.log, "State hash from received CatchUpContent does not match local state hash: {:?} {:?}", share_content, hash);
+            warn!(
+                self.log,
+                "State hash from received CatchUpContent does not match local state hash: {:?} {:?}",
+                share_content,
+                hash
+            );
             return Err(InvalidArtifactReason::MismatchedStateHashInCatchUpPackageShare.into());
         }
 
         let summary = block.payload.as_ref().as_summary();
-        let registry_version = if let Some(idkg) = summary.idkg.as_ref() {
+        let registry_version = if summary.idkg.is_some() {
             // Should succeed as we already got the hash above
             let state = self
                 .state_manager
                 .get_state_at(height)
                 .map_err(ValidationFailure::StateManagerError)?;
-            get_oldest_idkg_state_registry_version(idkg, state.get_ref())
+            get_oldest_idkg_state_registry_version(state.get_ref())
         } else {
             None
         };
         if registry_version != share_content.oldest_registry_version_in_use_by_replicated_state {
-            warn!(self.log, "Oldest registry version from received CatchUpContent does not match local one: {:?} {:?}", share_content, registry_version);
+            warn!(
+                self.log,
+                "Oldest registry version from received CatchUpContent does not match local one: {:?} {:?}",
+                share_content,
+                registry_version
+            );
             return Err(
                 InvalidArtifactReason::MismatchedOldestRegistryVersionInCatchUpPackageShare.into(),
             );
@@ -1759,18 +1800,16 @@ impl Validator {
     fn dedup_change_actions(&self, name: &str, actions: Mutations) -> Mutations {
         let mut change_set = Mutations::new();
         for action in actions {
-            change_set.dedup_push(action).unwrap_or_else(|action| {
+            if let Some(duplicate_action) = change_set.dedup_push(action) {
                 self.metrics
                     .duplicate_artifact
                     .with_label_values(&[name])
                     .inc();
                 trace!(
                     self.log,
-                    "Duplicated {} detected in changeset {:?}",
-                    name,
-                    action
+                    "Duplicated {} detected in changeset {:?}", name, duplicate_action
                 )
-            })
+            }
         }
         change_set
     }
@@ -1798,7 +1837,7 @@ impl Validator {
                 Some(ChangeAction::RemoveFromUnvalidated(message))
             }
             ValidationError::InvalidArtifact(s) => {
-                Some(ChangeAction::HandleInvalid(message, format!("{:?}", s)))
+                Some(ChangeAction::HandleInvalid(message, format!("{s:?}")))
             }
             ValidationError::ValidationFailed(err) => {
                 if self.unvalidated_for_too_long(pool_reader, &message.get_id()) {
@@ -1897,14 +1936,17 @@ impl Validator {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::consensus::block_maker::get_block_maker_delay;
+    use crate::consensus::{
+        MAX_CONSENSUS_THREADS, block_maker::get_block_maker_delay, build_thread_pool,
+    };
     use assert_matches::assert_matches;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{
-        dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
-        Dependencies, RefMockPayloadBuilder,
+        Dependencies, RefMockPayloadBuilder, dependencies_with_subnet_params,
+        dependencies_with_subnet_records_with_raw_state_manager,
     };
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_interfaces::{
         messaging::XNetPayloadValidationFailure, p2p::consensus::MutablePool,
         time_source::TimeSource,
@@ -1916,34 +1958,38 @@ pub mod test {
     use ic_registry_client_helpers::subnet::SubnetRegistry;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
+    use ic_test_utilities::state_manager::RefMockStateManager;
     use ic_test_utilities_consensus::{
         assert_changeset_matches_pattern,
         fake::*,
         idkg::{
-            add_available_quadruple_to_payload, empty_idkg_payload,
-            fake_ecdsa_idkg_master_public_key_id, fake_signature_request_context_with_pre_sig,
-            fake_state_with_signature_requests, request_id,
+            empty_idkg_payload, fake_ecdsa_idkg_master_public_key_id,
+            fake_signature_request_context_with_registry_version,
+            fake_state_with_signature_requests,
         },
-        matches_pattern,
     };
-    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{
         ids::{node_test_id, subnet_test_id},
         messages::SignedIngressBuilder,
     };
     use ic_types::{
+        CryptoHashOfState, ReplicaVersion, Time,
         batch::{BatchPayload, IngressPayload},
         consensus::{
-            dkg::DkgDataPayload, idkg::PreSigId, BlockPayload, CatchUpPackageShare, DataPayload,
-            EquivocationProof, Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon,
-            NotarizationShare, Payload, RandomBeaconContent, RandomTapeContent, SummaryPayload,
+            BlockPayload, CatchUpPackageShare, DataPayload, EquivocationProof, Finalization,
+            FinalizationShare, HashedBlock, HashedRandomBeacon, NotarizationShare, Payload,
+            RandomBeaconContent, RandomTapeContent, SummaryPayload, dkg::DkgDataPayload,
+            idkg::PreSigId,
         },
-        crypto::{BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
+        crypto::{
+            BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CombinedThresholdSig,
+            CombinedThresholdSigOf, CryptoHash,
+        },
+        messages::CallbackId,
         replica_config::ReplicaConfig,
         signature::ThresholdSignature,
-        CryptoHashOfState, ReplicaVersion, Time,
     };
     use std::sync::{Arc, RwLock};
 
@@ -1952,7 +1998,7 @@ pub mod test {
             Some(ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(b))) => {
                 assert_eq!(block, b);
             }
-            item => panic!("Unexpected change action set: {:?}", item),
+            item => panic!("Unexpected change action set: {item:?}"),
         };
     }
 
@@ -1961,7 +2007,7 @@ pub mod test {
             Some(ChangeAction::HandleInvalid(ConsensusMessage::BlockProposal(b), _)) => {
                 assert_eq!(block, b);
             }
-            item => panic!("Unexpected change action set: {:?}", item),
+            item => panic!("Unexpected change action set: {item:?}"),
         };
     }
 
@@ -1993,8 +2039,9 @@ pub mod test {
                 dependencies.state_manager.clone(),
                 message_routing.clone(),
                 dependencies.dkg_pool.clone(),
+                build_thread_pool(MAX_CONSENSUS_THREADS),
                 no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
+                &MetricsRegistry::new(),
                 Arc::clone(&dependencies.time_source) as Arc<_>,
             );
             Self {
@@ -2150,26 +2197,34 @@ pub mod test {
 
             let height = Height::from(0);
             let key_id = fake_ecdsa_idkg_master_public_key_id();
-            // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
+            // Create three quadruple Ids and contexts, context "2" will remain unmatched.
             let pre_sig_id1 = PreSigId(1);
-            let pre_sig_id2 = PreSigId(2);
             let pre_sig_id3 = PreSigId(3);
 
             let contexts = vec![
-                fake_signature_request_context_with_pre_sig(
-                    request_id(1, height),
-                    key_id.clone(),
-                    Some(pre_sig_id1),
+                (
+                    CallbackId::new(1),
+                    fake_signature_request_context_with_registry_version(
+                        Some(pre_sig_id1),
+                        key_id.inner(),
+                        RegistryVersion::from(3),
+                    ),
                 ),
-                fake_signature_request_context_with_pre_sig(
-                    request_id(2, height),
-                    key_id.clone(),
-                    None,
+                (
+                    CallbackId::new(2),
+                    fake_signature_request_context_with_registry_version(
+                        None,
+                        key_id.inner(),
+                        RegistryVersion::from(1),
+                    ),
                 ),
-                fake_signature_request_context_with_pre_sig(
-                    request_id(3, height),
-                    key_id.clone(),
-                    Some(pre_sig_id3),
+                (
+                    CallbackId::new(3),
+                    fake_signature_request_context_with_registry_version(
+                        Some(pre_sig_id3),
+                        key_id.inner(),
+                        RegistryVersion::from(2),
+                    ),
                 ),
             ];
 
@@ -2210,12 +2265,7 @@ pub mod test {
             let block = proposal.content.as_mut();
             block.context.certified_height = block.height();
 
-            let mut idkg = empty_idkg_payload(subnet_test_id(0));
-            // Add the three quadruples using registry version 3, 1 and 2 in order
-            add_available_quadruple_to_payload(&mut idkg, pre_sig_id1, RegistryVersion::from(3));
-            add_available_quadruple_to_payload(&mut idkg, pre_sig_id2, RegistryVersion::from(1));
-            add_available_quadruple_to_payload(&mut idkg, pre_sig_id3, RegistryVersion::from(2));
-
+            let idkg = empty_idkg_payload(subnet_test_id(0));
             let dkg = block.payload.as_ref().as_summary().dkg.clone();
             block.payload = Payload::new(
                 ic_types::crypto::crypto_hash,
@@ -2282,9 +2332,11 @@ pub mod test {
 
             // With no existing Notarization for `block`, the Finalization in the
             // unvalidated pool should not be added to validated
-            assert!(validator
-                .on_state_change(&PoolReader::new(&pool))
-                .is_empty());
+            assert!(
+                validator
+                    .on_state_change(&PoolReader::new(&pool))
+                    .is_empty()
+            );
 
             // Add a Notarization for `block` and assert it causes the Finalization
             // to be added to validated
@@ -2295,46 +2347,54 @@ pub mod test {
 
     #[test]
     fn test_validation_context_ordering() {
-        assert!(!ValidationContext {
-            registry_version: RegistryVersion::from(10),
-            certified_height: Height::from(5),
-            time: ic_types::time::UNIX_EPOCH,
-        }
-        .greater_or_equal(&ValidationContext {
-            registry_version: RegistryVersion::from(11),
-            certified_height: Height::from(4),
-            time: ic_types::time::UNIX_EPOCH,
-        }),);
-        assert!(ValidationContext {
-            registry_version: RegistryVersion::from(10),
-            certified_height: Height::from(5),
-            time: ic_types::time::UNIX_EPOCH,
-        }
-        .greater_or_equal(&ValidationContext {
-            registry_version: RegistryVersion::from(10),
-            certified_height: Height::from(5),
-            time: ic_types::time::UNIX_EPOCH,
-        }),);
-        assert!(ValidationContext {
-            registry_version: RegistryVersion::from(11),
-            certified_height: Height::from(5),
-            time: ic_types::time::UNIX_EPOCH,
-        }
-        .greater_or_equal(&ValidationContext {
-            registry_version: RegistryVersion::from(11),
-            certified_height: Height::from(4),
-            time: ic_types::time::UNIX_EPOCH,
-        }),);
-        assert!(!ValidationContext {
-            registry_version: RegistryVersion::from(10),
-            certified_height: Height::from(5),
-            time: ic_types::time::UNIX_EPOCH,
-        }
-        .greater_or_equal(&ValidationContext {
-            registry_version: RegistryVersion::from(11),
-            certified_height: Height::from(6),
-            time: ic_types::time::UNIX_EPOCH,
-        }),);
+        assert!(
+            !ValidationContext {
+                registry_version: RegistryVersion::from(10),
+                certified_height: Height::from(5),
+                time: ic_types::time::UNIX_EPOCH,
+            }
+            .greater_or_equal(&ValidationContext {
+                registry_version: RegistryVersion::from(11),
+                certified_height: Height::from(4),
+                time: ic_types::time::UNIX_EPOCH,
+            }),
+        );
+        assert!(
+            ValidationContext {
+                registry_version: RegistryVersion::from(10),
+                certified_height: Height::from(5),
+                time: ic_types::time::UNIX_EPOCH,
+            }
+            .greater_or_equal(&ValidationContext {
+                registry_version: RegistryVersion::from(10),
+                certified_height: Height::from(5),
+                time: ic_types::time::UNIX_EPOCH,
+            }),
+        );
+        assert!(
+            ValidationContext {
+                registry_version: RegistryVersion::from(11),
+                certified_height: Height::from(5),
+                time: ic_types::time::UNIX_EPOCH,
+            }
+            .greater_or_equal(&ValidationContext {
+                registry_version: RegistryVersion::from(11),
+                certified_height: Height::from(4),
+                time: ic_types::time::UNIX_EPOCH,
+            }),
+        );
+        assert!(
+            !ValidationContext {
+                registry_version: RegistryVersion::from(10),
+                certified_height: Height::from(5),
+                time: ic_types::time::UNIX_EPOCH,
+            }
+            .greater_or_equal(&ValidationContext {
+                registry_version: RegistryVersion::from(11),
+                certified_height: Height::from(6),
+                time: ic_types::time::UNIX_EPOCH,
+            }),
+        );
     }
 
     #[test]
@@ -2572,9 +2632,11 @@ pub mod test {
 
             // Ensure that the validator initially does not validate anything, as it is not
             // time for rank 1 yet
-            assert!(validator
-                .on_state_change(&PoolReader::new(&pool))
-                .is_empty(),);
+            assert!(
+                validator
+                    .on_state_change(&PoolReader::new(&pool))
+                    .is_empty(),
+            );
 
             // Time between blocks increases by at least initial_notary_delay + 1ns
             let monotonic_block_increment = registry_client
@@ -2758,6 +2820,105 @@ pub mod test {
             pool.notarize(&test_block);
             let results = validator.on_state_change(&PoolReader::new(&pool));
             assert_block_valid(&results, &next_block);
+        });
+    }
+
+    #[test]
+    // Construct a proposal block with a non-notarized parent and make sure we're
+    // not validating this block until the parent gets notarized.
+    fn test_block_validation_with_missing_past_payload() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let certified_height = Height::from(1);
+            let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let ValidatorAndDependencies {
+                validator,
+                payload_builder,
+                state_manager,
+                mut pool,
+                time_source,
+                ..
+            } = setup_dependencies(pool_config, &committee);
+            payload_builder
+                .get_mut()
+                .expect_validate_payload()
+                .returning(|_, _, _, _| Ok(()));
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(certified_height);
+            state_manager
+                .get_mut()
+                .expect_get_state_at()
+                .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                    Height::new(0),
+                    Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
+                )));
+
+            pool.advance_round_normal_operation_n(8);
+
+            // Make block at height 9
+            let next_proposal = pool.make_next_block();
+            assert_eq!(next_proposal.height().get(), 9);
+            // Make and insert beacon at height 9
+            let next_beacon = pool.make_next_beacon();
+            pool.insert_validated(next_beacon.clone());
+            // Make and insert beacon at height 10
+            let summary_beacon = RandomBeacon::from_parent(&next_beacon);
+            pool.insert_validated(summary_beacon.clone());
+            // Make summary at height 10
+            let summary =
+                pool.make_next_block_from_parent(next_proposal.content.get_value(), Rank(0));
+            let cup = CatchUpPackage {
+                content: CatchUpContent::new(
+                    HashedBlock::new(
+                        ic_types::crypto::crypto_hash,
+                        summary.content.get_value().clone(),
+                    ),
+                    HashedRandomBeacon::new(ic_types::crypto::crypto_hash, summary_beacon.clone()),
+                    CryptoHashOf::from(CryptoHash(Vec::new())),
+                    None,
+                ),
+                signature: ThresholdSignature {
+                    signer: summary_beacon.signature.signer.clone(),
+                    signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
+                },
+            };
+
+            // Insert the Summary before the next proposal
+            pool.notarize(&summary);
+            pool.insert_validated(summary);
+
+            let test_block = pool.make_next_block();
+            assert_eq!(test_block.height().get(), 11);
+            // Forward time correctly
+            time_source
+                .set_time(test_block.content.as_ref().context.time)
+                .unwrap();
+
+            // Validation should fail, since the payload at height 9 is missing
+            let result = validator.check_block_validity(&PoolReader::new(&pool), &test_block);
+            assert_matches!(
+                result,
+                Err(ValidationError::ValidationFailed(
+                    ValidationFailure::MissingPastPayloads,
+                ))
+            );
+
+            // Insert the missing proposal at height 9, the payload should be validated as expected
+            pool.insert_validated(next_proposal);
+            let result = validator.check_block_validity(&PoolReader::new(&pool), &test_block);
+            assert_matches!(result, Ok(()));
+
+            // Insert the cup at height 10, the payload validation should fail
+            // Since payloads below the CUP are not returned
+            pool.insert_validated(cup);
+            let result = validator.check_block_validity(&PoolReader::new(&pool), &test_block);
+            assert_matches!(
+                result,
+                Err(ValidationError::ValidationFailed(
+                    ValidationFailure::MissingPastPayloads,
+                ))
+            );
         });
     }
 
@@ -3066,9 +3227,11 @@ pub mod test {
             pool.apply(changeset);
 
             // Finally, changeset should be empty.
-            assert!(validator
-                .on_state_change(&PoolReader::new(&pool))
-                .is_empty());
+            assert!(
+                validator
+                    .on_state_change(&PoolReader::new(&pool))
+                    .is_empty()
+            );
         })
     }
 
@@ -3465,11 +3628,13 @@ pub mod test {
         let correct_signer = pool.get_block_maker_by_rank(block.height(), Rank(0));
 
         // Create two different blocks from the same block maker
-        let ingress = IngressPayload::from(vec![SignedIngressBuilder::new()
-            .method_payload(vec![0; 64])
-            .nonce(0)
-            .expiry_time(Time::from_nanos_since_unix_epoch(0))
-            .build()]);
+        let ingress = IngressPayload::from(vec![
+            SignedIngressBuilder::new()
+                .method_payload(vec![0; 64])
+                .nonce(0)
+                .expiry_time(Time::from_nanos_since_unix_epoch(0))
+                .build(),
+        ]);
         block.content.as_mut().payload = Payload::new(
             ic_types::crypto::crypto_hash,
             BlockPayload::Data(DataPayload {

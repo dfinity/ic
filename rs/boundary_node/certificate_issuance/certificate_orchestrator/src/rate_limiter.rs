@@ -1,12 +1,12 @@
-use anyhow::{anyhow, Error};
+use anyhow::{Error, anyhow};
 use candid::Principal;
 use certificate_orchestrator_interface::{Id, Name};
 use publicsuffix::{List, Psl};
 use std::collections::BTreeMap;
 
 use crate::{
-    registration::{Create, CreateError},
     LocalRef,
+    registration::{Create, CreateError},
 };
 
 // The rate limiter only subtracts available tokens and needs to be paired with a timer that adds available tokens.
@@ -63,7 +63,7 @@ fn extract_apex_domain(name: &str, domain_list: &List) -> Result<String, Error> 
 
 #[cfg(test)]
 mod tests {
-    use crate::rate_limiter::{extract_apex_domain, List};
+    use crate::rate_limiter::{List, extract_apex_domain};
     use anyhow::Error;
 
     #[test]

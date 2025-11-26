@@ -1,7 +1,7 @@
 [package]
 name = "ic-nervous-system-clients"
 version = "0.0.1"
-edition = "2021"
+edition.workspace = true
 
 [lib]
 name = "ic_nervous_system_clients"
@@ -22,6 +22,7 @@ ic-nervous-system-proxied-canister-calls-tracker = { path = "../proxied_canister
 ic-nervous-system-runtime = { path = "../runtime" }
 ic-utils = { path = "../../utils" }
 icrc-ledger-client = { path = "../../../packages/icrc-ledger-client" }
+icrc-ledger-client-cdk = { path = "../../../packages/icrc-ledger-client-cdk" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
 serde = { workspace = true }

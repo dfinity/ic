@@ -40,7 +40,7 @@ Success::
 
 end::catalog[] */
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use canister_test::Canister;
 use futures::FutureExt;
 use ic_config::subnet_config::VETKD_FEE;
@@ -57,15 +57,18 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            NnsInstallationBuilder,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+            retry_async,
         },
     },
     systest,
-    util::{block_on, get_app_subnet_and_node, runtime_from_url, MessageCanister},
+    util::{MessageCanister, block_on, get_app_subnet_and_node, runtime_from_url},
 };
 use ic_types::{Cycles, Height};
-use ic_vetkeys::{DerivedPublicKey, EncryptedVetKey, IBECiphertext, TransportSecretKey, VetKey};
+use ic_vetkeys::{
+    DerivedPublicKey, EncryptedVetKey, IbeCiphertext, IbeIdentity, IbeSeed, TransportSecretKey,
+    VetKey,
+};
 use rand::Rng;
 use slog::info;
 use std::time::Duration;
@@ -277,13 +280,12 @@ fn test(env: TestEnv) {
 
         // IBE-encrypt a message with one of the previously retrieved canister public keys.
         let secret_message = b"secret message";
-        let ibe_ciphertext = IBECiphertext::encrypt(
+        let ibe_ciphertext = IbeCiphertext::encrypt(
             &canister_master_pubkey_app.derive_sub_key(context),
-            input,
+            &IbeIdentity::from_bytes(input),
             secret_message,
-            &rng.gen::<[u8; 32]>(),
-        )
-        .expect("failed to IBE-encrypt");
+            &IbeSeed::random(rng),
+        );
 
         // When using the correct vetKey (i.e., the one for the correct input/context combination), the message MUST IBE-decrypt to the correct value
         assert_eq!(
@@ -310,7 +312,7 @@ async fn derive_vetkey_with_canister<R: Rng>(
     log: &slog::Logger,
     rng: &mut R,
 ) -> VetKey {
-    let tsk = TransportSecretKey::from_seed(rng.gen::<[u8; 32]>().to_vec())
+    let tsk = TransportSecretKey::from_seed(rng.r#gen::<[u8; 32]>().to_vec())
         .expect("Failed to generate transport secret key");
 
     info!(log, "Deriving vetKey...");

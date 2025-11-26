@@ -2,13 +2,14 @@ use crate::candid::{AddCkErc20Token, CyclesManagement, InitArg, LedgerInitArg};
 use crate::management::{CallError, CanisterRuntime, Reason};
 use crate::scheduler::test_fixtures::{usdc, usdc_metadata, usdc_token_id};
 use crate::scheduler::tests::mock::MockCanisterRuntime;
-use crate::scheduler::{cycles_to_u128, InstallLedgerSuiteArgs, Task, TaskError, TaskExecution};
+use crate::scheduler::{InstallLedgerSuiteArgs, Task, TaskError, TaskExecution, cycles_to_u128};
 use crate::state::test_fixtures::new_state;
 use crate::state::{
-    read_state, Canisters, GitCommitHash, IndexCanister, LedgerCanister, LedgerSuiteVersion,
-    ManagedCanisterStatus, State, WasmHash, ARCHIVE_NODE_BYTECODE, INDEX_BYTECODE, LEDGER_BYTECODE,
+    ARCHIVE_NODE_BYTECODE, Canisters, GitCommitHash, INDEX_BYTECODE, IndexCanister,
+    LEDGER_BYTECODE, LedgerCanister, LedgerSuiteVersion, ManagedCanisterStatus, State, WasmHash,
+    read_state,
 };
-use crate::storage::{mutate_wasm_store, record_icrc1_ledger_suite_wasms, TASKS};
+use crate::storage::{TASKS, mutate_wasm_store, record_icrc1_ledger_suite_wasms};
 use candid::Principal;
 use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult};
 
@@ -422,10 +423,10 @@ mod notify_erc_20_added {
     use crate::scheduler::test_fixtures::{usdc, usdc_metadata};
     use crate::scheduler::tests::mock::MockCanisterRuntime;
     use crate::scheduler::tests::{
-        expect_call_canister_add_ckerc20_token, init_state, LEDGER_PRINCIPAL, MINTER_PRINCIPAL,
+        LEDGER_PRINCIPAL, MINTER_PRINCIPAL, expect_call_canister_add_ckerc20_token, init_state,
     };
     use crate::scheduler::{Task, TaskError, TaskExecution};
-    use crate::state::{mutate_state, Ledger};
+    use crate::state::{Ledger, mutate_state};
     use candid::Nat;
 
     #[tokio::test]
@@ -597,10 +598,10 @@ mod discover_archives {
     };
     use crate::scheduler::tests::mock::MockCanisterRuntime;
     use crate::scheduler::tests::{
-        expect_call_canister_icrc3_get_archives, init_state, LEDGER_PRINCIPAL,
+        LEDGER_PRINCIPAL, expect_call_canister_icrc3_get_archives, init_state,
     };
     use crate::scheduler::{DiscoverArchivesError, Erc20Token, Task, TaskError, TaskExecution};
-    use crate::state::{mutate_state, read_state, Ledger, TokenId};
+    use crate::state::{Ledger, TokenId, mutate_state, read_state};
     use candid::Principal;
     use icrc_ledger_types::icrc3::archive::ICRC3ArchiveInfo;
 
@@ -723,27 +724,27 @@ mod discover_archives {
 
 mod upgrade_ledger_suite {
     use crate::management::CallError;
+    use crate::scheduler::UpgradeLedgerSuiteError::{CanisterNotReady, TokenNotFound};
     use crate::scheduler::test_fixtures::{usdc, usdc_metadata, usdc_token_id};
     use crate::scheduler::tests::{
-        execute_now, expect_call_canister_icrc3_get_archives, init_state,
-        mock::MockCanisterRuntime, read_archive_wasm_hash, read_index_wasm_hash,
-        read_ledger_wasm_hash, task_queue_from_state, INDEX_PRINCIPAL, LEDGER_PRINCIPAL,
+        INDEX_PRINCIPAL, LEDGER_PRINCIPAL, execute_now, expect_call_canister_icrc3_get_archives,
+        init_state, mock::MockCanisterRuntime, read_archive_wasm_hash, read_index_wasm_hash,
+        read_ledger_wasm_hash, task_queue_from_state,
     };
-    use crate::scheduler::UpgradeLedgerSuiteError::{CanisterNotReady, TokenNotFound};
     use crate::scheduler::{
-        pop_if_ready, Task, TaskError, UpgradeLedgerSuite, UpgradeLedgerSuiteError,
-        UpgradeLedgerSuiteSubtask,
+        Task, TaskError, UpgradeLedgerSuite, UpgradeLedgerSuiteError, UpgradeLedgerSuiteSubtask,
+        pop_if_ready,
     };
     use crate::state::{
-        mutate_state, read_state, CanisterUpgrade, Index, Ledger, ManagedCanisterStatus, TokenId,
-        WasmHash, ARCHIVE_NODE_BYTECODE, INDEX_BYTECODE, LEDGER_BYTECODE,
+        ARCHIVE_NODE_BYTECODE, CanisterUpgrade, INDEX_BYTECODE, Index, LEDGER_BYTECODE, Ledger,
+        ManagedCanisterStatus, TokenId, WasmHash, mutate_state, read_state,
+    };
+    use UpgradeLedgerSuiteSubtask::{
+        DiscoverArchives, UpgradeArchives, UpgradeIndex, UpgradeLedger,
     };
     use candid::Principal;
     use icrc_ledger_types::icrc3::archive::ICRC3ArchiveInfo;
     use maplit::btreemap;
-    use UpgradeLedgerSuiteSubtask::{
-        DiscoverArchives, UpgradeArchives, UpgradeIndex, UpgradeLedger,
-    };
 
     #[test]
     fn should_upgrade_in_the_correct_order() {
@@ -1265,11 +1266,11 @@ mod run_task {
     use crate::scheduler::test_fixtures::{usdc, usdc_metadata};
     use crate::scheduler::tests::mock::MockCanisterRuntime;
     use crate::scheduler::tests::{
-        expect_call_canister_add_ckerc20_token, init_state, task_deadline_from_state,
-        task_queue_from_state, LEDGER_PRINCIPAL, MINTER_PRINCIPAL,
+        LEDGER_PRINCIPAL, MINTER_PRINCIPAL, expect_call_canister_add_ckerc20_token, init_state,
+        task_deadline_from_state, task_queue_from_state,
     };
-    use crate::scheduler::{run_task, Task, TaskExecution};
-    use crate::state::{mutate_state, Ledger};
+    use crate::scheduler::{Task, TaskExecution, run_task};
+    use crate::state::{Ledger, mutate_state};
     use candid::Nat;
     use std::time::Duration;
 
@@ -1580,7 +1581,7 @@ async fn execute_now<R: CanisterRuntime>(task: Task, runtime: &R) -> Result<(), 
 mod metrics {
     use crate::management::CallError;
     use crate::scheduler::metrics::observe_task_duration;
-    use crate::scheduler::{encode_orchestrator_metrics, Reason, Task, TaskError};
+    use crate::scheduler::{Reason, Task, TaskError, encode_orchestrator_metrics};
     use std::time::Duration;
 
     #[test]
@@ -1671,8 +1672,7 @@ orchestrator_tasks_duration_seconds_count{task="maybe_top_up",result="err"} 1 12
         .trim();
         assert_eq!(
             actual, expected,
-            "BUG: Unexpected task durations histogram. Actual:\n{}\nexpected:\n{}",
-            actual, expected
+            "BUG: Unexpected task durations histogram. Actual:\n{actual}\nexpected:\n{expected}"
         );
     }
 }
@@ -1749,14 +1749,14 @@ mod mock {
 
 mod install_ledger_suite_args {
     use crate::candid::{AddErc20Arg, InitArg, LedgerInitArg};
-    use crate::scheduler::tests::{usdc_metadata, MINTER_PRINCIPAL};
+    use crate::scheduler::tests::{MINTER_PRINCIPAL, usdc_metadata};
     use crate::scheduler::{ChainId, Erc20Token, InstallLedgerSuiteArgs, InvalidAddErc20ArgError};
     use crate::state::test_fixtures::{expect_panic_with_message, new_state, new_state_from};
     use crate::state::{GitCommitHash, IndexWasm, LedgerSuiteVersion, LedgerWasm, WasmHash};
     use crate::storage::test_fixtures::{
         embedded_ledger_suite_version, empty_task_queue, empty_wasm_store,
     };
-    use crate::storage::{record_icrc1_ledger_suite_wasms, WasmStore};
+    use crate::storage::{WasmStore, record_icrc1_ledger_suite_wasms};
     use assert_matches::assert_matches;
     use candid::Nat;
     use proptest::collection::vec;

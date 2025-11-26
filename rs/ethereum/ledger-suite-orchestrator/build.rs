@@ -23,7 +23,7 @@ fn main() {
         };
 
         println!("cargo:rerun-if-changed={}", archive_path.display());
-        println!("cargo:rerun-if-env-changed={}", env_var);
+        println!("cargo:rerun-if-env-changed={env_var}");
         println!("cargo:rustc-env={}={}", env_var, archive_path.display());
     }
 }

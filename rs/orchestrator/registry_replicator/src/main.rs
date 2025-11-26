@@ -1,6 +1,8 @@
 use clap::Parser;
-use ic_logger::{info, new_replica_logger_from_config};
-use ic_registry_replicator::{args::RegistryReplicatorArgs, RegistryReplicator};
+use ic_http_endpoints_async_utils::shutdown_signal;
+use ic_logger::{info, new_replica_logger_from_config, warn};
+use ic_registry_replicator::{RegistryReplicator, args::RegistryReplicatorArgs};
+use tokio_util::sync::CancellationToken;
 
 #[tokio::main]
 async fn main() {
@@ -14,15 +16,35 @@ async fn main() {
         None,
         &config,
         args.get_metrics_addr(),
-    );
+    )
+    .await;
 
-    let (nns_urls, nns_pub_key) =
-        registry_replicator.parse_registry_access_info_from_config(&config);
+    let cancellation_token = CancellationToken::new();
+    info!(logger, "Initializing registry replicator.");
+    let future = registry_replicator
+        .start_polling(cancellation_token.clone())
+        .expect("Failed to start registry replicator");
 
     info!(logger, "Start polling registry.");
-    registry_replicator
-        .start_polling(nns_urls, nns_pub_key)
-        .await
-        .expect("Failed to start registry replicator")
-        .await;
+    let mut handle = tokio::task::spawn(future);
+
+    let result = tokio::select! {
+        _ = shutdown_signal(logger.clone()) => {
+            info!(logger, "Shutting down the registry replicator");
+            cancellation_token.cancel();
+            handle.await
+        },
+        result = &mut handle => {
+            result
+        },
+    };
+
+    match result {
+        Err(err) if err.is_panic() => {
+            warn!(logger, "Registry replicator task panicked: {err}");
+        }
+        _ => {
+            info!(logger, "Registry replicator shut down gracefully");
+        }
+    }
 }
