@@ -47,7 +47,7 @@ use ic_interfaces::{
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
-use ic_interfaces_registry::{POLLING_PERIOD, RegistryClient};
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{ReplicaLogger, debug, error, info, trace, warn};
 use ic_metrics::MetricsRegistry;
