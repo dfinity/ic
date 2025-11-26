@@ -58,7 +58,7 @@ pub fn max_delta_log_memory_limit() -> NumBytes {
 
 /// Truncates the content of a log record so that the record fits within the allowed size.
 fn truncate_content(byte_capacity: usize, mut record: CanisterLogRecord) -> CanisterLogRecord {
-    let max_content_size = byte_capacity - std::mem::size_of::<CanisterLogRecord>();
+    let max_content_size = byte_capacity.saturating_sub(std::mem::size_of::<CanisterLogRecord>());
     record.content.truncate(max_content_size);
     record
 }
@@ -148,10 +148,13 @@ pub struct CanisterLog {
     #[validate_eq(CompareWithValidateEq)]
     records: Records,
 
-    /// Tracks the size of each delta log appended during a round.
-    /// Multiple logs can be appended in one round (e.g. heartbeat, timers, or message executions).
-    /// The collected sizes are used to expose per-round memory usage metrics
-    /// and the record is cleared at the end of the round.
+    /// Tracks per-round sizes of appended delta logs — used solely for metrics.
+    ///
+    /// A round may append multiple logs (e.g. from heartbeats, timers, or message
+    /// executions). Their sizes are collected during the round and cleared after
+    /// metrics are recorded. Because this data is transient and not preserved
+    /// across checkpoints or snapshots, it is excluded from equality checks.
+    #[validate_eq(Ignore)]
     delta_log_sizes: VecDeque<usize>,
 }
 
@@ -188,7 +191,11 @@ impl CanisterLog {
 
     /// Takes the canister log, leaving an empty log in its place.
     pub fn take(&mut self) -> Self {
-        std::mem::replace(self, Self::new_inner(0, vec![], 0))
+        // Just in case preserve next_idx and byte_capacity for the new empty log — otherwise
+        // we could leave a zero-capacity log and cause underflow on later truncations.
+        let next_idx = self.next_idx;
+        let byte_capacity = self.byte_capacity();
+        std::mem::replace(self, Self::new_inner(next_idx, vec![], byte_capacity))
     }
 
     /// Returns the next canister log record index.
