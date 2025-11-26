@@ -32,8 +32,6 @@ thread_local! {
 
     pub static METRICS_MANAGER: Rc<MetricsManager<VM>> = {
         let metrics_manager = MetricsManager {
-            #[cfg(feature = "test")]
-            client: Box::new(management_canister_client_test::ICCanisterClient),
             client: Box::new(ICCanisterClient),
             subnets_metrics: RefCell::new(stable_btreemap_init(SUBNETS_METRICS_MEMORY_ID)),
             last_timestamp_per_subnet: RefCell::new(stable_btreemap_init(LAST_TIMESTAMP_PER_SUBNET_MEMORY_ID)),
