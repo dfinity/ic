@@ -33,7 +33,7 @@ use crate::{
 #[cfg(feature = "tla")]
 use crate::tla::{
     account_to_tla, btc_address_to_tla, utxo_set_to_tla, utxo_to_tla, UPDATE_BALANCE_DESC,
-    UPDATE_BALANCE_START, dummy_utxo
+    dummy_utxo
 };
 #[cfg(feature = "tla")]
 use crate::{
