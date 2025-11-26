@@ -184,20 +184,17 @@ mod withdrawal {
     };
     use ic_ckdoge_minter_test_utils::flow::withdrawal::assert_uses_utxos;
     use ic_ckdoge_minter_test_utils::{
-        DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
-        flow::withdrawal::WithdrawalFlowEnd, only_one, txid, utxo_with_value, utxos_with_value,
+        DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, MEDIAN_TRANSACTION_FEE, RETRIEVE_DOGE_MIN_AMOUNT,
+        Setup, USER_PRINCIPAL, flow::withdrawal::WithdrawalFlowEnd, only_one, txid,
+        utxo_with_value, utxos_with_value,
     };
     use icrc_ledger_types::icrc1::account::Account;
     use std::array;
 
     #[test]
     fn should_withdraw_doge() {
-        let setup = Setup::default();
-        let dogecoin = setup.dogecoin();
-        let fee_percentiles = array::from_fn(|i| i as u64);
-        let median_fee = fee_percentiles[50];
-        assert_eq!(median_fee, 50);
-        dogecoin.set_fee_percentiles(fee_percentiles);
+        let setup = Setup::default().with_median_fee_percentile(MEDIAN_TRANSACTION_FEE);
+
         let account = Account {
             owner: USER_PRINCIPAL,
             subaccount: Some([42_u8; 32]),

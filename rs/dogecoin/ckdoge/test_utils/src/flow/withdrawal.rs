@@ -12,6 +12,7 @@ use ic_ckdoge_minter::{
     address::DogecoinAddress,
     candid_api::{
         GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeWithApprovalError,
+        WithdrawalFee,
     },
     memo_encode,
 };
@@ -112,6 +113,12 @@ where
 {
     pub fn expect_withdrawal_request_accepted(self) -> DogecoinWithdrawalTransactionFlow<S> {
         let balance_before = self.setup.as_ref().ledger().icrc1_balance_of(self.account);
+        let withdrawal_fee = self
+            .setup
+            .as_ref()
+            .minter()
+            .estimate_withdrawal_fee(self.withdrawal_amount)
+            .expect("BUG: failed to estimate withdrawal fee");
 
         let retrieve_doge_id = self
             .await_minter_response()
@@ -165,6 +172,7 @@ where
             address,
             retrieve_doge_id,
             account: self.account,
+            expected_withdrawal_fee: withdrawal_fee,
         }
     }
 
@@ -172,7 +180,7 @@ where
     where
         P: FnOnce(RetrieveDogeWithApprovalError) -> bool,
     {
-        let err = self.await_minter_response().expect_err("");
+        let err = self.await_minter_response().unwrap_err();
         assert!(matcher(err))
     }
 
@@ -192,6 +200,7 @@ pub struct DogecoinWithdrawalTransactionFlow<S> {
     withdrawal_amount: u64,
     address: DogecoinAddress,
     retrieve_doge_id: RetrieveDogeOk,
+    expected_withdrawal_fee: WithdrawalFee,
     account: Account,
 }
 
@@ -231,9 +240,13 @@ where
                 _ => unreachable!(),
             }
         };
+        assert_eq!(
+            WithdrawalFee::from(withdrawal_fee),
+            self.expected_withdrawal_fee,
+            "BUG: withdrawal fee from event does not match fees retrieved from endpoint"
+        );
         assert!(request_block_indices.contains(&self.retrieve_doge_id.block_index));
 
-        // TODO DEFI-2458: fix fee handling
         assert_uses_utxos(&tx, used_utxos.clone());
         let total_inputs: u64 = used_utxos.iter().map(|input| input.value).sum();
 
