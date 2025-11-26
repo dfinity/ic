@@ -24,4 +24,3 @@ rust_test_suite(
     srcs = glob(["tests/**/*.rs"]),
     deps = [":access_list"],
 )
-
