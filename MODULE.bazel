@@ -683,8 +683,8 @@ http_file(
     # ci/container/container-run.sh
     # bazel build //publish/binaries:pocket-ic.gz
     # sha256sum bazel-bin/publish/binaries/pocket-ic.gz
-    sha256 = "237272216498074e5250a0685813b96632963ff9abbc51a7030d9b625985028d",
-    url = "https://github.com/dfinity/pocketic/releases/download/9.0.1/pocket-ic-x86_64-linux.gz",
+    sha256 = "2c75065bfa0d08922e2619cad2193178f2b167c445be83b44cc567f15ea35217",
+    url = "https://github.com/dfinity/pocketic/releases/download/10.0.0/pocket-ic-x86_64-linux.gz",
 )
 
 ## Rosetta CLI
