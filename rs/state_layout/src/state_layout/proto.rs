@@ -193,10 +193,10 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::log_visibility_v2",
             )
             .unwrap_or_default(),
-            // TODO(EXC-2118): remove this temporary code of setting the log memory limit to default value,
+            // TODO(DSM-11): remove this temporary code of setting the log memory limit to default value,
             // read properly from `NumBytes::from(value.log_memory_limit)`.
             log_memory_limit: NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64),
-            // TODO(EXC-2118): old implementation of canister log does not resize, remove after migration is done.
+            // TODO(DSM-11): old implementation of canister log does not resize, remove after migration is done.
             canister_log: CanisterLog::new_aggregate(
                 value.next_canister_log_record_idx,
                 value

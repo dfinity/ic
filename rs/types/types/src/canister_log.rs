@@ -121,7 +121,6 @@ impl Records {
 
     /// Removes old records to make enough free space for new data within the limit.
     fn make_free_space_within_limit(&mut self, new_data_size: usize) {
-        // Removes old records to make enough free space for new data within the limit.
         let mut total_size = new_data_size + self.bytes_used;
         while total_size > self.byte_capacity {
             if let Some(removed_size) = self.pop_front() {
@@ -250,7 +249,7 @@ impl CanisterLog {
     /// Moves all the logs from `delta_log` to `self`.
     pub fn append_delta_log(&mut self, delta_log: &mut Self) {
         // Record the size of the appended delta log for metrics.
-        self.push_delta_log_size(delta_log.bytes_used());
+        self.push_delta_log_size(delta_log.records.bytes_used);
 
         // Assume records sorted cronologically (with increasing idx) and
         // update the system state's next index with the last record's index.

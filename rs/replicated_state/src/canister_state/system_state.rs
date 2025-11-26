@@ -525,7 +525,7 @@ impl SystemState {
             wasm_chunk_store,
             log_visibility: Default::default(),
             log_memory_limit: NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64),
-            // TODO(EXC-2118): CanisterLog does not store log records efficiently,
+            // TODO(DSM-11): CanisterLog does not store log records efficiently,
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
             canister_log: CanisterLog::default_aggregate(),
@@ -2230,7 +2230,7 @@ pub mod testing {
             wasm_chunk_store: WasmChunkStore::new_for_testing(),
             log_visibility: Default::default(),
             log_memory_limit: NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64),
-            // TODO(EXC-2118): CanisterLog does not store log records efficiently,
+            // TODO(DSM-11): CanisterLog does not store log records efficiently,
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
             canister_log: CanisterLog::default_aggregate(),
