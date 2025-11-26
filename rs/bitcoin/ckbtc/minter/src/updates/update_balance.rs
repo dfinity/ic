@@ -214,8 +214,18 @@ pub async fn update_balance<R: CanisterRuntime>(
         min_confirmations,
         CallSource::Client,
         runtime,
-    ) // TODO(ogi): record the error case
-    .await?
+    )
+    .await.map_err(|e| {
+        #[cfg(feature = "tla")]
+        tla_log_response!(
+            Destination::new("btc_canister"),
+            TlaValue::Variant {
+                tag: "Error".to_string(),
+                value: Box::new(TlaValue::Constant("UNIT".to_string())),
+            }
+        );
+        e
+    })?
     .utxos;
 
     #[cfg(feature = "tla")]

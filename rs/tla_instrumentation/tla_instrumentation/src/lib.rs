@@ -269,6 +269,9 @@ pub fn log_method_return(
     global: GlobalState,
     source_location: SourceLocation,
 ) -> ResolvedStatePair {
+    if !matches!(state.stage, Stage::End(_)) {
+        panic!("Returning from method, but not in an end state");
+    }
     let local = state.context.end_update().unwrap_or_else(|e| {
         panic!(
             "Failed to merge locals in log_method_return: {}; label_stack={:?}, existing_locals={:?}, default_end_locals={:?}, handler_state={:?}",
