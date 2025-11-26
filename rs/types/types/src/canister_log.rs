@@ -13,12 +13,12 @@ const MiB: usize = 1024 * KiB;
 /// The minimum size of an aggregate canister log buffer.
 pub const MIN_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 /// The maximum size of an aggregate canister log buffer.
-pub const MAX_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
+pub const MAX_AGGREGATE_LOG_MEMORY_LIMIT: usize = 10 * MiB;
 /// The default size of an aggregate canister log buffer.
 pub const DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 
 /// The maximum size of a delta (per message) canister log buffer.
-pub const MAX_DELTA_LOG_MEMORY_LIMIT: usize = 4 * KiB;
+pub const MAX_DELTA_LOG_MEMORY_LIMIT: usize = 2 * MiB;
 
 /// Upper bound on stored delta-log sizes used for metrics.
 /// Limits memory growth, 10k covers expected per-round

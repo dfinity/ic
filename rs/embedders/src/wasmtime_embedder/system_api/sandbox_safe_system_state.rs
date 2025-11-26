@@ -30,7 +30,6 @@ use ic_replicated_state::{
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
-    max_delta_log_memory_limit,
     messages::{CallContextId, CallbackId, NO_DEADLINE, RejectContext, Request, RequestMetadata},
     methods::Callback,
     time::CoarseTime,
