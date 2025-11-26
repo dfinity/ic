@@ -1,7 +1,7 @@
 name: Dependency Checks
 
 on:
-  pull_request_target:
+  pull_request:
 
 permissions:
   contents: read
@@ -10,8 +10,6 @@ jobs:
   dependency-review:
     runs-on: ubuntu-latest
     steps:
-      - name: 'Checkout Repository'
-        uses: actions/checkout@v4 # safe to run the checkout because we are only reading files and using a gh action
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
         with:
