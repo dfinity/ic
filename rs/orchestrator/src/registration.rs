@@ -414,7 +414,7 @@ impl NodeRegistration {
 
         let node_id = self.node_id;
         let Some(nns_url) = self
-            .get_random_nns_url()
+            .get_random_nns_url_from_registry()
             .or_else(|| self.get_random_nns_url_from_config())
         else {
             return Err("Failed to get random NNS URL.".into());
@@ -460,7 +460,7 @@ impl NodeRegistration {
             .map_err(|e| format!("Failed to create IC agent: {e}"))?;
 
         if let Some(nns_pub_key) = self
-            .get_nns_pub_key_der()
+            .get_nns_pub_key_der_from_registry()
             .or_else(|| self.get_nns_pub_key_der_from_config())
         {
             agent.set_root_key(nns_pub_key);
@@ -510,7 +510,7 @@ impl NodeRegistration {
     }
 
     // Returns one random NNS url from registry.
-    fn get_random_nns_url(&self) -> Option<Url> {
+    fn get_random_nns_url_from_registry(&self) -> Option<Url> {
         let version = self.registry_client.get_latest_version();
         let root_subnet_id = match self.registry_client.get_root_subnet_id(version) {
             Ok(Some(id)) => id,
@@ -569,7 +569,7 @@ impl NodeRegistration {
         }
     }
 
-    fn get_nns_pub_key_der(&self) -> Option<Vec<u8>> {
+    fn get_nns_pub_key_der_from_registry(&self) -> Option<Vec<u8>> {
         let version = self.registry_client.get_latest_version();
         let root_subnet_id = match self.registry_client.get_root_subnet_id(version) {
             Ok(Some(id)) => id,
