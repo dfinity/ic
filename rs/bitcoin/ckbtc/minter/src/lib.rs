@@ -1343,28 +1343,20 @@ pub fn estimate_retrieve_btc_fee<F: FeeEstimator>(
 ) -> Result<WithdrawalFee, BuildTxError> {
     // We simulate the algorithm that selects UTXOs for the
     // specified amount.
+    // TODO DEFI-2518: remove expensive clone operation
     let mut utxos = available_utxos.clone();
-    let selected_utxos = utxos_selection(withdrawal_amount, &mut utxos, 1);
+
     // Only the address type matters for the amount of vbytes, not the actual bytes in the address.
     let dummy_minter_address = BitcoinAddress::P2wpkhV0([u8::MAX; 20]);
     let dummy_recipient_address = BitcoinAddress::P2wpkhV0([42_u8; 20]);
-
-    build_unsigned_transaction_from_inputs(
-        &selected_utxos,
-        vec![(dummy_recipient_address, withdrawal_amount)],
-        dummy_minter_address,
+    crate::queries::estimate_withdrawal_fee(
+        &mut utxos,
+        withdrawal_amount,
         median_fee_millisatoshi_per_vbyte,
+        dummy_minter_address,
+        dummy_recipient_address,
         fee_estimator,
     )
-    .map(|(unsigned_tx, _change_output, fee)| {
-        assert_eq!(
-            unsigned_tx.outputs.len(),
-            2,
-            "BUG: expected 1 output to the recipient and one change output to the minter, \
-                so that the totality of the fee is paid in full by the recipient"
-        );
-        fee
-    })
 }
 
 #[async_trait]

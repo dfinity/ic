@@ -1,4 +1,5 @@
 use ic_cdk::{init, post_upgrade, query, update};
+use ic_ckbtc_minter::address::BitcoinAddress;
 use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
 use ic_ckbtc_minter::{BuildTxError, CanisterRuntime};
@@ -79,25 +80,27 @@ async fn update_balance(args: UpdateBalanceArgs) -> Result<Vec<UtxoStatus>, Upda
 fn estimate_withdrawal_fee(
     arg: EstimateFeeArg,
 ) -> Result<WithdrawalFee, EstimateWithdrawalFeeError> {
+    // Only the address type matters for the amount of vbytes, not the actual bytes in the address.
+    let dummy_minter_address = BitcoinAddress::P2pkh([u8::MAX; 20]);
+    let dummy_recipient_address = BitcoinAddress::P2pkh([42_u8; 20]);
+
     ic_ckbtc_minter::state::read_state(|s| {
         let fee_estimator = DOGECOIN_CANISTER_RUNTIME.fee_estimator(s);
         let withdrawal_amount = arg.amount.unwrap_or(s.fee_based_retrieve_btc_min_amount);
-        ic_ckbtc_minter::estimate_retrieve_btc_fee(
-            &s.available_utxos,
+
+        // TODO DEFI-2518: remove expensive clone operation
+        let mut utxos = s.available_utxos.clone();
+
+        ic_ckbtc_minter::queries::estimate_withdrawal_fee(
+            &mut utxos,
             withdrawal_amount,
             s.last_median_fee_per_vbyte
                 .expect("Dogecoin current fee percentiles not retrieved yet."),
+            dummy_minter_address,
+            dummy_recipient_address,
             &fee_estimator,
         )
-        .map(
-            |ic_ckbtc_minter::queries::WithdrawalFee {
-                 minter_fee,
-                 bitcoin_fee,
-             }| WithdrawalFee {
-                minter_fee,
-                dogecoin_fee: bitcoin_fee,
-            },
-        )
+        .map(WithdrawalFee::from)
         .map_err(|e| match e {
             BuildTxError::NotEnoughFunds
             | BuildTxError::InvalidTransaction(InvalidTransactionError::TooManyInputs { .. }) => {

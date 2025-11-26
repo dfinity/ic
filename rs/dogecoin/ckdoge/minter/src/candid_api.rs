@@ -106,6 +106,15 @@ pub struct WithdrawalFee {
     pub dogecoin_fee: u64,
 }
 
+impl From<ic_ckbtc_minter::queries::WithdrawalFee> for WithdrawalFee {
+    fn from(withdrawal_fee: ic_ckbtc_minter::queries::WithdrawalFee) -> Self {
+        Self {
+            minter_fee: withdrawal_fee.minter_fee,
+            dogecoin_fee: withdrawal_fee.bitcoin_fee,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Serialize, Deserialize)]
 pub enum EstimateWithdrawalFeeError {
     /// The given withdrawal amount is too low to pay for the minter and transaction fee.
