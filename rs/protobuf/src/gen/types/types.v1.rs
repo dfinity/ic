@@ -1654,6 +1654,15 @@ pub struct StrippedBlockProposal {
     pub ingress_messages: ::prost::alloc::vec::Vec<StrippedIngressMessage>,
     #[prost(message, optional, tag = "3")]
     pub unstripped_consensus_message_id: ::core::option::Option<ConsensusMessageId>,
+    #[prost(message, repeated, tag = "4")]
+    pub stripped_dealings: ::prost::alloc::vec::Vec<StrippedDealing>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StrippedDealing {
+    #[prost(uint32, tag = "1")]
+    pub dealer_index: u32,
+    #[prost(message, optional, tag = "2")]
+    pub dealing_id: ::core::option::Option<IDkgArtifactId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StrippedIngressMessage {

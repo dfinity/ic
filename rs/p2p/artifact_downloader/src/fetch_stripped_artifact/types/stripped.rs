@@ -3,8 +3,9 @@ use ic_protobuf::{
     types::v1 as pb,
 };
 use ic_types::{
+    NodeIndex,
     artifact::{ConsensusMessageId, IdentifiableArtifact, PbArtifact},
-    consensus::ConsensusMessage,
+    consensus::{ConsensusMessage, idkg::IDkgArtifactId},
 };
 
 use super::SignedIngressId;
@@ -15,12 +16,19 @@ pub(crate) struct StrippedIngressPayload {
     pub(crate) ingress_messages: Vec<SignedIngressId>,
 }
 
+/// Stripped version of the [`SignedIDkgDealing`]s.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct StrippedIDkgDealings {
+    pub(crate) stripped_dealings: Vec<(NodeIndex, IDkgArtifactId)>,
+}
+
 /// Stripped version of the [`BlockProposal`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct StrippedBlockProposal {
     pub(crate) block_proposal_without_ingresses_proto: pb::BlockProposal,
     pub(crate) stripped_ingress_payload: StrippedIngressPayload,
     pub(crate) unstripped_consensus_message_id: ConsensusMessageId,
+    pub(crate) stripped_idkg_dealings: StrippedIDkgDealings,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -85,6 +93,21 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
                 value.unstripped_consensus_message_id,
                 "unstripped_consensus_message_id",
             )?,
+            stripped_idkg_dealings: StrippedIDkgDealings {
+                stripped_dealings: value
+                    .stripped_dealings
+                    .into_iter()
+                    .map(|dealing| {
+                        Ok((
+                            dealing.dealer_index,
+                            try_from_option_field(
+                                dealing.dealing_id,
+                                "StrippedIDkgDealings::dealing_id",
+                            )?,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, ProxyDecodeError>>()?,
+            },
         })
     }
 }
@@ -105,6 +128,15 @@ impl From<StrippedBlockProposal> for pb::StrippedBlockProposal {
                 })
                 .collect(),
             unstripped_consensus_message_id: Some(value.unstripped_consensus_message_id.into()),
+            stripped_dealings: value
+                .stripped_idkg_dealings
+                .stripped_dealings
+                .into_iter()
+                .map(|(dealer_index, dealing_id)| pb::StrippedDealing {
+                    dealer_index,
+                    dealing_id: Some(dealing_id.into()),
+                })
+                .collect(),
         }
     }
 }
