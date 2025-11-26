@@ -842,6 +842,7 @@ fn process_fee_collector_block(block: &Block<Tokens>) {
     if let Operation::FeeCollector {
         fee_collector,
         caller: _,
+        op: _,
     } = block.transaction.operation
     {
         mutate_state(|s| s.fee_collector_107 = Some(fee_collector));
@@ -982,6 +983,7 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
             Operation::FeeCollector {
                 fee_collector: _,
                 caller: _,
+                op: _,
             } => {
                 // Does not affect the balance
             }
