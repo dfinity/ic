@@ -6,6 +6,9 @@ use std::cmp::max;
 
 pub trait FeeEstimator {
     const DUST_LIMIT: u64;
+    /// The minimum fee increment for transaction resubmission.
+    /// See https://en.bitcoin.it/wiki/Miner_fees#Relaying for more detail.
+    const MIN_RELAY_FEE_RATE_INCREASE: MillisatoshiPerByte;
 
     /// Estimate the median fees based on the given fee percentiles (slice of fee rates in milli base unit per vbyte/byte).
     fn estimate_median_fee(
@@ -84,6 +87,8 @@ impl FeeEstimator for BitcoinFeeEstimator {
     // The threshold for other types is lower,
     // so we simply use 546 satoshi as the minimum amount per output.
     const DUST_LIMIT: u64 = 546;
+
+    const MIN_RELAY_FEE_RATE_INCREASE: MillisatoshiPerByte = 1_000;
 
     fn estimate_median_fee(
         &self,

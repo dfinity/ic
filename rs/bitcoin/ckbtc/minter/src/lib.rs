@@ -54,10 +54,6 @@ mod tests;
 pub const MIN_PENDING_REQUESTS: usize = 20;
 pub const MAX_REQUESTS_PER_BATCH: usize = 100;
 
-/// The minimum fee increment for transaction resubmission.
-/// See https://en.bitcoin.it/wiki/Miner_fees#Relaying for more detail.
-pub const MIN_RELAY_FEE_PER_VBYTE: MillisatoshiPerByte = 1_000;
-
 /// The minimum time the minter should wait before replacing a stuck transaction.
 pub const MIN_RESUBMISSION_DELAY: Duration = Duration::from_secs(24 * 60 * 60);
 
@@ -776,7 +772,7 @@ pub async fn resubmit_transactions<
             Some(prev_fee) => {
                 // Ensure that the fee is at least min relay fee higher than the previous
                 // transaction fee to comply with BIP-125 (https://en.bitcoin.it/wiki/BIP_0125).
-                fee_per_vbyte.max(prev_fee + MIN_RELAY_FEE_PER_VBYTE)
+                fee_per_vbyte.max(prev_fee + Fee::MIN_RELAY_FEE_RATE_INCREASE)
             }
             None => fee_per_vbyte,
         };

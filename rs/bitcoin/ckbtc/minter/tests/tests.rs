@@ -12,7 +12,7 @@ use ic_btc_checker::{
 use ic_btc_interface::{
     GetCurrentFeePercentilesRequest, MillisatoshiPerByte, NetworkInRequest, Txid,
 };
-use ic_ckbtc_minter::fees::BitcoinFeeEstimator;
+use ic_ckbtc_minter::fees::{BitcoinFeeEstimator, FeeEstimator};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::logs::Priority;
@@ -29,8 +29,8 @@ use ic_ckbtc_minter::updates::update_balance::{
     PendingUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
 };
 use ic_ckbtc_minter::{
-    CKBTC_LEDGER_MEMO_SIZE, MAX_NUM_INPUTS_IN_TRANSACTION, MIN_RELAY_FEE_PER_VBYTE,
-    MIN_RESUBMISSION_DELAY, MinterInfo, Network, UTXOS_COUNT_THRESHOLD,
+    CKBTC_LEDGER_MEMO_SIZE, MAX_NUM_INPUTS_IN_TRANSACTION, MIN_RESUBMISSION_DELAY, MinterInfo,
+    Network, UTXOS_COUNT_THRESHOLD,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
@@ -167,7 +167,7 @@ fn assert_replacement_transaction(old: &bitcoin::Transaction, new: &bitcoin::Tra
 
     let new_out_value = new.output.iter().map(|out| out.value).sum::<u64>();
     let prev_out_value = old.output.iter().map(|out| out.value).sum::<u64>();
-    let relay_cost = new.vsize() as u64 * MIN_RELAY_FEE_PER_VBYTE / 1000;
+    let relay_cost = new.vsize() as u64 * BitcoinFeeEstimator::MIN_RELAY_FEE_RATE_INCREASE / 1000;
 
     assert!(
         new_out_value + relay_cost <= prev_out_value,

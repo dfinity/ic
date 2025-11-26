@@ -41,6 +41,10 @@ impl FeeEstimator for DogecoinFeeEstimator {
     // in Koinu
     const DUST_LIMIT: u64 = 1_000_000;
 
+    // Incremental fee rate for resubmission is 10 koinu/byte,
+    // corresponding to 10k millikoinus/byte
+    const MIN_RELAY_FEE_RATE_INCREASE: u64 = 10_000;
+
     fn estimate_median_fee(&self, fee_percentiles: &[u64]) -> Option<u64> {
         const DEFAULT_REGTEST_FEE: MillisatoshiPerByte = DogecoinFeeEstimator::DUST_LIMIT * 1_000;
 

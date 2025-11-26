@@ -492,7 +492,8 @@ where
 }
 
 fn assert_replacement_transaction(old: &bitcoin::Transaction, new: &bitcoin::Transaction) {
-    const MIN_RELAY_FEE_PER_KB: u64 = 1_000;
+    // In koinu/byte
+    const MIN_RELAY_FEE_PER_BYTE: u64 = 10;
 
     fn input_utxos(tx: &bitcoin::Transaction) -> Vec<bitcoin::OutPoint> {
         tx.input.iter().map(|txin| txin.previous_output).collect()
@@ -511,8 +512,7 @@ fn assert_replacement_transaction(old: &bitcoin::Transaction, new: &bitcoin::Tra
 
     let new_out_value = new.output.iter().map(|out| out.value.to_sat()).sum::<u64>();
     let prev_out_value = old.output.iter().map(|out| out.value.to_sat()).sum::<u64>();
-    // TODO DEFI-2458: fix fee handling
-    let relay_cost = new.vsize() as u64 * MIN_RELAY_FEE_PER_KB / 1000;
+    let relay_cost = new.total_size() as u64 * MIN_RELAY_FEE_PER_BYTE;
 
     assert!(
         new_out_value + relay_cost <= prev_out_value,
