@@ -6,6 +6,7 @@ use assert_matches::assert_matches;
 use bitcoin::hashes::Hash;
 use candid::{Decode, Principal};
 use ic_bitcoin_canister_mock::{OutPoint, Utxo};
+use ic_ckdoge_minter::candid_api::EstimateWithdrawalFeeError;
 use ic_ckdoge_minter::{
     BitcoinAddress, BurnMemo, EventType, MIN_RESUBMISSION_DELAY, RetrieveBtcRequest, Txid,
     WithdrawalReimbursementReason,
@@ -117,8 +118,7 @@ where
             .setup
             .as_ref()
             .minter()
-            .estimate_withdrawal_fee(self.withdrawal_amount)
-            .expect("BUG: failed to estimate withdrawal fee");
+            .estimate_withdrawal_fee(self.withdrawal_amount);
 
         let retrieve_doge_id = self
             .await_minter_response()
@@ -172,7 +172,7 @@ where
             address,
             retrieve_doge_id,
             account: self.account,
-            expected_withdrawal_fee: withdrawal_fee,
+            withdrawal_fee,
         }
     }
 
@@ -200,7 +200,7 @@ pub struct DogecoinWithdrawalTransactionFlow<S> {
     withdrawal_amount: u64,
     address: DogecoinAddress,
     retrieve_doge_id: RetrieveDogeOk,
-    expected_withdrawal_fee: WithdrawalFee,
+    withdrawal_fee: Result<WithdrawalFee, EstimateWithdrawalFeeError>,
     account: Account,
 }
 
@@ -242,7 +242,9 @@ where
         };
         assert_eq!(
             WithdrawalFee::from(withdrawal_fee),
-            self.expected_withdrawal_fee,
+            self.withdrawal_fee.expect(
+                "BUG: failed to estimate withdrawal fee, even though transaction is expected"
+            ),
             "BUG: withdrawal fee from event does not match fees retrieved from endpoint"
         );
         assert!(request_block_indices.contains(&self.retrieve_doge_id.block_index));
@@ -321,6 +323,11 @@ where
         let balance_after_withdrawal = ledger.icrc1_balance_of(self.account);
         let withdrawal_id = self.retrieve_doge_id.block_index;
 
+        assert_eq!(
+            self.withdrawal_fee,
+            Err(EstimateWithdrawalFeeError::AmountTooHigh),
+            "BUG: the only reason for reimbursing a transaction is that the amount is so big that it requires too many UTXOs"
+        );
         assert_eq!(
             minter.retrieve_doge_status(withdrawal_id),
             RetrieveDogeStatus::Pending
