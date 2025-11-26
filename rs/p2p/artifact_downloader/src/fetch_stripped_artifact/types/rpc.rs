@@ -176,14 +176,16 @@ mod tests {
     use ic_types::{
         Height,
         artifact::IngressMessageId,
-        consensus::idkg::{
-            IDkgArtifactIdData, IDkgArtifactIdDataOf, dealing_prefix, dealing_support_prefix,
-        },
+        consensus::idkg::{IDkgArtifactIdData, IDkgArtifactIdDataOf, dealing_prefix},
         crypto::{CryptoHash, CryptoHashOf, canister_threshold_sig::idkg::IDkgTranscriptId},
         signature::BasicSignature,
         time::UNIX_EPOCH,
     };
-    use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_0, message_test_id};
+    use ic_types_test_utils::ids::{NODE_1, SUBNET_0, message_test_id};
+
+    use crate::fetch_stripped_artifact::test_utils::{
+        fake_finalization_consensus_message_id, fake_idkg_dealing_support_artifact_id,
+    };
 
     use super::*;
 
@@ -218,12 +220,7 @@ mod tests {
                 ingress_message_id: IngressMessageId::new(UNIX_EPOCH, message_test_id(42)),
                 ingress_bytes_hash: CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
             },
-            block_proposal_id: ConsensusMessageId {
-                hash: ConsensusMessageHash::Finalization(CryptoHashOf::from(
-                    CryptoHash(Vec::new()),
-                )),
-                height: Height::new(101),
-            },
+            block_proposal_id: fake_finalization_consensus_message_id(),
         };
 
         let proto = pb::GetIngressMessageInBlockRequest::from(request.clone());
@@ -285,12 +282,7 @@ mod tests {
                     subnet_id: SUBNET_0,
                 }),
             ),
-            block_proposal_id: ConsensusMessageId {
-                hash: ConsensusMessageHash::Finalization(CryptoHashOf::from(
-                    CryptoHash(Vec::new()),
-                )),
-                height: Height::new(101),
-            },
+            block_proposal_id: fake_finalization_consensus_message_id(),
         };
 
         let proto = pb::GetIDkgDealingInBlockRequest::from(request.clone());
@@ -305,17 +297,9 @@ mod tests {
 
     #[test]
     fn get_idkg_dealing_in_block_request_serialization_fails_if_not_dealing_test() {
-        let transcript_id = IDkgTranscriptId::new(SUBNET_0, 1, Height::new(101));
         let request = GetIDkgDealingInBlockRequest {
             node_index: 1,
-            dealing_id: IDkgArtifactId::DealingSupport(
-                dealing_support_prefix(&transcript_id, &NODE_1, &NODE_2),
-                IDkgArtifactIdDataOf::new(IDkgArtifactIdData {
-                    height: Height::new(101),
-                    hash: CryptoHash(Vec::new()),
-                    subnet_id: SUBNET_0,
-                }),
-            ),
+            dealing_id: fake_idkg_dealing_support_artifact_id(),
             block_proposal_id: make_proposal_id(),
         };
 

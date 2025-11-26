@@ -256,6 +256,12 @@ message StrippedBlockProposal {
   BlockProposal block_proposal_without_ingress_payload = 1;
   repeated StrippedIngressMessage ingress_messages = 2;
   ConsensusMessageId unstripped_consensus_message_id = 3;
+  repeated StrippedDealing stripped_dealings = 4;
+}
+
+message StrippedDealing {
+  uint32 dealer_index = 1;
+  IDkgArtifactId dealing_id = 2;
 }
 
 message StrippedIngressMessage {

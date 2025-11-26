@@ -3,6 +3,8 @@ use ic_types::{
     artifact::IdentifiableArtifact, batch::IngressPayload, consensus::ConsensusMessage,
 };
 
+use crate::fetch_stripped_artifact::types::stripped::StrippedIDkgDealings;
+
 use super::types::{
     SignedIngressId,
     stripped::{MaybeStrippedConsensusMessage, StrippedBlockProposal, StrippedIngressPayload},
@@ -44,6 +46,9 @@ impl Strippable for ConsensusMessage {
                     block_proposal_without_ingresses_proto: proto,
                     stripped_ingress_payload,
                     unstripped_consensus_message_id,
+                    stripped_idkg_dealings: StrippedIDkgDealings {
+                        stripped_dealings: vec![],
+                    },
                 })
             }
             msg => MaybeStrippedConsensusMessage::Unstripped(msg),
