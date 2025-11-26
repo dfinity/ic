@@ -4078,26 +4078,26 @@ impl From<pb::MaturityDisbursement> for pb_api::MaturityDisbursement {
     }
 }
 
-impl From<pb::Value> for pb_api::Value {
-    fn from(item: pb::Value) -> Self {
+impl From<pb::SelfDescribingValue> for pb_api::SelfDescribingValue {
+    fn from(item: pb::SelfDescribingValue) -> Self {
         let Some(value) = item.value else {
             return Self::Map(HashMap::new());
         };
         match value {
-            pb::value::Value::Blob(v) => Self::Blob(v),
-            pb::value::Value::Text(v) => Self::Text(v),
-            pb::value::Value::Nat(v) => {
+            pb::self_describing_value::Value::Blob(v) => Self::Blob(v),
+            pb::self_describing_value::Value::Text(v) => Self::Text(v),
+            pb::self_describing_value::Value::Nat(v) => {
                 let nat = Nat::decode(&mut v.as_slice()).unwrap();
                 Self::Nat(nat)
             }
-            pb::value::Value::Int(v) => {
+            pb::self_describing_value::Value::Int(v) => {
                 let int = Int::decode(&mut v.as_slice()).unwrap();
                 Self::Int(int)
             }
-            pb::value::Value::Array(v) => {
+            pb::self_describing_value::Value::Array(v) => {
                 Self::Array(v.values.into_iter().map(Self::from).collect())
             }
-            pb::value::Value::Map(v) => Self::Map(
+            pb::self_describing_value::Value::Map(v) => Self::Map(
                 v.values
                     .into_iter()
                     .map(|(k, v)| (k, Self::from(v)))
@@ -4107,27 +4107,31 @@ impl From<pb::Value> for pb_api::Value {
     }
 }
 
-impl From<pb_api::Value> for pb::Value {
-    fn from(item: pb_api::Value) -> Self {
+impl From<pb_api::SelfDescribingValue> for pb::SelfDescribingValue {
+    fn from(item: pb_api::SelfDescribingValue) -> Self {
         let value = match item {
-            pb_api::Value::Blob(v) => pb::value::Value::Blob(v),
-            pb_api::Value::Text(v) => pb::value::Value::Text(v),
-            pb_api::Value::Nat(v) => {
+            pb_api::SelfDescribingValue::Blob(v) => pb::self_describing_value::Value::Blob(v),
+            pb_api::SelfDescribingValue::Text(v) => pb::self_describing_value::Value::Text(v),
+            pb_api::SelfDescribingValue::Nat(v) => {
                 let mut bytes = Vec::new();
                 v.encode(&mut bytes).unwrap();
-                pb::value::Value::Nat(bytes)
+                pb::self_describing_value::Value::Nat(bytes)
             }
-            pb_api::Value::Int(v) => {
+            pb_api::SelfDescribingValue::Int(v) => {
                 let mut bytes = Vec::new();
                 v.encode(&mut bytes).unwrap();
-                pb::value::Value::Int(bytes)
+                pb::self_describing_value::Value::Int(bytes)
             }
-            pb_api::Value::Array(v) => pb::value::Value::Array(pb::ValueArray {
-                values: v.into_iter().map(Self::from).collect(),
-            }),
-            pb_api::Value::Map(v) => pb::value::Value::Map(pb::ValueMap {
-                values: v.into_iter().map(|(k, v)| (k, Self::from(v))).collect(),
-            }),
+            pb_api::SelfDescribingValue::Array(v) => {
+                pb::self_describing_value::Value::Array(pb::SelfDescribingValueArray {
+                    values: v.into_iter().map(Self::from).collect(),
+                })
+            }
+            pb_api::SelfDescribingValue::Map(v) => {
+                pb::self_describing_value::Value::Map(pb::SelfDescribingValueMap {
+                    values: v.into_iter().map(|(k, v)| (k, Self::from(v))).collect(),
+                })
+            }
         };
         Self { value: Some(value) }
     }
@@ -4138,7 +4142,7 @@ impl From<pb::SelfDescribingProposalAction> for pb_api::SelfDescribingProposalAc
         Self {
             type_name: Some(item.type_name),
             type_description: Some(item.type_description),
-            value: item.value.map(pb_api::Value::from),
+            value: item.value.map(pb_api::SelfDescribingValue::from),
         }
     }
 }
