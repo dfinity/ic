@@ -423,7 +423,7 @@ async fn await_dns_propagation(logger: &Logger, base_domain: &str) -> Result<()>
     let msg = format!("DNS propagation check for domain {base_domain}");
     retry_with_msg_async!(&msg, logger, READY_TIMEOUT, RETRY_INTERVAL, || async {
         // Generate a random subdomain to test the wildcard record
-        let random_subdomain: String = rand::thread_rng()
+        let random_subdomain: String = rand::rng()
             .sample_iter(&Alphanumeric)
             .take(8)
             .map(char::from)

@@ -1146,14 +1146,14 @@ mod tests {
         }
         impl HasId<Small> for Big {}
         impl HasId<Big> for Small {}
-        let set = BTreeMap::<Small, Big>::exhaustive_set(&mut rand::thread_rng());
+        let set = BTreeMap::<Small, Big>::exhaustive_set(&mut rand::rng());
         assert_eq!(set.len(), 3);
         assert_eq!(set[0][&Small::A], Big::X);
         assert_eq!(set[0][&Small::B], Big::Y);
         assert_eq!(set[1][&Small::A], Big::Z);
         assert!(set[2].is_empty());
 
-        let set = BTreeMap::<Big, Small>::exhaustive_set(&mut rand::thread_rng());
+        let set = BTreeMap::<Big, Small>::exhaustive_set(&mut rand::rng());
         assert_eq!(set.len(), 2);
         assert_eq!(set[0][&Big::X], Small::A);
         assert_eq!(set[0][&Big::Y], Small::B);
@@ -1174,7 +1174,7 @@ mod tests {
             A1,
             A2,
         }
-        let set = Enum1::exhaustive_set(&mut rand::thread_rng());
+        let set = Enum1::exhaustive_set(&mut rand::rng());
         assert_eq!(set.len(), 3);
         assert_eq!(set[0], Enum1::V2);
         assert_eq!(

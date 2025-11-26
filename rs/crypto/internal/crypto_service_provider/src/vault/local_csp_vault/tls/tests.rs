@@ -181,7 +181,9 @@ mod keygen {
         let mut rng = reproducible_rng();
 
         // generate random values
-        let mut inputs: Vec<_> = (0..100).map(|_| rng.gen_range(0..MAX_TIME_SECS)).collect();
+        let mut inputs: Vec<_> = (0..100)
+            .map(|_| rng.random_range(0..MAX_TIME_SECS))
+            .collect();
 
         // append edge cases (when time is below `GRACE_PERIOD_SECS`)
         inputs.push(0);
@@ -550,7 +552,7 @@ mod sign {
     }
 
     fn random_message<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
-        let msg_len: usize = rng.gen_range(0..1024);
+        let msg_len: usize = rng.random_range(0..1024);
         (0..msg_len).map(|_| rng.r#gen::<u8>()).collect()
     }
 }

@@ -42,7 +42,7 @@ pub fn test_absence_witness<R: Rng + CryptoRng>(full_tree: &LabeledTree<Vec<u8>>
     // tree, probabilistically also include existing paths
     const MAX_COMBINED_PATHS: usize = 10;
     for num_paths in 2..MAX_COMBINED_PATHS.min(existing_paths.len()) {
-        let num_absent_paths = rng.gen_range(1..=num_paths.min(paths_to_absent_ranges.len()));
+        let num_absent_paths = rng.random_range(1..=num_paths.min(paths_to_absent_ranges.len()));
         let num_existing_paths = num_paths - num_absent_paths;
 
         assert!(
@@ -205,7 +205,7 @@ fn new_subtree_in_range<R: Rng + CryptoRng>(
     rng: &mut R,
 ) -> LabeledTree<Vec<u8>> {
     let absent_label = random_label_in_range(range, rng);
-    let with_random_subtree = rng.gen_bool(0.5);
+    let with_random_subtree = rng.random_bool(0.5);
     let mut tree = if with_random_subtree {
         random_subtree_maybe_with_leaf(rng)
     } else {
@@ -232,7 +232,7 @@ fn random_label_in_range<R: Rng + CryptoRng>(range: &AbsentLabelRange, rng: &mut
                 let mut result = l
                     .as_bytes()
                     .iter()
-                    .map(|b| if *b != 0 { rng.gen_range(0..*b) } else { 0 })
+                    .map(|b| if *b != 0 { rng.random_range(0..*b) } else { 0 })
                     .collect();
                 append_bytes(&mut result, 0..5, rng);
                 assert!(
@@ -251,7 +251,7 @@ fn random_label_in_range<R: Rng + CryptoRng>(range: &AbsentLabelRange, rng: &mut
                 let mut result = l
                     .as_bytes()
                     .iter()
-                    .map(|b| rng.gen_range((*b).saturating_add(1)..=u8::MAX))
+                    .map(|b| rng.random_range((*b).saturating_add(1)..=u8::MAX))
                     .collect();
                 append_bytes(&mut result, 0..5, rng);
                 // if we accidentally generated `l`, create a label that is
@@ -277,7 +277,7 @@ fn random_label_in_range<R: Rng + CryptoRng>(range: &AbsentLabelRange, rng: &mut
                 let s = if i < sb.len() { sb[i] } else { 0 };
                 let l = if i < lb.len() { lb[i] } else { u8::MAX };
                 if s <= l {
-                    result.push(rng.gen_range(s..=l));
+                    result.push(rng.random_range(s..=l));
                 } else {
                     result.push(rng.r#gen::<u8>());
                 }
@@ -300,7 +300,7 @@ fn random_label_in_range<R: Rng + CryptoRng>(range: &AbsentLabelRange, rng: &mut
 }
 
 fn random_subtree_maybe_with_leaf<R: Rng + CryptoRng>(rng: &mut R) -> LabeledTree<Vec<u8>> {
-    let with_leaf = rng.gen_bool(0.5);
+    let with_leaf = rng.random_bool(0.5);
     if with_leaf {
         LabeledTree::SubTree(
             flatmap!(Label::from(random_bytes(0..10, rng)) => LabeledTree::Leaf(random_bytes(0..10, rng))),
@@ -315,7 +315,7 @@ fn append_bytes<Range: rand::distributions::uniform::SampleRange<usize>, R: Rng 
     range: Range,
     rng: &mut R,
 ) {
-    let num_bytes = rng.gen_range(range);
+    let num_bytes = rng.random_range(range);
     for _ in 0..num_bytes {
         vec.push(rng.r#gen::<u8>());
     }
@@ -338,7 +338,7 @@ pub fn rng_from_u32(seed: u32) -> ChaCha20Rng {
 pub fn try_remove_leaf<R: Rng + CryptoRng>(tree: &mut LabeledTree<Vec<u8>>, rng: &mut R) -> bool {
     let num_leaves = get_num_leaves(tree);
     if num_leaves != 0 {
-        remove_leaf(tree, rng.gen_range(0..num_leaves));
+        remove_leaf(tree, rng.random_range(0..num_leaves));
         true
     } else {
         false
@@ -402,7 +402,7 @@ pub fn try_remove_empty_subtree<R: Rng + CryptoRng>(
             return false;
         }
 
-        paths_to_empty_subtrees[rng.gen_range(0..paths_to_empty_subtrees.len())]
+        paths_to_empty_subtrees[rng.random_range(0..paths_to_empty_subtrees.len())]
             .iter()
             .map(|&l| l.clone())
             .collect()
@@ -488,7 +488,7 @@ fn add_subtree<R: Rng + CryptoRng>(
     let path: Vec<Label> = {
         let subtrees = all_subtrees(tree);
         assert!(!subtrees.is_empty());
-        subtrees[rng.gen_range(0..subtrees.len())]
+        subtrees[rng.random_range(0..subtrees.len())]
             .iter()
             .map(|&l| l.clone())
             .collect()
@@ -535,7 +535,7 @@ fn random_label<R: Rng + CryptoRng>(range: std::ops::Range<usize>, rng: &mut R) 
 }
 
 fn random_bytes<R: Rng + CryptoRng>(range: std::ops::Range<usize>, rng: &mut R) -> Vec<u8> {
-    let len = rng.gen_range(range);
+    let len = rng.random_range(range);
     let mut result = vec![0u8; len];
     rng.fill_bytes(&mut result[..]);
     result
@@ -578,7 +578,7 @@ pub fn try_randomly_change_bytes_leaf_value<F: Fn(&mut Vec<u8>), R: Rng + Crypto
 ) -> bool {
     let num_leaves = get_num_leaves(tree);
     if num_leaves != 0 {
-        modify_leaf(tree, rng.gen_range(0..num_leaves), modify_bytes_fn);
+        modify_leaf(tree, rng.random_range(0..num_leaves), modify_bytes_fn);
         true
     } else {
         false
@@ -662,7 +662,7 @@ pub fn try_randomly_change_bytes_label<F: Fn(&mut Vec<u8>), R: Rng + CryptoRng>(
 ) -> bool {
     let num_labels = get_num_labels(tree);
     if num_labels != 0 {
-        modify_label(tree, rng.gen_range(0..num_labels), modify_bytes_fn);
+        modify_label(tree, rng.random_range(0..num_labels), modify_bytes_fn);
         true
     } else {
         false

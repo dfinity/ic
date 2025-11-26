@@ -37,9 +37,9 @@ fn test_range_to_i8_is_correct() -> CanisterThresholdResult<()> {
             // tests 1000 ranges for each scalar
             for _iteration in 0..1000 {
                 // generate a random position that is in bounds
-                let pos = rng.gen_range(0..naf.bit_len());
+                let pos = rng.random_range(0..naf.bit_len());
                 // generate a random length
-                let len = rng.gen_range(1..std::cmp::min(8, naf.bit_len() - pos + 1));
+                let len = rng.random_range(1..std::cmp::min(8, naf.bit_len() - pos + 1));
                 let computed_result = naf.range_as_i8(pos, len);
                 // compute the expected result by pulling and aggregating single bits
                 let mut expected_result = 0i8;

@@ -1235,7 +1235,7 @@ prop_compose! {
 
         replicated_state.metadata.batch_time = Time::from_nanos_since_unix_epoch(time);
         let mut rng = ChaChaRng::seed_from_u64(time);
-        let rotation = rng.gen_range(0..raw_requests.len().max(1));
+        let rotation = rng.random_range(0..raw_requests.len().max(1));
         raw_requests.rotate_left(rotation);
 
         if let Some(requests) = subnet_queue_requests {

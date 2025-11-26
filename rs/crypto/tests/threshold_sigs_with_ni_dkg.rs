@@ -30,7 +30,7 @@ const ONE_NODE: NumberOfNodes = NumberOfNodes::new(1);
 // A random receiver is chosen to be both combiner and verifier.
 fn should_threshold_sign_if_sufficient_shares() {
     let rng = &mut reproducible_rng();
-    let subnet_size = rng.gen_range(1..7);
+    let subnet_size = rng.random_range(1..7);
     let (config, dkg_id, crypto_components) = setup_with_random_ni_dkg_config(subnet_size, rng);
 
     run_ni_dkg_and_load_transcript_for_receivers(&config, &crypto_components);
@@ -57,7 +57,7 @@ fn should_threshold_sign_if_sufficient_shares() {
 // Test uses a random NI-DKG config. A random receiver is chosen as verifier.
 fn should_produce_valid_signature_shares() {
     let rng = &mut reproducible_rng();
-    let subnet_size = rng.gen_range(1..7);
+    let subnet_size = rng.random_range(1..7);
     let (config, dkg_id, crypto_components) = setup_with_random_ni_dkg_config(subnet_size, rng);
 
     run_ni_dkg_and_load_transcript_for_receivers(&config, &crypto_components);
@@ -87,7 +87,7 @@ fn should_produce_valid_signature_shares() {
 fn should_create_same_config_and_transcript_with_same_seed() {
     let generate_transcript = || {
         let rng = &mut ChaCha20Rng::from_seed([0; 32]);
-        let subnet_size = rng.gen_range(1..7);
+        let subnet_size = rng.random_range(1..7);
         let (config, dkg_id, crypto_components) = setup_with_random_ni_dkg_config(subnet_size, rng);
         let transcript = run_ni_dkg_and_create_single_transcript(&config, &crypto_components);
         (config, dkg_id, transcript)
@@ -98,7 +98,7 @@ fn should_create_same_config_and_transcript_with_same_seed() {
 #[test]
 fn should_load_transcript_and_validate_signature_shares_as_non_receiver_without_secret_key() {
     let rng = &mut reproducible_rng();
-    let subnet_size = rng.gen_range(1..7);
+    let subnet_size = rng.random_range(1..7);
     let (config, dkg_id, crypto_components) = setup_with_random_ni_dkg_config(subnet_size, rng);
 
     let transcript = run_ni_dkg_and_create_single_transcript(&config, &crypto_components);
@@ -145,7 +145,7 @@ fn should_load_transcript_and_validate_signature_shares_as_non_receiver_without_
 #[test]
 fn should_successfully_reload_the_same_transcript() {
     let rng = &mut reproducible_rng();
-    let subnet_size = rng.gen_range(1..7);
+    let subnet_size = rng.random_range(1..7);
     let (config, _dkg_id, crypto_components) = setup_with_random_ni_dkg_config(subnet_size, rng);
 
     let transcript = run_ni_dkg_and_create_single_transcript(&config, &crypto_components);
@@ -170,7 +170,7 @@ fn should_successfully_reload_the_same_transcript() {
 fn should_fail_to_combine_insufficient_shares() {
     let rng = &mut reproducible_rng();
     // Need >=4 nodes to have >=2 shares to combine in a low-threshold config
-    let subnet_size = rng.gen_range(4..7);
+    let subnet_size = rng.random_range(4..7);
     let (config, dkg_id, crypto_components) = setup_with_random_ni_dkg_config(subnet_size, rng);
     let num_of_shares_to_combine = config.threshold().get() - ONE_NODE;
 
@@ -332,7 +332,7 @@ mod non_interactive_distributed_key_generation {
     #[test]
     fn should_produce_valid_dealings_for_all_dealers() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..7);
+        let subnet_size = rng.random_range(1..7);
         let (config, _dkg_id, crypto_components) =
             setup_with_random_ni_dkg_config(subnet_size, rng);
 
@@ -353,7 +353,7 @@ mod non_interactive_distributed_key_generation {
     #[test]
     fn should_produce_same_transcript_for_all_receivers() {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..7);
+        let subnet_size = rng.random_range(1..7);
         let (config, _dkg_id, crypto_components) =
             setup_with_random_ni_dkg_config(subnet_size, rng);
 
@@ -500,7 +500,7 @@ mod non_interactive_distributed_key_generation {
         let rng = &mut reproducible_rng();
         let max_subnet_size = 10;
         let mut env = NiDkgTestEnvironment::new();
-        let registry_version = RegistryVersion::from(rng.gen_range(1..u32::MAX - 10_000) as u64);
+        let registry_version = RegistryVersion::from(rng.random_range(1..u32::MAX - 10_000) as u64);
 
         // epoch 0
         let config0 = RandomNiDkgConfig::builder()
@@ -608,7 +608,7 @@ mod non_interactive_distributed_key_generation {
     fn should_not_reshare_old_transcript_after_pruning_old_keys() {
         let rng = &mut reproducible_rng();
 
-        let registry_version = RegistryVersion::from(rng.gen_range(1..u32::MAX - 10_000) as u64);
+        let registry_version = RegistryVersion::from(rng.random_range(1..u32::MAX - 10_000) as u64);
 
         let mut env = NiDkgTestEnvironment::new();
 
@@ -656,9 +656,9 @@ mod non_interactive_distributed_key_generation {
     #[test]
     fn should_not_load_old_transcript_after_pruning_old_keys() {
         let rng = &mut reproducible_rng();
-        let registry_version = RegistryVersion::from(rng.gen_range(1..u32::MAX - 10_000) as u64);
+        let registry_version = RegistryVersion::from(rng.random_range(1..u32::MAX - 10_000) as u64);
         let mut env = NiDkgTestEnvironment::new();
-        let subnet_size = rng.gen_range(4..7);
+        let subnet_size = rng.random_range(4..7);
 
         // Epoch 0
         let config0 = RandomNiDkgConfig::builder()

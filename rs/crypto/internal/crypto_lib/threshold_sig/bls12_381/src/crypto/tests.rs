@@ -237,7 +237,7 @@ fn omnipotent_dealer() {
 fn test_combined_secret_key() {
     let rng = &mut reproducible_rng();
     for _trial in 0..3 {
-        let num_receivers = rng.gen_range::<u8, _>(1..=u8::MAX) as NodeIndex;
+        let num_receivers = rng.random_range::<u8, _>(1..=u8::MAX) as NodeIndex;
         let poly_degree = rng.r#gen::<u8>() as usize;
 
         let polynomial = Polynomial::random(poly_degree, rng);

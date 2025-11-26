@@ -728,7 +728,7 @@ fn hash_plan(
     // rehash_every_nth checkpoints in expectation.
     let mut rng = ChaChaRng::seed_from_u64(seed);
     let rehash_every_nth = rehash_every_nth.max(1); // 0 will behave like 1
-    let offset = rng.gen_range(0..rehash_every_nth);
+    let offset = rng.random_range(0..rehash_every_nth);
 
     debug_assert!(uses_chunk_size(base_manifest, max_chunk_size));
 

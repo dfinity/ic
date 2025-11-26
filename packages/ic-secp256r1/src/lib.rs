@@ -5,13 +5,7 @@
 
 //! A crate with handling of ECDSA keys over the secp256r1 curve
 
-use p256::{
-    AffinePoint, NistP256, Scalar,
-    elliptic_curve::{
-        Curve,
-        generic_array::{GenericArray, typenum::Unsigned},
-    },
-};
+use p256::{AffinePoint, NistP256, Scalar, elliptic_curve::Curve};
 use rand::{CryptoRng, RngCore};
 use std::sync::LazyLock;
 use zeroize::ZeroizeOnDrop;
@@ -103,8 +97,8 @@ impl DerivationPath {
 
         let hmac_output: [u8; 64] = hmac.finalize().into_bytes().into();
 
-        let fb = p256::FieldBytes::from_slice(&hmac_output[..32]);
-        let next_offset = <p256::Scalar as Reduce<p256::U256>>::reduce_bytes(fb);
+        let fb: p256::FieldBytes = p256::FieldBytes::from_slice(&hmac_output[..32]);
+        let next_offset: p256::Scalar = Reduce::reduce(fb);
         let next_chain_key: [u8; 32] = hmac_output[32..].to_vec().try_into().expect("Correct size");
 
         // If iL >= order, try again with the "next" index as described in SLIP-10
@@ -124,7 +118,7 @@ impl DerivationPath {
         chain_code: &[u8; 32],
     ) -> ([u8; 32], Scalar, AffinePoint) {
         use p256::ProjectivePoint;
-        use p256::elliptic_curve::{group::GroupEncoding, ops::MulByGenerator};
+        use p256::elliptic_curve::group::GroupEncoding;
 
         let mut ckd_input = pt.to_bytes();
 
@@ -132,8 +126,8 @@ impl DerivationPath {
 
         loop {
             let (next_chain_code, next_offset) = Self::ckd(idx, &ckd_input, chain_code);
-
-            let next_pt = (pt + ProjectivePoint::mul_by_generator(&next_offset)).to_affine();
+            let next_offset_pt: ProjectivePoint = Group::mul_by_generator(&next_offset);
+            let next_pt = (pt + next_offset_pt).to_affine();
 
             // If the new key is not infinity, we're done: return the new key
             if !bool::from(next_pt.is_identity()) {
@@ -307,7 +301,7 @@ pub struct PrivateKey {
 impl PrivateKey {
     /// Generate a new random private key
     pub fn generate() -> Self {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         Self::generate_using_rng(&mut rng)
     }
 

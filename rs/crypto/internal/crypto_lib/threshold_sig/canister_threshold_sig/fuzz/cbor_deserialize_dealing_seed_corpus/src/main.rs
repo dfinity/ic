@@ -45,14 +45,14 @@ fn generate_dealings() -> Result<Vec<IDkgDealingInternal>, IdkgCreateDealingInte
 
 fn generate_dealing() -> Result<IDkgDealingInternal, IdkgCreateDealingInternalError> {
     let rng = &mut chacha_20_rng();
-    let mut associated_data: Vec<u8> = vec![0u8; rng.gen_range(10..200)];
+    let mut associated_data: Vec<u8> = vec![0u8; rng.random_range(10..200)];
     rng.fill_bytes(&mut associated_data);
-    let num_parties: u32 = rng.gen_range(3..40);
+    let num_parties: u32 = rng.random_range(3..40);
     let curve = EccCurveType::K256;
     let (_private_keys, public_keys) = gen_private_keys(curve, num_parties as usize);
-    let threshold = rng.gen_range(1..num_parties / 3 + 1);
-    let dealer_index = rng.gen_range(0..num_parties);
-    let shares_type = rng.gen_range(0..4);
+    let threshold = rng.random_range(1..num_parties / 3 + 1);
+    let dealer_index = rng.random_range(0..num_parties);
+    let shares_type = rng.random_range(0..4);
     let shares = match shares_type {
         0 => SecretShares::Random,
         1 => reshare_of_unmasked_shares(rng, curve),

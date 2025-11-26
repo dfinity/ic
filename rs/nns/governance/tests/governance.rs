@@ -3655,7 +3655,7 @@ fn test_random_voting_rewards_scenarios() {
         let mut proposals = vec![];
         let mut total_proposal_weight = 0;
         for _proposal_index in 0..PROPOSAL_COUNT {
-            let proposer = rng.gen_range(0..neuron_count) as u64;
+            let proposer = rng.random_range(0..neuron_count) as u64;
 
             let mut votes = BTreeMap::new();
             for (neuron_id, _w) in neuron_weights.iter().enumerate() {

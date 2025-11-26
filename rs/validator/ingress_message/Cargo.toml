@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
-getrandom = { version = "0.2", optional = true }
+getrandom = { workspace = true, optional = true }
 hex = { workspace = true }
 ic-crypto-interfaces-sig-verification = { path = "../../crypto/interfaces/sig_verification" }
 ic-crypto-standalone-sig-verifier = { path = "../../crypto/standalone-sig-verifier" }
@@ -22,7 +22,7 @@ ic-cdk = { workspace = true, optional = true }
 
 [features]
 default = ["dep:ic-cdk"]
-js = ["time/wasm-bindgen", "getrandom/js"]
+js = ["time/wasm-bindgen", "getrandom/wasm_js"]
 
 [dev-dependencies]
 assert_matches = { workspace = true }

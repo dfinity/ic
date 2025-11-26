@@ -204,7 +204,7 @@ fn should_correctly_sign_compared_to_testvec() {
 fn should_sign_verifiably_with_generated_node_signing_key() {
     let csp_vault = LocalCspVault::builder_for_test().build_into_arc();
     let rng = &mut reproducible_rng();
-    let msg_len_in_bytes = rng.gen_range(0..1024);
+    let msg_len_in_bytes = rng.random_range(0..1024);
     let message = random_message(rng, msg_len_in_bytes);
 
     generate_key_pair_and_sign_and_verify_message(csp_vault, &message);
@@ -265,7 +265,7 @@ fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
         )
         .expect("failed to generate threshold sig keys");
     let key_id = key_ids[0];
-    let msg_len: usize = rng.gen_range(0..1024);
+    let msg_len: usize = rng.random_range(0..1024);
     let msg: Vec<u8> = (0..msg_len).map(|_| rng.r#gen::<u8>()).collect();
 
     let result = csp_vault.sign(AlgorithmId::Ed25519, msg, key_id);

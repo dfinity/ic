@@ -12,7 +12,7 @@ fn test_rng_with_seed(seed: [u8; 32]) -> ChaCha20Rng {
 }
 
 fn test_rng() -> ChaCha20Rng {
-    let seed = rand::thread_rng().r#gen::<[u8; 32]>();
+    let seed = rand::rng().r#gen::<[u8; 32]>();
     // If a test ever fails, reproduce it using
     // let mut rng = test_rng_with_seed(hex!("SEED"));
     println!("RNG seed: {}", hex::encode(seed));

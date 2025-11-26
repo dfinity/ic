@@ -833,7 +833,7 @@ pub mod node {
                 minimum_size,
                 self.len()
             );
-            let subset_size = rng.gen_range(minimum_size..=self.len());
+            let subset_size = rng.random_range(minimum_size..=self.len());
             self.iter().choose_multiple(rng, subset_size).into_iter()
         }
 
@@ -1395,7 +1395,7 @@ pub fn set_of_nodes(ids: &[u64]) -> BTreeSet<NodeId> {
 }
 // Random registry version decreased by a margin that allows for increasing it again sufficiently during tests.
 fn random_registry_version<R: RngCore + CryptoRng>(rng: &mut R) -> RegistryVersion {
-    RegistryVersion::new(rng.gen_range(1..u64::MAX - 10_000))
+    RegistryVersion::new(rng.random_range(1..u64::MAX - 10_000))
 }
 
 pub fn random_transcript_id<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
@@ -1438,7 +1438,7 @@ pub fn random_receiver_id_excluding_set<'a, R: CryptoRng + RngCore>(
     if acceptable_receivers.is_empty() {
         return None;
     }
-    Some(acceptable_receivers[rng.gen_range(0..acceptable_receivers.len())])
+    Some(acceptable_receivers[rng.random_range(0..acceptable_receivers.len())])
 }
 
 pub fn random_dealer_id<R: RngCore + CryptoRng>(
@@ -1523,7 +1523,7 @@ impl IDkgMode {
             min < max,
             "min ({min}) should not be larger than max ({max}) subnet size"
         );
-        rng.gen_range(min..=max)
+        rng.random_range(min..=max)
     }
 
     /// Returns the minimum subnet size for `&self` that can be used to generate
@@ -3090,7 +3090,7 @@ pub mod ecdsa {
         R: RngCore + CryptoRng,
         S: SampleRange<usize>,
     {
-        let subnet_size = rng.gen_range(subnet_size_range);
+        let subnet_size = rng.random_range(subnet_size_range);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -3143,7 +3143,7 @@ pub mod schnorr {
         R: RngCore + CryptoRng,
         S: SampleRange<usize>,
     {
-        let subnet_size = rng.gen_range(subnet_size_range);
+        let subnet_size = rng.random_range(subnet_size_range);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
@@ -3152,7 +3152,7 @@ pub mod schnorr {
             derivation_path: vec![],
         };
 
-        let message_length = rng.gen_range(0..2_000_000);
+        let message_length = rng.random_range(0..2_000_000);
         let mut message = vec![0; message_length];
         rng.fill_bytes(&mut message);
         let seed = Randomness::from(rng.r#gen::<[u8; 32]>());

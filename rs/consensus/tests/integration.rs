@@ -74,7 +74,7 @@ fn minority_invalid_notary_share_signature_would_pass() -> Result<(), String> {
             let f = (config.num_nodes - 1) / 3;
             assert!(f > 0, "This test requires NUM_NODES >= 4");
             let mut malicious: Vec<ComponentModifier> = Vec::new();
-            for _ in 0..rng.gen_range(1..=f) {
+            for _ in 0..rng.random_range(1..=f) {
                 malicious.push(malicious::invalid_notary_share_signature())
             }
             run_n_rounds_and_collect_hashes(config, malicious, true);
@@ -103,7 +103,7 @@ fn minority_absent_notary_share_would_pass() -> Result<(), String> {
             let f = (config.num_nodes - 1) / 3;
             assert!(f > 0, "This test requires NUM_NODES >= 4");
             let mut malicious: Vec<ComponentModifier> = Vec::new();
-            for _ in 0..rng.gen_range(1..=f) {
+            for _ in 0..rng.random_range(1..=f) {
                 malicious.push(malicious::absent_notary_share());
             }
             run_n_rounds_and_collect_hashes(config, malicious, true);
@@ -132,7 +132,7 @@ fn minority_maliciouly_notarize_all_would_pass() -> Result<(), String> {
             let f = (config.num_nodes - 1) / 3;
             assert!(f > 0, "This test requires NUM_NODES >= 4");
             let mut malicious: Vec<ComponentModifier> = Vec::new();
-            for _ in 0..rng.gen_range(1..=f) {
+            for _ in 0..rng.random_range(1..=f) {
                 let malicious_flags = MaliciousFlags {
                     maliciously_notarize_all: true,
                     ..MaliciousFlags::default()
@@ -152,7 +152,7 @@ fn minority_maliciouly_finalize_all_would_pass() -> Result<(), String> {
             let f = (config.num_nodes - 1) / 3;
             assert!(f > 0, "This test requires NUM_NODES >= 4");
             let mut malicious: Vec<ComponentModifier> = Vec::new();
-            for _ in 0..rng.gen_range(1..=f) {
+            for _ in 0..rng.random_range(1..=f) {
                 let malicious_flags = MaliciousFlags {
                     maliciously_finalize_all: true,
                     ..MaliciousFlags::default()
@@ -203,7 +203,7 @@ fn minority_maliciouly_idkg_dealers_would_pass() -> Result<(), String> {
             let f = (config.num_nodes - 1) / 3;
             assert!(f > 0, "This test requires NUM_NODES >= 4");
             let mut malicious: Vec<ComponentModifier> = Vec::new();
-            for _ in 0..rng.gen_range(1..=f) {
+            for _ in 0..rng.random_range(1..=f) {
                 let malicious_flags = MaliciousFlags {
                     maliciously_corrupt_idkg_dealings: true,
                     ..MaliciousFlags::default()

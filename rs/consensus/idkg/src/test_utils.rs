@@ -764,7 +764,7 @@ pub(crate) fn create_corrupted_transcript<R: CryptoRng + Rng>(
         .unwrap()
         .get_mut(&to_corrupt)
         .unwrap();
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let builder = signed_dealing.content.clone().into_builder();
     signed_dealing.content = builder
         .corrupt_internal_dealing_raw_by_changing_ciphertexts(&[complainer_index], &mut rng)

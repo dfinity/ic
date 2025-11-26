@@ -26,7 +26,7 @@ impl MultiSigTestEnvironment {
         let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
 
         // Random registry version decreased by a margin that allows for increasing it again sufficiently during tests.
-        let registry_version = { RegistryVersion::new(rng.gen_range(1..u64::MAX - 10_000)) };
+        let registry_version = { RegistryVersion::new(rng.random_range(1..u64::MAX - 10_000)) };
 
         let mut env = Self {
             crypto_components: BTreeMap::new(),

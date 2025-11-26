@@ -699,7 +699,7 @@ impl Subnet {
 
     pub fn with_random_height(mut self) -> Self {
         use rand::Rng;
-        self.initial_height = rand::thread_rng().r#gen();
+        self.initial_height = rand::rng().r#gen();
         self
     }
 

@@ -456,7 +456,7 @@ impl RemoteTestRuntime {
     /// it
     fn get_nonce_vec(&self) -> Vec<u8> {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         (0..8).map(move |_| rng.r#gen::<u8>()).collect()
     }
 }

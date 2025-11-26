@@ -7,7 +7,7 @@
 //!     use rand::Rng;
 //!
 //!     thread_local! {
-//!         static IS_FOO_ENABLED: Cell<bool> = Cell::new(rand::thread_rng().r#gen());
+//!         static IS_FOO_ENABLED: Cell<bool> = Cell::new(rand::rng().r#gen());
 //!     }
 //!
 //!     pub fn is_foo_enabled() -> bool {

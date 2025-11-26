@@ -158,7 +158,7 @@ impl MockDkgConfig {
             } else {
                 all_node_ids
                     .iter()
-                    .take(rng.gen_range(min_dealers..=num_nodes))
+                    .take(rng.random_range(min_dealers..=num_nodes))
                     .cloned()
                     .collect()
             },
@@ -166,15 +166,15 @@ impl MockDkgConfig {
         .expect("Could not create NiDkgDealers struct for test");
         let num_dealers = dealers.get().len();
 
-        let num_receivers = rng.gen_range(min_receivers..=num_nodes);
+        let num_receivers = rng.random_range(min_receivers..=num_nodes);
         let receivers =
             NiDkgReceivers::new(all_node_ids.iter().take(num_receivers).cloned().collect())
                 .expect("Could not create NiDkgReceivers struct for test");
 
         // Config values
         let algorithm_id = AlgorithmId::NiDkg_Groth20_Bls12_381;
-        let max_corrupt_dealers = rng.gen_range(0..num_dealers); // Need at least one honest dealer.
-        let threshold = rng.gen_range(min_threshold..=num_receivers); // threshold <= num_receivers
+        let max_corrupt_dealers = rng.random_range(0..num_dealers); // Need at least one honest dealer.
+        let threshold = rng.random_range(min_threshold..=num_receivers); // threshold <= num_receivers
         let epoch = Epoch::from(rng.r#gen::<u32>());
 
         let receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey> = receivers

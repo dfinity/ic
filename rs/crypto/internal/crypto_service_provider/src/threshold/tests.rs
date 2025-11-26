@@ -260,8 +260,8 @@ pub mod util {
     pub fn test_threshold_scheme_with_basic_keygen(seed: Seed, message: &[u8]) {
         let mut rng = seed.into_rng();
         let seed = Seed::from_rng(&mut rng);
-        let threshold = NumberOfNodes::from(rng.gen_range(1..10));
-        let number_of_signers = NumberOfNodes::from(rng.gen_range(0..10));
+        let threshold = NumberOfNodes::from(rng.random_range(1..10));
+        let number_of_signers = NumberOfNodes::from(rng.random_range(0..10));
 
         let vault = LocalCspVault::builder_for_test().with_rng(rng).build();
         let threshold_keygen = vault.threshold_keygen_for_test(

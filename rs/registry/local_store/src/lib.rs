@@ -360,7 +360,7 @@ mod tests {
     fn empty_changelog_after_clear() {
         let tempdir = TempDir::new().unwrap();
         let store = LocalStoreImpl::new(tempdir.path());
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let changelog = get_random_changelog(1, &mut rng);
 
         store
@@ -394,7 +394,7 @@ mod tests {
     fn storing_at_version_0_fails() {
         let tempdir = TempDir::new().unwrap();
         let store = LocalStoreImpl::new(tempdir.path());
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let changelog = get_random_changelog(1, &mut rng);
 
         store
@@ -406,7 +406,7 @@ mod tests {
     fn can_extend_and_restore() {
         let tempdir = TempDir::new().unwrap();
         let store = LocalStoreImpl::new(tempdir.path());
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         let mut changelog = get_random_changelog(200, &mut rng);
         changelog.iter().enumerate().for_each(|(i, c)| {

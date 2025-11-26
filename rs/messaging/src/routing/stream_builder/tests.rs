@@ -1031,7 +1031,7 @@ fn requests_into_queue_round_robin(
         .collect();
 
     let mut rng = ChaChaRng::seed_from_u64(time.as_nanos_since_unix_epoch());
-    let rotation = rng.gen_range(0..request_ring.len().max(1));
+    let rotation = rng.random_range(0..request_ring.len().max(1));
     request_ring.rotate_left(rotation);
 
     let mut bytes_routed = 0;

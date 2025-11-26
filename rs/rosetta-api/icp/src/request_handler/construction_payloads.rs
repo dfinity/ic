@@ -94,7 +94,7 @@ impl RosettaRequestHandler {
             .as_ref()
             .and_then(|meta| meta.memo)
             .map(Memo)
-            .unwrap_or_else(|| Memo(rand::thread_rng().r#gen()));
+            .unwrap_or_else(|| Memo(rand::rng().r#gen()));
 
         let mut ingress_expiries = vec![];
         let mut now = ingress_start;

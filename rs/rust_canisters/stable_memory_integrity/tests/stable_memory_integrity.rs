@@ -187,7 +187,7 @@ impl StableOperationType {
     /// 40% read
     /// 40% write
     fn random(rng: &mut impl Rng) -> Self {
-        let val = rng.gen_range(0.0..1.0);
+        let val = rng.random_range(0.0..1.0);
         if val < 0.05 {
             Self::Size
         } else if val < 0.2 {
@@ -289,8 +289,8 @@ impl proptest::strategy::Strategy for OperationsStrategy {
 
         // Execute 20 messages.
         for _ in 0..20 {
-            let allow_invalid = rng.gen_bool(0.2);
-            let concentrate_ops = rng.gen_bool(0.5);
+            let allow_invalid = rng.random_bool(0.2);
+            let concentrate_ops = rng.random_bool(0.5);
             let ops = generate_random_ops(allow_invalid, concentrate_ops, rng, &mut state);
             all_operations.push(ops);
         }
@@ -304,7 +304,7 @@ fn generate_random_ops(
     rng: &mut impl Rng,
     state: &mut StableState,
 ) -> Operations {
-    let count = rng.gen_range(0..100);
+    let count = rng.random_range(0..100);
     let mut result = Vec::with_capacity(count);
     let initial_state = state.clone();
     for _ in 0..count {
@@ -356,22 +356,22 @@ fn generate_operation(
     } else {
         0
     };
-    if allow_invalid && rng.gen_bool(0.1) {
+    if allow_invalid && rng.random_bool(0.1) {
         return generate_invalid_operation(rng, state, ty);
     }
     match ty {
         StableOperationType::Size => StableOperation::Size,
         StableOperationType::Grow => {
-            let new_pages = rng.gen_range(0..100);
+            let new_pages = rng.random_range(0..100);
             StableOperation::Grow(new_pages)
         }
         StableOperationType::Read => {
             let length = if state.contents.is_empty() {
                 0
             } else {
-                rng.gen_range(0..4 * KB)
+                rng.random_range(0..4 * KB)
             };
-            let start = rng.gen_range(
+            let start = rng.random_range(
                 range_start as u64..(state.contents.len() as u64).saturating_sub(length).max(1),
             );
             StableOperation::Read { start, length }
@@ -380,11 +380,11 @@ fn generate_operation(
             let write_size = if state.contents.is_empty() {
                 0
             } else {
-                rng.gen_range(0..4 * KB)
+                rng.random_range(0..4 * KB)
             };
             let mut contents = vec![0; write_size as usize];
             rng.fill(&mut contents[..]);
-            let start = rng.gen_range(
+            let start = rng.random_range(
                 range_start as u64
                     ..(state.contents.len() as u64)
                         .saturating_sub(write_size)
@@ -408,17 +408,17 @@ fn generate_invalid_operation(
             StableOperation::Grow(max_pages_to_grow.saturating_add(rng.r#gen::<u64>()))
         }
         StableOperationType::Read => {
-            let length = rng.gen_range(0..4 * KB);
-            let start = rng.gen_range(
+            let length = rng.random_range(0..4 * KB);
+            let start = rng.random_range(
                 (state.contents.len() as u64).saturating_sub(length)
                     ..(state.contents.len()) as u64 + 10,
             );
             StableOperation::Read { start, length }
         }
         StableOperationType::Write => {
-            let write_size = rng.gen_range(0..4 * KB);
+            let write_size = rng.random_range(0..4 * KB);
             let contents = vec![0; write_size as usize];
-            let start = rng.gen_range(
+            let start = rng.random_range(
                 (state.contents.len() as u64).saturating_sub(write_size)
                     ..(state.contents.len()) as u64 + 10,
             );

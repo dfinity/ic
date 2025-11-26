@@ -1,4 +1,4 @@
-use rand::{CryptoRng, Error, Rng, RngCore, SeedableRng};
+use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
 /// Byte length of the seed type used in [`ReproducibleRng`].
@@ -24,7 +24,7 @@ impl ReproducibleRng {
     /// Randomly generates a seed and prints it to `stdout`.
     pub fn new() -> Self {
         let mut seed = [0u8; SEED_LEN];
-        rand::thread_rng().fill(&mut seed);
+        rand::rng().fill(&mut seed);
         let rng = Self::from_seed_internal(seed);
         println!("{rng:?}");
         rng
@@ -76,10 +76,6 @@ impl RngCore for ReproducibleRng {
 
     fn fill_bytes(&mut self, dest: &mut [u8]) {
         self.rng.fill(dest)
-    }
-
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Error> {
-        self.rng.try_fill_bytes(dest)
     }
 }
 

@@ -1757,7 +1757,7 @@ fn sparse_labeled_tree_many_paths_max_depth_one_too_deep() {
     let too_long_subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH as usize - 1];
 
     let rng = &mut reproducible_rng();
-    let target_index = rng.gen_range(0..TREE_WIDTH);
+    let target_index = rng.random_range(0..TREE_WIDTH);
 
     let mut paths = Vec::with_capacity(TREE_WIDTH);
 
@@ -2992,7 +2992,7 @@ fn witness_for_a_labeled_tree_does_not_contain_private_data_impl<R: RngCore + Cr
         );
 
         // `NUMBER_OF_RANDOM_LEAVES` *consecutive* random indexes
-        let start: usize = rng.gen_range(0..num_selected_leaves);
+        let start: usize = rng.random_range(0..num_selected_leaves);
         let indexes: Vec<_> = (start..start + num_selected_leaves).collect();
         witness_for_a_labeled_tree_does_not_contain_private_data_multileaf(
             labeled_tree,
@@ -3127,8 +3127,8 @@ fn pruning_depth_0_tree_works_correctly() {
         // generate 10 random invalid trees and check that we cannot 1) generate
         // a witness and 2) recompute the hash using the wrong tree
         for _ in 0..10 {
-            let random_tree_desired_size: u32 = rng.gen_range(1..100);
-            let min_leaves = rng.gen_range(0..10);
+            let random_tree_desired_size: u32 = rng.random_range(1..100);
+            let min_leaves = rng.random_range(0..10);
             let other_labeled_tree = new_random_labeled_tree(
                 rng,
                 RANDOM_TREE_MAX_DEPTH,
@@ -3185,8 +3185,8 @@ fn pruning_witness_pruned_in_the_root_fails_for_any_labeled_tree() {
     use rand::Rng;
     let rng = &mut reproducible_rng();
     const RANDOM_TREE_MAX_DEPTH: u32 = 10;
-    let random_tree_desired_size: u32 = rng.gen_range(1..100);
-    let min_leaves = rng.gen_range(0..10);
+    let random_tree_desired_size: u32 = rng.random_range(1..100);
+    let min_leaves = rng.random_range(0..10);
     const WITNESS: Witness = Witness::Pruned {
         digest: Digest([0u8; Sha256::DIGEST_LEN]),
     };

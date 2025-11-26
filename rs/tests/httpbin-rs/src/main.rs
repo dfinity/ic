@@ -193,8 +193,8 @@ async fn large_response_total_header_size_handler(
 }
 
 async fn random_handler() -> String {
-    let mut rng = rand::thread_rng();
-    let random_number: u32 = rng.gen_range(1..=1000000000);
+    let mut rng = rand::rng();
+    let random_number: u32 = rng.random_range(1..=1000000000);
     random_number.to_string()
 }
 

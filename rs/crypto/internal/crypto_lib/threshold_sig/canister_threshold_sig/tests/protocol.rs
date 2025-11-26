@@ -380,7 +380,7 @@ fn should_be_able_to_perform_bip340_signature() -> Result<(), CanisterThresholdE
     let corrupted_dealings = 1;
     let threshold = (nodes - 1) / 3;
 
-    let msg_lens = [0, 1, 32, rng.gen_range(0..2_000_000)];
+    let msg_lens = [0, 1, 32, rng.random_range(0..2_000_000)];
     for msg_len in msg_lens {
         let mut signed_message = vec![0; msg_len];
         rng.fill_bytes(&mut signed_message);
@@ -441,7 +441,7 @@ fn should_be_able_to_perform_taproot_signature() -> Result<(), CanisterThreshold
     let corrupted_dealings = 1;
     let threshold = (nodes - 1) / 3;
 
-    //let msg_lens = [0, 1, 32, rng.gen_range(0..2_000_000)];
+    //let msg_lens = [0, 1, 32, rng.random_range(0..2_000_000)];
 
     let msg_lens = [32, 32, 32, 32, 32, 32, 32, 32, 32];
 

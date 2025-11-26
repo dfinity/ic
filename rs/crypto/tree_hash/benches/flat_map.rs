@@ -83,14 +83,14 @@ fn random_inputs_with_dups<R: Rng + CryptoRng>(
     rng: &mut R,
 ) -> Vec<(Label, Vec<u8>)> {
     assert!(len > 1);
-    let num_dups = rng.gen_range(1..len - 1);
+    let num_dups = rng.random_range(1..len - 1);
     let num_wo_dups = len - num_dups;
 
     let mut result = random_inputs(num_wo_dups, input_size, rng);
 
     // append duplicates
     for _ in 0..num_dups {
-        let idx = rng.gen_range(0..num_wo_dups);
+        let idx = rng.random_range(0..num_wo_dups);
         result.push((result[idx].0.clone(), random_value(32, rng)));
     }
 

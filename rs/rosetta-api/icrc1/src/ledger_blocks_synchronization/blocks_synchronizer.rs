@@ -757,7 +757,7 @@ mod tests {
                 // There is no point in shuffling the blockchain if it has length zero.
                 if num_blocks > 0 {
                     // If shuffled, the blockchain is no longer in order and thus no longer valid.
-                    rosetta_blocks.shuffle(&mut rand::thread_rng());
+                    rosetta_blocks.shuffle(&mut rand::rng());
                     let shuffled_blocks = rosetta_blocks.to_vec();
                     assert!(blocks_verifier::is_valid_blockchain(&shuffled_blocks,&rosetta_blocks.last().unwrap().clone().get_block_hash().clone()).is_err()|| num_blocks<=1||rosetta_blocks==shuffled_blocks);
                 }

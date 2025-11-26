@@ -220,6 +220,6 @@ fn dummy_dealing_support<R: Rng + CryptoRng>(rng: &mut R) -> IDkgDealingSupport 
 }
 
 fn random_bytes<R: Rng + CryptoRng>(range: std::ops::Range<usize>, rng: &mut R) -> Vec<u8> {
-    let len = rng.gen_range(range);
+    let len = rng.random_range(range);
     rng.sample_iter(Standard).take(len).collect()
 }

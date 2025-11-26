@@ -395,7 +395,7 @@ mod single_call_bincode {
     #[test]
     fn should_call_serialization_once_and_have_consistent_encoding() {
         let rng = &mut reproducible_rng();
-        let len: usize = rng.gen_range(0..1000);
+        let len: usize = rng.random_range(0..1000);
         let mut dummy = vec![0; len];
         rng.fill_bytes(dummy.as_mut_slice());
         // tokio serde implemented the Bincode object using

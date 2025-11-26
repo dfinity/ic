@@ -231,7 +231,7 @@ mod tests {
         let mut candidates = vec![];
         let now = Instant::now();
         for i in 0..51 {
-            let priority = rand::thread_rng().gen_range(0..100);
+            let priority = rand::rng().gen_range(0..100);
             candidates.push(EvictionCandidate {
                 id: canister_test_id(i),
                 last_used: now - Duration::from_secs(i + 1),
@@ -240,7 +240,7 @@ mod tests {
             });
         }
         for i in 0..49 {
-            let priority = rand::thread_rng().gen_range(0..100);
+            let priority = rand::rng().gen_range(0..100);
             candidates.push(EvictionCandidate {
                 id: canister_test_id(i),
                 last_used: now + Duration::from_secs(i + 1),
@@ -261,7 +261,7 @@ mod tests {
         let mut candidates = vec![];
         let now = Instant::now();
         for i in 0..100 {
-            let priority = rand::thread_rng().gen_range(0..100);
+            let priority = rand::rng().gen_range(0..100);
             candidates.push(EvictionCandidate {
                 id: canister_test_id(i),
                 last_used: now - Duration::from_secs(i + 1),

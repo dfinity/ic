@@ -815,7 +815,7 @@ fn message_in_size_range<R: Rng + CryptoRng>(
     range: core::ops::Range<usize>,
     rng: &mut R,
 ) -> Vec<u8> {
-    let size = rng.gen_range(range);
+    let size = rng.random_range(range);
     vec![123; size]
 }
 

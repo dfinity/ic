@@ -134,7 +134,7 @@ impl SimulatedIngressHistory {
     /// 3. All messages are within expiry between `t - 2s - MAX_INGRESS_TTL` and
     ///    `t - 2s`.
     fn set_history(&self, messages: BTreeMap<Time, MessageId>) {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let start_time = self.time_source.get_relative_time();
         let end_time = *messages.keys().next_back().unwrap();
         let mut histories = vec![];
@@ -257,7 +257,7 @@ where
 /// randomly distributed over the given expiry time period.
 fn prepare(time_source: &dyn TimeSource, duration: Duration, num: usize) -> Vec<SignedIngress> {
     let now = time_source.get_relative_time();
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     (0..num)
         .map(|i| {
             let expiry = Duration::from_millis(

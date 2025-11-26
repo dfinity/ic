@@ -155,7 +155,7 @@ impl Subnet {
     pub fn pick_random_nodes(&self, n: usize) -> Result<Vec<Arc<Node>>, ErrorCause> {
         let nodes = self
             .nodes
-            .choose_multiple(&mut rand::thread_rng(), n)
+            .choose_multiple(&mut rand::rng(), n)
             .cloned()
             .collect::<Vec<_>>();
 
@@ -181,7 +181,7 @@ impl Subnet {
         let nodes = &self.nodes[0..m];
 
         let picked_nodes = nodes
-            .choose_multiple(&mut rand::thread_rng(), n)
+            .choose_multiple(&mut rand::rng(), n)
             .cloned()
             .collect::<Vec<_>>();
 

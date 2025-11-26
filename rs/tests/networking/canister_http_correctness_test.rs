@@ -2493,7 +2493,7 @@ fn expected_cycle_cost(
             .build(),
         request.into(),
         &BTreeSet::new(),
-        &mut rand::thread_rng(),
+        &mut rand::rng(),
     )
     .unwrap();
     let req_size = dummy_context.variable_parts_size();

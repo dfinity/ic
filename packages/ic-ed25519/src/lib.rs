@@ -101,13 +101,13 @@ impl PrivateKey {
     /// Create a new random secret Ed25519 key
     #[cfg(feature = "rand")]
     pub fn generate() -> Self {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         Self::generate_using_rng(&mut rng)
     }
 
     /// Create a new random secret Ed25519 key using specified RNG
     #[cfg(feature = "rand")]
-    pub fn generate_using_rng<R: rand::CryptoRng + rand::Rng>(rng: &mut R) -> Self {
+    pub fn generate_using_rng<R: rand::CryptoRng>(rng: &mut R) -> Self {
         let sk = SigningKey::generate(rng);
         Self { sk }
     }
@@ -517,7 +517,7 @@ pub enum SignatureError {
     /// The batch was invalid (e.g., due to length mismatch between number of
     /// messages and number of signatures)
     #[error(
-        "The batch was invalid (e.g., due to length mismatch between number of 
+        "The batch was invalid (e.g., due to length mismatch between number of
         messages and number of signatures)"
     )]
     InvalidBatch,

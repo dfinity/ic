@@ -213,7 +213,7 @@ pub fn replace_random_known_with_dummy_pruned<R: rand::Rng>(
 
     let mut paths = vec![];
     paths_to_all_known(&mut vec![], &mut paths, witness);
-    let target_path: Vec<Label> = paths[rng.gen_range(0..paths.len())]
+    let target_path: Vec<Label> = paths[rng.random_range(0..paths.len())]
         .iter()
         .map(|&l| l.clone())
         .collect();

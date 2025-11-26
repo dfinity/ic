@@ -452,7 +452,7 @@ mod verify_ed25519 {
         }
 
         pub fn random_message<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
-            let mut msg = vec![0u8; rng.gen_range(0..RANDOM_MSG_MAX_LEN)];
+            let mut msg = vec![0u8; rng.random_range(0..RANDOM_MSG_MAX_LEN)];
             rng.fill_bytes(&mut msg[..]);
             msg
         }

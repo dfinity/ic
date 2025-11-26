@@ -110,7 +110,7 @@ fn bench_verify_dealing<M: Measurement, R: Rng + CryptoRng>(
                 let (env, config, dealings) = bench_context
                     .get_or_init(|| prepare_verify_dealing_test_vectors(test_case, rng));
                 let (dealer_id, dealing) = dealings
-                    .get(rng.gen_range(0..test_case.num_of_dealers))
+                    .get(rng.random_range(0..test_case.num_of_dealers))
                     .unwrap();
 
                 let receiver_id = config.random_receiver_id(rng);

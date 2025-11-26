@@ -160,7 +160,7 @@ impl<'a> OutputIterator<'a> {
             .collect();
 
         let mut rng = ChaChaRng::seed_from_u64(seed);
-        let rotation = rng.gen_range(0..canister_iterators.len().max(1));
+        let rotation = rng.random_range(0..canister_iterators.len().max(1));
         canister_iterators.rotate_left(rotation);
 
         // Push the subnet queues in front in order to make sure that at least one

@@ -143,7 +143,7 @@ pub fn generate_header(prev_blockhash: BlockHash, prev_time: u32, nonce: u32) ->
 /// Generates a number of seconds used for adding to the previous time (1 to 10 minutes).
 fn gen_time_delta() -> u32 {
     let mut rng = StdRng::from_entropy();
-    rng.gen_range(60..600)
+    rng.random_range(60..600)
 }
 
 /// This method is used to solve a header's proof of work puzzle.

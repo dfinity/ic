@@ -384,7 +384,7 @@ mod tests {
 
     #[test]
     fn should_parse_crypto_node_key() {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for key_purpose in &[
             KeyPurpose::NodeSigning,
             KeyPurpose::DkgDealingEncryption,

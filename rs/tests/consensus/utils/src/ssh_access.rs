@@ -36,7 +36,7 @@ const SSH_ACCESS_BACKOFF: Duration = Duration::from_secs(5);
 pub fn generate_key_strings() -> (String, String) {
     // Our keys are Ed25519, and not RSA. Once we figure out a direct way to encode
     // an Ed25519 private key the SSH way, we might consider switching to it.
-    let rsa = rsa::RsaPrivateKey::new(&mut rand::thread_rng(), 1024).expect("RSA keygen failed");
+    let rsa = rsa::RsaPrivateKey::new(&mut rand::rng(), 1024).expect("RSA keygen failed");
     use rsa::traits::PublicKeyParts;
     let e = rsa.e();
     let n = rsa.n();

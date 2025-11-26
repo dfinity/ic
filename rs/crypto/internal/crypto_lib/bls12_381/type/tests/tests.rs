@@ -1005,8 +1005,8 @@ fn with_random_duplicates(
     let mut result_pks = pks.to_vec();
     let mut result_msgs = msgs.to_vec();
     for _ in 0..n {
-        let in_index = rng.gen_range(0..sigs.len());
-        let out_index = rng.gen_range(0..result_sigs.len() + 1);
+        let in_index = rng.random_range(0..sigs.len());
+        let out_index = rng.random_range(0..result_sigs.len() + 1);
         result_sigs.insert(out_index, sigs[in_index].clone());
         result_pks.insert(out_index, pks[in_index].clone());
         result_msgs.insert(out_index, msgs[in_index].clone());
@@ -1027,8 +1027,8 @@ fn with_random_new_msgs_signed_by_existing_keys(
     let mut result_pks = pks.to_vec();
     let mut result_msgs = msgs.to_vec();
     for _ in 0..n {
-        let in_index = rng.gen_range(0..sigs.len());
-        let out_index = rng.gen_range(0..result_sigs.len() + 1);
+        let in_index = rng.random_range(0..sigs.len());
+        let out_index = rng.random_range(0..result_sigs.len() + 1);
 
         let rand_new_msg = G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>());
 
@@ -1057,10 +1057,10 @@ fn with_random_sigs_of_existing_messages_signed_by_existing_signers(
     let mut result_pks = pks.to_vec();
     let mut result_msgs = msgs.to_vec();
     for _ in 0..n {
-        let msg_index = rng.gen_range(0..sigs.len());
-        let signer_index = rng.gen_range(0..sigs.len());
+        let msg_index = rng.random_range(0..sigs.len());
+        let signer_index = rng.random_range(0..sigs.len());
 
-        let out_index = rng.gen_range(0..result_sigs.len() + 1);
+        let out_index = rng.random_range(0..result_sigs.len() + 1);
 
         let rand_selected_pk = pks[signer_index].clone();
         let rand_selected_sk = sks[signer_index].clone();

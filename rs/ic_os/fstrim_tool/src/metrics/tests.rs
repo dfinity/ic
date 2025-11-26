@@ -159,7 +159,7 @@ fn set_metrics() {
 fn update_metrics() {
     let mut rng = reproducible_rng();
     for _ in 0..100 {
-        let total_runs: u64 = rng.gen_range(0..10000000);
+        let total_runs: u64 = rng.random_range(0..10000000);
         let mut expected_metrics = FsTrimMetrics {
             total_runs: total_runs as f64,
             ..FsTrimMetrics::default()
@@ -169,8 +169,8 @@ fn update_metrics() {
             ..FsTrimMetrics::default()
         };
         for _ in 0..100 {
-            let success = rng.gen_bool(0.5);
-            let duration = Duration::from_millis(rng.gen_range(0..15000));
+            let success = rng.random_bool(0.5);
+            let duration = Duration::from_millis(rng.random_range(0..15000));
             update_metrics_locally(&mut expected_metrics, success, duration);
             updated_metrics
                 .update(success, duration)
@@ -246,8 +246,8 @@ fn maintain_invariants() {
     let mut existing_metrics = FsTrimMetrics::default();
     let rng = &mut reproducible_rng();
     for i in 0..100 {
-        let success = rng.gen_bool(0.5);
-        let duration = Duration::from_millis(rng.gen_range(1..1000));
+        let success = rng.random_bool(0.5);
+        let duration = Duration::from_millis(rng.random_range(1..1000));
         existing_metrics
             .update(success, duration)
             .expect("should update metrics successfully");

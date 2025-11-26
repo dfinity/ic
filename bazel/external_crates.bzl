@@ -32,6 +32,17 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 "@@//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
             },
         ))],
+        "getrandom": [crate.annotation(
+            rustc_flags = crate.select(
+                [],
+                {
+                    "wasm32-unknown-unknown": [
+                        "--cfg",
+                        "getrandom_backend=\"custom\"",
+                    ],
+                },
+            ),
+        )],
         "openssl-sys": [crate.annotation(
             build_script_data = [
                 "@openssl//:gen_dir",
@@ -454,7 +465,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 features = ["termination"],
             ),
             "curve25519-dalek": crate.spec(
-                version = "^4.1.3",
+                version = "^5.0.0-pre.2",
                 features = ["group", "precomputed-tables"],
             ),
             "cvt": crate.spec(
@@ -487,8 +498,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^1.0.14",
             ),
             "ed25519-dalek": crate.spec(
-                version = "^2.2.0",
-                features = ["std", "zeroize", "digest", "batch", "pkcs8", "pem", "hazmat"],
+                version = "^3.0.0-pre.2",
+                features = ["zeroize", "digest", "batch", "pkcs8", "pem", "hazmat"],
             ),
             "educe": crate.spec(
                 version = "^0.4",
@@ -551,10 +562,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.5.3",
             ),
             "getrandom": crate.spec(
-                version = "^0.2",
-                features = [
-                    "custom",
-                ],
+                version = "^0.3",
             ),
             "gpt": crate.spec(
                 version = "4.1",
@@ -590,7 +598,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.1.3",
             ),
             "hmac": crate.spec(
-                version = "^0.12",
+                version = "^0.13.0-rc.3",
             ),
             "hpke": crate.spec(
                 version = "^0.12",
@@ -794,7 +802,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.4.1",
             ),
             "k256": crate.spec(
-                version = "^0.13.4",
+                version = "^0.14.0-rc.0",
                 features = [
                     "arithmetic",
                     "ecdsa",
@@ -970,7 +978,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.13.0",
             ),
             "p256": crate.spec(
-                version = "^0.13.2",
+                version = "^0.14.0-rc.1",
                 features = [
                     "arithmetic",
                     "ecdsa",
@@ -1093,19 +1101,22 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^1.0.37",
             ),
             "rand": crate.spec(
-                version = "^0.8.5",
+                version = "^0.10.0-rc.5",
                 features = [
                     "small_rng",
                 ],
             ),
+            "rand_core": crate.spec(
+                version = "^0.10.0-rc-2",
+            ),
             "rand_chacha": crate.spec(
-                version = "^0.3.1",
+                version = "^0.10.0-rc.1",
             ),
             "rand_distr": crate.spec(
-                version = "^0.4",
+                version = "^0.6.0-rc.0",
             ),
             "rand_pcg": crate.spec(
-                version = "^0.3.1",
+                version = "^0.10.0-rc.1",
             ),
             "ratelimit": crate.spec(
                 version = "^0.9.1",

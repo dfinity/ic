@@ -1005,8 +1005,8 @@ fn clong_signature_with_random_bit_flipped(
 ) -> ic_agent::identity::Signature {
     let mut clone = signature.clone();
     if let Some(sig) = clone.signature.as_mut() {
-        let idx = rng.gen_range(0..sig.len());
-        sig[idx] ^= 1 << (rng.gen_range(0..8));
+        let idx = rng.random_range(0..sig.len());
+        sig[idx] ^= 1 << (rng.random_range(0..8));
         clone
     } else {
         panic!("cannot flip bit: missing signature");

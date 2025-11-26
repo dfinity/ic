@@ -199,7 +199,7 @@ impl Scalar {
 
         // We can't use fill_bytes here because that results in incompatible output.
         for i in 0..64 {
-            bytes[i] = rng.r#gen::<u8>();
+            bytes[i] = rng.random::<u8>();
         }
 
         let mut rbuf = [0u8; 64];
@@ -355,7 +355,7 @@ impl Scalar {
         let mut indices: Vec<u8> = Vec::with_capacity(range as usize);
         indices.extend(0..range);
         for i in 0..amount {
-            let j: u8 = rng.gen_range(i..range);
+            let j: u8 = rng.random_range(i..range);
             indices.swap(i as usize, j as usize);
         }
         indices.truncate(amount as usize);

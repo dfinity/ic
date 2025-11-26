@@ -194,9 +194,8 @@ async fn load_root_delegation(
             fetching_root_delagation_attempts
         );
 
-        let backoff = Duration::from_secs(
-            rand::thread_rng().gen_range(1..DELEGATION_RETRY_MAX_BACKOFF_SECONDS),
-        );
+        let backoff =
+            Duration::from_secs(rand::rng().gen_range(1..DELEGATION_RETRY_MAX_BACKOFF_SECONDS));
 
         match try_fetch_delegation_from_nns(
             config,
@@ -496,7 +495,7 @@ fn get_random_node_from_nns_subnet(
     }?;
 
     // Randomly choose a node from the nns subnet.
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let nns_node = nns_nodes.choose(&mut rng).ok_or(format!(
         "Failed to choose random nns node. NNS node list: {nns_nodes:?}"
     ))?;

@@ -65,7 +65,7 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { version = "0.2", features = ["custom"] }
+getrandom = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 assert_matches = { workspace = true }
@@ -85,7 +85,7 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 lazy_static = { workspace = true }
-rand_distr = "0.4.0"
+rand_distr = { workspace = true }
 serde_json = { workspace = true }
 
 [build-dependencies]

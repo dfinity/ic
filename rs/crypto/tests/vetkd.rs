@@ -269,7 +269,7 @@ mod create_encrypted_key_share {
 }
 
 fn flip_random_bit<R: Rng + CryptoRng>(v: &mut [u8], rng: &mut R) {
-    let idx = rng.gen_range(0..v.len());
+    let idx = rng.random_range(0..v.len());
     v[idx] ^= 1 << (rng.r#gen::<usize>() % 8);
 }
 
@@ -293,7 +293,7 @@ fn modify_random_share<R: Rng + CryptoRng, F: FnOnce(&mut VetKdEncryptedKeyShare
     rng: &mut R,
     modify: F,
 ) {
-    let idx = rng.gen_range(0..shares.len());
+    let idx = rng.random_range(0..shares.len());
 
     modify(shares.iter_mut().nth(idx).expect("Missing share").1, rng);
 }

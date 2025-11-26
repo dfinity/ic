@@ -197,7 +197,7 @@ fn labeled_tree_without_leaf_or_empty_subtree_works_correctly() {
     let initial_num_leaves_and_empty_subtrees = leaves_and_empty_subtrees.len();
     let mut counter: usize = 0;
     while leaves_and_empty_subtrees != vec![LabeledTree::SubTree(FlatMap::new())] {
-        let index_to_remove = rng.gen_range(0..leaves_and_empty_subtrees.len());
+        let index_to_remove = rng.random_range(0..leaves_and_empty_subtrees.len());
         let path_to_remove = &leaves_and_empty_subtrees[index_to_remove];
         let tree_with_removed_path =
             labeled_tree_without_leaf_or_empty_subtree(&tree, path_to_remove);

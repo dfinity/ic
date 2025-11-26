@@ -8,12 +8,9 @@
 use hex_literal::hex;
 use k256::{
     AffinePoint, Scalar, Secp256k1,
-    elliptic_curve::{
-        Curve,
-        generic_array::{GenericArray, typenum::Unsigned},
-    },
+    elliptic_curve::{Curve, FieldBytes},
 };
-use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+use rand::{CryptoRng, Rng, RngCore, SeedableRng, TryCryptoRng};
 use std::sync::LazyLock;
 use zeroize::ZeroizeOnDrop;
 
@@ -108,7 +105,7 @@ impl DerivationPath {
     }
 
     fn ckd(idx: &[u8], input: &[u8], chain_code: &[u8; 32]) -> ([u8; 32], Scalar) {
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use k256::{elliptic_curve::ops::Reduce, sha2::Sha512};
 
         let mut hmac = Hmac::<Sha512>::new_from_slice(chain_code)
@@ -119,8 +116,9 @@ impl DerivationPath {
 
         let hmac_output: [u8; 64] = hmac.finalize().into_bytes().into();
 
-        let fb = k256::FieldBytes::from_slice(&hmac_output[..32]);
-        let next_offset = <k256::Scalar as Reduce<k256::U256>>::reduce_bytes(fb);
+        let fb: k256::FieldBytes =
+            k256::FieldBytes::try_from(&hmac_output[..32]).expect("slice length mismatch");
+        let next_offset: k256::Scalar = Reduce::reduce(&fb);
         let next_chain_key: [u8; 32] = hmac_output[32..].to_vec().try_into().expect("Correct size");
 
         // If iL >= order, try again with the "next" index as described in SLIP-10
@@ -141,7 +139,8 @@ impl DerivationPath {
     ) -> ([u8; 32], Scalar, AffinePoint) {
         use k256::ProjectivePoint;
         use k256::elliptic_curve::{
-            group::GroupEncoding, group::prime::PrimeCurveAffine, ops::MulByGenerator,
+            group::prime::PrimeCurveAffine,
+            group::{Group, GroupEncoding},
         };
 
         let mut ckd_input = pt.to_bytes();
@@ -150,8 +149,8 @@ impl DerivationPath {
 
         loop {
             let (next_chain_code, next_offset) = Self::ckd(idx, &ckd_input, chain_code);
-
-            let next_pt = (pt + k256::ProjectivePoint::mul_by_generator(&next_offset)).to_affine();
+            let next_offset_pt: ProjectivePoint = Group::mul_by_generator(&next_offset);
+            let next_pt = (pt + next_offset_pt).to_affine();
 
             // If the new key is not infinity, we're done: return the new key
             if !bool::from(next_pt.is_identity()) {
@@ -325,8 +324,8 @@ fn bip341_generate_tweak(pk_x: &[u8], ttr: &[u8]) -> Result<Scalar, InvalidTapro
     sha256.update(ttr);
     let bytes: [u8; 32] = sha256.finalize().into();
 
-    let fb = k256::FieldBytes::from_slice(&bytes);
-    let s = k256::Scalar::from_repr(*fb);
+    let fb: k256::FieldBytes = bytes.try_into().expect("slice length mismatch");
+    let s = k256::Scalar::from_repr(fb);
 
     if bool::from(s.is_some()) {
         Ok(s.unwrap())
@@ -344,13 +343,13 @@ pub struct PrivateKey {
 impl PrivateKey {
     /// Generate a new random private key
     pub fn generate() -> Self {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         Self::generate_using_rng(&mut rng)
     }
 
     /// Generate a new random private key using some provided RNG
-    pub fn generate_using_rng<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
-        let key = k256::SecretKey::random(rng);
+    pub fn generate_using_rng<R: TryCryptoRng>(rng: &mut R) -> Self {
+        let Ok(key) = k256::SecretKey::try_from_rng(rng);
         Self { key }
     }
 
@@ -370,8 +369,8 @@ impl PrivateKey {
         };
 
         let scalar = {
-            let fb = k256::FieldBytes::from_slice(&digest);
-            let scalar = <k256::Scalar as Reduce<k256::U256>>::reduce_bytes(fb);
+            let fb: k256::FieldBytes = digest.try_into().expect("slice length mismatch");
+            let scalar: k256::Scalar = Reduce::reduce(&fb);
 
             // This could with ~ 1/2**256 probability fail. If it ever did, it
             // implies we've found a seed such that the SHA-256 hash of it,
@@ -394,7 +393,7 @@ impl PrivateKey {
                 KeyDecodingError::InvalidKeyEncoding(format!("invalid key size = {}.", bytes.len()))
             })?;
 
-        let key = k256::SecretKey::from_bytes(&GenericArray::from(byte_array))
+        let key = k256::SecretKey::from_bytes(&FieldBytes::from(byte_array))
             .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{e:?}")))?;
         Ok(Self { key })
     }
@@ -1039,8 +1038,6 @@ impl PublicKey {
 
     /// BIP341 derivation
     fn derive_bip341(&self, ttr: &[u8]) -> Result<Self, InvalidTaprootHash> {
-        use k256::elliptic_curve::ops::MulByGenerator;
-
         let pk = self.serialize_sec1(true);
 
         let t = k256::ProjectivePoint::mul_by_generator(&bip341_generate_tweak(&pk[1..], ttr)?);
