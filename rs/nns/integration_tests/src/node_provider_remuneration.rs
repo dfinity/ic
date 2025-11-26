@@ -1129,19 +1129,6 @@ fn tick_with_blockmaker_metrics(
     for nm in nodes_metrics {
         let node = NodeId::from(nm.node_id);
 
-        // find fallback (different from this node)
-        let fallback = all_nodes.iter().copied().find(|id| *id != node);
-
-        // if this node fails even once but no fallback exists → invalid input
-        if nm.num_blocks_failed > 0 && fallback.is_none() {
-            panic!(
-                "Node {:?} has {} failures but no fallback node exists.",
-                nm.node_id, nm.num_blocks_failed
-            );
-        }
-
-        let fallback = fallback.unwrap_or(node); // safe: fallback only used for failures
-
         // SUCCESS ROUNDS
         for _ in 0..nm.num_blocks_proposed {
             let metrics = BlockmakerMetrics {
@@ -1153,13 +1140,21 @@ fn tick_with_blockmaker_metrics(
         }
 
         // FAILURE ROUNDS
-        for _ in 0..nm.num_blocks_failed {
-            let metrics = BlockmakerMetrics {
-                blockmaker: fallback,
-                failed_blockmakers: vec![node],
-            };
-            let payload = PayloadBuilder::new().with_blockmaker_metrics(metrics);
-            state_machine.tick_with_config(payload);
+        if nm.num_blocks_failed > 0 {
+            let fallback = all_nodes
+                .iter()
+                .copied()
+                .find(|id| *id != node)
+                .expect("Node has failures but no fallback node exists");
+
+            for _ in 0..nm.num_blocks_failed {
+                let metrics = BlockmakerMetrics {
+                    blockmaker: fallback,
+                    failed_blockmakers: vec![node],
+                };
+                let payload = PayloadBuilder::new().with_blockmaker_metrics(metrics);
+                state_machine.tick_with_config(payload);
+            }
         }
     }
 }

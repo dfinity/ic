@@ -8,9 +8,6 @@ on the process that this file is part of, see
 
 ## Added
 
-- Added Performance Base Rewards integration tests to verify correct reward calculations over multiple reward periods.
-  These tests ensure that the performance-based reward system functions as intended under different scenarios.
-
 ## Changed
 
 ## Deprecated

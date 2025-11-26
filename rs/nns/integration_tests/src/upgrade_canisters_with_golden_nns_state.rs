@@ -61,6 +61,11 @@ impl NnsCanisterUpgrade {
             "registry"       => (REGISTRY_CANISTER_ID, "REGISTRY_CANISTER_WASM_PATH"),
             "root"           => (ROOT_CANISTER_ID, "ROOT_CANISTER_WASM_PATH"),
             "sns-wasm"       => (SNS_WASM_CANISTER_ID, "SNS_WASM_CANISTER_WASM_PATH"),
+
+            // The Node Rewards canister is updated with test feature that simulates
+            // calls to the management canister in order to retrieve blockmaker statistics for each node.
+            // This is necessary because state_machine tests run only with an NNS subnet, where real
+            // management canister calls are not possible (Just NNS subnet is present).
             "node-rewards"   => (NODE_REWARDS_CANISTER_ID, "NODE_REWARDS_CANISTER_TEST_WASM_PATH"),
             _ => panic!("Not a known NNS canister type: {nns_canister_name}",),
         };
