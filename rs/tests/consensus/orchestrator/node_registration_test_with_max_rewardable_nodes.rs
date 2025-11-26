@@ -4,6 +4,8 @@ use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_
 use ic_consensus_system_test_utils::ssh_access::execute_bash_command;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::NnsFunction;
+use ic_protobuf::registry::node_rewards::v2::UpdateNodeRewardsTableProposalPayload;
+use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardRates};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{group::SystemTestGroup, ic::InternetComputer, test_env::TestEnv, test_env_api::*},
@@ -11,6 +13,8 @@ use ic_system_test_driver::{
     systest,
     util::{block_on, runtime_from_url},
 };
+use maplit::btreemap;
+use registry_canister::mutations::do_update_node_operator_config::UpdateNodeOperatorConfigPayload;
 use registry_canister::mutations::node_management::do_remove_nodes::RemoveNodesPayload;
 use slog::info;
 use std::str::FromStr;
@@ -41,6 +45,10 @@ fn setup(env: TestEnv) {
 }
 
 fn test(env: TestEnv) {
+    let principal =
+        PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
+            .unwrap();
+
     let logger = env.logger();
     let topology = env.topology_snapshot();
     let nns_node = topology.root_subnet().nodes().next().unwrap();
@@ -77,7 +85,64 @@ fn test(env: TestEnv) {
 
     // Add a RewardTable which, if present, will force Registry Canister to look at
     // `max_rewardable_nodes`
-    block_on(async {});
+    block_on(async {
+        let proposal_id = submit_external_proposal_with_test_id(
+            &governance_canister,
+            NnsFunction::UpdateNodeRewardsTable,
+            UpdateNodeRewardsTableProposalPayload {
+                // The rates themselves are not important, what is important
+                // is that at least some NodeRewardTable exists
+                new_entries: btreemap! {
+                    "CH".to_string() =>  NodeRewardRates {
+                        rates: btreemap!{
+                            "default".to_string() => NodeRewardRate {
+                                xdr_permyriad_per_node_per_month: 240,
+                                reward_coefficient_percent: None,
+                            },
+                            "small".to_string() => NodeRewardRate {
+                                xdr_permyriad_per_node_per_month: 350,
+                                reward_coefficient_percent: None,
+                            },
+                        }
+                    }
+                },
+            },
+        )
+        .await;
+
+        vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
+    });
+
+    // Update the node operator config to include 1 max rewardable node
+    block_on(async {
+        let proposal_id = submit_external_proposal_with_test_id(
+            &governance_canister,
+            NnsFunction::UpdateNodeOperatorConfig,
+            UpdateNodeOperatorConfigPayload {
+                node_operator_id: Some(principal),
+                // Only one node is enough for this test, but the
+                // real setup would include all of the nodes that
+                // the node operator is linked to.
+                max_rewardable_nodes: Some(btreemap! {
+                    "type3.1".to_string() => 1,
+                }),
+                rewardable_nodes: btreemap! {
+                    "type3.1".to_string() => 1,
+                },
+                ..Default::default()
+            },
+        )
+        .await;
+
+        vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
+    });
+
+    // Wait for registry to increase the version.
+    block_on(
+        env.topology_snapshot()
+            .block_for_min_registry_version(ic_types::RegistryVersion::from(4)),
+    )
+    .unwrap();
 
     let s = unassigned_node
         .block_on_ssh_session()
@@ -96,6 +161,10 @@ oUQDQgAEKSfx/T3gDtkfdGl1fiONzUHs0N7/hcfQ8zwcqIzwuvHK3qqSJ3EhY5OB
 WIgAGf+2BAs2ac0RonxQZdQTmZMvrw==
 -----END EC PRIVATE KEY-----
 EOT
+
+        jq '.icos_settings.node_reward_type = "type3.1"' /run/config/config.json > /tmp/config.json.tmp
+        sudo cp /tmp/config.json.tmp /run/config/config.json
+
         sudo cp /tmp/node_operator_private_key.pem /var/lib/ic/data/node_operator_private_key.pem
         sudo chmod a+r /var/lib/ic/data/node_operator_private_key.pem
         sudo systemctl start ic-crypto-csp
@@ -103,17 +172,14 @@ EOT
         "#
     .to_string();
 
-    info!(logger, "Rotate keys on the unassigned node and restart it",);
-    if let Err(e) = execute_bash_command(&s, script) {
-        panic!("Script execution failed: {e:?}");
-    }
+    execute_bash_command(&s, script).unwrap();
 
     // Wait until the node registers itself and updates the registry, then check that we have
     // exactly 1 unassigned node.
     info!(&logger, "Make sure we have 1 unassigned node again");
     let num_unassigned_nodes = block_on(
         env.topology_snapshot()
-            .block_for_min_registry_version(ic_types::RegistryVersion::from(3)),
+            .block_for_min_registry_version(ic_types::RegistryVersion::from(5)),
     )
     .unwrap()
     .unassigned_nodes()
