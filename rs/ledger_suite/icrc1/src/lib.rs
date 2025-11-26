@@ -25,7 +25,6 @@ use std::collections::BTreeMap;
 #[serde(bound = "")]
 #[serde(tag = "op")]
 pub enum Operation<Tokens: TokensType> {
-    #[serde(rename = "mint")]
     Mint {
         #[serde(with = "compact_account")]
         to: Account,
@@ -34,7 +33,6 @@ pub enum Operation<Tokens: TokensType> {
         #[serde(skip_serializing_if = "Option::is_none")]
         fee: Option<Tokens>,
     },
-    #[serde(rename = "xfer")]
     Transfer {
         #[serde(with = "compact_account")]
         from: Account,
@@ -51,7 +49,6 @@ pub enum Operation<Tokens: TokensType> {
         #[serde(skip_serializing_if = "Option::is_none")]
         fee: Option<Tokens>,
     },
-    #[serde(rename = "burn")]
     Burn {
         #[serde(with = "compact_account")]
         from: Account,
@@ -66,7 +63,6 @@ pub enum Operation<Tokens: TokensType> {
         #[serde(skip_serializing_if = "Option::is_none")]
         fee: Option<Tokens>,
     },
-    #[serde(rename = "approve")]
     Approve {
         #[serde(with = "compact_account")]
         from: Account,
@@ -81,7 +77,6 @@ pub enum Operation<Tokens: TokensType> {
         #[serde(skip_serializing_if = "Option::is_none")]
         fee: Option<Tokens>,
     },
-    #[serde(rename = "107set_fee_collector")]
     FeeCollector {
         #[serde(
             default,
