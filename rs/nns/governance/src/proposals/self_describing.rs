@@ -1,6 +1,7 @@
 use crate::pb::v1::{
-    ApproveGenesisKyc, Motion, SelfDescribingProposalAction, Value, ValueArray, ValueMap,
-    value::Value::{Array, Map, Text},
+    ApproveGenesisKyc, Motion, SelfDescribingProposalAction, SelfDescribingValue,
+    SelfDescribingValueArray, SelfDescribingValueMap,
+    self_describing_value::Value::{Array, Map, Text},
 };
 
 use ic_base_types::PrincipalId;
@@ -13,13 +14,13 @@ pub trait LocallyDescribableProposalAction {
     const TYPE_NAME: &'static str;
     const TYPE_DESCRIPTION: &'static str;
 
-    fn to_value(&self) -> Value;
+    fn to_self_describing_value(&self) -> SelfDescribingValue;
 
-    fn to_self_describing(&self) -> SelfDescribingProposalAction {
+    fn to_self_describing_action(&self) -> SelfDescribingProposalAction {
         SelfDescribingProposalAction {
             type_name: Self::TYPE_NAME.to_string(),
             type_description: Self::TYPE_DESCRIPTION.to_string(),
-            value: Some(self.to_value()),
+            value: Some(self.to_self_describing_value()),
         }
     }
 }
@@ -31,7 +32,7 @@ impl LocallyDescribableProposalAction for Motion {
     No code is executed when a motion is adopted. An adopted motion should guide the future \
     strategy of the Internet Computer ecosystem.";
 
-    fn to_value(&self) -> Value {
+    fn to_self_describing_value(&self) -> SelfDescribingValue {
         ValueBuilder::new()
             .add_field("motion_text", self.motion_text.clone())
             .build()
@@ -49,16 +50,16 @@ impl LocallyDescribableProposalAction for ApproveGenesisKyc {
     must be KYCed. Consequently, all neurons created after Genesis have GenesisKYC=true set \
     automatically since they must have been derived from balances that have already been KYCed.)";
 
-    fn to_value(&self) -> Value {
+    fn to_self_describing_value(&self) -> SelfDescribingValue {
         ValueBuilder::new()
             .add_array_field("principals", self.principals.clone())
             .build()
     }
 }
 
-/// A builder for `Value` objects.
+/// A builder for `SelfDescribingValue` objects.
 pub(crate) struct ValueBuilder {
-    fields: HashMap<String, Value>,
+    fields: HashMap<String, SelfDescribingValue>,
 }
 
 impl ValueBuilder {
@@ -68,7 +69,7 @@ impl ValueBuilder {
         }
     }
 
-    pub fn add_field(mut self, key: impl ToString, value: impl Into<Value>) -> Self {
+    pub fn add_field(mut self, key: impl ToString, value: impl Into<SelfDescribingValue>) -> Self {
         self.fields.insert(key.to_string(), value.into());
         self
     }
@@ -76,12 +77,12 @@ impl ValueBuilder {
     pub fn add_array_field(
         mut self,
         key: impl ToString,
-        values: impl IntoIterator<Item = impl Into<Value>>,
+        values: impl IntoIterator<Item = impl Into<SelfDescribingValue>>,
     ) -> Self {
         self.fields.insert(
             key.to_string(),
-            Value {
-                value: Some(Array(ValueArray {
+            SelfDescribingValue {
+                value: Some(Array(SelfDescribingValueArray {
                     values: values.into_iter().map(Into::into).collect(),
                 })),
             },
@@ -89,25 +90,25 @@ impl ValueBuilder {
         self
     }
 
-    pub fn build(self) -> Value {
+    pub fn build(self) -> SelfDescribingValue {
         let Self { fields } = self;
-        Value {
-            value: Some(Map(ValueMap { values: fields })),
+        SelfDescribingValue {
+            value: Some(Map(SelfDescribingValueMap { values: fields })),
         }
     }
 }
 
-impl From<String> for Value {
+impl From<String> for SelfDescribingValue {
     fn from(value: String) -> Self {
-        Value {
+        SelfDescribingValue {
             value: Some(Text(value)),
         }
     }
 }
 
-impl From<PrincipalId> for Value {
+impl From<PrincipalId> for SelfDescribingValue {
     fn from(value: PrincipalId) -> Self {
-        Value {
+        SelfDescribingValue {
             value: Some(Text(value.to_string())),
         }
     }

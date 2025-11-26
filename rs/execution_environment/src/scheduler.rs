@@ -1564,10 +1564,10 @@ impl Scheduler for SchedulerImpl {
                         };
                     self.metrics
                         .canister_log_memory_usage_v2
-                        .observe(canister.system_state.canister_log.used_space() as f64);
+                        .observe(canister.system_state.canister_log.bytes_used() as f64);
                     self.metrics
                         .canister_log_memory_usage_v3
-                        .observe(canister.system_state.canister_log.used_space() as f64);
+                        .observe(canister.system_state.canister_log.bytes_used() as f64);
                     for memory_usage in canister.system_state.canister_log.take_delta_log_sizes() {
                         self.metrics
                             .canister_log_delta_memory_usage

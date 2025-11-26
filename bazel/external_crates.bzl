@@ -253,7 +253,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 features = ["typed-header"],
             ),
             "axum-server": crate.spec(
-                version = "^0.7.2",
+                version = "^0.7.3",
                 features = [
                     "tls-rustls-no-provider",
                 ],
@@ -376,7 +376,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.10.0",
             ),
             "chrono": crate.spec(
-                version = "^0.4.38",
+                version = "^0.4.42",
                 default_features = False,
                 features = [
                     "alloc",
@@ -634,11 +634,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 features = ["pem", "ring"],
             ),
             "ic-bn-lib": crate.spec(
-                git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "620fb49a238b3d8a2caa436b5742ed7ca7012098",
+                version = "0.1",
                 features = [
-                    "acme_alpn",
+                    "acme-alpn",
                 ],
+            ),
+            "ic-bn-lib-common": crate.spec(
+                version = "0.1",
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.3",
@@ -676,14 +678,15 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "ic-gateway": crate.spec(
                 git = "https://github.com/dfinity/ic-gateway",
-                rev = "b78562340bd00f05f9c055dcba3ec0f74758c927",
+                rev = "92ee522a4514584ccf6de487ba40d92063effd9a",
                 default_features = False,
             ),
             "ic-http-certification": crate.spec(
                 version = "3.0.3",
             ),
             "ic-http-gateway": crate.spec(
-                version = "0.3.0",
+                git = "https://github.com/dfinity/http-gateway",
+                rev = "c17ad1b378df3a85441ce2c6853ec61b6f83f730",
             ),
             "ic-identity-hsm": crate.spec(
                 version = "^0.40.1",
@@ -893,7 +896,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.13.0",
             ),
             "mockall": crate.spec(
-                version = "^0.13.0",
+                version = "^0.13.1",
             ),
             "mockito": crate.spec(
                 version = "^1.6.1",
@@ -1132,7 +1135,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.1.8",
             ),
             "reqwest": crate.spec(
-                version = "^0.12.15",
+                version = "^0.12.24",
                 default_features = False,
                 features = [
                     "blocking",

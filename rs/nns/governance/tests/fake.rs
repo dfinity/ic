@@ -48,7 +48,11 @@ use ic_nns_governance::governance::tla::{
     self, Destination, TLA_INSTRUMENTATION_STATE, ToTla, account_to_tla, tla_function,
 };
 use ic_nns_governance::{tla_log_request, tla_log_response};
+use ic_node_rewards_canister_api::RewardsCalculationAlgorithmVersion;
 use ic_node_rewards_canister_api::monthly_rewards::GetNodeProvidersMonthlyXdrRewardsResponse;
+use ic_node_rewards_canister_api::providers_rewards::{
+    GetNodeProvidersRewardsResponse, NodeProvidersRewards,
+};
 
 lazy_static! {
     pub(crate) static ref SNS_ROOT_CANISTER_ID: PrincipalId = PrincipalId::new_user_test_id(213599);
@@ -610,6 +614,19 @@ impl Environment for FakeDriver {
                 error: None
             })
             .unwrap());
+        }
+
+        if method_name == "get_node_providers_rewards" {
+            assert_eq!(PrincipalId::from(target), NODE_REWARDS_CANISTER_ID.get());
+
+            let response: GetNodeProvidersRewardsResponse = Ok(NodeProvidersRewards {
+                rewards_xdr_permyriad: btreemap! {
+                    PrincipalId::new_user_test_id(1).0 => NODE_PROVIDER_REWARD,
+                },
+                algorithm_version: RewardsCalculationAlgorithmVersion::default(),
+            });
+
+            return Ok(Encode!(&response).unwrap());
         }
 
         if method_name == "get_average_icp_xdr_conversion_rate" {
