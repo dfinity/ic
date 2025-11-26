@@ -2535,8 +2535,7 @@ impl Drop for PocketIc {
             let mut state_machine = Some(state_machine);
             while state_machine.is_some() {
                 match Arc::try_unwrap(state_machine.take().unwrap()) {
-                    Ok(sm) => {
-                        sm.drop();
+                    Ok(_) => {
                         break;
                     }
                     Err(sm) => {

@@ -10,7 +10,8 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, SubmitIngressError, UserError,
+    EXECUTE_ROUND_TIME_INCREMENT, ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig,
+    SubmitIngressError, UserError,
 };
 use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use ic_test_utilities_execution_environment::{get_reject, get_reply, wat_canister, wat_fn};
@@ -1719,7 +1720,7 @@ fn test_canister_log_on_reply() {
     // The call and its response are processed in different rounds.
     // All the response slices will have the same initial timestamp of a response round.
     let call_response_rounds = 2;
-    let round_time_increment = StateMachine::EXECUTE_ROUND_TIME_INCREMENT.as_nanos() as u64;
+    let round_time_increment = EXECUTE_ROUND_TIME_INCREMENT.as_nanos() as u64;
     let timestamp_response = timestamp_init + call_response_rounds * round_time_increment;
 
     // Assert time since the response round advanced by the number of slices minus one.
@@ -1782,7 +1783,7 @@ fn test_canister_log_on_cleanup() {
     // The call and its response are processed in different rounds.
     // All the response slices will have the same initial timestamp of a response round.
     let call_response_rounds = 2;
-    let round_time_increment = StateMachine::EXECUTE_ROUND_TIME_INCREMENT.as_nanos() as u64;
+    let round_time_increment = EXECUTE_ROUND_TIME_INCREMENT.as_nanos() as u64;
     let timestamp_response =
         timestamp_init + Duration::from_nanos(call_response_rounds * round_time_increment);
 

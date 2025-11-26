@@ -185,6 +185,7 @@ use std::{
     fmt,
     io::{self, stderr},
     net::Ipv6Addr,
+    ops::{Deref, DerefMut},
     path::{Path, PathBuf},
     str::FromStr,
     string::ToString,
@@ -197,6 +198,10 @@ use tokio::{
     sync::{mpsc, watch},
 };
 use tower::ServiceExt;
+
+/// Provides the implicit time increment for a single round of execution
+/// if time does not advance between consecutive rounds.
+pub const EXECUTE_ROUND_TIME_INCREMENT: Duration = Duration::from_nanos(1);
 
 /// The size of the channel used to communicate between the [`IngressWatcher`] and
 /// execution. Mirrors the size used in production defined in `setup_ic_stack.rs`
@@ -896,9 +901,126 @@ enum SignatureSecretKey {
     VetKD(ic_crypto_test_utils_vetkd::PrivateKey),
 }
 
+pub struct StateMachine {
+    inner: Option<StateMachineInner>,
+}
+
+impl StateMachine {
+    pub fn new() -> Self {
+        StateMachineBuilder::new().build()
+    }
+
+    // TODO: cleanup, replace external calls with `StateMachineBuilder`.
+    /// Constructs a new environment with the specified configuration.
+    pub fn new_with_config(config: StateMachineConfig) -> Self {
+        StateMachineBuilder::new().with_config(Some(config)).build()
+    }
+
+    /// Emulates a node restart, including checkpoint recovery.
+    pub fn restart_node(mut self) -> Self {
+        // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
+        // to the same root.
+        let inner = self.inner.take().unwrap();
+        let (state_dir, nonce, time, checkpoint_interval_length) = inner.into_components();
+
+        StateMachineBuilder::new()
+            .with_state_machine_state_dir(state_dir)
+            .with_nonce(nonce)
+            .with_time(time)
+            .with_checkpoint_interval_length(checkpoint_interval_length)
+            .build()
+    }
+
+    /// Same as [restart_node], but the subnet will have the specified `config`
+    /// after the restart.
+    pub fn restart_node_with_config(mut self, config: StateMachineConfig) -> Self {
+        // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
+        // to the same root.
+        let inner = self.inner.take().unwrap();
+        let (state_dir, nonce, time, checkpoint_interval_length) = inner.into_components();
+
+        StateMachineBuilder::new()
+            .with_state_machine_state_dir(state_dir)
+            .with_nonce(nonce)
+            .with_time(time)
+            .with_config(Some(config))
+            .with_checkpoint_interval_length(checkpoint_interval_length)
+            .build()
+    }
+
+    /// Same as [restart_node], but allows overwriting the LSMT flag.
+    pub fn restart_node_with_lsmt_override(mut self, lsmt_override: Option<LsmtConfig>) -> Self {
+        // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
+        // to the same root.
+        let inner = self.inner.take().unwrap();
+        let (state_dir, nonce, time, checkpoint_interval_length) = inner.into_components();
+
+        StateMachineBuilder::new()
+            .with_state_machine_state_dir(state_dir)
+            .with_nonce(nonce)
+            .with_time(time)
+            .with_checkpoint_interval_length(checkpoint_interval_length)
+            .with_lsmt_override(lsmt_override)
+            .build()
+    }
+
+    /// Same as [restart_node], but enables snapshot downloading.
+    pub fn restart_node_with_snapshot_download_enabled(mut self) -> Self {
+        // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
+        // to the same root.
+        let inner = self.inner.take().unwrap();
+        let (state_dir, nonce, time, checkpoint_interval_length) = inner.into_components();
+
+        StateMachineBuilder::new()
+            .with_state_machine_state_dir(state_dir)
+            .with_nonce(nonce)
+            .with_time(time)
+            .with_checkpoint_interval_length(checkpoint_interval_length)
+            .with_snapshot_download_enabled(true)
+            .build()
+    }
+}
+
+impl Default for StateMachine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl fmt::Debug for StateMachine {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner
+            .as_ref()
+            .expect("StateMachine uninitialized")
+            .fmt(f)
+    }
+}
+
+impl Deref for StateMachine {
+    type Target = StateMachineInner;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner.as_ref().expect("StateMachine uninitialized")
+    }
+}
+
+impl DerefMut for StateMachine {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.inner.as_mut().expect("StateMachine uninitialized")
+    }
+}
+
+impl Drop for StateMachine {
+    fn drop(&mut self) {
+        if let Some(inner) = self.inner.take() {
+            inner.drop();
+        }
+    }
+}
+
 /// Represents a replicated state machine detached from the network layer that
 /// can be used to test this part of the stack in isolation.
-pub struct StateMachine {
+pub struct StateMachineInner {
     subnet_id: SubnetId,
     subnet_type: SubnetType,
     public_key: ThresholdSigPublicKey,
@@ -957,13 +1079,7 @@ pub struct StateMachine {
     // DO NOT PUT ANY FIELDS AFTER `state_dir`!!!
 }
 
-impl Default for StateMachine {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl fmt::Debug for StateMachine {
+impl fmt::Debug for StateMachineInner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("StateMachine")
             .field("state_dir", &self.state_dir.path().display())
@@ -1327,7 +1443,7 @@ impl StateMachineBuilder {
     }
 
     pub fn build_internal(self) -> StateMachine {
-        StateMachine::setup_from_dir(
+        let sm = StateMachineInner::setup_from_dir(
             self.state_dir,
             self.nonce,
             self.time,
@@ -1361,7 +1477,8 @@ impl StateMachineBuilder {
             self.remove_old_states,
             self.create_at_registry_version,
             self.cost_schedule,
-        )
+        );
+        StateMachine { inner: Some(sm) }
     }
 
     pub fn build(self) -> StateMachine {
@@ -1512,18 +1629,7 @@ impl Default for StateMachineBuilder {
     }
 }
 
-impl StateMachine {
-    /// Provides the implicit time increment for a single round of execution
-    /// if time does not advance between consecutive rounds.
-    pub const EXECUTE_ROUND_TIME_INCREMENT: Duration = Duration::from_nanos(1);
-
-    // TODO: cleanup, replace external calls with `StateMachineBuilder`.
-    /// Constructs a new environment that uses a temporary directory for storing
-    /// states.
-    pub fn new() -> Self {
-        StateMachineBuilder::new().build()
-    }
-
+impl StateMachineInner {
     /// Drops the payload builder of this `StateMachine`.
     /// This function should be called when this `StateMachine` is supposed to be dropped
     /// if this `StateMachine` was created using `StateMachineBuilder::build_with_subnets`
@@ -1532,12 +1638,6 @@ impl StateMachine {
     pub fn drop_payload_builder(&self) {
         self.pocket_xnet.write().unwrap().take();
         self.payload_builder.write().unwrap().take();
-    }
-
-    // TODO: cleanup, replace external calls with `StateMachineBuilder`.
-    /// Constructs a new environment with the specified configuration.
-    pub fn new_with_config(config: StateMachineConfig) -> Self {
-        StateMachineBuilder::new().with_config(Some(config)).build()
     }
 
     pub fn execute_round(&self) {
@@ -2118,66 +2218,6 @@ impl StateMachine {
         let _ = self.into_components();
     }
 
-    /// Emulates a node restart, including checkpoint recovery.
-    pub fn restart_node(self) -> Self {
-        // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
-        // to the same root.
-        let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
-
-        StateMachineBuilder::new()
-            .with_state_machine_state_dir(state_dir)
-            .with_nonce(nonce)
-            .with_time(time)
-            .with_checkpoint_interval_length(checkpoint_interval_length)
-            .build()
-    }
-
-    /// Same as [restart_node], but allows overwriting the LSMT flag.
-    pub fn restart_node_with_lsmt_override(self, lsmt_override: Option<LsmtConfig>) -> Self {
-        // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
-        // to the same root.
-        let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
-
-        StateMachineBuilder::new()
-            .with_state_machine_state_dir(state_dir)
-            .with_nonce(nonce)
-            .with_time(time)
-            .with_checkpoint_interval_length(checkpoint_interval_length)
-            .with_lsmt_override(lsmt_override)
-            .build()
-    }
-
-    /// Same as [restart_node], but enables snapshot downloading.
-    pub fn restart_node_with_snapshot_download_enabled(self) -> Self {
-        // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
-        // to the same root.
-        let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
-
-        StateMachineBuilder::new()
-            .with_state_machine_state_dir(state_dir)
-            .with_nonce(nonce)
-            .with_time(time)
-            .with_checkpoint_interval_length(checkpoint_interval_length)
-            .with_snapshot_download_enabled(true)
-            .build()
-    }
-
-    /// Same as [restart_node], but the subnet will have the specified `config`
-    /// after the restart.
-    pub fn restart_node_with_config(self, config: StateMachineConfig) -> Self {
-        // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
-        // to the same root.
-        let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
-
-        StateMachineBuilder::new()
-            .with_state_machine_state_dir(state_dir)
-            .with_nonce(nonce)
-            .with_time(time)
-            .with_config(Some(config))
-            .with_checkpoint_interval_length(checkpoint_interval_length)
-            .build()
-    }
-
     pub fn get_delegation_for_subnet(
         &self,
         subnet_id: SubnetId,
@@ -2702,7 +2742,7 @@ impl StateMachine {
 
         let current_time = self.get_time();
         let time_of_next_round = if current_time == *self.time_of_last_round.read().unwrap() {
-            current_time + Self::EXECUTE_ROUND_TIME_INCREMENT
+            current_time + EXECUTE_ROUND_TIME_INCREMENT
         } else {
             current_time
         };
@@ -2860,7 +2900,7 @@ impl StateMachine {
     /// Returns the current state machine time.
     /// The time of a round executed by this state machine equals its current time
     /// if its current time increased since the last round.
-    /// Otherwise, the current time is implicitly increased by `StateMachine::EXECUTE_ROUND_TIME_INCREMENT` (1ns)
+    /// Otherwise, the current time is implicitly increased by `EXECUTE_ROUND_TIME_INCREMENT` (1ns)
     /// before executing the next round.
     pub fn time(&self) -> SystemTime {
         SystemTime::UNIX_EPOCH + Duration::from_nanos(self.time.load(Ordering::Relaxed))
