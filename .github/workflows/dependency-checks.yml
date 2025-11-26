@@ -1,7 +1,7 @@
 name: Security Checks
 
 on:
-  pull_request:
+  pull_request_target:
 
 jobs:
   dependency-review:
