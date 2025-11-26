@@ -22,15 +22,23 @@ use ic_bn_lib::{
     http::{
         self as bnhttp,
         shed::{
-            ShedResponse,
-            sharded::{ShardedLittleLoadShedderLayer, ShardedOptions, TypeExtractor},
+            sharded::ShardedLittleLoadShedderLayer,
             system::{SystemInfo, SystemLoadShedderLayer},
         },
     },
     prometheus::Registry,
     pubsub::BrokerBuilder,
     tasks::TaskManager,
-    tls::verify::NoopServerCertVerifier,
+    tls::{acme::alpn as AcmeAlpn, resolver::StubResolver, verify::NoopServerCertVerifier},
+};
+use ic_bn_lib_common::{
+    traits::{http::Client, shed::TypeExtractor},
+    types::{
+        acme::AcmeUrl,
+        http::{ALPN_ACME, ClientOptions, Metrics as HttpServerMetrics, ServerOptions},
+        shed::{ShardedOptions, ShedResponse},
+        tls::TlsOptions,
+    },
 };
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
@@ -195,20 +203,21 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         4096 * cli.network.network_http_client_count as usize,
     );
 
-    let mut http_client_opts: bnhttp::client::Options<DnsResolver> = (&cli.http_client).into();
+    let mut http_client_opts: ClientOptions = (&cli.http_client).into();
     http_client_opts.user_agent = SERVICE_NAME.into();
     http_client_opts.tls_config = Some(tls_config_client);
-    http_client_opts.dns_resolver = Some(dns_resolver);
 
     // HTTP client for health checks
-    let http_client_check = bnhttp::ReqwestClient::new(http_client_opts.clone())
-        .context("unable to create HTTP client for checks")?;
+    let http_client_check =
+        bnhttp::ReqwestClient::new(http_client_opts.clone(), Some(dns_resolver.clone()))
+            .context("unable to create HTTP client for checks")?;
     let http_client_check = Arc::new(http_client_check);
 
     // HTTP client for normal requests
     let http_client = Arc::new(
         bnhttp::ReqwestClientLeastLoaded::new(
             http_client_opts,
+            Some(dns_resolver.clone()),
             cli.network.network_http_client_count as usize,
             Some(&metrics_registry),
         )
@@ -387,10 +396,10 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     );
 
     // HTTP server metrics
-    let http_metrics = bnhttp::server::Metrics::new(&metrics_registry);
+    let http_metrics = HttpServerMetrics::new(&metrics_registry);
 
     // HTTP server options
-    let server_opts: bnhttp::server::Options = (&cli.http_server).into();
+    let server_opts: ServerOptions = (&cli.http_server).into();
 
     // HTTP
     if let Some(v) = cli.listen.listen_http_port {
@@ -648,7 +657,7 @@ fn setup_registry(
     replicator: RegistryReplicator,
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     persister: WithMetricsPersist<Persister>,
-    http_client_check: Arc<dyn bnhttp::Client>,
+    http_client_check: Arc<dyn Client>,
     metrics_registry: &Registry,
     channel_snapshot_send: watch::Sender<Option<Arc<RegistrySnapshot>>>,
     channel_snapshot_recv: watch::Receiver<Option<Arc<RegistrySnapshot>>>,
@@ -706,8 +715,6 @@ fn setup_registry(
 }
 
 fn setup_tls_resolver_stub(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Error> {
-    use ic_bn_lib::tls;
-
     let cert = cli
         .tls_cert_path
         .clone()
@@ -720,14 +727,11 @@ fn setup_tls_resolver_stub(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>
     let cert = std::fs::read(cert).context("unable to read TLS cert")?;
     let key = std::fs::read(key).context("unable to read TLS key")?;
 
-    let resolver = tls::StubResolver::new(&cert, &key)?;
+    let resolver = StubResolver::new(&cert, &key)?;
     Ok(Arc::new(resolver))
 }
 
 fn setup_tls_resolver_acme(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Error> {
-    use ic_bn_lib::tls;
-    use tokio_util::sync::CancellationToken;
-
     let path = cli
         .tls_acme_credentials_path
         .clone()
@@ -738,14 +742,20 @@ fn setup_tls_resolver_acme(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>
         .clone()
         .ok_or(anyhow!("hostname not specified"))?;
 
-    let opts = tls::acme::AcmeOptions::new(
+    let acme_url = if cli.tls_acme_staging {
+        AcmeUrl::LetsEncryptStaging
+    } else {
+        AcmeUrl::LetsEncryptProduction
+    };
+
+    let opts = AcmeAlpn::Opts::new(
+        acme_url,
         vec![hostname],
-        path,
-        cli.tls_acme_staging,
         "mailto:boundary-nodes@dfinity.org".into(),
+        path,
     );
 
-    Ok(tls::acme::alpn::new(opts, CancellationToken::new()))
+    Ok(Arc::new(AcmeAlpn::AcmeAlpn::new(opts)))
 }
 
 /// Try to load the static resolver first, then ACME one.
@@ -779,17 +789,17 @@ fn setup_tls_resolver(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Err
 
 fn setup_https(
     router: Router,
-    opts: bnhttp::server::Options,
+    opts: ServerOptions,
     cli: &Cli,
     registry: &Registry,
-    metrics: bnhttp::server::Metrics,
+    metrics: HttpServerMetrics,
 ) -> Result<bnhttp::Server, Error> {
     use ic_bn_lib::tls;
 
     let resolver = setup_tls_resolver(&cli.tls).context("unable to setup TLS resolver")?;
 
-    let tls_opts = tls::Options {
-        additional_alpn: vec![bnhttp::ALPN_ACME.to_vec()],
+    let tls_opts = TlsOptions {
+        additional_alpn: vec![ALPN_ACME.to_vec()],
         sessions_count: cli.http_server.http_server_tls_session_cache_size,
         sessions_tti: cli.http_server.http_server_tls_session_cache_tti,
         ticket_lifetime: cli.http_server.http_server_tls_ticket_lifetime,
@@ -814,6 +824,7 @@ fn setup_https(
 
 #[derive(Clone, Debug)]
 struct RequestTypeExtractor;
+
 impl TypeExtractor for RequestTypeExtractor {
     type Type = RequestType;
     type Request = Request;

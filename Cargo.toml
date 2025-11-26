@@ -610,7 +610,7 @@ bytes = "1.9.0"
 canbench-rs = "0.2.1"
 candid = { version = "0.10.20" }
 candid_parser = { version = "0.1.2" }
-chrono = { version = "0.4.38", default-features = false, features = [
+chrono = { version = "0.4.42", default-features = false, features = [
     "alloc",
     "clock",
     "serde",
@@ -670,9 +670,8 @@ hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.12", features = ["full"] }
 ic0 = "1.0.0"
 ic-agent = { version = "0.40.1", features = ["pem", "ring"] }
-ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "620fb49a238b3d8a2caa436b5742ed7ca7012098", features = [
-    "acme_alpn",
-] }
+ic-bn-lib = { version = "0.1", features = ["acme-alpn"] }
+ic-bn-lib-common = "0.1"
 ic-btc-interface = "0.2.3"
 ic-canister-sig-creation = "1.3.0"
 ic-cbor = "3"
@@ -682,9 +681,9 @@ ic-certificate-verification = "3"
 ic-certification = "3"
 ic-doge-interface = { git = "https://github.com/dfinity/dogecoin-canister", rev = "74e6dc9a10ba64d2dbad013282c26d74cd49863f" }
 ic-ed25519 = "0.4.0"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "b78562340bd00f05f9c055dcba3ec0f74758c927", default-features = false }
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "92ee522a4514584ccf6de487ba40d92063effd9a", default-features = false }
 ic-http-certification = "3.0.3"
-ic-http-gateway = "0.3.0"
+ic-http-gateway = { git = "https://github.com/dfinity/http-gateway", rev = "c17ad1b378df3a85441ce2c6853ec61b6f83f730" }
 ic-identity-hsm = "0.40.1"
 ic-management-canister-types = "0.3.0"
 ic-response-verification = "3"
@@ -790,7 +789,7 @@ rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"
 serde_regex = "1.1.0"
 rexpect = "0.6"
-reqwest = { version = "0.12.15", default-features = false, features = [
+reqwest = { version = "0.12.24", default-features = false, features = [
     "blocking",
     "http2",
     "json",
