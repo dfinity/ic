@@ -82,7 +82,7 @@ jobs:
         if: steps.filter.outputs.depcheck == 'true'
         shell: bash
         run: |
-          set -euo pipefail
+          set -euox pipefail
           export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
           cd ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
