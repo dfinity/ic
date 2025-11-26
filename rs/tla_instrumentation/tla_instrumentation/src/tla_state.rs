@@ -37,12 +37,17 @@ impl VarAssignment {
         self.0.extend(other.0)
     }
 
-    pub fn merge(&self, other: VarAssignment) -> VarAssignment {
+    fn assert_no_name_intersection(&self, other: &VarAssignment) {
+        let intersection: BTreeSet<_> = self
+            .0
+            .keys()
+            .collect::<BTreeSet<_>>()
+            .intersection(&other.0.keys().collect::<BTreeSet<_>>())
+            .cloned()
+            .collect();
+
         assert!(
-            self.0
-                .keys()
-                .collect::<BTreeSet<_>>()
-                .is_disjoint(&other.0.keys().collect()),
+            intersection.is_empty(),
             r#"The states have non-disjoint sets of keys:
 {:?}
 Possible causes:
@@ -53,13 +58,14 @@ States are:
 {:?}
 and
 {:?}"#,
-            self.0
-                .keys()
-                .collect::<BTreeSet<_>>()
-                .intersection(&other.0.keys().collect::<BTreeSet<_>>()),
+            intersection,
             self,
             other
         );
+    }
+
+    pub fn merge(&self, other: VarAssignment) -> VarAssignment {
+        self.assert_no_name_intersection(&other);
         let mut new_locals = self.0.clone();
         new_locals.extend(other.0);
         VarAssignment(new_locals)
