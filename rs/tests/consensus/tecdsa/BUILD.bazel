@@ -303,7 +303,7 @@ tecdsa_performance_test_template = system_test_nns(
     ],
 )
 
-DEFAULT_NODES_COUNT = "25"
+DEFAULT_NODES_COUNT = str(25)
 
 system_test_nns(
     name = "tecdsa_performance_test",
