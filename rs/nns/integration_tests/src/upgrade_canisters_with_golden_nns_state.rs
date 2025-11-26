@@ -61,7 +61,7 @@ impl NnsCanisterUpgrade {
             "registry"       => (REGISTRY_CANISTER_ID, "REGISTRY_CANISTER_WASM_PATH"),
             "root"           => (ROOT_CANISTER_ID, "ROOT_CANISTER_WASM_PATH"),
             "sns-wasm"       => (SNS_WASM_CANISTER_ID, "SNS_WASM_CANISTER_WASM_PATH"),
-            "node-rewards"   => (NODE_REWARDS_CANISTER_ID, "NODE_REWARDS_CANISTER_WASM_PATH"),
+            "node-rewards"   => (NODE_REWARDS_CANISTER_ID, "NODE_REWARDS_CANISTER_TEST_WASM_PATH"),
             _ => panic!("Not a known NNS canister type: {nns_canister_name}",),
         };
 
