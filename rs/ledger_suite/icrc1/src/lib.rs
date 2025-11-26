@@ -21,70 +21,36 @@ use serde::{Deserialize, Serialize};
 
 use std::collections::BTreeMap;
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
-#[serde(bound = "")]
-#[serde(tag = "op")]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub enum Operation<Tokens: TokensType> {
     Mint {
-        #[serde(with = "compact_account")]
         to: Account,
-        #[serde(rename = "amt")]
         amount: Tokens,
-        #[serde(skip_serializing_if = "Option::is_none")]
         fee: Option<Tokens>,
     },
     Transfer {
-        #[serde(with = "compact_account")]
         from: Account,
-        #[serde(with = "compact_account")]
         to: Account,
-        #[serde(
-            default,
-            skip_serializing_if = "Option::is_none",
-            with = "compact_account::opt"
-        )]
         spender: Option<Account>,
-        #[serde(rename = "amt")]
         amount: Tokens,
-        #[serde(skip_serializing_if = "Option::is_none")]
         fee: Option<Tokens>,
     },
     Burn {
-        #[serde(with = "compact_account")]
         from: Account,
-        #[serde(
-            default,
-            skip_serializing_if = "Option::is_none",
-            with = "compact_account::opt"
-        )]
         spender: Option<Account>,
-        #[serde(rename = "amt")]
         amount: Tokens,
-        #[serde(skip_serializing_if = "Option::is_none")]
         fee: Option<Tokens>,
     },
     Approve {
-        #[serde(with = "compact_account")]
         from: Account,
-        #[serde(with = "compact_account")]
         spender: Account,
-        #[serde(rename = "amt")]
         amount: Tokens,
-        #[serde(skip_serializing_if = "Option::is_none")]
         expected_allowance: Option<Tokens>,
-        #[serde(skip_serializing_if = "Option::is_none")]
         expires_at: Option<u64>,
-        #[serde(skip_serializing_if = "Option::is_none")]
         fee: Option<Tokens>,
     },
     FeeCollector {
-        #[serde(
-            default,
-            skip_serializing_if = "Option::is_none",
-            with = "compact_account::opt"
-        )]
         fee_collector: Option<Account>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         caller: Option<Principal>,
     },
 }
