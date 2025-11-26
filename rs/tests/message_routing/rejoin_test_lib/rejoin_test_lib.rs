@@ -163,7 +163,7 @@ pub async fn rejoin_test_large_state(
         .await_status_is_unavailable()
         .expect("Node still healthy");
 
-    // Note that how the canister stable memory is modified based on the random seed.
+    // Note that the canister stable memory is modified based on the random seed.
     // Make sure to provide a different seed than the one used in the previous `write_random_data_to_stable_memory` call.
     // In the following call, we skip odd-indexed canisters so that some canisters remain the same while others change.
     info!(
