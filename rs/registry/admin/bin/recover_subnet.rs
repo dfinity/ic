@@ -59,7 +59,7 @@ pub(crate) struct ProposeToUpdateRecoveryCupCmd {
     /// each with a subnet ID to request this key from.
     ///
     /// key_id: Master public key ID formatted as "Scheme:AlgorithmID:KeyName".
-    /// pre_signatures_to_create_in_advance: Non-negative integer value.
+    /// pre_signatures_to_create_in_advance: Non-negative integer value (keys that do not require pre-signatures omit this field).
     /// max_queue_size: Integer value greater than or equal 1.
     /// subnet_id: Principal ID of a subnet holding the requested key.
     ///
@@ -76,6 +76,11 @@ pub(crate) struct ProposeToUpdateRecoveryCupCmd {
     ///     {
     ///         "key_id": "schnorr:Bip340Secp256k1:some_key_name_2",
     ///         "pre_signatures_to_create_in_advance": "98",
+    ///         "max_queue_size": "154",
+    ///         "subnet_id": "gxevo-lhkam-aaaaa-aaaap-yai"
+    ///     },
+    ///     {
+    ///         "key_id": "vetkd:Bls12_381_G2:some_key_name_3",
     ///         "max_queue_size": "154",
     ///         "subnet_id": "gxevo-lhkam-aaaaa-aaaap-yai"
     ///     }
@@ -128,39 +133,49 @@ fn parse_key_config_requests_option(
 
     raw.iter()
         .map(|btree| {
-            let subnet_id = Some(btree
-                .get("subnet_id")
-                .map(|key| {
-                    key.parse::<PrincipalId>()
-                        .unwrap_or_else(|_| panic!("Could not parse subnet_id: '{key}'"))
-                })
-                .expect("Each element of the JSON object must specify a 'subnet_id'."));
+            let subnet_id = Some(
+                btree
+                    .get("subnet_id")
+                    .map(|key| {
+                        key.parse::<PrincipalId>()
+                            .unwrap_or_else(|_| panic!("Could not parse subnet_id: '{key}'"))
+                    })
+                    .expect("Each element of the JSON object must specify a 'subnet_id'."),
+            );
 
-            let key_id = Some(btree
-                .get("key_id")
-                .map(|key| {
-                    key.parse::<MasterPublicKeyId>()
-                        .unwrap_or_else(|_| panic!("Could not parse key_id: '{key}'"))
-                })
-                .expect("Each element of the JSON object must specify a 'key_id'."));
+            let key_id = Some(
+                btree
+                    .get("key_id")
+                    .map(|key| {
+                        key.parse::<MasterPublicKeyId>()
+                            .unwrap_or_else(|_| panic!("Could not parse key_id: '{key}'"))
+                    })
+                    .expect("Each element of the JSON object must specify a 'key_id'."),
+            );
 
-            let pre_signatures_to_create_in_advance = Some(btree
-                .get("pre_signatures_to_create_in_advance")
-                .map(|x| x.parse::<u32>().expect("pre_signatures_to_create_in_advance must be a u32."))
-                .expect("Each element of the JSON object must specify a 'pre_signatures_to_create_in_advance'."));
+            let pre_signatures_to_create_in_advance =
+                btree.get("pre_signatures_to_create_in_advance").map(|x| {
+                    x.parse::<u32>()
+                        .expect("pre_signatures_to_create_in_advance must be a u32.")
+                });
 
-            let max_queue_size = Some(btree
-                .get("max_queue_size")
-                .map(|x| x.parse::<u32>().expect("max_queue_size must be a u32"))
-                .expect("Each element of the JSON object must specify a 'max_queue_size'."));
+            let max_queue_size = Some(
+                btree
+                    .get("max_queue_size")
+                    .map(|x| x.parse::<u32>().expect("max_queue_size must be a u32"))
+                    .expect("Each element of the JSON object must specify a 'max_queue_size'."),
+            );
 
             let key_config = Some(do_recover_subnet::KeyConfig {
                 key_id,
                 pre_signatures_to_create_in_advance,
-                max_queue_size
+                max_queue_size,
             });
 
-            do_recover_subnet::KeyConfigRequest { key_config, subnet_id }
+            do_recover_subnet::KeyConfigRequest {
+                key_config,
+                subnet_id,
+            }
         })
         .collect()
 }
@@ -309,7 +324,6 @@ mod tests {
             },
             {
                 "key_id": "vetkd:Bls12_381_G2:some_key_name_3",
-                "pre_signatures_to_create_in_advance": "0",
                 "max_queue_size": "154",
                 "subnet_id": "gxevo-lhkam-aaaaa-aaaap-yai"
             }]"#
@@ -364,7 +378,7 @@ mod tests {
                                     curve: VetKdCurve::Bls12_381_G2,
                                     name: "some_key_name_3".to_string(),
                                 })),
-                                pre_signatures_to_create_in_advance: Some(0),
+                                pre_signatures_to_create_in_advance: None,
                                 max_queue_size: Some(154),
                             }),
                             subnet_id: Some(

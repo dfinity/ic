@@ -91,7 +91,7 @@ impl FromStr for SubnetFeatures {
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct KeyConfig {
     pub key_id: MasterPublicKeyId,
-    pub pre_signatures_to_create_in_advance: u32,
+    pub pre_signatures_to_create_in_advance: Option<u32>,
     pub max_queue_size: u32,
 }
 
@@ -104,8 +104,6 @@ impl From<KeyConfig> for pb::KeyConfig {
         } = src;
 
         let key_id = Some(pb_types::MasterPublicKeyId::from(&key_id));
-
-        let pre_signatures_to_create_in_advance = Some(pre_signatures_to_create_in_advance);
 
         Self {
             key_id,
@@ -120,10 +118,7 @@ impl TryFrom<pb::KeyConfig> for KeyConfig {
 
     fn try_from(value: pb::KeyConfig) -> Result<Self, Self::Error> {
         Ok(KeyConfig {
-            pre_signatures_to_create_in_advance: try_from_option_field(
-                value.pre_signatures_to_create_in_advance,
-                "KeyConfig::pre_signatures_to_create_in_advance",
-            )?,
+            pre_signatures_to_create_in_advance: value.pre_signatures_to_create_in_advance,
             key_id: try_from_option_field(value.key_id, "KeyConfig::key_id")?,
             max_queue_size: try_from_option_field(
                 value.max_queue_size,
@@ -233,7 +228,7 @@ mod tests {
                         curve: EcdsaCurve::Secp256k1,
                         name: "test_key1".to_string(),
                     }),
-                    pre_signatures_to_create_in_advance: 77,
+                    pre_signatures_to_create_in_advance: Some(77),
                     max_queue_size: 30,
                 },
                 KeyConfig {
@@ -241,7 +236,7 @@ mod tests {
                         curve: VetKdCurve::Bls12_381_G2,
                         name: "test_key2".to_string(),
                     }),
-                    pre_signatures_to_create_in_advance: 0,
+                    pre_signatures_to_create_in_advance: Some(0),
                     max_queue_size: 30,
                 },
             ],

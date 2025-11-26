@@ -82,19 +82,19 @@ pub(super) fn as_past_payload(payload: &[u8]) -> PastPayload<'_> {
 pub(super) fn make_chain_key_config() -> ChainKeyConfig {
     let key_config = KeyConfig {
         key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId::from_str("Secp256k1:some_key_1").unwrap()),
-        pre_signatures_to_create_in_advance: 1,
+        pre_signatures_to_create_in_advance: Some(1),
         max_queue_size: 3,
     };
     let key_config_1 = KeyConfig {
         key_id: MasterPublicKeyId::VetKd(VetKdKeyId::from_str("bls12_381_g2:some_key").unwrap()),
-        pre_signatures_to_create_in_advance: 0,
+        pre_signatures_to_create_in_advance: None,
         max_queue_size: 3,
     };
     let key_config_2 = KeyConfig {
         key_id: MasterPublicKeyId::VetKd(
             VetKdKeyId::from_str("bls12_381_g2:some_other_key").unwrap(),
         ),
-        pre_signatures_to_create_in_advance: 0,
+        pre_signatures_to_create_in_advance: None,
         max_queue_size: 3,
     };
 

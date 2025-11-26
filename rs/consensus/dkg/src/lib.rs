@@ -1625,7 +1625,7 @@ mod tests {
                         .with_chain_key_config(ChainKeyConfig {
                             key_configs: vec![KeyConfig {
                                 key_id: MasterPublicKeyId::VetKd(key_id.clone()),
-                                pre_signatures_to_create_in_advance: 0,
+                                pre_signatures_to_create_in_advance: None,
                                 max_queue_size: 20,
                             }],
                             signature_request_timeout_ns: None,
@@ -2117,7 +2117,7 @@ mod tests {
         ChainKeyConfig {
             key_configs: vec![KeyConfig {
                 key_id: MasterPublicKeyId::VetKd(test_vet_key()),
-                pre_signatures_to_create_in_advance: 0,
+                pre_signatures_to_create_in_advance: None,
                 max_queue_size: 20,
             }],
             signature_request_timeout_ns: None,

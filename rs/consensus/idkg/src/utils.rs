@@ -434,7 +434,7 @@ pub fn get_idkg_chain_key_config_if_enabled(
             // Skip keys that don't need to run IDKG protocol
             .filter(|key_config| key_config.key_id.is_idkg_key())
             // A key that has `presignatures_to_create_in_advance` set to 0 is not active
-            .filter(|key_config| key_config.pre_signatures_to_create_in_advance != 0)
+            .filter(|key_config| key_config.pre_signatures_to_create_in_advance.unwrap_or_default() != 0)
             .count();
 
         if num_active_key_ids == 0 {
@@ -833,7 +833,7 @@ mod tests {
                     key_id: MasterPublicKeyId::Ecdsa(
                         EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
                     ),
-                    pre_signatures_to_create_in_advance: 1,
+                    pre_signatures_to_create_in_advance: Some(1),
                     max_queue_size: 3,
                 }],
                 ..ChainKeyConfig::default()
@@ -857,14 +857,14 @@ mod tests {
                 key_id: MasterPublicKeyId::Ecdsa(
                     EcdsaKeyId::from_str("Secp256k1:some_key_1").unwrap(),
                 ),
-                pre_signatures_to_create_in_advance: 1,
+                pre_signatures_to_create_in_advance: Some(1),
                 max_queue_size: 3,
             };
             let key_config_2 = KeyConfig {
                 key_id: MasterPublicKeyId::Schnorr(
                     SchnorrKeyId::from_str("Ed25519:some_key_2").unwrap(),
                 ),
-                pre_signatures_to_create_in_advance: 1,
+                pre_signatures_to_create_in_advance: Some(1),
                 max_queue_size: 3,
             };
 
@@ -898,7 +898,7 @@ mod tests {
                     key_id: MasterPublicKeyId::Ecdsa(
                         EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
                     ),
-                    pre_signatures_to_create_in_advance: 0,
+                    pre_signatures_to_create_in_advance: Some(0),
                     max_queue_size: 3,
                 }],
                 ..ChainKeyConfig::default()

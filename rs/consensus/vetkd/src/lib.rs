@@ -1060,7 +1060,7 @@ mod tests {
                 key_id: MasterPublicKeyId::VetKd(
                     VetKdKeyId::from_str("bls12_381_g2:unused_key").unwrap(),
                 ),
-                pre_signatures_to_create_in_advance: 0,
+                pre_signatures_to_create_in_advance: None,
                 max_queue_size: 3,
             }],
             ..ChainKeyConfig::default()
