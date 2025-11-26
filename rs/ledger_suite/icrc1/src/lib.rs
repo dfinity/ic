@@ -127,7 +127,7 @@ impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<T
     type Error = String;
 
     fn try_from(value: FlattenedTransaction<Tokens>) -> Result<Self, Self::Error> {
-        let created_at_time = value.created_at_time.clone();
+        let created_at_time = value.created_at_time;
         let memo = value.memo.clone();
         // This conversion is only done for the ledger internal deduplication window, so we can
         // assume that the tx.op is always Some.
@@ -152,7 +152,7 @@ impl<Tokens: TokensType> TryFrom<(Option<String>, FlattenedTransaction<Tokens>)>
         let (btype, value) = btype_and_tx;
         let btype_str = btype.as_deref();
 
-        let created_at_time = value.created_at_time.clone();
+        let created_at_time = value.created_at_time;
         let memo = value.memo.clone();
 
         let operation = match btype_str {
