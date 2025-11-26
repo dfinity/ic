@@ -12,6 +12,8 @@ use ic_ckbtc_minter::{
         update_balance::{UpdateBalanceArgs, UtxoStatus},
     },
 };
+#[cfg(feature = "tla")]
+use ic_tests_ckbtc::fetch_and_check_traces;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
@@ -304,6 +306,9 @@ pub fn test_update_balance(env: TestEnv) {
                 panic!("expected to have one minted utxo, got: {update_result:?}");
             }
         }
+
+        #[cfg(feature = "tla")]
+        fetch_and_check_traces(minter_canister.clone(), runtime.as_ref());
     });
 }
 fn main() -> Result<()> {

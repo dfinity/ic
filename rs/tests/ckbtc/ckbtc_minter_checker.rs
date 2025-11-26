@@ -8,6 +8,8 @@ use ic_ckbtc_minter::updates::{
     retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError},
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
+#[cfg(feature = "tla")]
+use ic_tests_ckbtc::fetch_and_check_traces;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
@@ -257,6 +259,9 @@ pub fn test_btc_checker(env: TestEnv) {
         let owed_kyt_amount_after_update_balance =
             metrics.get("ckbtc_minter_owed_kyt_amount").unwrap().value;
         assert_eq!(owed_kyt_amount_after_update_balance as u64, 0);
+
+        #[cfg(feature = "tla")]
+        fetch_and_check_traces(minter_canister.clone(), runtime.as_ref());
 
         // Now let's send ckBTC back to the BTC network
         let withdrawal_account = minter_agent

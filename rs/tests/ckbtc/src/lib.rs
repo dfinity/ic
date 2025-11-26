@@ -48,6 +48,9 @@ use std::{
     time::Duration,
 };
 
+#[cfg(feature = "tla")]
+use ic_ckbtc_minter::tla::perform_trace_check;
+
 pub mod adapter;
 pub mod utils;
 
@@ -75,6 +78,27 @@ pub const BTC_MIN_CONFIRMATIONS: u64 = 6;
 pub const CHECK_FEE: u64 = 1001;
 
 const UNIVERSAL_VM_NAME: &str = "btc-node";
+
+#[cfg(feature = "tla")]
+pub fn fetch_and_check_traces(minter_canister: Canister, runtime: &Runtime) {
+    // Fetch traces from the canister
+    let traces: Vec<tla_instrumentation::UpdateTrace> = runtime
+        .block_on(minter_canister.query_("get_tla_traces", candid, ()))
+        .expect("query get_tla_traces failed");
+
+    perform_trace_check(traces);
+}
+
+#[cfg(feature = "tla")]
+fn get_tla_module_path(module: &str) -> std::path::PathBuf {
+    let modules = std::env::var("TLA_MODULES")
+        .expect("TLA_MODULES must be set for TLA trace checking");
+    modules
+        .split_whitespace()
+        .map(std::path::PathBuf::from)
+        .find(|p| p.file_name().is_some_and(|f| f == module))
+        .unwrap_or_else(|| panic!("Could not find TLA module {module} in TLA_MODULES"))
+}
 
 pub(crate) const BITCOIND_RPC_USER: &str = "btc-dev-preview";
 

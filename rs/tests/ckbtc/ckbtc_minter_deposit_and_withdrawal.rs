@@ -26,6 +26,8 @@ use ic_tests_ckbtc::{
         wait_for_update_balance,
     },
 };
+#[cfg(feature = "tla")]
+use ic_tests_ckbtc::fetch_and_check_traces;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use slog::{debug, info};
@@ -184,6 +186,9 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
 
         // Check that we can modify the fee
         assert!(get_tx_infos.bip125_replaceable);
+
+        #[cfg(feature = "tla")]
+        fetch_and_check_traces(minter_canister.clone(), runtime.as_ref());
 
         // Try to retrieve btc to minter's main_address
         let main_btc_address = minter_agent

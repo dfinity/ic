@@ -38,7 +38,7 @@ use crate::tla::{
 #[cfg(feature = "tla")]
 use crate::{
     tla::TLA_INSTRUMENTATION_STATE, tla::TLA_TRACES_LKEY, tla::TLA_TRACES_MUTEX,
-    tla_log_label, tla_log_locals, tla_log_request, tla_log_response, tla_snapshotter,
+    tla_log_locals, tla_log_request, tla_log_response, tla_snapshotter,
 };
 #[cfg(feature = "tla")]
 use tla_instrumentation::{Destination, InstrumentationState, TlaValue, ToTla};
@@ -164,8 +164,6 @@ pub async fn update_balance<R: CanisterRuntime>(
     args: UpdateBalanceArgs,
     runtime: &R,
 ) -> Result<Vec<UtxoStatus>, UpdateBalanceError> {
-    #[cfg(feature = "tla")]
-    tla_log_label!(UPDATE_BALANCE_START);
 
     let caller = runtime.caller();
     if args.owner.unwrap_or(caller) == runtime.id() {
@@ -191,6 +189,9 @@ pub async fn update_balance<R: CanisterRuntime>(
 
    let address = state::read_state(|s| runtime.derive_user_address(s, &caller_account));
 
+    let (btc_network, min_confirmations) =
+        state::read_state(|s| (s.btc_network, s.min_confirmations));
+
     #[cfg(feature = "tla")]
     {
         tla_log_locals! {
@@ -207,16 +208,13 @@ pub async fn update_balance<R: CanisterRuntime>(
         );
     }
 
-    let (btc_network, min_confirmations) =
-        state::read_state(|s| (s.btc_network, s.min_confirmations));
-
     let utxos = get_utxos(
         btc_network,
         &address,
         min_confirmations,
         CallSource::Client,
         runtime,
-    )
+    ) // TODO(ogi): record the error case
     .await?
     .utxos;
 

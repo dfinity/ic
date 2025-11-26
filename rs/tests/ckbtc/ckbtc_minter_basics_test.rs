@@ -21,6 +21,8 @@ use ic_tests_ckbtc::{
     install_bitcoin_canister, install_btc_checker, install_ledger, install_minter, subnet_app,
     subnet_sys,
 };
+#[cfg(feature = "tla")]
+use ic_tests_ckbtc::fetch_and_check_traces;
 use icrc_ledger_types::icrc1::account::Account;
 use slog::info;
 
@@ -206,6 +208,9 @@ async fn test_update_balance(agent: &CkBtcMinterAgent) {
         .await
         .expect("Error while decoding response.");
     assert!(res.is_err());
+
+    #[cfg(feature = "tla")]
+    fetch_and_check_traces(agent.minter_canister.clone(), agent.runtime());
 }
 
 fn main() -> Result<()> {
