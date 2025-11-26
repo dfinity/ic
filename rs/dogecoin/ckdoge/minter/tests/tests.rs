@@ -459,12 +459,18 @@ fn should_estimate_withdrawal_fee() {
         })
     );
 
+    let expected_fee = WithdrawalFee {
+        minter_fee: 180_000_000,
+        dogecoin_fee: 11_150_000,
+    };
     assert_eq!(
         minter.estimate_withdrawal_fee(RETRIEVE_DOGE_MIN_AMOUNT),
-        Ok(WithdrawalFee {
-            minter_fee: 180_000_000,
-            dogecoin_fee: 11_150_000,
-        })
+        Ok(expected_fee)
+    );
+    assert_eq!(
+        minter.estimate_withdrawal_fee(RETRIEVE_DOGE_MIN_AMOUNT),
+        Ok(expected_fee),
+        "BUG: estimate_withdrawal_fee should be idempotent"
     );
 }
 
