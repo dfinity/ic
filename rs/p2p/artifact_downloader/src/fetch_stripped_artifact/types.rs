@@ -67,17 +67,6 @@ pub(crate) enum StrippedMessage {
     IDkgDealing(IDkgArtifactId, NodeIndex, SignedIDkgDealing),
 }
 
-impl From<&StrippedMessage> for StrippedMessageId {
-    fn from(message: &StrippedMessage) -> Self {
-        match message {
-            StrippedMessage::Ingress(id, _) => StrippedMessageId::Ingress(id.clone()),
-            StrippedMessage::IDkgDealing(id, node_index, _) => {
-                StrippedMessageId::IDkgDealing(id.clone(), *node_index)
-            }
-        }
-    }
-}
-
 #[derive(Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum StrippedMessageType {
     Ingress,

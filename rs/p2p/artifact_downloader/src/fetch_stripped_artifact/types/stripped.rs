@@ -5,7 +5,7 @@ use ic_protobuf::{
 use ic_types::{
     NodeIndex,
     artifact::{ConsensusMessageId, IdentifiableArtifact, PbArtifact},
-    consensus::{ConsensusMessage, idkg::IDkgArtifactId},
+    consensus::{ConsensusMessage, ConsensusMessageHash, idkg::IDkgArtifactId},
 };
 
 use super::SignedIngressId;
@@ -80,6 +80,21 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
             )));
         }
 
+        let unstripped_consensus_message_id: ConsensusMessageId = try_from_option_field(
+            value.unstripped_consensus_message_id,
+            "unstripped_consensus_message_id",
+        )?;
+
+        if !matches!(
+            unstripped_consensus_message_id.hash,
+            ConsensusMessageHash::BlockProposal(_)
+        ) {
+            return Err(ProxyDecodeError::Other(format!(
+                "The unstripped consensus message id {:?} is NOT for a block proposal",
+                unstripped_consensus_message_id,
+            )));
+        }
+
         Ok(Self {
             block_proposal_without_ingresses_proto,
             stripped_ingress_payload: StrippedIngressPayload {
@@ -89,22 +104,23 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
                     .map(SignedIngressId::try_from)
                     .collect::<Result<Vec<_>, _>>()?,
             },
-            unstripped_consensus_message_id: try_from_option_field(
-                value.unstripped_consensus_message_id,
-                "unstripped_consensus_message_id",
-            )?,
+            unstripped_consensus_message_id,
             stripped_idkg_dealings: StrippedIDkgDealings {
                 stripped_dealings: value
                     .stripped_dealings
                     .into_iter()
                     .map(|dealing| {
-                        Ok((
-                            dealing.dealer_index,
-                            try_from_option_field(
-                                dealing.dealing_id,
-                                "StrippedIDkgDealings::dealing_id",
-                            )?,
-                        ))
+                        let idkg_artifact_id: IDkgArtifactId = try_from_option_field(
+                            dealing.dealing_id,
+                            "StrippedIDkgDealings::dealing_id",
+                        )?;
+                        if !matches!(idkg_artifact_id, IDkgArtifactId::Dealing(_, _)) {
+                            return Err(ProxyDecodeError::Other(format!(
+                                "The stripped IDKG artifact id {:?} is NOT for a dealing",
+                                idkg_artifact_id,
+                            )));
+                        }
+                        Ok((dealing.dealer_index, idkg_artifact_id))
                     })
                     .collect::<Result<Vec<_>, ProxyDecodeError>>()?,
             },
@@ -215,18 +231,32 @@ impl PbArtifact for MaybeStrippedConsensusMessage {
 
 #[cfg(test)]
 mod tests {
-    use crate::fetch_stripped_artifact::test_utils::{
-        fake_ingress_message, fake_stripped_block_proposal_with_ingresses,
+    use assert_matches::assert_matches;
+    use ic_types_test_utils::ids::{NODE_1, NODE_2};
+
+    use crate::fetch_stripped_artifact::{
+        test_utils::{
+            fake_finalization_consensus_message_id, fake_idkg_dealing,
+            fake_idkg_dealing_support_artifact_id, fake_ingress_message,
+            fake_stripped_block_proposal_with_messages,
+        },
+        types::StrippedMessageId,
     };
 
     use super::*;
 
     #[test]
     fn serialize_deserialize_stripped_block_proposal_test() {
-        let (_ingress_1, ingress_1_id) = fake_ingress_message("fake_1");
-        let (_ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
-        let stripped_block_proposal =
-            fake_stripped_block_proposal_with_ingresses(vec![ingress_1_id, ingress_2_id]);
+        let ingress_1_id = fake_ingress_message("fake_1").id();
+        let ingress_2_id = fake_ingress_message("fake_2").id();
+        let idkg_dealing_1_id = fake_idkg_dealing(NODE_1, 1).id();
+        let idkg_dealing_2_id = fake_idkg_dealing(NODE_2, 2).id();
+        let stripped_block_proposal = fake_stripped_block_proposal_with_messages(vec![
+            ingress_1_id,
+            ingress_2_id,
+            idkg_dealing_1_id,
+            idkg_dealing_2_id,
+        ]);
         let original_consensus_message =
             MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped_block_proposal);
 
@@ -235,5 +265,40 @@ mod tests {
             .expect("Should deserialize a valid proto");
 
         assert_eq!(consensus_message, original_consensus_message);
+    }
+
+    #[test]
+    fn deserialize_non_proposal_message_id_should_fail() {
+        let mut stripped_block_proposal = fake_stripped_block_proposal_with_messages(vec![]);
+        stripped_block_proposal.unstripped_consensus_message_id =
+            fake_finalization_consensus_message_id();
+
+        let original_consensus_message =
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped_block_proposal);
+        let proto = pb::StrippedConsensusMessage::from(original_consensus_message.clone());
+        let result = MaybeStrippedConsensusMessage::try_from(proto);
+        assert_matches!(
+            result,
+            Err(ProxyDecodeError::Other(msg)) if msg.contains("is NOT for a block proposal")
+        );
+    }
+
+    #[test]
+    fn deserialize_non_dealing_artifact_id_should_fail() {
+        let idkg_dealing_support_id = fake_idkg_dealing_support_artifact_id();
+        let stripped_block_proposal =
+            fake_stripped_block_proposal_with_messages(vec![StrippedMessageId::IDkgDealing(
+                idkg_dealing_support_id,
+                1,
+            )]);
+        let original_consensus_message =
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped_block_proposal);
+
+        let proto = pb::StrippedConsensusMessage::from(original_consensus_message.clone());
+        let result = MaybeStrippedConsensusMessage::try_from(proto);
+        assert_matches!(
+            result,
+            Err(ProxyDecodeError::Other(msg)) if msg.contains("is NOT for a dealing")
+        );
     }
 }

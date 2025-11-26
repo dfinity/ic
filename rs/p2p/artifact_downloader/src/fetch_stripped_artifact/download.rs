@@ -452,11 +452,9 @@ fn parse_dealing_response(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, BTreeSet};
-
     use crate::fetch_stripped_artifact::test_utils::{
         fake_block_proposal_with_ingresses, fake_block_proposal_with_ingresses_and_idkg,
-        fake_summary_block_proposal,
+        fake_idkg_payload_with_dealing, fake_summary_block_proposal,
     };
 
     use super::*;
@@ -470,22 +468,16 @@ mod tests {
     use ic_test_utilities_consensus::fake::{FakeContent, FakeContentSigner};
     use ic_test_utilities_types::messages::SignedIngressBuilder;
     use ic_types::{
-        Height, RegistryVersion,
+        Height,
         artifact::IngressMessageId,
         consensus::{
             Finalization, FinalizationContent,
-            idkg::{IDkgArtifactIdDataOf, IDkgPayload, IDkgPrefixOf},
+            idkg::{IDkgArtifactIdDataOf, IDkgPrefixOf},
         },
-        crypto::{
-            AlgorithmId, CryptoHash, CryptoHashOf, Signed,
-            canister_threshold_sig::idkg::{
-                IDkgReceivers, IDkgTranscript, IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
-            },
-        },
-        signature::BasicSignatureBatch,
+        crypto::{CryptoHash, CryptoHashOf},
         time::UNIX_EPOCH,
     };
-    use ic_types_test_utils::ids::{NODE_1, SUBNET_0};
+    use ic_types_test_utils::ids::NODE_1;
     use tower::ServiceExt;
 
     enum PoolMessage {
@@ -990,7 +982,7 @@ mod tests {
                 .returning(move |_, _| Ok(response(stripped_message_clone.clone())));
             let response = download_stripped_message(
                 Arc::new(mock_transport),
-                StrippedMessageId::from(&stripped_message),
+                stripped_message.id(),
                 ConsensusMessageId::from(&block),
                 &no_op_logger(),
                 &FetchStrippedConsensusArtifactMetrics::new(&MetricsRegistry::new()),
@@ -1014,46 +1006,9 @@ mod tests {
         node_index: NodeIndex,
         is_summary: bool,
     ) -> ConsensusMessage {
-        let IDkgArtifactId::Dealing(prefix, data) = dealing.message_id() else {
-            panic!("Expected dealing artifact id");
-        };
-
-        let transcript_id = IDkgTranscriptId::new(
-            data.get_ref().subnet_id,
-            prefix.get_ref().group_tag(),
-            data.get_ref().height,
-        );
-
-        let mut verified_dealings = BTreeMap::new();
-        verified_dealings.insert(
-            node_index,
-            Signed {
-                content: dealing,
-                signature: BasicSignatureBatch {
-                    signatures_map: BTreeMap::new(),
-                },
-            },
-        );
-
-        let transcript = IDkgTranscript {
-            transcript_id,
-            receivers: IDkgReceivers::new(BTreeSet::from_iter([NODE_1])).unwrap(),
-            registry_version: RegistryVersion::from(1),
-            verified_dealings: Arc::new(verified_dealings),
-            transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random),
-            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-            internal_transcript_raw: vec![],
-        };
-
-        let mut idkg_transcripts = BTreeMap::new();
-        idkg_transcripts.insert(transcript_id, transcript);
-
-        let mut idkg_payload = IDkgPayload::empty(Height::new(100), SUBNET_0, vec![]);
-        idkg_payload.idkg_transcripts = idkg_transcripts;
-
         ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses_and_idkg(
             vec![],
-            Some(idkg_payload),
+            Some(fake_idkg_payload_with_dealing(dealing, node_index)),
             is_summary,
         ))
     }

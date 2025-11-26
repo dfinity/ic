@@ -373,7 +373,12 @@ impl BlockProposalAssembler {
                 .iter()
                 .map(|signed_ingress_id| (signed_ingress_id.clone(), None))
                 .collect(),
-            signed_dealings: vec![],
+            signed_dealings: stripped_block_proposal
+                .stripped_idkg_dealings
+                .stripped_dealings
+                .iter()
+                .map(|(node_index, dealing_id)| ((*node_index, dealing_id.clone()), None))
+                .collect(),
             stripped_block_proposal,
         }
     }
@@ -507,9 +512,9 @@ impl BlockProposalAssembler {
 #[cfg(test)]
 mod tests {
     use crate::fetch_stripped_artifact::test_utils::{
-        fake_block_proposal_with_ingresses, fake_ingress_message,
+        fake_block_proposal_with_ingresses, fake_idkg_dealing, fake_ingress_message,
         fake_ingress_message_with_arg_size, fake_ingress_message_with_sig,
-        fake_stripped_block_proposal_with_ingresses,
+        fake_stripped_block_proposal_with_messages,
     };
     use crate::fetch_stripped_artifact::types::rpc::GetIngressMessageInBlockResponse;
     use bytes::Bytes;
@@ -519,7 +524,7 @@ mod tests {
     use ic_p2p_test_utils::mocks::MockTransport;
     use ic_p2p_test_utils::mocks::MockValidatedPoolReader;
     use ic_protobuf::proxy::ProtoProxy;
-    use ic_types_test_utils::ids::NODE_1;
+    use ic_types_test_utils::ids::{NODE_1, NODE_2};
 
     use super::*;
 
@@ -586,12 +591,16 @@ mod tests {
     }
 
     #[test]
-    fn missing_ingress_messages_test() {
-        let (_ingress_1, ingress_1_id) = fake_ingress_message("fake_1");
-        let (_ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
-        let stripped_block_proposal = fake_stripped_block_proposal_with_ingresses(vec![
+    fn missing_stripped_messages_test() {
+        let ingress_1_id = fake_ingress_message("fake_1").id();
+        let ingress_2_id = fake_ingress_message("fake_2").id();
+        let idkg_dealing_1_id = fake_idkg_dealing(NODE_1, 1).id();
+        let idkg_dealing_2_id = fake_idkg_dealing(NODE_2, 2).id();
+        let stripped_block_proposal = fake_stripped_block_proposal_with_messages(vec![
             ingress_1_id.clone(),
             ingress_2_id.clone(),
+            idkg_dealing_1_id.clone(),
+            idkg_dealing_2_id.clone(),
         ]);
 
         let assembler = BlockProposalAssembler::new(stripped_block_proposal);
@@ -599,58 +608,77 @@ mod tests {
         assert_eq!(
             assembler.missing_stripped_messages(),
             vec![
-                StrippedMessageId::Ingress(ingress_1_id),
-                StrippedMessageId::Ingress(ingress_2_id)
+                ingress_1_id,
+                ingress_2_id,
+                idkg_dealing_1_id,
+                idkg_dealing_2_id
             ]
         );
     }
 
     #[test]
     fn ingress_payload_insertion_works_test() {
-        let (ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
+        let ingress_2 = fake_ingress_message("fake_2");
+        let idkg_dealing_2 = fake_idkg_dealing(NODE_2, 2);
         let stripped_block_proposal =
-            fake_stripped_block_proposal_with_ingresses(vec![ingress_2_id.clone()]);
+            fake_stripped_block_proposal_with_messages(vec![ingress_2.id(), idkg_dealing_2.id()]);
 
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         assembler
-            .try_insert_ingress_message(ingress_2, ingress_2_id.clone())
+            .try_insert_stripped_message(ingress_2)
             .expect("Should successfully insert the missing ingress");
+
+        assert_eq!(
+            assembler.missing_stripped_messages(),
+            vec![idkg_dealing_2.id()]
+        );
+
+        assembler
+            .try_insert_stripped_message(idkg_dealing_2)
+            .expect("Should successfully insert the missing dealing");
 
         assert!(assembler.missing_stripped_messages().is_empty());
     }
 
     #[test]
     fn ingress_payload_insertion_existing_fails_test() {
-        let (ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
+        let ingress_2 = fake_ingress_message("fake_2");
+        let idkg_dealing_2 = fake_idkg_dealing(NODE_2, 2);
         let stripped_block_proposal =
-            fake_stripped_block_proposal_with_ingresses(vec![ingress_2_id.clone()]);
+            fake_stripped_block_proposal_with_messages(vec![ingress_2.id(), idkg_dealing_2.id()]);
 
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
-        assembler
-            .try_insert_ingress_message(ingress_2.clone(), ingress_2_id.clone())
-            .expect("Should successfully insert the missing ingress");
+        for message in [ingress_2, idkg_dealing_2] {
+            assembler
+                .try_insert_stripped_message(message.clone())
+                .expect("Should successfully insert the missing message");
 
-        assert_eq!(
-            assembler.try_insert_ingress_message(ingress_2, ingress_2_id),
-            Err(InsertionError::AlreadyInserted)
-        );
+            assert_eq!(
+                assembler.try_insert_stripped_message(message),
+                Err(InsertionError::AlreadyInserted)
+            );
+        }
     }
 
     #[test]
     fn ingress_payload_insertion_unknown_fails_test() {
-        let (ingress_1, ingress_1_id) = fake_ingress_message("fake_1");
-        let (_ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
+        let ingress_1 = fake_ingress_message("fake_1");
+        let ingress_2 = fake_ingress_message("fake_2");
+        let idkg_dealing_1 = fake_idkg_dealing(NODE_1, 1);
+        let idkg_dealing_2 = fake_idkg_dealing(NODE_2, 2);
         let stripped_block_proposal =
-            fake_stripped_block_proposal_with_ingresses(vec![ingress_2_id.clone()]);
+            fake_stripped_block_proposal_with_messages(vec![ingress_2.id(), idkg_dealing_2.id()]);
 
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
-        assert_eq!(
-            assembler.try_insert_ingress_message(ingress_1, ingress_1_id),
-            Err(InsertionError::NotNeeded)
-        );
+        for message in [idkg_dealing_1, ingress_1] {
+            assert_eq!(
+                assembler.try_insert_stripped_message(message),
+                Err(InsertionError::NotNeeded)
+            );
+        }
     }
 
     #[derive(Clone)]
