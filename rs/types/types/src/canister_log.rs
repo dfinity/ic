@@ -63,8 +63,8 @@ fn truncate_content(byte_capacity: usize, mut record: CanisterLogRecord) -> Cani
     record
 }
 
-// Helper struct to hold canister log records and keep track of the used space.
-// This is needed to avoid iterating over all records to calculate the used space.
+/// Stores log records and maintains their total byte usage so new entries can be
+/// appended while enforcing the provided capacity limit.
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, ValidateEq)]
 struct Records {
     #[validate_eq(Ignore)]
@@ -74,6 +74,7 @@ struct Records {
 }
 
 impl Records {
+    /// Creates a new `Records` from the given records and byte capacity.
     fn from(records: Vec<CanisterLogRecord>, byte_capacity: usize) -> Self {
         let records: Vec<_> = records
             .into_iter()
@@ -90,15 +91,18 @@ impl Records {
         result
     }
 
+    /// Clears the canister log records and resets the used bytes.
     fn clear(&mut self) {
         self.records.clear();
         self.bytes_used = 0;
     }
 
+    /// Returns the canister log records.
     fn get(&self) -> &VecDeque<CanisterLogRecord> {
         &self.records
     }
 
+    /// Pushes a new record to the back, updating the used bytes.
     fn push_back(&mut self, record: CanisterLogRecord) {
         let added_size = record.data_size();
         // LINT.IfChange
@@ -110,6 +114,7 @@ impl Records {
         self.bytes_used += added_size;
     }
 
+    /// Pops the oldest record from the front, updating the used bytes.
     fn pop_front(&mut self) -> Option<usize> {
         if let Some(record) = self.records.pop_front() {
             let removed_size = record.data_size();
@@ -120,6 +125,7 @@ impl Records {
         }
     }
 
+    /// Appends all records from `other` to `self`, making sure the size limit is respected.
     fn append(&mut self, other: &mut Self) {
         self.make_free_space_within_limit(other.bytes_used);
         self.records.append(&mut other.records);
@@ -127,8 +133,8 @@ impl Records {
         other.clear();
     }
 
+    /// Removes old records to make enough free space for new data within the limit.
     fn make_free_space_within_limit(&mut self, new_data_size: usize) {
-        // Removes old records to make enough free space for new data within the limit.
         let mut total_size = new_data_size + self.bytes_used;
         while total_size > self.byte_capacity {
             if let Some(removed_size) = self.pop_front() {
@@ -152,9 +158,7 @@ pub struct CanisterLog {
     ///
     /// A round may append multiple logs (e.g. from heartbeats, timers, or message
     /// executions). Their sizes are collected during the round and cleared after
-    /// metrics are recorded. Because this data is transient and not preserved
-    /// across checkpoints or snapshots, it is excluded from equality checks.
-    #[validate_eq(Ignore)]
+    /// metrics are recorded.
     delta_log_sizes: VecDeque<usize>,
 }
 
@@ -176,10 +180,12 @@ impl CanisterLog {
         Self::new_inner(next_idx, records, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT)
     }
 
+    /// Creates a default empty aggregate canister log.
     pub fn default_aggregate() -> Self {
         Self::new_aggregate(0, vec![])
     }
 
+    /// Creates a default empty delta canister log.
     pub fn default_delta() -> Self {
         Self::new_inner(0, vec![], MAX_DELTA_LOG_MEMORY_LIMIT)
     }
