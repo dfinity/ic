@@ -1,6 +1,6 @@
 use crate::common::{
     NnsInitPayloads, build_cmc_wasm, build_genesis_token_wasm, build_governance_wasm_with_features,
-    build_ledger_wasm, build_lifeline_wasm, build_node_rewards_test_wasm,
+    build_ledger_wasm, build_lifeline_wasm, build_node_rewards_wasm,
     build_registry_wasm_with_features, build_root_wasm, build_sns_wasms_wasm,
 };
 use crate::state_test_helpers::nns_governance_pb::Visibility;
@@ -755,7 +755,7 @@ pub fn setup_nns_node_rewards_with_correct_canister_id(machine: &StateMachine) {
     setup_nns_canister_at_position(
         machine,
         NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET,
-        build_node_rewards_test_wasm(),
+        build_node_rewards_wasm(),
         Encode!().unwrap(),
     );
 }
