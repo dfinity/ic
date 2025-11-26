@@ -19,6 +19,7 @@
 #![warn(future_incompatible)]
 #![allow(clippy::needless_range_loop)]
 
+mod cache;
 mod interpolation;
 mod poly;
 
@@ -36,8 +37,7 @@ use itertools::multiunzip;
 use pairing::group::{Group, ff::Field};
 use paste::paste;
 use rand::{CryptoRng, Rng, RngCore};
-use std::sync::Arc;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 use std::{collections::HashMap, fmt};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -2047,6 +2047,40 @@ declare_muln_vartime_impls_for!(G2Projective, 3, 4);
 declare_muln_vartime_affine_impl_for!(G2Projective, G2Affine);
 impl_debug_using_serialize_for!(G2Affine);
 impl_debug_using_serialize_for!(G2Projective);
+
+impl G2Affine {
+    /// Deserialize a G2 element using a cache
+    ///
+    /// This function verifies that the decoded point is within the prime order
+    /// subgroup, and is safe to call on untrusted inputs.
+    ///
+    /// This function is equivalent to `deserialize` but additionally caches
+    /// that it has seen the key before; repeated deserializations will be much
+    /// faster. This is mostly useful when deserializing public keys, which are
+    /// potentially seen many times over the process lifetime.
+    pub fn deserialize_cached<B: AsRef<[u8]>>(bytes: &B) -> Result<Self, PairingInvalidPoint> {
+        let bytes: &[u8; Self::BYTES] = bytes
+            .as_ref()
+            .try_into()
+            .map_err(|_| PairingInvalidPoint::InvalidPoint)?;
+        if let Some(pk) = crate::cache::G2PublicKeyCache::global().get(bytes) {
+            return Ok(pk);
+        }
+
+        if let Some(pt) = ic_bls12_381::G2Affine::from_compressed(bytes).into_option() {
+            let pt = Self::new(pt);
+            crate::cache::G2PublicKeyCache::global().insert(*bytes, pt.clone());
+            Ok(pt)
+        } else {
+            Err(PairingInvalidPoint::InvalidPoint)
+        }
+    }
+
+    /// Return statistics related to the deserialize_cached cache
+    pub fn deserialize_cached_statistics() -> crate::cache::G2PublicKeyCacheStatistics {
+        crate::cache::G2PublicKeyCache::global().cache_statistics()
+    }
+}
 
 /// An element of the group Gt
 #[derive(Clone, Eq, PartialEq, Debug, Zeroize, ZeroizeOnDrop)]
