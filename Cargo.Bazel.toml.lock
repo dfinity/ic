@@ -2945,7 +2945,7 @@ dependencies = [
  "crossterm_winapi",
  "libc",
  "mio 0.8.10",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.5",
  "signal-hook",
  "signal-hook-mio",
  "winapi 0.3.9",
@@ -2960,7 +2960,7 @@ dependencies = [
  "bitflags 2.9.0",
  "crossterm_winapi",
  "mio 1.0.2",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.5",
  "rustix 0.38.44",
  "signal-hook",
  "signal-hook-mio",
@@ -5359,7 +5359,7 @@ checksum = "bf151400ff0baff5465007dd2f3e717f3fe502074ca563069ce3a6629d07b289"
 dependencies = [
  "allocator-api2",
  "equivalent",
- "foldhash",
+ "foldhash 0.1.4",
  "serde",
 ]
 
@@ -10910,63 +10910,6 @@ name = "rangemap"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "977b1e897f9d764566891689e642653e5ed90c6895106acd005eb4c1d0203991"
-
-[[package]]
-name = "rasn"
-version = "0.15.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5379b720091e4bf4a9f118eb46f4ffb67bb8b7551649528c89e265cf880e748"
-dependencies = [
- "arrayvec 0.7.4",
- "bitvec",
- "bitvec-nom2",
- "bytes",
- "chrono 0.4.38",
- "either",
- "jzon",
- "konst",
- "nom",
- "num-bigint 0.4.6",
- "num-integer",
- "num-traits",
- "once_cell",
- "rasn-derive",
- "snafu 0.7.5",
-]
-
-[[package]]
-name = "rasn-derive"
-version = "0.15.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e521162112419405837a6590b327f24707ce9f9b3ac9c9c4a4d10673b63abcd8"
-dependencies = [
- "either",
- "itertools 0.10.5",
- "proc-macro2",
- "quote",
- "rayon",
- "syn 1.0.109",
- "uuid",
-]
-
-[[package]]
-name = "rasn-ocsp"
-version = "0.15.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aada75dbe8ab73b0304c47a9b23c8846b93d19113c771d332dba2065c51c5372"
-dependencies = [
- "rasn",
- "rasn-pkix",
-]
-
-[[package]]
-name = "rasn-pkix"
-version = "0.15.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9f74a31343c2fd11da94025b8dcbeb96bfb207b4d480db99ad5554c117448fa"
-dependencies = [
- "rasn",
-]
 
 [[package]]
 name = "ratatui"
