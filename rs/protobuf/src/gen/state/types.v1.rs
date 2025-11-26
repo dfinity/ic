@@ -777,6 +777,13 @@ pub struct IDkgDealingSupport {
     #[prost(message, optional, tag = "4")]
     pub sig_share: ::core::option::Option<BasicSignature>,
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StrippedDealing {
+    #[prost(uint32, tag = "1")]
+    pub dealer_index: u32,
+    #[prost(message, optional, tag = "2")]
+    pub dealing_id: ::core::option::Option<PrefixPairIDkg>,
+}
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct IDkgPrefix {
     #[prost(uint64, tag = "1")]
