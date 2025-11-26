@@ -4,7 +4,7 @@
 #
 #    bazel run //:python-requirements.update
 #
-ansible==11.7.0 \
+ansible==11.7.1 \
     --hash=sha256:caa56fc92e5bea012abf37f08aa348da27d2fcaf94bf398e24cadcb618a4dc3b \
     --hash=sha256:f9df37c71d407f65bcb9c5c06c9918e297d9ea74b5cdaf5926c4c9aa9e44db5f
     # via -r requirements.in
