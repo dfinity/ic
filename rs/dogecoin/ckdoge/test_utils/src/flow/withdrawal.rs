@@ -7,6 +7,7 @@ use bitcoin::hashes::Hash;
 use candid::{Decode, Principal};
 use ic_bitcoin_canister_mock::{OutPoint, Utxo};
 use ic_ckdoge_minter::candid_api::EstimateWithdrawalFeeError;
+use ic_ckdoge_minter::fees::DogecoinFeeEstimator;
 use ic_ckdoge_minter::{
     BitcoinAddress, BurnMemo, EventType, MIN_RESUBMISSION_DELAY, RetrieveBtcRequest, Txid,
     WithdrawalReimbursementReason,
@@ -314,10 +315,6 @@ where
     }
 
     pub fn minter_await_withdrawal_reimbursed(self, reason: WithdrawalReimbursementReason) {
-        // TODO DEFI-2458: use correct fees. Need to estimate amount of DOGE to pay for 1B cycles.
-        // See docs in the ckBTC minter for that constant.
-        const REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS: u64 = 100 * 10;
-
         let ledger = self.setup.as_ref().ledger();
         let minter = self.setup.as_ref().minter();
         let balance_after_withdrawal = ledger.icrc1_balance_of(self.account);
@@ -350,7 +347,7 @@ where
 
         let reimbursement_block_index = withdrawal_id + 1;
         let reimbursement_amount =
-            self.withdrawal_amount - REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS;
+            self.withdrawal_amount - DogecoinFeeEstimator::COST_OF_ONE_BILLION_CYCLES;
         assert_matches!(
             status,
             RetrieveDogeStatus::Reimbursed(reimbursement) if

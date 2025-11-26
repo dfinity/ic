@@ -53,18 +53,6 @@ mod tests;
 /// a batch transaction.
 pub const MIN_PENDING_REQUESTS: usize = 20;
 pub const MAX_REQUESTS_PER_BATCH: usize = 100;
-/// Reimbursement fee for when a batch of *pending* withdrawal requests would require more than [`MAX_NUM_INPUTS_IN_TRANSACTION`] inputs.
-///
-/// No transaction was issued (not signed and not sent) but the minter still did some work:
-/// 1) Burn on the ledger for each withdrawal request.
-/// 2) Build transaction candidate to cover the amount in the batch of withdrawal requests.
-///
-/// Heuristic:
-/// * charge 1B cycles for each request (a burn on the ledger on the fiduciary subnet is probably around 50M cycles) and to simplify, since there are at most
-///   [`MAX_REQUESTS_PER_BATCH`] withdrawal requests in a transaction to cancel, we charge [`MAX_REQUESTS_PER_BATCH`] times that amount.
-/// * For the cycles, we use a lower bound on the price of Bitcoin of 1 BTC = 10_000 XDR, so that 10 sats correspond to 1B cycles.
-pub const REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS: u64 =
-    (MAX_REQUESTS_PER_BATCH as u64) * 10;
 
 /// The minimum fee increment for transaction resubmission.
 /// See https://en.bitcoin.it/wiki/Miner_fees#Relaying for more detail.
@@ -391,13 +379,9 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                     err
                 );
                 let reason = reimbursement::WithdrawalReimbursementReason::InvalidTransaction(err);
-                reimburse_canceled_requests(
-                    s,
-                    batch,
-                    reason,
-                    REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS,
-                    runtime,
-                );
+                let reimbursement_fee = fee_estimator
+                    .reimbursement_fee_for_pending_withdrawal_requests(batch.len() as u64);
+                reimburse_canceled_requests(s, batch, reason, reimbursement_fee, runtime);
                 None
             }
             Err(BuildTxError::AmountTooLow) => {

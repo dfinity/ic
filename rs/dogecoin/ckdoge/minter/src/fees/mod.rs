@@ -16,6 +16,11 @@ pub struct DogecoinFeeEstimator {
 }
 
 impl DogecoinFeeEstimator {
+    /// Cost in koinu of 1B cycles.
+    ///
+    /// Use a lower bound on the price of Doge of 50 DOGE = 1 XDR, so that 5M koinus correspond to 1B cycles.
+    pub const COST_OF_ONE_BILLION_CYCLES: u64 = 5_000_000;
+
     pub fn new(network: Network, retrieve_doge_min_amount: u64) -> Self {
         Self {
             network,
@@ -108,5 +113,11 @@ impl FeeEstimator for DogecoinFeeEstimator {
     ) -> u64 {
         let tx_size = ic_ckbtc_minter::fake_sign(unsigned_tx).serialized_len();
         (tx_size as u64 * fee_per_byte) / 1000
+    }
+
+    fn reimbursement_fee_for_pending_withdrawal_requests(&self, num_requests: u64) -> u64 {
+        // Heuristic:
+        // * charge 1B cycles for each request (a burn on the ledger on the fiduciary subnet is probably around 50M cycles).
+        num_requests.saturating_mul(Self::COST_OF_ONE_BILLION_CYCLES)
     }
 }
