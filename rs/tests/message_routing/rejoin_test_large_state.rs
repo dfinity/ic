@@ -42,7 +42,7 @@ const PER_TASK_TIMEOUT: Duration = Duration::from_secs(3600 * 2);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(3600 * 2);
 const NUM_NODES: usize = 4;
 
-// Increasing the total size of all canisters results in a more rigorous test, but will also increase state synccompletion time.
+// Increasing the total size of all canisters results in a more rigorous test, but will also increase state sync completion time.
 // When adjusting canister size in manual test runs, it is recommended to also increase retry timeout and backoff values accordingly.
 const CANISTER_SIZE_GIB: u64 = 2;
 const NUM_CANISTERS: usize = 8;
