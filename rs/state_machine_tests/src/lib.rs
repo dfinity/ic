@@ -2616,7 +2616,11 @@ impl StateMachine {
     /// Triggers a single round of execution without any new inputs.  The state
     /// machine will invoke heartbeats and make progress on pending async calls.
     pub fn tick(&self) {
-        let mut payload = PayloadBuilder::default();
+        let payload = PayloadBuilder::default();
+        self.tick_with_config(payload)
+    }
+
+    pub fn tick_with_config(&self, mut payload_builder: PayloadBuilder) {
         let state = self.state_manager.get_latest_state().take();
 
         // Process threshold signing requests.
@@ -2625,10 +2629,10 @@ impl StateMachine {
             .subnet_call_context_manager
             .sign_with_threshold_contexts
         {
-            self.process_threshold_signing_request(id, context, &mut payload);
+            self.process_threshold_signing_request(id, context, &mut payload_builder);
         }
 
-        self.execute_payload(payload);
+        self.execute_payload(payload_builder);
     }
 
     /// Makes the state machine tick until there are no more messages in the system.

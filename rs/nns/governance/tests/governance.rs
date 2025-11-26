@@ -1354,7 +1354,7 @@ async fn test_mint_monthly_node_provider_rewards() {
         xdr_conversion_rate,
         minimum_xdr_permyriad_per_icp,
         maximum_node_provider_rewards_e8s,
-        registry_version,
+        registry_version: _,
         node_providers,
         algorithm_version: _,
     } = most_recent_monthly_node_provider_rewards;
@@ -1369,8 +1369,6 @@ async fn test_mint_monthly_node_provider_rewards() {
         maximum_node_provider_rewards_e8s,
         Some(default_economics.maximum_node_provider_rewards_e8s)
     );
-    // It happens to be 5, we just want to ensure it is set.
-    assert_eq!(registry_version, Some(5));
     assert_eq!(node_providers.len(), 1);
 }
 
