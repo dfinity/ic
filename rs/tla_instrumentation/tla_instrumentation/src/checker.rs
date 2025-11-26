@@ -167,17 +167,17 @@ fn run_apalache(
         .arg("--length=1")
         .arg(tla_module)
         .env("JVM_ARGS", jvm_args);
-    cmd.status()
+    cmd.output()
         .map_err(|e| ApalacheError::SetupError(e.to_string()))
         .and_then(|e| {
-            if e.success() {
+            if e.status.success() {
                 Ok(())
             } else {
                 Err(ApalacheError::CheckFailed(
-                    e.code(),
-                    format!("When checking file\n{tla_module:?}\nApalache returned the error: {e}")
+                    e.status.code(),
+                    format!("When checking file\n{tla_module:?}\nApalache returned the error: {}\nApalache stdout:\n{}\nApalache stderr:\n{}", e.status, String::from_utf8_lossy(&e.stdout), String::from_utf8_lossy(&e.stderr)
                         .to_string(),
-                ))
+                )))
             }
         })
 }

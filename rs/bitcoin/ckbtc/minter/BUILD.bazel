@@ -47,12 +47,25 @@ LIB_DEPS = [
     "@crate_index//:serde_json",
 ]
 
+TLA_DEPS = select({
+    "//rs/bitcoin/ckbtc/minter:tla_disabled": [],
+    "//conditions:default": [
+        "//rs/tla_instrumentation",
+        "//rs/tla_instrumentation:local_key",
+    ],
+})
+
 LIB_PROC_MACRO_DEPS = [
     # Keep sorted.
     "//packages/canlog_derive",
     "@crate_index//:async-trait",
     "@crate_index//:minicbor-derive",
 ]
+
+TLA_PROC_MACRO_DEPS = select({
+    "//rs/bitcoin/ckbtc/minter:tla_disabled": [],
+    "//conditions:default": ["//rs/tla_instrumentation:proc_macros"],
+})
 
 [
     rust_library(
@@ -63,9 +76,9 @@ LIB_PROC_MACRO_DEPS = [
         ),
         crate_features = features,
         crate_name = "ic_ckbtc_minter",
-        proc_macro_deps = LIB_PROC_MACRO_DEPS,
+        proc_macro_deps = LIB_PROC_MACRO_DEPS + TLA_PROC_MACRO_DEPS,
         version = "0.1.0",
-        deps = LIB_DEPS + extra_deps,
+        deps = LIB_DEPS + TLA_DEPS + extra_deps,
     )
     for (name, features, extra_deps) in [
         (
@@ -93,9 +106,7 @@ alias(
         compile_data = [":ckbtc_minter.did"],
         crate_features = features,
         crate_name = "ic_ckbtc_minter_canister",
-        proc_macro_deps = [
-            # Keep sorted.
-        ],
+        proc_macro_deps = TLA_PROC_MACRO_DEPS,
         rustc_env = {
             "CKBTC_MINTER_DID_PATH": "$(execpath :ckbtc_minter.did)",
         },
@@ -111,7 +122,7 @@ alias(
             "@crate_index//:ic-cdk",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:serde_json",
-        ],
+        ] + TLA_DEPS,
     )
     for (name, features) in [
         # Production version without debug assertions.
@@ -131,6 +142,18 @@ rust_test(
     name = "ckbtc_minter_lib_unit_tests",
     crate = ":ckbtc_minter_lib",
     crate_features = test_with_tla(),
+    data = [
+        ":tla_models",
+        "@bazel_tools//tools/jdk:current_java_runtime",
+        "@tla_apalache//:bin/apalache-mc",
+    ],
+    env = {
+        "JAVABASE": "$(JAVABASE)",
+        "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
+        "TLA_MODULES": "$(locations :tla_models)",
+    },
+    proc_macro_deps = TLA_PROC_MACRO_DEPS,
+    toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
     deps = [
         # Keep sorted.
         "@crate_index//:assert_matches",
@@ -140,7 +163,12 @@ rust_test(
         "@crate_index//:proptest",
         "@crate_index//:simple_asn1",
         "@crate_index//:tokio",
-    ],
+    ] + TLA_DEPS,
+)
+
+filegroup(
+    name = "tla_models",
+    srcs = glob(["tla/*.tla"]),
 )
 
 rust_test(

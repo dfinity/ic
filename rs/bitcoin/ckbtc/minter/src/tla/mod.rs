@@ -1,12 +1,12 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::thread;
+use std::hash::Hash;
 use std::path::PathBuf;
-
+use std::sync::mpsc;
 use ic_btc_interface::{OutPoint, Utxo};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use lazy_static::lazy_static;
-use tla_instrumentation::{
-    GlobalState, TlaConstantAssignment, TlaValue, ToTla, Update, UpdateTrace, VarAssignment,
-};
+use tla_instrumentation::{GlobalState, ResolvedStatePair, TlaConstantAssignment, TlaValue, ToTla, Update, UpdateTrace, VarAssignment};
 
 use crate::state::{self, CkBtcMinterState};
 use crate::updates::get_btc_address::account_to_p2wpkh_address_from_state;
@@ -88,66 +88,171 @@ pub fn check_traces() {
     perform_trace_check(take_traces())
 }
 
+fn dedup_by_key<E, K, F>(vec: &mut Vec<E>, mut key_selector: F)
+where
+    F: FnMut(&E) -> K,
+    K: Eq + Hash,
+{
+    let mut seen_keys = HashSet::new();
+    vec.retain(|element| seen_keys.insert(key_selector(element)));
+}
+
+// Add JAVABASE/bin to PATH to make the Bazel-provided JRE available to scripts
+fn set_java_path() {
+    let current_path = std::env::var("PATH").expect("PATH is not set");
+    let bazel_java = std::env::var("JAVABASE")
+        .expect("JAVABASE is not set; have you added the bazel tools toolchain?");
+    // TODO: Audit that the environment access only happens in single-threaded code.
+    unsafe { std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin")) };
+}
+
+/// Returns the path to the TLA module (e.g. `Foo.tla` -> `/home/me/tla/Foo.tla`)
+/// TLA modules are read from $TLA_MODULES (space-separated list)
+/// NOTE: this assumes unique basenames amongst the modules
+fn get_tla_module_path(module: &str) -> PathBuf {
+    let modules = std::env::var("TLA_MODULES").expect(
+        "environment variable 'TLA_MODULES' should be a space-separated list of TLA modules",
+    );
+
+    modules
+        .split(" ")
+        .map(|f| f.into()) /* str -> PathBuf */
+        .find(|f: &PathBuf| f.file_name().is_some_and(|file_name| file_name == module))
+        .unwrap_or_else(|| {
+            panic!("Could not find TLA module {module}, check 'TLA_MODULES' is set correctly")
+        })
+}
 pub fn perform_trace_check(traces: Vec<UpdateTrace>) {
-    if std::env::var("TEST_TMPDIR").is_err() {
-        let tmp = std::env::temp_dir();
-        let _ = std::fs::create_dir_all(&tmp);
-        // Setting environment variables is considered unsafe on some platforms.
-        unsafe {
-            std::env::set_var("TEST_TMPDIR", tmp.to_string_lossy().into_owned());
-        }
-    }
-    let tla_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tla");
-    if std::env::var("TLA_MODULES").is_err() {
-        let modules = [
-            "Apalache.tla",
-            "TypeAliases.tla",
-            "Variants.tla",
-            "TLA_Hash.tla",
-            "Ckbtc_Common.tla",
-            "Update_Balance.tla",
-            "Update_Balance_Apalache.tla",
-        ]
-        .iter()
-        .map(|f| tla_dir.join(f).to_string_lossy().into_owned())
-        .collect::<Vec<_>>()
-        .join(" ");
-        unsafe {
-            std::env::set_var("TLA_MODULES", modules);
-        }
+    // Large states make Apalache time and memory consumption explode. We'll look at
+    // improving that later, for now we introduce a hard limit on the state size, and
+    // skip checking states larger than the limit. The limit is a somewhat arbitrary
+    // number based on what we observed in the tests. We saw that states with 1000+ atoms take
+    // a long time to process, whereas most manual tests yield states of size 100 or so.
+    const STATE_SIZE_LIMIT: u64 = 500;
+    // Proptests generate lots of traces (and thus state pairs) that make the Apalache testing very long.
+    // Again, limit this to some arbitrary number where checking is still reasonably fast.
+    // Note that this is effectively a per-test limit due to how `check_traces` is normally used.
+    const STATE_PAIR_COUNT_LIMIT: usize = 30;
+    fn is_under_limit(p: &ResolvedStatePair) -> bool {
+        p.start.size() < STATE_SIZE_LIMIT && p.end.size() < STATE_SIZE_LIMIT
     }
 
-    let apalache_bin = std::env::var("TLA_APALACHE_BIN")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("..")
-                .join("..")
-                .join("..")
-                .join("..")
-                .join("tlatools")
-                .join("apalache")
-                .join("bin")
-                .join("apalache-mc")
-        });
-    let module = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tla")
-        .join("Update_Balance_Apalache.tla");
+    fn print_stats(traces: &Vec<UpdateTrace>) {
+        let mut total_pairs = 0;
+        ic_cdk::println!("Checking {} traces with TLA/Apalache", traces.len());
+        for t in traces {
+            let total_len = t.state_pairs.len();
+            total_pairs += total_len;
+            let under_limit_len = t.state_pairs.iter().filter(|p| is_under_limit(p)).count();
+            ic_cdk::println!(
+                "TLA/Apalache checks: keeping {}/{} state pairs for update {}",
+                under_limit_len, total_len, t.model_name
+            );
+        }
+        ic_cdk::println!(
+            "Total of {} state pairs to be checked with Apalache; will retain at most {}",
+            total_pairs, STATE_PAIR_COUNT_LIMIT
+        )
+    }
+    print_stats(&traces);
 
-    for trace in traces {
-        for pair in trace.state_pairs {
-            check_tla_code_link(
-                &apalache_bin,
+    let mut all_pairs = traces
+        .into_iter()
+        .flat_map(|t| {
+            t.state_pairs
+                .into_iter()
+                .filter(is_under_limit)
+                .map(move |p| (t.model_name.clone(), t.constants.clone(), p))
+        })
+        .collect();
+
+    // A quick check that we don't have any duplicate state pairs. We assume the constants should
+    // be the same anyways and look at just the model name and the state sthemselves.
+    dedup_by_key(&mut all_pairs, |(model_name, _c, p)| {
+        (model_name.clone(), p.start.clone(), p.end.clone())
+    });
+
+    all_pairs.truncate(STATE_PAIR_COUNT_LIMIT);
+
+    set_java_path();
+
+    let apalache = std::env::var("TLA_APALACHE_BIN")
+        .expect("environment variable 'TLA_APALACHE_BIN' should point to the apalache binary");
+    let apalache = PathBuf::from(apalache);
+
+    if !apalache.as_path().is_file() {
+        panic!("bad apalache bin from 'TLA_APALACHE_BIN': '{apalache:?}'");
+    }
+
+    // A poor man's parallel_map; process up to MAX_THREADS state pairs in parallel. Use mpsc channels
+    // to signal threads becoming available. Additionally, use the channels to signal any errors while
+    // performing the Apalache checks.
+    const MAX_THREADS: usize = 20;
+    let mut running_threads = 0;
+    let (thread_freed_tx, thread_freed_rx) = mpsc::channel::<bool>();
+    for (i, (model_name, constants, pair)) in all_pairs.iter().enumerate() {
+        ic_cdk::println!("Checking state pair #{}", i + 1);
+        if running_threads >= MAX_THREADS {
+            if thread_freed_rx
+                .recv()
+                .expect("Error while waiting for the thread completion signal")
+            {
+                panic!("An Apalache thread signalled an error")
+            }
+            running_threads -= 1;
+        }
+
+        let thread_freed_rx = thread_freed_tx.clone();
+        let apalache = apalache.clone();
+        let constants = constants.clone();
+        let pair = pair.clone();
+        // NOTE: We adopt the convention to reuse the 'process_id" as the tla module name
+        let tla_module = format!("{model_name}_Apalache.tla");
+        let tla_module = get_tla_module_path(&tla_module);
+
+        running_threads += 1;
+        let _handle = thread::spawn(move || {
+            let res = check_tla_code_link(
+                &apalache,
                 PredicateDescription {
-                    tla_module: module.clone(),
+                    tla_module,
                     transition_predicate: "Next".to_string(),
-                    predicate_parameters: vec![],
+                    predicate_parameters: Vec::new(),
                 },
                 pair,
-                trace.constants.clone(),
-            )
-            .expect("TLA code link check failed");
+                constants,
+            ).map_err(|e| {
+                if e.apalache_error.is_likely_mismatch() {
+                    ic_cdk::println!("Possible divergence from the TLA model detected when interacting with the ledger!");
+                    ic_cdk::println!("If you did not expect to change the interaction between governance and the ledger, reconsider whether your change is safe. You can find additional data on the step that triggered the error below.");
+                    ic_cdk::println!("If you are confident that your change is correct, please contact the #formal-models Slack channel and describe the problem.");
+                } else {
+                    ic_cdk::println!("An error detected while checking the TLA model.");
+                    ic_cdk::println!("The types may have diverged, or there might be something wrong with the TLA/Apalache setup");
+                }
+                ic_cdk::println!("You can edit nns/governance/feature_flags.bzl to disable TLA checks in the CI and get on with your business.");
+                ic_cdk::println!("-------------------");
+                ic_cdk::println!("Error occured in TLA model {:?} and state pair:\n{:#?}\nwith constants:\n{:#?}", e.model, e.pair, e.constants);
+                let diff = e.pair.diff();
+                if !diff.is_empty() {
+                    ic_cdk::println!("Diff between states: {:#?}", diff);
+                }
+                ic_cdk::println!("Apalache returned:\n{:#?}", e.apalache_error);
+            });
+            thread_freed_rx
+                .send(res.is_err())
+                .expect("Couldn't send the thread completion signal");
+        });
+    }
+
+    while running_threads > 0 {
+        if thread_freed_rx
+            .recv()
+            .expect("Error while waiting for the thread completion signal")
+        {
+            panic!("An Apalache thread signalled an error")
         }
+        running_threads -= 1;
     }
 }
 
