@@ -1,5 +1,6 @@
 use candid::{Decode, Encode};
 use chrono::DateTime;
+use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
 use ic_base_types::NodeId;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
@@ -53,6 +54,7 @@ use maplit::btreemap;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rewards_calculation::REWARDS_TABLE_DAYS;
 use rewards_calculation::types::NodeMetricsDailyRaw;
+use std::time::UNIX_EPOCH;
 use std::{collections::BTreeMap, time::Duration};
 
 struct NodeInfo {
@@ -145,16 +147,11 @@ fn test_list_node_provider_rewards() {
         num_blocks_proposed: 1,
     }];
 
-    for _ in 0..31 {
-        set_icp_xdr_conversion_rate(&state_machine, payload.clone());
-
-        tick_with_blockmaker_metrics(&state_machine, &node_metrics_daily);
-        state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS));
-        wait_for_nrc_metrics_sync(&state_machine);
-    }
+    // Set the average conversion rate
+    set_average_icp_xdr_conversion_rate(&state_machine, 155_000);
+    wait_for_nrc_metrics_sync(&state_machine);
 
     let now_seconds = state_machine.get_time().as_secs_since_unix_epoch();
-
     let start_timestamp_1 = now_seconds - NODE_PROVIDER_REWARD_PERIOD_SECONDS;
     let end_timestamp_1 = now_seconds;
     let rewards_days = calculate_expected_rewards_days(start_timestamp_1, end_timestamp_1);
@@ -259,8 +256,6 @@ fn test_list_node_provider_rewards() {
         // Cover 31 days of blockmaker metrics
         for _ in 0..31 {
             set_icp_xdr_conversion_rate(&state_machine, payload.clone());
-
-            tick_with_blockmaker_metrics(&state_machine, &node_metrics_daily);
 
             state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS));
 
@@ -1198,6 +1193,43 @@ fn submit_nns_proposal(state_machine: &StateMachine, action: ProposalActionReque
     // No proposals should be pending now.
     let pending_proposals = get_pending_proposals(state_machine);
     assert_eq!(pending_proposals, vec![]);
+}
+
+/// Set the average ICP/XDR conversion rate
+fn set_average_icp_xdr_conversion_rate(
+    state_machine: &StateMachine,
+    average_icp_xdr_conversion_rate: u64,
+) {
+    // Add conversion rate proposals for the past 31 days.
+    for _ in 0..31 {
+        let current_timestamp_seconds = state_machine
+            .time()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let payload = UpdateIcpXdrConversionRatePayload {
+            timestamp_seconds: current_timestamp_seconds,
+            xdr_permyriad_per_icp: average_icp_xdr_conversion_rate,
+            ..Default::default()
+        };
+        set_icp_xdr_conversion_rate(state_machine, payload);
+        state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS));
+    }
+
+    let actual_average_icp_xdr_conversion_rate: u64 = query(
+        state_machine,
+        CYCLES_MINTING_CANISTER_ID,
+        "get_average_icp_xdr_conversion_rate",
+        Encode!().unwrap(),
+    )
+    .map(|response| Decode!(&response, IcpXdrConversionRateCertifiedResponse).unwrap())
+    .map(|response| response.data.xdr_permyriad_per_icp)
+    .expect("Could not query the average_icp_xdr_conversion_rate from the CMC Canister");
+
+    assert_eq!(
+        actual_average_icp_xdr_conversion_rate,
+        average_icp_xdr_conversion_rate
+    );
 }
 
 /// Submit and execute a proposal to set the given conversion rate

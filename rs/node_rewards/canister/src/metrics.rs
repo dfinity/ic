@@ -53,6 +53,7 @@ impl ManagementCanisterClient for ICCanisterClient {
         &self,
         args: NodeMetricsHistoryArgs,
     ) -> CallResult<Vec<NodeMetricsHistoryRecord>> {
+        ic_cdk::println!("is feature test enabled: {}", cfg!(feature = "test"));
         ic_cdk::println!("running production implementation of node_metrics_history");
         ic_cdk::api::call::call_with_payment128::<_, (Vec<NodeMetricsHistoryRecord>,)>(
             Principal::management_canister(),
