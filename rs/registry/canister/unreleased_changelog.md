@@ -9,6 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
+### Node Swaps
+
+All node operators can now swap nodes on non-system subnets; later, swapping will be enabled on all subnets.
+
 ## Changed
 
 ## Deprecated
