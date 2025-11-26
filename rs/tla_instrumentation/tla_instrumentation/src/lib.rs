@@ -106,7 +106,7 @@ impl Context {
                 .update
                 .default_end_locals
                 .clone()
-                .merge(self.locals.clone()),
+                .merge_or_panic(self.locals.clone(), "end_update"),
             label: self.update.end_label.clone(),
         }
     }
@@ -120,8 +120,9 @@ impl Context {
     }
 
     // TODO: handle passing &mut locals to called functions somehow; what if they're called differently?
-    fn log_locals(&mut self, locals: VarAssignment) {
-        self.locals = self.locals.merge(locals);
+    fn log_locals(&mut self, locals: VarAssignment) -> Result<(), MergeError> {
+        self.locals = self.locals.merge(locals)?;
+        Ok(())
     }
 }
 
@@ -176,12 +177,15 @@ impl InstrumentationState {
     }
 }
 
-pub fn log_locals(state: &mut MessageHandlerState, locals: Vec<(&str, TlaValue)>) {
+pub fn log_locals(
+    state: &mut MessageHandlerState,
+    locals: Vec<(&str, TlaValue)>,
+) -> Result<(), MergeError> {
     let mut assignment = VarAssignment::new();
     for (name, value) in locals {
         assignment.push(name, value);
     }
-    state.context.log_locals(assignment);
+    state.context.log_locals(assignment)
 }
 
 pub fn log_globals(state: &mut MessageHandlerState, global: GlobalState) {
@@ -314,10 +318,33 @@ macro_rules! tla_log_locals {
             )*
             let res = TLA_INSTRUMENTATION_STATE.try_with(|state| {
                 let mut handler_state = state.handler_state.lock().expect("Failed to lock handler state in log_locals");
-                $crate::log_locals(&mut handler_state, locals.clone());
+                $crate::log_locals(&mut handler_state, locals.clone())
             });
             match res {
-                Ok(_) => (),
+                Ok(Ok(())) => (),
+                Ok(Err(e)) => {
+                    let handler_snapshot = TLA_INSTRUMENTATION_STATE
+                        .try_with(|state| {
+                            let handler_state = state
+                                .handler_state
+                                .lock()
+                                .expect("Failed to lock handler state for snapshot in log_locals");
+                            let label = handler_state.context.location.merge_labels();
+                            let existing_keys: Vec<_> = handler_state
+                                .context
+                                .locals
+                                .0
+                                .keys()
+                                .cloned()
+                                .collect();
+                            format!(
+                                "label={:?}, existing_keys={:?}, existing_locals={:?}, handler_state={:?}",
+                                label, existing_keys, handler_state.context.locals, handler_state
+                            )
+                        })
+                        .unwrap_or_else(|_| "handler state unavailable".to_string());
+                    panic!("tla_log_locals merge failure: {}; handler_state: {}", e, handler_snapshot);
+                }
                 Err(_) => {
                     println!("Asked to log locals {:?}, but instrumentation not initialized", locals);
                 }

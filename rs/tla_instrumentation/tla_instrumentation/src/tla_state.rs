@@ -37,38 +37,51 @@ impl VarAssignment {
         self.0.extend(other.0)
     }
 
-    fn assert_no_name_intersection(&self, other: &VarAssignment) {
-        let intersection: BTreeSet<_> = self
-            .0
+    fn overlapping_keys(&self, other: &VarAssignment) -> BTreeSet<String> {
+        self.0
             .keys()
-            .collect::<BTreeSet<_>>()
-            .intersection(&other.0.keys().collect::<BTreeSet<_>>())
             .cloned()
-            .collect();
-
-        assert!(
-            intersection.is_empty(),
-            r#"The states have non-disjoint sets of keys:
-{:?}
-Possible causes:
-1. A local variable is set both after the last await and in default_locals.
-   This is the most likely cause if the stack trace includes tla_log_method_return.
-2. A local variable of the same name is set in multiple functions in the call stack.
-States are:
-{:?}
-and
-{:?}"#,
-            intersection,
-            self,
-            other
-        );
+            .collect::<BTreeSet<_>>()
+            .intersection(&other.0.keys().cloned().collect())
+            .cloned()
+            .collect()
     }
 
-    pub fn merge(&self, other: VarAssignment) -> VarAssignment {
-        self.assert_no_name_intersection(&other);
+    pub fn merge(&self, other: VarAssignment) -> Result<VarAssignment, MergeError> {
+        let intersection = self.overlapping_keys(&other);
+        if !intersection.is_empty() {
+            return Err(MergeError {
+                overlapping_keys: intersection,
+                left: self.clone(),
+                right: other,
+            });
+        }
         let mut new_locals = self.0.clone();
         new_locals.extend(other.0);
-        VarAssignment(new_locals)
+        Ok(VarAssignment(new_locals))
+    }
+
+    pub fn merge_or_panic(&self, other: VarAssignment, context: &str) -> VarAssignment {
+        self.merge(other).unwrap_or_else(|e| {
+            panic!("Failed to merge VarAssignments in {context}: {e}")
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct MergeError {
+    pub overlapping_keys: BTreeSet<String>,
+    pub left: VarAssignment,
+    pub right: VarAssignment,
+}
+
+impl fmt::Display for MergeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "overlapping keys: {:?}. left={:?}, right={:?}",
+            self.overlapping_keys, self.left, self.right
+        )
     }
 }
 
@@ -85,7 +98,11 @@ impl GlobalState {
     }
 
     pub fn merge(&self, other: GlobalState) -> GlobalState {
-        GlobalState(self.0.merge(other.0))
+        GlobalState(
+            self.0
+                .merge(other.0)
+                .unwrap_or_else(|e| panic!("Failed to merge GlobalStates: {e}")),
+        )
     }
 
     pub fn extend(&mut self, other: GlobalState) {
@@ -309,18 +326,18 @@ impl ResolvedStatePair {
                     .start
                     .global
                     .0
-                    .merge(resolved_start_locals)
-                    .merge(resolved_responses)
-                    .merge(start_pc),
+                    .merge_or_panic(resolved_start_locals, "resolve start locals")
+                    .merge_or_panic(resolved_responses, "resolve responses")
+                    .merge_or_panic(start_pc, "resolve start pc"),
             ),
             end: GlobalState(
                 unresolved
                     .end
                     .global
                     .0
-                    .merge(resolved_end_locals)
-                    .merge(resolved_requests)
-                    .merge(end_pc),
+                    .merge_or_panic(resolved_end_locals, "resolve end locals")
+                    .merge_or_panic(resolved_requests, "resolve requests")
+                    .merge_or_panic(end_pc, "resolve end pc"),
             ),
             start_source_location: unresolved.start.source_location,
             end_source_location: unresolved.end.source_location,
