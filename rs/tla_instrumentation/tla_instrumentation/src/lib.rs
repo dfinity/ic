@@ -100,15 +100,15 @@ impl Context {
         let _f = self.location.0.pop().expect("No function in call stack");
     }
 
-    fn end_update(&mut self) -> LocalState {
-        LocalState {
+    fn end_update(&mut self) -> Result<LocalState, MergeError> {
+        Ok(LocalState {
             locals: self
                 .update
                 .default_end_locals
                 .clone()
-                .merge_or_panic(self.locals.clone(), "end_update"),
+                .merge(self.locals.clone())?,
             label: self.update.end_label.clone(),
-        }
+        })
     }
 
     fn get_state(&self) -> LocalState {
@@ -269,7 +269,16 @@ pub fn log_method_return(
     global: GlobalState,
     source_location: SourceLocation,
 ) -> ResolvedStatePair {
-    let local = state.context.end_update();
+    let local = state.context.end_update().unwrap_or_else(|e| {
+        panic!(
+            "Failed to merge locals in log_method_return: {}; label_stack={:?}, existing_locals={:?}, default_end_locals={:?}, handler_state={:?}",
+            e,
+            state.context.location,
+            state.context.locals,
+            state.context.update.default_end_locals,
+            state,
+        )
+    });
 
     let start_state = match mem::replace(&mut state.stage, Stage::Start) {
         Stage::End(start) => start,
