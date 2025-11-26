@@ -164,8 +164,8 @@ jobs:
         if: steps.filter.outputs.generate-config-fixtures == 'true'
         run: ./ci/scripts/generate-config-fixtures.sh
 
-  dependencies-check:
-    name: Dependency Scan for PR
+  security-checks:
+    name: Security Checks for PR
     uses: ./.github/workflows/security-check.yml
     with:
       commit-sha: ${{ inputs.commit-sha }}
