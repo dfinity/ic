@@ -11018,6 +11018,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-access-list"
+version = "0.9.0"
+
+[[package]]
 name = "ic-nervous-system-agent"
 version = "0.0.1"
 dependencies = [
@@ -20775,6 +20779,7 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-management-canister-types-private",
  "ic-metrics-encoder",
+ "ic-nervous-system-access-list",
  "ic-nervous-system-canisters",
  "ic-nervous-system-chunks",
  "ic-nervous-system-clients",
