@@ -148,6 +148,14 @@ where
                                 },
                             );
                         }
+
+                        let date =
+                            DateTime::from_timestamp_nanos(last_timestamp as i64).date_naive();
+                        ic_cdk::println!(
+                            "Successfully updated subnet {} metrics for date: {}",
+                            subnet_id,
+                            date
+                        );
                     }
                 }
                 Err((_, e)) => {

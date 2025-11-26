@@ -36,6 +36,7 @@ use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use ic_boundary::{ErrorClientFacing, MAX_REQUEST_BODY_SIZE};
 use ic_http_endpoints_public::{cors_layer, make_plaintext_response, query, read_state};
+use ic_registry_routing_table::RoutingTable;
 use ic_types::{CanisterId, SnapshotId, SubnetId};
 use pocket_ic::RejectResponse;
 use pocket_ic::common::rest::{
@@ -92,6 +93,7 @@ pub struct AppState {
     /// TTL in nanoseconds since UNIX epoch
     pub min_alive_until: Arc<AtomicU64>,
     pub runtime: Arc<Runtime>,
+    pub mainnet_routing_table: RoutingTable,
     pub blob_store: Arc<dyn BlobStore>,
 }
 
@@ -1429,7 +1431,10 @@ fn contains_unimplemented(config: ExtendedSubnetConfigSet) -> bool {
 /// The new InstanceId will be returned.
 pub async fn create_instance(
     State(AppState {
-        api_state, runtime, ..
+        api_state,
+        runtime,
+        mainnet_routing_table,
+        ..
     }): State<AppState>,
     extract::Json(instance_config): extract::Json<InstanceConfig>,
 ) -> (StatusCode, Json<rest::CreateInstanceResponse>) {
@@ -1558,6 +1563,7 @@ pub async fn create_instance(
             move |seed, gateway_port| {
                 PocketIc::try_new(
                     runtime,
+                    mainnet_routing_table,
                     seed,
                     subnet_configs,
                     instance_config.state_dir,

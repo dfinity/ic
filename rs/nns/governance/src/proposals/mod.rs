@@ -1,19 +1,22 @@
 use crate::{
-    governance::LOG_PREFIX,
+    governance::{Environment, LOG_PREFIX},
     pb::v1::{
         AddOrRemoveNodeProvider, ApproveGenesisKyc, CreateServiceNervousSystem,
         DeregisterKnownNeuron, FulfillSubnetRentalRequest, GovernanceError, InstallCode,
         KnownNeuron, ManageNeuron, Motion, NetworkEconomics, ProposalData, RewardNodeProvider,
-        RewardNodeProviders, StopOrStartCanister, Topic, UpdateCanisterSettings, Vote,
-        governance_error::ErrorType, proposal::Action,
+        RewardNodeProviders, SelfDescribingProposalAction, StopOrStartCanister, Topic,
+        UpdateCanisterSettings, Vote, governance_error::ErrorType, proposal::Action,
     },
-    proposals::execute_nns_function::ValidExecuteNnsFunction,
+    proposals::{
+        execute_nns_function::ValidExecuteNnsFunction,
+        self_describing::LocallyDescribableProposalAction,
+    },
 };
 use ic_base_types::CanisterId;
 use ic_cdk::println;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{PROTOCOL_CANISTER_IDS, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 pub mod call_canister;
 pub mod create_service_nervous_system;
@@ -22,6 +25,7 @@ pub mod execute_nns_function;
 pub mod fulfill_subnet_rental_request;
 pub mod install_code;
 pub mod register_known_neuron;
+pub mod self_describing;
 pub mod stop_or_start_canister;
 pub mod update_canister_settings;
 
@@ -168,6 +172,22 @@ impl ValidProposalAction {
             Some(manage_neuron)
         } else {
             None
+        }
+    }
+
+    /// Converts the proposal action to a self describing representation of itself. Note that it is
+    /// async because we need to call `ic0.canister_metadata` to get the candid file of an external
+    /// canister.
+    pub async fn to_self_describing(
+        &self,
+        _env: Arc<dyn Environment>,
+    ) -> Result<SelfDescribingProposalAction, GovernanceError> {
+        match self {
+            ValidProposalAction::Motion(motion) => Ok(motion.to_self_describing()),
+            _ => Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "Self describing proposal actions are not supported for this proposal action yet.",
+            )),
         }
     }
 }
