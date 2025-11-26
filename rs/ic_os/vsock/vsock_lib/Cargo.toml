@@ -12,6 +12,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+procfs = { version = "^0.9" }
 reqwest = { workspace = true }
 rusb = "0.9"
 sha2 = { workspace = true }
