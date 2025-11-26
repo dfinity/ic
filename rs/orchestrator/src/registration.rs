@@ -142,6 +142,13 @@ impl NodeRegistration {
     async fn retry_register_node(&mut self) {
         let add_node_payload = self.assemble_add_node_message().await;
 
+        // Any changes to the registry are replicated after some delay, so we sleep between attempts
+        // for that amount of time.
+        let sleep_duration = Duration::from_millis(
+            self.node_config
+                .nns_registry_replicator
+                .poll_delay_duration_ms,
+        );
         while !self.is_node_registered().await {
             let message = "Node registration not complete. Trying to register it".to_string();
             warn!(self.log, "{}", message);
@@ -158,7 +165,7 @@ impl NodeRegistration {
                 );
             };
 
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            tokio::time::sleep(sleep_duration).await;
         }
 
         UtilityCommand::notify_host(
