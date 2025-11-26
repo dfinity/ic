@@ -31,7 +31,6 @@ pub struct ICCanisterClient;
 impl ManagementCanisterClient for ICCanisterClient {
     /// Queries the `node_metrics_history` endpoint of the management canisters of the subnet specified
     /// in the 'contract' to fetch daily node metrics.
-    #[cfg(not(feature = "test"))]
     async fn node_metrics_history(
         &self,
         args: NodeMetricsHistoryArgs,
