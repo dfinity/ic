@@ -1,10 +1,10 @@
-//! # Feature Access Policy
+//! # Access List
 //!
-//! A flexible library for managing feature access control through allowlists and denylists.
+//! A flexible library for managing authorization through allowlists and denylists.
 //!
 //! ## Overview
 //!
-//! `FeatureAccessPolicy<T>` provides a type-safe way to control access to features or resources
+//! `AccessList<T>` provides a type-safe way to control access to features or resources
 //! using four distinct policy modes:
 //!
 //! - **Allow All**: Permits access to everything (open by default)
@@ -19,14 +19,14 @@
 //! Use these when you want to explicitly set a policy without any items:
 //!
 //! ```rust
-//! use ic_nervous_system_access_list::FeatureAccessPolicy;
+//! use ic_nervous_system_access_list::AccessList;
 //!
 //! // Allow everything
-//! let policy = FeatureAccessPolicy::<&str>::allow_all();
+//! let policy = AccessList::<&str>::allow_all();
 //! assert!(policy.is_allowed(&"any_feature"));
 //!
 //! // Deny everything
-//! let policy = FeatureAccessPolicy::<&str>::deny_all();
+//! let policy = AccessList::<&str>::deny_all();
 //! assert!(!policy.is_allowed(&"any_feature"));
 //! ```
 //!
@@ -39,29 +39,29 @@
 //! - `deny()` with empty collection → `AllowAll` (permissive: nothing denied)
 //!
 //! ```rust
-//! use ic_nervous_system_access_list::FeatureAccessPolicy;
+//! use ic_nervous_system_access_list::AccessList;
 //!
 //! // If features is empty, deny everything (safe default)
 //! let features = vec!["read", "write"];
-//! let policy = FeatureAccessPolicy::allow(features);
+//! let policy = AccessList::allow(features);
 //!
 //! // Empty collection becomes deny-all
 //! let empty: Vec<&str> = vec![];
-//! let policy = FeatureAccessPolicy::allow(empty);
+//! let policy = AccessList::allow(empty);
 //! assert!(policy.is_all_denied());
 //!
 //! // If blocked is empty, allow everything
 //! let blocked: Vec<&str> = vec![];
-//! let policy = FeatureAccessPolicy::deny(blocked);
+//! let policy = AccessList::deny(blocked);
 //! assert!(policy.is_all_allowed());
 //! ```
 //!
 //! ## Checking Access
 //!
 //! ```rust
-//! use ic_nervous_system_access_list::FeatureAccessPolicy;
+//! use ic_nervous_system_access_list::AccessList;
 //!
-//! let policy = FeatureAccessPolicy::allow(vec!["read", "write"]);
+//! let policy = AccessList::allow(vec!["read", "write"]);
 //!
 //! // Check individual items
 //! if policy.is_allowed(&"read") {
@@ -78,12 +78,12 @@
 //! ### Feature Flags
 //!
 //! ```rust
-//! use ic_nervous_system_access_list::FeatureAccessPolicy;
+//! use ic_nervous_system_access_list::AccessList;
 //! use std::cell::RefCell;
 //!
 //! thread_local! {
-//!     static CALLER_POLICY: RefCell<FeatureAccessPolicy<&'static str>> = RefCell::new(
-//!         FeatureAccessPolicy::allow(
+//!     static CALLER_POLICY: RefCell<AccessList<&'static str>> = RefCell::new(
+//!         AccessList::allow(
 //!             [
 //!                 "maiwj-n4dkq-rojw2-sujtw-otasa-qystf-dycvm-ckccf-3w75k-ar24y-czw",
 //!                 "tvpnz-xwmg5-42fpu-gbq54-hpxom-al3sk-fmp54-kzxlk-5a62i-i3y6r-dig",
@@ -108,97 +108,80 @@
 use std::fmt::Debug;
 use std::{collections::HashSet, hash::Hash};
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Debug)]
-pub struct FeatureAccessPolicy<T> {
-    inner: FeatureAccessPolicyInner<T>,
+pub struct AccessList<T> {
+    inner: AccessListInner<T>,
 }
 
 #[derive(Debug)]
-enum FeatureAccessPolicyInner<T> {
-    AllowAll,
+enum AccessListInner<T> {
     AllowOnly(HashSet<T>),
-    DenyAll,
     DenyOnly(HashSet<T>),
 }
 
-impl<T> FeatureAccessPolicy<T>
+impl<T> AccessList<T>
 where
     T: Debug + Eq + Hash,
 {
     pub fn allow_all() -> Self {
         Self {
-            inner: FeatureAccessPolicyInner::AllowAll,
+            inner: AccessListInner::DenyOnly(HashSet::new()),
         }
     }
 
     pub fn deny_all() -> Self {
         Self {
-            inner: FeatureAccessPolicyInner::DenyAll,
+            inner: AccessListInner::AllowOnly(HashSet::new()),
         }
     }
 
-    /// Use when unsure about the number of items in the collection.
-    ///
-    /// The library will try to make a best effort guess about what the
-    /// code calling it expects it to do.
-    ///
-    /// If the collection doesn't contain any elements it will deem it
-    /// as `DenyAll`.
-    /// If the collection has some elements it will deem it as `AllowOnly`
     pub fn allow<I>(items: I) -> Self
     where
         I: IntoIterator<Item = T>,
     {
         let items: HashSet<T> = items.into_iter().collect();
 
-        if items.is_empty() {
-            return Self {
-                inner: FeatureAccessPolicyInner::DenyAll,
-            };
-        }
-
         Self {
-            inner: FeatureAccessPolicyInner::AllowOnly(items),
+            inner: AccessListInner::AllowOnly(items),
         }
     }
 
-    /// The library will try to make a best effort guess about what the
-    /// code calling it expects it to do.
-    ///
-    /// If the collection doesn't contain any elements it will deem it
-    /// as `AllowAll`.
-    /// If the collection has some elements it will deem it as `DenyOnly`
     pub fn deny<I>(items: I) -> Self
     where
         I: IntoIterator<Item = T>,
     {
         let items: HashSet<T> = items.into_iter().collect();
 
-        if items.is_empty() {
-            return Self {
-                inner: FeatureAccessPolicyInner::AllowAll,
-            };
-        }
-
         Self {
-            inner: FeatureAccessPolicyInner::DenyOnly(items),
+            inner: AccessListInner::DenyOnly(items),
         }
     }
 
     pub fn is_allowed(&self, item: &T) -> bool {
         match &self.inner {
-            FeatureAccessPolicyInner::AllowAll => true,
-            FeatureAccessPolicyInner::AllowOnly(items) => items.contains(item),
-            FeatureAccessPolicyInner::DenyAll => false,
-            FeatureAccessPolicyInner::DenyOnly(items) => !items.contains(item),
+            AccessListInner::AllowOnly(items) => items.contains(item),
+            AccessListInner::DenyOnly(items) => !items.contains(item),
         }
     }
 
     pub fn is_all_allowed(&self) -> bool {
-        matches!(self.inner, FeatureAccessPolicyInner::AllowAll)
+        if let AccessListInner::DenyOnly(items) = &self.inner
+            && items.is_empty()
+        {
+            return true;
+        }
+        false
     }
 
     pub fn is_all_denied(&self) -> bool {
-        matches!(self.inner, FeatureAccessPolicyInner::DenyAll)
+        if let AccessListInner::AllowOnly(items) = &self.inner
+            && items.is_empty()
+        {
+            return true;
+        }
+        false
     }
 }
