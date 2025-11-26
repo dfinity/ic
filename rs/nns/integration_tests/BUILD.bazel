@@ -191,7 +191,7 @@ DEV_ENV = {
     "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
     "MEM_UTILS_TEST_CANISTER_WASM_PATH": "$(rootpath :mem-utils-test-canister)",
     "NODE_REWARDS_CANISTER_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister)",
-    "NODE_REWARDS_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister)",
+    "NODE_REWARDS_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister-test)",
     "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     "CANISTER_PLAYGROUND_CANISTER_WASM_PATH": "$(rootpath :canister-playground-canister)",
     "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",

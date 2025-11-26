@@ -28,7 +28,7 @@ use std::sync::Arc;
 fn main() {}
 
 thread_local! {
-    static REGISTRY_STORE: Arc<StableCanisterRegistryClient<RegistryStoreStableMemoryBorrower>> = {
+    pub static REGISTRY_STORE: Arc<StableCanisterRegistryClient<RegistryStoreStableMemoryBorrower>> = {
         let store = StableCanisterRegistryClient::<RegistryStoreStableMemoryBorrower>::new(
             Arc::new(RegistryCanister::new()));
         Arc::new(store)
