@@ -2,7 +2,7 @@ use super::*;
 use candid::{decode_args, encode_args};
 use canister_test::Project;
 use lazy_static::lazy_static;
-use pocket_ic::{common::rest::InstanceHttpGatewayConfig, PocketIcBuilder};
+use pocket_ic::{PocketIcBuilder, common::rest::InstanceHttpGatewayConfig};
 use std::fs;
 
 lazy_static! {
@@ -36,22 +36,20 @@ async fn test_call_canister() {
     // Step 1.2: Install "Hello, world!" canister.
     let callee_canister_id = pocket_ic.create_canister().await;
     pocket_ic.add_cycles(callee_canister_id, u128::MAX).await;
-    pocket_ic.install_canister(
-        callee_canister_id,
-        TEST_WASM.clone(),
-        encode_args(()).unwrap(),
-        None,
-    )
-    .await;
+    pocket_ic
+        .install_canister(
+            callee_canister_id,
+            TEST_WASM.clone(),
+            encode_args(()).unwrap(),
+            None,
+        )
+        .await;
 
     // Step 1.3: Create object that code under test needs (to call canister), to
     // wit, an Agent.
     pocket_ic.auto_progress().await;
     let agent_url = pocket_ic.url().unwrap();
-    let agent = Agent::builder()
-        .with_url(agent_url)
-        .build()
-        .unwrap();
+    let agent = Agent::builder().with_url(agent_url).build().unwrap();
     agent.fetch_root_key().await.unwrap();
 
     // Step 2: Call the code under test.
