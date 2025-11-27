@@ -442,10 +442,3 @@ mod tests {
         assert_eq!(next_idx_before, store.next_id());
     }
 }
-
-/*
-bazel test //rs/replicated_state:replicated_state_test \
-  --test_output=streamed \
-  --test_arg=--nocapture \
-  --test_arg=log_memory_store
-*/
