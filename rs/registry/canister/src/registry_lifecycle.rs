@@ -65,7 +65,7 @@ fn fill_swiss_subnet_node_operators_max_rewardable_nodes(
 
     for (operator, max_rewardable_nodes) in MAX_REWARDABLE_NODES_MAPPING.iter() {
         let registry_value = match registry.get(
-            make_node_operator_record_key(operator.clone()).as_bytes(),
+            make_node_operator_record_key(*operator).as_bytes(),
             registry.latest_version(),
         ) {
             Some(record) => record,
@@ -84,11 +84,11 @@ fn fill_swiss_subnet_node_operators_max_rewardable_nodes(
         }
 
         node_operator_record.max_rewardable_nodes = max_rewardable_nodes
-            .into_iter()
+            .iter()
             .map(|(node_reward_type, count)| (node_reward_type.to_string(), *count))
             .collect();
         mutations.push(update(
-            make_node_operator_record_key(operator.clone()),
+            make_node_operator_record_key(*operator),
             node_operator_record.encode_to_vec(),
         ));
     }
