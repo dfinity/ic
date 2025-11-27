@@ -85,8 +85,10 @@ async fn test_load_from_file() {
     let mut signed_reply = tempfile::NamedTempFile::new().unwrap();
     signed_reply.write(SAMPLE_SIGNED_REPLY).unwrap();
 
+    let a_very_long_time = Duration::from_secs(365_250 * 500 * 24 * 60 * 60);
     let agent = Agent::builder()
         .with_url(PRODUCTION_AGENT_URL.to_string())
+        .with_ingress_expiry(a_very_long_time)
         .build()
         .unwrap();
 

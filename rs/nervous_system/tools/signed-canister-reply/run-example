@@ -4,7 +4,7 @@ set -eou pipefail
 
 PROPOSAL_ID=139499
 # This gets left behind, in case you want to inspect it yourself.
-SIGNED_REPLY_PATH=signed_reply.cbor
+SIGNED_REPLY_PATH=example_signed_reply.cbor
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
 

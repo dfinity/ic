@@ -11802,6 +11802,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-signed-canister-reply"
+version = "0.9.0"
+dependencies = [
+ "base64 0.13.1",
+ "candid",
+ "canister-test",
+ "clap 4.5.27",
+ "hex",
+ "ic-agent",
+ "ic-certification 3.0.3",
+ "lazy_static",
+ "pocket-ic",
+ "serde_cbor",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "ic-nervous-system-string"
 version = "0.0.1"
 
@@ -23002,24 +23020,6 @@ checksum = "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
 dependencies = [
  "digest 0.10.7",
  "rand_core 0.6.4",
-]
-
-[[package]]
-name = "signed-canister-reply"
-version = "0.9.0"
-dependencies = [
- "base64 0.13.1",
- "candid",
- "canister-test",
- "clap 4.5.27",
- "hex",
- "ic-agent",
- "ic-certification 3.0.3",
- "lazy_static",
- "pocket-ic",
- "serde_cbor",
- "tempfile",
- "tokio",
 ]
 
 [[package]]

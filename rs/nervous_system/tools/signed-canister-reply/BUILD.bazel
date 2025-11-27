@@ -1,9 +1,10 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 # TODO: Open this up.
 package(default_visibility = ["//visibility:private"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:base64",
     "@crate_index//:clap",
     "@crate_index//:ic-agent",
@@ -12,33 +13,59 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
 ]
 
-BINARY_SRCS = glob(
+LIBRARY_SRCS = glob(
     ["src/**/*.rs"],
-    exclude = ["**/*tests.rs"],
+    exclude = [
+        # Keep sorted.
+        "src/main.rs",
+        "**/*tests.rs",
+    ],
+)
+
+rust_library(
+    name = "signed-canister-reply",
+    crate_name = "ic_nervous_system_signed_canister_reply",
+    srcs = LIBRARY_SRCS,
+    deps = DEPENDENCIES,
 )
 
 rust_binary(
-    name = "signed-canister-reply",
-    srcs = BINARY_SRCS,
-    deps = DEPENDENCIES,
+    name = "signed-canister-reply_tool",
+    binary_name = "signed-canister-reply",
+    srcs = [
+        # Keep sorted.
+        "src/main.rs",
+    ],
+    deps = [
+        # Keep sorted.
+        ":signed-canister-reply",
+        "@crate_index//:clap",
+        "@crate_index//:tokio",
+    ],
 )
 
 rust_test(
     name = "signed-canister-reply_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(
+        ["src/**"],
+        exclude = ["src/main.rs"],
+    ),
     compile_data = [
+        # Keep sorted.
         "signed_reply.cbor",
     ],
-    crate_root = "src/main.rs",
     data = [
+        # Keep sorted.
         "//rs/nervous_system/common/test_canister",
         "//rs/pocket_ic_server:pocket-ic-server-head-nns",
     ],
     env = {
+        # Keep sorted.
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server-head-nns)",
         "TEST_CANISTER_WASM_PATH": "$(rootpath //rs/nervous_system/common/test_canister)",
     },
     deps = DEPENDENCIES + [
+        # Keep sorted.
         "//packages/pocket-ic",
         "//rs/rust_canisters/canister_test",
         "@crate_index//:candid",
