@@ -122,3 +122,5 @@ ic-registry-canister-api = { path = "../../registry/canister/api" }
 pretty_assertions = { workspace = true }
 rewards-calculation = { path = "../../node_rewards/rewards_calculation" }
 chrono = { workspace = true }
+rewards-calculation = { path = "../../node_rewards/rewards_calculation" }
+chrono = { workspace = true }
