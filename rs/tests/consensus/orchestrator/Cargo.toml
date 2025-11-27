@@ -31,6 +31,7 @@ ssh2 = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
+maplit = "1.0.2"
 
 [[bin]]
 name = "ic-systest-cup-compatibility"
@@ -49,8 +50,8 @@ name = "ic-systest-node-registration-test-with-node-allowance"
 path = "node_registration_test_with_node_allowance.rs"
 
 [[bin]]
-name = "ic-systest-node-registration-test-with-max-rewaradble-nodes"
-path = "node_registration_test_with_max_rewaradble_nodes.rs"
+name = "ic-systest-node-registration-test-with-max-rewardable-nodes"
+path = "node_registration_test_with_max_rewardable_nodes.rs"
 
 [[bin]]
 name = "ic-systest-rotate-ecdsa-idkg-key"

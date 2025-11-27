@@ -72,6 +72,7 @@ system_test_nns(
         # Keep sorted.
         "//rs/nns/constants",
         "//rs/nns/governance/api",
+        "//rs/protobuf",
         "//rs/registry/canister",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
@@ -79,10 +80,9 @@ system_test_nns(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",
         "//rs/types/types",
-        "//rs/protobuf",
         "@crate_index//:anyhow",
-        "@crate_index//:slog",
         "@crate_index//:maplit",
+        "@crate_index//:slog",
     ],
 )
 
