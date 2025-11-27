@@ -57,7 +57,7 @@ async fn test_call_canister() {
     fs::write("arg.can", encode_args(()).unwrap()).unwrap();
     let mut stdout = vec![];
     CallCanister {
-        callee: Principal::from(callee_canister_id),
+        callee: callee_canister_id,
         method: "get_build_metadata".to_string(),
         arg_path: "arg.can".to_string(),
     }
@@ -81,7 +81,7 @@ async fn test_load_from_file() {
 
     // Create an input file, by essentially copying ../signed_reply.cbor.
     let mut signed_reply = tempfile::NamedTempFile::new().unwrap();
-    signed_reply.write(SAMPLE_SIGNED_REPLY).unwrap();
+    signed_reply.write_all(SAMPLE_SIGNED_REPLY).unwrap();
 
     let a_very_long_time = Duration::from_secs(365_250 * 500 * 24 * 60 * 60);
     let agent = Agent::builder()
