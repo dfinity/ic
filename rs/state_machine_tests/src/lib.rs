@@ -2286,19 +2286,19 @@ impl StateMachine {
             .state_layout()
             .flush_checkpoint_removal_channel();
 
-        let mut state_manager = Some(self.state_manager.clone());
+        let mut state_manager = self.state_manager.clone();
         let (nonce, time, checkpoint_interval_length) = self.into_components_inner();
         // StateManager is owned by an Arc, that is cloned into multiple components and different
         // threads. If we return before all the asynchronous components release the Arc, we may
         // end up with to StateManagers writing to the same directory, resulting in a crash.
         let start = std::time::Instant::now();
         let state_dir = loop {
-            match Arc::try_unwrap(state_manager.take().unwrap()) {
+            match Arc::try_unwrap(state_manager) {
                 Ok(sm) => {
                     break sm.into_state_dir();
                 }
                 Err(sm) => {
-                    state_manager = Some(sm);
+                    state_manager = sm;
                 }
             }
             if start.elapsed() > std::time::Duration::from_secs(5 * 60) {
