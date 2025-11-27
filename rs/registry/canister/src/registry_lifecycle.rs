@@ -69,13 +69,25 @@ fn fill_swiss_subnet_node_operators_max_rewardable_nodes(
             registry.latest_version(),
         ) {
             Some(record) => record,
-            None => continue,
+            None => {
+                ic_cdk::println!(
+                    "Failed to find NodeOperatorRecord for operator {}",
+                    operator
+                );
+                continue;
+            }
         };
 
         let mut node_operator_record =
             match NodeOperatorRecord::decode(registry_value.value.as_slice()) {
                 Ok(node_operator_record) => node_operator_record,
-                _ => continue,
+                _ => {
+                    ic_cdk::println!(
+                        "Failed to decode NodeOperatorRecord for operator {}",
+                        operator
+                    );
+                    continue;
+                }
             };
 
         // This avoids re-modifying existing max_rewardable_nodes entries.
