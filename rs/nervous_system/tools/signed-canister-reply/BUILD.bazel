@@ -17,25 +17,25 @@ LIBRARY_SRCS = glob(
     ["src/**/*.rs"],
     exclude = [
         # Keep sorted.
-        "src/main.rs",
         "**/*tests.rs",
+        "src/main.rs",
     ],
 )
 
 rust_library(
     name = "signed-canister-reply",
-    crate_name = "ic_nervous_system_signed_canister_reply",
     srcs = LIBRARY_SRCS,
+    crate_name = "ic_nervous_system_signed_canister_reply",
     deps = DEPENDENCIES,
 )
 
 rust_binary(
     name = "signed-canister-reply_tool",
-    binary_name = "signed-canister-reply",
     srcs = [
         # Keep sorted.
         "src/main.rs",
     ],
+    binary_name = "signed-canister-reply",
     deps = [
         # Keep sorted.
         ":signed-canister-reply",
