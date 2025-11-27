@@ -7703,9 +7703,11 @@ dependencies = [
  "ic-secp256k1 0.3.0",
  "icrc-ledger-types",
  "pocket-ic",
+ "proptest",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "test-strategy 0.4.0",
 ]
 
 [[package]]

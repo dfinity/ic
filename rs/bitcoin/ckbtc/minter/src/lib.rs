@@ -53,22 +53,6 @@ mod tests;
 /// a batch transaction.
 pub const MIN_PENDING_REQUESTS: usize = 20;
 pub const MAX_REQUESTS_PER_BATCH: usize = 100;
-/// Reimbursement fee for when a batch of *pending* withdrawal requests would require more than [`MAX_NUM_INPUTS_IN_TRANSACTION`] inputs.
-///
-/// No transaction was issued (not signed and not sent) but the minter still did some work:
-/// 1) Burn on the ledger for each withdrawal request.
-/// 2) Build transaction candidate to cover the amount in the batch of withdrawal requests.
-///
-/// Heuristic:
-/// * charge 1B cycles for each request (a burn on the ledger on the fiduciary subnet is probably around 50M cycles) and to simplify, since there are at most
-///   [`MAX_REQUESTS_PER_BATCH`] withdrawal requests in a transaction to cancel, we charge [`MAX_REQUESTS_PER_BATCH`] times that amount.
-/// * For the cycles, we use a lower bound on the price of Bitcoin of 1 BTC = 10_000 XDR, so that 10 sats correspond to 1B cycles.
-pub const REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS: u64 =
-    (MAX_REQUESTS_PER_BATCH as u64) * 10;
-
-/// The minimum fee increment for transaction resubmission.
-/// See https://en.bitcoin.it/wiki/Miner_fees#Relaying for more detail.
-pub const MIN_RELAY_FEE_PER_VBYTE: MillisatoshiPerByte = 1_000;
 
 /// The minimum time the minter should wait before replacing a stuck transaction.
 pub const MIN_RESUBMISSION_DELAY: Duration = Duration::from_secs(24 * 60 * 60);
@@ -391,13 +375,9 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                     err
                 );
                 let reason = reimbursement::WithdrawalReimbursementReason::InvalidTransaction(err);
-                reimburse_canceled_requests(
-                    s,
-                    batch,
-                    reason,
-                    REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS,
-                    runtime,
-                );
+                let reimbursement_fee = fee_estimator
+                    .reimbursement_fee_for_pending_withdrawal_requests(batch.len() as u64);
+                reimburse_canceled_requests(s, batch, reason, reimbursement_fee, runtime);
                 None
             }
             Err(BuildTxError::AmountTooLow) => {
@@ -792,7 +772,7 @@ pub async fn resubmit_transactions<
             Some(prev_fee) => {
                 // Ensure that the fee is at least min relay fee higher than the previous
                 // transaction fee to comply with BIP-125 (https://en.bitcoin.it/wiki/BIP_0125).
-                fee_per_vbyte.max(prev_fee + MIN_RELAY_FEE_PER_VBYTE)
+                fee_per_vbyte.max(prev_fee + Fee::MIN_RELAY_FEE_RATE_INCREASE)
             }
             None => fee_per_vbyte,
         };
@@ -1343,28 +1323,20 @@ pub fn estimate_retrieve_btc_fee<F: FeeEstimator>(
 ) -> Result<WithdrawalFee, BuildTxError> {
     // We simulate the algorithm that selects UTXOs for the
     // specified amount.
+    // TODO DEFI-2518: remove expensive clone operation
     let mut utxos = available_utxos.clone();
-    let selected_utxos = utxos_selection(withdrawal_amount, &mut utxos, 1);
+
     // Only the address type matters for the amount of vbytes, not the actual bytes in the address.
     let dummy_minter_address = BitcoinAddress::P2wpkhV0([u8::MAX; 20]);
     let dummy_recipient_address = BitcoinAddress::P2wpkhV0([42_u8; 20]);
-
-    build_unsigned_transaction_from_inputs(
-        &selected_utxos,
-        vec![(dummy_recipient_address, withdrawal_amount)],
-        dummy_minter_address,
+    crate::queries::estimate_withdrawal_fee(
+        &mut utxos,
+        withdrawal_amount,
         median_fee_millisatoshi_per_vbyte,
+        dummy_minter_address,
+        dummy_recipient_address,
         fee_estimator,
     )
-    .map(|(unsigned_tx, _change_output, fee)| {
-        assert_eq!(
-            unsigned_tx.outputs.len(),
-            2,
-            "BUG: expected 1 output to the recipient and one change output to the minter, \
-                so that the totality of the fee is paid in full by the recipient"
-        );
-        fee
-    })
 }
 
 #[async_trait]
