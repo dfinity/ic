@@ -434,7 +434,12 @@ pub fn get_idkg_chain_key_config_if_enabled(
             // Skip keys that don't need to run IDKG protocol
             .filter(|key_config| key_config.key_id.is_idkg_key())
             // A key that has `presignatures_to_create_in_advance` set to 0 is not active
-            .filter(|key_config| key_config.pre_signatures_to_create_in_advance.unwrap_or_default() != 0)
+            .filter(|key_config| {
+                key_config
+                    .pre_signatures_to_create_in_advance
+                    .unwrap_or_default()
+                    != 0
+            })
             .count();
 
         if num_active_key_ids == 0 {

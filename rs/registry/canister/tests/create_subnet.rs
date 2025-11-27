@@ -307,7 +307,9 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
                 key_configs: vec![KeyConfigRequest {
                     key_config: Some(KeyConfig {
                         key_id: Some(key_id.clone()),
-                        pre_signatures_to_create_in_advance: key_id.requires_pre_signatures().then_some(101),
+                        pre_signatures_to_create_in_advance: key_id
+                            .requires_pre_signatures()
+                            .then_some(101),
                         max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                     }),
                     subnet_id: Some(*system_subnet_principal),
