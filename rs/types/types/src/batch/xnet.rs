@@ -1,15 +1,15 @@
-use ic_base_types::{subnet_id_try_from_option, SubnetId};
+use ic_base_types::{SubnetId, subnet_id_try_from_option};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{
     messaging::xnet::v1 as messaging_pb,
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     types::v1 as pb,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryFrom};
 
-use crate::{xnet::CertifiedStreamSlice, CountBytes};
+use crate::{CountBytes, xnet::CertifiedStreamSlice};
 
 /// Payload that contains XNet messages.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]

@@ -53,7 +53,7 @@ EOT
 
     info!(logger, "Adding state files to node",);
     if let Err(e) = execute_bash_command(&s, script) {
-        panic!("Script execution failed: {:?}", e);
+        panic!("Script execution failed: {e:?}");
     }
 
     // Reboot once to get things fully initialized

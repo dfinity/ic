@@ -14,7 +14,7 @@ fn should_be_maximal_algorithm_index_id_to_ensure_all_variants_covered_by_strate
 }
 
 macro_rules! should_have_a_strategy_for_each_variant {
-    ($enum_name:ty, $base_case:expr, $($variant:ident $($pattern:tt)?),+ $(,)?) => {
+    ($enum_name:ty, $base_case:expr_2021, $($variant:ident $($pattern:tt)?),+ $(,)?) => {
         paste::paste! {
             #[test]
             fn [<should_have_a_strategy_for_each_variant_of_ $enum_name:snake >]() {
@@ -160,6 +160,7 @@ should_have_a_strategy_for_each_variant!(
         error: "dummy error to match upon".to_string(),
     },
     VersionNotAvailable { .. },
+    NoVersionsBefore { .. },
     DataProviderQueryFailed { .. },
     PollLockFailed { .. },
     PollingLatestVersionFailed { .. },
@@ -260,6 +261,5 @@ should_have_a_strategy_for_each_variant!(
     SecretKeyNotFound { .. },
     WrongSecretKeyType { .. },
     MalformedSecretKey { .. },
-    SigningFailed { .. },
     TransientInternalError { .. },
 );

@@ -3,22 +3,21 @@ use std::{convert::TryFrom, rc::Rc};
 
 use ic_base_types::NumBytes;
 use ic_config::execution_environment::Config as HypervisorConfig;
-use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
+use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
+    WasmtimeEmbedder,
     wasm_utils::compile,
     wasmtime_embedder::{
-        system_api::{
-            sandbox_safe_system_state::SandboxSafeSystemState, ApiType,
-            DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits,
-            ModificationTracking, SystemApiImpl,
-        },
         WasmtimeInstance,
+        system_api::{
+            ApiType, DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits,
+            ModificationTracking, SystemApiImpl, sandbox_safe_system_state::SandboxSafeSystemState,
+        },
     },
-    WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionMode, HypervisorError, SubnetAvailableMemory, SystemApi,
+    ExecutionMode, HypervisorError, MessageMemoryUsage, SubnetAvailableMemory, SystemApi,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::Global;
@@ -27,7 +26,8 @@ use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages, PageMap};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
-use ic_types::{time::UNIX_EPOCH, ComputeAllocation, MemoryAllocation, NumInstructions};
+use ic_types::batch::CanisterCyclesCostSchedule;
+use ic_types::{ComputeAllocation, MemoryAllocation, NumInstructions, time::UNIX_EPOCH};
 use ic_wasm_types::BinaryEncodedWasm;
 
 pub const DEFAULT_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
@@ -124,6 +124,7 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn try_build(self) -> Result<WasmtimeInstance, (HypervisorError, SystemApiImpl)> {
         let log = no_op_logger();
 
@@ -161,6 +162,7 @@ impl WasmtimeInstanceBuilder {
             Default::default(),
             self.api_type.caller(),
             self.api_type.call_context_id(),
+            CanisterCyclesCostSchedule::Normal,
         );
 
         let subnet_memory_capacity = i64::MAX / 2;
@@ -169,10 +171,9 @@ impl WasmtimeInstanceBuilder {
             self.api_type,
             sandbox_safe_system_state,
             self.memory_usage,
-            ic_replicated_state::MessageMemoryUsage::ZERO,
+            MessageMemoryUsage::ZERO,
             ExecutionParameters {
                 instruction_limits: InstructionLimits::new(
-                    FlagStatus::Disabled,
                     self.num_instructions,
                     self.num_instructions,
                 ),
@@ -184,7 +185,7 @@ impl WasmtimeInstanceBuilder {
                 execution_mode: ExecutionMode::Replicated,
                 subnet_memory_saturation: ResourceSaturation::default(),
             },
-            SubnetAvailableMemory::new(
+            SubnetAvailableMemory::new_for_testing(
                 subnet_memory_capacity,
                 subnet_memory_capacity,
                 subnet_memory_capacity,

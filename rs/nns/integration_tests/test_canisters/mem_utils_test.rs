@@ -17,7 +17,7 @@ const WASM_PAGE_SIZE_BYTES: usize = 65536;
 
 static mut GTC: Option<Gtc> = None;
 
-#[export_name = "canister_update test_empty"]
+#[unsafe(export_name = "canister_update test_empty")]
 fn test_empty() {
     over(candid, |()| {
         println!("{}Testing empty serialization...", LOG_PREFIX);
@@ -29,7 +29,7 @@ fn test_empty() {
     })
 }
 
-#[export_name = "canister_update test_buffer_size"]
+#[unsafe(export_name = "canister_update test_buffer_size")]
 fn test_buffer_size() {
     over(candid, |(buffer_size,): (u32,)| {
         println!("{}Testing with buffer size {}...", LOG_PREFIX, buffer_size);
@@ -60,7 +60,7 @@ fn test_buffer_size() {
     })
 }
 
-#[export_name = "canister_update test_1_byte_buffer"]
+#[unsafe(export_name = "canister_update test_1_byte_buffer")]
 fn test_1_byte_buffer() {
     over(candid, |()| {
         println!("{}Testing small data with buffer size 1...", LOG_PREFIX);
@@ -96,7 +96,7 @@ fn test_1_byte_buffer() {
     })
 }
 
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn canister_init() {
     dfn_core::printer::hook();
 

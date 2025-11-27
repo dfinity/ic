@@ -1,67 +1,101 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/config",
-    "//rs/crypto/utils/threshold_sig_der",
-    "//rs/monitoring/logger",
-    "//rs/orchestrator/registry_replicator",
-    "//rs/recovery",
-    "//rs/registry/client",
-    "//rs/registry/helpers",
-    "//rs/registry/local_store",
-    "//rs/types/types",
-    "@crate_index//:anyhow",
-    "@crate_index//:chrono",
-    "@crate_index//:clap",
-    "@crate_index//:rand",
-    "@crate_index//:reqwest",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:slog",
-    "@crate_index//:slog-async",
-    "@crate_index//:slog-term",
-    "@crate_index//:tokio",
-    "@crate_index//:url",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/test_utilities/tmpdir",
-]
-
-MACRO_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_library(
     name = "backup",
     srcs = glob(["src/**"]),
-    aliases = ALIASES,
     crate_name = "ic_backup",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "1.0.2",
     visibility = [
         "//rs:system-tests-pkg",
     ],
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/crypto/utils/threshold_sig_der",
+        "//rs/interfaces/registry",
+        "//rs/monitoring/logger",
+        "//rs/orchestrator/registry_replicator",
+        "//rs/recovery",
+        "//rs/registry/helpers",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:chrono",
+        "@crate_index//:clap",
+        "@crate_index//:rand",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+        "@crate_index//:slog-async",
+        "@crate_index//:slog-term",
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-util",
+        "@crate_index//:url",
+    ],
 )
 
 rust_binary(
     name = "ic-backup",
     srcs = ["src/main.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     visibility = [
         "//rs:release-pkg",
         "//rs:system-tests-pkg",
     ],
-    deps = DEPENDENCIES + [":backup"],
+    deps = [
+        # Keep sorted.
+        ":backup",
+        "//rs/config",
+        "//rs/crypto/utils/threshold_sig_der",
+        "//rs/interfaces/registry",
+        "//rs/monitoring/logger",
+        "//rs/orchestrator/registry_replicator",
+        "//rs/recovery",
+        "//rs/registry/helpers",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:chrono",
+        "@crate_index//:clap",
+        "@crate_index//:rand",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+        "@crate_index//:slog-async",
+        "@crate_index//:slog-term",
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-util",
+        "@crate_index//:url",
+    ],
 )
 
 rust_test(
     name = "backup_test",
     compile_data = ["test_data/fake_input_config.json.template"],
     crate = ":backup",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/crypto/utils/threshold_sig_der",
+        "//rs/interfaces/registry",
+        "//rs/monitoring/logger",
+        "//rs/orchestrator/registry_replicator",
+        "//rs/recovery",
+        "//rs/registry/client",
+        "//rs/registry/helpers",
+        "//rs/registry/local_store",
+        "//rs/test_utilities/tmpdir",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:chrono",
+        "@crate_index//:clap",
+        "@crate_index//:rand",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+        "@crate_index//:slog-async",
+        "@crate_index//:slog-term",
+        "@crate_index//:tokio",
+        "@crate_index//:url",
+    ],
 )

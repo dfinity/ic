@@ -4,17 +4,18 @@ use axum::body::Body;
 use bytes::Bytes;
 use http_body_util::Full;
 use hyper::{Method, Request, Response};
-use ic_agent::{agent::UpdateBuilder, export::Principal, identity::AnonymousIdentity, Agent};
+use ic_agent::{Agent, agent::UpdateBuilder, export::Principal, identity::AnonymousIdentity};
 use ic_config::http_handler::Config;
+use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
 use ic_error_types::{ErrorCode, UserError};
-use ic_http_endpoints_public::{call_v2, IngressValidatorBuilder};
+use ic_http_endpoints_public::{IngressValidatorBuilder, call_async};
+use ic_interfaces::execution_environment::{IngressFilterInput, IngressFilterResponse};
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
+use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_logger::replica_logger::no_op_logger;
-use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-use ic_types::{messages::SignedIngressContent, PrincipalId};
+use ic_types::PrincipalId;
 use ic_validator_http_request_arbitrary::AnonymousContent;
 use libfuzzer_sys::fuzz_target;
 use std::{
@@ -24,10 +25,10 @@ use std::{
 };
 use tokio::{
     runtime::Runtime,
-    sync::mpsc::{channel, Receiver},
+    sync::mpsc::{Receiver, channel},
 };
 use tower::{
-    limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder, ServiceExt,
+    Service, ServiceBuilder, ServiceExt, limit::GlobalConcurrencyLimitLayer, util::BoxCloneService,
 };
 use tower_test::mock::Handle;
 
@@ -35,8 +36,7 @@ use tower_test::mock::Handle;
 pub mod common;
 use common::{basic_registry_client, get_free_localhost_socket_addr, setup_ingress_filter_mock};
 
-type IngressFilterHandle =
-    Handle<(ProvisionalWhitelist, SignedIngressContent), Result<(), UserError>>;
+type IngressFilterHandle = Handle<IngressFilterInput, IngressFilterResponse>;
 type CallServiceEndpoint = BoxCloneService<Request<Body>, Response<Body>, Infallible>;
 
 #[derive(Clone, Debug, Arbitrary)]
@@ -86,12 +86,12 @@ fuzz_target!(|call_impls: Vec<CallServiceImpl>| {
             for flag in filter_flags {
                 while let Some((_, resp)) = ingress_filter_handle.next_request().await {
                     if flag {
-                        resp.send_response(Ok(()))
+                        resp.send_response(Ok(Ok(())))
                     } else {
-                        resp.send_response(Err(UserError::new(
+                        resp.send_response(Ok(Err(UserError::new(
                             ErrorCode::CanisterNotFound,
                             "Fuzzing ingress filter error",
-                        )))
+                        ))))
                     }
                 }
             }
@@ -188,8 +188,7 @@ fn new_call_service(
     let ingress_pool_throttler = MockIngressPoolThrottler::new(throttler_rx);
 
     let ingress_throttler = Arc::new(RwLock::new(ingress_pool_throttler));
-    #[allow(clippy::disallowed_methods)]
-    let (ingress_tx, _ingress_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (ingress_tx, _ingress_rx) = tokio::sync::mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
 
     let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(1)));
     let call_handler = IngressValidatorBuilder::builder(
@@ -208,7 +207,7 @@ fn new_call_service(
             .layer(GlobalConcurrencyLimitLayer::new(
                 config.max_call_concurrent_requests,
             ))
-            .service(call_v2::new_service(call_handler)),
+            .service(call_async::new_service(call_handler)),
     );
     (ingress_filter_handle, call_service)
 }

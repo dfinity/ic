@@ -46,7 +46,7 @@ use std::net::Ipv4Addr;
 use std::time::Duration;
 use tokio::runtime::Runtime;
 
-use anyhow::{anyhow, format_err, Error};
+use anyhow::{Error, anyhow, format_err};
 
 use candid::Encode;
 
@@ -188,7 +188,7 @@ EOT
             sudo systemctl start ic-crypto-csp
             sudo systemctl start ic-replica
             "#}) {
-            panic!("Script execution failed: {:?}", e);
+            panic!("Script execution failed: {e:?}");
         }
 
         info!(log, "Waiting for the registry to update from version {:?} ...", topology.get_registry_version());

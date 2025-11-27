@@ -26,8 +26,8 @@ use ic_system_test_driver::systest;
 use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_threshold_sig_system_test_utils::{
-    enable_chain_key_signing, get_public_key_and_test_signature, get_public_key_with_logger,
-    make_key_ids_for_all_schemes, DKG_INTERVAL,
+    DKG_INTERVAL, enable_chain_key_signing, get_public_key_and_test_signature,
+    get_public_key_with_logger, make_key_ids_for_all_schemes,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;

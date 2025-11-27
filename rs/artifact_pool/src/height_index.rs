@@ -1,7 +1,7 @@
 use ic_types::{
+    Height,
     consensus::*,
     crypto::{CryptoHash, CryptoHashOf},
-    Height,
 };
 use std::collections::BTreeMap;
 use std::time::Instant;
@@ -427,11 +427,13 @@ mod tests {
         assert!(!index.retain(height, |&x| x < max));
         assert!(index.retain(height, |&x| x % 2 == 0));
 
-        assert!(!index
-            .buckets
-            .get(&height)
-            .unwrap()
-            .iter()
-            .any(|x| x % 2 != 0));
+        assert!(
+            !index
+                .buckets
+                .get(&height)
+                .unwrap()
+                .iter()
+                .any(|x| x % 2 != 0)
+        );
     }
 }

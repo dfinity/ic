@@ -21,10 +21,11 @@ const RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE: &str = "9999123123595
 const SECS_PER_DAY: u64 = 60 * 60 * 24;
 
 #[derive(Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum KeyPair {
     Ed25519 {
-        secret_key: ic_crypto_internal_basic_sig_ed25519::types::SecretKeyBytes,
-        public_key: ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes,
+        secret_key: ic_ed25519::PrivateKey,
+        public_key: ic_ed25519::PublicKey,
     },
     Secp256r1 {
         secret_key: ic_secp256r1::PrivateKey,
@@ -35,12 +36,9 @@ pub enum KeyPair {
 impl signature::Signer<Signature> for KeyPair {
     fn try_sign(&self, msg: &[u8]) -> Result<Signature, signature::Error> {
         match self {
-            KeyPair::Ed25519 { secret_key, .. } => Ok(Signature(
-                ic_crypto_internal_basic_sig_ed25519::sign(msg, secret_key)
-                    .unwrap()
-                    .0
-                    .to_vec(),
-            )),
+            KeyPair::Ed25519 { secret_key, .. } => {
+                Ok(Signature(secret_key.sign_message(msg).to_vec()))
+            }
             KeyPair::Secp256r1 { secret_key, .. } => {
                 Ok(Signature(secret_key.sign_message(msg).to_vec()))
             }
@@ -84,7 +82,7 @@ impl signature::Keypair for KeyPair {
 
 #[derive(Clone)]
 pub enum VerifyingKey {
-    Ed25519(ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes),
+    Ed25519(ic_ed25519::PublicKey),
     Secp256r1(ic_secp256r1::PublicKey),
 }
 
@@ -92,7 +90,7 @@ impl pkcs8::EncodePublicKey for VerifyingKey {
     fn to_public_key_der(&self) -> spki::Result<pkcs8::Document> {
         match self {
             VerifyingKey::Ed25519(key) => {
-                let der = ic_crypto_internal_basic_sig_ed25519::public_key_to_der(*key);
+                let der = key.serialize_rfc8410_der();
                 Ok(pkcs8::Document::try_from(der)
                     .expect("failed to create document from ed25519 DER"))
             }
@@ -104,10 +102,11 @@ impl pkcs8::EncodePublicKey for VerifyingKey {
 
 impl KeyPair {
     pub fn gen_ed25519<R: Rng + CryptoRng>(rng: &mut R) -> Self {
-        let key_pair = ic_crypto_internal_basic_sig_ed25519::api::keypair_from_rng(rng);
+        let secret_key = ic_ed25519::PrivateKey::generate_using_rng(rng);
+        let public_key = secret_key.public_key();
         Self::Ed25519 {
-            secret_key: key_pair.0,
-            public_key: key_pair.1,
+            secret_key,
+            public_key,
         }
     }
 
@@ -125,7 +124,7 @@ impl KeyPair {
             KeyPair::Ed25519 {
                 secret_key: _,
                 public_key,
-            } => ic_crypto_internal_basic_sig_ed25519::public_key_to_der(*public_key),
+            } => public_key.serialize_rfc8410_der(),
             KeyPair::Secp256r1 {
                 secret_key: _,
                 public_key,
@@ -143,9 +142,7 @@ impl KeyPair {
     pub fn serialize_for_rustls(&self) -> Vec<u8> {
         match self {
             KeyPair::Ed25519 { secret_key, .. } => {
-                ic_crypto_internal_basic_sig_ed25519::secret_key_to_pkcs8_v1_der(secret_key)
-                    .expose_secret()
-                    .to_vec()
+                secret_key.serialize_pkcs8(ic_ed25519::PrivateKeyFormat::Pkcs8v2)
             }
             KeyPair::Secp256r1 { secret_key, .. } => secret_key.serialize_rfc5915_der(),
         }
@@ -478,8 +475,8 @@ fn x509_cert_cn(cn: &String, duplicate: bool) -> x509_cert::name::Name {
 }
 
 fn asn1_time_string_to_unix_timestamp(time_asn1: &str) -> Result<u64, String> {
-    use time::macros::format_description;
     use time::PrimitiveDateTime;
+    use time::macros::format_description;
 
     let asn1_format = format_description!("[year][month][day][hour][minute][second]Z"); // e.g., 99991231235959Z
     let time_primitivedatetime =

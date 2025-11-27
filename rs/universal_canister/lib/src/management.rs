@@ -1,5 +1,5 @@
 use crate::CallInterface;
-use crate::{wasm, Call};
+use crate::{Call, wasm};
 use candid::{CandidType, Deserialize, Encode, Principal};
 use std::convert::TryFrom;
 

@@ -121,8 +121,8 @@ service : {
   ecdsa_public_key : (opt principal, vec blob, text) -> (EcdsaPublicKeyResult);
   sign_with_ecdsa : (blob, vec blob, text) -> (SignWithEcdsaResult);
   node_metrics_history_proxy: (NodeMetricsHistoryArgs) -> (vec NodeMetricsHistoryResponse);
-  canister_http : () -> (HttpResponseResult);
-  canister_http_with_transform : () -> (HttpResponse);
+  canister_http : (text) -> (HttpResponseResult);
+  canister_http_with_transform : (text) -> (HttpResponse);
   transform : (TransformArgs) -> (HttpResponse) query;
   whoami : () -> (text);
   whois : (principal) -> (text);
@@ -135,4 +135,6 @@ service : {
   reject_update : () -> ();
   trap_query : () -> () query;
   trap_update : () -> ();
+  stable_grow_and_fill : (nat64) -> ();
+  stable_size : () -> (nat64) query;
 }

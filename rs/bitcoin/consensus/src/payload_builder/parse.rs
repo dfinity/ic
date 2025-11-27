@@ -1,14 +1,14 @@
 use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_interfaces::batch_payload::PastPayload;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_protobuf::{
     bitcoin::v1::BitcoinAdapterResponse as PbBitcoinAdapterResponse, proxy::ProxyDecodeError,
 };
 use ic_types::{
-    batch::{
-        iterator_to_bytes, slice_to_messages, SelfValidatingPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES,
-    },
     NumBytes,
+    batch::{
+        MAX_BITCOIN_PAYLOAD_IN_BYTES, SelfValidatingPayload, iterator_to_bytes, slice_to_messages,
+    },
 };
 use prost::Message;
 use std::collections::BTreeSet;

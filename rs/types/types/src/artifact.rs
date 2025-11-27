@@ -1,18 +1,18 @@
 //! Artifact related types.
 use crate::{
+    Height, NodeId, Time,
     canister_http::CanisterHttpResponseShare,
     consensus::{
+        ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable, HasHash, HasHeight,
         certification::{CertificationMessage, CertificationMessageHash},
         idkg::IDkgArtifactId,
-        ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable, HasHash, HasHeight,
     },
-    crypto::{crypto_hash, CryptoHash},
+    crypto::{CryptoHash, crypto_hash},
     messages::{MessageId, SignedIngress},
-    Height, NodeId, Time,
 };
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
 use std::{

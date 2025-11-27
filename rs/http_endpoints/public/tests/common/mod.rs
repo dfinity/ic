@@ -1,18 +1,22 @@
 use axum::body::Body;
 use hyper::{
-    client::conn::http1::{handshake, SendRequest},
     Method, Request, StatusCode,
+    client::conn::http1::{SendRequest, handshake},
 };
 use hyper_util::rt::TokioIo;
 use ic_config::http_handler::Config;
+use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
+use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
-use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
-use ic_error_types::UserError;
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
 use ic_http_endpoints_public::start_server;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
-    execution_environment::{IngressFilterService, QueryExecutionResponse, QueryExecutionService},
+    execution_environment::{
+        IngressFilterInput, IngressFilterResponse, IngressFilterService, QueryExecutionInput,
+        QueryExecutionResponse, QueryExecutionService,
+    },
     ingress_pool::IngressPoolThrottler,
 };
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
@@ -20,8 +24,10 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled, StateReader};
 use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
+use ic_nns_delegation_manager::{NNSDelegationBuilder, NNSDelegationReader};
 use ic_pprof::{Pprof, PprofCollector};
 use ic_protobuf::registry::{
     crypto::v1::{AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto},
@@ -32,32 +38,30 @@ use ic_registry_keys::{
     make_crypto_threshold_signing_pubkey_key, make_provisional_whitelist_record_key,
     make_subnet_record_key,
 };
-use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_snapshots::CanisterSnapshots, CanisterQueues, NetworkTopology, ReplicatedState,
-    SystemMetadata,
+    CanisterQueues, NetworkTopology, RefundPool, ReplicatedState, SystemMetadata,
+    canister_snapshots::CanisterSnapshots,
 };
-use ic_test_utilities::crypto::{temp_crypto_component_with_fake_registry, CryptoReturningOk};
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
+    CryptoHashOfPartialState, Height, RegistryVersion,
     artifact::UnvalidatedArtifactMutation,
     batch::RawQueryStats,
     consensus::certification::{Certification, CertificationContent},
     crypto::{
-        threshold_sig::{
-            ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-            ThresholdSigPublicKey,
-        },
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
+        threshold_sig::{
+            ThresholdSigPublicKey,
+            ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        },
     },
     malicious_flags::MaliciousFlags,
-    messages::{CertificateDelegation, MessageId, Query, SignedIngress, SignedIngressContent},
+    messages::{CertificateDelegation, MessageId, SignedIngress},
     signature::ThresholdSignature,
     time::UNIX_EPOCH,
-    CryptoHashOfPartialState, Height, RegistryVersion,
 };
 use mockall::{mock, predicate::*};
 use prost::Message;
@@ -65,66 +69,55 @@ use std::{collections::BTreeMap, convert::Infallible, net::SocketAddr, sync::Arc
 use tokio::{
     net::{TcpSocket, TcpStream},
     sync::{
-        mpsc::{channel, unbounded_channel, Sender, UnboundedReceiver},
+        mpsc::{Receiver, Sender, channel},
         watch,
     },
 };
 use tokio_util::sync::CancellationToken;
-use tower::{util::BoxCloneService, Service, ServiceExt};
+use tower::{Service, ServiceExt, util::BoxCloneService};
 use tower_test::mock::Handle;
 
-pub type IngressFilterHandle =
-    Handle<(ProvisionalWhitelist, SignedIngressContent), Result<(), UserError>>;
-pub type QueryExecutionHandle =
-    Handle<(Query, Option<CertificateDelegation>), QueryExecutionResponse>;
+pub type IngressFilterHandle = Handle<IngressFilterInput, IngressFilterResponse>;
+pub type QueryExecutionHandle = Handle<QueryExecutionInput, QueryExecutionResponse>;
 
 fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle) {
-    let (service, handle) =
-        tower_test::mock::pair::<(Query, Option<CertificateDelegation>), QueryExecutionResponse>();
+    let (service, handle) = tower_test::mock::pair::<QueryExecutionInput, QueryExecutionResponse>();
 
-    let infallible_service =
-        tower::service_fn(move |request: (Query, Option<CertificateDelegation>)| {
-            let mut service_clone = service.clone();
-            async move {
-                Ok::<QueryExecutionResponse, Infallible>(
-                    service_clone
-                        .ready()
-                        .await
-                        .expect("Mocking Infallible service. Waiting for readiness failed.")
-                        .call(request)
-                        .await
-                        .expect(
-                            "Mocking Infallible service and can therefore not return an error.",
-                        ),
-                )
-            }
-        });
+    let infallible_service = tower::service_fn(move |request: QueryExecutionInput| {
+        let mut service_clone = service.clone();
+        async move {
+            Ok::<QueryExecutionResponse, Infallible>(
+                service_clone
+                    .ready()
+                    .await
+                    .expect("Mocking Infallible service. Waiting for readiness failed.")
+                    .call(request)
+                    .await
+                    .expect("Mocking Infallible service and can therefore not return an error."),
+            )
+        }
+    });
     (BoxCloneService::new(infallible_service), handle)
 }
 
 #[allow(clippy::type_complexity)]
 pub fn setup_ingress_filter_mock() -> (IngressFilterService, IngressFilterHandle) {
-    let (service, handle) = tower_test::mock::pair::<
-        (ProvisionalWhitelist, SignedIngressContent),
-        Result<(), UserError>,
-    >();
+    let (service, handle) = tower_test::mock::pair::<IngressFilterInput, IngressFilterResponse>();
 
-    let infallible_service = tower::service_fn(
-        move |request: (ProvisionalWhitelist, SignedIngressContent)| {
-            let mut service_clone = service.clone();
-            async move {
-                Ok::<Result<(), UserError>, Infallible>({
-                    service_clone
-                        .ready()
-                        .await
-                        .expect("Mocking Infallible service. Waiting for readiness failed.")
-                        .call(request)
-                        .await
-                        .expect("Mocking Infallible service and can therefore not return an error.")
-                })
-            }
-        },
-    );
+    let infallible_service = tower::service_fn(move |request: IngressFilterInput| {
+        let mut service_clone = service.clone();
+        async move {
+            Ok::<IngressFilterResponse, Infallible>({
+                service_clone
+                    .ready()
+                    .await
+                    .expect("Mocking Infallible service. Waiting for readiness failed.")
+                    .call(request)
+                    .await
+                    .expect("Mocking Infallible service and can therefore not return an error.")
+            })
+        }
+    });
     (BoxCloneService::new(infallible_service), handle)
 }
 
@@ -156,8 +149,8 @@ pub fn default_read_certified_state(
     Some((rs, mht, cert))
 }
 
-pub fn default_certified_state_reader(
-) -> Option<Box<dyn CertifiedStateSnapshot<State = ReplicatedState> + 'static>> {
+pub fn default_certified_state_reader()
+-> Option<Box<dyn CertifiedStateSnapshot<State = ReplicatedState> + 'static>> {
     struct FakeCertifiedStateSnapshot(Arc<ReplicatedState>, MixedHashTree, Certification);
 
     impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
@@ -171,9 +164,10 @@ pub fn default_certified_state_reader(
             self.2.height
         }
 
-        fn read_certified_state(
+        fn read_certified_state_with_exclusion(
             &self,
             _paths: &LabeledTree<()>,
+            _exclusion: Option<&MatchPatternPath>,
         ) -> Option<(MixedHashTree, Certification)> {
             Some((self.1.clone(), self.2.clone()))
         }
@@ -209,6 +203,7 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
             BTreeMap::new(),
             metadata,
             CanisterQueues::default(),
+            RefundPool::default(),
             RawQueryStats::default(),
             CanisterSnapshots::default(),
         )),
@@ -345,7 +340,7 @@ pub async fn create_conn_and_send_request(addr: SocketAddr) -> (SendRequest<Body
 
     let request = Request::builder()
         .method(Method::GET)
-        .uri(format!("http://{}/api/v2/status", addr))
+        .uri(format!("http://{addr}/api/v2/status"))
         .body(Body::from(""))
         .expect("Building the request failed.");
     let response = request_sender
@@ -366,7 +361,7 @@ mock! {
 
 pub struct HttpEndpointHandles {
     pub ingress_filter: IngressFilterHandle,
-    pub ingress_rx: UnboundedReceiver<UnvalidatedArtifactMutation<SignedIngress>>,
+    pub ingress_rx: Receiver<UnvalidatedArtifactMutation<SignedIngress>>,
     pub query_execution: QueryExecutionHandle,
     pub terminal_state_ingress_messages: Sender<(MessageId, Height)>,
     pub certified_height_watcher: watch::Sender<Height>,
@@ -380,9 +375,10 @@ pub struct HttpEndpointBuilder {
     registry_client: Arc<dyn RegistryClient>,
     delegation_from_nns: Option<CertificateDelegation>,
     pprof_collector: Arc<dyn PprofCollector>,
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig>,
     certified_height: Option<Height>,
     ingress_pool_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
+    ingress_channel_capacity: usize,
 }
 
 impl HttpEndpointBuilder {
@@ -398,6 +394,7 @@ impl HttpEndpointBuilder {
             pprof_collector: Arc::new(Pprof),
             tls_config: Arc::new(MockTlsConfig::new()),
             certified_height: None,
+            ingress_channel_capacity: MAX_P2P_IO_CHANNEL_SIZE,
         }
     }
 
@@ -437,7 +434,7 @@ impl HttpEndpointBuilder {
         self
     }
 
-    pub fn with_tls_config(mut self, tls_config: impl TlsConfig + Send + Sync + 'static) -> Self {
+    pub fn with_tls_config(mut self, tls_config: impl TlsConfig + 'static) -> Self {
         self.tls_config = Arc::new(tls_config);
         self
     }
@@ -450,30 +447,38 @@ impl HttpEndpointBuilder {
         self
     }
 
+    pub fn with_ingress_channel_capacity(mut self, capacity: usize) -> Self {
+        self.ingress_channel_capacity = capacity;
+        self
+    }
+
     pub fn run(self) -> HttpEndpointHandles {
         let metrics = MetricsRegistry::new();
+        let log = no_op_logger();
+
+        // Run test on "nns" to avoid fetching root delegation
+        let subnet_id = subnet_test_id(1);
+        let nns_subnet_id = subnet_test_id(1);
 
         let (ingress_filter, ingress_filter_handle) = setup_ingress_filter_mock();
         let (query_exe, query_exe_handler) = setup_query_execution_mock();
         let (certified_height_watcher_tx, certified_height_watcher_rx) =
             watch::channel(self.certified_height.unwrap_or_default());
-        let (_nns_delegation_watcher_tx, nns_delegation_watcher_rx) =
-            watch::channel(self.delegation_from_nns);
+        let builder = self.delegation_from_nns.map(|delegation| {
+            NNSDelegationBuilder::try_new(delegation.certificate, subnet_id, &log).unwrap()
+        });
+        let (_nns_delegation_watcher_tx, nns_delegation_watcher_rx) = watch::channel(builder);
+        let nns_delegation_reader =
+            NNSDelegationReader::new(nns_delegation_watcher_rx, log.clone());
 
         let (terminal_state_ingress_messages_tx, terminal_state_ingress_messages_rx) = channel(100);
 
-        // Run test on "nns" to avoid fetching root delegation
-        let subnet_id = subnet_test_id(1);
-        let nns_subnet_id = subnet_test_id(1);
         let node_id = node_test_id(1);
 
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let crypto = Arc::new(CryptoReturningOk::default());
 
-        #[allow(clippy::disallowed_methods)]
-        let (ingress_tx, ingress_rx) = unbounded_channel();
-
-        let log = no_op_logger();
+        let (ingress_tx, ingress_rx) = channel(self.ingress_channel_capacity);
 
         start_server(
             self.rt_handle,
@@ -495,7 +500,7 @@ impl HttpEndpointBuilder {
             self.consensus_cache,
             SubnetType::Application,
             MaliciousFlags::default(),
-            nns_delegation_watcher_rx,
+            nns_delegation_reader,
             self.pprof_collector,
             ic_tracing::ReloadHandles::new(tracing_subscriber::reload::Layer::new(vec![]).1),
             certified_height_watcher_rx,

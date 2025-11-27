@@ -3,33 +3,33 @@
   <uuid>fd897da5-8017-41c8-8575-a706dba30766</uuid>
   <metadata>
     <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
-      <libosinfo:os id="http://ubuntu.com/ubuntu/20.04"/>
+      <libosinfo:os id="http://ubuntu.com/ubuntu/24.04"/>
     </libosinfo:libosinfo>
   </metadata>
-  <memory unit='GiB'>490</memory>
-  <currentMemory unit='GiB'>490</currentMemory>
+  <memory unit='GiB'>12</memory>
+  <currentMemory unit='GiB'>12</currentMemory>
   <vcpu placement='static'>56</vcpu>
   <cpu mode='host-passthrough' migratable='off'>
     <cache mode='passthrough'/>
     <topology sockets='2' cores='14' threads='2'/>
     <feature policy='require' name='topoext'/>
   </cpu>
+  <commandline xmlns="http://libvirt.org/schemas/domain/qemu/1.0">
+    <arg value='-cpu'/>
+    <arg value='EPYC-v4,topoext=on,l3-cache=off'/>
+  </commandline>
   <launchSecurity type='sev-snp' kernelHashes='yes'>
     <cbitpos>51</cbitpos>
     <reducedPhysBits>1</reducedPhysBits>
     <policy>30000</policy>
   </launchSecurity>
-  <memoryBacking>
-    <locked/>
-  </memoryBacking>
   <resource>
     <partition>/machine</partition>
   </resource>
-  <os>
+  <os type='efi'>
     <type arch='x86_64' machine='pc-q35-9.2'>hvm</type>
-    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
-    <nvram>/var/lib/libvirt/qemu/nvram/guestos_VARS.fd</nvram>
     <boot dev='hd'/>
+    <loader readonly='yes'>/tmp/OVMF_SEV.fd</loader>
     <kernel>/tmp/test-kernel</kernel>
     <initrd>/tmp/test-initrd</initrd>
     <cmdline>security=selinux selinux=1 enforcing=0</cmdline>
@@ -55,7 +55,7 @@
     <emulator>/usr/bin/qemu-system-x86_64</emulator>
     <disk type='block' device='disk'>
       <driver name='qemu' type='raw' cache='none' discard='unmap'/>
-      <source dev='/dev/hostlvm/guestos' index='1'/>
+      <source dev='/dev/guest_disk' index='1'/>
       <backingStore/>
       <target dev='vda' bus='virtio'/>
       <alias name='virtio-disk0'/>
@@ -151,7 +151,7 @@
         <model name='isa-serial'/>
       </target>
       <alias name='serial0'/>
-      <log file='/var/log/libvirt/qemu/guestos-serial.log' append='off'/>
+      <log file='/var/serial/console.txt' append='off'/>
     </serial>
     <console type='pty' tty='/dev/pts/3'>
       <source path='/dev/pts/3'/>

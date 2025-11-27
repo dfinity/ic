@@ -130,7 +130,7 @@ pub fn set_panic_hook() {
             },
         };
 
-        let err_info = format!("Panicked at '{}', {}:{}:{}", msg, file, line, col);
+        let err_info = format!("Panicked at '{msg}', {file}:{line}:{col}");
 
         unsafe {
             log(&err_info);

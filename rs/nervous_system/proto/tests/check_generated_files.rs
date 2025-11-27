@@ -1,5 +1,5 @@
-use ic_nervous_system_proto_protobuf_generator::{generate_prost_files, ProtoPaths};
-use ic_test_utilities_compare_dirs::{compare, CompareError};
+use ic_nervous_system_proto_protobuf_generator::{ProtoPaths, generate_prost_files};
+use ic_test_utilities_compare_dirs::{CompareError, compare};
 use std::path::PathBuf;
 
 #[test]
@@ -23,14 +23,14 @@ fn check_generated_files() {
         out_dir.path(),
     );
 
-    let gen = manifest_dir.join("src/gen");
+    let r#gen = manifest_dir.join("src/gen");
 
-    match compare(&gen, out_dir.path()) {
+    match compare(&r#gen, out_dir.path()) {
         Ok(_) => (),
         Err(CompareError::PathsDiffer { .. }) => {
             panic!(
                 "Directory {} is outdated, run {}",
-                gen.display(),
+                r#gen.display(),
                 command_to_regenerate
             )
         }

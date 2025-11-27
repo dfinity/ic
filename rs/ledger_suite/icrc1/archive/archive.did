@@ -6,8 +6,9 @@ type Transaction = record {
   kind : text;
   mint : opt Mint;
   approve : opt Approve;
+  fee_collector : opt FeeCollector;
   timestamp : nat64;
-  transfer : opt Transfer;
+  transfer : opt Transfer
 };
 
 type Approve = record {
@@ -18,7 +19,13 @@ type Approve = record {
   amount : nat;
   expected_allowance : opt nat;
   expires_at : opt nat64;
-  spender : Account;
+  spender : Account
+};
+
+type FeeCollector = record {
+  caller : opt principal;
+  fee_collector : opt Account;
+  ts : opt nat64
 };
 
 type Burn = record {
@@ -27,6 +34,7 @@ type Burn = record {
   created_at_time : opt nat64;
   amount : nat;
   spender : opt Account;
+  fee : opt nat
 };
 
 type Mint = record {
@@ -34,6 +42,7 @@ type Mint = record {
   memo : opt vec nat8;
   created_at_time : opt nat64;
   amount : nat;
+  fee : opt nat
 };
 
 type Transfer = record {
@@ -43,20 +52,20 @@ type Transfer = record {
   memo : opt vec nat8;
   created_at_time : opt nat64;
   amount : nat;
-  spender : opt Account;
+  spender : opt Account
 };
 
 // This is not the ICRC-3 Value but a custom
 // type with one more variant. For the ICRC-3
 // type check ICRC3Value instead.
 type Value = variant {
-    Blob : blob; 
-    Text : text; 
-    Nat : nat;
-    Nat64: nat64;
-    Int : int;
-    Array : vec Value; 
-    Map : Map; 
+  Blob : blob;
+  Text : text;
+  Nat : nat;
+  Nat64 : nat64;
+  Int : int;
+  Array : vec Value;
+  Map : Map
 };
 
 type Map = vec record { text; Value };
@@ -64,46 +73,46 @@ type Map = vec record { text; Value };
 type Block = Value;
 
 type ICRC3Value = variant {
-    Blob : blob;
-    Text : text;
-    Nat : nat;
-    Int : int;
-    Array : vec ICRC3Value;
-    Map : vec record { text; ICRC3Value };
+  Blob : blob;
+  Text : text;
+  Nat : nat;
+  Int : int;
+  Array : vec ICRC3Value;
+  Map : vec record { text; ICRC3Value }
 };
 
 type GetArchivesArgs = record {
-    // The last archive seen by the client.
-    // The Ledger will return archives coming
-    // after this one if set, otherwise it
-    // will return the first archives.
-    from : opt principal;
+  // The last archive seen by the client.
+  // The Ledger will return archives coming
+  // after this one if set, otherwise it
+  // will return the first archives.
+  from : opt principal
 };
 
 type GetArchivesResult = vec record {
-    // The id of the archive
-    canister_id : principal;
+  // The id of the archive
+  canister_id : principal;
 
-    // The first block in the archive
-    start : nat;
+  // The first block in the archive
+  start : nat;
 
-    // The last block in the archive
-    end : nat;
+  // The last block in the archive
+  end : nat
 };
 
 type GetBlocksArgs = vec record { start : nat; length : nat };
 
 type GetBlocksResult = record {
-    // Total number of blocks in the
-    // block log
-    log_length : nat;
+  // Total number of blocks in the
+  // block log
+  log_length : nat;
 
-    blocks : vec record { id : nat; block: ICRC3Value };
+  blocks : vec record { id : nat; block : ICRC3Value };
 
-    archived_blocks : vec record {
-        args : GetBlocksArgs;
-        callback : func (GetBlocksArgs) -> (GetBlocksResult) query;
-    };
+  archived_blocks : vec record {
+    args : GetBlocksArgs;
+    callback : func(GetBlocksArgs) -> (GetBlocksResult) query
+  }
 };
 
 type DataCertificate = record {
@@ -111,17 +120,17 @@ type DataCertificate = record {
   certificate : blob;
 
   // CBOR encoded hash_tree
-  hash_tree : blob;
+  hash_tree : blob
 };
 
 service : (principal, nat64, opt nat64, opt nat64) -> {
-    append_blocks : (vec blob) -> ();
-    remaining_capacity : () -> (nat64) query;
-    get_transaction : (nat64) -> (opt Transaction) query;
-    get_transactions : (record { start : nat; length : nat }) -> (record { transactions : vec Transaction }) query;
-    get_blocks : (record { start : nat; length : nat }) -> (record { blocks : vec Block }) query;
-    icrc3_get_archives : (GetArchivesArgs) -> (GetArchivesResult) query;
-    icrc3_get_tip_certificate : () -> (opt DataCertificate) query;
-    icrc3_get_blocks : (GetBlocksArgs) -> (GetBlocksResult) query;
-    icrc3_supported_block_types : () -> (vec record { block_type : text; url : text }) query;
+  append_blocks : (vec blob) -> ();
+  remaining_capacity : () -> (nat64) query;
+  get_transaction : (nat64) -> (opt Transaction) query;
+  get_transactions : (record { start : nat; length : nat }) -> (record { transactions : vec Transaction }) query;
+  get_blocks : (record { start : nat; length : nat }) -> (record { blocks : vec Block }) query;
+  icrc3_get_archives : (GetArchivesArgs) -> (GetArchivesResult) query;
+  icrc3_get_tip_certificate : () -> (opt DataCertificate) query;
+  icrc3_get_blocks : (GetBlocksArgs) -> (GetBlocksResult) query;
+  icrc3_supported_block_types : () -> (vec record { block_type : text; url : text }) query
 }

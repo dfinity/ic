@@ -31,7 +31,7 @@
 //! neither fun nor profitable.
 
 use anyhow::Result;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -79,7 +79,9 @@ fn run_unit_test(
     // We search the output for an indication that a test was actually executed.
     // Fragile, but better than nothing.
     assert!(
-        std::str::from_utf8(&output.stdout).unwrap().contains("1 passed"),
+        std::str::from_utf8(&output.stdout)
+            .unwrap()
+            .contains("1 passed"),
         "Trying to execute {} from {:?}, but no test with such name was found.\nCheck that you don't have a typo in the name of the target module or test, and that the test is availalable in the provided version?",
         test_name,
         binary.file_name().unwrap(),
@@ -89,7 +91,7 @@ fn run_unit_test(
 
 fn download_mainnet_binary(
     binary_name: &str,
-    version: &str,
+    version: &ReplicaVersion,
     target_dir: &Path,
     log: &Logger,
 ) -> PathBuf {
@@ -99,14 +101,9 @@ fn download_mainnet_binary(
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || async {
-            download_binary(
-                log,
-                ReplicaVersion::try_from(version).unwrap(),
-                binary_name.into(),
-                target_dir,
-            )
-            .await
-            .map_err(|e| e.into())
+            download_binary(log, version, binary_name.into(), target_dir)
+                .await
+                .map_err(|e| e.into())
         }
     ))
     .expect("Failed to Download")
@@ -148,7 +145,7 @@ enum TestType {
     SelfTestOnly,
     Bidirectional {
         published_binary: String,
-        mainnet_version: String,
+        mainnet_version: ReplicaVersion,
     },
 }
 
@@ -201,7 +198,7 @@ impl TestCase {
 
     fn bidirectional_test(
         &self,
-        mainnet_version: &str,
+        mainnet_version: &ReplicaVersion,
         published_binary_name: &str,
         logger: &Logger,
     ) {
@@ -236,8 +233,8 @@ impl TestCase {
 fn test(env: TestEnv) {
     let logger = env.logger();
 
-    let mainnet_nns_version = get_mainnet_nns_revision();
-    let mainnet_application_subnet_version = get_mainnet_application_subnet_revision();
+    let mainnet_nns_version = get_mainnet_nns_revision().unwrap();
+    let mainnet_application_subnet_version = get_mainnet_application_subnet_revision().unwrap();
 
     info!(
         logger,
@@ -273,6 +270,14 @@ fn test(env: TestEnv) {
                 },
                 "_main/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
                 "canister_state::queues::tests::mainnet_compatibility_tests::input_order_test",
+            ),
+            TestCase::new(
+                TestType::Bidirectional {
+                    published_binary: "replicated-state-test".to_string(),
+                    mainnet_version: v.clone(),
+                },
+                "_main/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
+                "canister_state::queues::tests::mainnet_compatibility_tests::refunds_test",
             ),
         ]
     });

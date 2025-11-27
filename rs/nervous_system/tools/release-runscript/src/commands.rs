@@ -18,17 +18,17 @@ pub(crate) fn run_script(
             let command_str = format!(
                 "{} {}",
                 script.display(),
-                args.iter().map(|s| format!("\"{}\"", s)).join(" ")
+                args.iter().map(|s| format!("\"{s}\"")).join(" ")
             );
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
-            eprintln!("Script failed: {}", stderr);
-            eprintln!("Failed to run command: {}", command_str);
+            eprintln!("Script failed: {stderr}");
+            eprintln!("Failed to run command: {command_str}");
             if input_yes_or_no("Do you want to try again?", true)? {
                 continue;
             } else {
                 return Err(anyhow::anyhow!("{}\n{}", stdout, stderr)
-                    .context(format!("Failed to run command: {}", command_str)));
+                    .context(format!("Failed to run command: {command_str}")));
             }
         }
     }
@@ -54,11 +54,11 @@ pub(crate) fn run_script_in_current_process(
             let command_str = format!(
                 "{} {}",
                 script.display(),
-                args.iter().map(|s| format!("\"{}\"", s)).join(" ")
+                args.iter().map(|s| format!("\"{s}\"")).join(" ")
             );
             // we can't read stdout or stderr here because it's piped to the current process
             eprintln!("Script failed :(");
-            eprintln!("Failed to run command: {}", command_str);
+            eprintln!("Failed to run command: {command_str}");
             if input_yes_or_no("Do you want to try again?", true)? {
                 continue;
             } else {

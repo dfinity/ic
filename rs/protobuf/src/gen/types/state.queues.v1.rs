@@ -28,7 +28,7 @@ pub struct Stream {
     #[prost(uint64, tag = "1")]
     pub messages_begin: u64,
     #[prost(message, repeated, tag = "2")]
-    pub messages: ::prost::alloc::vec::Vec<RequestOrResponse>,
+    pub messages: ::prost::alloc::vec::Vec<StreamMessage>,
     #[prost(uint64, tag = "5")]
     pub signals_end: u64,
     #[prost(message, repeated, tag = "8")]
@@ -129,6 +129,35 @@ pub mod request_or_response {
         Request(super::Request),
         #[prost(message, tag = "2")]
         Response(super::Response),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Refund {
+    #[prost(message, optional, tag = "1")]
+    pub recipient: ::core::option::Option<super::super::super::types::v1::CanisterId>,
+    #[prost(message, optional, tag = "2")]
+    pub amount: ::core::option::Option<Cycles>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Refunds {
+    #[prost(message, repeated, tag = "1")]
+    pub refunds: ::prost::alloc::vec::Vec<Refund>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StreamMessage {
+    #[prost(oneof = "stream_message::Message", tags = "1, 2, 3")]
+    pub message: ::core::option::Option<stream_message::Message>,
+}
+/// Nested message and enum types in `StreamMessage`.
+pub mod stream_message {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Message {
+        #[prost(message, tag = "1")]
+        Request(super::Request),
+        #[prost(message, tag = "2")]
+        Response(super::Response),
+        #[prost(message, tag = "3")]
+        Refund(super::Refund),
     }
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]

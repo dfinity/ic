@@ -9,21 +9,22 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_governance_api::{
+    AddOrRemoveNodeProvider, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, NnsFunction, NodeProvider, ProposalActionRequest, ProposalStatus,
     add_or_remove_node_provider::Change, manage_neuron::NeuronIdOrSubaccount,
-    manage_neuron_response::Command as CommandResponse, AddOrRemoveNodeProvider,
-    MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
-    NnsFunction, NodeProvider, ProposalActionRequest, ProposalStatus,
+    manage_neuron_response::Command as CommandResponse,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{submit_external_update_proposal, wait_for_final_state},
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
     registry::{get_value_or_panic, prepare_add_node_payload},
 };
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::{
-    deserialize_get_value_response, serialize_get_value_request, Error::KeyNotPresent,
+    Error::KeyNotPresent, deserialize_get_value_response, serialize_get_value_request,
 };
 use ic_types::PrincipalId;
 use maplit::btreemap;
@@ -104,7 +105,8 @@ fn test_node_operator_records_can_be_added_and_removed() {
         add_node_operator(&nns_canisters, &TEST_NEURON_2_OWNER_PRINCIPAL).await;
 
         // Assert that a Node Operator with no nodes can be removed
-        let (payload, _) = prepare_add_node_payload(1);
+        let (payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
+
         // To fix occasional flakiness similar to this error:
         // invalid TLS certificate: notBefore date (=ASN1Time(2024-12-12 13:17:08.0 +00:00:00)) \
         //      is in the future compared to current time (=ASN1Time(2024-12-12 13:16:39.0 +00:00:00))\"
@@ -190,12 +192,14 @@ async fn add_node_operator(nns_canisters: &NnsCanisters<'_>, node_operator_id: &
 
     let proposal_payload = AddNodeOperatorPayload {
         node_operator_principal_id: Some(*node_operator_id),
-        node_allowance: 5,
+        node_allowance: 0,
         node_provider_principal_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
         dc_id: "DC".into(),
         rewardable_nodes: rewardable_nodes.clone(),
         ipv6: Some("0:0:0:0:0:0:0:0".into()),
-        max_rewardable_nodes: None,
+        max_rewardable_nodes: Some(btreemap! {
+            NodeRewardType::Type1.to_string() => 5
+        }),
     };
 
     let node_operator_record_key = make_node_operator_record_key(*node_operator_id).into_bytes();

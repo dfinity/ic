@@ -1,14 +1,15 @@
 use crate::{
-    governance::{voting_power_snapshots::VotingPowerSnapshots, LOG_PREFIX},
+    governance::{LOG_PREFIX, voting_power_snapshots::VotingPowerSnapshots},
     pb::v1::{ArchivedMonthlyNodeProviderRewards, AuditEvent},
     reward::distribution::RewardsDistributionStateMachine,
     voting::VotingStateMachines,
+    voting_history_store::VotingHistoryStore,
 };
 
 use ic_cdk::println;
 use ic_stable_structures::{
-    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     DefaultMemoryImpl, Memory, StableBTreeMap, StableLog, Storable,
+    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
 };
 use std::cell::RefCell;
 
@@ -35,6 +36,7 @@ const MATURITY_DISBURSEMENTS_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(18);
 const NEURON_MATURITY_DISBURSEMENT_INDEX_MEMORY_ID: MemoryId = MemoryId::new(19);
 const VOTING_POWER_MAPS_MEMORY_ID: MemoryId = MemoryId::new(20);
 const VOTING_POWER_TOTALS_MEMORY_ID: MemoryId = MemoryId::new(21);
+const VOTING_HISTORY_STORE_MEMORY_ID: MemoryId = MemoryId::new(22);
 
 pub mod neuron_indexes;
 pub mod neurons;
@@ -69,6 +71,12 @@ thread_local! {
                 memory_manager.get(VOTING_POWER_MAPS_MEMORY_ID),
                 memory_manager.get(VOTING_POWER_TOTALS_MEMORY_ID),
             )
+        })
+    });
+
+    pub(crate) static VOTING_HISTORY_STORE: RefCell<VotingHistoryStore> = RefCell::new({
+        MEMORY_MANAGER.with_borrow(|memory_manager| {
+            VotingHistoryStore::new(memory_manager.get(VOTING_HISTORY_STORE_MEMORY_ID))
         })
     });
 }
@@ -221,6 +229,15 @@ pub(crate) fn with_node_provider_rewards_log<R>(
     })
 }
 
+#[allow(dead_code)]
+pub(crate) fn with_voting_history_store<R>(f: impl FnOnce(&VotingHistoryStore) -> R) -> R {
+    VOTING_HISTORY_STORE.with_borrow(f)
+}
+
+pub(crate) fn with_voting_history_store_mut<R>(f: impl FnOnce(&mut VotingHistoryStore) -> R) -> R {
+    VOTING_HISTORY_STORE.with_borrow_mut(f)
+}
+
 pub(crate) fn with_voting_state_machines_mut<R>(
     f: impl FnOnce(&mut VotingStateMachines<VM>) -> R,
 ) -> R {
@@ -298,6 +315,11 @@ pub fn reset_stable_memory() {
             )
         });
         *snapshots = VotingPowerSnapshots::new(voting_power_maps_memory, voting_power_totals_memory)
+    });
+    VOTING_HISTORY_STORE.with_borrow_mut(|voting_history_store| {
+        *voting_history_store = VotingHistoryStore::new(
+            MEMORY_MANAGER.with_borrow(|mm| mm.get(VOTING_HISTORY_STORE_MEMORY_ID)),
+        );
     });
 }
 

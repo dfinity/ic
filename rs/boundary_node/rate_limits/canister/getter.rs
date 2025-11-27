@@ -149,10 +149,10 @@ impl<R: CanisterApi, F: ConfidentialityFormatting<Input = OutputConfig>, A: Reso
 }
 
 impl<
-        R: CanisterApi,
-        F: ConfidentialityFormatting<Input = OutputRuleMetadata>,
-        A: ResolveAccessLevel,
-    > EntityGetter for IncidentGetter<R, F, A>
+    R: CanisterApi,
+    F: ConfidentialityFormatting<Input = OutputRuleMetadata>,
+    A: ResolveAccessLevel,
+> EntityGetter for IncidentGetter<R, F, A>
 {
     type Input = api::IncidentId;
     type Output = Vec<api::OutputRuleMetadata>;
@@ -203,10 +203,10 @@ impl<
 }
 
 impl<
-        R: CanisterApi,
-        F: ConfidentialityFormatting<Input = OutputRuleMetadata>,
-        A: ResolveAccessLevel,
-    > EntityGetter for RuleGetter<R, F, A>
+    R: CanisterApi,
+    F: ConfidentialityFormatting<Input = OutputRuleMetadata>,
+    A: ResolveAccessLevel,
+> EntityGetter for RuleGetter<R, F, A>
 {
     type Input = api::RuleId;
     type Output = api::OutputRuleMetadata;
@@ -516,8 +516,8 @@ mod tests {
             removed_in_version: Some(5),
         };
         // rules are not ordered in the response, so just search
-        assert!(response.iter().any(|e| *e == rule_1));
-        assert!(response.iter().any(|e| *e == rule_2));
+        assert!(response.contains(&rule_1));
+        assert!(response.contains(&rule_2));
     }
 
     #[test]

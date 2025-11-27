@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 //! This module contains a canister used for XNet integration test.
 use candid::{CandidType, Principal};
 use ic_cdk::api::{call::call_raw, id};
@@ -124,7 +125,7 @@ async fn start(arguments: Arguments) -> Vec<Message> {
     messages
 }
 
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn main() {
     let mut memory_size_left = MEMORY_SIZE;
     let mut memories: Vec<Vec<u8>> = vec![];

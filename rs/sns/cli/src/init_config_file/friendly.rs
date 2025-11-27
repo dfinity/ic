@@ -1,9 +1,9 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use ic_base_types::PrincipalId;
 use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
 use ic_nns_governance_api::{
-    proposal::Action, proposal_validation::validate_user_submitted_proposal_fields,
-    CreateServiceNervousSystem, Proposal,
+    CreateServiceNervousSystem, MakeProposalRequest, ProposalActionRequest,
+    proposal_validation::validate_user_submitted_proposal_fields,
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
 use std::{
@@ -17,13 +17,13 @@ use std::{
 // getting mixed up.
 mod nns_governance_pb {
     pub use ic_nns_governance_api::create_service_nervous_system::{
+        GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
         governance_parameters::VotingRewardParameters,
         initial_token_distribution::{
-            developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
-            TreasuryDistribution,
+            DeveloperDistribution, SwapDistribution, TreasuryDistribution,
+            developer_distribution::NeuronDistribution,
         },
         swap_parameters::NeuronBasketConstructionParameters,
-        GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
     };
 }
 
@@ -290,8 +290,7 @@ impl<'a> AliasToPrincipalId<'a> {
                 PrincipalId::from_str(string)
                     .map_err(|err| {
                         defects.push(format!(
-                            "Unable to parse PrincipalId ({:?}) in {}. Reason: {}",
-                            string, field_name, err,
+                            "Unable to parse PrincipalId ({string:?}) in {field_name}. Reason: {err}",
                         ))
                     })
                     .unwrap_or_default()
@@ -320,18 +319,15 @@ fn parse_image_path(
     };
     let image = image.as_path();
     let image_content = std::fs::read(image).map_err(|err| {
-        format!(
-            "An error occurred while reading the image file ({:?}): {}",
-            image_path, err,
-        )
+        format!("An error occurred while reading the image file ({image_path:?}): {err}",)
     })?;
     let image_content = base64::encode(image_content);
-    let base64_encoding = Some(format!("data:image/png;base64,{}", image_content));
+    let base64_encoding = Some(format!("data:image/png;base64,{image_content}"));
     Ok(nervous_system_pb::Image { base64_encoding })
 }
 
 impl SnsConfigurationFile {
-    pub fn try_convert_to_nns_proposal(&self, base_path: &Path) -> Result<Proposal> {
+    pub fn try_convert_to_nns_proposal(&self, base_path: &Path) -> Result<MakeProposalRequest> {
         // Extract the proposal action from the config file
         let create_service_nervous_system =
             self.try_convert_to_create_service_nervous_system(base_path)?;
@@ -359,17 +355,16 @@ impl SnsConfigurationFile {
         // Empty strings is a legal NNS Proposal Url.
         let url = nns_proposal.url.clone().unwrap_or_default();
 
-        let proposal = Proposal {
+        let proposal = MakeProposalRequest {
             title,
             summary,
             url,
-            action: Some(Action::CreateServiceNervousSystem(
+            action: Some(ProposalActionRequest::CreateServiceNervousSystem(
                 create_service_nervous_system,
             )),
         };
 
-        validate_user_submitted_proposal_fields(&(proposal.clone()))
-            .map_err(|e| anyhow!("{}", e))?;
+        validate_user_submitted_proposal_fields(&proposal).map_err(|e| anyhow!("{}", e))?;
 
         Ok(proposal)
     }
@@ -598,9 +593,8 @@ impl Neuron {
         let controller = PrincipalId::from_str(principal)
             .map_err(|err| {
                 defects.push(format!(
-                    "Unable to parse PrincipalId in distribution.neurons ({:?}). \
-                     err: {:#?}",
-                    principal, err,
+                    "Unable to parse PrincipalId in distribution.neurons ({principal:?}). \
+                     err: {err:#?}",
                 ))
             })
             .unwrap_or_default();

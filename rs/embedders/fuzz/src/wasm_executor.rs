@@ -1,35 +1,38 @@
-use crate::ic_wasm::{ic_embedders_config, ICWasmModule};
+use crate::ic_wasm::ICWasmModule;
 use ic_config::{
-    execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
+    embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
     subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
+    CompilationCacheBuilder, WasmExecutionInput, WasmtimeEmbedder,
     wasm_executor::{WasmExecutor, WasmExecutorImpl},
     wasmtime_embedder::system_api::{
-        sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
-        InstructionLimits,
+        ApiType, ExecutionParameters, InstructionLimits,
+        sandbox_safe_system_state::SandboxSafeSystemState,
     },
-    CompilationCacheBuilder, WasmExecutionInput, WasmtimeEmbedder,
 };
-use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::Global;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    ExecutionState, ExportedFunctions, Memory, NetworkTopology,
     canister_state::execution_state::{WasmBinary, WasmMetadata},
     page_map::TestPageAllocatorFileDescriptorImpl,
-    ExecutionState, ExportedFunctions, Memory, MessageMemoryUsage, NetworkTopology,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_embedders::DEFAULT_NUM_INSTRUCTIONS;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::user_test_id;
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
+    ComputeAllocation, MemoryAllocation, NumBytes,
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
-    ComputeAllocation, MemoryAllocation, NumBytes,
 };
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
@@ -39,7 +42,7 @@ const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 
 lazy_static! {
     pub(crate) static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(
+        SubnetAvailableMemory::new_for_testing(
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY
@@ -58,7 +61,7 @@ pub fn run_fuzzer(module: ICWasmModule) {
     let wasm_methods: BTreeSet<WasmMethod> = module.exported_functions;
 
     let log = no_op_logger();
-    let embedder_config = ic_embedders_config(module.config.memory64_enabled);
+    let embedder_config = EmbeddersConfig::default();
     let metrics_registry = MetricsRegistry::new();
     let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
 
@@ -136,13 +139,13 @@ pub(crate) fn get_system_state(api_type: ApiType) -> SandboxSafeSystemState {
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     )
 }
 
 pub(crate) fn get_execution_parameters() -> ExecutionParameters {
     ExecutionParameters {
         instruction_limits: InstructionLimits::new(
-            FlagStatus::Disabled,
             DEFAULT_NUM_INSTRUCTIONS,
             DEFAULT_NUM_INSTRUCTIONS,
         ),

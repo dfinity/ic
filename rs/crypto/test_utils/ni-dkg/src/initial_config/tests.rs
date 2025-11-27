@@ -1,5 +1,5 @@
 use super::*;
-use ic_crypto_internal_bls12_381_type::{verify_bls_signature, G1Affine, G2Affine};
+use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, verify_bls_signature};
 use ic_crypto_test_utils::{map_of, set_of};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces_registry::RegistryClient;
@@ -8,11 +8,11 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_registry_keys::make_catch_up_package_contents_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
-use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
+use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
+use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use ic_types::{Height, NumberOfNodes, RegistryVersion, SubnetId};
-use ic_types_test_utils::ids::{node_test_id, NODE_1, SUBNET_1};
+use ic_types_test_utils::ids::{NODE_1, SUBNET_1, node_test_id};
 use rand::Rng;
 use std::sync::Arc;
 
@@ -205,7 +205,7 @@ fn should_get_master_key_associated_with_transcript_public_key() {
         let temp_crypto = TempCryptoComponent::builder()
             .with_node_id(node_id)
             .with_keys(ic_crypto_temp_crypto::NodeKeysToGenerate::only_dkg_dealing_encryption_key())
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
             .build();
         let dkg_dealing_encryption_pubkey = temp_crypto
             .current_node_public_keys()
@@ -221,7 +221,7 @@ fn should_get_master_key_associated_with_transcript_public_key() {
     let pk = ThresholdSigPublicKey::try_from(&transcript)
         .expect("should extract public key from high threshold transcript");
 
-    let test_message = rng.gen::<[u8; 32]>();
+    let test_message = rng.r#gen::<[u8; 32]>();
 
     let signature = sign_message(&test_message, &secret);
 
@@ -241,10 +241,10 @@ fn should_get_master_key_associated_with_transcript_public_key() {
 /// transcript.
 fn transcript_without_empty_or_default_data() -> NiDkgTranscript {
     use ic_crypto_internal_types::curves::bls12_381::{G1Bytes, G2Bytes};
-    use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
-        EncryptedShares, PublicCoefficientsBytes, Transcript, NUM_CHUNKS,
-    };
     use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
+    use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
+        EncryptedShares, NUM_CHUNKS, PublicCoefficientsBytes, Transcript,
+    };
 
     let encrypted_shares = EncryptedShares {
         rand_r: [G1Bytes([1; G1Bytes::SIZE]); NUM_CHUNKS],

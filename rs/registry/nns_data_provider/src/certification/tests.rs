@@ -3,22 +3,21 @@ use futures_util::FutureExt;
 use ic_certification_test_utils::{CertificateBuilder, CertificateData};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_tree_hash::{
-    flatmap, Digest, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree,
-    WitnessGenerator,
+    Digest, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
+    flatmap,
 };
 use ic_interfaces_registry::RegistryRecord;
 use ic_registry_transport::{
-    delete,
+    MockGetChunk, delete,
     pb::v1::{
-        high_capacity_registry_mutation, registry_mutation, CertifiedResponse,
-        HighCapacityRegistryMutation, LargeValueChunkKeys, RegistryAtomicMutateRequest,
-        RegistryMutation,
+        CertifiedResponse, HighCapacityRegistryMutation, LargeValueChunkKeys, RegistryMutation,
+        high_capacity_registry_mutation, registry_mutation,
     },
-    upsert, MockGetChunk,
+    upsert,
 };
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, crypto::CombinedThresholdSig, CanisterId,
-    RegistryVersion, Time,
+    CanisterId, RegistryVersion, Time, crypto::CombinedThresholdSig,
+    crypto::threshold_sig::ThresholdSigPublicKey,
 };
 use pretty_assertions::assert_eq;
 use prost::Message;
@@ -59,15 +58,11 @@ fn decode_certified_deltas_no_chunks(
     .unwrap()
 }
 
-fn make_certified_delta<AtomicMutation>(
-    deltas: Vec<AtomicMutation>,
+fn make_certified_delta(
+    deltas: Vec<HighCapacityRegistryAtomicMutateRequest>,
     selection: impl std::ops::RangeBounds<u64>,
     garble_response: GarbleResponse,
-) -> (CanisterId, ThresholdSigPublicKey, EncodedResponse)
-where
-    // TODO(NNS1-3679): No generic; just HighCapacityRegistryAtomicMutateRequest.
-    AtomicMutation: prost::Message,
-{
+) -> (CanisterId, ThresholdSigPublicKey, EncodedResponse) {
     let cid = CanisterId::from_u64(1);
 
     let mut encoded_version = vec![];
@@ -161,10 +156,15 @@ fn rem_key(version: u64, k: impl ToString) -> RegistryRecord {
     }
 }
 
-fn make_change(mutations: Vec<RegistryMutation>) -> RegistryAtomicMutateRequest {
-    RegistryAtomicMutateRequest {
+fn make_change(mutations: Vec<RegistryMutation>) -> HighCapacityRegistryAtomicMutateRequest {
+    let mutations = mutations
+        .into_iter()
+        .map(HighCapacityRegistryMutation::from)
+        .collect();
+    HighCapacityRegistryAtomicMutateRequest {
         mutations,
         preconditions: vec![],
+        timestamp_nanoseconds: 0,
     }
 }
 
@@ -242,8 +242,7 @@ fn test_decode_bad_root_hash() {
         Err(CertificationError::CertifiedDataMismatch { certified, .. })
             if &certified[..] == bad_digest.as_bytes() => {}
         other => panic!(
-            "Expected CertifiedDataMismatch error containing the bad digest {}, got {:?}",
-            bad_digest, other
+            "Expected CertifiedDataMismatch error containing the bad digest {bad_digest}, got {other:?}"
         ),
     }
 }
@@ -259,7 +258,7 @@ fn test_decode_bad_sig() {
     );
     match decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]) {
         Err(CertificationError::InvalidSignature(_)) => (),
-        other => panic!("Expected InvalidSignature error, got {:?}", other),
+        other => panic!("Expected InvalidSignature error, got {other:?}"),
     }
 }
 
@@ -301,7 +300,7 @@ fn test_decode_missing_version() {
     );
     match decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]) {
         Err(CertificationError::InvalidDeltas(_)) => (),
-        other => panic!("Expected InvalidDeltas error, got {:?}", other),
+        other => panic!("Expected InvalidDeltas error, got {other:?}"),
     }
 }
 
@@ -318,7 +317,7 @@ fn test_decode_missing_middle_version() {
     );
     match decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]) {
         Err(CertificationError::InvalidDeltas(_)) => (),
-        other => panic!("Expected InvalidDeltas error, got {:?}", other),
+        other => panic!("Expected InvalidDeltas error, got {other:?}"),
     }
 }
 
@@ -335,7 +334,7 @@ fn test_decode_empty_prefix() {
     );
     match decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]) {
         Err(CertificationError::InvalidDeltas(_)) => (),
-        other => panic!("Expected InvalidDeltas error, got {:?}", other),
+        other => panic!("Expected InvalidDeltas error, got {other:?}"),
     }
 }
 
@@ -454,10 +453,10 @@ fn test_evil_chunked() {
         )) => {
             let message = err.to_lowercase();
             for key_word in ["chunk", "hash", "match"] {
-                assert!(message.contains(key_word), "{} not in {}", key_word, err);
+                assert!(message.contains(key_word), "{key_word} not in {err}");
             }
         }
 
-        _ => panic!("{:?}", result),
+        _ => panic!("{result:?}"),
     }
 }

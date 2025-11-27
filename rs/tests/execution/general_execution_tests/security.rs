@@ -52,11 +52,13 @@ pub fn stack_overflow(env: TestEnv) {
                 .expect_err("should fail");
             match err {
                 AgentError::CertifiedReject { reject, .. } => {
-                    assert!(reject
-                        .reject_message
-                        .contains("Canister trapped: stack overflow"));
+                    assert!(
+                        reject
+                            .reject_message
+                            .contains("Canister trapped: stack overflow")
+                    );
                 }
-                _ => panic!("Unexpected error: {:?}", err),
+                _ => panic!("Unexpected error: {err:?}"),
             };
         }
     })

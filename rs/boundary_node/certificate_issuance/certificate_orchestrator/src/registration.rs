@@ -4,7 +4,7 @@ use candid::Principal;
 use certificate_orchestrator_interface::{
     EncryptedPair, ExportPackage, Id, Name, NameError, Registration, State, UpdateType,
 };
-use ic_cdk::caller;
+use ic_cdk::api::msg_caller;
 use mockall::automock;
 use priority_queue::PriorityQueue;
 use prometheus::labels;
@@ -20,10 +20,10 @@ cfg_if::cfg_if! {
 }
 
 use crate::{
+    LocalRef, REGISTRATION_EXPIRATION_TTL, StableMap, StorableId, WithMetrics,
     acl::{Authorize, AuthorizeError, WithAuthorize},
     ic_certification::{add_cert, remove_cert},
     id::Generate,
-    LocalRef, StableMap, StorableId, WithMetrics, REGISTRATION_EXPIRATION_TTL,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -116,7 +116,7 @@ impl Create for Creator {
 
 impl<T: Create, A: Authorize> Create for WithAuthorize<T, A> {
     fn create(&self, domain: &str, canister: &Principal) -> Result<Id, CreateError> {
-        if let Err(err) = self.1.authorize(&caller()) {
+        if let Err(err) = self.1.authorize(&msg_caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => CreateError::Unauthorized,
                 AuthorizeError::UnexpectedError(err) => CreateError::UnexpectedError(err),
@@ -185,7 +185,7 @@ impl Get for Getter {
 
 impl<T: Get, A: Authorize> Get for WithAuthorize<T, A> {
     fn get(&self, id: &Id) -> Result<Registration, GetError> {
-        if let Err(err) = self.1.authorize(&caller()) {
+        if let Err(err) = self.1.authorize(&msg_caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => GetError::Unauthorized,
                 AuthorizeError::UnexpectedError(err) => GetError::UnexpectedError(err),
@@ -346,7 +346,7 @@ impl<T: Update> Update for UpdateWithIcCertification<T> {
 
 impl<T: Update, A: Authorize> Update for WithAuthorize<T, A> {
     fn update(&self, id: &Id, typ: UpdateType) -> Result<(), UpdateError> {
-        if let Err(err) = self.1.authorize(&caller()) {
+        if let Err(err) = self.1.authorize(&msg_caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => UpdateError::Unauthorized,
                 AuthorizeError::UnexpectedError(err) => UpdateError::UnexpectedError(err),
@@ -416,7 +416,7 @@ impl List for Lister {
 
 impl<T: List, A: Authorize> List for WithAuthorize<T, A> {
     fn list(&self) -> Result<Vec<(String, Registration)>, ListError> {
-        if let Err(err) = self.1.authorize(&caller()) {
+        if let Err(err) = self.1.authorize(&msg_caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => ListError::Unauthorized,
                 AuthorizeError::UnexpectedError(err) => ListError::UnexpectedError(err),
@@ -485,7 +485,7 @@ impl Remove for Remover {
         self.names.with(|names| names.borrow_mut().remove(&name));
 
         // remove task/retry/expiry if present
-        [self.tasks, self.retries, self.expirations]
+        let _ = [self.tasks, self.retries, self.expirations]
             .map(|pq| pq.with(|pq| pq.borrow_mut().remove(id)));
 
         // remove certificate
@@ -501,7 +501,7 @@ impl Remove for Remover {
 
 impl<T: Remove, A: Authorize> Remove for WithAuthorize<T, A> {
     fn remove(&self, id: &Id) -> Result<(), RemoveError> {
-        if let Err(err) = self.1.authorize(&caller()) {
+        if let Err(err) = self.1.authorize(&msg_caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => RemoveError::Unauthorized,
                 AuthorizeError::UnexpectedError(err) => RemoveError::UnexpectedError(err),
@@ -772,7 +772,7 @@ mod tests {
 
         match r.remove(&Id::from("id")) {
             Err(RemoveError::NotFound) => {}
-            other => panic!("expected RemoveError::NotFound but got {:?}", other),
+            other => panic!("expected RemoveError::NotFound but got {other:?}"),
         };
 
         Ok(())
@@ -835,7 +835,7 @@ mod tests {
 
         match r.remove(&Id::from("id")) {
             Ok(()) => {}
-            other => panic!("expected Ok but got {:?}", other),
+            other => panic!("expected Ok but got {other:?}"),
         };
 
         match REGISTRATIONS.with(|regs| regs.borrow().get(&"id".to_string().into())) {
@@ -895,7 +895,7 @@ mod tests {
 
         match r.remove(&Id::from("id")) {
             Ok(()) => {}
-            other => panic!("expected Ok but got {:?}", other),
+            other => panic!("expected Ok but got {other:?}"),
         };
 
         match REGISTRATIONS.with(|regs| regs.borrow().get(&"id".to_string().into())) {
@@ -908,7 +908,7 @@ mod tests {
 
     #[test]
     fn expire_ok() -> Result<(), Error> {
-        [("id-1", 0), ("id-2", 1)].map(|(id, p)| {
+        let _ = [("id-1", 0), ("id-2", 1)].map(|(id, p)| {
             EXPIRATIONS.with(|exps| {
                 exps.borrow_mut().push(
                     id.into(),  // item

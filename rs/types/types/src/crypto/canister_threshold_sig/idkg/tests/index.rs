@@ -7,15 +7,16 @@ use crate::signature::{BasicSignature, BasicSignatureBatch};
 use crate::{Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use maplit::{btreemap, btreeset};
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 #[test]
 fn should_return_correct_dealer_id_for_index() {
     let transcript = IDkgTranscript {
-        verified_dealings: btreemap! {
+        verified_dealings: Arc::new(btreemap! {
             0 => batch_signed_dealing(node_id(42)),
             1 => batch_signed_dealing(node_id(43)),
             3 => batch_signed_dealing(node_id(45))
-        },
+        }),
         transcript_id: dummy_transcript_id(),
         receivers: dummy_receivers(),
         registry_version: dummy_registry_version(),
@@ -34,11 +35,11 @@ fn should_return_correct_dealer_id_for_index() {
 #[test]
 fn should_return_correct_index_for_dealer_id() {
     let transcript = IDkgTranscript {
-        verified_dealings: btreemap! {
+        verified_dealings: Arc::new(btreemap! {
             0 => batch_signed_dealing(node_id(42)),
             1 => batch_signed_dealing(node_id(43)),
             3 => batch_signed_dealing(node_id(45))
-        },
+        }),
         transcript_id: dummy_transcript_id(),
         receivers: dummy_receivers(),
         registry_version: dummy_registry_version(),
@@ -57,7 +58,7 @@ fn should_return_correct_index_for_dealer_id() {
 #[test]
 fn should_return_correct_index_for_signer_id() {
     let transcript = IDkgTranscript {
-        verified_dealings: dummy_dealings(),
+        verified_dealings: Arc::new(dummy_dealings()),
         transcript_id: dummy_transcript_id(),
         receivers: IDkgReceivers::new(btreeset! {
             node_id(42),

@@ -1,15 +1,15 @@
 use std::{convert::TryFrom, path::PathBuf, time::Duration};
 
-use bitcoin::Network;
-use bitcoin::{blockdata::constants::genesis_block, consensus::Decodable, Block, BlockHash};
+use bitcoin::{BlockHash, consensus::Decodable};
 use clap::Parser;
+use ic_btc_adapter::{AdapterNetwork, BlockchainBlock, BlockchainHeader, BlockchainNetwork};
 use ic_btc_service::{
-    btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,
-    BtcServiceGetSuccessorsResponse,
+    BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,
+    btc_service_client::BtcServiceClient,
 };
 use tokio::{
     net::UnixStream,
-    time::{sleep, Instant},
+    time::{Instant, sleep},
 };
 use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
@@ -40,21 +40,28 @@ async fn setup_client(uds_path: PathBuf) -> BtcServiceClient<Channel> {
 #[clap(version = "0.0.0", author = "DFINITY team <team@dfinity.org>")]
 pub struct Cli {
     /// This field contains the path to the config file.
-    pub network: Network,
+    pub network: AdapterNetwork,
     pub uds_path: PathBuf,
 }
 
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
+    match cli.network {
+        AdapterNetwork::Bitcoin(network) => run(network, cli.uds_path).await,
+        AdapterNetwork::Dogecoin(network) => run(network, cli.uds_path).await,
+    }
+}
+
+async fn run<Network: BlockchainNetwork>(network: Network, uds_path: PathBuf) {
     let interval_sleep_ms = Duration::from_millis(1000);
     let request_timeout_ms = Duration::from_millis(50);
 
-    let block_0 = genesis_block(cli.network);
+    let block_0 = network.genesis_block_header();
     let mut total_processed_block_hashes: usize = 0;
     let mut processed_block_hashes: Vec<BlockHash> = vec![];
     let mut current_anchor = block_0.block_hash();
-    let mut rpc_client = setup_client(cli.uds_path).await;
+    let mut rpc_client = setup_client(uds_path.clone()).await;
     let total_timer = Instant::now();
 
     loop {
@@ -75,7 +82,11 @@ async fn main() {
             Ok(response) => response.into_inner(),
             Err(status) => match status.code() {
                 tonic::Code::Cancelled | tonic::Code::Unavailable => continue,
-                _ => break,
+                _ => {
+                    println!("status = {status:?}");
+                    sleep(interval_sleep_ms).await;
+                    continue;
+                }
             },
         };
 
@@ -85,7 +96,7 @@ async fn main() {
                 .blocks
                 .iter()
                 .map(|b| {
-                    Block::consensus_decode(&mut b.as_slice())
+                    Network::Block::consensus_decode(&mut b.as_slice())
                         .unwrap()
                         .block_hash()
                 })

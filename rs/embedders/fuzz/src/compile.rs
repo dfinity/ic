@@ -1,6 +1,7 @@
-use crate::ic_wasm::{generate_exports, ic_embedders_config, ic_wasm_config};
+use crate::ic_wasm::{generate_exports, ic_wasm_config};
 use arbitrary::{Arbitrary, Result, Unstructured};
-use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
+use ic_config::embedders::Config as EmbeddersConfig;
+use ic_embedders::{WasmtimeEmbedder, wasm_utils::compile};
 use ic_logger::replica_logger::no_op_logger;
 use ic_wasm_types::BinaryEncodedWasm;
 use std::time::Duration;
@@ -10,7 +11,6 @@ use wasm_smith::{Config, MemoryOffsetChoices, Module};
 #[derive(Debug)]
 pub struct MaybeInvalidModule {
     pub module: Module,
-    pub memory64_enabled: bool,
 }
 
 const MAX_PARALLEL_EXECUTIONS: usize = 4;
@@ -18,9 +18,9 @@ const MAX_PARALLEL_EXECUTIONS: usize = 4;
 impl<'a> Arbitrary<'a> for MaybeInvalidModule {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
         let mut config = if u.ratio(1, 2)? {
-            let memory64_enabled = u.ratio(2, 3)?;
-            let mut config = ic_wasm_config(ic_embedders_config(memory64_enabled));
-            config.exports = generate_exports(ic_embedders_config(memory64_enabled), u)?;
+            let is_wasm64 = u.ratio(2, 3)?;
+            let mut config = ic_wasm_config(EmbeddersConfig::default(), is_wasm64);
+            config.exports = generate_exports(EmbeddersConfig::default(), u)?;
             config.min_data_segments = 2;
             config.max_data_segments = 10;
             config
@@ -31,7 +31,6 @@ impl<'a> Arbitrary<'a> for MaybeInvalidModule {
         config.memory_offset_choices = MemoryOffsetChoices(40, 20, 40);
         Ok(MaybeInvalidModule {
             module: Module::new(config.clone(), u)?,
-            memory64_enabled: config.memory64_enabled,
         })
     }
 }
@@ -46,24 +45,21 @@ pub fn run_fuzzer(bytes: &[u8]) {
     // 33% - Wasm with arbitrary wasm-smith config + maybe invalid functions
     // 33% - IC compliant wasm + maybe invalid functions
 
-    // Only used w/ random bytes
-    let memory64_enabled = u.ratio(1, 2).unwrap_or(false);
-
     let wasm = if u.ratio(1, 3).unwrap_or(false)
         || bytes.len() < <MaybeInvalidModule as Arbitrary>::size_hint(0).0
     {
-        config = ic_embedders_config(memory64_enabled);
+        config = EmbeddersConfig::default();
         raw_wasm_bytes(bytes)
     } else {
         let data = <MaybeInvalidModule as Arbitrary>::arbitrary_take_rest(u);
 
         match data {
             Ok(data) => {
-                config = ic_embedders_config(data.memory64_enabled);
+                config = EmbeddersConfig::default();
                 data.module.to_bytes()
             }
             Err(_) => {
-                config = ic_embedders_config(memory64_enabled);
+                config = EmbeddersConfig::default();
                 raw_wasm_bytes(bytes)
             }
         }

@@ -1,4 +1,4 @@
-use candid::{CandidType, Deserialize, Nat};
+use candid::{CandidType, Deserialize, Nat, Principal};
 use serde::Serialize;
 
 use crate::{
@@ -22,6 +22,7 @@ pub struct Mint {
     pub to: Account,
     pub memo: Option<Memo>,
     pub created_at_time: Option<u64>,
+    pub fee: Option<Nat>,
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -31,6 +32,7 @@ pub struct Burn {
     pub spender: Option<Account>,
     pub memo: Option<Memo>,
     pub created_at_time: Option<u64>,
+    pub fee: Option<Nat>,
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -56,6 +58,13 @@ pub struct Approve {
     pub created_at_time: Option<u64>,
 }
 
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct FeeCollector {
+    pub fee_collector: Option<Account>,
+    pub caller: Option<Principal>,
+    pub ts: Option<u64>,
+}
+
 // Representation of a Transaction which supports the Icrc1 Standard functionalities
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Transaction {
@@ -64,6 +73,7 @@ pub struct Transaction {
     pub burn: Option<Burn>,
     pub transfer: Option<Transfer>,
     pub approve: Option<Approve>,
+    pub fee_collector: Option<FeeCollector>,
     pub timestamp: u64,
 }
 
@@ -76,6 +86,7 @@ impl Transaction {
             burn: Some(burn),
             transfer: None,
             approve: None,
+            fee_collector: None,
         }
     }
 
@@ -87,6 +98,7 @@ impl Transaction {
             burn: None,
             transfer: None,
             approve: None,
+            fee_collector: None,
         }
     }
 
@@ -98,6 +110,7 @@ impl Transaction {
             burn: None,
             transfer: Some(transfer),
             approve: None,
+            fee_collector: None,
         }
     }
 
@@ -109,6 +122,19 @@ impl Transaction {
             burn: None,
             transfer: None,
             approve: Some(approve),
+            fee_collector: None,
+        }
+    }
+
+    pub fn set_fee_collector(fee_collector: FeeCollector, timestamp: u64) -> Self {
+        Self {
+            kind: "107set_fee_collector".into(),
+            timestamp,
+            mint: None,
+            burn: None,
+            transfer: None,
+            approve: None,
+            fee_collector: Some(fee_collector),
         }
     }
 }

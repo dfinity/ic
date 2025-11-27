@@ -2,7 +2,7 @@
 
 use super::ComponentModifier;
 use ic_consensus::consensus::ConsensusImpl;
-use ic_consensus_idkg::{malicious_pre_signer, IDkgImpl};
+use ic_consensus_idkg::{IDkgImpl, malicious_pre_signer};
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
     consensus_pool::{ChangeAction::*, ConsensusPool, Mutations, ValidatedConsensusArtifact},
@@ -39,13 +39,10 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for InvalidNotaryShareSignature 
                     })
                     .and_then(|share| NotarizationShare::try_from(share).ok())
                 {
-                    std::mem::swap(
-                        action,
-                        &mut AddToValidated(ValidatedConsensusArtifact {
-                            msg: share.into_message(),
-                            timestamp,
-                        }),
-                    );
+                    *action = AddToValidated(ValidatedConsensusArtifact {
+                        msg: share.into_message(),
+                        timestamp,
+                    });
                 }
             }
         }
@@ -103,14 +100,10 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusWithMaliciousFlags 
         let changeset = self.consensus.on_state_change(pool);
         let pool_reader = PoolReader::new(pool);
         if self.malicious_flags.is_consensus_malicious() {
-            ic_consensus::consensus::malicious_consensus::maliciously_alter_changeset(
+            self.consensus.maliciously_alter_changeset(
                 &pool_reader,
                 changeset,
                 &self.malicious_flags,
-                &self.consensus.block_maker,
-                &self.consensus.finalizer,
-                &self.consensus.notary,
-                &self.consensus.log,
                 current_time(),
             )
         } else {

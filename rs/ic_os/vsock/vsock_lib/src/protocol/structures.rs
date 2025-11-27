@@ -12,8 +12,8 @@ pub enum Payload {
 impl fmt::Display for Payload {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Payload::HostOSVsockVersion(version) => write!(f, "HostOSVsockVersion({})", version),
-            Payload::HostOSVersion(version) => write!(f, "HostOSVersion({})", version),
+            Payload::HostOSVsockVersion(version) => write!(f, "HostOSVsockVersion({version})"),
+            Payload::HostOSVersion(version) => write!(f, "HostOSVersion({version})"),
             Payload::NoPayload => write!(f, "NoPayload"),
         }
     }

@@ -3,13 +3,13 @@ use ic_interfaces::{
     validation::ValidationResult,
 };
 use ic_types::{
+    CountBytes, Height, NumBytes, Time,
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     consensus::Payload,
     ingress::IngressSets,
     messages::SignedIngress,
     time::UNIX_EPOCH,
-    CountBytes, Height, NumBytes, Time,
 };
 use std::collections::VecDeque;
 use std::sync::Mutex;

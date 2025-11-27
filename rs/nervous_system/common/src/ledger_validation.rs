@@ -88,8 +88,7 @@ pub fn validate_token_logo(token_logo: &str) -> Result<(), String> {
 
     if token_logo.len() > MAX_LOGO_LENGTH {
         return Err(format!(
-            "Error: token_logo must be less than {} characters, roughly 256 Kb",
-            MAX_LOGO_LENGTH
+            "Error: token_logo must be less than {MAX_LOGO_LENGTH} characters, roughly 256 Kb"
         ));
     }
 

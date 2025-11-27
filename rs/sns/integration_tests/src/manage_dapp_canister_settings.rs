@@ -10,8 +10,8 @@ use ic_nns_test_utils::state_test_helpers::{
     sns_stake_neuron, sns_wait_for_proposal_executed_or_failed, sns_wait_for_proposal_execution,
 };
 use ic_sns_governance::pb::v1::{
-    proposal::Action, LogVisibility, ManageDappCanisterSettings, NervousSystemParameters,
-    NeuronPermissionList, NeuronPermissionType, Proposal,
+    LogVisibility, ManageDappCanisterSettings, NervousSystemParameters, NeuronPermissionList,
+    NeuronPermissionType, Proposal, proposal::Action,
 };
 use ic_sns_test_utils::{
     itest_helpers::SnsTestsInitPayloadBuilder,
@@ -319,5 +319,10 @@ fn test_manage_dapp_canister_settings_failure() {
         )
         .unwrap()
         .unwrap();
-    assert_eq!(new_ledger_canister_status, original_ledger_canister_status);
+    // Ignore the canister version in the comparison because it's irrelevant for the
+    // canister settings and changes with every update call.
+    assert_eq!(
+        new_ledger_canister_status.ignore_version(),
+        original_ledger_canister_status.ignore_version()
+    );
 }

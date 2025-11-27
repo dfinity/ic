@@ -9,16 +9,16 @@
 //! bazel run //rs/execution_environment:execute_query_bench
 //! ```
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use execution_environment_bench::{common, wat::*};
 use ic_execution_environment::{
-    as_num_instructions, as_round_instructions,
-    execution::nonreplicated_query::execute_non_replicated_query, ExecutionEnvironment,
-    NonReplicatedQueryKind, RoundLimits,
+    ExecutionEnvironment, NonReplicatedQueryKind, RoundLimits, as_num_instructions,
+    as_round_instructions, execution::nonreplicated_query::execute_non_replicated_query,
 };
 use ic_interfaces::execution_environment::ExecutionMode;
-use ic_types::methods::WasmMethod;
 use ic_types::PrincipalId;
+use ic_types::batch::CanisterCyclesCostSchedule;
+use ic_types::methods::WasmMethod;
 
 use crate::common::Wasm64;
 
@@ -99,6 +99,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
              time,
              mut execution_parameters,
              subnet_available_memory,
+             subnet_memory_reservation,
              subnet_available_callbacks,
              network_topology,
              ..
@@ -111,6 +112,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 subnet_available_memory,
                 subnet_available_callbacks,
                 compute_allocation_used: 0,
+                subnet_memory_reservation,
             };
             let instructions_before = round_limits.instructions;
             let result = execute_non_replicated_query(
@@ -125,6 +127,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 exec_env.hypervisor_for_testing(),
                 &mut round_limits,
                 exec_env.state_changes_error(),
+                CanisterCyclesCostSchedule::Normal,
             )
             .2;
             let executed_instructions =

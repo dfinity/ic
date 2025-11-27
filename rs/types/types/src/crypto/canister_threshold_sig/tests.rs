@@ -1,4 +1,5 @@
 use super::*;
+use crate::crypto::ExtendedDerivationPath;
 use crate::crypto::canister_threshold_sig::error::{
     EcdsaPresignatureQuadrupleCreationError, ThresholdEcdsaSigInputsCreationError,
 };
@@ -7,9 +8,10 @@ use crate::{Height, NodeId, RegistryVersion, SubnetId};
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_crypto_test_utils_canister_threshold_sigs::{ordered_node_id, set_of_nodes};
-use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 #[test]
 fn should_create_quadruples_correctly() {
@@ -260,48 +262,42 @@ fn should_not_create_quadruples_for_key_times_lambda_with_wrong_type() {
 #[test]
 fn should_create_ecdsa_inputs_correctly() {
     let rng = &mut reproducible_rng();
-    let common_receivers = set_of_nodes(&[1, 2, 3]);
-    let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, key_transcript) =
-        transcripts_for_ecdsa_inputs(common_receivers.clone(), rng);
+    let receivers = set_of_nodes(&[1, 2, 3]);
+    let inputs_owned = valid_tecdsa_inputs_with_receivers(receivers.clone(), rng);
 
-    let quadruple = EcdsaPreSignatureQuadruple::new(
-        kappa_unmasked,
-        lambda_masked,
-        kappa_times_lambda,
-        key_times_lambda,
-    );
-    assert!(quadruple.is_ok());
-
-    let derivation_path = derivation_path();
-    let hashed_message = hashed_message();
-    let nonce = nonce();
-    let quadruple = quadruple.unwrap();
-    let result = ThresholdEcdsaSigInputs::new(
-        &derivation_path,
-        &hashed_message,
-        nonce,
-        quadruple.clone(),
-        key_transcript.clone(),
-    );
+    let result: Result<ThresholdEcdsaSigInputs, _> = inputs_owned.to_ref();
     assert!(result.is_ok());
 
     let ecdsa_inputs = result.unwrap();
-    assert_eq!(ecdsa_inputs.derivation_path(), &derivation_path);
-    assert_eq!(ecdsa_inputs.hashed_message(), &hashed_message);
-    assert_eq!(ecdsa_inputs.nonce(), &nonce);
-    assert_eq!(ecdsa_inputs.presig_quadruple(), &quadruple);
-    assert_eq!(ecdsa_inputs.key_transcript(), &key_transcript);
+    assert_eq!(ecdsa_inputs.caller(), &inputs_owned.caller);
+    assert_eq!(
+        ecdsa_inputs.derivation_path(),
+        &inputs_owned.derivation_path
+    );
+    assert_eq!(ecdsa_inputs.hashed_message(), &inputs_owned.hashed_message);
+    assert_eq!(ecdsa_inputs.nonce(), &inputs_owned.nonce);
+    assert_eq!(
+        ecdsa_inputs.presig_quadruple(),
+        &inputs_owned.presig_quadruple
+    );
+    assert_eq!(ecdsa_inputs.key_transcript(), &inputs_owned.key_transcript);
     assert_eq!(
         ecdsa_inputs.reconstruction_threshold(),
-        key_transcript.reconstruction_threshold()
+        inputs_owned.key_transcript.reconstruction_threshold()
     );
-    assert_eq!(ecdsa_inputs.receivers(), &key_transcript.receivers);
-    assert_eq!(ecdsa_inputs.algorithm_id(), key_transcript.algorithm_id);
-    for node_id in common_receivers.iter() {
+    assert_eq!(
+        ecdsa_inputs.receivers(),
+        &inputs_owned.key_transcript.receivers
+    );
+    assert_eq!(
+        ecdsa_inputs.algorithm_id(),
+        inputs_owned.key_transcript.algorithm_id
+    );
+    for node_id in receivers.iter() {
         assert!(ecdsa_inputs.index_for_signer_id(*node_id).is_some());
         assert_eq!(
             ecdsa_inputs.index_for_signer_id(*node_id),
-            key_transcript.index_for_signer_id(*node_id)
+            inputs_owned.key_transcript.index_for_signer_id(*node_id)
         );
     }
 }
@@ -309,30 +305,13 @@ fn should_create_ecdsa_inputs_correctly() {
 #[test]
 fn should_not_create_ecdsa_inputs_with_inconsistent_algorithm() {
     let rng = &mut reproducible_rng();
-    let common_receivers = set_of_nodes(&[1, 2, 3]);
-    let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, mut key_transcript) =
-        transcripts_for_ecdsa_inputs(common_receivers, rng);
+    let mut inputs_owned = valid_tecdsa_inputs(rng);
 
     let wrong_algorithm = AlgorithmId::Tls;
-    assert_ne!(key_transcript.algorithm_id, wrong_algorithm);
+    assert_ne!(inputs_owned.key_transcript.algorithm_id, wrong_algorithm);
+    inputs_owned.key_transcript.algorithm_id = wrong_algorithm;
 
-    key_transcript.algorithm_id = wrong_algorithm;
-
-    let quadruple = EcdsaPreSignatureQuadruple::new(
-        kappa_unmasked,
-        lambda_masked,
-        kappa_times_lambda,
-        key_times_lambda,
-    );
-    assert!(quadruple.is_ok());
-
-    let ecdsa_inputs = ThresholdEcdsaSigInputs::new(
-        &derivation_path(),
-        &hashed_message(),
-        nonce(),
-        quadruple.unwrap(),
-        key_transcript,
-    );
+    let ecdsa_inputs: Result<ThresholdEcdsaSigInputs, _> = inputs_owned.to_ref();
 
     assert_matches!(
         ecdsa_inputs,
@@ -343,39 +322,20 @@ fn should_not_create_ecdsa_inputs_with_inconsistent_algorithm() {
 #[test]
 fn should_not_create_ecdsa_inputs_with_unsupported_algorithm() {
     let rng = &mut reproducible_rng();
-    let common_receivers = set_of_nodes(&[1, 2, 3]);
-    let (
-        mut kappa_unmasked,
-        mut lambda_masked,
-        mut kappa_times_lambda,
-        mut key_times_lambda,
-        mut key_transcript,
-    ) = transcripts_for_ecdsa_inputs(common_receivers, rng);
+    let mut inputs_owned = valid_tecdsa_inputs(rng);
 
     let wrong_algorithm = AlgorithmId::Tls;
-    assert_ne!(key_transcript.algorithm_id, wrong_algorithm);
+    assert_ne!(inputs_owned.key_transcript.algorithm_id, wrong_algorithm);
+    inputs_owned.presig_quadruple.kappa_unmasked.algorithm_id = wrong_algorithm;
+    inputs_owned.presig_quadruple.lambda_masked.algorithm_id = wrong_algorithm;
+    inputs_owned
+        .presig_quadruple
+        .kappa_times_lambda
+        .algorithm_id = wrong_algorithm;
+    inputs_owned.presig_quadruple.key_times_lambda.algorithm_id = wrong_algorithm;
+    inputs_owned.key_transcript.algorithm_id = wrong_algorithm;
 
-    kappa_unmasked.algorithm_id = wrong_algorithm;
-    lambda_masked.algorithm_id = wrong_algorithm;
-    kappa_times_lambda.algorithm_id = wrong_algorithm;
-    key_times_lambda.algorithm_id = wrong_algorithm;
-    key_transcript.algorithm_id = wrong_algorithm;
-
-    let quadruple = EcdsaPreSignatureQuadruple::new(
-        kappa_unmasked,
-        lambda_masked,
-        kappa_times_lambda,
-        key_times_lambda,
-    );
-    assert!(quadruple.is_ok());
-
-    let ecdsa_inputs = ThresholdEcdsaSigInputs::new(
-        &derivation_path(),
-        &hashed_message(),
-        nonce(),
-        quadruple.unwrap(),
-        key_transcript,
-    );
+    let ecdsa_inputs: Result<ThresholdEcdsaSigInputs, _> = inputs_owned.to_ref();
 
     assert_matches!(
         ecdsa_inputs,
@@ -386,25 +346,12 @@ fn should_not_create_ecdsa_inputs_with_unsupported_algorithm() {
 #[test]
 fn should_not_create_ecdsa_inputs_with_invalid_hash_length() {
     let rng = &mut reproducible_rng();
-    let common_receivers = set_of_nodes(&[1, 2, 3]);
-    let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, key_transcript) =
-        transcripts_for_ecdsa_inputs(common_receivers, rng);
+    let mut inputs_owned = valid_tecdsa_inputs(rng);
 
-    let quadruple = EcdsaPreSignatureQuadruple::new(
-        kappa_unmasked,
-        lambda_masked,
-        kappa_times_lambda,
-        key_times_lambda,
-    );
-    assert!(quadruple.is_ok());
+    let hashed_message_invalid_length = vec![1u8; 33];
+    inputs_owned.hashed_message = hashed_message_invalid_length;
 
-    let ecdsa_inputs = ThresholdEcdsaSigInputs::new(
-        &derivation_path(),
-        &[1u8; 33],
-        nonce(),
-        quadruple.unwrap(),
-        key_transcript,
-    );
+    let ecdsa_inputs: Result<ThresholdEcdsaSigInputs, _> = inputs_owned.to_ref();
 
     assert_matches!(
         ecdsa_inputs,
@@ -415,30 +362,13 @@ fn should_not_create_ecdsa_inputs_with_invalid_hash_length() {
 #[test]
 fn should_not_create_ecdsa_inputs_with_distinct_receivers() {
     let rng = &mut reproducible_rng();
-    let common_receivers = set_of_nodes(&[1, 2, 3]);
+    let mut inputs_owned = valid_tecdsa_inputs_with_receivers(set_of_nodes(&[1, 2, 3]), rng);
+
     let wrong_receivers = IDkgReceivers::new(set_of_nodes(&[1, 2, 3, 4])).unwrap();
-    let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, mut key_transcript) =
-        transcripts_for_ecdsa_inputs(common_receivers, rng);
+    assert_ne!(inputs_owned.key_transcript.receivers, wrong_receivers);
+    inputs_owned.key_transcript.receivers = wrong_receivers;
 
-    assert_ne!(key_transcript.receivers, wrong_receivers);
-
-    key_transcript.receivers = wrong_receivers;
-
-    let quadruple = EcdsaPreSignatureQuadruple::new(
-        kappa_unmasked,
-        lambda_masked,
-        kappa_times_lambda,
-        key_times_lambda,
-    );
-    assert!(quadruple.is_ok());
-
-    let ecdsa_inputs = ThresholdEcdsaSigInputs::new(
-        &derivation_path(),
-        &hashed_message(),
-        nonce(),
-        quadruple.unwrap(),
-        key_transcript,
-    );
+    let ecdsa_inputs: Result<ThresholdEcdsaSigInputs, _> = inputs_owned.to_ref();
 
     assert_matches!(
         ecdsa_inputs,
@@ -449,32 +379,21 @@ fn should_not_create_ecdsa_inputs_with_distinct_receivers() {
 #[test]
 fn should_not_create_ecdsa_inputs_for_quadruple_with_wrong_origin() {
     let rng = &mut reproducible_rng();
-    let common_receivers = set_of_nodes(&[1, 2, 3]);
-    let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, mut key_transcript) =
-        transcripts_for_ecdsa_inputs(common_receivers, rng);
+    let mut inputs_owned = valid_tecdsa_inputs(rng);
 
     let wrong_key_transcript_id = random_transcript_id(rng);
-    assert_ne!(key_transcript.transcript_id, wrong_key_transcript_id);
-
-    key_transcript.transcript_id = wrong_key_transcript_id;
-
-    let quadruple = EcdsaPreSignatureQuadruple::new(
-        kappa_unmasked,
-        lambda_masked,
-        kappa_times_lambda,
-        key_times_lambda,
+    assert_ne!(
+        inputs_owned.key_transcript.transcript_id,
+        wrong_key_transcript_id
     );
-    assert!(quadruple.is_ok());
+    inputs_owned.key_transcript.transcript_id = wrong_key_transcript_id;
 
-    let ecdsa_inputs = ThresholdEcdsaSigInputs::new(
-        &derivation_path(),
-        &hashed_message(),
-        nonce(),
-        quadruple.clone().unwrap(),
-        key_transcript.clone(),
-    );
+    let ecdsa_inputs: Result<ThresholdEcdsaSigInputs, _> = inputs_owned.to_ref();
+
     assert_matches!(ecdsa_inputs, Err(ThresholdEcdsaSigInputsCreationError::InvalidQuadrupleOrigin(error))
-        if error == format!("Quadruple transcript `key_times_lambda` expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},_)`, but found transcript of type {:?}", key_transcript.transcript_id, quadruple.unwrap().key_times_lambda().transcript_type)
+        if error == format!("Quadruple transcript `key_times_lambda` expected to have type `Masked` with \
+        origin of type `UnmaskedTimesMasked({:?},_)`, but found transcript of type \
+        {:?}", inputs_owned.key_transcript.transcript_id, inputs_owned.presig_quadruple.key_times_lambda().transcript_type)
     );
 }
 
@@ -518,29 +437,11 @@ fn serde_cbor_deserialization_of_extended_derivation_path_is_backward_compatible
 fn should_return_correct_index_for_signer_id_from_threshold_ecdsa_sig_inputs() {
     let rng = &mut reproducible_rng();
     let common_receivers = set_of_nodes(&[42, 43, 45, 128]);
-    let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, key_transcript) =
-        transcripts_for_ecdsa_inputs(common_receivers, rng);
+    let inputs_owned = valid_tecdsa_inputs_with_receivers(common_receivers, rng);
 
-    let quadruple = EcdsaPreSignatureQuadruple::new(
-        kappa_unmasked,
-        lambda_masked,
-        kappa_times_lambda,
-        key_times_lambda,
-    );
-    assert!(quadruple.is_ok());
-
-    let derivation_path = derivation_path();
-    let hashed_message = hashed_message();
-    let nonce = nonce();
-    let quadruple = quadruple.unwrap();
-    let inputs = ThresholdEcdsaSigInputs::new(
-        &derivation_path,
-        &hashed_message,
-        nonce,
-        quadruple.clone(),
-        key_transcript.clone(),
-    )
-    .expect("failed to create ThresholdEcdsaSigInputs");
+    let inputs: ThresholdEcdsaSigInputs = inputs_owned
+        .to_ref()
+        .expect("failed to create ThresholdEcdsaSigInputs");
 
     assert_eq!(inputs.index_for_signer_id(ordered_node_id(42)), Some(0));
     assert_eq!(inputs.index_for_signer_id(ordered_node_id(43)), Some(1));
@@ -612,52 +513,37 @@ fn should_not_create_schnorr_presignature_with_invalid_origin() {
 #[test]
 fn should_create_schnorr_sig_inputs_correctly() {
     let rng = &mut reproducible_rng();
-    let common_receivers = set_of_nodes(&[1, 2, 3]);
-    let (presignature_transcript_raw, key_transcript) =
-        transcripts_for_schnorr_sig_inputs(common_receivers.clone(), rng);
+    let receivers = set_of_nodes(&[1, 2, 3]);
+    let inputs_owned = valid_tschnorr_inputs_with_receivers(receivers.clone(), rng);
 
-    let presignature_transcript = SchnorrPreSignatureTranscript::new(presignature_transcript_raw)
-        .expect("failed to created presignature transcript");
+    let result: Result<ThresholdSchnorrSigInputs, _> = inputs_owned.to_ref();
+    assert!(result.is_ok());
 
-    let derivation_path = derivation_path();
-    let message = message_in_size_range(0..1_000, rng);
-    let nonce = nonce();
-    let tschnorr_sig_inputs = ThresholdSchnorrSigInputs::new(
-        &derivation_path,
-        &message,
-        None,
-        nonce,
-        presignature_transcript.clone(),
-        key_transcript.clone(),
-    )
-    .expect("failed to create threshold Schnorr signature inputs");
-
-    assert_eq!(tschnorr_sig_inputs.derivation_path(), &derivation_path);
-    assert_eq!(tschnorr_sig_inputs.message(), &message);
-    assert_eq!(tschnorr_sig_inputs.nonce(), &nonce);
+    let inputs = result.unwrap();
+    assert_eq!(inputs.caller(), &inputs_owned.caller);
+    assert_eq!(inputs.derivation_path(), &inputs_owned.derivation_path);
+    assert_eq!(inputs.message(), &inputs_owned.message);
+    assert_eq!(inputs.nonce(), &inputs_owned.nonce);
+    assert_eq!(inputs.presig_transcript(), &inputs_owned.presig_transcript);
+    assert_eq!(inputs.key_transcript(), &inputs_owned.key_transcript);
     assert_eq!(
-        tschnorr_sig_inputs.presig_transcript(),
-        &presignature_transcript
+        inputs.reconstruction_threshold(),
+        inputs_owned.key_transcript.reconstruction_threshold()
     );
-    assert_eq!(tschnorr_sig_inputs.key_transcript(), &key_transcript);
+    assert_eq!(inputs.receivers(), &inputs_owned.key_transcript.receivers);
     assert_eq!(
-        tschnorr_sig_inputs.reconstruction_threshold(),
-        key_transcript.reconstruction_threshold()
-    );
-    assert_eq!(tschnorr_sig_inputs.receivers(), &key_transcript.receivers);
-    assert_eq!(
-        AsRef::<IDkgReceivers>::as_ref(&tschnorr_sig_inputs),
-        &key_transcript.receivers
+        AsRef::<IDkgReceivers>::as_ref(&inputs),
+        &inputs_owned.key_transcript.receivers
     );
     assert_eq!(
-        tschnorr_sig_inputs.algorithm_id(),
-        key_transcript.algorithm_id
+        inputs.algorithm_id(),
+        inputs_owned.key_transcript.algorithm_id
     );
-    for node_id in common_receivers.iter() {
-        assert!(tschnorr_sig_inputs.index_for_signer_id(*node_id).is_some());
+    for node_id in receivers.iter() {
+        assert!(inputs.index_for_signer_id(*node_id).is_some());
         assert_eq!(
-            tschnorr_sig_inputs.index_for_signer_id(*node_id),
-            key_transcript.index_for_signer_id(*node_id)
+            inputs.index_for_signer_id(*node_id),
+            inputs_owned.key_transcript.index_for_signer_id(*node_id)
         );
     }
 }
@@ -665,53 +551,31 @@ fn should_create_schnorr_sig_inputs_correctly() {
 #[test]
 fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_algorithms() {
     let rng = &mut reproducible_rng();
-    let common_receivers = set_of_nodes(&[1, 2, 3]);
-    let (presignature_transcript_raw, key_transcript) =
-        transcripts_for_schnorr_sig_inputs(common_receivers, rng);
+    let mut inputs_owned = valid_tschnorr_inputs(rng);
 
-    let mut presignature_transcript =
-        SchnorrPreSignatureTranscript::new(presignature_transcript_raw)
-            .expect("failed to created presignature transcript");
-
-    let derivation_path = derivation_path();
-    let message = message_in_size_range(0..1_000, rng);
-    let nonce = nonce();
-
-    {
-        let mut key_transcript = key_transcript.clone();
-        key_transcript.algorithm_id = AlgorithmId::Tls;
-        assert_eq!(
-            ThresholdSchnorrSigInputs::new(
-                &derivation_path,
-                &message,
-                None,
-                nonce,
-                presignature_transcript.clone(),
-                key_transcript,
-            ),
-            Err(
-                error::ThresholdSchnorrSigInputsCreationError::InconsistentAlgorithmIds(
-                    AlgorithmId::ThresholdSchnorrBip340.to_string(),
-                    AlgorithmId::Tls.to_string()
-                )
-            )
-        );
-    }
-
-    presignature_transcript.blinder_unmasked.algorithm_id = AlgorithmId::Tls;
+    // Mismatch: key transcript uses TLS
+    let mut owned_mismatch_key = inputs_owned.clone();
+    owned_mismatch_key.key_transcript.algorithm_id = AlgorithmId::Tls;
+    let result: Result<ThresholdSchnorrSigInputs, _> = owned_mismatch_key.to_ref();
     assert_eq!(
-        ThresholdSchnorrSigInputs::new(
-            &derivation_path,
-            &message,
-            None,
-            nonce,
-            presignature_transcript,
-            key_transcript,
-        ),
+        result,
+        Err(
+            error::ThresholdSchnorrSigInputsCreationError::InconsistentAlgorithmIds(
+                AlgorithmId::ThresholdSchnorrBip340.to_string(),
+                AlgorithmId::Tls.to_string()
+            )
+        )
+    );
+
+    // Mismatch: presignature transcript uses TLS
+    inputs_owned.presig_transcript.blinder_unmasked.algorithm_id = AlgorithmId::Tls;
+    let result: Result<ThresholdSchnorrSigInputs, _> = inputs_owned.to_ref();
+    assert_eq!(
+        result,
         Err(
             error::ThresholdSchnorrSigInputsCreationError::InconsistentAlgorithmIds(
                 AlgorithmId::Tls.to_string(),
-                AlgorithmId::ThresholdSchnorrBip340.to_string(),
+                AlgorithmId::ThresholdSchnorrBip340.to_string()
             )
         )
     );
@@ -720,30 +584,15 @@ fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_algorithms() {
 #[test]
 fn should_fail_creating_schnorr_sig_inputs_with_unsupported_algorithm() {
     let rng = &mut reproducible_rng();
-    let common_receivers = set_of_nodes(&[1, 2, 3]);
-    let (presignature_transcript_raw, mut key_transcript) =
-        transcripts_for_schnorr_sig_inputs(common_receivers, rng);
-
-    let mut presignature_transcript =
-        SchnorrPreSignatureTranscript::new(presignature_transcript_raw)
-            .expect("failed to created presignature transcript");
-
-    let derivation_path = derivation_path();
-    let message = message_in_size_range(0..1_000, rng);
-    let nonce = nonce();
+    let mut inputs_owned = valid_tschnorr_inputs(rng);
 
     let unsupported_algorithm = AlgorithmId::ThresholdEcdsaSecp256k1;
-    key_transcript.algorithm_id = unsupported_algorithm;
-    presignature_transcript.blinder_unmasked.algorithm_id = unsupported_algorithm;
+    inputs_owned.key_transcript.algorithm_id = unsupported_algorithm;
+    inputs_owned.presig_transcript.blinder_unmasked.algorithm_id = unsupported_algorithm;
+
+    let result: Result<ThresholdSchnorrSigInputs, _> = inputs_owned.to_ref();
     assert_eq!(
-        ThresholdSchnorrSigInputs::new(
-            &derivation_path,
-            &message,
-            None,
-            nonce,
-            presignature_transcript,
-            key_transcript,
-        ),
+        result,
         Err(
             error::ThresholdSchnorrSigInputsCreationError::UnsupportedAlgorithm(
                 unsupported_algorithm.to_string()
@@ -770,14 +619,18 @@ fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_receivers() {
     let presignature_transcript = SchnorrPreSignatureTranscript::new(presignature_transcript_raw)
         .expect("failed to created presignature transcript");
 
+    let extended_derivation_path = derivation_path();
+    let message = message_in_size_range(0..1_000, rng);
+    let nonce = nonce();
     assert_eq!(
         ThresholdSchnorrSigInputs::new(
-            &derivation_path(),
-            &message_in_size_range(0..1_000, rng),
+            &extended_derivation_path.caller,
+            &extended_derivation_path.derivation_path,
+            &message,
             None,
-            nonce(),
-            presignature_transcript,
-            key_transcript,
+            &nonce,
+            &presignature_transcript,
+            &key_transcript,
         ),
         Err(error::ThresholdSchnorrSigInputsCreationError::InconsistentReceivers)
     );
@@ -786,17 +639,7 @@ fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_receivers() {
 #[test]
 fn should_fail_creating_schnorr_sig_inputs_with_invalid_transcript_origin() {
     let rng = &mut reproducible_rng();
-    let common_receivers = set_of_nodes(&[1, 2, 3]);
-    let (presignature_transcript_raw, key_transcript) =
-        transcripts_for_schnorr_sig_inputs(common_receivers, rng);
-
-    let mut presignature_transcript =
-        SchnorrPreSignatureTranscript::new(presignature_transcript_raw)
-            .expect("failed to created presignature transcript");
-
-    let derivation_path: ExtendedDerivationPath = derivation_path();
-    let message = message_in_size_range(0..1_000, rng);
-    let nonce = nonce();
+    let mut inputs_owned = valid_tschnorr_inputs(rng);
 
     let invalid_transcript_types = [
         IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
@@ -812,16 +655,15 @@ fn should_fail_creating_schnorr_sig_inputs_with_invalid_transcript_origin() {
         )),
     ];
     for invalid_transcript_type in invalid_transcript_types {
-        presignature_transcript.blinder_unmasked.transcript_type = invalid_transcript_type.clone();
+        inputs_owned
+            .presig_transcript
+            .blinder_unmasked
+            .transcript_type = invalid_transcript_type.clone();
+
+        let result: Result<ThresholdSchnorrSigInputs, _> = inputs_owned.to_ref();
+
         assert_matches!(
-            ThresholdSchnorrSigInputs::new(
-                &derivation_path,
-                &message,
-                None,
-                nonce,
-                presignature_transcript.clone(),
-                key_transcript.clone(),
-            ),
+            result,
             Err(error::ThresholdSchnorrSigInputsCreationError::InvalidPreSignatureOrigin(internal_error))
             if internal_error == format!("Presignature transcript: {invalid_transcript_type:?}")
         );
@@ -830,9 +672,9 @@ fn should_fail_creating_schnorr_sig_inputs_with_invalid_transcript_origin() {
 
 // A randomized way to get non-repeating IDs.
 fn random_transcript_id<R: Rng + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
-    let id = rng.gen();
-    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
-    let height = Height::from(rng.gen::<u64>());
+    let id = rng.r#gen();
+    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.r#gen::<u64>()));
+    let height = Height::from(rng.r#gen::<u64>());
 
     IDkgTranscriptId::new(subnet, id, height)
 }
@@ -846,7 +688,7 @@ fn transcript<R: Rng + CryptoRng>(
         transcript_id: random_transcript_id(rng),
         receivers: IDkgReceivers::new(receivers).unwrap(),
         registry_version: RegistryVersion::from(314),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type,
         algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
         internal_transcript_raw: vec![],
@@ -862,7 +704,7 @@ fn schnorr_transcript<R: Rng + CryptoRng>(
         transcript_id: random_transcript_id(rng),
         receivers: IDkgReceivers::new(receivers).expect("failed to create IDKG receivers"),
         registry_version: RegistryVersion::from(314),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type,
         algorithm_id: AlgorithmId::ThresholdSchnorrBip340,
         internal_transcript_raw: vec![1, 2, 3],
@@ -954,21 +796,6 @@ fn transcripts_for_ecdsa_inputs<R: Rng + CryptoRng>(
     )
 }
 
-fn transcripts_for_schnorr_sig_inputs<R: Rng + CryptoRng>(
-    receivers: BTreeSet<NodeId>,
-    rng: &mut R,
-) -> (IDkgTranscript, IDkgTranscript) {
-    let blinder_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random);
-    let blinder_unmasked_transcript = schnorr_transcript(receivers.clone(), blinder_type, rng);
-
-    let key_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
-        random_transcript_id(rng),
-    ));
-    let key_transcript = schnorr_transcript(receivers.clone(), key_type, rng);
-
-    (blinder_unmasked_transcript, key_transcript)
-}
-
 fn derivation_path() -> ExtendedDerivationPath {
     ExtendedDerivationPath {
         caller: Default::default(),
@@ -976,8 +803,8 @@ fn derivation_path() -> ExtendedDerivationPath {
     }
 }
 
-fn nonce() -> Randomness {
-    Randomness::new([42u8; 32])
+fn nonce() -> [u8; 32] {
+    [42u8; 32]
 }
 
 fn hashed_message() -> Vec<u8> {
@@ -990,4 +817,135 @@ fn message_in_size_range<R: Rng + CryptoRng>(
 ) -> Vec<u8> {
     let size = rng.gen_range(range);
     vec![123; size]
+}
+
+// Copy of ic_crypto_test_utils_canister_threshold_sigs::ThresholdEcdsaSigInputsOwned.
+// The latter cannot be used here because ic-types (this crate here) has a dev-dependency on
+// ic_crypto_test_utils_canister_threshold_sigs, which has a dependency on ic-types.
+// This [quasi-circular dependency](https://mmapped.blog/posts/03-rust-packages-crates-modules#quasi-circular)
+// (and thus the code duplication) could be worked around by turning the unit tests
+// into integration tests.
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub struct ThresholdEcdsaSigInputsOwned {
+    pub caller: PrincipalId,
+    pub derivation_path: Vec<Vec<u8>>,
+    pub hashed_message: Vec<u8>,
+    pub nonce: [u8; 32],
+    pub presig_quadruple: EcdsaPreSignatureQuadruple,
+    pub key_transcript: IDkgTranscript,
+}
+
+impl ThresholdEcdsaSigInputsOwned {
+    pub fn to_ref<'a>(
+        &'a self,
+    ) -> Result<ThresholdEcdsaSigInputs<'a>, error::ThresholdEcdsaSigInputsCreationError> {
+        ThresholdEcdsaSigInputs::new(
+            &self.caller,
+            &self.derivation_path,
+            &self.hashed_message,
+            &self.nonce,
+            &self.presig_quadruple,
+            &self.key_transcript,
+        )
+    }
+}
+
+fn valid_tecdsa_inputs(rng: &mut ReproducibleRng) -> ThresholdEcdsaSigInputsOwned {
+    valid_tecdsa_inputs_with_receivers(set_of_nodes(&[1, 2, 3]), rng)
+}
+
+fn valid_tecdsa_inputs_with_receivers(
+    receivers: BTreeSet<NodeId>,
+    rng: &mut ReproducibleRng,
+) -> ThresholdEcdsaSigInputsOwned {
+    let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, key_transcript) =
+        transcripts_for_ecdsa_inputs(receivers, rng);
+
+    let quadruple = EcdsaPreSignatureQuadruple::new(
+        kappa_unmasked,
+        lambda_masked,
+        kappa_times_lambda,
+        key_times_lambda,
+    )
+    .unwrap();
+
+    let extended_derivation_path = derivation_path();
+    let hashed_message = hashed_message();
+    let nonce = nonce();
+
+    ThresholdEcdsaSigInputsOwned {
+        caller: extended_derivation_path.caller,
+        derivation_path: extended_derivation_path.derivation_path,
+        hashed_message,
+        nonce,
+        presig_quadruple: quadruple,
+        key_transcript,
+    }
+}
+
+// Copy of ic_crypto_test_utils_canister_threshold_sigs::ThresholdSchnorrSigInputsOwned.
+// The latter cannot be used here because ic-types (this crate here) has a dev-dependency on
+// ic_crypto_test_utils_canister_threshold_sigs, which has a dependency on ic-types.
+// This [quasi-circular dependency](https://mmapped.blog/posts/03-rust-packages-crates-modules#quasi-circular)
+// (and thus the code duplication) could be worked around by turning the unit tests
+// into integration tests.
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub struct ThresholdSchnorrSigInputsOwned {
+    pub caller: PrincipalId,
+    pub derivation_path: Vec<Vec<u8>>,
+    pub message: Vec<u8>,
+    pub taproot_tree_root: Option<Vec<u8>>,
+    pub nonce: [u8; 32],
+    pub presig_transcript: SchnorrPreSignatureTranscript,
+    pub key_transcript: IDkgTranscript,
+}
+
+impl ThresholdSchnorrSigInputsOwned {
+    pub fn to_ref<'a>(
+        &'a self,
+    ) -> Result<ThresholdSchnorrSigInputs<'a>, error::ThresholdSchnorrSigInputsCreationError> {
+        ThresholdSchnorrSigInputs::new(
+            &self.caller,
+            &self.derivation_path,
+            &self.message,
+            None,
+            &self.nonce,
+            &self.presig_transcript,
+            &self.key_transcript,
+        )
+    }
+}
+
+fn valid_tschnorr_inputs(rng: &mut ReproducibleRng) -> ThresholdSchnorrSigInputsOwned {
+    valid_tschnorr_inputs_with_receivers(set_of_nodes(&[1, 2, 3]), rng)
+}
+
+fn valid_tschnorr_inputs_with_receivers(
+    receivers: BTreeSet<NodeId>,
+    rng: &mut ReproducibleRng,
+) -> ThresholdSchnorrSigInputsOwned {
+    let blinder_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random);
+    let blinder_unmasked_transcript = schnorr_transcript(receivers.clone(), blinder_type, rng);
+
+    let key_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
+        random_transcript_id(rng),
+    ));
+    let key_transcript = schnorr_transcript(receivers.clone(), key_type, rng);
+
+    let presig_transcript = SchnorrPreSignatureTranscript::new(blinder_unmasked_transcript)
+        .expect("failed to create presignature transcript");
+
+    let extended_derivation_path = derivation_path();
+    let message = message_in_size_range(0..1_000, rng);
+    let nonce = nonce();
+
+    ThresholdSchnorrSigInputsOwned {
+        caller: extended_derivation_path.caller,
+        derivation_path: extended_derivation_path.derivation_path,
+        message,
+        taproot_tree_root: None,
+        nonce,
+        presig_transcript,
+        key_transcript,
+    }
 }

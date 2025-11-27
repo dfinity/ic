@@ -2,7 +2,7 @@
 Title:: Catch Up Test
 /// Common test function for a couple of catch up tests.
 
-Goal:: Demonstrate catch up behaviour of nodes when both execution and state sync are slow.
+Goal:: Demonstrate catch up behavior of nodes when both execution and state sync are slow.
 
 Runbook::
 . Set up a malicious (defect) node that uses delays to simulate slow execution and state sync
@@ -15,7 +15,7 @@ Success::
 . Depending on the parameters we set in this test, we either expect the node to be able to catch up or not
 
 Coverage::
-In the test, the delays are artificially introduced. However, they simulate real node behaviour
+In the test, the delays are artificially introduced. However, they simulate real node behavior
 in certain situations. The speed of state sync depends on the size of the state, while the execution speed
 depends on the number of messages in the blocks to replay.
 
@@ -30,8 +30,8 @@ use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::systest;
 
 use anyhow::Result;
-use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::Height;
+use ic_types::malicious_behavior::MaliciousBehavior;
 use std::time::Duration;
 
 const PROMETHEUS_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
@@ -61,7 +61,7 @@ fn setup(env: TestEnv) {
                 .add_nodes(3)
                 .add_malicious_nodes(
                     1,
-                    MaliciousBehaviour::new(true)
+                    MaliciousBehavior::new(true)
                         .set_maliciously_delay_execution(Duration::from_millis(execution_delay_ms))
                         .set_maliciously_delay_state_sync(Duration::from_millis(
                             state_sync_delay_ms,

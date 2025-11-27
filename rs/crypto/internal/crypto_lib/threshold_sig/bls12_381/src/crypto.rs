@@ -7,12 +7,12 @@ use super::types::{
 use crate::api::dkg_errors::InvalidArgumentError;
 
 use crate::types::PublicKey;
-use ic_crypto_internal_bls12_381_type::{verify_bls_signature, G1Projective, G2Affine, Scalar};
+use ic_crypto_internal_bls12_381_type::{G1Projective, G2Affine, Scalar, verify_bls_signature};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::{
-    crypto::{AlgorithmId, CryptoError, CryptoResult},
     NodeIndex, NumberOfNodes,
+    crypto::{AlgorithmId, CryptoError, CryptoResult},
 };
 
 /// Domain separator for Hash-to-G1 to be used for signature generation as
@@ -136,8 +136,7 @@ fn verify_keygen_args(
     if threshold > receivers {
         return Err(InvalidArgumentError {
             message: format!(
-                "Threshold too high: (threshold={} !<= {}=num_shares)",
-                threshold, receivers,
+                "Threshold too high: (threshold={threshold} !<= {receivers}=num_shares)",
             ),
         });
     }

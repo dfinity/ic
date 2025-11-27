@@ -4,7 +4,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
-    ic_gateway_vm::{IcGatewayVm, IC_GATEWAY_VM_NAME},
+    ic_gateway_vm::{IC_GATEWAY_VM_NAME, IcGatewayVm},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };

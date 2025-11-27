@@ -1,7 +1,7 @@
 use crate::target_subnet::TargetSubnet;
 
 use ic_base_types::SubnetId;
-use ic_recovery::{error::RecoveryResult, Recovery, CHECKPOINTS, CUPS_DIR, IC_STATE};
+use ic_recovery::{CHECKPOINTS, CUPS_DIR, IC_STATE, Recovery, error::RecoveryResult};
 
 use std::path::{Path, PathBuf};
 
@@ -61,11 +61,11 @@ impl Layout {
     }
 
     pub(crate) fn actual_manifest_file(&self, subnet_id: SubnetId) -> PathBuf {
-        self.root.join(format!("{}.manifest", subnet_id))
+        self.root.join(format!("{subnet_id}.manifest"))
     }
 
     pub(crate) fn subnet_public_key_file(&self, subnet_id: SubnetId) -> PathBuf {
-        self.root.join(format!("{}.pem", subnet_id))
+        self.root.join(format!("{subnet_id}.pem"))
     }
 
     pub(crate) fn data_dir(&self, target_subnet: TargetSubnet) -> PathBuf {

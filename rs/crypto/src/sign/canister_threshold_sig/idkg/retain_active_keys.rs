@@ -38,7 +38,7 @@ pub fn retain_keys_for_transcripts(
         .map(|transcript| {
             IDkgTranscriptInternal::try_from(transcript).map_err(|e| {
                 IDkgRetainKeysError::SerializationError {
-                    internal_error: format!("failed to deserialize internal transcript: {:?}", e),
+                    internal_error: format!("failed to deserialize internal transcript: {e:?}"),
                 }
             })
         })
@@ -67,15 +67,13 @@ fn oldest_public_key(
             Err(err) => Err(if err.is_reproducible() {
                 IDkgRetainKeysError::InternalError {
                     internal_error: format!(
-                        "Internal error while searching for iDKG public key: {:?}",
-                        err
+                        "Internal error while searching for iDKG public key: {err:?}"
                     ),
                 }
             } else {
                 IDkgRetainKeysError::TransientInternalError {
                     internal_error: format!(
-                        "Transient error while searching for iDKG public key: {:?}",
-                        err
+                        "Transient error while searching for iDKG public key: {err:?}"
                     ),
                 }
             }),

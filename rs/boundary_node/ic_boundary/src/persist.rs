@@ -4,13 +4,11 @@ use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
 use ethnum::u256;
-use rand::seq::SliceRandom;
 use tracing::{debug, error};
 
 use crate::{
-    errors::ErrorCause,
     metrics::{MetricParamsPersist, WithMetricsPersist},
-    snapshot::{Node, Subnet},
+    snapshot::Subnet,
 };
 
 #[derive(Copy, Clone)]
@@ -27,90 +25,57 @@ pub enum PersistStatus {
     SkippedEmpty,
 }
 
-// Converts byte slice principal to a u256
-fn principal_bytes_to_u256(p: &[u8]) -> u256 {
-    if p.len() > 29 {
-        panic!("Principal length should be <30 bytes");
-    }
+/// Converts Principal to a u256
+pub fn principal_to_u256(p: &Principal) -> u256 {
+    let b = p.as_slice();
 
     // Since Principal length can be anything in 0..29 range - prepend it with zeros to 32
-    let pad = 32 - p.len();
+    let pad = 32 - b.len();
     let mut padded: [u8; 32] = [0; 32];
-    padded[pad..32].copy_from_slice(p);
+    padded[pad..32].copy_from_slice(b);
 
     u256::from_be_bytes(padded)
 }
 
-// Principals are 2^232 max so we can use the u256 type to efficiently store them
-// Under the hood u256 is using two u128
-// This is more efficient than lexographically sorted hexadecimal strings as done in JS router
-// Currently the largest canister_id range is somewhere around 2^40 - so probably using one u128 would work for a long time
-// But going u256 makes it future proof and according to spec
+/// Route from a canister id range to a subnet.
+///
+/// Principals can be up to 2^232 long, so we can use the u256 type to efficiently store them.
+/// Under the hood u256 is using two u128, this is more efficient than lexographically sorted hexadecimal strings as was done in JS router.
+///
+/// Currently the largest canister id is somewhere around 2^40 - so probably using one u128 would work for a long time,
+/// but going u256 makes it future proof and according to spec.
 #[derive(Eq, PartialEq, Debug)]
-pub struct RouteSubnet {
-    pub id: Principal,
+pub struct Route {
+    pub subnet: Arc<Subnet>,
     pub range_start: u256,
     pub range_end: u256,
-    pub nodes: Vec<Arc<Node>>,
-}
-
-impl RouteSubnet {
-    pub fn pick_random_nodes(&self, n: usize) -> Result<Vec<Arc<Node>>, ErrorCause> {
-        let nodes = self
-            .nodes
-            .choose_multiple(&mut rand::thread_rng(), n)
-            .cloned()
-            .collect::<Vec<_>>();
-
-        if nodes.is_empty() {
-            return Err(ErrorCause::NoHealthyNodes);
-        }
-
-        Ok(nodes)
-    }
-
-    // max acceptable number of malicious nodes in a subnet
-    pub fn fault_tolerance_factor(&self) -> usize {
-        (self.nodes.len() - 1) / 3
-    }
-
-    pub fn pick_n_out_of_m_closest(
-        &self,
-        n: usize,
-        m: usize,
-    ) -> Result<Vec<Arc<Node>>, ErrorCause> {
-        // nodes should already be sorted by latency after persist() invocation
-        let m = std::cmp::min(m, self.nodes.len());
-        let nodes = &self.nodes[0..m];
-
-        let picked_nodes = nodes
-            .choose_multiple(&mut rand::thread_rng(), n)
-            .map(Arc::clone)
-            .collect::<Vec<_>>();
-
-        if picked_nodes.is_empty() {
-            return Err(ErrorCause::NoHealthyNodes);
-        }
-
-        Ok(picked_nodes)
-    }
 }
 
 #[derive(Eq, PartialEq, Debug)]
 pub struct Routes {
     pub node_count: u32,
-    // subnets should be sorted by `range_start` field for the binary search to work
-    pub subnets: Vec<Arc<RouteSubnet>>,
-    pub subnet_map: HashMap<Principal, Arc<RouteSubnet>>,
+    pub range_count: u32,
+
+    // Routes should be sorted by `range_start` field for the binary search to work
+    pub routes: Vec<Route>,
+    // Direct mapping from the Canister ID to the subnet for faster lookups
+    pub direct: HashMap<u256, Arc<Subnet>>,
+    // Mapping from Subnet ID to subnet
+    pub subnet_map: HashMap<Principal, Arc<Subnet>>,
 }
 
 impl Routes {
     // Look up the subnet by canister_id
-    pub fn lookup_by_canister_id(&self, canister_id: Principal) -> Option<Arc<RouteSubnet>> {
-        let canister_id_u256 = principal_bytes_to_u256(canister_id.as_slice());
+    pub fn lookup_by_canister_id(&self, canister_id: Principal) -> Option<Arc<Subnet>> {
+        let canister_id_u256 = principal_to_u256(&canister_id);
+
+        // First take a look in the direct table
+        if let Some(v) = self.direct.get(&canister_id_u256) {
+            return Some(v.clone());
+        }
 
         let idx = match self
-            .subnets
+            .routes
             .binary_search_by_key(&canister_id_u256, |x| x.range_start)
         {
             // Ok should happen rarely when canister_id equals lower bound of some subnet
@@ -131,16 +96,16 @@ impl Routes {
             }
         };
 
-        let subnet = self.subnets[idx].clone();
-        if canister_id_u256 < subnet.range_start || canister_id_u256 > subnet.range_end {
+        let route = &self.routes[idx];
+        if canister_id_u256 < route.range_start || canister_id_u256 > route.range_end {
             return None;
         }
 
-        Some(subnet)
+        Some(route.subnet.clone())
     }
 
     // Look up the subnet by subnet_id
-    pub fn lookup_by_id(&self, subnet_id: Principal) -> Option<Arc<RouteSubnet>> {
+    pub fn lookup_by_id(&self, subnet_id: Principal) -> Option<Arc<Subnet>> {
         self.subnet_map.get(&subnet_id).cloned()
     }
 }
@@ -168,49 +133,58 @@ impl Persist for Persister {
         }
 
         let node_count = subnets.iter().map(|x| x.nodes.len()).sum::<usize>() as u32;
+        let range_count = subnets.iter().map(|x| x.ranges.len()).sum::<usize>() as u32;
 
-        // Generate a list of subnets with a single canister range
-        // Can contain several entries with the same subnet ID
-        let mut rt_subnets = subnets
-            .into_iter()
-            .flat_map(|subnet| {
-                let mut nodes = subnet.nodes;
-                // Sort nodes by latency before publishing to avoid sorting on each retry_request() call.
-                nodes.sort_by(|a, b| a.avg_latency_secs.partial_cmp(&b.avg_latency_secs).unwrap());
+        let mut direct = HashMap::new();
+        let mut routes = Vec::new();
+        let mut subnet_map = HashMap::with_capacity(subnets.len());
 
-                subnet.ranges.into_iter().map(move |range| {
-                    Arc::new(RouteSubnet {
-                        id: subnet.id,
-                        range_start: principal_bytes_to_u256(range.start.as_slice()),
-                        range_end: principal_bytes_to_u256(range.end.as_slice()),
-                        nodes: nodes.clone(),
-                    })
-                })
-            })
-            .collect::<Vec<_>>();
+        for mut subnet in subnets {
+            // Sort nodes by an average latency before publishing
+            subnet
+                .nodes
+                .sort_by(|a, b| a.avg_latency_secs.total_cmp(&b.avg_latency_secs));
 
-        let subnet_map = rt_subnets
-            .iter()
-            .map(|subnet| (subnet.id, subnet.clone()))
-            .collect::<HashMap<_, _>>();
+            let subnet = Arc::new(subnet);
+            subnet_map.insert(subnet.id, subnet.clone());
+
+            for range in &subnet.ranges {
+                // For smaller ranges create a direct mapping from the canister id to a subnet
+                if range.len() <= 5 {
+                    for canister_id in range.canisters() {
+                        direct.insert(canister_id, subnet.clone());
+                    }
+                } else {
+                    // The rest goes into normal binary search array
+                    let route = Route {
+                        subnet: subnet.clone(),
+                        range_start: principal_to_u256(&range.start),
+                        range_end: principal_to_u256(&range.end),
+                    };
+
+                    routes.push(route);
+                }
+            }
+        }
 
         // Sort subnets by range_start for the binary search to work in lookup()
-        rt_subnets.sort_by_key(|x| x.range_start);
+        routes.sort_by_key(|x| x.range_start);
 
         let rt = Arc::new(Routes {
             node_count,
-            subnets: rt_subnets,
+            range_count,
+            routes,
+            direct,
             subnet_map,
         });
 
         // Load old subnet to get previous numbers
         let rt_old = self.published_routes.load_full();
-        let (ranges_old, nodes_old) =
-            rt_old.map_or((0, 0), |x| (x.subnets.len() as u32, x.node_count));
+        let (ranges_old, nodes_old) = rt_old.map_or((0, 0), |x| (x.range_count, x.node_count));
 
         let results = PersistResults {
             ranges_old,
-            ranges_new: rt.subnets.len() as u32,
+            ranges_new: rt.range_count,
             nodes_old,
             nodes_new: rt.node_count,
         };
@@ -254,7 +228,7 @@ impl<T: Persist> Persist for WithMetricsPersist<T> {
 
 #[cfg(test)]
 pub(crate) mod test {
-    use super::{principal_bytes_to_u256, Persist, PersistStatus, Persister, RouteSubnet, Routes};
+    use super::*;
 
     use std::{
         collections::HashMap,
@@ -266,29 +240,20 @@ pub(crate) mod test {
     use arc_swap::ArcSwapOption;
     use candid::Principal;
     use ethnum::u256;
-    use ic_bn_lib::principal;
+    use ic_bn_lib_common::principal;
     use ic_registry_subnet_type::SubnetType;
 
     use crate::{
-        snapshot::{node_test_id, CanisterRange, Node, Subnet},
+        snapshot::{CanisterRange, Node, Subnet, node_test_id},
         test_utils::valid_tls_certificate_and_validation_time,
     };
 
-    // Converts string principal to a u256
-    fn principal_to_u256(p: &str) -> Result<u256, Error> {
-        // Parse textual representation into a byte slice
-        let p = Principal::from_text(p)?;
-        let p = p.as_slice();
-
-        Ok(principal_bytes_to_u256(p))
-    }
-
     #[test]
-    fn test_principal_to_u256() -> Result<(), Error> {
-        assert!(principal_to_u256("foo-bar-baz").is_err());
-
+    fn test_principal_to_u256() {
         assert_eq!(
-            principal_to_u256("tg57h-slwo4-l4fga-d4zo2-4pc5z-lujes-uxqp3-pzchi-krm7r-sgvix-pae")?,
+            principal_to_u256(&principal!(
+                "tg57h-slwo4-l4fga-d4zo2-4pc5z-lujes-uxqp3-pzchi-krm7r-sgvix-pae"
+            )),
             u256::from_be_bytes([
                 0x00, 0x00, 0x00, 0x76, 0x77, 0x17, 0xc2, 0x98, 0x03, 0xe6, 0x5d, 0xae, 0x3c, 0x5d,
                 0xca, 0xe8, 0x92, 0x4a, 0x97, 0x83, 0xf6, 0xfc, 0x88, 0xe8, 0x54, 0x59, 0xf8, 0xc8,
@@ -297,7 +262,9 @@ pub(crate) mod test {
         );
 
         assert_eq!(
-            principal_to_u256("iineg-fibai-bqibi-ga4ea-searc-ijrif-iwc4m-bsibb-eirsi-jjge4-ucs")?,
+            principal_to_u256(&principal!(
+                "iineg-fibai-bqibi-ga4ea-searc-ijrif-iwc4m-bsibb-eirsi-jjge4-ucs"
+            )),
             u256::from_be_bytes([
                 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x10, 0x11,
                 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25,
@@ -306,15 +273,13 @@ pub(crate) mod test {
         );
 
         assert_eq!(
-            principal_to_u256("xtqug-aqaae-bagba-faydq-q")?,
+            principal_to_u256(&principal!("xtqug-aqaae-bagba-faydq-q")),
             u256::from_be_bytes([
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04,
                 0x05, 0x06, 0x07, 0x08
             ])
         );
-
-        Ok(())
     }
 
     pub fn node(i: u64, subnet_id: Principal) -> Arc<Node> {
@@ -380,10 +345,17 @@ pub(crate) mod test {
         let subnet3 = Subnet {
             id: subnet_id_3,
             subnet_type: SubnetType::Application,
-            ranges: vec![CanisterRange {
-                start: principal!("zdpgc-saqaa-aacai"),
-                end: principal!("fij4j-bi777-7qcai"),
-            }],
+            ranges: vec![
+                CanisterRange {
+                    start: principal!("zdpgc-saqaa-aacai"),
+                    end: principal!("fij4j-bi777-7qcai"),
+                },
+                // Range with 5 canisters that should go into direct table
+                CanisterRange {
+                    start: Principal::from_slice(&[0x01]),
+                    end: Principal::from_slice(&[0x05]),
+                },
+            ],
             nodes: vec![node3.clone()],
             replica_version: "7742d96ddd30aa6b607c9d2d4093a7b714f5b25b".to_string(),
         };
@@ -392,64 +364,58 @@ pub(crate) mod test {
     }
 
     pub fn generate_test_routes(offset: u64) -> Routes {
-        let subnet_id_1 =
-            principal!("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe");
-        let subnet_id_2 =
-            principal!("uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe");
-        let subnet_id_3 =
-            principal!("snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae");
-
-        let subnet1 = RouteSubnet {
-            id: subnet_id_1,
-            range_start: principal_to_u256("f7crg-kabae").unwrap(),
-            range_end: principal_to_u256("sxiki-5ygae-aq").unwrap(),
-            nodes: vec![node(1 + offset, subnet_id_1)],
-        };
-
-        let subnet2 = RouteSubnet {
-            id: subnet_id_2,
-            range_start: principal_to_u256("sqjm4-qahae-aq").unwrap(),
-            range_end: principal_to_u256("sqjm4-qahae-aq").unwrap(),
-            nodes: vec![node(2 + offset, subnet_id_2)],
-        };
-
-        let subnet3 = RouteSubnet {
-            id: subnet_id_1,
-            range_start: principal_to_u256("t5his-7iiae-aq").unwrap(),
-            range_end: principal_to_u256("jlzvg-byp77-7qcai").unwrap(),
-            nodes: vec![node(1 + offset, subnet_id_1)],
-        };
-
-        let subnet4 = RouteSubnet {
-            id: subnet_id_3,
-            range_start: principal_to_u256("zdpgc-saqaa-aacai").unwrap(),
-            range_end: principal_to_u256("fij4j-bi777-7qcai").unwrap(),
-            nodes: vec![node(3 + offset, subnet_id_3)],
-        };
-
-        let subnet5 = RouteSubnet {
-            id: subnet_id_2,
-            range_start: principal_to_u256("6l3jn-7icca-aaaai-b").unwrap(),
-            range_end: principal_to_u256("ca5tg-macd7-776ai-b").unwrap(),
-            nodes: vec![node(2 + offset, subnet_id_2)],
-        };
-
-        let subnets = vec![
-            Arc::new(subnet1),
-            Arc::new(subnet2),
-            Arc::new(subnet3),
-            Arc::new(subnet4),
-            Arc::new(subnet5),
-        ];
+        let subnets = generate_test_subnets(offset)
+            .into_iter()
+            .map(Arc::new)
+            .collect::<Vec<_>>();
 
         let subnet_map = subnets
             .iter()
-            .map(|subnet| (subnet.id, subnet.clone()))
+            .map(|x| (x.id, x.clone()))
             .collect::<HashMap<_, _>>();
+
+        let route1 = Route {
+            subnet: subnets[0].clone(),
+            range_start: principal_to_u256(&principal!("f7crg-kabae")),
+            range_end: principal_to_u256(&principal!("sxiki-5ygae-aq")),
+        };
+
+        let route2 = Route {
+            subnet: subnets[0].clone(),
+            range_start: principal_to_u256(&principal!("t5his-7iiae-aq")),
+            range_end: principal_to_u256(&principal!("jlzvg-byp77-7qcai")),
+        };
+
+        let route3 = Route {
+            subnet: subnets[2].clone(),
+            range_start: principal_to_u256(&principal!("zdpgc-saqaa-aacai")),
+            range_end: principal_to_u256(&principal!("fij4j-bi777-7qcai")),
+        };
+
+        let route4 = Route {
+            subnet: subnets[1].clone(),
+            range_start: principal_to_u256(&principal!("6l3jn-7icca-aaaai-b")),
+            range_end: principal_to_u256(&principal!("ca5tg-macd7-776ai-b")),
+        };
+
+        let routes = vec![route1, route2, route3, route4];
+        let mut direct = HashMap::new();
+        direct.insert(
+            principal_to_u256(&principal!("sqjm4-qahae-aq")),
+            subnets[1].clone(),
+        );
+        for i in 1..=5 {
+            direct.insert(
+                principal_to_u256(&Principal::from_slice(&[i])),
+                subnets[2].clone(),
+            );
+        }
 
         Routes {
             node_count: 3,
-            subnets,
+            range_count: 6,
+            routes,
+            direct,
             subnet_map,
         }
     }
@@ -460,7 +426,7 @@ pub(crate) mod test {
         let subnets = generate_test_subnets(0);
 
         let rt_init = Arc::new(ArcSwapOption::empty());
-        let persister = Persister::new(Arc::clone(&rt_init));
+        let persister = Persister::new(rt_init.clone());
 
         // Persist the routing table
         let result = persister.persist(subnets.clone());
@@ -547,13 +513,34 @@ pub(crate) mod test {
             "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe"
         );
 
+        // Test direct lookups
+        assert_eq!(
+            r.lookup_by_canister_id(principal!("sqjm4-qahae-aq"))
+                .unwrap()
+                .id
+                .to_string(),
+            "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe"
+        );
+
+        for i in 1..=5 {
+            assert_eq!(
+                r.lookup_by_canister_id(Principal::from_slice(&[i]))
+                    .unwrap()
+                    .id
+                    .to_string(),
+                "snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae"
+            );
+        }
+
         // Test failure
-        assert!(r
-            .lookup_by_canister_id(principal!("32fn4-qqaaa-aaaak-ad65a-cai"))
-            .is_none());
-        assert!(r
-            .lookup_by_canister_id(principal!("3we4s-lyaaa-aaaak-aegrq-cai"))
-            .is_none());
+        assert!(
+            r.lookup_by_canister_id(principal!("32fn4-qqaaa-aaaak-ad65a-cai"))
+                .is_none()
+        );
+        assert!(
+            r.lookup_by_canister_id(principal!("3we4s-lyaaa-aaaak-aegrq-cai"))
+                .is_none()
+        );
 
         Ok(())
     }

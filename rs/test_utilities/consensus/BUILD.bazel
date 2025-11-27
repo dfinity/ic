@@ -4,7 +4,9 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/crypto/test_utils/canister_threshold_sigs",
     "//rs/crypto/test_utils/ni-dkg",
+    "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash",
     "//rs/interfaces",
     "//rs/interfaces/state_manager",
@@ -16,6 +18,7 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
+    "@crate_index//:assert_matches",
     "@crate_index//:bincode",
     "@crate_index//:mockall",
     "@crate_index//:prost",

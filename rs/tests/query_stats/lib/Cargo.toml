@@ -8,13 +8,15 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
+futures = { workspace = true }
 ic-agent = { workspace = true }
+ic-management-canister-types-private = { path = "../../../types/management_canister_types/" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
-ic-universal-canister = { path = "../../universal_canister/lib" }
+ic-universal-canister = { path = "../../../universal_canister/lib" }
 ic-utils = { workspace = true }
-ic_consensus_system_test_utils = { path = "../../consensu/utils" }
+ic_consensus_system_test_utils = { path = "../../consensus/utils" }
 itertools = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }

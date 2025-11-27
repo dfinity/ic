@@ -401,14 +401,14 @@ mod validate_config {
 
 mod schema_upgrades {
     use crate::candid::CyclesManagement;
+    use crate::scheduler::Task;
     use crate::scheduler::test_fixtures::{
         cketh_ledger_suite, cketh_token_symbol, usdc, usdc_ledger_suite,
     };
-    use crate::scheduler::Task;
     use crate::state::test_fixtures::arb_state;
     use crate::state::{
-        decode, encode, Canisters, CanistersMetadata, Erc20Token, IndexCanister, LedgerCanister,
-        LedgerSuiteVersion, ManagedCanisters, State,
+        Canisters, CanistersMetadata, Erc20Token, IndexCanister, LedgerCanister,
+        LedgerSuiteVersion, ManagedCanisters, State, decode, encode,
     };
     use candid::{Deserialize, Principal};
     use proptest::proptest;

@@ -136,6 +136,7 @@ type InitialChainKeyConfig = record {
   key_configs : vec KeyConfigRequest;
   signature_request_timeout_ns : opt nat64;
   idkg_key_rotation_period_ms : opt nat64;
+  max_parallel_pre_signature_transcripts_in_creation : opt nat32;
 };
 
 type KeyConfigRequest = record {
@@ -161,20 +162,7 @@ type VetKdCurve = variant { bls12_381_g2 };
 
 type EcdsaCurve = variant { secp256k1 };
 
-type EcdsaInitialConfig = record {
-  quadruples_to_create_in_advance : nat32;
-  max_queue_size : opt nat32;
-  keys : vec EcdsaKeyRequest;
-  signature_request_timeout_ns : opt nat64;
-  idkg_key_rotation_period_ms : opt nat64;
-};
-
 type EcdsaKeyId = record { name : text; curve : EcdsaCurve };
-
-type EcdsaKeyRequest = record {
-  key_id : EcdsaKeyId;
-  subnet_id : opt principal;
-};
 
 type FirewallRule = record {
   ipv4_prefixes : vec text;
@@ -254,7 +242,9 @@ type MigrateCanistersPayload = record {
   target_subnet_id : principal;
 };
 
-type MigrateCanistersResponse = record {};
+type MigrateCanistersResponse = record {
+  registry_version: nat64;
+};
 
 type NodeOperatorRecord = record {
   ipv6 : opt text;
@@ -327,8 +317,15 @@ type ReviseElectedGuestosVersionsPayload = record {
   release_package_urls : vec text;
   replica_versions_to_unelect : vec text;
   replica_version_to_elect : opt text;
-  guest_launch_measurement_sha256_hex : opt text;
+  guest_launch_measurements : opt GuestLaunchMeasurements;
   release_package_sha256_hex : opt text;
+};
+
+type GuestLaunchMeasurements = record {
+ guest_launch_measurements : vec record {
+   metadata : opt record { kernel_cmdline : text };
+   measurement : blob;
+ };
 };
 
 type SetFirewallConfigPayload = record {
@@ -463,11 +460,43 @@ type ChainKeyConfig = record {
   key_configs : vec KeyConfig;
   signature_request_timeout_ns : opt nat64;
   idkg_key_rotation_period_ms : opt nat64;
+  max_parallel_pre_signature_transcripts_in_creation : opt nat32;
 };
 
 type UpdateUnassignedNodesConfigPayload = record {
   replica_version : opt text;
   ssh_readonly_access : opt vec text;
+};
+
+type SwapNodeInSubnetDirectlyPayload = record {
+  new_node_id : opt principal;
+  old_node_id : opt principal;
+};
+
+// Used to perform the first and last steps of subnet recovery.
+type SetSubnetOperationalLevelPayload = record {
+  // Which subnet not modify (if any).
+  subnet_id : opt principal;
+
+  // 1 = Normal. This results in setting is_halted in SubnetRecord to false.
+  // 2 = DownForRepairs. This results in setting is_halted in SubnetRecord to true.
+  operational_level : opt int32;
+
+  // SSH public keys that are allowed to ssh into nodes of the subnet with
+  // read-only access.
+  ssh_readonly_access : opt vec text;
+
+  // Similar to ssh_read_only_access, except that this targets one node at a
+  // time, not all the nodes in the subnet.
+  ssh_node_state_write_access : opt vec NodeSshAccess;
+};
+
+type NodeSshAccess = record {
+  // Doesn't make sense without this. (opt for future compatibility.)
+  node_id : opt principal;
+
+  // Doesn't make sense without this. (opt for future compatibility.)
+  public_keys : opt vec text;
 };
 
 service : {
@@ -508,6 +537,7 @@ service : {
   revise_elected_guestos_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   revise_elected_replica_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   set_firewall_config : (SetFirewallConfigPayload) -> ();
+  set_subnet_operational_level : (SetSubnetOperationalLevelPayload) -> ();
   update_api_boundary_nodes_version : (UpdateApiBoundaryNodesVersionPayload) -> ();
   update_elected_hostos_versions : (UpdateElectedHostosVersionsPayload) -> ();
   revise_elected_hostos_versions : (ReviseElectedHostosVersionsPayload) -> ();
@@ -528,4 +558,5 @@ service : {
   ) -> ();
   update_subnet : (UpdateSubnetPayload) -> ();
   update_unassigned_nodes_config : (UpdateUnassignedNodesConfigPayload) -> ();
+  swap_node_in_subnet_directly : (SwapNodeInSubnetDirectlyPayload) -> ();
 };

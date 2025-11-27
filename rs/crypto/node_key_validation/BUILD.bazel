@@ -23,7 +23,6 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/test_utils/keys",
     "//rs/crypto/utils/basic_sig",
-    "//rs/test_utilities",
     "@crate_index//:assert_matches",
     "@crate_index//:curve25519-dalek",
 ]

@@ -3,72 +3,11 @@ load("//bazel:defs.bzl", "rust_ic_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-error-types",
-    "//rs/bitcoin/replica_types",
-    "//rs/bitcoin/service",
-    "//rs/canister_client/sender",
-    "//rs/config",
-    "//rs/execution_environment",
-    "//rs/http_endpoints/async_utils",
-    "//rs/interfaces",
-    "//rs/interfaces/registry",
-    "//rs/interfaces/state_manager",
-    "//rs/monitoring/metrics",
-    "//rs/monitoring/tracing",
-    "//rs/prep",
-    "//rs/protobuf",
-    "//rs/registry/fake",
-    "//rs/registry/keys",
-    "//rs/registry/proto_data_provider",
-    "//rs/registry/provisional_whitelist",
-    "//rs/registry/subnet_type",
-    "//rs/replica:replica_lib",
-    "//rs/replicated_state",
-    "//rs/state_machine_tests",
-    "//rs/test_utilities",
-    "//rs/test_utilities/logger",
-    "//rs/test_utilities/types",
-    "//rs/types/base_types",
-    "//rs/types/management_canister_types",
-    "//rs/types/types",
-    "//rs/utils",
-    "@crate_index//:crossbeam-channel",
-    "@crate_index//:ic-btc-interface",
-    "@crate_index//:prost",
-    "@crate_index//:rand",
-    "@crate_index//:slog",
-    "@crate_index//:slog-scope",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
-    "@crate_index//:tonic",
-    "@crate_index//:tower",
-    "@crate_index//:tracing-subscriber",
-    "@crate_index//:wat",
-]
-
-MACRO_DEPENDENCIES = []
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/sha2",
-    "//rs/rust_canisters/canister_test",
-    "//rs/sys",
-    "@crate_index//:assert_matches",
-    "@crate_index//:candid",
-    "@crate_index//:maplit",
-]
-
-MACRO_DEV_DEPENDENCIES = []
-
 DEV_DATA = [
     # Keep sorted.
     ":replica_tests",
     "//rs/universal_canister/impl:universal_canister.wasm.gz",
 ]
-
-ALIASES = {}
 
 DEV_ENV = {
     # Keep sorted.
@@ -79,27 +18,81 @@ rust_library(
     name = "replica_tests",
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_name = "ic_replica_tests",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-error-types",
+        "//rs/canister_client/sender",
+        "//rs/config",
+        "//rs/execution_environment",
+        "//rs/interfaces",
+        "//rs/interfaces/registry",
+        "//rs/interfaces/state_manager",
+        "//rs/monitoring/metrics",
+        "//rs/monitoring/tracing",
+        "//rs/prep",
+        "//rs/protobuf",
+        "//rs/registry/fake",
+        "//rs/registry/keys",
+        "//rs/registry/proto_data_provider",
+        "//rs/registry/provisional_whitelist",
+        "//rs/registry/subnet_type",
+        "//rs/replica:replica_lib",
+        "//rs/replicated_state",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities",
+        "//rs/test_utilities/logger",
+        "//rs/test_utilities/types",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:prost",
+        "@crate_index//:rand",
+        "@crate_index//:slog-scope",
+        "@crate_index//:tokio",
+        "@crate_index//:tower",
+        "@crate_index//:tracing-subscriber",
+        "@crate_index//:wat",
+    ],
 )
 
 rust_test(
     name = "replica_tests_test",
-    aliases = ALIASES,
     crate = ":replica_tests",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_ic_test_suite(
     name = "replica_tests_integration",
     timeout = "long",
     srcs = glob(["tests/**/*.rs"]),
-    aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":replica_tests"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":replica_tests",
+        "//packages/ic-error-types",
+        "//rs/bitcoin/replica_types",
+        "//rs/bitcoin/service",
+        "//rs/config",
+        "//rs/crypto/sha2",
+        "//rs/http_endpoints/async_utils",
+        "//rs/registry/provisional_whitelist",
+        "//rs/registry/subnet_type",
+        "//rs/replicated_state",
+        "//rs/state_machine_tests",
+        "//rs/sys",
+        "//rs/test_utilities",
+        "//rs/test_utilities/types",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "//rs/utils",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:ic-btc-interface",
+        "@crate_index//:maplit",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+        "@crate_index//:tonic",
+    ],
 )

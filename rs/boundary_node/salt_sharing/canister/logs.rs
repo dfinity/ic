@@ -37,7 +37,7 @@ pub fn export_logs_as_http_response(request: HttpRequest) -> HttpResponse {
             Err(_) => {
                 return HttpResponseBuilder::bad_request()
                     .with_body_and_content_length("failed to parse the 'time' parameter")
-                    .build()
+                    .build();
             }
         },
         None => 0,

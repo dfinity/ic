@@ -1,8 +1,9 @@
-use bitcoin::Network;
+use crate::AdapterNetwork;
 use ic_config::logger::Config as LoggerConfig;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::time::Duration;
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 /// The source of the unix domain socket to be used for inter-process
@@ -17,8 +18,8 @@ pub enum IncomingSource {
 
 /// This struct contains configuration options for the BTC Adapter.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Config {
-    /// The type of Bitcoin network we plan to communicate to (e.g. Mainnet, Testnet, etc.).
+pub struct Config<Network> {
+    /// The type of Bitcoin or Dogecoin network we plan to communicate to (e.g. Mainnet, Testnet, etc.).
     pub network: Network,
     /// A list of DNS seeds for address discovery.
     #[serde(default)]
@@ -48,6 +49,10 @@ pub struct Config {
     /// Specifies the address limits used by the `AddressBook`.
     #[serde(default)]
     pub address_limits: (usize, usize),
+    /// Directory that stores cached data
+    pub cache_dir: Option<PathBuf>,
+    /// Request timeout duration.
+    pub request_timeout: Option<Duration>,
 }
 
 /// Set the default idle seconds to one hour.
@@ -55,44 +60,89 @@ fn default_idle_seconds() -> u64 {
     3600
 }
 
-/// This function is used to get the address limits for the `AddressBook`
-/// based on the provided `Network`.
-pub fn address_limits(network: Network) -> (usize, usize) {
+/// Default request timeout is 30 seconds.
+pub const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// For Regtest request timeout is set to 5 seconds.
+pub const REGTEST_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Return the request timeout duration according to the network.
+fn request_timeout(network: AdapterNetwork) -> Duration {
     match network {
-        Network::Bitcoin => (500, 2000),
-        Network::Testnet => (100, 1000),
-        //TODO(mihailjianu): revisit these values
-        Network::Testnet4 => (100, 1000),
-        Network::Signet => (1, 1),
-        Network::Regtest => (1, 1),
-        _ => (1, 1),
+        AdapterNetwork::Bitcoin(bitcoin::Network::Regtest)
+        | AdapterNetwork::Dogecoin(bitcoin::dogecoin::Network::Regtest) => REGTEST_REQUEST_TIMEOUT,
+        _ => DEFAULT_REQUEST_TIMEOUT,
     }
 }
 
-impl Config {
-    /// This function returns the port to use based on the Bitcoin network provided.
-    pub fn network_port(&self) -> u16 {
-        match self.network {
-            Network::Bitcoin => 8333,
-            Network::Testnet => 18333,
-            Network::Testnet4 => 48333,
-            _ => 8333,
+/// This function is used to get the address limits for the `AddressBook`
+/// based on the provided `Network`.
+pub fn address_limits(network: AdapterNetwork) -> (usize, usize) {
+    match network {
+        AdapterNetwork::Bitcoin(network) => {
+            use bitcoin::Network::*;
+            match network {
+                Bitcoin => (500, 2000),
+                Testnet => (100, 1000),
+                //TODO(mihailjianu): revisit these values
+                Testnet4 => (100, 1000),
+                Signet => (1, 1),
+                Regtest => (1, 1),
+                _ => (1, 1),
+            }
+        }
+        AdapterNetwork::Dogecoin(network) => {
+            use bitcoin::dogecoin::Network::*;
+            match network {
+                Dogecoin => (200, 1000),
+                //TODO(XC-423): revisit these values
+                Testnet => (20, 100),
+                Regtest => (1, 1),
+                _ => (1, 1),
+            }
         }
     }
 }
 
-impl Default for Config {
-    fn default() -> Self {
+impl<Network> Config<Network> {
+    /// Return a config of a different network while retaining the rest fields.
+    pub fn with_network<T>(self, network: T) -> Config<T> {
+        Config {
+            network,
+            dns_seeds: self.dns_seeds,
+            socks_proxy: self.socks_proxy,
+            nodes: self.nodes,
+            idle_seconds: self.idle_seconds,
+            ipv6_only: self.ipv6_only,
+            logger: self.logger,
+            incoming_source: self.incoming_source,
+            address_limits: self.address_limits,
+            cache_dir: self.cache_dir,
+            request_timeout: self.request_timeout,
+        }
+    }
+
+    /// Return the request timeout setting, and use default value if not set.
+    pub fn request_timeout(&self) -> Duration {
+        self.request_timeout.unwrap_or(DEFAULT_REQUEST_TIMEOUT)
+    }
+}
+
+impl<Network: Copy + Into<AdapterNetwork>> Config<Network> {
+    /// Return a config of the given network with default settings for the rest fields.
+    pub fn default_with(network: Network) -> Self {
         Self {
+            network,
             dns_seeds: Default::default(),
-            network: Network::Bitcoin,
             socks_proxy: Default::default(),
             nodes: vec![],
             idle_seconds: default_idle_seconds(),
             ipv6_only: false,
             logger: LoggerConfig::default(),
             incoming_source: Default::default(),
-            address_limits: address_limits(Network::Bitcoin), // Address limits used for Bitcoin mainnet
+            address_limits: address_limits(network.into()),
+            cache_dir: None,
+            request_timeout: Some(request_timeout(network.into())),
         }
     }
 }
@@ -101,19 +151,18 @@ impl Default for Config {
 pub mod test {
 
     use super::*;
+    use crate::common::BlockchainNetwork;
 
-    #[derive(Default)]
-    pub struct ConfigBuilder {
-        config: Config,
+    pub struct ConfigBuilder<Network> {
+        config: Config<Network>,
     }
 
-    impl ConfigBuilder {
-        pub fn new() -> Self {
+    impl<Network: BlockchainNetwork + Into<AdapterNetwork>> ConfigBuilder<Network> {
+        pub fn default_with(network: Network) -> Self {
             Self {
-                config: Config::default(),
+                config: Config::default_with(network),
             }
         }
-
         pub fn with_dns_seeds(mut self, dns_seeds: Vec<String>) -> Self {
             self.config.dns_seeds = dns_seeds;
             self
@@ -126,7 +175,7 @@ pub mod test {
 
         pub fn with_network(mut self, network: Network) -> Self {
             self.config.network = network;
-            self.config.address_limits = address_limits(network);
+            self.config.address_limits = address_limits(network.into());
             self
         }
 
@@ -135,7 +184,7 @@ pub mod test {
             self
         }
 
-        pub fn build(self) -> Config {
+        pub fn build(self) -> Config<Network> {
             self.config
         }
     }

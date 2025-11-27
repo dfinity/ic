@@ -1,19 +1,18 @@
 use std::sync::Arc;
 
 use axum::{
-    body::{to_bytes, Body},
+    Extension,
+    body::{Body, to_bytes},
     extract::{Request, State},
     middleware::Next,
     response::{IntoResponse, Response},
-    Extension,
 };
 use http::StatusCode;
 
 use crate::{
     errors::{ApiError, ErrorCause},
-    persist::RouteSubnet,
     routes::RequestContext,
-    snapshot::Node,
+    snapshot::{Node, Subnet},
 };
 
 #[derive(Clone)]
@@ -56,7 +55,7 @@ fn request_needs_retrying(response: &Response) -> bool {
 pub async fn retry_request(
     State(params): State<RetryParams>,
     Extension(ctx): Extension<Arc<RequestContext>>,
-    Extension(subnet): Extension<Arc<RouteSubnet>>,
+    Extension(subnet): Extension<Arc<Subnet>>,
     mut request: Request,
     next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -131,15 +130,18 @@ mod test {
 
     use anyhow::Error;
     use axum::{
-        body::Body, extract::State, http::Request, middleware, response::IntoResponse,
-        routing::method_routing::post, Router,
+        Router, body::Body, extract::State, http::Request, middleware, response::IntoResponse,
+        routing::method_routing::post,
     };
     use http::StatusCode;
-    use ic_bn_lib::principal;
+    use ic_bn_lib_common::principal;
     use ic_types::CanisterId;
     use tower::Service;
 
-    use crate::routes::{test::test_route_subnet, RequestType};
+    use crate::{
+        http::RequestType,
+        persist::test::{generate_test_subnets, node},
+    };
 
     struct TestState {
         failures: u8,
@@ -160,11 +162,17 @@ mod test {
 
         let ctx = Arc::new(ctx);
 
+        let mut subnet = generate_test_subnets(0)[0].clone();
+        subnet.nodes = vec![];
+        for i in 0..10 {
+            subnet.nodes.push(node(i, subnet.id))
+        }
+
         let mut req = Request::post("/").body(Body::from("foobar")).unwrap();
         req.extensions_mut().insert(ctx);
         req.extensions_mut()
             .insert(CanisterId::from_str("f7crg-kabae").unwrap());
-        req.extensions_mut().insert(Arc::new(test_route_subnet(10)));
+        req.extensions_mut().insert(Arc::new(subnet));
 
         req
     }
@@ -196,7 +204,7 @@ mod test {
         }));
 
         let mut app = Router::new()
-            .route("/", post(handler).with_state(Arc::clone(&state)))
+            .route("/", post(handler).with_state(state.clone()))
             .layer(middleware::from_fn_with_state(
                 RetryParams {
                     retry_count: 3,
@@ -207,7 +215,7 @@ mod test {
             ));
 
         // Check successful retry
-        let req = gen_request(RequestType::Query);
+        let req = gen_request(RequestType::QueryV2);
         let res = app.call(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
 
@@ -216,7 +224,7 @@ mod test {
             state.write().unwrap().failures = 4;
         }
 
-        let req = gen_request(RequestType::Query);
+        let req = gen_request(RequestType::QueryV2);
         let res = app.call(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::INTERNAL_SERVER_ERROR);
 
@@ -226,7 +234,7 @@ mod test {
             state.write().unwrap().fail_code = StatusCode::BAD_REQUEST;
         }
 
-        let req = gen_request(RequestType::Query);
+        let req = gen_request(RequestType::QueryV2);
         let res = app.call(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 
@@ -236,7 +244,7 @@ mod test {
             state.write().unwrap().fail_code = StatusCode::INTERNAL_SERVER_ERROR;
         }
 
-        let req = gen_request(RequestType::Call);
+        let req = gen_request(RequestType::CallV2);
         let res = app.call(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::INTERNAL_SERVER_ERROR);
 
@@ -246,7 +254,7 @@ mod test {
             state.write().unwrap().error_cause = Some(ErrorCause::ReplicaErrorConnect);
         }
 
-        let req = gen_request(RequestType::Query);
+        let req = gen_request(RequestType::QueryV2);
         let res = app.call(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
 
@@ -256,13 +264,13 @@ mod test {
             state.write().unwrap().error_cause = Some(ErrorCause::PayloadTooLarge(123));
         }
 
-        let req = gen_request(RequestType::Query);
+        let req = gen_request(RequestType::QueryV2);
         let res = app.call(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::INTERNAL_SERVER_ERROR);
 
         // Check update call retried
         let mut app = Router::new()
-            .route("/", post(handler).with_state(Arc::clone(&state)))
+            .route("/", post(handler).with_state(state.clone()))
             .layer(middleware::from_fn_with_state(
                 RetryParams {
                     retry_count: 3,
@@ -277,7 +285,7 @@ mod test {
             state.write().unwrap().error_cause = None;
         }
 
-        let req = gen_request(RequestType::Call);
+        let req = gen_request(RequestType::CallV2);
         let res = app.call(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
 

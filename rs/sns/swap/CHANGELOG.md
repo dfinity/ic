@@ -11,6 +11,24 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-09-05: Proposal 138374
+
+http://dashboard.internetcomputer.org/proposal/138374
+
+## Changed
+
+* Expose a metric for whether auto finalization has failed.
+
+
+# 2025-08-01: Proposal 137686
+
+http://dashboard.internetcomputer.org/proposal/137686
+
+## Added
+
+Swap `get_canister_status` method now returns the `memory_metrics` field.
+
+
 # 2025-07-11: Proposal 137349
 
 http://dashboard.internetcomputer.org/proposal/137349

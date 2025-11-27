@@ -39,7 +39,7 @@ use anyhow::Result;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::ic_gateway_vm::{
-    HasIcGatewayVm, IcGatewayVm, IC_GATEWAY_VM_NAME,
+    HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm,
 };
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
@@ -66,6 +66,7 @@ pub fn setup(env: TestEnv) {
     PrometheusVm::default()
         .start(&env)
         .expect("Failed to start prometheus VM");
+
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
@@ -98,7 +99,12 @@ pub fn setup(env: TestEnv) {
 
     let app_effective_canister_id = app_node.effective_canister_id();
     let logger = env.logger();
-    info!(logger, "Use {} as effective canister ID when creating canisters for your dapp, e.g., using --provisional-create-canister-effective-canister-id {} with DFX", app_effective_canister_id, app_effective_canister_id);
+    info!(
+        logger,
+        "Use {} as effective canister ID when creating canisters for your dapp, e.g., using --provisional-create-canister-effective-canister-id {} with DFX",
+        app_effective_canister_id,
+        app_effective_canister_id
+    );
 
     let sns_aggregator_canister_id = install_sns_aggregator(&env, &ic_gateway_url, sns_node);
     install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, Some(sns_aggregator_canister_id));

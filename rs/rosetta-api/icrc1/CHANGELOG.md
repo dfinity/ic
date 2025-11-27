@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [1.2.7] - 2025-10-29
+### Added
+- Metrics for `rosetta_synched_block_height` and `rosetta_target_block_height` ([#6896](https://github.com/dfinity/ic/pull/6896))
+
+### Changed
+- Burn and mint transaction fees are taken into account ([#6620](https://github.com/dfinity/ic/pull/6620))
+
+### Fixed
+- Fix exponential backoff in case of an error ([#6734](https://github.com/dfinity/ic/pull/6734))
+
+## [1.2.6] - 2025-08-11
+### Changed
+- Deprecate `network_type` parameter ([#6434](https://github.com/dfinity/ic/pull/6434))
+
+## [1.2.5] - 2025-08-11
+### Fixed
+- Handle startup ledger errors gracefully ([#5884](https://github.com/dfinity/ic/pull/5884))
+
 ## [1.2.4] - 2025-07-07
 ### Added
 - Allow retrieving the aggregate balance of a ICRC1 token account ([#5773](https://github.com/dfinity/ic/pull/5773))

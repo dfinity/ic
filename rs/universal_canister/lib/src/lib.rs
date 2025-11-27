@@ -22,18 +22,14 @@ pub fn get_universal_canister_wasm() -> Vec<u8> {
     let uc_wasm_path = std::env::var("UNIVERSAL_CANISTER_WASM_PATH")
         .expect("UNIVERSAL_CANISTER_WASM_PATH not set");
     std::fs::read(&uc_wasm_path)
-        .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", uc_wasm_path))
+        .unwrap_or_else(|e| panic!("Could not read WASM from {uc_wasm_path:?}: {e:?}"))
 }
 
 pub fn get_universal_canister_no_heartbeat_wasm() -> Vec<u8> {
     let uc_no_heartbeat_wasm_path = std::env::var("UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH")
         .expect("UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH not set");
-    std::fs::read(&uc_no_heartbeat_wasm_path).unwrap_or_else(|e| {
-        panic!(
-            "Could not read WASM from {:?}: {e:?}",
-            uc_no_heartbeat_wasm_path
-        )
-    })
+    std::fs::read(&uc_no_heartbeat_wasm_path)
+        .unwrap_or_else(|e| panic!("Could not read WASM from {uc_no_heartbeat_wasm_path:?}: {e:?}"))
 }
 
 pub fn get_universal_canister_wasm_sha256() -> [u8; 32] {
@@ -266,9 +262,26 @@ impl PayloadBuilder {
         self
     }
 
+    pub fn set_on_low_wasm_memory_method<P: AsRef<[u8]>>(mut self, payload: P) -> Self {
+        self = self.push_bytes(payload.as_ref());
+        self.0.push(Ops::SetOnLowWasmMemoryMethod as u8);
+        self
+    }
+
+    pub fn set_transform<P: AsRef<[u8]>>(mut self, payload: P) -> Self {
+        self = self.push_bytes(payload.as_ref());
+        self.0.push(Ops::SetTransform as u8);
+        self
+    }
+
     pub fn api_global_timer_set(mut self, timestamp: u64) -> Self {
         self = self.push_int64(timestamp);
         self.0.push(Ops::ApiGlobalTimerSet as u8);
+        self
+    }
+
+    pub fn canister_status(mut self) -> Self {
+        self.0.push(Ops::CanisterStatus as u8);
         self
     }
 
@@ -448,6 +461,14 @@ impl PayloadBuilder {
         self
     }
 
+    /// This function should only be used for testing the system API `ic0.call_data_append`,
+    /// but *not* for testing inter-canister calls.
+    pub fn call_data_append(mut self, bytes: &[u8]) -> Self {
+        self = self.push_bytes(bytes);
+        self.0.push(Ops::CallDataAppend as u8);
+        self
+    }
+
     pub fn message_payload(mut self) -> Self {
         self.0.push(Ops::MessagePayload as u8);
         self
@@ -599,6 +620,12 @@ impl PayloadBuilder {
         self
     }
 
+    /// Pushes the method name onto the stack.
+    pub fn msg_method_name(mut self) -> Self {
+        self.0.push(Ops::MsgMethodName as u8);
+        self
+    }
+
     /// Pushes the size of the argument data onto the stack.
     pub fn msg_arg_data_size(mut self) -> Self {
         self.0.push(Ops::MsgArgDataSize as u8);
@@ -694,6 +721,11 @@ impl PayloadBuilder {
         self
     }
 
+    pub fn data_certificate_present(mut self) -> Self {
+        self.0.push(Ops::DataCertificatePresent as u8);
+        self
+    }
+
     pub fn data_certificate(mut self) -> Self {
         self.0.push(Ops::DataCertificate as u8);
         self
@@ -733,6 +765,12 @@ impl PayloadBuilder {
         self = self.push_int64(request_size);
         self = self.push_int64(max_res_bytes);
         self.0.push(Ops::CostHttpRequest as u8);
+        self
+    }
+
+    pub fn cost_http_request_v2(mut self, data: &[u8]) -> Self {
+        self = self.push_bytes(data);
+        self.0.push(Ops::CostHttpRequestV2 as u8);
         self
     }
 
@@ -785,6 +823,15 @@ impl PayloadBuilder {
     pub fn memory_size_is_at_least(mut self, amount: u64) -> Self {
         self = self.push_int64(amount);
         self.0.push(Ops::MemorySizeIsAtLeast as u8);
+        self
+    }
+
+    /// Grows WASM memory by the specified amount of WASM pages.
+    /// This function should only be used to test WASM memory growth,
+    /// it does not substitute the Rust allocator.
+    pub fn wasm_memory_grow(mut self, pages: u32) -> Self {
+        self = self.push_int(pages);
+        self.0.push(Ops::WasmMemoryGrow as u8);
         self
     }
 

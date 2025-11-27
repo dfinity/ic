@@ -9,10 +9,10 @@ use anyhow::Error;
 use async_trait::async_trait;
 use bytes::Buf;
 use http::Method;
-use ic_bn_lib::{http::Client, tasks::Run};
+use ic_bn_lib_common::traits::{Run, http::Client};
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
-use simple_moving_average::{SumTreeSMA, SMA};
+use simple_moving_average::{SMA, SumTreeSMA};
 #[allow(clippy::disallowed_types)]
 use tokio::sync::Mutex;
 use tokio::{
@@ -30,14 +30,21 @@ use crate::{
     snapshot::{Node, Subnet},
 };
 
+/// An error that can occur during check
 #[derive(Clone, PartialEq, Debug)]
 pub enum CheckError {
+    /// Generic error
     Generic(String),
-    Network(String),  // Unable to make HTTP request
-    Http(u16),        // Got non-200 status code
-    ReadBody(String), // Cannot read response body
-    Cbor(String),     // Cannot parse CBOR payload
-    Health,           // Node reported itself as un-healthy
+    /// Unable to make HTTP request
+    Network(String),
+    /// Got non-200 status code
+    Http(u16),
+    /// Cannot read response body
+    ReadBody(String),
+    /// Cannot parse CBOR payload
+    Cbor(String),
+    /// Node reported itself as un-healthy
+    Health,
 }
 
 impl CheckError {
@@ -76,13 +83,13 @@ struct NodeState {
     avg_latency_secs: f64,
 }
 
-// Send node's state message to the SubnetActor after this number of health checks have passed.
+/// Send node's state message to the SubnetActor after this number of health checks have passed.
 const CHECKS_MSG_PERIODICITY: usize = 10;
-// Send node's state message to the SubnetActor, if node's latency has deviated from the average by more than this threshold value.
+/// Send node's state message to the SubnetActor, if node's latency has deviated from the average by more than this threshold value.
 const LATENCY_CHANGE_THRESHOLD: f64 = 0.15;
 
-// NodeActor periodically runs the health checking with given interval and sends the NodeState down to
-// SubnetActor when it changes
+/// NodeActor periodically runs the health checking with given interval and sends the NodeState down to
+/// SubnetActor when it changes
 struct NodeActor {
     idx: usize,
     node: Arc<Node>,
@@ -114,7 +121,7 @@ impl NodeActor {
         }
     }
 
-    // Perform the health check
+    /// Perform the health check
     async fn check(&mut self) {
         self.checks_counter += 1;
 
@@ -181,8 +188,8 @@ impl NodeActor {
     }
 }
 
-// SubnetActor spawns NodeActors, receives their state, computes minimum height for the subnet and sends the
-// Subnet with healthy nodes down to GlobalActor when the health state changes
+/// SubnetActor spawns NodeActors, receives their state, computes minimum height for the subnet and sends the
+/// Subnet with healthy nodes down to GlobalActor when the health state changes
 struct SubnetActor {
     idx: usize,
     subnet: Subnet,
@@ -242,6 +249,7 @@ impl SubnetActor {
         }
     }
 
+    /// Calculate the minimum height across all nodes in this subnet
     fn calc_min_height(&self) -> u64 {
         let mut heights = self
             .states
@@ -268,7 +276,7 @@ impl SubnetActor {
         }
     }
 
-    // This remembers if we have passed the init state so that we don't have to iterate each time
+    /// This remembers if we have passed the init state so that we don't have to iterate each time
     fn init_done(&mut self) -> bool {
         if !self.init_done {
             self.init_done = !self.states.iter().any(|x| x.is_none());
@@ -372,7 +380,7 @@ impl SubnetActor {
     }
 }
 
-// GlobalActor spawns SubnetActors, receives & aggregates their state and persists the new routing table snapshots
+/// GlobalActor spawns SubnetActors, receives & aggregates their state and persists the new routing table snapshots
 struct GlobalActor {
     subnets: Vec<Option<Subnet>>,
     token: CancellationToken,
@@ -425,7 +433,7 @@ impl GlobalActor {
         }
     }
 
-    // This remembers if we have passed the init state so that we don't have to iterate each time
+    /// This remembers if we have passed the init state so that we don't have to iterate each time
     fn init_done(&mut self) -> bool {
         if !self.init_done {
             self.init_done = !self.subnets.iter().any(|x| x.is_none());
@@ -434,7 +442,7 @@ impl GlobalActor {
         self.init_done
     }
 
-    // Persist the current health state in a routing table
+    /// Persist the current health state in a routing table
     fn persist(&mut self) {
         // Don't do anything unless we already got an initial iteration of states from all subnet actors
         if !self.init_done() {
@@ -567,6 +575,7 @@ pub trait Check: Send + Sync {
     async fn check(&self, node: &Node) -> Result<CheckResult, CheckError>;
 }
 
+/// Checks the node's health
 pub struct Checker {
     http_client: Arc<dyn Client>,
     timeout: Duration,
@@ -704,7 +713,7 @@ pub(crate) mod test {
     use super::*;
     use crate::{
         persist::{Persister, Routes},
-        snapshot::{node_test_id, subnet_test_id, CanisterRange, Node, RegistrySnapshot, Subnet},
+        snapshot::{CanisterRange, Node, RegistrySnapshot, Subnet, node_test_id, subnet_test_id},
         test_utils::valid_tls_certificate_and_validation_time,
     };
 
@@ -712,9 +721,8 @@ pub(crate) mod test {
 
     impl Routes {
         // Check if given node exists in the lookup table
-        // It's O(n) and used only in tests
         pub fn node_exists(&self, node_id: Principal) -> bool {
-            for s in self.subnets.iter() {
+            for s in self.subnet_map.values() {
                 for n in s.nodes.iter() {
                     if n.id == node_id {
                         return true;
@@ -795,7 +803,7 @@ pub(crate) mod test {
     #[tokio::test]
     async fn test_check_some_unhealthy() -> Result<(), Error> {
         let routes = Arc::new(ArcSwapOption::empty());
-        let persister = Arc::new(Persister::new(Arc::clone(&routes)));
+        let persister = Arc::new(Persister::new(routes.clone()));
 
         let mut checker = MockCheck::new();
         checker
@@ -841,7 +849,7 @@ pub(crate) mod test {
             if routes.load().is_some() {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(20)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
         let rt = routes.load_full().unwrap();
@@ -859,7 +867,7 @@ pub(crate) mod test {
     #[tokio::test]
     async fn test_check_nodes_gone() -> Result<(), Error> {
         let routes = Arc::new(ArcSwapOption::empty());
-        let persister = Arc::new(Persister::new(Arc::clone(&routes)));
+        let persister = Arc::new(Persister::new(routes.clone()));
 
         let mut checker = MockCheck::new();
         checker
@@ -951,7 +959,7 @@ pub(crate) mod test {
         checker.expect_check().returning(|_| Ok(check_result(1000)));
 
         let routes = Arc::new(ArcSwapOption::empty());
-        let persister = Arc::new(Persister::new(Arc::clone(&routes)));
+        let persister = Arc::new(Persister::new(routes.clone()));
 
         let (channel_send, channel_recv) = watch::channel(None);
         let runner = Runner::new(
@@ -978,13 +986,13 @@ pub(crate) mod test {
             if routes.load().is_some() {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(20)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
         let rt = routes.load_full().unwrap();
         assert_eq!(rt.node_count, snapshot.nodes.len() as u32);
         for (i, j) in [(0, 1), (1, 0)].iter() {
-            let mut nodes_left = rt.subnets[*i].nodes.clone();
+            let mut nodes_left = rt.routes[*i].subnet.nodes.clone();
             let mut nodes_right = snapshot.subnets[*j].nodes.clone();
             nodes_left.sort_by_key(|n| n.id);
             nodes_right.sort_by_key(|n| n.id);

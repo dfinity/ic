@@ -1,7 +1,9 @@
 name: PR Slack Notification
 
 on:
-  pull_request:
+  # pull_request_target needs to be used so that we can use the SLACK_API_TOKEN secret for forked PRs
+  # however, pull_request_target cannot be used with a checkout step, which why we need to curl the team-channels.json file
+  pull_request_target:
     types: [review_requested]
 
 jobs:
@@ -9,8 +11,19 @@ jobs:
     name: Notify Slack
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      # Sanitize PR title for Slack (<, >, &)
+      - name: Sanitize PR title
+        if: github.event.pull_request.head.repo.full_name == github.repository # only for internal PRs
+        id: sanitize
+        env:
+          RAW_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          ESCAPED_TITLE=$(echo "$RAW_TITLE" \
+            | sed 's/&/\&amp;/g' \
+            | sed 's/</\&lt;/g' \
+            | sed 's/>/\&gt;/g')
+          echo "safe_title=$ESCAPED_TITLE" >> "$GITHUB_OUTPUT"
+
       - name: Get requested team reviewers
         id: get-reviewers
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
@@ -18,16 +31,19 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             return "requested_team" in context.payload ? context.payload.requested_team.name : ""
+
       - name: Lookup Slack channel
         id: lookup
         if: steps.get-reviewers.outputs.result != '""'
         run: |
           TEAM=${{ steps.get-reviewers.outputs.result }}
-          CHANNEL=$(jq -r --arg team "$TEAM" '.[$team]' .github/workflows/team-channels.json)
+          curl -sSL https://raw.githubusercontent.com/dfinity/ic/master/.github/workflows/team-channels.json -o team-channels.json
+          CHANNEL=$(jq -r --arg team "$TEAM" '.[$team]' team-channels.json)
           echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
           echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
         env:
-          MESSAGE: ":github: `${{ github.repository }}` <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>"
+          MESSAGE: ":github: `${{ github.repository }}` <${{ github.event.pull_request.html_url }}|${{ steps.sanitize.outputs.safe_title || '' }}>"
+
       - name: Post to a Slack channel
         if: steps.get-reviewers.outputs.result != '""' && steps.lookup.outputs.channel != 'null'
         id: slack

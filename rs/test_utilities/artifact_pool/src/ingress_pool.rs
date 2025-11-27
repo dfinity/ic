@@ -9,7 +9,7 @@ use ic_interfaces::{
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_types::{artifact::IngressMessageId, messages::SignedIngress, NodeId};
+use ic_types::{NodeId, artifact::IngressMessageId, messages::SignedIngress};
 
 pub struct TestIngressPool {
     pub pool: IngressPoolImpl,

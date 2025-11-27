@@ -27,6 +27,7 @@ build-info = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
+chrono = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
 dyn-clone = "1.0.14"
 futures = { workspace = true }
@@ -37,16 +38,20 @@ ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for-wasm" }
 ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
+ic-limits = { path = "../../limits" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
+ic-nervous-system-common-validation = { path = "../../nervous_system/common/validation" }
 ic-nervous-system-governance = { path = "../../nervous_system/governance" }
 ic-nervous-system-linear-map = { path = "../../nervous_system/linear_map" }
+ic-nervous-system-lock = { path = "../../nervous_system/lock" }
 ic-nervous-system-long-message = { path = "../../nervous_system/long_message" }
 ic-nervous-system-timer-task = { path = "../../nervous_system/timer_task" }
+ic-nervous-system-rate-limits = { path = "../../nervous_system/rate_limits" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
@@ -62,6 +67,7 @@ ic-nns-governance-init = { path = "./init" }
 ic-nns-handler-root-interface = { path = "../handlers/root/interface" }
 ic-node-rewards-canister-api = { path = "../../node_rewards/canister/api" }
 ic-protobuf = { path = "../../protobuf" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-sns-init = { path = "../../sns/init" }                                                         # This is just for a couple of PB definitions.
 ic-sns-root = { path = "../../sns/root" }                                                         # This is just for a couple of PB definitions.
 ic-sns-swap = { path = "../../sns/swap" }                                                         # This is just for a couple of PB definitions.
@@ -91,7 +97,7 @@ registry-canister = { path = "../../registry/canister" }
 strum_macros = { workspace = true }
 strum = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
-canbench-rs = { version = "0.1.7", optional = true }
+canbench-rs = { workspace = true, optional = true }
 
 local_key = { path = "../../tla_instrumentation/local_key", optional = true }
 tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation", optional = true }

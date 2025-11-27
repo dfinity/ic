@@ -2,11 +2,10 @@ use crate::{
     convert::to_model_account_identifier,
     errors::ApiError,
     models::{
-        self,
+        self, Operation, OperationIdentifier,
         amount::{signed_amount, tokens_to_amount},
         operation::OperationType,
         seconds::Seconds,
-        Operation, OperationIdentifier,
     },
     transaction_id::TransactionIdentifier,
 };
@@ -32,6 +31,7 @@ pub const STOP_DISSOLVE: &str = "STOP_DISSOLVE";
 pub const SET_DISSOLVE_TIMESTAMP: &str = "SET_DISSOLVE_TIMESTAMP";
 pub const CHANGE_AUTO_STAKE_MATURITY: &str = "CHANGE_AUTO_STAKE_MATURITY";
 pub const DISBURSE: &str = "DISBURSE";
+pub const DISBURSE_MATURITY: &str = "DISBURSE_MATURITY";
 pub const DISSOLVE_TIME_UTC_SECONDS: &str = "dissolve_time_utc_seconds";
 pub const ADD_HOT_KEY: &str = "ADD_HOT_KEY";
 pub const REMOVE_HOTKEY: &str = "REMOVE_HOTKEY";
@@ -70,6 +70,9 @@ pub enum RequestType {
     #[serde(rename = "DISBURSE")]
     #[serde(alias = "Disperse")]
     Disburse { neuron_index: u64 },
+    #[serde(rename = "DISBURSE_MATURITY")]
+    #[serde(alias = "DisburseMaturity")]
+    DisburseMaturity { neuron_index: u64 },
     #[serde(rename = "ADD_HOT_KEY")]
     #[serde(alias = "AddHotKey")]
     AddHotKey { neuron_index: u64 },
@@ -127,6 +130,7 @@ impl RequestType {
             RequestType::ListNeurons { .. } => LIST_NEURONS,
             RequestType::Follow { .. } => FOLLOW,
             RequestType::RefreshVotingPower { .. } => REFRESH_VOTING_POWER,
+            RequestType::DisburseMaturity { .. } => DISBURSE_MATURITY,
         }
     }
 
@@ -151,6 +155,7 @@ impl RequestType {
                 | RequestType::NeuronInfo { .. }
                 | RequestType::ListNeurons { .. }
                 | RequestType::Follow { .. }
+                | RequestType::DisburseMaturity { .. }
         )
     }
 }
@@ -160,8 +165,12 @@ impl TryFrom<RequestResultMetadata> for ObjectMap {
     fn try_from(d: RequestResultMetadata) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert RequestResultMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert RequestResultMetadata to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert RequestResultMetadata to ObjectMap. Expected type Object but received: {o:?}"
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert RequestResultMetadata to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -187,8 +196,7 @@ impl TryFrom<Option<ObjectMap>> for RequestResultMetadata {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse a `neuron_identifier` from metadata JSON object: {}",
-                e
+                "Could not parse a `neuron_identifier` from metadata JSON object: {e}"
             ))
         })
     }
@@ -243,8 +251,12 @@ impl TryFrom<GetProposalInfo> for ObjectMap {
     fn try_from(d: GetProposalInfo) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert GetProposalInfo to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert GetProposalInfo to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert GetProposalInfo to ObjectMap. Expected type Object but received: {o:?}"
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert GetProposalInfo to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -254,8 +266,7 @@ impl TryFrom<Option<ObjectMap>> for GetProposalInfo {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse a `proposal_id` from metadata JSON object: {}",
-                e
+                "Could not parse a `proposal_id` from metadata JSON object: {e}"
             ))
         })
     }
@@ -302,6 +313,14 @@ pub struct Stake {
 pub struct Disburse {
     pub account: icp_ledger::AccountIdentifier,
     pub amount: Option<Tokens>,
+    pub recipient: Option<icp_ledger::AccountIdentifier>,
+    pub neuron_index: u64,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct DisburseMaturity {
+    pub account: icp_ledger::AccountIdentifier,
+    pub percentage_to_disburse: u32,
     pub recipient: Option<icp_ledger::AccountIdentifier>,
     pub neuron_index: u64,
 }
@@ -434,8 +453,12 @@ impl TryFrom<ChangeAutoStakeMaturityMetadata> for ObjectMap {
     fn try_from(d: ChangeAutoStakeMaturityMetadata) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ChangeAutoStakeMaturityMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert ChangeAutoStakeMaturityMetadata to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert ChangeAutoStakeMaturityMetadata to ObjectMap. Expected type Object but received: {o:?}"
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert ChangeAutoStakeMaturityMetadata to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -445,8 +468,7 @@ impl TryFrom<Option<ObjectMap>> for ChangeAutoStakeMaturityMetadata {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse a `neuron_index` from metadata JSON object: {}",
-                e
+                "Could not parse a `neuron_index` from metadata JSON object: {e}"
             ))
         })
     }
@@ -457,8 +479,12 @@ impl TryFrom<SetDissolveTimestampMetadata> for ObjectMap {
     fn try_from(d: SetDissolveTimestampMetadata) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert SetDissolveTimestampMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert SetDissolveTimestampMetadata to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert SetDissolveTimestampMetadata to ObjectMap. Expected type Object but received: {o:?}"
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert SetDissolveTimestampMetadata to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -475,8 +501,7 @@ impl TryFrom<Option<ObjectMap>> for SetDissolveTimestampMetadata {
                  A Set Dissolve Timestamp operation may have a 'neuron_index' metadata field.
                  The 'neuron_index` field differentiates between neurons controlled by the user.
 
-                 Parse Error: {}",
-                e
+                 Parse Error: {e}"
             ))
         })
     }
@@ -494,8 +519,7 @@ impl TryFrom<Option<ObjectMap>> for NeuronIdentifierMetadata {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse a `neuron_index` from metadata JSON object: {}",
-                e
+                "Could not parse a `neuron_index` from metadata JSON object: {e}"
             ))
         })
     }
@@ -506,8 +530,12 @@ impl TryFrom<NeuronIdentifierMetadata> for ObjectMap {
     fn try_from(d: NeuronIdentifierMetadata) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert NeuronIdentifierMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert NeuronIdentifierMetadata to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert NeuronIdentifierMetadata to ObjectMap. Expected type Object but received: {o:?}"
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert NeuronIdentifierMetadata to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -527,8 +555,7 @@ impl TryFrom<Option<ObjectMap>> for DisburseMetadata {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse DISBURSE operation metadata from a JSON object: {}",
-                e
+                "Could not parse DISBURSE operation metadata from a JSON object: {e}"
             ))
         })
     }
@@ -539,8 +566,12 @@ impl TryFrom<DisburseMetadata> for ObjectMap {
     fn try_from(d: DisburseMetadata) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert DisburseMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert DisburseMetadata to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert DisburseMetadata to ObjectMap. Expected type Object but received: {o:?}"
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert DisburseMetadata to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -559,8 +590,7 @@ impl TryFrom<Option<ObjectMap>> for KeyMetadata {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse hot key management operation metadata from a JSON object: {}",
-                e
+                "Could not parse hot key management operation metadata from a JSON object: {e}"
             ))
         })
     }
@@ -571,8 +601,50 @@ impl TryFrom<KeyMetadata> for ObjectMap {
     fn try_from(d: KeyMetadata) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert KeyMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert KeyMetadata to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert KeyMetadata to ObjectMap. Expected type Object but received: {o:?}"
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert KeyMetadata to ObjectMap: {err:?}"
+            ))),
+        }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+pub struct DisburseMaturityMetadata {
+    #[serde(default)]
+    pub neuron_index: u64,
+    #[serde(default)]
+    pub percentage_to_disburse: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub recipient: Option<AccountIdentifier>,
+}
+
+impl TryFrom<Option<ObjectMap>> for DisburseMaturityMetadata {
+    type Error = ApiError;
+
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse DISBURSE_MATURITY operation metadata from a JSON object: {e}"
+            ))
+        })
+    }
+}
+
+impl TryFrom<DisburseMaturityMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: DisburseMaturityMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert DisburseMaturityMetadata to ObjectMap. Expected type Object but received: {o:?}"
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert DisburseMaturityMetadata to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -642,8 +714,7 @@ impl TryFrom<Option<ObjectMap>> for SpawnMetadata {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse SPAWN operation metadata from a JSON object: {}",
-                e
+                "Could not parse SPAWN operation metadata from a JSON object: {e}"
             ))
         })
     }
@@ -654,8 +725,12 @@ impl TryFrom<SpawnMetadata> for ObjectMap {
     fn try_from(d: SpawnMetadata) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert SpawnMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert SpawnMetadata to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert SpawnMetadata to ObjectMap. Expected type Object but received: {o:?}"
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert SpawnMetadata to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -673,8 +748,7 @@ impl TryFrom<Option<ObjectMap>> for RegisterVoteMetadata {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse REGISTER_VOTE operation metadata from metadata JSON object: {}",
-                e
+                "Could not parse REGISTER_VOTE operation metadata from metadata JSON object: {e}"
             ))
         })
     }
@@ -685,8 +759,12 @@ impl TryFrom<RegisterVoteMetadata> for ObjectMap {
     fn try_from(d: RegisterVoteMetadata) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert RegisterVoteMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert RegisterVoteMetadata to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert RegisterVoteMetadata to ObjectMap. Expected type Object but received: {o:?}"
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert RegisterVoteMetadata to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -705,8 +783,7 @@ impl TryFrom<Option<ObjectMap>> for StakeMaturityMetadata {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse STAKE_MATURITY operation metadata from metadata JSON object: {}",
-                e
+                "Could not parse STAKE_MATURITY operation metadata from metadata JSON object: {e}"
             ))
         })
     }
@@ -717,8 +794,12 @@ impl TryFrom<StakeMaturityMetadata> for ObjectMap {
     fn try_from(d: StakeMaturityMetadata) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert StakeMaturityMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert StakeMaturityMetadata to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert StakeMaturityMetadata to ObjectMap. Expected type Object but received: {o:?}"
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert StakeMaturityMetadata to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -735,8 +816,12 @@ impl TryFrom<PublicKeyOrPrincipal> for ObjectMap {
     fn try_from(d: PublicKeyOrPrincipal) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert PublicKeyOrPrincipal to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert PublicKeyOrPrincipal to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert PublicKeyOrPrincipal to ObjectMap. Expected type Object but received: {o:?}"
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert PublicKeyOrPrincipal to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -746,8 +831,7 @@ impl TryFrom<Option<ObjectMap>> for NeuronInfoMetadata {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse NEURON_INFO operation metadata from metadata JSON object: {}",
-                e
+                "Could not parse NEURON_INFO operation metadata from metadata JSON object: {e}"
             ))
         })
     }
@@ -810,8 +894,12 @@ impl TryFrom<NeuronInfoMetadata> for ObjectMap {
     fn try_from(d: NeuronInfoMetadata) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert NeuronInfoMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert NeuronInfoMetadata to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert NeuronInfoMetadata to ObjectMap. Expected type Object but received: {o:?}"
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert NeuronInfoMetadata to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -826,8 +914,7 @@ impl TryFrom<Option<ObjectMap>> for ListNeuronsMetadata {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse LIST_NEURONS operation metadata from metadata JSON object: {}",
-                e
+                "Could not parse LIST_NEURONS operation metadata from metadata JSON object: {e}"
             ))
         })
     }
@@ -838,8 +925,12 @@ impl TryFrom<ListNeuronsMetadata> for ObjectMap {
     fn try_from(d: ListNeuronsMetadata) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ListNeuronsMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert ListNeuronsMetadata to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert ListNeuronsMetadata to ObjectMap. Expected type Object but received: {o:?}"
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert ListNeuronsMetadata to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -858,8 +949,7 @@ impl TryFrom<Option<ObjectMap>> for FollowMetadata {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse a FOLLOW operation metadata from metadata JSON object: {}",
-                e
+                "Could not parse a FOLLOW operation metadata from metadata JSON object: {e}"
             ))
         })
     }
@@ -870,8 +960,12 @@ impl TryFrom<FollowMetadata> for ObjectMap {
     fn try_from(d: FollowMetadata) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert FollowMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert FollowMetadata to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert FollowMetadata to ObjectMap. Expected type Object but received: {o:?}"
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert FollowMetadata to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -890,8 +984,7 @@ impl TryFrom<Option<ObjectMap>> for ApproveMetadata {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse a Approve operation metadata from metadata JSON object: {}",
-                e
+                "Could not parse a Approve operation metadata from metadata JSON object: {e}"
             ))
         })
     }
@@ -902,8 +995,12 @@ impl TryFrom<ApproveMetadata> for ObjectMap {
     fn try_from(d: ApproveMetadata) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ApproveMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert ApproveMetadata to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert ApproveMetadata to ObjectMap. Expected type Object but received: {o:?}"
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert ApproveMetadata to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -1196,6 +1293,38 @@ impl TransactionBuilder {
         });
         Ok(())
     }
+
+    pub fn disburse_maturity(
+        &mut self,
+        disburse_maturity: &DisburseMaturity,
+    ) -> Result<(), ApiError> {
+        let DisburseMaturity {
+            account,
+            percentage_to_disburse,
+            recipient,
+            neuron_index,
+        } = disburse_maturity;
+        let operation_identifier = self.allocate_op_id();
+        self.ops.push(Operation {
+            operation_identifier,
+            type_: OperationType::DisburseMaturity.to_string(),
+            status: None,
+            account: Some(to_model_account_identifier(account)),
+            amount: None,
+            related_operations: None,
+            coin_change: None,
+            metadata: Some(
+                DisburseMaturityMetadata {
+                    recipient: *recipient,
+                    neuron_index: *neuron_index,
+                    percentage_to_disburse: *percentage_to_disburse,
+                }
+                .try_into()?,
+            ),
+        });
+        Ok(())
+    }
+
     pub fn add_hot_key(&mut self, key: &AddHotKey) -> Result<(), ApiError> {
         let AddHotKey {
             account,

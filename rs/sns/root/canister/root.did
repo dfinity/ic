@@ -13,6 +13,17 @@ type CanisterInstallMode = variant {
   install;
 };
 
+type MemoryMetrics = record {
+  wasm_memory_size : opt nat;
+  stable_memory_size : opt nat;
+  global_memory_size : opt nat;
+  wasm_binary_size : opt nat;
+  custom_sections_size : opt nat;
+  canister_history_size : opt nat;
+  wasm_chunk_store_size : opt nat;
+  snapshots_size : opt nat;
+};
+
 type CanisterStatusResult = record {
   status : CanisterStatusType;
   memory_size : nat;
@@ -22,6 +33,7 @@ type CanisterStatusResult = record {
   module_hash : opt blob;
   reserved_cycles : opt nat;
   query_stats : opt QueryStats;
+  memory_metrics : opt MemoryMetrics;
 };
 
 type CanisterStatusResultV2 = record {
@@ -32,6 +44,7 @@ type CanisterStatusResultV2 = record {
   idle_cycles_burned_per_day : nat;
   module_hash : opt blob;
   query_stats : opt QueryStats;
+  memory_metrics : opt MemoryMetrics;
 };
 
 type CanisterStatusType = variant {
@@ -113,6 +126,7 @@ type ListSnsCanistersResponse = record {
   index : opt principal;
   governance : opt principal;
   dapps : vec principal;
+  extensions : opt Extensions;
   archives : vec principal;
 };
 
@@ -137,6 +151,32 @@ type ManageDappCanisterSettingsResponse = record {
   failure_reason : opt text;
 };
 
+type RegisterExtensionRequest = record {
+  canister_id : opt principal;
+};
+
+type RegisterExtensionResult = variant {
+  Ok : record {};
+  Err : CanisterCallError;
+};
+
+type RegisterExtensionResponse = record {
+  result : opt RegisterExtensionResult;
+};
+
+type CleanUpFailedRegisterExtensionRequest = record {
+  canister_id : opt principal;
+};
+
+type CleanUpFailedRegisterExtensionResult = variant {
+  Ok : record {};
+  Err : CanisterCallError;
+};
+
+type CleanUpFailedRegisterExtensionResponse = record {
+  result : opt CleanUpFailedRegisterExtensionResult;
+};
+
 type RegisterDappCanisterRequest = record {
   canister_id : opt principal;
 };
@@ -154,8 +194,13 @@ type SetDappControllersResponse = record {
   failed_updates : vec FailedUpdate;
 };
 
+type Extensions = record {
+  extension_canister_ids : vec principal;
+};
+
 type SnsRootCanister = record {
   dapp_canister_ids : vec principal;
+  extensions : opt Extensions;
   testflight : bool;
   archive_canister_ids : vec principal;
   governance_canister_id : opt principal;
@@ -178,6 +223,7 @@ type GetTimersResponse = record {
 service : (SnsRootCanister) -> {
   canister_status : (CanisterIdRecord) -> (CanisterStatusResult);
   change_canister : (ChangeCanisterRequest) -> ();
+  clean_up_failed_register_extension : (CleanUpFailedRegisterExtensionRequest) -> (CleanUpFailedRegisterExtensionResponse);
   get_build_metadata : () -> (text) query;
   get_sns_canisters_summary : (GetSnsCanistersSummaryRequest) -> (
       GetSnsCanistersSummaryResponse,
@@ -186,6 +232,7 @@ service : (SnsRootCanister) -> {
   manage_dapp_canister_settings : (ManageDappCanisterSettingsRequest) -> (
       ManageDappCanisterSettingsResponse,
     );
+  register_extension : (RegisterExtensionRequest) -> (RegisterExtensionResponse);
   register_dapp_canister : (RegisterDappCanisterRequest) -> (record {});
   register_dapp_canisters : (RegisterDappCanistersRequest) -> (record {});
   set_dapp_controllers : (SetDappControllersRequest) -> (

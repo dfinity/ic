@@ -1,5 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("//rs/tests:common.bzl", "MAINNET_ENV", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -44,20 +44,11 @@ BACKUP_ENV = MESSAGE_CANISTER_ENV | UNIVERSAL_CANISTER_ENV | {
     "CANISTER_SANDBOX_PATH": "$(rootpath //rs/canister_sandbox:canister_sandbox)",
 }
 
-system_test_nns(
-    name = "backup_manager_downgrade_test",
-    env = BACKUP_ENV | MAINNET_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    tags = [
-        "experimental_system_test_colocation",
-        "long_test",  # since it takes longer than 5 minutes.
-    ],
-    test_timeout = "eternal",  # this test often times out with the default 15 minute timeout so we allow more time
-    uses_guestos_dev_test = True,
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        BACKUP_RUNTIME_DEPS,
+rust_binary(
+    name = "backup_manager_test_bin",
+    testonly = True,
+    srcs = ["backup_manager_test.rs"],
+    crate_name = "ic_systest_backup",
     deps = [
         # Keep sorted.
         ":common",
@@ -68,22 +59,37 @@ system_test_nns(
 
 system_test_nns(
     name = "backup_manager_upgrade_test",
-    env = BACKUP_ENV | MAINNET_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
+    env = BACKUP_ENV | MAINNET_ENV | {
+        "ENV_DEPS__IC_VERSION_FILE": "$(rootpath //bazel:version.txt)",
+    },
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "long_test",  # since it takes longer than 5 minutes.
     ],
+    test_driver_target = ":backup_manager_test_bin",
     test_timeout = "eternal",  # this test often times out with the default 15 minute timeout so we allow more time
-    uses_guestos_dev_test = True,
+    uses_guestos_img = False,
+    uses_guestos_mainnet_nns_img = True,
+    uses_guestos_update = True,
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        BACKUP_RUNTIME_DEPS,
-    deps = [
-        # Keep sorted.
-        ":common",
-        "//rs/tests/driver:ic-system-test-driver",
-        "@crate_index//:anyhow",
+        BACKUP_RUNTIME_DEPS + ["//bazel:version.txt"],
+)
+
+system_test_nns(
+    name = "backup_manager_downgrade_test",
+    env = BACKUP_ENV | MAINNET_ENV | {
+        "ENV_DEPS__IC_VERSION_FILE": "$(rootpath //bazel:version.txt)",
+    },
+    tags = [
+        "colocate",
+        "long_test",  # since it takes longer than 5 minutes.
     ],
+    test_driver_target = ":backup_manager_test_bin",
+    test_timeout = "eternal",  # this test often times out with the default 15 minute timeout so we allow more time
+    uses_guestos_img = True,
+    uses_guestos_mainnet_nns_update = True,
+    runtime_deps =
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        BACKUP_RUNTIME_DEPS + ["//bazel:version.txt"],
 )

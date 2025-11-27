@@ -1,10 +1,10 @@
 [package]
-name = "ic-cycles-account-manager"
-version.workspace = true
 authors.workspace = true
-edition.workspace = true
 description.workspace = true
 documentation.workspace = true
+edition.workspace = true
+name = "ic-cycles-account-manager"
+version.workspace = true
 
 [dependencies]
 ic-base-types = { path = "../types/base_types" }
@@ -27,4 +27,3 @@ ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
-ic-wasm-types = { path = "../types/wasm_types" }

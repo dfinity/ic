@@ -1,6 +1,6 @@
-use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::MetricsRegistry;
-use prometheus::{histogram_opts, labels, opts, HistogramVec, IntCounterVec, IntGaugeVec};
+use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
+use prometheus::{HistogramVec, IntCounterVec, IntGaugeVec, histogram_opts, labels, opts};
 
 pub const LABEL_POOL: &str = "pool";
 pub const LABEL_POOL_TYPE: &str = "pool_type";

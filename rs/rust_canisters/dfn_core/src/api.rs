@@ -28,7 +28,7 @@ impl Funds {
 #[cfg(target_arch = "wasm32")]
 pub mod ic0 {
     #[link(wasm_import_module = "ic0")]
-    extern "C" {
+    unsafe extern "C" {
         pub fn canister_self_copy(dst: u32, offset: u32, size: u32);
         pub fn canister_self_size() -> u32;
         pub fn debug_print(offset: u32, size: u32);
@@ -103,7 +103,7 @@ sharing of types between WASM and x86 programs in crates which depend on this.
 #[allow(dead_code)]
 pub mod ic0 {
     fn wrong_arch<A>(s: &str) -> A {
-        panic!("{} should only be called inside canisters", s)
+        panic!("{s} should only be called inside canisters")
     }
 
     pub unsafe fn canister_self_copy(_dst: u32, _offset: u32, _size: u32) {
@@ -382,7 +382,7 @@ pub fn call_bytes(
     method: &str,
     data: &[u8],
     funds: Funds,
-) -> impl Future<Output = futures::FutureResult<Vec<u8>>> {
+) -> impl Future<Output = futures::FutureResult<Vec<u8>>> + use<> {
     // the callback from IC dereferences the future from a raw pointer, assigns the
     // result and calls the waker
     fn callback(future_ptr: *mut ()) {
@@ -434,7 +434,7 @@ pub fn call_bytes_with_cleanup(
     method: &str,
     data: &[u8],
     funds: Funds,
-) -> impl Future<Output = futures::FutureResult<Vec<u8>>> {
+) -> impl Future<Output = futures::FutureResult<Vec<u8>>> + use<> {
     // the callback from IC dereferences the future from a raw pointer, assigns the
     // result and calls the waker
     fn callback(future_ptr: *mut ()) {
@@ -555,11 +555,9 @@ where
         funds,
     ) {
         0 => Ok(()),
-        err_code =>
-            Err(format!("ic0.call_perform returned the error code '{}' indicating the call could not be made, when calling {} on canister {:?}",
-                        err_code,
-                        method,
-                        id)),
+        err_code => Err(format!(
+            "ic0.call_perform returned the error code '{err_code}' indicating the call could not be made, when calling {method} on canister {id:?}"
+        )),
     }
 }
 
@@ -863,7 +861,7 @@ pub fn canister_status() -> CanisterStatus {
         1 => CanisterStatus::Running,
         2 => CanisterStatus::Stopping,
         3 => CanisterStatus::Stopped,
-        other => panic!("Weird canister status: {}", other),
+        other => panic!("Weird canister status: {other}"),
     }
 }
 

@@ -5,13 +5,13 @@ use std::{
 };
 
 use clap::{Parser, ValueEnum};
-use slog::{slog_o, Drain};
+use slog::{Drain, slog_o};
 
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
+    WasmtimeEmbedder,
     wasm_utils::compile,
     wasm_utils::{decoding::decode_wasm, validate_and_instrument_for_testing},
-    WasmtimeEmbedder,
 };
 
 #[derive(Debug, Copy, Clone, ValueEnum)]
@@ -28,7 +28,7 @@ pub enum Artifact {
 
 impl From<Artifact> for clap::builder::OsStr {
     fn from(artifact: Artifact) -> clap::builder::OsStr {
-        format!("{:?}", artifact).into()
+        format!("{artifact:?}").into()
     }
 }
 
@@ -68,7 +68,7 @@ fn get_logger() -> slog::Logger {
 
 fn process_wasm(filename: &Path, mut output_stream: Box<dyn std::io::Write>, artifact: Artifact) {
     let contents = std::fs::read(filename)
-        .unwrap_or_else(|e| panic!("Failed to read input file {:?}: {e}", filename));
+        .unwrap_or_else(|e| panic!("Failed to read input file {filename:?}: {e}"));
     let config = EmbeddersConfig::default();
     let decoded = decode_wasm(config.wasm_max_size, Arc::new(contents))
         .expect("failed to decode canister module");
@@ -101,7 +101,7 @@ fn main() {
     let output: Box<dyn std::io::Write> = if let Some(output_file) = options.output_file {
         Box::new(
             std::fs::File::create(&output_file)
-                .unwrap_or_else(|e| panic!("Error opening output file {:?}: {e}", output_file)),
+                .unwrap_or_else(|e| panic!("Error opening output file {output_file:?}: {e}")),
         )
     } else {
         Box::new(std::io::stdout())

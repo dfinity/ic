@@ -6,11 +6,13 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted
+    "//packages/icrc-ledger-types",
     "//packages/pocket-ic",
     "//rs/canister_client/sender",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nervous_system/agent",
     "//rs/nervous_system/clients",
+    "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
     "//rs/nervous_system/proto",
@@ -19,7 +21,6 @@ DEPENDENCIES = [
     "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
     "//rs/nns/test_utils",
-    "//rs/registry/transport",
     "//rs/rust_canisters/canister_test",
     "//rs/sns/cli",
     "//rs/sns/governance/api",
@@ -47,55 +48,25 @@ DEPENDENCIES = [
     "@crate_index//:url",
 ]
 
-DEV_DATA = [
+HEAD_NNS_DEV_DATA = [
     # Keep sorted
     ":sns_testing_canister",
-    "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm",
-    "//rs/ledger_suite/icp/index:ic-icp-index-canister",
-    "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
-    "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
-    "//rs/ledger_suite/icrc1/archive:archive_canister",
-    "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
-    "//rs/ledger_suite/icrc1/ledger:ledger_canister",
-    "//rs/nns/cmc:cycles-minting-canister",
-    "//rs/nns/governance:governance-canister",
-    "//rs/nns/governance:governance-canister-test",
-    "//rs/nns/handlers/root/impl:root-canister",
-    "//rs/nns/sns-wasm:sns-wasm-canister",
-    "//rs/pocket_ic_server:pocket-ic-server",
-    "//rs/registry/canister:registry-canister",
-    "//rs/sns/governance:sns-governance-canister",
-    "//rs/sns/root:sns-root-canister",
-    "//rs/sns/swap:sns-swap-canister",
-    "//rs/types/management_canister_types",
-    "@cycles-ledger.wasm.gz//file",
-    "@ii_dev_canister//file",
-    "@nns_dapp_canister//file",
-    "@sns_aggregator//file",
+    "//rs/pocket_ic_server:pocket-ic-server-head-nns",
 ]
 
-DEV_ENV = {
-    "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
-    "CYCLES_LEDGER_WASM_PATH": "$(rootpath @cycles-ledger.wasm.gz//file)",
-    "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
-    "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
-    "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
-    "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister)",
-    "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister)",
-    "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
-    "IC_ICP_INDEX_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/index:ic-icp-index-canister)",
-    "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
-    "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
-    "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm)",
-    "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
-    "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister)",
-    "SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/sns/root:sns-root-canister)",
-    "SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/swap:sns-swap-canister)",
-    "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
+HEAD_NNS_DEV_ENV = {
+    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server-head-nns)",
+    "SNS_TESTING_CANISTER_WASM_PATH": "$(rootpath :sns_testing_canister)",
+}
+
+MAINNET_NNS_DEV_DATA = [
+    # Keep sorted
+    ":sns_testing_canister",
+    "//rs/pocket_ic_server:pocket-ic-server",
+]
+
+MAINNET_NNS_DEV_ENV = {
     "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
-    "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
-    "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
-    "INTERNET_IDENTITY_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
     "SNS_TESTING_CANISTER_WASM_PATH": "$(rootpath :sns_testing_canister)",
 }
 
@@ -108,16 +79,22 @@ rust_binary(
     ],
 )
 
-rust_binary(
-    name = "sns-testing-init",
-    testonly = True,
-    srcs = ["src/bin/init.rs"],
-    data = DEV_DATA,
-    env = DEV_ENV,
-    deps = DEPENDENCIES + [
-        ":sns_testing",
-    ],
-)
+[
+    rust_binary(
+        name = "sns-testing-init" + name_suffix,
+        testonly = True,
+        srcs = ["src/bin/init.rs"],
+        data = dev_data,
+        env = dev_env,
+        deps = DEPENDENCIES + [
+            ":sns_testing",
+        ],
+    )
+    for (name_suffix, dev_data, dev_env) in [
+        ("-head-nns", HEAD_NNS_DEV_DATA, HEAD_NNS_DEV_ENV),
+        ("", MAINNET_NNS_DEV_DATA, MAINNET_NNS_DEV_ENV),
+    ]
+]
 
 rust_library(
     name = "sns_testing",
@@ -133,18 +110,24 @@ rust_test(
     deps = DEPENDENCIES,
 )
 
-rust_test(
-    name = "sns_testing_ci",
-    # the test sometimes times out on CI with default timeout
-    # of "moderate" (5 minutes) - 2025-07-01
-    timeout = "long",
-    srcs = ["tests/sns_testing_ci.rs"],
-    data = DEV_DATA,
-    env = DEV_ENV,
-    deps = DEPENDENCIES + [
-        ":sns_testing",
-    ],
-)
+[
+    rust_test(
+        name = "sns_testing_ci" + name_suffix,
+        # the test sometimes times out on CI with default timeout
+        # of "moderate" (5 minutes) - 2025-07-01
+        timeout = "long",
+        srcs = ["tests/sns_testing_ci.rs"],
+        data = dev_data,
+        env = dev_env,
+        deps = DEPENDENCIES + [
+            ":sns_testing",
+        ],
+    )
+    for (name_suffix, dev_data, dev_env) in [
+        ("-head-nns", HEAD_NNS_DEV_DATA, HEAD_NNS_DEV_ENV),
+        ("", MAINNET_NNS_DEV_DATA, MAINNET_NNS_DEV_ENV),
+    ]
+]
 
 rust_canister(
     name = "sns_testing_canister",
@@ -161,11 +144,11 @@ rust_canister(
 genrule(
     name = "_sns_testing_env",
     testonly = True,
-    srcs = DEV_DATA,  # Include the dependencies to be resolved by rootpath in DEV_ENV.
+    srcs = MAINNET_NNS_DEV_DATA,  # Include the dependencies to be resolved by rootpath in MAINNET_NNS_DEV_ENV.
     outs = ["sns_testing_env.sh"],
     cmd = "\n".join([
         'echo \'export %s="%s"\' >> $@' % (key, value)
-        for key, value in DEV_ENV.items()
+        for key, value in MAINNET_NNS_DEV_ENV.items()
     ]),
 )
 
@@ -179,7 +162,7 @@ pkg_tar(
 pkg_tar(
     name = "sns_testing_dependencies",
     testonly = True,
-    srcs = DEV_DATA,
+    srcs = MAINNET_NNS_DEV_DATA,
     extension = "tar",
     strip_prefix = "/",
 )

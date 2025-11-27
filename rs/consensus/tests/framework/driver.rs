@@ -12,10 +12,10 @@ use ic_interfaces::{
     idkg::{IDkgChangeAction, IDkgChangeSet},
     p2p::consensus::{MutablePool, PoolMutationsProducer},
 };
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug};
 use ic_metrics::MetricsRegistry;
 use ic_test_artifact_pool::ingress_pool::TestIngressPool;
-use ic_types::{consensus::ConsensusMessage, NodeId};
+use ic_types::{NodeId, consensus::ConsensusMessage};
 use std::{
     cell::RefCell,
     sync::{Arc, RwLock},

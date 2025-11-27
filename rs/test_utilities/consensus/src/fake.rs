@@ -7,18 +7,24 @@ use ic_interfaces::{
 };
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
-    batch::*,
+    CryptoHashOfPartialState, Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
+    batch::{BatchPayload, ValidationContext},
     consensus::{
-        certification::*,
+        Block, BlockPayload, DataPayload, FinalizationContent, FinalizationShare,
+        NotarizationContent, NotarizationShare, Payload, RandomBeacon, RandomBeaconContent,
+        RandomBeaconShare, RandomTapeContent, RandomTapeShare, Rank, SummaryPayload,
+        certification::{Certification, CertificationContent},
         dkg::{DkgDataPayload, DkgSummary},
-        *,
+        hashed,
     },
     crypto::{
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript},
         *,
     },
-    signature::*,
-    *,
+    signature::{
+        BasicSignature, MultiSignature, MultiSignatureShare, ThresholdSignature,
+        ThresholdSignatureShare,
+    },
 };
 use serde::{Deserialize, Serialize};
 
@@ -61,6 +67,20 @@ impl Fake for DkgSummary {
             /*height=*/ Height::new(0),
             /*initial_dkg_attempts=*/ BTreeMap::default(),
         )
+    }
+}
+
+impl Fake for Certification {
+    fn fake() -> Self {
+        Certification {
+            height: Height::new(0),
+            signed: Signed {
+                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
+                    vec![],
+                ))),
+                signature: ThresholdSignature::fake(),
+            },
+        }
     }
 }
 
@@ -311,66 +331,6 @@ impl FakeVersion for Block {
     }
 }
 
-#[test]
-fn test_fake_block_is_binary_compatible() {
-    let block = Block::new(
-        CryptoHashOf::from(CryptoHash(Vec::new())),
-        Payload::new(
-            ic_types::crypto::crypto_hash,
-            BlockPayload::Data(DataPayload {
-                batch: BatchPayload::default(),
-                dkg: DkgDataPayload::new_empty(Height::from(1)),
-                idkg: None,
-            }),
-        ),
-        Height::from(123),
-        Rank(456),
-        ValidationContext {
-            registry_version: RegistryVersion::from(99),
-            certified_height: Height::from(42),
-            time: ic_types::time::UNIX_EPOCH,
-        },
-    );
-    let bytes1 = bincode::serialize(&block).unwrap();
-    let fake_block = bincode::deserialize::<FakeBlock>(&bytes1).unwrap();
-    let bytes2 = bincode::serialize(&fake_block).unwrap();
-    assert_eq!(bytes1, bytes2);
-}
-
-#[test]
-fn test_fake_block() {
-    use std::convert::TryFrom;
-    let block = Block::new(
-        CryptoHashOf::from(CryptoHash(Vec::new())),
-        Payload::new(
-            ic_types::crypto::crypto_hash,
-            BlockPayload::Data(DataPayload {
-                batch: BatchPayload::default(),
-                dkg: DkgDataPayload::new_empty(Height::from(1)),
-                idkg: None,
-            }),
-        ),
-        Height::from(123),
-        Rank(456),
-        ValidationContext {
-            registry_version: RegistryVersion::from(99),
-            certified_height: Height::from(42),
-            time: ic_types::time::UNIX_EPOCH,
-        },
-    );
-
-    // fake block is binary compatible
-    let bytes1 = bincode::serialize(&block).unwrap();
-    let fake_block = bincode::deserialize::<FakeBlock>(&bytes1).unwrap();
-    let bytes2 = bincode::serialize(&fake_block).unwrap();
-    assert_eq!(bytes1, bytes2);
-
-    // fake version works as expected
-    let new_version = ReplicaVersion::try_from(format!("{}.1234", block.version())).unwrap();
-    let block2 = block.fake_version(new_version.clone());
-    assert_eq!(block2.version(), &new_version);
-}
-
 #[derive(Default)]
 pub struct FakeVerifier;
 
@@ -388,5 +348,72 @@ impl Verifier for FakeVerifier {
         _registry_version: RegistryVersion,
     ) -> ValidationResult<VerifierError> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ic_types::consensus::HasVersion;
+
+    use super::*;
+
+    #[test]
+    fn test_fake_block_is_binary_compatible() {
+        let block = Block::new(
+            CryptoHashOf::from(CryptoHash(Vec::new())),
+            Payload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Data(DataPayload {
+                    batch: BatchPayload::default(),
+                    dkg: DkgDataPayload::new_empty(Height::from(1)),
+                    idkg: None,
+                }),
+            ),
+            Height::from(123),
+            Rank(456),
+            ValidationContext {
+                registry_version: RegistryVersion::from(99),
+                certified_height: Height::from(42),
+                time: ic_types::time::UNIX_EPOCH,
+            },
+        );
+        let bytes1 = bincode::serialize(&block).unwrap();
+        let fake_block = bincode::deserialize::<FakeBlock>(&bytes1).unwrap();
+        let bytes2 = bincode::serialize(&fake_block).unwrap();
+        assert_eq!(bytes1, bytes2);
+    }
+
+    #[test]
+    fn test_fake_block() {
+        use std::convert::TryFrom;
+        let block = Block::new(
+            CryptoHashOf::from(CryptoHash(Vec::new())),
+            Payload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Data(DataPayload {
+                    batch: BatchPayload::default(),
+                    dkg: DkgDataPayload::new_empty(Height::from(1)),
+                    idkg: None,
+                }),
+            ),
+            Height::from(123),
+            Rank(456),
+            ValidationContext {
+                registry_version: RegistryVersion::from(99),
+                certified_height: Height::from(42),
+                time: ic_types::time::UNIX_EPOCH,
+            },
+        );
+
+        // fake block is binary compatible
+        let bytes1 = bincode::serialize(&block).unwrap();
+        let fake_block = bincode::deserialize::<FakeBlock>(&bytes1).unwrap();
+        let bytes2 = bincode::serialize(&fake_block).unwrap();
+        assert_eq!(bytes1, bytes2);
+
+        // fake version works as expected
+        let new_version = ReplicaVersion::try_from(format!("{}.1234", block.version())).unwrap();
+        let block2 = block.fake_version(new_version.clone());
+        assert_eq!(block2.version(), &new_version);
     }
 }

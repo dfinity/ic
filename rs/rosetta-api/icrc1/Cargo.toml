@@ -2,7 +2,7 @@
 name = "ic-icrc-rosetta"
 description = "Build Once. Integrate Your Blockchain Everywhere. "
 default-run = "ic-icrc-rosetta"
-version = "1.2.4"
+version = "1.2.7"
 authors.workspace = true
 edition.workspace = true
 documentation.workspace = true
@@ -65,14 +65,16 @@ futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-icrc-rosetta-client = { path = "client" }
 ic-icrc-rosetta-runner = { path = "runner" }
-ic-ledger-suite-state-machine-tests = { path = "../../ledger_suite/tests/sm-tests" }
+ic-ledger-suite-state-machine-tests-constants = { path = "../../ledger_suite/tests/sm-tests/constants" }
 ic-icrc1-test-utils = { path = "../../ledger_suite/icrc1/test_utils" }
 ic-ledger-canister-core = { path = "../../ledger_suite/common/ledger_canister_core" }
+ic-management-canister-types = { workspace = true }
 ic-rosetta-test-utils = { path = "../icp/test_utils" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 ic-utils = { workspace = true }
 once_cell = "1.8.0"
 pocket-ic = { path = "../../../packages/pocket-ic" }
+prometheus-parse = { workspace = true }
 url = { workspace = true }
 
 [[test]]

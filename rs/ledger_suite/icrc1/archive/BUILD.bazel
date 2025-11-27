@@ -80,7 +80,7 @@ rust_test(
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
-            "//rs/rosetta-api/icp/test_utils",
+            "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
             "//rs/state_machine_tests",
             "//rs/test_utilities/load_wasm",
             "//rs/types/base_types",
@@ -102,3 +102,26 @@ rust_test(
         ),
     ]
 ]
+
+rust_ic_test(
+    name = "archive_upgrade_token_type_tests",
+    srcs = ["tests/archive_token_type_tests.rs"],
+    crate_features = [],
+    data = [
+        ":archive_canister.wasm.gz",
+        ":archive_canister_u256.wasm.gz",
+        "@mainnet_canisters//:ck_btc_archive.wasm.gz",
+        "@mainnet_canisters//:ck_eth_archive.wasm.gz",
+    ],
+    env = {
+        "IC_ICRC1_ARCHIVE_WASM_U64_PATH": "$(rootpath :archive_canister.wasm.gz)",
+        "IC_ICRC1_ARCHIVE_WASM_u256_PATH": "$(rootpath :archive_canister_u256.wasm.gz)",
+        "CKBTC_IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ck_btc_archive.wasm.gz)",
+        "CKETH_IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ck_eth_archive.wasm.gz)",
+    },
+    deps = [
+        # Keep sorted.
+        "//rs/state_machine_tests",
+        "@crate_index//:candid",
+    ],
+)

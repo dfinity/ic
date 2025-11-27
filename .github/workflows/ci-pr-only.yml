@@ -2,35 +2,87 @@ name: CI PR Only
 # Jobs that run on PRs, but no other pipelines
 
 on:
-  merge_group:
-  pull_request:
-    types: [opened, synchronize, reopened]
-concurrency:
-  # only triggered on PR, so head_ref will always be set
-  group: ${{ github.workflow }}-${{ github.head_ref }}
-  cancel-in-progress: true
+  workflow_call:
+    inputs:
+      commit-sha:
+        description: The commit sha to run the CI on
+        required: true
+        type: string
+      base-ref:
+        description: The base branch of the PR
+        required: false
+        default: ${{ github.event.pull_request.base.ref }}
+        type: string
+      pr-number:
+        description: 'The PR number'
+        required: false
+        default: ${{ github.event.pull_request.number }}
+        type: string
+
 env:
   CI_PROJECT_DIR: ${{ github.workspace }}
-  MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
   ORG: ${{ github.repository_owner }}
+
 jobs:
-  bazel-build-fuzzers-archives:
-    name: Bazel Build Fuzzers Archives
-    timeout-minutes: 90
-    runs-on:
-      labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:02165696a5201b1a347a28e548c32dc9590d60975c22be26ac1ea7e72573523d
+
+  # Run didc compatibility checks against the merge base
+  didc_checks:
+    name: Candid compatibility checks
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
+    runs-on: &dind-small-setup
+      labels: dind-small
+    container: &container-setup
+      image: ghcr.io/dfinity/ic-build@sha256:86c24b5b717519527920d3b720906f91723514d63acddcbaeb27ecf4144aeb37
       options: >-
-        -e NODE_NAME
-    if: ${{ github.event_name != 'merge_group' }}
+         -e NODE_NAME
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Ensures we fetch the merge-base, which we compare against
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.commit-sha }}
+      - name: Run candid compatibility checks
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            export DID_CHECK_REV="$(git merge-base HEAD 'origin/${{ inputs.base-ref }}')"
+            echo "DID_CHECK_REV=$DID_CHECK_REV"
+            bazel test //... \
+              --build_tag_filters="didc" \
+              --test_tag_filters="didc"
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+  insta-tests:
+    name: Quick Feedback Tests
+    runs-on: *dind-small-setup
+    container: *container-setup
+    timeout-minutes: 30
+    steps:
+      - &checkout
+        name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit-sha }}
+      - name: Run insta-tests
+        uses: ./.github/actions/bazel
+        with:
+          run: bazel test //:insta_tests
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+  bazel-build-fuzzers-archives:
+    name: Bazel Build Fuzzers Archives
+    runs-on: &dind-large-setup
+      labels: dind-large
+    container: *container-setup
+    timeout-minutes: 90
+    steps:
+      - *checkout
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
         with:
+          ref: ${{ inputs.commit-sha }}
           filters: |
             fuzzers:
               - '.github/workflows/ci-pr-only.yml'
@@ -44,23 +96,28 @@ jobs:
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}"/bin/fuzzing/
           ./build-all-fuzzers.sh --zip
+
   lock-generate:
     name: Lock Generate
+    runs-on: ubuntu-latest
     timeout-minutes: 30
-    runs-on:
-      labels: dind-small
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:02165696a5201b1a347a28e548c32dc9590d60975c22be26ac1ea7e72573523d
-      options: >-
-        -e NODE_NAME
-    if: ${{ github.event_name != 'merge_group' }}
-    env:
-      CI_EVENT_NAME: ${{ github.event_name }}
     steps:
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || inputs.commit-sha }}
+          token: ${{ steps.app-token.outputs.token }}
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
         with:
+          ref: ${{ inputs.commit-sha }}
           filters: |
             lock-generate:
               - '.github/workflows/ci-pr-only.yml'
@@ -71,42 +128,17 @@ jobs:
               - '**/*.lock'
               - '**/*.rs'
               - '**/*.toml'
-      - name: Create GitHub App Token
-        uses: actions/create-github-app-token@v1
-        id: app-token
-        with:
-          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
-          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ steps.app-token.outputs.token }}
       - name: Run Lock Generate
         id: lock-generate
         if: steps.filter.outputs.lock-generate == 'true'
         run: ./ci/scripts/lock-generate.sh
+
   generate-config-fixtures:
     name: Generate Config Fixtures
-    runs-on:
-      labels: dind-small
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:02165696a5201b1a347a28e548c32dc9590d60975c22be26ac1ea7e72573523d
-      options: >-
-        -e NODE_NAME
-    timeout-minutes: 5
-    if: ${{ github.event_name != 'merge_group' }}
-    env:
-      CI_EVENT_NAME: ${{ github.event_name }}
+    runs-on: ubuntu-latest
+    container: *container-setup
+    timeout-minutes: 30
     steps:
-      - name: Filter Relevant Files
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        id: filter
-        with:
-          filters: |
-            generate-config-fixtures:
-              - 'rs/ic_os/config_types/**'
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
         id: app-token
@@ -116,45 +148,47 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || inputs.commit-sha }}
           token: ${{ steps.app-token.outputs.token }}
+      - name: Filter Relevant Files
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        with:
+          ref: ${{ inputs.commit-sha }}
+          filters: |
+            generate-config-fixtures:
+              - '.github/workflows/ci-pr-only.yml'
+              - 'rs/ic_os/config_types/**'
       - name: Run Generate Config Fixtures
         id: generate-config-fixtures
         if: steps.filter.outputs.generate-config-fixtures == 'true'
         run: ./ci/scripts/generate-config-fixtures.sh
+
   dependencies-check:
     name: Dependency Scan for PR
-    runs-on:
-      labels: dind-small
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:02165696a5201b1a347a28e548c32dc9590d60975c22be26ac1ea7e72573523d
-      options: >-
-        -e NODE_NAME
-    if: ${{ github.event_name != 'merge_group' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: read
       pull-requests: write
     env:
       SHELL_WRAPPER: "/usr/bin/time"
-      CI_MERGE_REQUEST_IID: ${{ github.event.pull_request.number }}
+      CARGO_AUDIT_VERSION: "0.21.0"
+      CI_MERGE_REQUEST_IID: ${{ inputs.pr-number }}
       CI_PROJECT_PATH: ${{ github.repository }}
       CI_PIPELINE_ID: ${{ github.run_id }}
-      CI_COMMIT_SHA: ${{ github.sha }}
+      CI_COMMIT_SHA: ${{ inputs.commit-sha }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
       SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
       REPO_NAME: ${{ github.repository }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 256
+      - *checkout
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
         with:
+          ref: ${{ inputs.commit-sha }}
           filters: |
             depcheck:
               - '.github/workflows/ci-pr-only.yml'
@@ -166,13 +200,14 @@ jobs:
         if: steps.filter.outputs.depcheck == 'true'
         with:
           python-version: "3.12"
-      - name: Setup python deps
-        id: setup-python-deps
+      - name: Setup environment deps
+        id: setup-environment-deps
         if: steps.filter.outputs.depcheck == 'true'
         shell: bash
         run: |
           # Ignore externally-managed-environment pip error, install packages system-wide.
           PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
+          cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       - name: Dependency Scan for Pull Request
         id: dependencies-check
         if: steps.filter.outputs.depcheck == 'true'
@@ -182,23 +217,19 @@ jobs:
           export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
           cd ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
+
   # CI job is also executed in Schedule Hourly
   bazel-test-coverage:
     name: Bazel Test Coverage
+    runs-on: *dind-large-setup
+    container: *container-setup
     timeout-minutes: 90
-    runs-on:
-      labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:02165696a5201b1a347a28e548c32dc9590d60975c22be26ac1ea7e72573523d
-      options: >-
-        -e NODE_NAME
     if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')
     permissions:
       contents: read
       pull-requests: read
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - *checkout
       - name: Run Bazel Test Coverage
         shell: bash
         run: |

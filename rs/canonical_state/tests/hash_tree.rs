@@ -47,6 +47,7 @@ fn large_history_state_old_vs_new_hashing() {
                 state: IngressState::Completed(WasmResult::Reply(b"done".to_vec())),
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
     }
 
@@ -71,6 +72,7 @@ fn large_history_and_canisters_state_old_vs_new_hashing() {
                 state: IngressState::Completed(WasmResult::Reply(b"done".to_vec())),
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
     }
 

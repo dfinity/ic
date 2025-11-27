@@ -4,24 +4,24 @@ use assert_matches::assert_matches;
 
 use ic_base_types::NumSeconds;
 use ic_error_types::ErrorCode;
-use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
-    canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES},
     CallOrigin,
+    canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES},
 };
 use ic_state_machine_tests::WasmResult;
 use ic_sys::PAGE_SIZE;
-use ic_types::ingress::IngressStatus;
+use ic_types::batch::CanisterCyclesCostSchedule;
+use ic_types::ingress::IngressState;
 use ic_types::messages::{CallbackId, RequestMetadata};
 use ic_types::{Cycles, NumInstructions, NumOsPages};
 use ic_universal_canister::{call_args, wasm};
 
 use ic_config::embedders::StableMemoryPageLimit;
 use ic_test_utilities_execution_environment::{
-    check_ingress_status, ExecutionTest, ExecutionTestBuilder,
+    ExecutionTest, ExecutionTestBuilder, check_ingress_status,
 };
 
 fn wat_writing_to_each_stable_memory_page(memory_amount: u64) -> String {
@@ -39,13 +39,12 @@ fn wat_writing_to_each_stable_memory_page(memory_amount: u64) -> String {
                 (loop $loop
                     (call $stable_write (local.get 0) (i64.const 0) (i64.const 1))
                     (local.set 0 (i64.add (local.get 0) (i64.const 4096))) (;increment by OS page size;)
-                    (br_if $loop (i64.lt_s (local.get 0) (i64.const {}))) (;loop if value is within the memory amount;)
+                    (br_if $loop (i64.lt_s (local.get 0) (i64.const {memory_amount}))) (;loop if value is within the memory amount;)
                 )
                 (call $msg_reply)
             )
             (memory (export "memory") 1)
-        )"#,
-        memory_amount
+        )"#
     )
 }
 
@@ -64,13 +63,12 @@ fn wat_writing_to_each_stable_memory_page_long_execution(memory_amount: u64) -> 
                 (loop $loop
                     (call $stable_write (local.get 0) (i64.const 0) (i64.const 1))
                     (local.set 0 (i64.add (local.get 0) (i64.const 4096))) (;increment by OS page size;)
-                    (br_if $loop (i64.lt_s (local.get 0) (i64.const {}))) (;loop if value is within the memory amount;)
+                    (br_if $loop (i64.lt_s (local.get 0) (i64.const {memory_amount}))) (;loop if value is within the memory amount;)
                 )
                 (call $msg_reply)
             )
             (memory (export "memory") 1)
-        )"#,
-        memory_amount
+        )"#
     )
 }
 
@@ -92,7 +90,7 @@ fn wat_writing_to_each_stable_memory_page_query(memory_amount: u64) -> String {
                 (loop $loop
                     (call $stable_write (local.get 0) (i64.const 0) (i64.const 1))
                     (local.set 0 (i64.add (local.get 0) (i64.const 4096))) (;increment by OS page size;)
-                    (br_if $loop (i64.lt_s (local.get 0) (i64.const {}))) (;loop if value is within the memory amount;)
+                    (br_if $loop (i64.lt_s (local.get 0) (i64.const {memory_amount}))) (;loop if value is within the memory amount;)
                 )
                 (call $msg_reply)
             )
@@ -105,13 +103,12 @@ fn wat_writing_to_each_stable_memory_page_query(memory_amount: u64) -> String {
                 (loop $loop
                     (call $stable_read (local.get 1) (local.get 0) (i64.const 1))
                     (local.set 0 (i64.add (local.get 0) (i64.const 4096))) (;increment by OS page size;)
-                    (br_if $loop (i64.lt_s (local.get 0) (i64.const {}))) (;loop if value is within the memory amount;)
+                    (br_if $loop (i64.lt_s (local.get 0) (i64.const {memory_amount}))) (;loop if value is within the memory amount;)
                 )
                 (call $msg_reply)
             )
             (memory (export "memory") 1)
-        )"#,
-        memory_amount, memory_amount
+        )"#
     )
 }
 
@@ -189,6 +186,7 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(a_id),
     );
 
@@ -278,6 +276,7 @@ fn dts_replicated_query_concurrent_cycles_change_succeeds() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(canister_id),
     );
 
@@ -375,6 +374,7 @@ fn dts_update_concurrent_cycles_change_fails() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(a_id),
     );
 
@@ -473,6 +473,7 @@ fn dts_replicated_query_concurrent_cycles_change_fails() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(canister_id),
     );
 
@@ -511,9 +512,8 @@ fn dts_replicated_query_concurrent_cycles_change_fails() {
     assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
 
     assert!(err.description().contains(&format!(
-        "Canister {} is out of cycles: \
-             please top up the canister with at least",
-        canister_id
+        "Canister {canister_id} is out of cycles: \
+             please top up the canister with at least"
     )));
 
     assert_eq!(
@@ -764,10 +764,9 @@ fn dts_replicated_execution_resume_fails_due_to_cycles_change() {
         err.assert_contains(
             ErrorCode::CanisterWasmEngineError,
             &format!(
-                "Error from Canister {}: Canister encountered a Wasm engine error: \
+                "Error from Canister {a_id}: Canister encountered a Wasm engine error: \
              Failed to apply system changes: Mismatch in cycles \
-             balance when resuming {}",
-                a_id, message
+             balance when resuming {message}"
             ),
         );
     });
@@ -833,10 +832,9 @@ fn dts_replicated_execution_resume_fails_due_to_call_context_change() {
         assert_eq!(
             err.description(),
             format!(
-                "Error from Canister {}: Canister encountered a Wasm engine error: \
+                "Error from Canister {a_id}: Canister encountered a Wasm engine error: \
              Failed to apply system changes: Mismatch in call \
-             context id when resuming {}",
-                a_id, message
+             context id when resuming {message}"
             )
         );
     });
@@ -1102,8 +1100,7 @@ fn dts_uninstall_with_aborted_replicated_execution() {
         let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
         err.assert_contains(ErrorCode::CanisterWasmModuleNotFound,
             &format!(
-                "Error from Canister {}: Attempted to execute a message, but the canister contains no Wasm module.",
-                canister_id
+                "Error from Canister {canister_id}: Attempted to execute a message, but the canister contains no Wasm module."
             )
         );
     });
@@ -1115,11 +1112,7 @@ fn stable_grow_updates_subnet_available_memory() {
 
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    test.set_subnet_available_memory(SubnetAvailableMemory::new(
-        initial_subnet_memory,
-        initial_subnet_memory,
-        initial_subnet_memory,
-    ));
+    test.set_available_execution_memory(initial_subnet_memory);
 
     // Growing stable memory should reduce the subnet total memory.
     let payload = wasm()
@@ -1209,8 +1202,8 @@ fn test_call_context_instructions_executed_is_updated_on_ok_update() {
     let wasm_payload = wasm().inter_update(b_id, call_args()).build();
 
     // Enqueue ingress message to canister A.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_matches!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
 
     // Execute canister A ingress.
@@ -1237,8 +1230,8 @@ fn test_call_context_instructions_executed_is_updated_on_err_update() {
     let wasm_payload = wasm().inter_update(b_id, call_args()).trap().build();
 
     // Enqueue ingress message to canister A.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_matches!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
 
     // Execute canister A ingress.

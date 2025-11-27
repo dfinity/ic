@@ -1,11 +1,7 @@
 use anyhow::Result;
 use assert_json_diff::assert_json_eq;
-use ic_ledger_core::Tokens;
-use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance_api::{neuron::DissolveState, Neuron};
 use ic_rosetta_api::{
-    convert::neuron_subaccount_bytes_from_public_key,
-    request::{request_result::RequestResult, Request},
+    request::{Request, request_result::RequestResult},
     request_types::{AddHotKey, Follow, PublicKeyOrPrincipal},
 };
 use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
@@ -15,22 +11,19 @@ use ic_system_test_driver::{driver::test_env::TestEnv, util::block_on};
 use rosetta_test_lib::{
     ledger_client::LedgerClient,
     rosetta_client::RosettaApiClient,
-    setup::{setup, ROSETTA_TESTS_OVERALL_TIMEOUT, ROSETTA_TESTS_PER_TEST_TIMEOUT},
+    setup::{ROSETTA_TESTS_OVERALL_TIMEOUT, ROSETTA_TESTS_PER_TEST_TIMEOUT, setup},
     test_neurons::TestNeurons,
     utils::{
-        create_ledger_client, do_multiple_txn, do_multiple_txn_external, make_user_ed25519,
-        one_day_from_now_nanos, raw_construction, sign, to_public_key, NeuronDetails,
+        NeuronDetails, create_ledger_client, do_multiple_txn, do_multiple_txn_external,
+        make_user_ed25519, one_day_from_now_nanos, raw_construction, sign, to_public_key,
     },
 };
-use serde_json::{json, Value};
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use serde_json::{Value, json};
+use std::{collections::HashMap, sync::Arc};
 
 const PORT: u32 = 8108;
 const VM_NAME: &str = "neuron-follow";
+const NUM_NEURONS_TO_FOLLOW: usize = 16;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -64,6 +57,13 @@ pub fn test(env: TestEnv) {
     let neuron4 = neurons.create(|neuron| {
         neuron.maturity_e8s_equivalent = 300_000_000;
     });
+    let mut neurons_to_follow = vec![];
+    for _ in 0..NUM_NEURONS_TO_FOLLOW {
+        let n = neurons.create(|neuron| {
+            neuron.maturity_e8s_equivalent = 100_000_000;
+        });
+        neurons_to_follow.push(n);
+    }
 
     // Create Rosetta and ledger clients.
     let neurons = neurons.get_neurons();
@@ -71,17 +71,22 @@ pub fn test(env: TestEnv) {
     let ledger_client = create_ledger_client(&env, &client);
 
     block_on(async {
-        test_follow(&client, &ledger_client, &neuron1).await;
-        test_follow_with_hotkey(&client, &ledger_client, &neuron2).await;
-        test_follow_with_hotkey_raw(&client, &ledger_client, &neuron3).await;
-        test_follow_too_many(&client, &ledger_client, &neuron4).await;
+        test_follow(&client, &ledger_client, &neuron1, &neurons_to_follow).await;
+        test_follow_with_hotkey(&client, &ledger_client, &neuron2, &neurons_to_follow).await;
+        test_follow_with_hotkey_raw(&client, &ledger_client, &neuron3, &neurons_to_follow).await;
+        test_follow_too_many(&client, &ledger_client, &neuron4, &neurons_to_follow).await;
     });
 }
 
-async fn test_follow(ros: &RosettaApiClient, _ledger: &LedgerClient, neuron_info: &NeuronDetails) {
-    // Create neurons to follow (f1 and f2).
-    let f1 = create_neuron(1001);
-    let f2 = create_neuron(1002);
+async fn test_follow(
+    ros: &RosettaApiClient,
+    _ledger: &LedgerClient,
+    neuron_info: &NeuronDetails,
+    neurons_to_follow: &[NeuronDetails],
+) {
+    // IDs of neurons to follow (f1 and f2).
+    let f1 = neurons_to_follow.first().unwrap().neuron.id.unwrap().id;
+    let f2 = neurons_to_follow.get(1).unwrap().neuron.id.unwrap().id;
 
     let acc = neuron_info.account_id;
     let neuron_index = neuron_info.neuron_subaccount_identifier;
@@ -93,7 +98,7 @@ async fn test_follow(ros: &RosettaApiClient, _ledger: &LedgerClient, neuron_info
             request: Request::Follow(Follow {
                 account: acc,
                 topic: 0, // 0 is "Unspecified" topic.
-                followees: vec![f1.id.unwrap().id, f2.id.unwrap().id],
+                followees: vec![f1, f2],
                 controller: None,
                 neuron_index,
             }),
@@ -135,10 +140,11 @@ async fn test_follow_with_hotkey(
     ros: &RosettaApiClient,
     _ledger: &LedgerClient,
     neuron_info: &NeuronDetails,
+    neurons_to_follow: &[NeuronDetails],
 ) {
-    // Create neurons to follow (f1 and f2).
-    let f1 = create_neuron(1001);
-    let f2 = create_neuron(1002);
+    // IDs of neurons to follow (f1 and f2).
+    let f1 = neurons_to_follow.first().unwrap().neuron.id.unwrap().id;
+    let f2 = neurons_to_follow.get(1).unwrap().neuron.id.unwrap().id;
 
     let acc = neuron_info.account_id;
     let neuron_index = neuron_info.neuron_subaccount_identifier;
@@ -184,7 +190,7 @@ async fn test_follow_with_hotkey(
             request: Request::Follow(Follow {
                 account: hotkey_acc,
                 topic: 0, // 0 is "Unspecified" topic.
-                followees: vec![f1.id.unwrap().id, f2.id.unwrap().id],
+                followees: vec![f1, f2],
                 controller: Some(neuron_controller),
                 neuron_index,
             }),
@@ -226,11 +232,12 @@ async fn test_follow_with_hotkey_raw(
     ros: &RosettaApiClient,
     _ledger: &LedgerClient,
     neuron_info: &NeuronDetails,
+    neurons_to_follow: &[NeuronDetails],
 ) {
-    // Create neurons to follow.
-    let f1 = create_neuron(1001);
-    let f2 = create_neuron(1002);
-    let f3 = create_neuron(1003);
+    // IDs of neurons to follow (f1, f2, and f3).
+    let f1 = neurons_to_follow.first().unwrap().neuron.id.unwrap().id;
+    let f2 = neurons_to_follow.get(1).unwrap().neuron.id.unwrap().id;
+    let f3 = neurons_to_follow.get(2).unwrap().neuron.id.unwrap().id;
 
     let acc = neuron_info.account_id;
     let neuron_index = neuron_info.neuron_subaccount_identifier;
@@ -303,8 +310,8 @@ async fn test_follow_with_hotkey_raw(
             "metadata": {
                 "topic": 0,
                 "followees": [
-                    f1.id.unwrap().id,
-                    f2.id.unwrap().id
+                    f1,
+                    f2
                 ],
                 "controller": {
                     "public_key": neuron_info.public_key
@@ -323,7 +330,7 @@ async fn test_follow_with_hotkey_raw(
             "metadata": {
                 "topic": 5,
                 "followees": [
-                    f3.id.unwrap().id,
+                    f3,
                 ],
                 "controller": {
                     "principal": neuron_controller
@@ -484,15 +491,17 @@ async fn test_follow_too_many(
     ros: &RosettaApiClient,
     _ledger: &LedgerClient,
     neuron_info: &NeuronDetails,
+    neurons_to_follow: &[NeuronDetails],
 ) {
     let acc = neuron_info.account_id;
     let neuron_index = neuron_info.neuron_subaccount_identifier;
     let key_pair: Arc<EdKeypair> = neuron_info.key_pair.clone().into();
     let _expected_type = "FOLLOW".to_string();
-    let mut followees = Vec::new();
-    for i in 0..16 {
-        followees.push(create_neuron(1000 + i).id.unwrap().id);
-    }
+    let followees: Vec<u64> = neurons_to_follow
+        .iter()
+        .take(NUM_NEURONS_TO_FOLLOW)
+        .map(|n| n.neuron.id.unwrap().id)
+        .collect();
     let res = do_multiple_txn_external(
         ros,
         &[RequestInfo {
@@ -517,25 +526,4 @@ async fn test_follow_too_many(
     let res = res.unwrap_err();
     assert_eq!(res.0.code, 770);
     assert_eq!(res.0.message, "Operation failed");
-}
-
-// Create neurons to follow.
-fn create_neuron(id: u64) -> Neuron {
-    let (_, _, pk, pid) = make_user_ed25519(10_000 + id);
-    let created_timestamp_seconds = (SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
-        - Duration::from_secs(60 * 60 * 24 * 365))
-    .as_secs();
-    Neuron {
-        id: Some(NeuronId { id }),
-        account: neuron_subaccount_bytes_from_public_key(&pk, rand::random())
-            .unwrap()
-            .to_vec(),
-        controller: Some(pid),
-        created_timestamp_seconds,
-        aging_since_timestamp_seconds: created_timestamp_seconds + 10,
-        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
-        cached_neuron_stake_e8s: Tokens::new(10, 0).unwrap().get_e8s(),
-        kyc_verified: true,
-        ..Default::default()
-    }
 }

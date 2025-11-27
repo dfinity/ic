@@ -1,6 +1,6 @@
 use std::{cell::RefCell, cmp::Reverse, collections::BTreeMap, thread::LocalKey, time::Duration};
 
-use candid::{candid_method, Principal};
+use candid::{Principal, candid_method};
 use certificate_orchestrator_interface::{
     BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError,
     DispenseTaskResponse, EncryptedPair, ExportCertificatesCertifiedResponse,
@@ -15,14 +15,14 @@ use certificate_orchestrator_interface::{
     UploadCertificateResponse,
 };
 use ic_cdk::{
-    api::{id, time},
-    caller, post_upgrade, pre_upgrade, trap,
+    api::{canister_self, msg_caller, time},
+    post_upgrade, pre_upgrade, trap,
 };
 use ic_cdk::{init, query, update};
 use ic_cdk_timers::set_timer_interval;
 use ic_stable_structures::{
-    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     DefaultMemoryImpl, StableBTreeMap,
+    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
 };
 use priority_queue::PriorityQueue;
 use prometheus::{CounterVec, Encoder, Gauge, GaugeVec, Opts, Registry, TextEncoder};
@@ -474,22 +474,22 @@ fn init_timers_fn() {
     let interval =
         Duration::from_secs(MANAGEMENT_TASK_INTERVAL.with(|s| s.borrow().get(&()).unwrap()));
 
-    set_timer_interval(interval, || {
+    set_timer_interval(interval, async || {
         if let Err(err) = EXPIRER.with(|e| e.borrow().expire(time())) {
-            trap(&format!("failed to run expire: {err}"));
+            trap(format!("failed to run expire: {err}"));
         }
     });
 
-    set_timer_interval(interval, || {
+    set_timer_interval(interval, async || {
         if let Err(err) = RETRIER.with(|r| r.borrow().retry(time())) {
-            trap(&format!("failed to run retry: {err}"));
+            trap(format!("failed to run retry: {err}"));
         }
     });
 
     // update the available tokens for rate limiting
     set_timer_interval(
         REGISTRATION_RATE_LIMIT_PERIOD / REGISTRATION_RATE_LIMIT_RATE,
-        || {
+        async || {
             AVAILABLE_TOKENS.with(|at| {
                 let mut at = at.borrow_mut();
 
@@ -559,8 +559,8 @@ fn init_fn(
     // authorize the canister ID so that timer functions are authorized
     ALLOWED_PRINCIPALS.with(|m| {
         m.borrow_mut().insert(
-            id().to_text().into(), // principal
-            (),                    //
+            canister_self().to_text().into(), // principal
+            (),                               //
         )
     });
 
@@ -575,20 +575,20 @@ fn pre_upgrade_fn() {
 
         TASKS.with(|tasks| {
             if let Err(err) = persistence::store(m.get(MemoryId::new(MEMORY_ID_TASKS)), tasks) {
-                trap(&format!("failed to persist tasks: {err}"));
+                trap(format!("failed to persist tasks: {err}"));
             }
         });
 
         EXPIRATIONS.with(|exps| {
             if let Err(err) = persistence::store(m.get(MemoryId::new(MEMORY_ID_EXPIRATIONS)), exps)
             {
-                trap(&format!("failed to persist expirations: {err}"));
+                trap(format!("failed to persist expirations: {err}"));
             }
         });
 
         RETRIES.with(|retries| {
             if let Err(err) = persistence::store(m.get(MemoryId::new(MEMORY_ID_RETRIES)), retries) {
-                trap(&format!("failed to persist retries: {err}"));
+                trap(format!("failed to persist retries: {err}"));
             }
         });
     });
@@ -602,21 +602,21 @@ fn post_upgrade_fn() {
         TASKS.with(|tasks| {
             match persistence::load(m.get(MemoryId::new(MEMORY_ID_TASKS))) {
                 Ok(v) => *tasks.borrow_mut() = v,
-                Err(err) => trap(&format!("failed to load tasks: {err}")),
+                Err(err) => trap(format!("failed to load tasks: {err}")),
             };
         });
 
         EXPIRATIONS.with(|exps| {
             match persistence::load(m.get(MemoryId::new(MEMORY_ID_EXPIRATIONS))) {
                 Ok(v) => *exps.borrow_mut() = v,
-                Err(err) => trap(&format!("failed to load expirations: {err}")),
+                Err(err) => trap(format!("failed to load expirations: {err}")),
             };
         });
 
         RETRIES.with(|retries| {
             match persistence::load(m.get(MemoryId::new(MEMORY_ID_RETRIES))) {
                 Ok(v) => *retries.borrow_mut() = v,
-                Err(err) => trap(&format!("failed to load retries: {err}")),
+                Err(err) => trap(format!("failed to load retries: {err}")),
             };
         });
     });
@@ -624,8 +624,8 @@ fn post_upgrade_fn() {
     // authorize the canister ID so that timer functions are authorized
     ALLOWED_PRINCIPALS.with(|m| {
         m.borrow_mut().insert(
-            id().to_text().into(), // principal
-            (),                    //
+            canister_self().to_text().into(), // principal
+            (),                               //
         )
     });
 
@@ -947,8 +947,10 @@ fn http_request(request: HttpRequest) -> HttpResponse {
         GAUGE_ALLOWED_PRINCIPALS_TOTAL.with(|g| g.borrow_mut().set(tasks.borrow().len() as f64));
     });
 
-    GAUGE_CANISTER_CYCLES_BALANCE
-        .with(|g| g.borrow_mut().set(ic_cdk::api::canister_balance() as f64));
+    GAUGE_CANISTER_CYCLES_BALANCE.with(|g| {
+        g.borrow_mut()
+            .set(ic_cdk::api::canister_cycle_balance() as f64)
+    });
 
     // Export metrics
     let bs = METRICS_REGISTRY.with(|r| {
@@ -958,7 +960,7 @@ fn http_request(request: HttpRequest) -> HttpResponse {
         let enc = TextEncoder::new();
 
         if let Err(err) = enc.encode(&mfs, &mut buffer) {
-            trap(&format!("failed to encode metrics: {err}"));
+            trap(format!("failed to encode metrics: {err}"));
         };
 
         buffer
@@ -976,7 +978,7 @@ fn http_request(request: HttpRequest) -> HttpResponse {
 #[query(name = "listAllowedPrincipals")]
 #[candid_method(query, rename = "listAllowedPrincipals")]
 fn list_allowed_principals() -> ListAllowedPrincipalsResponse {
-    if let Err(err) = ROOT_AUTHORIZER.with(|a| a.borrow().authorize(&caller())) {
+    if let Err(err) = ROOT_AUTHORIZER.with(|a| a.borrow().authorize(&msg_caller())) {
         return ListAllowedPrincipalsResponse::Err(match err {
             AuthorizeError::Unauthorized => ListAllowedPrincipalsError::Unauthorized,
             AuthorizeError::UnexpectedError(err) => {
@@ -990,7 +992,7 @@ fn list_allowed_principals() -> ListAllowedPrincipalsResponse {
         m.borrow()
             .iter()
             .map(|(k, _)| Principal::from_text(k.as_str()).expect("failed to parse principal"))
-            .filter(|k| k != &id())
+            .filter(|k| k != &canister_self())
             .collect()
     }))
 }
@@ -998,7 +1000,7 @@ fn list_allowed_principals() -> ListAllowedPrincipalsResponse {
 #[update(name = "addAllowedPrincipal")]
 #[candid_method(update, rename = "addAllowedPrincipal")]
 fn add_allowed_principal(principal: Principal) -> ModifyAllowedPrincipalResponse {
-    if let Err(err) = ROOT_AUTHORIZER.with(|a| a.borrow().authorize(&caller())) {
+    if let Err(err) = ROOT_AUTHORIZER.with(|a| a.borrow().authorize(&msg_caller())) {
         return ModifyAllowedPrincipalResponse::Err(match err {
             AuthorizeError::Unauthorized => ModifyAllowedPrincipalError::Unauthorized,
             AuthorizeError::UnexpectedError(err) => {
@@ -1015,7 +1017,7 @@ fn add_allowed_principal(principal: Principal) -> ModifyAllowedPrincipalResponse
 #[update(name = "rmAllowedPrincipal")]
 #[candid_method(update, rename = "rmAllowedPrincipal")]
 fn rm_allowed_principal(principal: Principal) -> ModifyAllowedPrincipalResponse {
-    if let Err(err) = ROOT_AUTHORIZER.with(|a| a.borrow().authorize(&caller())) {
+    if let Err(err) = ROOT_AUTHORIZER.with(|a| a.borrow().authorize(&msg_caller())) {
         return ModifyAllowedPrincipalResponse::Err(match err {
             AuthorizeError::Unauthorized => ModifyAllowedPrincipalError::Unauthorized,
             AuthorizeError::UnexpectedError(err) => {
@@ -1042,7 +1044,7 @@ mod tests {
 
     #[test]
     fn check_candid_interface() {
-        use candid_parser::utils::{service_equal, CandidSource};
+        use candid_parser::utils::{CandidSource, service_equal};
 
         candid::export_service!();
         let new_interface = __export_service();

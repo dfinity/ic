@@ -1,0 +1,52 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:anyhow",
+    "@crate_index//:base64",
+    "@crate_index//:der",
+    "@crate_index//:hkdf",
+    "@crate_index//:mockall",
+    "@crate_index//:p384",
+    "@crate_index//:rand",
+    "@crate_index//:rcgen",
+    "@crate_index//:reqwest",
+    "@crate_index//:rsa",
+    "@crate_index//:sev",
+    "@crate_index//:sha2",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+    "@crate_index//:x509-cert",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:pem",
+    "@crate_index//:rcgen",
+]
+
+ALIASES = {}
+
+rust_library(
+    name = "sev",
+    srcs = glob(
+        ["src/**/*.rs"],
+    ),
+    aliases = ALIASES,
+    compile_data = [
+        # Fetched from https://kdsintf.amd.com/vcek/v1/Milan/eabe711026ad4d9e45ab0a53cf339471c9f3e42d5ca9d947fafdd517695e6aa1b2376f0d953c4c62c96e4f9c10d36207733bd2b43f46304629979b52e7227a03?blSPL=03&teeSPL=00&snpSPL=23&ucodeSPL=213
+        "fixtures/mock_amd_key_server_response.crt",
+    ],
+    crate_name = "ic_sev",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "sev_test",
+    crate = ":sev",
+    # Requires network access to the AMD Key Server.
+    tags = ["requires-network"],
+    deps = DEV_DEPENDENCIES,
+)

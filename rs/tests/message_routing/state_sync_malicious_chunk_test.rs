@@ -32,8 +32,8 @@ use ic_system_test_driver::driver::test_env_api::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
-use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::Height;
+use ic_types::malicious_behavior::MaliciousBehavior;
 use rejoin_test_lib::fetch_metrics;
 use rejoin_test_lib::rejoin_test;
 use rejoin_test_lib::rejoin_test_large_state;
@@ -132,7 +132,7 @@ fn setup(env: TestEnv, config: Config) {
                 .add_nodes(config.nodes_count - 1)
                 .add_malicious_nodes(
                     1,
-                    MaliciousBehaviour::new(true)
+                    MaliciousBehavior::new(true)
                         .set_maliciously_alter_state_sync_chunk_receiving_side(
                             config.meta_manifest_chunk_error_allowance,
                             config.manifest_chunk_error_allowance,
@@ -157,7 +157,7 @@ fn setup(env: TestEnv, config: Config) {
                 .add_nodes(config.nodes_count - config.allowed_failures)
                 .add_malicious_nodes(
                     config.allowed_failures,
-                    MaliciousBehaviour::new(true)
+                    MaliciousBehavior::new(true)
                         .set_maliciously_alter_state_sync_chunk_sending_side(),
                 ),
         )

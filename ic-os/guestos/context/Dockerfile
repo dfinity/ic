@@ -20,7 +20,7 @@ USER root:root
 
 RUN mkdir -p /boot/config \
              /boot/efi \
-             /grub
+             /boot/grub
 COPY etc /etc
 
 # Deactivate motd, it tries creating $HOME/.cache/motd.legal-displayed,
@@ -60,6 +60,7 @@ COPY --chmod=644 etc/resolv.conf /etc/resolv.conf
 RUN find /etc -type d -exec chmod 0755 {} \+ && \
     find /etc -type f -not -path "/etc/hostname" -not -path "/etc/hosts" -not -path "/etc/resolv.conf" -exec chmod 0644 {} \+ && \
     chmod 0755 /etc/systemd/system-generators/* && \
+    chmod 0755 /etc/systemd/system-environment-generators/* && \
     chmod 0755 /etc/init.d/* && \
     chmod 0440 /etc/sudoers && \
     chmod 755 /etc/initramfs-tools/scripts/init-bottom/set-machine-id && \
@@ -194,14 +195,6 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
     adduser admin vsock && \
     adduser admin sudo
 
-# The "filebeat" account. Used to run filebeat binary to send logs of the
-# GuestOS.
-RUN addgroup filebeat && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Filebeat" filebeat && \
-    adduser filebeat filebeat && \
-    adduser filebeat systemd-journal && \
-    chown root:root /usr/local/bin/filebeat
-
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.
 RUN addgroup node_exporter && \
@@ -236,6 +229,9 @@ RUN find /opt -type d -exec chmod 0755 {} \+ && \
     find /opt -type f -exec chmod 0644 {} \+ && \
     chmod 0755 /opt/ic/bin/* && \
     chmod 0644 /opt/ic/share/*
+
+# Prepare mount point for config device coming from the HostOS
+RUN mkdir /mnt/config
 
 # ------ DEV VARIANT ---------------------------------------------
 

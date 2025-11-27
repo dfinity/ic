@@ -14,15 +14,20 @@ ic-agent = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-config = { path = "../../config" }
+ic-nervous-system-common  = { path = "../../nervous_system/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
+ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-nns-data-provider = { path = "../../registry/nns_data_provider" }
 ic-system-test-driver = { path = "../../tests/driver" }
 ic-tests-ckbtc = { path = "../../tests/ckbtc" }
 ic-types = { path = "../../types/types" }
+ic-utils = "0.40.1"
+ic-universal-canister = { path = "../../universal_canister/lib" }
 ic_consensus_system_test_utils = { path = "../../tests/consensus/utils" }
+lazy_static = { workspace = true }
 libflate = { workspace = true }
 nns_dapp = { path = "../../tests/nns/nns_dapp" }
 reqwest = { workspace = true }
@@ -33,6 +38,7 @@ ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-canister-client = { path = "../../canister_client" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 icp-ledger = { path = "../../ledger_suite/icp" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 tokio = { workspace = true }
 cycles_minting = { path = "./cycles_minting" }
 cycles-minting-canister = { path = "../../nns/cmc" }
@@ -58,8 +64,8 @@ name = "certified_registry_test"
 path = "certified_registry_test.rs"
 
 [[bin]]
-name = "create_subnet_pre_master_test"
-path = "create_subnet_pre_master_test.rs"
+name = "create_subnet_test"
+path = "create_subnet_test.rs"
 
 # [[bin]]
 # name = "nns_canister_uninstall_test"
@@ -88,3 +94,11 @@ path = "nns_dapp_test.rs"
 [[bin]]
 name = "ic-systest-bitcoin-set-config-proposal-test"
 path = "bitcoin_set_config_proposal_test.rs"
+
+[[bin]]
+name = "rent_subnet_test"
+path = "rent_subnet_test.rs"
+
+[[bin]]
+name = "node_swap_test"
+path = "node_swap_test.rs"

@@ -2,8 +2,8 @@ use assert_matches::assert_matches;
 use candid::{Nat, Principal};
 use ic_base_types::CanisterId;
 use ic_cketh_minter::blocklist::SAMPLE_BLOCKED_ADDRESS;
-use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::CandidBlockTag::Finalized;
+use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::{
     AddCkErc20Token, CkErc20Token, Erc20Balance, MinterInfo, WithdrawalDetail,
     WithdrawalSearchParameter,
@@ -23,13 +23,12 @@ use ic_cketh_test_utils::response::{
     block_response, empty_logs, multi_logs_for_single_transaction,
 };
 use ic_cketh_test_utils::{
-    format_ethereum_address_to_eip_55, CkEthSetup, CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
-    DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
-    DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
-    DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, DEFAULT_USER_SUBACCOUNT,
-    DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS, EFFECTIVE_GAS_PRICE,
+    CKETH_MINIMUM_WITHDRAWAL_AMOUNT, CkEthSetup, DEFAULT_DEPOSIT_BLOCK_NUMBER,
+    DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH,
+    DEFAULT_ERC20_DEPOSIT_LOG_INDEX, DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH,
+    DEFAULT_USER_SUBACCOUNT, DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS, EFFECTIVE_GAS_PRICE,
     ERC20_HELPER_CONTRACT_ADDRESS, ETH_HELPER_CONTRACT_ADDRESS, GAS_USED,
-    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS, format_ethereum_address_to_eip_55,
 };
 use ic_ethereum_types::Address;
 use ic_ledger_suite_orchestrator_test_utils::flow::call_ledger_icrc1_total_supply;
@@ -148,6 +147,7 @@ fn should_mint_with_ckerc20_setup() {
 mod withdraw_erc20 {
     use super::*;
     use ic_base_types::PrincipalId;
+    use ic_cketh_minter::PROCESS_REIMBURSEMENT;
     use ic_cketh_minter::blocklist::SAMPLE_BLOCKED_ADDRESS;
     use ic_cketh_minter::endpoints::ckerc20::{
         LedgerError, RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
@@ -159,25 +159,25 @@ mod withdraw_erc20 {
         EthTransaction, RetrieveEthStatus, TxFinalizedStatus, WithdrawalStatus,
     };
     use ic_cketh_minter::memo::BurnMemo;
-    use ic_cketh_minter::PROCESS_REIMBURSEMENT;
     use ic_cketh_test_utils::ckerc20::{
-        erc20_transfer_data, Erc20WithdrawalFlow, RefreshGasFeeEstimate,
-        DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS, ONE_USDC, TWO_USDC,
+        DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS, Erc20WithdrawalFlow, ONE_USDC,
+        RefreshGasFeeEstimate, TWO_USDC, erc20_transfer_data,
     };
     use ic_cketh_test_utils::flow::{
+        DepositCkEthParams, DepositParams, FeeHistoryProcessWithdrawal, ProcessWithdrawalParams,
         double_and_increment_base_fee_per_gas, increment_base_fee_per_gas,
-        increment_max_priority_fee_per_gas, DepositCkEthParams, DepositParams,
-        FeeHistoryProcessWithdrawal, ProcessWithdrawalParams,
+        increment_max_priority_fee_per_gas,
     };
     use ic_cketh_test_utils::response::{
         decode_transaction, default_erc20_signed_eip_1559_transaction, hash_transaction,
     };
     use ic_cketh_test_utils::{
-        JsonRpcProvider, CKETH_TRANSFER_FEE, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
+        CKETH_TRANSFER_FEE, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
         DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION, DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE,
         DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID, EXPECTED_BALANCE,
+        JsonRpcProvider,
     };
-    use ic_ledger_suite_orchestrator_test_utils::{new_state_machine, CKERC20_TRANSFER_FEE};
+    use ic_ledger_suite_orchestrator_test_utils::{CKERC20_TRANSFER_FEE, new_state_machine};
     use icrc_ledger_types::icrc3::transactions::Burn;
     use num_bigint::BigUint;
     use num_traits::ToPrimitive;
@@ -440,6 +440,7 @@ mod withdraw_erc20 {
                             .unwrap(),
                     })),
                     created_at_time: None,
+                    fee: None,
                 });
 
             let balance_after_withdrawal = ckerc20.cketh.balance_of(caller);
@@ -485,6 +486,7 @@ mod withdraw_erc20 {
                         withdrawal_id: cketh_burn_index.into(),
                     })),
                     created_at_time: None,
+                    fee: None,
                 });
         }
 
@@ -725,6 +727,7 @@ mod withdraw_erc20 {
                         .unwrap(),
                 })),
                 created_at_time: None,
+                fee: None,
             })
             .call_ckerc20_ledger_get_transaction(
                 deposit_params.token().ledger_canister_id,
@@ -744,6 +747,7 @@ mod withdraw_erc20 {
                         .unwrap(),
                 })),
                 created_at_time: None,
+                fee: None,
             });
 
             let expected_cketh_balance_after_withdrawal =
@@ -873,6 +877,7 @@ mod withdraw_erc20 {
                             tx_hash: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.parse().unwrap(),
                         })),
                         created_at_time: None,
+                        fee: None,
                     });
             }
         }
@@ -1176,7 +1181,7 @@ mod withdraw_erc20 {
                         effective_gas_price: Nat::from(4_277_923_390_u64),
                         gas_used: Nat::from(21_000_u64),
                         status: TransactionStatus::Success,
-                        transaction_hash: format!("{:?}", resubmitted_tx_hash),
+                        transaction_hash: format!("{resubmitted_tx_hash:?}"),
                     },
                 },
             ]);
@@ -1361,6 +1366,7 @@ fn should_deposit_ckerc20() {
                     log_index: params.transaction_data().log_index.into(),
                 })),
                 created_at_time: None,
+                fee: None,
             });
     }
 }
@@ -1454,6 +1460,7 @@ fn should_deposit_cketh_and_ckerc20() {
                     log_index: cketh_params.transaction_data().log_index.into(),
                 })),
                 created_at_time: None,
+                fee: None,
             })
             .call_ckerc20_ledger_get_transaction(params.token().ledger_canister_id, 0_u8)
             .expect_mint(Mint {
@@ -1465,6 +1472,7 @@ fn should_deposit_cketh_and_ckerc20() {
                     log_index: params.transaction_data().log_index.into(),
                 })),
                 created_at_time: None,
+                fee: None,
             });
     }
 }
@@ -1621,9 +1629,11 @@ fn should_fail_to_mint_from_unsupported_erc20_contract_address() {
     let unsupported_erc20_address: Address = "0x6b175474e89094c44da98b954eedeac495271d0f"
         .parse()
         .unwrap();
-    assert!(!ckerc20
-        .supported_erc20_contract_addresses()
-        .contains(&unsupported_erc20_address));
+    assert!(
+        !ckerc20
+            .supported_erc20_contract_addresses()
+            .contains(&unsupported_erc20_address)
+    );
 
     ckerc20
         .deposit(DepositCkErc20Params::new(

@@ -1,0 +1,16 @@
+load("@rules_rust//rust:defs.bzl", "rust_proc_macro")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_proc_macro(
+    name = "ic-heap-bytes-derive",
+    srcs = glob(["src/**"]),
+    version = "0.1.0",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:darling",
+        "@crate_index//:proc-macro2",
+        "@crate_index//:quote",
+        "@crate_index//:syn",
+    ],
+)

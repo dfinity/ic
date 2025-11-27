@@ -1,8 +1,8 @@
 mod root_of_trust {
-    use crate::internal::{
-        nns_root_public_key, ConstantRootOfTrustProvider, StandaloneIngressSigVerifier,
-    };
     use crate::AuthenticationError::InvalidCanisterSignature;
+    use crate::internal::{
+        ConstantRootOfTrustProvider, StandaloneIngressSigVerifier, nns_root_public_key,
+    };
     use crate::{
         HttpRequestVerifier, IngressMessageVerifier, RequestValidationError, TimeProvider,
     };
@@ -11,13 +11,13 @@ mod root_of_trust {
     use ic_crypto_test_utils_root_of_trust::{
         MockRootOfTrustProvider, MockRootOfTrustProviderError,
     };
+    use ic_types::Time;
     use ic_types::crypto::threshold_sig::{IcRootOfTrust, RootOfTrustProvider};
     use ic_types::time::GENESIS;
-    use ic_types::Time;
     use ic_validator_http_request_test_utils::AuthenticationScheme::Direct;
     use ic_validator_http_request_test_utils::{
-        all_authentication_schemes, canister_signature_with_hard_coded_root_of_trust,
-        hard_coded_root_of_trust, DirectAuthenticationScheme, HttpRequestBuilder,
+        DirectAuthenticationScheme, HttpRequestBuilder, all_authentication_schemes,
+        canister_signature_with_hard_coded_root_of_trust, hard_coded_root_of_trust,
     };
     use std::sync::Arc;
 

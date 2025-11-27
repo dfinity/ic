@@ -3,10 +3,10 @@ use ic_crypto_temp_crypto::CryptoComponentRng;
 use ic_crypto_temp_crypto::TempCryptoComponentGeneric;
 use ic_crypto_test_utils::crypto_for;
 use ic_crypto_test_utils_ni_dkg::{
-    create_dealings, run_ni_dkg_and_create_single_transcript, NiDkgTestEnvironment,
-    RandomNiDkgConfig,
+    NiDkgTestEnvironment, RandomNiDkgConfig, create_dealings,
+    run_ni_dkg_and_create_single_transcript,
 };
-use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
 use ic_interfaces::crypto::{
     LoadTranscriptResult, NiDkgAlgorithm, ThresholdSigVerifier, ThresholdSigner,
 };
@@ -297,7 +297,7 @@ fn sign_threshold_for_each<H: Signable, C: CryptoComponentRng>(
         .map(|signer| {
             let sig_share = crypto_for(*signer, crypto_components)
                 .sign_threshold(msg, dkg_id)
-                .unwrap_or_else(|e| panic!("signing by node {:?} failed: {}", signer, e));
+                .unwrap_or_else(|e| panic!("signing by node {signer:?} failed: {e}"));
             (*signer, sig_share)
         })
         .collect()
@@ -324,8 +324,8 @@ fn message() -> SignableMock {
 
 mod non_interactive_distributed_key_generation {
     use super::*;
-    use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
     use ic_crypto_internal_types::NodeIndex;
+    use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
     use ic_protobuf::registry::crypto::v1::PublicKey;
     use ic_types::crypto::threshold_sig::ni_dkg::NiDkgDealing;
 
@@ -345,9 +345,7 @@ mod non_interactive_distributed_key_generation {
             assert_eq!(
                 verification_result,
                 Ok(()),
-                "verification of dealing from dealer {:?} failed for {:?}",
-                dealer,
-                verifier
+                "verification of dealing from dealer {dealer:?} failed for {verifier:?}"
             );
         }
     }
@@ -767,8 +765,7 @@ mod non_interactive_distributed_key_generation {
                 let overhead = (record_len as f64) / (expected_size as f64);
 
                 println!(
-                    "Subnet size {} with {} dealers, threshold {:?} protobuf transcript size {} (overhead {:.3})",
-                    subnet_size, dealer_count, threshold, record_len, overhead,
+                    "Subnet size {subnet_size} with {dealer_count} dealers, threshold {threshold:?} protobuf transcript size {record_len} (overhead {overhead:.3})",
                 );
 
                 assert!(
@@ -834,7 +831,7 @@ mod non_interactive_distributed_key_generation {
                     key_id: _,
                 }) => {}
                 Err(e) => {
-                    panic!("Unexpected error {}", e);
+                    panic!("Unexpected error {e}");
                 }
             }
         }
@@ -859,7 +856,7 @@ mod non_interactive_distributed_key_generation {
                     assert_eq!(dkg_id, &missing_dkg_id);
                 }
                 Err(e) => {
-                    panic!("Unexpected error {}", e);
+                    panic!("Unexpected error {e}");
                 }
             }
         }
@@ -902,7 +899,7 @@ mod non_interactive_distributed_key_generation {
                 let transcript = crypto_for(*node, crypto_components)
                     .create_transcript(ni_dkg_config, dealings)
                     .unwrap_or_else(|error| {
-                        panic!("failed to create transcript for {:?}: {:?}", node, error)
+                        panic!("failed to create transcript for {node:?}: {error:?}")
                     });
                 (*node, transcript)
             })

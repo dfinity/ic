@@ -43,6 +43,25 @@ impl Module {
         N: std::fmt::Display,
         P: RenderParams,
     {
+        self.from_ic0_with_data(name, params, result, DataSections::default(), wasm64_status)
+    }
+
+    /// Render a complete WAT module for a system call executing in a loop, with params and result,
+    /// and a data segment
+    #[allow(clippy::wrong_self_convention)]
+    pub fn from_ic0_with_data<N, D, P>(
+        &self,
+        name: N,
+        params: P,
+        result: Result,
+        data: D,
+        wasm64_status: Wasm64,
+    ) -> String
+    where
+        N: std::fmt::Display,
+        P: RenderParams,
+        D: std::fmt::Display,
+    {
         let loop_iterations = match self {
             Module::Test
             | Module::StableTest
@@ -53,16 +72,21 @@ impl Module {
             Module::CallNewLoop => LoopIterations::One,
         };
         self.from_sections(
-            Self::sections(loop_iterations, name, params, result, wasm64_status),
+            Self::sections(loop_iterations, name, params, result, data, wasm64_status),
             wasm64_status,
         )
     }
 
     /// Render a complete WAT module from imports and body.
     #[allow(clippy::wrong_self_convention)]
-    pub fn from_sections<I, B>(&self, (imports, body): (I, B), wasm64_status: Wasm64) -> String
+    pub fn from_sections<I, D, B>(
+        &self,
+        (imports, data, body): (I, D, B),
+        wasm64_status: Wasm64,
+    ) -> String
     where
         I: core::fmt::Display,
+        D: core::fmt::Display,
         B: core::fmt::Display,
     {
         let memory = if wasm64_status == Wasm64::Enabled {
@@ -81,8 +105,7 @@ impl Module {
                 ({ty}.const 100) ({ty}.const 18)
                 ({ty}.const 11)  ({ty}.const 0) ;; non-existent function
                 ({ty}.const 22)  ({ty}.const 0) ;; non-existent function
-            )"#,
-            ty = ty
+            )"#
         );
         let call_new_signature = format!(
             r#"(import "ic0" "call_new"
@@ -91,8 +114,7 @@ impl Module {
                 (param $name_src {ty})           (param $name_size {ty})
                 (param $reply_fun {ty})          (param $reply_env {ty})
                 (param $reject_fun {ty})         (param $reject_env {ty})
-                ))"#,
-            ty = ty
+                ))"#
         );
 
         match self {
@@ -103,6 +125,7 @@ impl Module {
         (module
             {IMPORTS}
             {MEMORY}
+            {DATA}
             (func $test (export "canister_update test")
                 {VARS_DECLARATION}
                 {BODY}
@@ -111,6 +134,7 @@ impl Module {
             "#,
                     IMPORTS = imports,
                     MEMORY = memory,
+                    DATA = data,
                     VARS_DECLARATION = if wasm64_status == Wasm64::Enabled {
                         "(local $i i64) (local $s i64)"
                     } else {
@@ -126,6 +150,7 @@ impl Module {
             {STABLE_GROW_IMPORT}
             {IMPORTS}
             {MEMORY}
+            {DATA}
             (func $test (export "canister_update test")
                 {LOCAL_COUNTER_DECLARATION}
                 {CALL_STABLE_GROW}
@@ -142,6 +167,7 @@ impl Module {
                     },
                     IMPORTS = imports,
                     MEMORY = memory,
+                    DATA = data,
                     LOCAL_COUNTER_DECLARATION = if wasm64_status == Wasm64::Enabled {
                         "(local $i i64) (local $s i64)"
                     } else {
@@ -160,10 +186,8 @@ impl Module {
                     LoopIterations::Mi,
                     format!(
                         r#"
-                            {CALL_NEW_PARAMS}
-                            {BODY}"#,
-                        CALL_NEW_PARAMS = call_new_params,
-                        BODY = body
+                            {call_new_params}
+                            {body}"#
                     ),
                     wasm64_status,
                 );
@@ -173,6 +197,7 @@ impl Module {
             {CALL_NEW_SIGNATURE}
             {IMPORTS}
             {MEMORY}
+            {DATA}
             (func $test (export "canister_update test")
                 {VARS_DECLARATION}
                 {BODY}
@@ -182,6 +207,7 @@ impl Module {
                     CALL_NEW_SIGNATURE = call_new_signature,
                     IMPORTS = imports,
                     MEMORY = memory,
+                    DATA = data,
                     VARS_DECLARATION = if wasm64_status == Wasm64::Enabled {
                         "(local $i i64) (local $s i64)"
                     } else {
@@ -197,6 +223,7 @@ impl Module {
             (import "ic0" "accept_message" (func $ic0_accept_message))
             {IMPORTS}
             {MEMORY}
+            {DATA}
             (func (export "canister_inspect_message")
                 {VARS_DECLARATION}
                 {BODY}
@@ -206,6 +233,7 @@ impl Module {
             "#,
                     IMPORTS = imports,
                     MEMORY = memory,
+                    DATA = data,
                     VARS_DECLARATION = if wasm64_status == Wasm64::Enabled {
                         "(local $i i64) (local $s i64)"
                     } else {
@@ -218,18 +246,16 @@ impl Module {
                 format!(
                     r#"
         (module
-            {IMPORTS}
-            {MEMORY}
+            {imports}
+            {memory}
+            {data}
             (table funcref (elem $test))
             (func $test (param $env i32)
                 (local $i i32) (local $s i32)
-                {BODY}
+                {body}
             )
         )
-            "#,
-                    IMPORTS = imports,
-                    MEMORY = memory,
-                    BODY = body
+            "#
                 )
             }
             Module::QueryTest => {
@@ -239,6 +265,7 @@ impl Module {
         (module
             {IMPORTS}
             {MEMORY}
+            {DATA}
             (func $test (export "canister_query test")
                 {VARS_DECLARATION}
                 {BODY}
@@ -247,6 +274,7 @@ impl Module {
             "#,
                     IMPORTS = imports,
                     MEMORY = memory,
+                    DATA = data,
                     VARS_DECLARATION = if wasm64_status == Wasm64::Enabled {
                         "(local $i i64) (local $s i64)"
                     } else {
@@ -259,16 +287,18 @@ impl Module {
     }
 
     /// Get WAT module parts: imports and body.
-    pub fn sections<N, P>(
+    pub fn sections<N, P, D>(
         loop_iterations: LoopIterations,
         name: N,
         params: P,
         result: Result,
+        data: D,
         wasm64_status: Wasm64,
-    ) -> (String, String)
+    ) -> (String, String, String)
     where
         N: std::fmt::Display,
         P: RenderParams,
+        D: std::fmt::Display,
     {
         let imports = format!(
             r#"
@@ -288,7 +318,7 @@ impl Module {
             )),
             wasm64_status,
         );
-        (imports, body)
+        (imports, data.to_string(), body)
     }
 
     /// Return WAT for a simple loop.
@@ -303,8 +333,7 @@ impl Module {
         match loop_iterations {
             LoopIterations::One => format!(
                 // Indent to match module and function
-                "{LOOP_BODY}",
-                LOOP_BODY = loop_body
+                "{loop_body}"
             ),
             LoopIterations::Mi => format!(
                 r#"
@@ -358,6 +387,30 @@ pub trait RenderParams {
     fn import(&self) -> String;
     /// Render System API call parameter call.
     fn call(&self) -> String;
+}
+
+#[derive(Default)]
+pub struct DataSections {
+    pub use_64_bit: bool,
+    pub sections: Vec<(u32, Vec<u8>)>,
+}
+
+impl core::fmt::Display for DataSections {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        for (offset, bytes) in &self.sections {
+            write!(
+                f,
+                r#"(data ({address_space}.const {offset}) "{bytes}")"#,
+                address_space = if self.use_64_bit { "i64" } else { "i32" },
+                offset = offset,
+                bytes = bytes
+                    .iter()
+                    .map(|b| format!("\\{:02x}", b))
+                    .collect::<String>()
+            )?;
+        }
+        Ok(())
+    }
 }
 
 /// Implement RenderParams trait for i32.

@@ -5,7 +5,7 @@ use proptest::prelude::*;
 use ic_base_types::CanisterId;
 use ic_stable_memory_integrity::StableOperationResult;
 use ic_state_machine_tests::StateMachine;
-use ic_types::{ingress::WasmResult, Cycles, MAX_STABLE_MEMORY_IN_BYTES};
+use ic_types::{Cycles, MAX_STABLE_MEMORY_IN_BYTES, ingress::WasmResult};
 
 const KB: u64 = 1024;
 const WASM_PAGE_SIZE_IN_BYTES: usize = 64 * KB as usize;
@@ -122,7 +122,7 @@ impl StableState {
             .unwrap()
         {
             WasmResult::Reply(bytes) => bytes,
-            WasmResult::Reject(err) => panic!("Failed to get stable memory size: {}", err),
+            WasmResult::Reject(err) => panic!("Failed to get stable memory size: {err}"),
         };
 
         assert_eq!(
@@ -165,7 +165,7 @@ impl StableState {
                 {
                     WasmResult::Reply(bytes) => bytes,
                     WasmResult::Reject(err) => {
-                        panic!("Failed to read stable memory contents: {}", err)
+                        panic!("Failed to read stable memory contents: {err}")
                     }
                 };
                 assert_eq!(chunk, &Decode!(&result, Vec<u8>).unwrap());
@@ -405,7 +405,7 @@ fn generate_invalid_operation(
         StableOperationType::Grow => {
             let max_pages_to_grow = (MAX_STABLE_MEMORY_IN_BYTES - state.contents.len() as u64)
                 / WASM_PAGE_SIZE_IN_BYTES as u64;
-            StableOperation::Grow(max_pages_to_grow.saturating_add(rng.gen::<u64>()))
+            StableOperation::Grow(max_pages_to_grow.saturating_add(rng.r#gen::<u64>()))
         }
         StableOperationType::Read => {
             let length = rng.gen_range(0..4 * KB);

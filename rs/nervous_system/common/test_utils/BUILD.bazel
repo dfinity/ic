@@ -17,12 +17,15 @@ package_group(
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/crypto/sha2",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nervous_system/canisters",
     "//rs/nervous_system/common",
     "//rs/rust_canisters/dfn_core",
+    "@crate_index//:candid",
     "@crate_index//:futures",
     "@crate_index//:ic-wasm",
+    "@crate_index//:lazy_static",
     "@crate_index//:libflate",
     "@crate_index//:prometheus-parse",
 ]

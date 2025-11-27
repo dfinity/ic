@@ -1,8 +1,8 @@
 use super::*;
 use assert_matches::assert_matches;
 use ic_crypto_standalone_sig_verifier::ed25519_public_key_to_der;
+use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
 use ic_crypto_test_utils_root_of_trust::MockRootOfTrustProvider;
-use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, node_test_id};
 use ic_types::{
     messages::{Delegation, SignedDelegation, UserSignature},
@@ -28,14 +28,16 @@ fn plain_authentication_correct_signature_passes() {
         sender_delegation: None,
     };
 
-    assert!(validate_signature(
-        &sig_verifier,
-        &message_id,
-        &user_signature,
-        UNIX_EPOCH,
-        &MockRootOfTrustProvider::new()
-    )
-    .is_ok());
+    assert!(
+        validate_signature(
+            &sig_verifier,
+            &message_id,
+            &user_signature,
+            UNIX_EPOCH,
+            &MockRootOfTrustProvider::new()
+        )
+        .is_ok()
+    );
 
     // Same signature as above with empty delegations specified. Should also pass.
     let user_signature = UserSignature {
@@ -44,14 +46,16 @@ fn plain_authentication_correct_signature_passes() {
         sender_delegation: Some(Vec::new()),
     };
 
-    assert!(validate_signature(
-        &sig_verifier,
-        &message_id,
-        &user_signature,
-        UNIX_EPOCH,
-        &MockRootOfTrustProvider::new()
-    )
-    .is_ok());
+    assert!(
+        validate_signature(
+            &sig_verifier,
+            &message_id,
+            &user_signature,
+            UNIX_EPOCH,
+            &MockRootOfTrustProvider::new()
+        )
+        .is_ok()
+    );
 }
 
 #[test]
@@ -607,8 +611,7 @@ mod canister_id_set {
         // Probability of collision is negligible (around 10^(-60)).
         assert!(
             intersection.is_empty(),
-            "expected {:?} to be empty but was not",
-            intersection
+            "expected {intersection:?} to be empty but was not"
         )
     }
 

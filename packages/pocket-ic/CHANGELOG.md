@@ -8,8 +8,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
-- The function `PocketIc::start_or_reuse_server` to manually start or reuse a PocketIC server.
-- The function `PocketIcBuilder::with_all_icp_features` to specify that all ICP features (supported by PocketIC) should be enabled.
+- The function `PocketIcBuilder::with_initial_time` to specify the initial timestamp of the newly created PocketIC instance.
+- The parameter `ttl` to `StartServerParams` to specify the TTL of the PocketIC server.
+- The constant `LATEST_SERVER_VERSION` to facilitate downloading the PocketIC server.
+- The function `PocketIcBuilder::with_dogecoind_addrs` to specify a list of addresses at which a `dogecoind` process is listening
+  for Dogecoin support in PocketIC.
+- The function `PocketIc::canister_snapshot_download` to download a canister snapshot to a given snapshot directory.
+- The function `PocketIc::canister_snapshot_upload` to upload a canister snapshot from a given snapshot directory.
+
+### Changed
+- Deprecated `PocketIcBuilder::with_initial_timestamp`, use `PocketIcBuilder::with_initial_time` instead.
+- The function `start_server` only downloads the PocketIC server binary
+  if no path to the PocketIC server binary is provided explicitly.
+
+### Fixed
+- The function `PocketIc::make_live_with_params` is only async in the `nonblocking` module.
+
+### Removed
+- The constant `EXPECTED_SERVER_VERSION`: semantic version is now used instead of a fixed expected PocketIC server version.
+
+
+
+## 10.0.0 - 2025-09-12
+
+### Added
+- The function `start_server` and its input type `StartServerParams` to manually start a PocketIC server.
+- The function `PocketIc::upgrade_eop_canister` to upgrade a Motoko EOP canister.
+- The function `PocketIcBuilder::with_icp_features` to specify that selected ICP features (supported by PocketIC) should be enabled.
+- The function `PocketIcBuilder::with_initial_timestamp` to specify the initial timestamp of the newly created PocketIC instance.
+- The function `PocketIcBuilder::with_auto_progress` to specify that the new instance should make progress automatically,
+  i.e., PocketIC should periodically update the time of the instance to the real time and execute rounds on the subnets.
+- The function `PocketIcBuilder::with_http_gateway` to specify that an HTTP gateway should be created for the newly created instance.
+
+### Removed
+- The field `node_ids` from `SubnetConfig`. Node ids can always be retrieved from the registry.
+- The deprecated function `PocketIc::make_deterministic`.
+
+### Changed
+- Renamed `PocketIcBuilder::with_nonmainnet_features` to `PocketIcBuilder::with_icp_config` and changed the argument type
+  from a simple Boolean to a record with separate settings for the individual configuration options.
 
 
 

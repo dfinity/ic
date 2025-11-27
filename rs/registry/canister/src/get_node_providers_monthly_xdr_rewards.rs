@@ -78,7 +78,7 @@ mod tests {
         },
     };
     use ic_registry_keys::make_node_operator_record_key;
-    use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+    use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
     use ic_types::PrincipalId;
     use maplit::btreemap;
     use std::collections::BTreeMap;
@@ -131,15 +131,6 @@ mod tests {
     fn registry_init_empty() -> Registry {
         let mut registry = Registry::new();
         registry.maybe_apply_mutation_internal(invariant_compliant_mutation(0));
-
-        // Assert get_node_providers_monthly_xdr_rewards fails because no rewards table
-        // exists in the Registry
-        let err = registry
-            .get_node_providers_monthly_xdr_rewards(GetNodeProvidersMonthlyXdrRewardsRequest {
-                registry_version: None,
-            })
-            .unwrap_err();
-        assert_eq!(&err, "Node Rewards Table was not found in the Registry");
 
         // Add empty Node Rewards table to test failure cases
         let node_rewards_payload = UpdateNodeRewardsTableProposalPayload::default();
@@ -446,7 +437,7 @@ mod tests {
         let mut np2_expected_reward_ch = 0;
         let mut node_reward_ch = 22000000.0;
         for _ in 0..14 {
-            println!("node_reward CH {}", node_reward_ch);
+            println!("node_reward CH {node_reward_ch}");
             np2_expected_reward_ch += node_reward_ch as u64;
             node_reward_ch *= 0.7;
         }
@@ -472,7 +463,7 @@ mod tests {
         let mut np2_expected_reward_de = 0;
         let mut node_reward_de = 22000000.0;
         for _ in 0..11 {
-            println!("node_reward DE {}", node_reward_de);
+            println!("node_reward DE {node_reward_de}");
             np2_expected_reward_de += node_reward_de as u64;
             node_reward_de *= 0.7;
         }
@@ -502,7 +493,7 @@ mod tests {
         );
 
         for _ in 0..10 {
-            println!("node_reward CH {}", node_reward_ch);
+            println!("node_reward CH {node_reward_ch}");
             np2_expected_reward_ch += node_reward_ch as u64;
             node_reward_ch *= 0.7;
         }

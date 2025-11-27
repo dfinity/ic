@@ -3,12 +3,12 @@ use crate::common::utils::assert_rosetta_blockchain_is_valid;
 use crate::common::utils::get_test_agent;
 use crate::common::utils::test_identity;
 use crate::common::utils::wait_for_rosetta_to_sync_up_to_block;
-use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
+use ic_agent::identity::BasicIdentity;
 use ic_icrc1_test_utils::LedgerEndpointArg;
 use ic_icrc1_test_utils::{
-    minter_identity, valid_transactions_strategy_with_excluded_transaction_types, TransactionTypes,
-    DEFAULT_TRANSFER_FEE,
+    DEFAULT_TRANSFER_FEE, TransactionTypes, minter_identity,
+    valid_transactions_strategy_with_excluded_transaction_types,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
@@ -48,7 +48,7 @@ fn test_icp_transfer() {
                 for arg_with_caller in args_with_caller.iter() {
                     assert!(
                         matches!(arg_with_caller.arg, LedgerEndpointArg::TransferArg(_)),
-                        "Strategy should only generate transactions with TransferArg, but got: {:?}", arg_with_caller
+                        "Strategy should only generate transactions with TransferArg, but got: {arg_with_caller:?}"
                     );
                 }
                 let rt = Runtime::new().unwrap();

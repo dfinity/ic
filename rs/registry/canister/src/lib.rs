@@ -13,4 +13,4 @@ pub mod registry_lifecycle;
 pub mod storage;
 
 mod invariants;
-mod missing_node_types_map;
+mod rate_limits;

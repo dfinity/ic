@@ -47,10 +47,7 @@ impl Registry {
         &mut self,
         payload: DeployGuestosToSomeApiBoundaryNodes,
     ) {
-        println!(
-            "{}do_update_api_boundary_nodes_version: {:?}",
-            LOG_PREFIX, payload
-        );
+        println!("{LOG_PREFIX}do_update_api_boundary_nodes_version: {payload:?}");
 
         // Ensure payload is valid
         self.validate_update_api_boundary_nodes_version_payload(&payload);
@@ -185,7 +182,7 @@ mod tests {
                 ReplicaVersionRecord {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
-                    guest_launch_measurement_sha256_hex: None,
+                    guest_launch_measurements: None,
                 }
                 .encode_to_vec(),
             ),

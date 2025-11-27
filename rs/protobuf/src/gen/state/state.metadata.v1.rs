@@ -28,6 +28,11 @@ pub struct SubnetTopology {
     #[prost(message, repeated, tag = "6")]
     pub chain_keys_held:
         ::prost::alloc::vec::Vec<super::super::super::types::v1::MasterPublicKeyId>,
+    #[prost(
+        enumeration = "super::super::super::registry::subnet::v1::CanisterCyclesCostSchedule",
+        tag = "7"
+    )]
+    pub canister_cycles_cost_schedule: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetsEntry {
@@ -209,6 +214,23 @@ pub struct CanisterHttpRequestContext {
     pub transform_context: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     #[prost(message, optional, tag = "11")]
     pub replication: ::core::option::Option<Replication>,
+    #[prost(message, optional, tag = "12")]
+    pub pricing_version: ::core::option::Option<PricingVersion>,
+}
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct PricingVersion {
+    #[prost(oneof = "pricing_version::Version", tags = "1, 2")]
+    pub version: ::core::option::Option<pricing_version::Version>,
+}
+/// Nested message and enum types in `PricingVersion`.
+pub mod pricing_version {
+    #[derive(Clone, Copy, PartialEq, ::prost::Oneof)]
+    pub enum Version {
+        #[prost(message, tag = "1")]
+        Legacy(()),
+        #[prost(message, tag = "2")]
+        PayAsYouGo(()),
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Replication {
@@ -530,6 +552,12 @@ pub struct SystemMetadata {
     pub blockmaker_metrics_time_series: ::core::option::Option<BlockmakerMetricsTimeSeries>,
     #[prost(message, repeated, tag = "21")]
     pub api_boundary_nodes: ::prost::alloc::vec::Vec<ApiBoundaryNodeEntry>,
+    /// TODO: deprecate in favour of information in NetworkTopology
+    #[prost(
+        enumeration = "super::super::super::registry::subnet::v1::CanisterCyclesCostSchedule",
+        tag = "22"
+    )]
+    pub canister_cycles_cost_schedule: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StableMemory {

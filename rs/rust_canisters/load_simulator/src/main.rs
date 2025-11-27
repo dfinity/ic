@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use ic_cdk::api::stable;
 use std::cell::RefCell;
 use std::time::Duration;
@@ -26,7 +27,7 @@ async fn timer_handler() {
 #[ic_cdk::init]
 fn set_up_timer() {
     // Set up a canister timer to call a function every N seconds.
-    ic_cdk_timers::set_timer_interval(Duration::from_secs(1), || ic_cdk::spawn(timer_handler()));
+    ic_cdk_timers::set_timer_interval(Duration::from_secs(1), async || timer_handler().await);
 }
 
 // When run on native this prints the candid service definition of this

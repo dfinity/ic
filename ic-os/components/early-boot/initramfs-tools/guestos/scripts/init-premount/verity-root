@@ -15,6 +15,9 @@ case $1 in
         ;;
 esac
 
+# Without this, error exit codes are ignored and the boot continues
+trap 'panic "fatal: verity-root failed"' ERR
+
 . /scripts/functions
 
 echo "Original root: ${ROOT}"

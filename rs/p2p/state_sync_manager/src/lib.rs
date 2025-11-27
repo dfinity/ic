@@ -20,18 +20,19 @@ use std::{
     time::Duration,
 };
 
-use axum::{routing::any, Router};
+use crate::utils::Advert;
+use axum::{Router, routing::any};
 use futures::future::join_all;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::state_sync::{StateSyncArtifactId, StateSyncClient};
-use ic_logger::{info, ReplicaLogger};
+use ic_interfaces::p2p::state_sync::StateSyncClient;
+use ic_logger::{ReplicaLogger, info};
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::{Shutdown, Transport};
 use metrics::{StateSyncManagerHandlerMetrics, StateSyncManagerMetrics};
-use ongoing::{start_ongoing_state_sync, OngoingStateSyncHandle};
+use ongoing::{OngoingStateSyncHandle, start_ongoing_state_sync};
 use routes::{
+    STATE_SYNC_ADVERT_PATH, STATE_SYNC_CHUNK_PATH, StateSyncAdvertHandler, StateSyncChunkHandler,
     build_advert_handler_request, state_sync_advert_handler, state_sync_chunk_handler,
-    StateSyncAdvertHandler, StateSyncChunkHandler, STATE_SYNC_ADVERT_PATH, STATE_SYNC_CHUNK_PATH,
 };
 use tokio::{runtime::Handle, select, task::JoinSet, time::MissedTickBehavior};
 use tokio_util::sync::CancellationToken;
@@ -39,6 +40,7 @@ use tokio_util::sync::CancellationToken;
 mod metrics;
 mod ongoing;
 mod routes;
+mod utils;
 
 // Interval with which state is advertised to peers.
 const ADVERT_BROADCAST_INTERVAL: Duration = Duration::from_secs(5);
@@ -89,7 +91,7 @@ pub struct StateSyncManager<T> {
     rt: Handle,
     metrics: StateSyncManagerMetrics,
     state_sync: Arc<dyn StateSyncClient<Message = T>>,
-    advert_receiver: tokio::sync::mpsc::Receiver<(StateSyncArtifactId, NodeId)>,
+    advert_receiver: tokio::sync::mpsc::Receiver<(Advert, NodeId)>,
     ongoing_state_sync: Option<OngoingStateSyncHandle>,
 }
 
@@ -111,6 +113,10 @@ impl<T: 'static + Send> StateSyncManager<T> {
                 () = cancellation.cancelled() => {
                     break;
                 }
+                Some(_) = advertise_task.join_next() => {}
+                Some((advert, peer_id)) = self.advert_receiver.recv() => {
+                    self.handle_advert(advert, peer_id, transport.clone()).await;
+                }
                 // Make sure we only have one active advertise task.
                 _ = interval.tick(), if advertise_task.is_empty() => {
                     advertise_task.spawn_on(
@@ -124,10 +130,6 @@ impl<T: 'static + Send> StateSyncManager<T> {
                         &self.rt
                     );
                 },
-                Some((advert, peer_id)) = self.advert_receiver.recv() =>{
-                    self.handle_advert(advert, peer_id, transport.clone()).await;
-                }
-                Some(_) = advertise_task.join_next() => {}
             }
         }
         while advertise_task.join_next().await.is_some() {}
@@ -138,21 +140,21 @@ impl<T: 'static + Send> StateSyncManager<T> {
 
     async fn handle_advert(
         &mut self,
-        artifact_id: StateSyncArtifactId,
+        advert: Advert,
         peer_id: NodeId,
         transport: Arc<dyn Transport>,
     ) {
         self.metrics.adverts_received_total.inc();
         // Remove ongoing state sync if finished or try to add peer if ongoing.
         if let Some(ongoing) = &mut self.ongoing_state_sync {
-            if ongoing.artifact_id == artifact_id {
+            if ongoing.artifact_id == advert.id {
                 // `try_send` is used beacuse the ongoing state sync can be blocked. This can, for example happen because of
                 // file system operations. In that case we don't want to block the main event loop here. It is also fine
                 // to drop adverts since peers will readvertise anyway.
                 let _ = ongoing.sender.try_send(peer_id);
             }
             if ongoing.shutdown.completed() {
-                info!(self.log, "Cleaning up state sync {}", artifact_id.height);
+                info!(self.log, "Cleaning up state sync {}", advert.id.height);
                 self.ongoing_state_sync = None;
             } else {
                 if self.state_sync.cancel_if_running(&ongoing.artifact_id) {
@@ -163,10 +165,10 @@ impl<T: 'static + Send> StateSyncManager<T> {
         }
         // `maybe_start_state_sync` should not be called if we have ongoing state sync!
         debug_assert!(self.ongoing_state_sync.is_none());
-        if let Some(chunkable) = self.state_sync.maybe_start_state_sync(&artifact_id) {
+        if let Some(chunkable) = self.state_sync.maybe_start_state_sync(&advert.id) {
             info!(
                 self.log,
-                "Starting state sync for height {}", artifact_id.height
+                "Starting state sync for height {}", advert.id.height
             );
             self.metrics.state_syncs_total.inc();
 
@@ -178,7 +180,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
                 &self.rt,
                 self.metrics.ongoing_state_sync_metrics.clone(),
                 Arc::new(Mutex::new(chunkable)),
-                artifact_id.clone(),
+                advert.id.clone(),
                 transport,
             );
             // Add peer that initiated this state sync to ongoing state sync.
@@ -231,11 +233,11 @@ impl<T: 'static + Send> StateSyncManager<T> {
                 let cancellation_c = cancellation.clone();
                 futures.push(async move {
                     select! {
+                        () = cancellation_c.cancelled() => {}
                         _ = tokio::time::timeout(
                             ADVERT_BROADCAST_TIMEOUT,
                             // TODO: NET-1748
                             transport_c.rpc(&peer_id, request)) => {}
-                        () = cancellation_c.cancelled() => {}
                     }
                 });
             }
@@ -248,11 +250,11 @@ impl<T: 'static + Send> StateSyncManager<T> {
 mod tests {
     use axum::{http::StatusCode, response::Response};
     use bytes::{Bytes, BytesMut};
-    use ic_interfaces::p2p::state_sync::ChunkId;
+    use ic_interfaces::p2p::state_sync::{ChunkId, StateSyncArtifactId};
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync, MockTransport};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::{crypto::CryptoHash, Height};
+    use ic_types::{Height, crypto::CryptoHash};
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use mockall::Sequence;
     use prost::Message;
@@ -315,13 +317,17 @@ mod tests {
                 .return_once(|_| Some(Box::new(c)));
 
             let rt = Runtime::new().unwrap();
-            let old_id = StateSyncArtifactId {
-                height: Height::from(0),
-                hash: CryptoHash(vec![]),
+            let old_advert = Advert {
+                id: StateSyncArtifactId {
+                    height: Height::from(0),
+                    hash: CryptoHash(vec![]),
+                },
             };
-            let id = StateSyncArtifactId {
-                height: Height::from(1),
-                hash: CryptoHash(vec![]),
+            let advert = Advert {
+                id: StateSyncArtifactId {
+                    height: Height::from(1),
+                    hash: CryptoHash(vec![]),
+                },
             };
 
             let (handler_tx, handler_rx) = tokio::sync::mpsc::channel(100);
@@ -337,8 +343,8 @@ mod tests {
             };
             let _ = manager.start(Arc::new(t) as Arc<_>);
             rt.block_on(async move {
-                handler_tx.send((id, NODE_1)).await.unwrap();
-                handler_tx.send((old_id, NODE_2)).await.unwrap();
+                handler_tx.send((advert, NODE_1)).await.unwrap();
+                handler_tx.send((old_advert, NODE_2)).await.unwrap();
                 finished.notified().await;
             });
         });

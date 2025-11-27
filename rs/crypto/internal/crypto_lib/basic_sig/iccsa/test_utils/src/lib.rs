@@ -1,8 +1,8 @@
-use ic_certification_test_utils::{hash_full_tree, CertificateBuilder, CertificateData};
+use ic_certification_test_utils::{CertificateBuilder, CertificateData, hash_full_tree};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_tree_hash::{
-    flatmap, Digest, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, MixedHashTree,
-    WitnessGenerator,
+    Digest, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, MixedHashTree,
+    WitnessGenerator, flatmap,
 };
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{CanisterId, PrincipalId, SubnetId};

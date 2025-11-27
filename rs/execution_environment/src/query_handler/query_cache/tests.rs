@@ -1,11 +1,11 @@
 use super::{QueryCache, QueryCacheMetrics};
 use crate::{
-    metrics,
+    InternalHttpQueryHandler, metrics,
     query_handler::query_cache::{EntryEnv, EntryKey, EntryValue},
-    InternalHttpQueryHandler,
 };
 use ic_base_types::CanisterId;
 use ic_error_types::ErrorCode;
+use ic_heap_bytes::{DeterministicHeapBytes, HeapBytes, total_bytes};
 use ic_interfaces::execution_environment::{SystemApiCallCounters, SystemApiCallId};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
@@ -15,8 +15,11 @@ use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
-    messages::{CanisterTask, Query, QuerySource},
-    time, MemoryDiskBytes,
+    messages::{
+        CanisterTask, CertificateDelegationFormat, CertificateDelegationMetadata, Query,
+        QuerySource,
+    },
+    time,
 };
 use ic_types_test_utils::ids::subnet_test_id;
 use ic_universal_canister::call_args;
@@ -217,6 +220,7 @@ fn query_cache_reports_memory_bytes_metric_on_invalidation() {
         receiver: a_id,
         method_name: "method".into(),
         method_payload: vec![],
+        certificate_delegation_format: None,
     };
 
     // Assert initial cache state.
@@ -333,6 +337,7 @@ fn query_cache_returns_different_results_for_different_sources() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         );
         assert_eq!(query_cache_metrics(&test).misses.get(), 1);
         let caller = if a_id == b_id {
@@ -357,6 +362,7 @@ fn query_cache_returns_different_results_for_different_sources() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         );
         assert_eq!(query_cache_metrics(&test).misses.get(), 2);
         let caller = if a_id == b_id {
@@ -398,6 +404,46 @@ fn query_cache_returns_different_results_for_different_method_names() {
     let res_2 = test.non_replicated_query(id, "f2", vec![]);
     assert_eq!(query_cache_metrics(&test).misses.get(), 2);
     assert_eq!(res_1, res_2);
+}
+
+#[test]
+fn query_cache_returns_different_results_for_different_certificate_delegation_formats() {
+    let mut test = builder_with_query_caching().build();
+    let id = test.canister_from_wat(QUERY_CACHE_WAT).unwrap();
+    let method_name = "f1";
+    let method_payload = vec![];
+
+    let res_1 = test.non_replicated_query_with_certificate_delegation_metadata(
+        id,
+        method_name,
+        method_payload.clone(),
+        None,
+    );
+    assert_eq!(query_cache_metrics(&test).misses.get(), 1);
+    assert_eq!(res_1, Ok(WasmResult::Reply(b"42".to_vec())));
+
+    let res_2 = test.non_replicated_query_with_certificate_delegation_metadata(
+        id,
+        method_name,
+        method_payload.clone(),
+        Some(CertificateDelegationMetadata {
+            format: CertificateDelegationFormat::Flat,
+        }),
+    );
+    assert_eq!(query_cache_metrics(&test).misses.get(), 2);
+
+    let res_3 = test.non_replicated_query_with_certificate_delegation_metadata(
+        id,
+        method_name,
+        method_payload.clone(),
+        Some(CertificateDelegationMetadata {
+            format: CertificateDelegationFormat::Tree,
+        }),
+    );
+    assert_eq!(query_cache_metrics(&test).misses.get(), 3);
+
+    assert_eq!(res_1, res_2);
+    assert_eq!(res_2, res_3);
 }
 
 #[test]
@@ -763,18 +809,18 @@ fn query_cache_frees_memory_after_invalidated_entries() {
         .build();
     let id = test.canister_from_wat(QUERY_CACHE_WAT).unwrap();
 
-    let memory_bytes = query_cache(&test).memory_bytes();
+    let heap_bytes = query_cache(&test).heap_bytes();
     // Initially the cache should be empty, i.e. less than 1MB.
-    assert!(memory_bytes < BIG_RESPONSE_SIZE);
+    assert!(heap_bytes < BIG_RESPONSE_SIZE);
 
     // The 1MB result will be cached internally.
     let res = test
         .non_replicated_query(id, "canister_balance_sized_reply", vec![])
         .unwrap();
-    assert_eq!(BIG_RESPONSE_SIZE, res.memory_bytes());
-    let memory_bytes = query_cache(&test).memory_bytes();
+    assert_eq!(BIG_RESPONSE_SIZE, res.deterministic_heap_bytes());
+    let heap_bytes = query_cache(&test).heap_bytes();
     // After the first reply, the cache should have more than 1MB of data.
-    assert!(memory_bytes > BIG_RESPONSE_SIZE);
+    assert!(heap_bytes > BIG_RESPONSE_SIZE);
 
     // Set the canister balance to 42, so the second reply will have just 42 bytes.
     test.canister_state_mut(id).system_state.remove_cycles(
@@ -786,11 +832,11 @@ fn query_cache_frees_memory_after_invalidated_entries() {
     let res = test
         .non_replicated_query(id, "canister_balance_sized_reply", vec![])
         .unwrap();
-    assert_eq!(SMALL_RESPONSE_SIZE, res.memory_bytes());
-    let memory_bytes = query_cache(&test).memory_bytes();
+    assert_eq!(SMALL_RESPONSE_SIZE, res.deterministic_heap_bytes());
+    let heap_bytes = query_cache(&test).heap_bytes();
     // The second 42 reply should invalidate and replace the first 1MB reply in the cache.
-    assert!(memory_bytes > SMALL_RESPONSE_SIZE);
-    assert!(memory_bytes < BIG_RESPONSE_SIZE);
+    assert!(heap_bytes > SMALL_RESPONSE_SIZE);
+    assert!(heap_bytes < BIG_RESPONSE_SIZE);
 }
 
 #[test]
@@ -801,8 +847,8 @@ fn query_cache_respects_cache_capacity() {
     let id = test.universal_canister().unwrap();
 
     // Initially the cache should be empty, i.e. less than REPLY_SIZE.
-    let memory_bytes = query_cache(&test).memory_bytes();
-    assert!(memory_bytes < REPLY_SIZE);
+    let heap_bytes = query_cache(&test).heap_bytes();
+    assert!(heap_bytes < REPLY_SIZE);
 
     // All replies should hit the same cache entry.
     for _ in 0..ITERATIONS {
@@ -810,9 +856,9 @@ fn query_cache_respects_cache_capacity() {
         let _res =
             test.non_replicated_query(id, "query", wasm().reply_data(&[1; REPLY_SIZE / 2]).build());
         // Now there should be only one reply in the cache.
-        let memory_bytes = query_cache(&test).memory_bytes();
-        assert!(memory_bytes > REPLY_SIZE);
-        assert!(memory_bytes < QUERY_CACHE_CAPACITY);
+        let heap_bytes = query_cache(&test).heap_bytes();
+        assert!(heap_bytes > REPLY_SIZE);
+        assert!(heap_bytes < QUERY_CACHE_CAPACITY);
     }
 
     // Now the replies should hit another entry.
@@ -820,9 +866,9 @@ fn query_cache_respects_cache_capacity() {
         let _res =
             test.non_replicated_query(id, "query", wasm().reply_data(&[2; REPLY_SIZE / 2]).build());
         // Now there should be two replies in the cache.
-        let memory_bytes = query_cache(&test).memory_bytes();
-        assert!(memory_bytes > REPLY_SIZE * 2);
-        assert!(memory_bytes < QUERY_CACHE_CAPACITY);
+        let heap_bytes = query_cache(&test).heap_bytes();
+        assert!(heap_bytes > REPLY_SIZE * 2);
+        assert!(heap_bytes < QUERY_CACHE_CAPACITY);
     }
 
     // Now the replies should evict the first entry.
@@ -830,9 +876,9 @@ fn query_cache_respects_cache_capacity() {
         let _res =
             test.non_replicated_query(id, "query", wasm().reply_data(&[3; REPLY_SIZE / 2]).build());
         // There should be still just two replies in the cache.
-        let memory_bytes = query_cache(&test).memory_bytes();
-        assert!(memory_bytes > REPLY_SIZE * 2);
-        assert!(memory_bytes < QUERY_CACHE_CAPACITY);
+        let heap_bytes = query_cache(&test).heap_bytes();
+        assert!(heap_bytes > REPLY_SIZE * 2);
+        assert!(heap_bytes < QUERY_CACHE_CAPACITY);
     }
 }
 
@@ -842,13 +888,13 @@ fn query_cache_works_with_zero_cache_capacity() {
     let id = test.universal_canister().unwrap();
 
     // Even with zero capacity the cache data structure uses some bytes for the pointers etc.
-    let initial_memory_bytes = query_cache(&test).memory_bytes();
+    let initial_heap_bytes = query_cache(&test).heap_bytes();
 
     // Replies should not change the initial (zero) capacity.
     for _ in 0..ITERATIONS {
         let _res = test.non_replicated_query(id, "query", wasm().reply_data(&[1]).build());
-        let memory_bytes = query_cache(&test).memory_bytes();
-        assert_eq!(initial_memory_bytes, memory_bytes);
+        let heap_bytes = query_cache(&test).heap_bytes();
+        assert_eq!(initial_heap_bytes, heap_bytes);
     }
 }
 
@@ -1483,6 +1529,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::CostCall
         | SystemApiCallId::CostCreateCanister
         | SystemApiCallId::CostHttpRequest
+        | SystemApiCallId::CostHttpRequestV2
         | SystemApiCallId::CostSignWithEcdsa
         | SystemApiCallId::CostSignWithSchnorr
         | SystemApiCallId::CostVetkdDeriveKey
@@ -1562,4 +1609,69 @@ fn query_cache_future_proof_test() {
             ////////////////////////////////////////////////////////////////////
         }
     }
+}
+
+#[test]
+fn total_bytes_future_proof_guard() {
+    const HEAP_BYTES: usize = 5;
+
+    // Key with no heap data.
+    let key = EntryKey {
+        source: user_test_id(1),
+        receiver: CanisterId::from_u64(1),
+        method_name: String::new(),
+        method_payload: vec![],
+        certificate_delegation_format: None,
+    };
+    assert_eq!(size_of_val(&key), 112);
+    assert_eq!(total_bytes(&key), size_of_val(&key));
+
+    // Key with some heap data.
+    let key = EntryKey {
+        source: user_test_id(1),
+        receiver: CanisterId::from_u64(1),
+        method_name: " ".repeat(HEAP_BYTES),
+        method_payload: vec![42; HEAP_BYTES],
+        certificate_delegation_format: None,
+    };
+    assert_eq!(size_of_val(&key), 112);
+    assert_eq!(total_bytes(&key), size_of_val(&key) + HEAP_BYTES * 2);
+
+    // Value with no heap data.
+    let env = EntryEnv {
+        batch_time: time::GENESIS,
+        canisters_versions_balances_stats: vec![],
+    };
+    let value = EntryValue::new(
+        env,
+        Result::Ok(WasmResult::Reply(vec![])),
+        &SystemApiCallCounters::default(),
+    );
+    assert_eq!(size_of_val(&value), 80);
+    assert_eq!(total_bytes(&value), size_of_val(&value));
+
+    // Value with some heap data.
+    let env = EntryEnv {
+        batch_time: time::GENESIS,
+        canisters_versions_balances_stats: vec![
+            (
+                CanisterId::from_u64(1),
+                0,
+                0_u64.into(),
+                QueryStats::default(),
+            );
+            HEAP_BYTES
+        ],
+    };
+    let env_vec_size = size_of_val(&*env.canisters_versions_balances_stats);
+    let value = EntryValue::new(
+        env,
+        Result::Ok(WasmResult::Reply(vec![42; HEAP_BYTES])),
+        &SystemApiCallCounters::default(),
+    );
+    assert_eq!(size_of_val(&value), 80);
+    assert_eq!(
+        total_bytes(&value),
+        size_of_val(&value) + env_vec_size + HEAP_BYTES
+    );
 }

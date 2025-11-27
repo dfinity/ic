@@ -1,9 +1,9 @@
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
-use ic_ckbtc_minter::state::eventlog::Event;
-use ic_ckbtc_minter::state::Mode;
 use ic_ckbtc_minter::Network;
+use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
+use ic_ckbtc_minter::state::Mode;
+use ic_ckbtc_minter::state::eventlog::Event;
 use ic_test_utilities_load_wasm::load_wasm;
 use pocket_ic::{PocketIc, PocketIcBuilder};
 
@@ -120,8 +120,8 @@ fn upload_events(setup: &Setup, file_name: &str) {
 }
 
 fn upload_events_and_dump_stable_memory(input_file: &str, output_file: &str) {
-    use flate2::bufread::GzEncoder;
     use flate2::Compression;
+    use flate2::bufread::GzEncoder;
     use std::fs::File;
     use std::io::{BufReader, BufWriter, Read, Write};
 

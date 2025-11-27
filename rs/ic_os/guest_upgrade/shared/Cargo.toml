@@ -1,0 +1,13 @@
+[package]
+name = "guest_upgrade_shared"
+edition = "2021"
+build = "build.rs"
+
+[dependencies]
+attestation = { path = "../../attestation" }
+der = { workspace = true }
+prost = { workspace = true }
+tonic = { workspace = true }
+
+[build-dependencies]
+tonic-build = { workspace = true }

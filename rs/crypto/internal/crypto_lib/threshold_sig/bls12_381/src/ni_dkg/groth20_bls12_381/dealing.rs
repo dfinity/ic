@@ -3,8 +3,8 @@
 
 use super::encryption::{encrypt_and_prove, verify_zk_proofs};
 use crate::api::ni_dkg_errors::{
-    dealing::InvalidDealingError, CspDkgCreateReshareDealingError, CspDkgVerifyDealingError,
-    InvalidArgumentError, MalformedSecretKeyError, MisnumberedReceiverError, SizeError,
+    CspDkgCreateReshareDealingError, CspDkgVerifyDealingError, InvalidArgumentError,
+    MalformedSecretKeyError, MisnumberedReceiverError, SizeError, dealing::InvalidDealingError,
 };
 use crate::{
     api::individual_public_key,
@@ -20,10 +20,10 @@ use crate::types::{SecretKey as ThresholdSecretKey, SecretKeyBytes as ThresholdS
 
 // "New style" internal types, used for the NiDKG:
 use super::ALGORITHM_ID;
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     Dealing, FsEncryptionPublicKey, PublicCoefficientsBytes,
 };
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 
 /// Creates a new dealing, i.e. generates threshold keys.
 ///
@@ -243,7 +243,7 @@ pub fn verify_resharing_dealing(
         individual_public_key(resharing_public_coefficients, dealer_resharing_index).map_err(
             |error| {
                 let error = InvalidArgumentError {
-                    message: format!("{}", error),
+                    message: format!("{error}"),
                 };
                 CspDkgVerifyDealingError::InvalidDealingError(error)
             },
@@ -289,8 +289,7 @@ pub fn verify_threshold(
     if threshold < min_threshold {
         return Err(InvalidArgumentError {
             message: format!(
-                "Threshold to small:\n  Threshold: {}\n  minimum: {}",
-                threshold, min_threshold
+                "Threshold to small:\n  Threshold: {threshold}\n  minimum: {min_threshold}"
             ),
         });
     }
@@ -298,8 +297,7 @@ pub fn verify_threshold(
     if threshold > number_of_receivers {
         return Err(InvalidArgumentError {
             message: format!(
-                "Threshold to large:\n  Threshold: {}\n  Number of receivers: {}",
-                threshold, number_of_receivers
+                "Threshold to large:\n  Threshold: {threshold}\n  Number of receivers: {number_of_receivers}"
             ),
         });
     }

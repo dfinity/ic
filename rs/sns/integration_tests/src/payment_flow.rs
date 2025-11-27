@@ -6,9 +6,9 @@ use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nns_test_utils::state_test_helpers::icrc1_transfer;
 use ic_sns_swap::{
     pb::v1::{
-        new_sale_ticket_response, BuyerState, GetLifecycleResponse, Init, Lifecycle,
-        NeuronBasketConstructionParameters, NewSaleTicketResponse, Params,
-        RefreshBuyerTokensResponse, Ticket,
+        BuyerState, GetLifecycleResponse, Init, Lifecycle, NeuronBasketConstructionParameters,
+        NewSaleTicketResponse, Params, RefreshBuyerTokensResponse, Ticket,
+        new_sale_ticket_response,
     },
     swap::principal_to_subaccount,
 };
@@ -19,7 +19,7 @@ use ic_sns_test_utils::state_test_helpers::{
 };
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
-    AccountIdentifier, LedgerCanisterInitPayload as IcpInitArgs, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, DEFAULT_TRANSFER_FEE, LedgerCanisterInitPayload as IcpInitArgs,
 };
 use icrc_ledger_types::icrc1::{
     account::{Account, Subaccount},
@@ -472,14 +472,18 @@ fn test_simple_refresh_buyer_token() {
     let amount0_0 = params.min_participant_icp_e8s;
 
     // Get user0 some funds to participate in the sale
-    assert!(payment_flow_protocol
-        .mint_icp(&user0.0.into(), &(100 * E8))
-        .is_ok());
+    assert!(
+        payment_flow_protocol
+            .mint_icp(&user0.0.into(), &(100 * E8))
+            .is_ok()
+    );
 
     // Get a ticket
-    assert!(payment_flow_protocol
-        .new_sale_ticket(&user0, &amount0_0, None)
-        .is_ok());
+    assert!(
+        payment_flow_protocol
+            .new_sale_ticket(&user0, &amount0_0, None)
+            .is_ok()
+    );
 
     // Commit some ICP
     payment_flow_protocol
@@ -493,9 +497,11 @@ fn test_simple_refresh_buyer_token() {
         .unwrap();
 
     // Get ICP accepted by the SNS sale canister
-    assert!(payment_flow_protocol
-        .refresh_buyer_tokens(&user0, None)
-        .is_ok());
+    assert!(
+        payment_flow_protocol
+            .refresh_buyer_tokens(&user0, None)
+            .is_ok()
+    );
 
     // Check that the buyer state was updated accordingly
     assert_eq!(
@@ -509,10 +515,12 @@ fn test_simple_refresh_buyer_token() {
     );
 
     // Check that the ticket has been deleted
-    assert!(payment_flow_protocol
-        .get_open_ticket(&user0)
-        .unwrap()
-        .is_none())
+    assert!(
+        payment_flow_protocol
+            .get_open_ticket(&user0)
+            .unwrap()
+            .is_none()
+    )
 }
 
 #[test]
@@ -530,17 +538,21 @@ fn test_multiple_payment_flows() {
     let amount0_0 = params.min_participant_icp_e8s;
 
     // Get user0 some funds to participate in the sale
-    assert!(payment_flow_protocol
-        .mint_icp(&user0.0.into(), &(100 * E8))
-        .is_ok());
+    assert!(
+        payment_flow_protocol
+            .mint_icp(&user0.0.into(), &(100 * E8))
+            .is_ok()
+    );
 
     let mut amount_committed = 0;
 
     for _ in 0..3 {
         // Step 1: Get a ticket
-        assert!(payment_flow_protocol
-            .new_sale_ticket(&user0, &amount0_0, None)
-            .is_ok());
+        assert!(
+            payment_flow_protocol
+                .new_sale_ticket(&user0, &amount0_0, None)
+                .is_ok()
+        );
 
         // Step 2: Commit some ICP
         payment_flow_protocol
@@ -554,9 +566,11 @@ fn test_multiple_payment_flows() {
             .unwrap();
 
         // Step3: Get ICP accepted by the SNS sale canister
-        assert!(payment_flow_protocol
-            .refresh_buyer_tokens(&user0, None)
-            .is_ok());
+        assert!(
+            payment_flow_protocol
+                .refresh_buyer_tokens(&user0, None)
+                .is_ok()
+        );
         amount_committed += amount0_0;
 
         // Step 4: Check that the buyer state was updated accordingly
@@ -571,10 +585,12 @@ fn test_multiple_payment_flows() {
         );
 
         // Check that the ticket has been deleted
-        assert!(payment_flow_protocol
-            .get_open_ticket(&user0)
-            .unwrap()
-            .is_none())
+        assert!(
+            payment_flow_protocol
+                .get_open_ticket(&user0)
+                .unwrap()
+                .is_none()
+        )
     }
 }
 
@@ -603,11 +619,13 @@ fn test_payment_flow_multiple_users_concurrent() {
     for i in 0..5 {
         let new_user = PrincipalId::new_user_test_id(i);
         users.push(new_user);
-        assert!(payment_flow_protocol
-            .lock()
-            .unwrap()
-            .mint_icp(&new_user.0.into(), &(100 * E8))
-            .is_ok());
+        assert!(
+            payment_flow_protocol
+                .lock()
+                .unwrap()
+                .mint_icp(&new_user.0.into(), &(100 * E8))
+                .is_ok()
+        );
     }
 
     fn execute_payment_flow(
@@ -629,11 +647,13 @@ fn test_payment_flow_multiple_users_concurrent() {
             .unwrap();
 
         // Get ICP accepted by the SNS sale canister
-        assert!(payment_flow_protocol
-            .lock()
-            .unwrap()
-            .refresh_buyer_tokens(&user, None)
-            .is_ok());
+        assert!(
+            payment_flow_protocol
+                .lock()
+                .unwrap()
+                .refresh_buyer_tokens(&user, None)
+                .is_ok()
+        );
 
         // Check that the buyer state was updated accordingly
         assert_eq!(
@@ -649,12 +669,14 @@ fn test_payment_flow_multiple_users_concurrent() {
         );
 
         // Check that the ticket has been deleted
-        assert!(payment_flow_protocol
-            .lock()
-            .unwrap()
-            .get_open_ticket(&user)
-            .unwrap()
-            .is_none());
+        assert!(
+            payment_flow_protocol
+                .lock()
+                .unwrap()
+                .get_open_ticket(&user)
+                .unwrap()
+                .is_none()
+        );
     }
 
     for user in users.clone() {
@@ -705,14 +727,18 @@ fn test_multiple_spending() {
     let amount0_0 = params.min_participant_icp_e8s;
 
     // Get user0 some funds to participate in the sale
-    assert!(payment_flow_protocol
-        .mint_icp(&user0.0.into(), &(100 * E8))
-        .is_ok());
+    assert!(
+        payment_flow_protocol
+            .mint_icp(&user0.0.into(), &(100 * E8))
+            .is_ok()
+    );
 
     // Get a ticket
-    assert!(payment_flow_protocol
-        .new_sale_ticket(&user0, &amount0_0, None)
-        .is_ok());
+    assert!(
+        payment_flow_protocol
+            .new_sale_ticket(&user0, &amount0_0, None)
+            .is_ok()
+    );
 
     // Commit some ICP
     let idx = payment_flow_protocol
@@ -726,21 +752,25 @@ fn test_multiple_spending() {
         .unwrap();
 
     // Try to buy some more tokens with same ticket parameters --> Should fail due to multiple spending error
-    assert!(payment_flow_protocol
-        .commit_icp_e8s(
-            &user0,
-            &payment_flow_protocol
-                .get_open_ticket(&user0)
-                .unwrap()
-                .unwrap()
-        )
-        .unwrap_err()
-        .contains(&format!("duplicate_of: Nat({})", idx)),);
+    assert!(
+        payment_flow_protocol
+            .commit_icp_e8s(
+                &user0,
+                &payment_flow_protocol
+                    .get_open_ticket(&user0)
+                    .unwrap()
+                    .unwrap()
+            )
+            .unwrap_err()
+            .contains(&format!("duplicate_of: Nat({idx})")),
+    );
 
     // Get ICP accepted by the SNS sale canister
-    assert!(payment_flow_protocol
-        .refresh_buyer_tokens(&user0, None)
-        .is_ok());
+    assert!(
+        payment_flow_protocol
+            .refresh_buyer_tokens(&user0, None)
+            .is_ok()
+    );
 
     // Check that the buyer state was updated accordingly
     assert_eq!(
@@ -754,10 +784,12 @@ fn test_multiple_spending() {
     );
 
     // Check that the ticket has been deleted
-    assert!(payment_flow_protocol
-        .get_open_ticket(&user0)
-        .unwrap()
-        .is_none())
+    assert!(
+        payment_flow_protocol
+            .get_open_ticket(&user0)
+            .unwrap()
+            .is_none()
+    )
 }
 
 #[test]
@@ -786,23 +818,31 @@ fn test_maximum_reached() {
     assert!(amount2_0 >= params.min_participant_icp_e8s);
 
     // Get users some funds to participate in the sale
-    assert!(payment_flow_protocol
-        .mint_icp(&user0.0.into(), &(100 * E8))
-        .is_ok());
+    assert!(
+        payment_flow_protocol
+            .mint_icp(&user0.0.into(), &(100 * E8))
+            .is_ok()
+    );
     // Get users some funds to participate in the sale
-    assert!(payment_flow_protocol
-        .mint_icp(&user1.0.into(), &(100 * E8))
-        .is_ok());
+    assert!(
+        payment_flow_protocol
+            .mint_icp(&user1.0.into(), &(100 * E8))
+            .is_ok()
+    );
     // Get users some funds to participate in the sale
-    assert!(payment_flow_protocol
-        .mint_icp(&user2.0.into(), &(100 * E8))
-        .is_ok());
+    assert!(
+        payment_flow_protocol
+            .mint_icp(&user2.0.into(), &(100 * E8))
+            .is_ok()
+    );
     let execute_payment_flow =
         |user: &PrincipalId, payment_flow_protocol: &PaymentProtocolTestSetup, amount: &u64| {
             // Get a ticket
-            assert!(payment_flow_protocol
-                .new_sale_ticket(user, amount, None)
-                .is_ok());
+            assert!(
+                payment_flow_protocol
+                    .new_sale_ticket(user, amount, None)
+                    .is_ok()
+            );
 
             // Commit some ICP
             payment_flow_protocol
@@ -816,15 +856,19 @@ fn test_maximum_reached() {
                 .unwrap();
 
             // Get ICP accepted by the SNS sale canister
-            assert!(payment_flow_protocol
-                .refresh_buyer_tokens(user, None)
-                .is_ok());
+            assert!(
+                payment_flow_protocol
+                    .refresh_buyer_tokens(user, None)
+                    .is_ok()
+            );
 
             // Check that the ticket has been deleted
-            assert!(payment_flow_protocol
-                .get_open_ticket(&user0)
-                .unwrap()
-                .is_none())
+            assert!(
+                payment_flow_protocol
+                    .get_open_ticket(&user0)
+                    .unwrap()
+                    .is_none()
+            )
         };
 
     execute_payment_flow(&user0, &payment_flow_protocol, &amount0_0);
@@ -877,7 +921,7 @@ fn test_commitment_below_participant_minimum() {
     );
 
     let params = payment_flow_protocol.get_sns_sale_parameters();
-    println!("Sale parameters: {:?}", params);
+    println!("Sale parameters: {params:?}");
     let amount0_0 = (params.max_participant_icp_e8s - 1) / 2;
     let amount1_0 = (params.max_participant_icp_e8s - 1) / 2;
     let amount2_0 = params.min_participant_icp_e8s;
@@ -896,15 +940,17 @@ fn test_commitment_below_participant_minimum() {
 
     for user in &users {
         // Get users some funds to participate in the sale
-        assert!(payment_flow_protocol
-            .mint_icp(
-                &Account {
-                    owner: user.0,
-                    subaccount: None
-                },
-                &(100 * E8)
-            )
-            .is_ok());
+        assert!(
+            payment_flow_protocol
+                .mint_icp(
+                    &Account {
+                        owner: user.0,
+                        subaccount: None
+                    },
+                    &(100 * E8)
+                )
+                .is_ok()
+        );
     }
 
     assert_eq!(
@@ -921,9 +967,11 @@ fn test_commitment_below_participant_minimum() {
                 .unwrap(),
         )
         .unwrap();
-    assert!(payment_flow_protocol
-        .refresh_buyer_tokens(&user0, None)
-        .is_ok());
+    assert!(
+        payment_flow_protocol
+            .refresh_buyer_tokens(&user0, None)
+            .is_ok()
+    );
 
     payment_flow_protocol
         .commit_icp_e8s(
@@ -933,9 +981,11 @@ fn test_commitment_below_participant_minimum() {
                 .unwrap(),
         )
         .unwrap();
-    assert!(payment_flow_protocol
-        .refresh_buyer_tokens(&user1, None)
-        .is_ok());
+    assert!(
+        payment_flow_protocol
+            .refresh_buyer_tokens(&user1, None)
+            .is_ok()
+    );
 
     // The amount bought now should be below the maximum and the amount left should be less than the minimum per participant
     assert!(
@@ -960,9 +1010,11 @@ fn test_commitment_below_participant_minimum() {
             &amount2_0,
         )
         .unwrap();
-    assert!(payment_flow_protocol
-        .refresh_buyer_tokens(&user2, None)
-        .is_err());
+    assert!(
+        payment_flow_protocol
+            .refresh_buyer_tokens(&user2, None)
+            .is_err()
+    );
 
     // User0 who has participated in the sale should be able to purchase the missing tokens
     payment_flow_protocol
@@ -973,9 +1025,11 @@ fn test_commitment_below_participant_minimum() {
                 .unwrap(),
         )
         .unwrap();
-    assert!(payment_flow_protocol
-        .refresh_buyer_tokens(&user0, None)
-        .is_ok());
+    assert!(
+        payment_flow_protocol
+            .refresh_buyer_tokens(&user0, None)
+            .is_ok()
+    );
 
     //Check that user1's purchase was registered
     assert_eq!(

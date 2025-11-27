@@ -1,7 +1,7 @@
 [package]
 name = "ic-icrc1-index-ng"
 description = "Index canister for the ICRC1 Ledger"
-edition = "2018"
+edition.workspace = true
 version.workspace = true
 authors.workspace = true
 documentation.workspace = true
@@ -38,16 +38,15 @@ candid_parser = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-icrc1-ledger = { path = "../ledger" }
+ic-ledger-suite-state-machine-helpers = { path = "../../test_utils/state_machine_helpers" }
 ic-ledger-suite-state-machine-tests = { path = "../../tests/sm-tests" }
 ic-icrc1-test-utils = { path = "../test_utils" }
+ic-icrc3-test-ledger = { path = "../test_utils/icrc3_test_ledger" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
-ic-rosetta-test-utils = { path = "../../../rosetta-api/icp/test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 ic-types = { path = "../../../types/types" }
 proptest = { workspace = true }
-serde_bytes = { workspace = true }
-serde_json = { workspace = true }
 
 [features]
 default = []

@@ -71,39 +71,75 @@ impl Project {
         }
     }
 
-    /// On CI, returns the pre-compiled binary, found thanks to an env var.
+    /// On CI, returns the pre-compiled binary, found thanks to an env var. For
+    /// local development, compiles the canister with Cargo into a Wasm module and
+    /// returns it.
     ///
-    /// For local development, compile the canister with cargo using the given `bin_name`.
+    /// If installing the resulting Wasm module fails with "Module imports function
+    /// '__wbindgen_describe'", consider using `cargo_bin_with_package()` instead.
     pub fn cargo_bin_maybe_from_env(bin_name: &str, features: &[&str]) -> Wasm {
         Wasm::from_location_specified_by_env_var(bin_name, features)
-            .unwrap_or_else(|| Self::new().cargo_bin(bin_name, features))
+            .unwrap_or_else(|| Self::new().compile_cargo_bin(None, bin_name, features))
     }
 
-    /// this is largely equivalent to running
+    /// On CI, returns the pre-compiled binary, found thanks to an env var. For
+    /// local development, compiles the canister with Cargo into a Wasm module and
+    /// returns it.
+    ///
+    /// If installing the resulting Wasm module fails with "Module imports function
+    /// '__wbindgen_describe'", consider using `cargo_bin_with_package()` instead.
+    pub fn cargo_bin(&self, bin_name: &str, features: &[&str]) -> Wasm {
+        Wasm::from_location_specified_by_env_var(bin_name, features)
+            .unwrap_or_else(|| self.compile_cargo_bin(None, bin_name, features))
+    }
+
+    /// On CI, returns the pre-compiled binary, found thanks to an env var. For
+    /// local development, compiles the given canister binary from the given Cargo
+    /// package into a Wasm module and returns it.
+    ///
+    /// Specifiying the cargo package name may help if installing the resulting Wasm
+    /// module fails with "Module imports function '__wbindgen_describe'". Without
+    /// limiting the build to the canister's package, `cargo` will build all
+    /// dependencies with a superset of all features used anywhere in the workspace,
+    /// which likely includes bindings not available to canisters.
+    pub fn cargo_bin_with_package(
+        &self,
+        package: Option<&str>,
+        bin_name: &str,
+        features: &[&str],
+    ) -> Wasm {
+        Wasm::from_location_specified_by_env_var(bin_name, features)
+            .unwrap_or_else(|| self.compile_cargo_bin(package, bin_name, features))
+    }
+
+    /// Compiles the given canister binary from the (optionally) given Cargo package
+    /// into a Wasm module and returns it.
+    ///
+    /// This is largely equivalent to running
     /// ```bash
-    /// cargo build --target wasm32-unknown-unknown --release \
-    ///   --manifest-path <cargo_manifest_dir>/Cargo.toml
-    ///   --target-dir <repo_root>/rs/target/wasm-cargo-bin
+    /// cargo build --target wasm32-unknown-unknown \
+    ///   --target-dir <repo_root>/target/wasm-cargo-bin \
+    ///   --profile canister-release \
+    ///   --manifest-path <cargo_manifest_dir>/Cargo.toml \
+    ///   [--package <package_name>] \
+    ///   --bin <bin_name> \
+    ///   [--features <features>]
     /// ```
-    /// then finding the wasm file outputted by cargo and running
+    /// then finding the wasm file output by cargo and running
     /// ```ignore
     /// # use canister_test::*;
     /// # use std::path::PathBuf;
     /// # let wasm_file = PathBuf::from("test");
-    /// WASM::from_file(wasm_file);
+    /// Wasm::from_file(wasm_file);
     /// ```
-    /// We also ignore linker arguments during this compilation
-    /// because they generally don't play well with the WASM
-    /// linker
-    pub fn cargo_bin(&self, bin_name: &str, features: &[&str]) -> Wasm {
-        if let Some(wasm) = Wasm::from_location_specified_by_env_var(bin_name, features) {
-            return wasm;
-        }
+    /// We also ignore linker arguments during this compilation because they
+    /// generally don't play well with the WASM linker.
+    fn compile_cargo_bin(&self, package: Option<&str>, bin_name: &str, features: &[&str]) -> Wasm {
         let since_start_secs = {
             let s = SystemTime::now();
             move || (SystemTime::now().duration_since(s).unwrap()).as_secs_f32()
         };
-        eprintln!("Compiling {}...", bin_name);
+        eprintln!("Compiling {bin_name}...");
 
         let cargo_toml_path = self.cargo_manifest_dir.join("Cargo.toml");
         let target_dir = MetadataCommand::new()
@@ -130,6 +166,9 @@ impl Project {
             .arg("canister-release")
             .manifest_path(cargo_toml_path)
             .target_dir(wasm_target_dir);
+        if let Some(pkg) = package {
+            cargo_build = cargo_build.package(pkg);
+        }
 
         if !features.is_empty() {
             cargo_build = cargo_build.features(features.join(" "));

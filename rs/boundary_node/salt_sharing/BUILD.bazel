@@ -3,35 +3,28 @@ load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-http-types",
-    "//rs/boundary_node/salt_sharing/api:salt_sharing_api",
-    "//rs/nns/constants",
-    "//rs/rust_canisters/canister_log",
-    "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:ic-cdk-timers",
-    "@crate_index//:ic-stable-structures",
-    "@crate_index//:prometheus",
-    "@crate_index//:serde",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:serde_json",
-    "@crate_index//:time",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-]
-
 rust_canister(
     name = "salt_sharing_canister",
     srcs = glob(["canister/**/*.rs"]),
     crate_name = "salt_sharing_canister",
     crate_root = "canister/lib.rs",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = "canister/salt_sharing_canister.did",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-http-types",
+        "//rs/boundary_node/salt_sharing/api:salt_sharing_api",
+        "//rs/nns/constants",
+        "//rs/rust_canisters/canister_log",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:prometheus",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:serde_json",
+        "@crate_index//:time",
+    ],
 )
 
 rust_test(
@@ -40,6 +33,21 @@ rust_test(
     crate_name = "salt_sharing_canister",
     crate_root = "canister/lib.rs",
     data = ["canister/salt_sharing_canister.did"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + ["@crate_index//:candid_parser"],
+    deps = [
+        # Keep sorted.
+        "//packages/ic-http-types",
+        "//rs/boundary_node/salt_sharing/api:salt_sharing_api",
+        "//rs/nns/constants",
+        "//rs/rust_canisters/canister_log",
+        "@crate_index//:candid",
+        "@crate_index//:candid_parser",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:prometheus",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:serde_json",
+        "@crate_index//:time",
+    ],
 )

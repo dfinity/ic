@@ -12,17 +12,18 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
-use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use ic_test_utilities_types::messages::SignedIngressBuilder;
 use ic_types::canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES;
 use ic_types::ingress::WasmResult;
-use ic_types::messages::{SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES};
+use ic_types::messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, SignedIngress};
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId,
 };
 use more_asserts::assert_lt;
 use std::time::Duration;
 use std::{convert::TryFrom, str::FromStr};
+use wirm::wasmparser;
 
 const B: u64 = 1_000_000_000;
 
@@ -38,8 +39,8 @@ const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 0;
 // instruction cost of executing inc method on the test canister
 fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
     use ic_config::embedders::MeteringType;
-    use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
     use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
+    use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
 
     let instruction_to_cost = match config.embedders_config.metering_type {
         MeteringType::New => instruction_to_cost,
@@ -533,6 +534,7 @@ fn simulate_http_request_cost(subnet_type: SubnetType, subnet_size: usize) -> Cy
                         context: vec![],
                     }),
                     is_replicated: None,
+                    pricing_version: None,
                 })
                 .unwrap(),
             ),
@@ -642,7 +644,7 @@ fn simulate_create_canister_cost(subnet_type: SubnetType, subnet_size: usize) ->
         .unwrap();
     let canister_b = match result {
         WasmResult::Reply(bytes) => Decode!(&bytes, CanisterIdRecord).unwrap().get_canister_id(),
-        WasmResult::Reject(err) => panic!("Expected CreateCanister to succeed but got {}", err),
+        WasmResult::Reject(err) => panic!("Expected CreateCanister to succeed but got {err}"),
     };
 
     canister_b_initial_balance - Cycles::new(env.cycle_balance(canister_b))
@@ -748,6 +750,8 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             max_storage_reservation_period: Duration::from_secs(0),
             default_reserved_balance_limit: CyclesAccountManagerConfig::system_subnet()
                 .default_reserved_balance_limit,
+            fetch_canister_logs_base_fee: Cycles::new(0),
+            fetch_canister_logs_per_byte_fee: Cycles::new(0),
         },
         SubnetType::Application | SubnetType::VerifiedApplication => CyclesAccountManagerConfig {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
@@ -782,6 +786,8 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             max_storage_reservation_period: Duration::from_secs(0),
             default_reserved_balance_limit: CyclesAccountManagerConfig::application_subnet()
                 .default_reserved_balance_limit,
+            fetch_canister_logs_base_fee: Cycles::new(1_000_000),
+            fetch_canister_logs_per_byte_fee: Cycles::new(800),
         },
     }
 }
@@ -918,14 +924,14 @@ fn ingress_induction_cost_from_bytes(
 
 fn calculate_induction_cost(
     config: &CyclesAccountManagerConfig,
-    ingress: &SignedIngressContent,
+    ingress: &SignedIngress,
     subnet_size: usize,
 ) -> Cycles {
-    let bytes_to_charge = ingress.arg().len()
-        + ingress.method_name().len()
-        + ingress.nonce().map(|n| n.len()).unwrap_or(0);
-
-    ingress_induction_cost_from_bytes(config, NumBytes::from(bytes_to_charge as u64), subnet_size)
+    ingress_induction_cost_from_bytes(
+        config,
+        NumBytes::from(ingress.binary().len() as u64),
+        subnet_size,
+    )
 }
 
 #[test]
@@ -1115,8 +1121,7 @@ fn test_subnet_size_ingress_induction_cost() {
         .method_name("inc")
         .nonce(3)
         .build();
-    let reference_cost =
-        calculate_induction_cost(&config, signed_ingress.content(), reference_subnet_size);
+    let reference_cost = calculate_induction_cost(&config, &signed_ingress, reference_subnet_size);
 
     // Check default cost.
     assert_eq!(
@@ -1171,8 +1176,7 @@ fn test_subnet_size_execute_message_cost() {
     assert_eq!(reference_instructions_cost, 2019);
     let simulated_cost = simulate_execute_message_cost(subnet_type, reference_subnet_size);
     assert_eq!(
-        simulated_cost,
-        reference_cost,
+        simulated_cost, reference_cost,
         "subnet_size={reference_subnet_size}, simulated_cost={simulated_cost}, reference_cost={reference_cost}"
     );
 

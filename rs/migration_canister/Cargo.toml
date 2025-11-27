@@ -1,0 +1,33 @@
+[package]
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+name = "ic-migration-canister"
+version.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+futures = { workspace = true }
+ic-cdk = { workspace = true }
+ic-cdk-timers = { workspace = true }
+ic-stable-structures = "0.7.0"
+itertools = { workspace = true }
+ic-management-canister-types = { workspace = true }
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }
+pocket-ic = { path = "../../packages/pocket-ic" }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+ic-base-types = { path = "../types/base_types" }
+ic-management-canister-types = { workspace = true }
+ic-nns-test-utils = { path = "../nns/test_utils" }
+registry-canister = { path = "../registry/canister" }
+canister-test = { path = "../rust_canisters/canister_test" }
+ic-universal-canister = { path = "../universal_canister/lib" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }

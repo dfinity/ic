@@ -11,11 +11,11 @@ use ic_cketh_minter::numeric::{
     BlockNumber, CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, LogIndex,
     TransactionNonce, Wei, WeiPerGas,
 };
-use ic_cketh_minter::state::audit::{apply_state_transition, EventType};
+use ic_cketh_minter::state::audit::{EventType, apply_state_transition};
 use ic_cketh_minter::state::eth_logs_scraping::LogScrapingId;
 use ic_cketh_minter::state::transactions::{
-    create_transaction, Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex,
-    WithdrawalRequest,
+    Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex, WithdrawalRequest,
+    create_transaction,
 };
 use ic_cketh_minter::state::{MintedEvent, State};
 use ic_cketh_minter::tx::{
@@ -1505,8 +1505,8 @@ fn ckerc20_withdrawal_flow(
 }
 
 mod assertions {
-    use crate::dashboard::filters::lower_alphanumeric;
     use crate::dashboard::DashboardTemplate;
+    use crate::dashboard::filters::lower_alphanumeric;
     use askama::Template;
     use ic_cketh_minter::erc20::CkErc20Token;
     use ic_cketh_minter::state::eth_logs_scraping::LogScrapingId;
@@ -1531,8 +1531,7 @@ mod assertions {
             let selector = Selector::parse(selector).unwrap();
             assert!(
                 self.actual.select(&selector).next().is_none(),
-                "expected no elements matching '{:?}', but found some",
-                selector
+                "expected no elements matching '{selector:?}', but found some"
             );
             self
         }
@@ -1560,7 +1559,7 @@ mod assertions {
                     lower_alphanumeric(id).unwrap()
                 ),
                 expected_href,
-                &format!("wrong last {} synced block href", id),
+                &format!("wrong last {id} synced block href"),
             )
         }
 
@@ -1569,14 +1568,13 @@ mod assertions {
                 .iter()
                 .map(|i| {
                     format!(
-                        "<a href=\"https://sepolia.etherscan.io/block/{}\"><code>{}</code></a>",
-                        i, i
+                        "<a href=\"https://sepolia.etherscan.io/block/{i}\"><code>{i}</code></a>"
                     )
                 })
                 .collect::<Vec<_>>()
                 .join(", ");
             self.has_html_value(
-                &format!("#skipped-blocks-{} > td", contract_address),
+                &format!("#skipped-blocks-{contract_address} > td"),
                 &expected_links,
                 "wrong skipped blocks",
             )
@@ -1591,11 +1589,7 @@ mod assertions {
             for link in self.actual.select(&selector) {
                 let href = link.value().attr("href").expect("href not found");
                 if filter(href) {
-                    assert!(
-                        predicate(href),
-                        "Link '{}' does not satisfy predicate",
-                        href
-                    );
+                    assert!(predicate(href), "Link '{href}' does not satisfy predicate");
                 }
             }
             self
@@ -1645,7 +1639,7 @@ mod assertions {
                     lower_alphanumeric(id).unwrap()
                 ),
                 expected_address,
-                &format!("wrong {} helper contract address", id),
+                &format!("wrong {id} helper contract address"),
             )
         }
 
@@ -1993,7 +1987,7 @@ mod assertions {
             self
         }
 
-        fn select_only_one(&self, selector: &str) -> ElementRef {
+        fn select_only_one(&self, selector: &str) -> ElementRef<'_> {
             let css_selector = Selector::parse(selector).unwrap();
             let mut iter = self.actual.select(&css_selector);
             let value = iter.next().unwrap_or_else(|| {

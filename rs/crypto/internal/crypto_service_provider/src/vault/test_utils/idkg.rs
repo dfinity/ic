@@ -1,7 +1,7 @@
+use crate::CspVault;
 use crate::api::CspCreateMEGaKeyError;
 use crate::key_id::KeyId;
 use crate::keygen::utils::idkg_dealing_encryption_pk_to_proto;
-use crate::CspVault;
 use assert_matches::assert_matches;
 use std::collections::HashSet;
 use std::sync::Arc;

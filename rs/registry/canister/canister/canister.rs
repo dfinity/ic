@@ -1,4 +1,4 @@
-use candid::{candid_method, Decode};
+use candid::{Decode, candid_method};
 use dfn_candid::{candid, candid_one};
 use dfn_core::{
     api::{arg_data, data_certificate, reply, trap_with},
@@ -7,7 +7,7 @@ use dfn_core::{
 use ic_base_types::{NodeId, PrincipalId};
 use ic_certified_map::{AsHashTree, HashTree};
 use ic_nervous_system_string::clamp_debug_len;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_protobuf::registry::{
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
     node_operator::v1::NodeOperatorRecord,
@@ -21,10 +21,11 @@ use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
     deserialize_get_value_request,
     pb::v1::{
-        high_capacity_registry_get_value_response, registry_error::Code, CertifiedResponse,
-        HighCapacityRegistryGetChangesSinceResponse, HighCapacityRegistryGetValueResponse,
-        HighCapacityRegistryValue, RegistryAtomicMutateResponse, RegistryError,
-        RegistryGetChangesSinceRequest, RegistryGetLatestVersionResponse,
+        CertifiedResponse, HighCapacityRegistryGetChangesSinceResponse,
+        HighCapacityRegistryGetValueResponse, HighCapacityRegistryValue,
+        RegistryAtomicMutateResponse, RegistryError, RegistryGetChangesSinceRequest,
+        RegistryGetLatestVersionResponse, high_capacity_registry_get_value_response,
+        registry_error::Code,
     },
     serialize_atomic_mutate_response, serialize_get_changes_since_response,
     serialize_get_value_response,
@@ -49,6 +50,8 @@ use registry_canister::{
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
         do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
+        do_set_subnet_operational_level::SetSubnetOperationalLevelPayload,
+        do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload,
         do_update_api_boundary_nodes_version::{
             DeployGuestosToSomeApiBoundaryNodes, UpdateApiBoundaryNodesVersionPayload,
         },
@@ -79,7 +82,7 @@ use registry_canister::{
         NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage, SubnetForCanister,
     },
     proto_on_wire::protobuf,
-    registry::{EncodedVersion, Registry, MAX_REGISTRY_DELTAS_SIZE},
+    registry::{EncodedVersion, MAX_REGISTRY_DELTAS_SIZE, Registry},
     registry_lifecycle,
 };
 use std::ptr::addr_of_mut;
@@ -114,28 +117,21 @@ fn registry_mut() -> &'static mut Registry {
 
 fn check_caller_is_governance_and_log(method_name: &str) {
     let caller = dfn_core::api::caller();
-    println!("{}call: {} from: {}", LOG_PREFIX, method_name, caller);
+    println!("{LOG_PREFIX}call: {method_name} from: {caller}");
     assert_eq!(
         caller,
         GOVERNANCE_CANISTER_ID.into(),
-        "{}Principal: {} is not authorized to call this method: {}",
-        LOG_PREFIX,
-        caller,
-        method_name
+        "{LOG_PREFIX}Principal: {caller} is not authorized to call this method: {method_name}"
     );
 }
 
 fn check_caller_is_canister_migration_orchestrator_and_log(method_name: &str) {
     let caller = dfn_core::api::caller();
-    println!("{}call: {} from: {}", LOG_PREFIX, method_name, caller);
-    // TODO - change GOVERNANCE_CANISTER to the new canister when the constant is available.
+    println!("{LOG_PREFIX}call: {method_name} from: {caller}");
     assert_eq!(
         caller,
-        GOVERNANCE_CANISTER_ID.into(),
-        "{}Principal: {} is not authorized to call this method: {}",
-        LOG_PREFIX,
-        caller,
-        method_name
+        MIGRATION_CANISTER_ID.into(),
+        "{LOG_PREFIX}Principal: {caller} is not authorized to call this method: {method_name}"
     );
 }
 
@@ -157,14 +153,15 @@ fn check_caller_is_canister_migration_orchestrator_and_log(method_name: &str) {
 /// a difference with respect to intermediate state: using `canister_init`, the
 /// intermediate state, such as the one with empty content, is never
 /// visible through the public API.
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn canister_init() {
     dfn_core::printer::hook();
     recertify_registry();
 
-    let init_payload =
-        Decode!(&arg_data(), RegistryCanisterInitPayload)
-            .expect("The init argument for the registry canister must be a Candid-encoded RegistryCanisterInitPayload.");
+    let init_payload = Decode!(&arg_data(), RegistryCanisterInitPayload).expect(
+        "The init argument for the registry canister must be a Candid-encoded \
+        RegistryCanisterInitPayload.",
+    );
     println!(
         "{}canister_init: Initializing with: {}",
         LOG_PREFIX,
@@ -179,11 +176,42 @@ fn canister_init() {
             registry.maybe_apply_mutation_internal(mutation_request.mutations)
         });
     recertify_registry();
+
+    #[cfg(feature = "test")]
+    {
+        use registry_canister::flags::temporary_overrides::{
+            test_set_swapping_enabled_subnets, test_set_swapping_status,
+            test_set_swapping_whitelisted_callers,
+        };
+
+        println!("{LOG_PREFIX}canister_init: Overriding swapping flags");
+        println!(
+            "{LOG_PREFIX}canister_intt: Swapping enabled: {:?}",
+            init_payload.is_swapping_feature_enabled
+        );
+        test_set_swapping_status(init_payload.is_swapping_feature_enabled.unwrap_or_default());
+        println!(
+            "{LOG_PREFIX}canister_init: Swapping whietlisted callers: {:?}",
+            init_payload.swapping_whitelisted_callers
+        );
+        test_set_swapping_whitelisted_callers(
+            init_payload
+                .swapping_whitelisted_callers
+                .unwrap_or_default(),
+        );
+        println!(
+            "{LOG_PREFIX}canister_init: Swapping enabled on subnets: {:?}",
+            init_payload.swapping_enabled_subnets
+        );
+        test_set_swapping_enabled_subnets(
+            init_payload.swapping_enabled_subnets.unwrap_or_default(),
+        );
+    }
 }
 
-#[export_name = "canister_pre_upgrade"]
+#[unsafe(export_name = "canister_pre_upgrade")]
 fn canister_pre_upgrade() {
-    println!("{}canister_pre_upgrade", LOG_PREFIX);
+    println!("{LOG_PREFIX}canister_pre_upgrade");
     let registry = registry();
     let ss = RegistryCanisterStableStorage {
         registry: Some(registry.serializable_form()),
@@ -193,10 +221,10 @@ fn canister_pre_upgrade() {
         .expect("Failed to encode protobuf pre-upgrade");
 }
 
-#[export_name = "canister_post_upgrade"]
+#[unsafe(export_name = "canister_post_upgrade")]
 fn canister_post_upgrade() {
     dfn_core::printer::hook();
-    println!("{}canister_post_upgrade", LOG_PREFIX);
+    println!("{LOG_PREFIX}canister_post_upgrade");
     // call stable_storage APIs and get registry instance in canister context
     // Look for MemoryManager magic bytes
     let mut magic_bytes = [0u8; 3];
@@ -220,7 +248,7 @@ fn canister_post_upgrade() {
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
 
-#[export_name = "canister_query get_changes_since"]
+#[unsafe(export_name = "canister_query get_changes_since")]
 fn get_changes_since() {
     fn main() -> Result<HighCapacityRegistryGetChangesSinceResponse, (Code, String)> {
         // Parse request.
@@ -265,7 +293,7 @@ fn get_changes_since() {
     reply(&response);
 }
 
-#[export_name = "canister_query get_certified_changes_since"]
+#[unsafe(export_name = "canister_query get_certified_changes_since")]
 fn get_certified_changes_since() {
     over(
         protobuf,
@@ -297,7 +325,7 @@ fn get_certified_changes_since() {
     )
 }
 
-#[export_name = "canister_query get_value"]
+#[unsafe(export_name = "canister_query get_value")]
 fn get_value() {
     let response_pb = match deserialize_get_value_request(arg_data()) {
         Ok((key, version_opt)) => {
@@ -321,7 +349,7 @@ fn get_value() {
                             // that is the only case where try_from fails, we deduce
                             // that this panic cannot occur.
                             .unwrap_or_else(|err| {
-                                panic!("Unable to convert value to response type, because {}", err,)
+                                panic!("Unable to convert value to response type, because {err}",)
                             })
                     });
 
@@ -367,14 +395,14 @@ fn get_value() {
     reply(&bytes);
 }
 
-#[export_name = "canister_query get_latest_version"]
+#[unsafe(export_name = "canister_query get_latest_version")]
 fn get_latest_version() {
     over(protobuf, |_: Vec<u8>| RegistryGetLatestVersionResponse {
         version: registry().latest_version(),
     });
 }
 
-#[export_name = "canister_query get_certified_latest_version"]
+#[unsafe(export_name = "canister_query get_certified_latest_version")]
 fn get_certified_latest_version() {
     over(protobuf, |_: Vec<u8>| -> CertifiedResponse {
         use ic_certified_map::{fork, labeled_hash};
@@ -387,7 +415,7 @@ fn get_certified_latest_version() {
     });
 }
 
-#[export_name = "canister_update atomic_mutate"]
+#[unsafe(export_name = "canister_update atomic_mutate")]
 fn atomic_mutate() {
     let caller = dfn_core::api::caller();
     //
@@ -396,11 +424,9 @@ fn atomic_mutate() {
     //   recorded.
     assert!(
         caller == GOVERNANCE_CANISTER_ID.get() || caller == ROOT_CANISTER_ID.get(),
-        "{}Principal {} is not authorized to call 'atomic_mutate'.",
-        LOG_PREFIX,
-        caller
+        "{LOG_PREFIX}Principal {caller} is not authorized to call 'atomic_mutate'."
     );
-    println!("{}call 'atomic_mutate' from {}", LOG_PREFIX, caller);
+    println!("{LOG_PREFIX}call 'atomic_mutate' from {caller}");
 
     let response_pb = match deserialize_atomic_mutate_request(arg_data()) {
         Ok(request_pb) => {
@@ -412,8 +438,7 @@ fn atomic_mutate() {
         }
         Err(error) => {
             println!(
-                "{}Received a mutate call, but the request could not de deserialized due to: {}",
-                LOG_PREFIX, error
+                "{LOG_PREFIX}Received a mutate call, but the request could not de deserialized due to: {error}"
             );
             let mut response_pb = RegistryAtomicMutateResponse::default();
             let error_pb = RegistryError {
@@ -432,7 +457,7 @@ fn atomic_mutate() {
     reply(&bytes)
 }
 
-#[export_name = "canister_query get_chunk"]
+#[unsafe(export_name = "canister_query get_chunk")]
 fn get_chunk() {
     over(candid_one, get_chunk_);
 }
@@ -458,7 +483,7 @@ fn get_chunk_(request: GetChunkRequest) -> Result<Chunk, String> {
 ///     1. Produce large record(s).
 ///     2. Chunking is ALWAYS enabled.
 #[cfg(feature = "test")]
-#[export_name = "canister_update mutate_test_high_capacity_records"]
+#[unsafe(export_name = "canister_update mutate_test_high_capacity_records")]
 fn mutate_test_high_capacity_records() {
     // Since these should only be used in tests, we do not put these at the top of the file.
     use ic_registry_canister_api::mutate_test_high_capacity_records::Request;
@@ -472,7 +497,7 @@ fn mutate_test_high_capacity_records() {
     });
 }
 
-#[export_name = "canister_update revise_elected_guestos_versions"]
+#[unsafe(export_name = "canister_update revise_elected_guestos_versions")]
 fn revise_elected_guestos_versions() {
     check_caller_is_governance_and_log("revise_elected_guestos_versions");
     over(candid_one, revise_elected_guestos_versions_);
@@ -486,7 +511,7 @@ fn revise_elected_guestos_versions_(payload: ReviseElectedGuestosVersionsPayload
 
 // TODO[NNS1-3000]: Remove this endpoint once mainnet NNS Governance starts calling the new
 // TODO[NNS1-3000]: `revise_elected_guestos_versions` endpoint.
-#[export_name = "canister_update revise_elected_replica_versions"]
+#[unsafe(export_name = "canister_update revise_elected_replica_versions")]
 fn revise_elected_replica_versions() {
     check_caller_is_governance_and_log("revise_elected_replica_versions");
     over(candid_one, revise_elected_replica_versions_);
@@ -498,7 +523,7 @@ fn revise_elected_replica_versions_(payload: ReviseElectedGuestosVersionsPayload
     recertify_registry();
 }
 
-#[export_name = "canister_update deploy_guestos_to_all_subnet_nodes"]
+#[unsafe(export_name = "canister_update deploy_guestos_to_all_subnet_nodes")]
 fn deploy_guestos_to_all_subnet_nodes() {
     check_caller_is_governance_and_log("deploy_guestos_to_all_subnet_nodes");
     over(candid_one, deploy_guestos_to_all_subnet_nodes_);
@@ -512,7 +537,7 @@ fn deploy_guestos_to_all_subnet_nodes_(payload: DeployGuestosToAllSubnetNodesPay
 
 // TODO[NNS1-3000]: Remove this endpoint once mainnet NNS Governance starts calling the new
 // TODO[NNS1-3000]: `revise_elected_hostos_versions` endpoint.
-#[export_name = "canister_update update_elected_hostos_versions"]
+#[unsafe(export_name = "canister_update update_elected_hostos_versions")]
 fn update_elected_hostos_versions() {
     check_caller_is_governance_and_log("update_elected_hostos_versions");
     over(candid_one, update_elected_hostos_versions_);
@@ -526,7 +551,7 @@ fn update_elected_hostos_versions_(payload: UpdateElectedHostosVersionsPayload) 
     recertify_registry();
 }
 
-#[export_name = "canister_update revise_elected_hostos_versions"]
+#[unsafe(export_name = "canister_update revise_elected_hostos_versions")]
 fn revise_elected_hostos_versions() {
     check_caller_is_governance_and_log("revise_elected_hostos_versions");
     over(candid_one, revise_elected_hostos_versions_);
@@ -540,7 +565,7 @@ fn revise_elected_hostos_versions_(payload: ReviseElectedHostosVersionsPayload) 
 
 // TODO[NNS1-3000]: Remove this endpoint once mainnet NNS Governance starts calling the new
 // TODO[NNS1-3000]: `deploy_hostos_to_some_nodes` endpoint.
-#[export_name = "canister_update update_nodes_hostos_version"]
+#[unsafe(export_name = "canister_update update_nodes_hostos_version")]
 fn update_nodes_hostos_version() {
     check_caller_is_governance_and_log("update_nodes_hostos_version");
     over(candid_one, |payload: UpdateNodesHostosVersionPayload| {
@@ -554,7 +579,7 @@ fn update_nodes_hostos_version_(payload: UpdateNodesHostosVersionPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update deploy_hostos_to_some_nodes"]
+#[unsafe(export_name = "canister_update deploy_hostos_to_some_nodes")]
 fn deploy_hostos_to_some_nodes() {
     check_caller_is_governance_and_log("deploy_hostos_to_some_nodes");
     over(candid_one, deploy_hostos_to_some_nodes_);
@@ -566,7 +591,7 @@ fn deploy_hostos_to_some_nodes_(payload: DeployHostosToSomeNodes) {
     recertify_registry();
 }
 
-#[export_name = "canister_update add_node_operator"]
+#[unsafe(export_name = "canister_update add_node_operator")]
 fn add_node_operator() {
     check_caller_is_governance_and_log("add_node_operator");
     over(candid_one, |payload: AddNodeOperatorPayload| {
@@ -580,7 +605,7 @@ fn add_node_operator_(payload: AddNodeOperatorPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update create_subnet"]
+#[unsafe(export_name = "canister_update create_subnet")]
 fn create_subnet() {
     check_caller_is_governance_and_log("create_subnet");
     over_async(candid_one, |payload: CreateSubnetPayload| async move {
@@ -599,7 +624,7 @@ async fn create_subnet_(payload: CreateSubnetPayload) -> Result<NewSubnet, Strin
     Ok(new_subnet)
 }
 
-#[export_name = "canister_update add_nodes_to_subnet"]
+#[unsafe(export_name = "canister_update add_nodes_to_subnet")]
 fn add_nodes_to_subnet() {
     check_caller_is_governance_and_log("add_nodes_to_subnet");
     over(candid_one, |payload: AddNodesToSubnetPayload| {
@@ -613,7 +638,7 @@ fn add_nodes_to_subnet_(payload: AddNodesToSubnetPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update recover_subnet"]
+#[unsafe(export_name = "canister_update recover_subnet")]
 fn recover_subnet() {
     check_caller_is_governance_and_log("recover_subnet");
     over_async(candid_one, |payload: RecoverSubnetPayload| async move {
@@ -627,7 +652,7 @@ async fn recover_subnet_(payload: RecoverSubnetPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update remove_nodes_from_subnet"]
+#[unsafe(export_name = "canister_update remove_nodes_from_subnet")]
 fn remove_nodes_from_subnet() {
     check_caller_is_governance_and_log("remove_nodes_from_subnet");
     over(candid_one, |payload: RemoveNodesFromSubnetPayload| {
@@ -641,7 +666,7 @@ fn remove_nodes_from_subnet_(payload: RemoveNodesFromSubnetPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update change_subnet_membership"]
+#[unsafe(export_name = "canister_update change_subnet_membership")]
 fn change_subnet_membership() {
     check_caller_is_governance_and_log("change_subnet_membership");
     over(candid_one, |payload: ChangeSubnetMembershipPayload| {
@@ -655,7 +680,7 @@ fn change_subnet_membership_(payload: ChangeSubnetMembershipPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update add_api_boundary_nodes"]
+#[unsafe(export_name = "canister_update add_api_boundary_nodes")]
 fn add_api_boundary_nodes() {
     check_caller_is_governance_and_log("add_api_boundary_nodes");
     over(candid_one, |payload: AddApiBoundaryNodesPayload| {
@@ -669,7 +694,7 @@ fn add_api_boundary_nodes_(payload: AddApiBoundaryNodesPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update remove_api_boundary_nodes"]
+#[unsafe(export_name = "canister_update remove_api_boundary_nodes")]
 fn remove_api_boundary_nodes() {
     check_caller_is_governance_and_log("remove_api_boundary_nodes");
     over(candid_one, |payload: RemoveApiBoundaryNodesPayload| {
@@ -685,7 +710,7 @@ fn remove_api_boundary_nodes_(payload: RemoveApiBoundaryNodesPayload) {
 
 // TODO[NNS1-3000]: Remove this endpoint once mainnet NNS Governance starts calling the new
 // TODO[NNS1-3000]: `deploy_guestos_to_some_api_boundary_nodes` endpoint.
-#[export_name = "canister_update update_api_boundary_nodes_version"]
+#[unsafe(export_name = "canister_update update_api_boundary_nodes_version")]
 fn update_api_boundary_nodes_version() {
     check_caller_is_governance_and_log("update_api_boundary_nodes_version");
     over(candid_one, update_api_boundary_nodes_version_);
@@ -697,7 +722,7 @@ fn update_api_boundary_nodes_version_(payload: UpdateApiBoundaryNodesVersionPayl
     recertify_registry();
 }
 
-#[export_name = "canister_update deploy_guestos_to_some_api_boundary_nodes"]
+#[unsafe(export_name = "canister_update deploy_guestos_to_some_api_boundary_nodes")]
 fn deploy_guestos_to_some_api_boundary_nodes() {
     check_caller_is_governance_and_log("deploy_guestos_to_some_api_boundary_nodes");
     over(candid_one, deploy_guestos_to_some_api_boundary_nodes_);
@@ -709,7 +734,7 @@ fn deploy_guestos_to_some_api_boundary_nodes_(payload: DeployGuestosToSomeApiBou
     recertify_registry();
 }
 
-#[export_name = "canister_update remove_nodes"]
+#[unsafe(export_name = "canister_update remove_nodes")]
 fn remove_nodes() {
     check_caller_is_governance_and_log("remove_nodes");
     over(candid_one, |payload: RemoveNodesPayload| {
@@ -723,7 +748,7 @@ fn remove_nodes_(payload: RemoveNodesPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update update_node_operator_config"]
+#[unsafe(export_name = "canister_update update_node_operator_config")]
 fn update_node_operator_config() {
     check_caller_is_governance_and_log("update_node_operator_config");
     over(candid_one, |payload: UpdateNodeOperatorConfigPayload| {
@@ -737,7 +762,7 @@ fn update_node_operator_config_(payload: UpdateNodeOperatorConfigPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update update_node_operator_config_directly"]
+#[unsafe(export_name = "canister_update update_node_operator_config_directly")]
 fn update_node_operator_config_directly() {
     // This method can be called by anyone
     println!(
@@ -759,7 +784,20 @@ fn update_node_operator_config_directly_(payload: UpdateNodeOperatorConfigDirect
     recertify_registry();
 }
 
-#[export_name = "canister_update remove_node_operators"]
+#[unsafe(export_name = "canister_update swap_node_in_subnet_directly")]
+fn swap_node_in_subnet_directly() {
+    over(candid_one, |payload: SwapNodeInSubnetDirectlyPayload| {
+        swap_node_in_subnet_directly_(payload)
+    });
+}
+
+#[candid_method(update, rename = "swap_node_in_subnet_directly")]
+fn swap_node_in_subnet_directly_(payload: SwapNodeInSubnetDirectlyPayload) {
+    registry_mut().do_swap_node_in_subnet_directly(payload);
+    recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update remove_node_operators")]
 fn remove_node_operators() {
     check_caller_is_governance_and_log("remove_node_operators");
     over(candid_one, |payload: RemoveNodeOperatorsPayload| {
@@ -773,7 +811,7 @@ fn remove_node_operators_(payload: RemoveNodeOperatorsPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update update_subnet"]
+#[unsafe(export_name = "canister_update update_subnet")]
 fn update_subnet() {
     check_caller_is_governance_and_log("update_subnet");
     over(candid_one, |payload: UpdateSubnetPayload| {
@@ -787,7 +825,7 @@ fn update_subnet_(payload: UpdateSubnetPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update clear_provisional_whitelist"]
+#[unsafe(export_name = "canister_update clear_provisional_whitelist")]
 fn clear_provisional_whitelist() {
     check_caller_is_governance_and_log("clear_provisional_whitelist");
     over(candid, |_: ()| clear_provisional_whitelist_());
@@ -799,7 +837,7 @@ fn clear_provisional_whitelist_() {
     recertify_registry();
 }
 
-#[export_name = "canister_update set_firewall_config"]
+#[unsafe(export_name = "canister_update set_firewall_config")]
 fn set_firewall_config() {
     check_caller_is_governance_and_log("set_firewall_config");
     over(candid_one, |payload: SetFirewallConfigPayload| {
@@ -813,7 +851,7 @@ fn set_firewal_config_(payload: SetFirewallConfigPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update add_firewall_rules"]
+#[unsafe(export_name = "canister_update add_firewall_rules")]
 fn add_firewall_rules() {
     check_caller_is_governance_and_log("add_firewall_rules");
     over(candid_one, |payload: AddFirewallRulesPayload| {
@@ -827,7 +865,7 @@ fn add_firewall_rules_(payload: AddFirewallRulesPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update remove_firewall_rules"]
+#[unsafe(export_name = "canister_update remove_firewall_rules")]
 fn remove_firewall_rules() {
     check_caller_is_governance_and_log("remove_firewall_rules");
     over(candid_one, |payload: RemoveFirewallRulesPayload| {
@@ -841,7 +879,7 @@ fn remove_firewall_rules_(payload: RemoveFirewallRulesPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update update_firewall_rules"]
+#[unsafe(export_name = "canister_update update_firewall_rules")]
 fn update_firewall_rules() {
     check_caller_is_governance_and_log("update_firewall_rules");
     over(candid_one, |payload: UpdateFirewallRulesPayload| {
@@ -855,7 +893,7 @@ fn update_firewall_rules_(payload: UpdateFirewallRulesPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update update_node_rewards_table"]
+#[unsafe(export_name = "canister_update update_node_rewards_table")]
 fn update_node_rewards_table() {
     check_caller_is_governance_and_log("update_node_rewards_table");
     over(candid_one, update_node_rewards_table_);
@@ -867,7 +905,7 @@ fn update_node_rewards_table_(payload: UpdateNodeRewardsTableProposalPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update add_or_remove_data_centers"]
+#[unsafe(export_name = "canister_update add_or_remove_data_centers")]
 fn add_or_remove_data_centers() {
     check_caller_is_governance_and_log("add_or_remove_data_centers");
     over(candid_one, add_or_remove_data_centers_);
@@ -879,7 +917,7 @@ fn add_or_remove_data_centers_(payload: AddOrRemoveDataCentersProposalPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update update_unassigned_nodes_config"]
+#[unsafe(export_name = "canister_update update_unassigned_nodes_config")]
 fn update_unassigned_nodes_config() {
     check_caller_is_governance_and_log("update_unassigned_nodes_config");
     over(candid_one, |payload: UpdateUnassignedNodesConfigPayload| {
@@ -893,7 +931,7 @@ fn update_unassigned_nodes_config_(payload: UpdateUnassignedNodesConfigPayload) 
     recertify_registry();
 }
 
-#[export_name = "canister_update deploy_guestos_to_all_unassigned_nodes"]
+#[unsafe(export_name = "canister_update deploy_guestos_to_all_unassigned_nodes")]
 fn deploy_guestos_to_all_unassigned_nodes() {
     check_caller_is_governance_and_log("deploy_guestos_to_all_unassigned_nodes");
     over(
@@ -910,7 +948,7 @@ fn deploy_guestos_to_all_unassigned_nodes_(payload: DeployGuestosToAllUnassigned
     recertify_registry();
 }
 
-#[export_name = "canister_update update_ssh_readonly_access_for_all_unassigned_nodes"]
+#[unsafe(export_name = "canister_update update_ssh_readonly_access_for_all_unassigned_nodes")]
 fn update_ssh_readonly_access_for_all_unassigned_nodes() {
     check_caller_is_governance_and_log("update_ssh_readonly_access_for_all_unassigned_nodes");
     over(
@@ -929,7 +967,7 @@ fn update_ssh_readonly_access_for_all_unassigned_nodes_(
     recertify_registry();
 }
 
-#[export_name = "canister_update prepare_canister_migration"]
+#[unsafe(export_name = "canister_update prepare_canister_migration")]
 fn prepare_canister_migration() {
     check_caller_is_governance_and_log("prepare_canister_migration");
     over(candid_one, prepare_canister_migration_);
@@ -941,14 +979,13 @@ fn prepare_canister_migration_(payload: PrepareCanisterMigrationPayload) {
         .prepare_canister_migration(payload)
         .unwrap_or_else(|error_message| {
             trap_with(&format!(
-                "{} Prepare canister migration failed: {}",
-                LOG_PREFIX, error_message
+                "{LOG_PREFIX} Prepare canister migration failed: {error_message}"
             ))
         });
     recertify_registry();
 }
 
-#[export_name = "canister_update reroute_canister_ranges"]
+#[unsafe(export_name = "canister_update reroute_canister_ranges")]
 fn reroute_canister_ranges() {
     check_caller_is_governance_and_log("reroute_canister_ranges");
     over(candid_one, reroute_canister_ranges_);
@@ -960,14 +997,13 @@ fn reroute_canister_ranges_(payload: RerouteCanisterRangesPayload) {
         .reroute_canister_ranges(payload)
         .unwrap_or_else(|error_message| {
             trap_with(&format!(
-                "{} Reroute canister ranges failed: {}",
-                LOG_PREFIX, error_message
+                "{LOG_PREFIX} Reroute canister ranges failed: {error_message}"
             ))
         });
     recertify_registry();
 }
 
-#[export_name = "canister_update complete_canister_migration"]
+#[unsafe(export_name = "canister_update complete_canister_migration")]
 fn complete_canister_migration() {
     check_caller_is_governance_and_log("complete_canister_migration");
     over(candid_one, complete_canister_migration_);
@@ -979,14 +1015,13 @@ fn complete_canister_migration_(payload: CompleteCanisterMigrationPayload) {
         .complete_canister_migration(payload)
         .unwrap_or_else(|error_message| {
             trap_with(&format!(
-                "{} Complete canister migration failed: {}",
-                LOG_PREFIX, error_message
+                "{LOG_PREFIX} Complete canister migration failed: {error_message}"
             ))
         });
     recertify_registry();
 }
 
-#[export_name = "canister_update migrate_canisters"]
+#[unsafe(export_name = "canister_update migrate_canisters")]
 fn migrate_canisters() {
     check_caller_is_canister_migration_orchestrator_and_log("migrate_canisters");
     over(candid_one, migrate_canisters_);
@@ -994,10 +1029,12 @@ fn migrate_canisters() {
 
 #[candid_method(update, rename = "migrate_canisters")]
 fn migrate_canisters_(payload: MigrateCanistersPayload) -> MigrateCanistersResponse {
-    registry_mut().do_migrate_canisters(payload)
+    let res = registry_mut().do_migrate_canisters(payload);
+    recertify_registry();
+    res
 }
 
-#[export_name = "canister_query get_node_providers_monthly_xdr_rewards"]
+#[unsafe(export_name = "canister_query get_node_providers_monthly_xdr_rewards")]
 fn get_node_providers_monthly_xdr_rewards() {
     check_caller_is_governance_and_log("get_node_providers_monthly_xdr_rewards");
     over(
@@ -1015,7 +1052,7 @@ fn get_node_providers_monthly_xdr_rewards_(
     registry().get_node_providers_monthly_xdr_rewards(arg.unwrap_or_default())
 }
 
-#[export_name = "canister_query get_api_boundary_node_ids"]
+#[unsafe(export_name = "canister_query get_api_boundary_node_ids")]
 fn get_api_boundary_node_ids() {
     over(
         candid_one,
@@ -1037,7 +1074,7 @@ fn get_api_boundary_node_ids_(
     Ok(ids)
 }
 
-#[export_name = "canister_query get_node_operators_and_dcs_of_node_provider"]
+#[unsafe(export_name = "canister_query get_node_operators_and_dcs_of_node_provider")]
 fn get_node_operators_and_dcs_of_node_provider() {
     over(
         candid_one,
@@ -1054,7 +1091,7 @@ fn get_node_operators_and_dcs_of_node_provider_(
     registry().get_node_operators_and_dcs_of_node_provider(node_provider)
 }
 
-#[export_name = "canister_query get_subnet_for_canister"]
+#[unsafe(export_name = "canister_query get_subnet_for_canister")]
 fn get_subnet_for_canister() {
     over(candid_one, get_subnet_for_canister_)
 }
@@ -1070,7 +1107,7 @@ fn get_subnet_for_canister_(arg: GetSubnetForCanisterRequest) -> Result<SubnetFo
         .map_err(|e| e.to_string())
 }
 
-#[export_name = "canister_update add_node"]
+#[unsafe(export_name = "canister_update add_node")]
 fn add_node() {
     // This method can be called by anyone
     // Note that for now, once a node record has been added, it MUST not be
@@ -1088,17 +1125,18 @@ fn add_node_(payload: AddNodePayload) -> NodeId {
     let node_id = registry_mut()
         .do_add_node(payload)
         .unwrap_or_else(|error_message| {
-            trap_with(&format!(
-                "{} Add node failed: {}",
-                LOG_PREFIX, error_message
-            ))
+            let msg = format!("{LOG_PREFIX} Add node failed: {error_message}");
+            // TODO(NNS1-4290): Delete once we figure why it seems like clients
+            // are throwing this away.
+            println!("{}", msg);
+            trap_with(&msg);
         });
 
     recertify_registry();
     node_id
 }
 
-#[export_name = "canister_update update_node_directly"]
+#[unsafe(export_name = "canister_update update_node_directly")]
 fn update_node_directly() {
     // This method can be called by anyone
     println!(
@@ -1115,8 +1153,7 @@ fn update_node_directly_(payload: UpdateNodeDirectlyPayload) {
         .do_update_node_directly(payload)
         .unwrap_or_else(|error_message| {
             trap_with(&format!(
-                "{} Update node directly failed: {}",
-                LOG_PREFIX, error_message
+                "{LOG_PREFIX} Update node directly failed: {error_message}"
             ))
         });
     recertify_registry();
@@ -1129,7 +1166,7 @@ fn update_node_domain_directly_(payload: UpdateNodeDomainDirectlyPayload) -> Res
     Ok(())
 }
 
-#[export_name = "canister_update update_node_domain_directly"]
+#[unsafe(export_name = "canister_update update_node_domain_directly")]
 fn update_node_domain_directly() {
     // This method can be called by anyone
     println!(
@@ -1142,7 +1179,7 @@ fn update_node_domain_directly() {
     });
 }
 
-#[export_name = "canister_update update_node_ipv4_config_directly"]
+#[unsafe(export_name = "canister_update update_node_ipv4_config_directly")]
 fn update_node_ipv4_config_directly() {
     // This method can be called by anyone
     println!(
@@ -1162,7 +1199,7 @@ fn update_node_ipv4_config_directly_(
     Ok(())
 }
 
-#[export_name = "canister_update remove_node_directly"]
+#[unsafe(export_name = "canister_update remove_node_directly")]
 fn remove_node_directly() {
     // This method can be called by anyone
     println!(
@@ -1179,6 +1216,17 @@ fn remove_node_directly() {
 fn remove_node_directly_(payload: RemoveNodeDirectlyPayload) {
     registry_mut().do_remove_node_directly(payload);
     recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update set_subnet_operational_level")]
+fn set_subnet_operational_level() {
+    check_caller_is_governance_and_log("set_subnet_operational_level");
+    over(candid_one, set_subnet_operational_level_);
+}
+
+#[candid_method(update, rename = "set_subnet_operational_level")]
+fn set_subnet_operational_level_(payload: SetSubnetOperationalLevelPayload) {
+    registry_mut().do_set_subnet_operational_level(payload);
 }
 
 fn recertify_registry() {
@@ -1203,11 +1251,16 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         ic_nervous_system_common::total_memory_size_bytes() as f64,
         "Size of the total memory allocated by this canister measured in bytes.",
     )?;
+    w.encode_gauge(
+        "registry_latest_version",
+        registry().latest_version() as f64,
+        "The current latest version of the registry.",
+    )?;
 
     Ok(())
 }
 
-#[export_name = "canister_query http_request"]
+#[unsafe(export_name = "canister_query http_request")]
 fn http_request() {
     dfn_http_metrics::serve_metrics(encode_metrics);
 }

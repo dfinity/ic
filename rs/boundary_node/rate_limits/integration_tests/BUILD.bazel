@@ -1,41 +1,9 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/boundary_node/rate_limits/api:rate_limits_api",
-    "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
-    "//rs/types/base_types",
-    "@crate_index//:assert_matches",
-    "@crate_index//:candid",
-    "@crate_index//:ic-management-canister-types",
-    "@crate_index//:serde",
-    "@crate_index//:tokio",
-] + select({
-    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
-    "//conditions:default": [
-        "//packages/pocket-ic",
-        "//rs/crypto/sha2",
-        "//rs/nns/constants",
-        "//rs/registry/keys",
-        "//rs/registry/transport",
-        "//rs/rust_canisters/canister_test",
-        "//rs/nns/test_utils:test_utils",
-    ],
-})
-
-MACRO_DEPENDENCIES = []
-
-DEV_DEPENDENCIES = []
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
 DEV_DATA = [
-    "@mainnet_nns_registry_canister//file",
+    "@mainnet_canisters//:registry.wasm.gz",
     "//rs/registry/canister:registry-canister",
     "//rs/pocket_ic_server:pocket-ic-server",
     "//rs/boundary_node/rate_limits:rate_limit_canister",
@@ -44,7 +12,7 @@ DEV_DATA = [
 DEV_ENV = {
     "CARGO_MANIFEST_DIR": "rs/nns/integration_tests",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
-    "MAINNET_REGISTRY_CANISTER_WASM_PATH": "$(rootpath @mainnet_nns_registry_canister//file)",
+    "MAINNET_REGISTRY_CANISTER_WASM_PATH": "$(rootpath @mainnet_canisters//:registry.wasm.gz)",
     "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     "RATE_LIMITS_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/rate_limits:rate_limit_canister)",
 }
@@ -53,22 +21,59 @@ rust_library(
     name = "rate_limit_canister_integration_tests",
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_name = "rate_limit_canister_integration_tests",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/boundary_node/rate_limits/api:rate_limits_api",
+        "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
+        "//rs/types/base_types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:ic-management-canister-types",
+        "@crate_index//:serde",
+        "@crate_index//:tokio",
+    ] + select({
+        "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+        "//conditions:default": [
+            "//packages/pocket-ic",
+            "//rs/crypto/sha2",
+            "//rs/nns/constants",
+            "//rs/nns/test_utils",
+            "//rs/registry/keys",
+            "//rs/registry/transport",
+            "//rs/rust_canisters/canister_test",
+        ],
+    }),
 )
 
-rust_test_suite_with_extra_srcs(
+rust_test_suite(
     name = "integration_tests_test",
     srcs = glob(
         ["tests/**/*.rs"],
     ),
-    aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV,
-    extra_srcs = [],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    tags = [],
-    deps = [":rate_limit_canister_integration_tests"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        ":rate_limit_canister_integration_tests",
+        # Keep sorted.
+        "//rs/boundary_node/rate_limits/api:rate_limits_api",
+        "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
+        "//rs/types/base_types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:ic-management-canister-types",
+        "@crate_index//:serde",
+        "@crate_index//:tokio",
+    ] + select({
+        "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+        "//conditions:default": [
+            "//packages/pocket-ic",
+            "//rs/crypto/sha2",
+            "//rs/nns/constants",
+            "//rs/nns/test_utils",
+            "//rs/registry/keys",
+            "//rs/registry/transport",
+            "//rs/rust_canisters/canister_test",
+        ],
+    }),
 )

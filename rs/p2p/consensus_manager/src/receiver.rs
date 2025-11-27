@@ -1,23 +1,24 @@
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 
 use crate::{
+    CommitId, SlotNumber, SlotUpdate, Update,
     metrics::{
-        ConsensusManagerMetrics, ASSEMBLE_TASK_RESULT_ALL_PEERS_DELETED,
-        ASSEMBLE_TASK_RESULT_COMPLETED, ASSEMBLE_TASK_RESULT_DROP,
+        ASSEMBLE_TASK_RESULT_ALL_PEERS_DELETED, ASSEMBLE_TASK_RESULT_COMPLETED,
+        ASSEMBLE_TASK_RESULT_DROP, ConsensusManagerMetrics,
     },
-    uri_prefix, CommitId, SlotNumber, SlotUpdate, Update,
+    uri_prefix,
 };
 use axum::{
+    Extension, Router,
     extract::{DefaultBodyLimit, State},
     http::StatusCode,
     response::IntoResponse,
     routing::any,
-    Extension, Router,
 };
 use bytes::Bytes;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::consensus::{ArtifactAssembler, AssembleResult, Peers};
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_protobuf::p2p::v1 as pb;
 use ic_quic_transport::{ConnId, Shutdown, SubnetTopology};
 use ic_types::artifact::{IdentifiableArtifact, PbArtifact, UnvalidatedArtifactMutation};
@@ -238,13 +239,11 @@ where
                 _ = cancellation_token.cancelled() => {
                     error!(
                         self.log,
-                        "Sender event loop for the P2P client `{:?}` terminated. No more slot updates will be sent for this client.",
+                        "Sender event loop for the P2P client `{:?}` terminated. \
+                        No more slot updates will be sent for this client.",
                         uri_prefix::<WireArtifact>()
                     );
                     break;
-                }
-                Some((slot_update, peer_id, conn_id)) = self.slot_updates_rx.recv() => {
-                    self.handle_slot_update_receive(slot_update, peer_id, conn_id, cancellation_token.clone());
                 }
                 Some(result) = self.artifact_processor_tasks.join_next() => {
                     match result {
@@ -261,6 +260,9 @@ where
                         }
                     }
                 }
+                Some((slot_update, peer_id, conn_id)) = self.slot_updates_rx.recv() => {
+                    self.handle_slot_update_receive(slot_update, peer_id, conn_id, cancellation_token.clone());
+                }
                 Ok(()) = self.topology_watcher.changed() => {
                     self.handle_topology_update();
                 }
@@ -268,7 +270,8 @@ where
             debug_assert_eq!(
                 self.active_assembles.len(),
                 self.artifact_processor_tasks.len(),
-                "Number of artifact processing tasks differs from the available number of channels that communicate with the processing tasks"
+                "Number of artifact processing tasks differs from the available number of channels that \
+                communicate with the processing tasks"
             );
             debug_assert!(
                 self.artifact_processor_tasks.len()
@@ -475,27 +478,37 @@ where
         };
 
         select! {
+            _ = cancellation_token.cancelled() => {}
             assemble_result = assemble_artifact => {
                 match assemble_result {
                     AssembleResult::Done { message, peer_id } => {
                         let id = message.id();
-                        // Sends artifact to the pool. In theory this channel can get full if there is a bug in consensus and each round takes very long time.
-                        // However, the duration of this await is not IO-bound so for the time being it is fine that sending over the channel is not done as
-                        // part of a select.
+                        // Sends artifact to the pool. In theory this channel can get full if there is a bug in consensus
+                        // and each round takes very long time. However, the duration of this await is not IO-bound so for
+                        // the time being it is fine that sending over the channel is not done as part of a select.
                         if sender.send(UnvalidatedArtifactMutation::Insert((message, peer_id))).await.is_err() {
-
-                            error!(log, "The receiving side of the channel, owned by the consensus thread, was closed. This should be infallible situation since a cancellation token should be received. If this happens then most likely there is very subnet synchonization bug.");
+                            error!(
+                                log,
+                                "The receiving side of the channel, owned by the consensus thread, was closed. \
+                                This should be an infallible situation since a cancellation token should be received. \
+                                If this happens then most likely there is a very serious synchonization bug."
+                            );
                         }
 
                         // wait for deletion from peers
                         // TODO: NET-1774
                         let _ = peer_rx.wait_for(|p| p.is_empty()).await;
 
-                        // Purge artifact from the unvalidated pool. In theory this channel can get full if there is a bug in consensus and each round takes very long time.
-                        // However, the duration of this await is not IO-bound so for the time being it is fine that sending over the channel is not done as
-                        // part of a select.
+                        // Purge artifact from the unvalidated pool. In theory this channel can get full if there is a bug in
+                        // consensus and each round takes very long time. However, the duration of this await is not IO-bound
+                        // so for the time being it is fine that sending over the channel is not done as part of a select.
                         if sender.send(UnvalidatedArtifactMutation::Remove(id)).await.is_err() {
-                            error!(log, "The receiving side of the channel, owned by the consensus thread, was closed. This should be infallible situation since a cancellation token should be received. If this happens then most likely there is very subnet synchonization bug.");
+                            error!(
+                                log,
+                                "The receiving side of the channel, owned by the consensus thread, was closed. \
+                                This should be an infallible situation since a cancellation token should be received. \
+                                If this happens then most likely there is a very serious synchonization bug."
+                            );
                         }
                         metrics
                             .assemble_task_result_total
@@ -513,8 +526,6 @@ where
 
                     },
                 }
-            }
-            _ = cancellation_token.cancelled() => {
             }
             _ = all_peers_deleted_artifact => {
                 metrics
@@ -598,7 +609,7 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::{consensus::U64Artifact, mocks::MockArtifactAssembler};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::{artifact::IdentifiableArtifact, RegistryVersion};
+    use ic_types::{RegistryVersion, artifact::IdentifiableArtifact};
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use tokio::time::timeout;
     use tower::util::ServiceExt;

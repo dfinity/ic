@@ -19,9 +19,13 @@ candid = { workspace = true }
 futures = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
+ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-management-canister-types = { workspace = true }
+ic-metrics-encoder = "1.1.1"
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
+ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-timer-task = { path = "../../nervous_system/timer_task" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-node-rewards-canister-api = { path = "./api" }
 ic-registry-canister-client = { path = "../../registry/canister-client" }
@@ -34,13 +38,12 @@ ic-protobuf = { path = "../../protobuf" }
 mockall = { workspace = true }
 prost = { workspace = true }
 rewards-calculation = { path = "../rewards_calculation" }
-serde = { workspace = true }
 itertools = { workspace = true }
+chrono = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
 futures-util = { workspace = true }
-ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-nervous-system-agent = { path = "../../nervous_system/agent", features = ["test"] }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
@@ -48,7 +51,7 @@ maplit = "1.0.2"
 pocket-ic = { path = "../../../packages/pocket-ic" }
 serde_json = { workspace = true }
 tokio = { workspace = true }
-
+pretty_assertions = { workspace = true }
 
 [features]
 test = []

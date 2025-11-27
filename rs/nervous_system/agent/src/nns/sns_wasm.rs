@@ -1,6 +1,6 @@
+use crate::CallCanisters;
 use crate::null_request::NullRequest;
 use crate::sns::Sns;
-use crate::CallCanisters;
 use anyhow::anyhow;
 use ic_agent::Agent;
 use ic_base_types::PrincipalId;

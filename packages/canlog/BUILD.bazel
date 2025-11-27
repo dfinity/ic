@@ -5,8 +5,8 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:ic-canister-log",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:regex",
+    "@crate_index//:ic0",
+    "@crate_index//:regex-lite",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
 ]

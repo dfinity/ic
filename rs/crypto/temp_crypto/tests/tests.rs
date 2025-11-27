@@ -46,7 +46,7 @@ fn should_set_correct_tempdir_permissions() {
         .with_node_id(node_test_id(NODE_ID))
         .build();
     let result = CryptoConfig::check_dir_has_required_permissions(temp_crypto.temp_dir_path());
-    assert!(result.is_ok(), "{:?}", result);
+    assert!(result.is_ok(), "{result:?}");
 }
 
 mod vault_rng {

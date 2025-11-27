@@ -10,7 +10,7 @@ build:lint --config=clippy
 # rust-clippy
 build:clippy --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect
 build:clippy --output_groups=+clippy_checks
-build --@rules_rust//:clippy.toml=//:clippy.toml --@rules_rust//:clippy_flags=-D,warnings,-D,clippy::all,-D,clippy::mem_forget,-C,debug-assertions=off
+build --@rules_rust//:clippy.toml=//:clippy.toml --@rules_rust//:clippy_flags=-D,warnings,-D,clippy::all,-D,clippy::mem_forget,-C,debug-assertions=off,-A,clippy::uninlined_format_args
 # rustfmt
 build:fmt --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect
 build:fmt --output_groups=+rustfmt_checks
@@ -43,7 +43,6 @@ build --experimental_repository_downloader_retries=3 # https://bazel.build/refer
 
 common --flag_alias=release_build=//bazel:release_build
 common --flag_alias=s3_endpoint=//ci/src/artifacts:s3_endpoint
-common --flag_alias=k8s=//rs/tests:k8s
 common --flag_alias=timeout_value=//bazel:timeout_value
 common --flag_alias=hermetic_cc=//bazel:hermetic_cc
 
@@ -61,19 +60,14 @@ common:stamped --workspace_status_command='$(pwd)/bazel/workspace_status.sh --st
 # fail on 'bazel build')
 common:flaky_retry --flaky_test_attempts=default --flaky_test_attempts=//rs/tests/.*@3
 
-# Exclude system tests by default
+# Exclude fuzz tests by default
 # https://github.com/bazelbuild/bazel/issues/8439
-build --build_tag_filters="-system_test,-fuzz_test"
-test --test_tag_filters="-system_test,-fuzz_test"
-test:alltests --test_tag_filters=""
-test:paritytests --test_tag_filters="-system_test"
+build --build_tag_filters="-fuzz_test"
+test --test_tag_filters="-fuzz_test"
 
 test --test_output=errors
 
 test:precommit --build_tests_only --test_tag_filters="smoke"
-
-build:systest --build_tag_filters=
-test:systest --test_output=streamed --test_tag_filters=
 
 build:testnet --build_tag_filters=
 test:testnet --test_output=streamed --test_tag_filters=
@@ -90,9 +84,8 @@ test --flaky_test_attempts=1
 build:dev --compilation_mode=fastbuild
 
 # Fuzzing configuration
-build:fuzzing --action_env="SANITIZERS_ENABLED=1"
-# sanitizers are only supported in nightly
-build:fuzzing --@rules_rust//rust/toolchain/channel=nightly
+# fuzzers use nightly features so we tell rustc to allow nightly features
+build:fuzzing --@rules_rust//rust/settings:extra_rustc_env=RUSTC_BOOTSTRAP=1 --@rules_rust//rust/settings:extra_exec_rustc_env=RUSTC_BOOTSTRAP=1
 build:fuzzing --build_tag_filters=fuzz_test
 # Ignoring transitions for now since it doesn't add any additional improvement to current setup
 build:fuzzing --//bazel:enable_fuzzing_code=True

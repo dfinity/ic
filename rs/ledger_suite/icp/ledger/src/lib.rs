@@ -16,12 +16,12 @@ use ic_ledger_core::{
 use ic_ledger_core::{block::BlockIndex, tokens::Tokens};
 use ic_ledger_hash_of::HashOf;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::{storable::Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
+use ic_stable_structures::{Storable, storable::Bound};
 use icp_ledger::{
-    AccountIdentifier, Allowance as Allowance103, Allowances, Block, FeatureFlags,
-    LedgerAllowances, LedgerBalances, Memo, Operation, PaymentError, Transaction, TransferError,
-    TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE, MAX_TAKE_ALLOWANCES,
+    AccountIdentifier, Allowance as Allowance103, Allowances, Block, DEFAULT_TRANSFER_FEE,
+    FeatureFlags, LedgerAllowances, LedgerBalances, MAX_TAKE_ALLOWANCES, Memo, Operation,
+    PaymentError, Transaction, TransferError, TransferFee, UpgradeArgs,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use intmap::IntMap;
@@ -29,7 +29,7 @@ use lazy_static::lazy_static;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::RwLock;
 use std::time::Duration;
@@ -84,7 +84,7 @@ struct StorableAllowance {
 }
 
 impl Storable for StorableAllowance {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         minicbor::encode(self, &mut buf).expect("StorableAllowance encoding should always succeed");
         Cow::Owned(buf)
@@ -147,6 +147,8 @@ thread_local! {
     // block_index -> block
     pub static BLOCKS_MEMORY: RefCell<StableBTreeMap<u64, Vec<u8>, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BLOCKS_MEMORY_ID))));
+
+    static ARCHIVING_FAILURES: Cell<u64> = Cell::default();
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
@@ -159,7 +161,6 @@ pub enum LedgerField {
 
 /// The ledger versions represent backwards incompatible versions of the ledger.
 /// Downgrading to a lower ledger version is never suppported.
-/// Upgrading from version N to version N+1 should always be possible.
 /// We have the following ledger versions:
 ///   * 0 - the whole ledger state is stored on the heap.
 ///   * 1 - the allowances are stored in stable structures.
@@ -323,6 +324,14 @@ impl LedgerData for Ledger {
     ) -> Option<&mut ic_ledger_core::block::FeeCollector<Self::AccountId>> {
         None
     }
+
+    fn increment_archiving_failure_metric(&mut self) {
+        ARCHIVING_FAILURES.with(|cell| cell.set(cell.get() + 1));
+    }
+
+    fn get_archiving_failure_metric(&self) -> u64 {
+        ARCHIVING_FAILURES.get()
+    }
 }
 
 impl Default for Ledger {
@@ -399,9 +408,9 @@ impl Ledger {
             effective_fee,
         )
         .map_err(|e| {
-            use ic_ledger_canister_core::ledger::TransferError as CTE;
             use PaymentError::TransferError as PTE;
             use TransferError as TE;
+            use ic_ledger_canister_core::ledger::TransferError as CTE;
 
             match e {
                 CTE::BadFee { expected_fee } => PTE(TE::BadFee { expected_fee }),
@@ -433,7 +442,7 @@ impl Ledger {
     /// during canister migration or upgrade.
     pub fn add_block(&mut self, block: Block) -> Result<BlockIndex, String> {
         icp_ledger::apply_operation(self, &block.transaction.operation, block.timestamp)
-            .map_err(|e| format!("failed to execute transfer {:?}: {:?}", block, e))?;
+            .map_err(|e| format!("failed to execute transfer {block:?}: {e:?}"))?;
         self.blockchain.add_block(block)
     }
 
@@ -467,7 +476,7 @@ impl Ledger {
                 None,
                 timestamp,
             )
-            .expect(&format!("Creating account {:?} failed", to)[..]);
+            .unwrap_or_else(|_| panic!("Creating account {to:?} failed"));
         }
 
         self.send_whitelist = send_whitelist;
@@ -497,7 +506,7 @@ impl Ledger {
 
         match (is_notified, new_state) {
             (true, true) | (false, false) => {
-                Err(format!("The notification state is already {}", is_notified))
+                Err(format!("The notification state is already {is_notified}"))
             }
             (true, false) => {
                 self.blocks_notified.remove(height);
@@ -523,10 +532,8 @@ impl Ledger {
             .get_blocks_for_archiving(trigger_threshold, num_blocks)
     }
 
-    pub fn can_send(&self, principal_id: &PrincipalId) -> bool {
-        // If we include more principals here, we need to update the trap message
-        // in `icrc1_transfer` and similar functions.
-        !principal_id.is_anonymous()
+    pub fn can_send(&self, _principal_id: &PrincipalId) -> bool {
+        true
     }
 
     /// Check if it's allowed to notify this canister.
@@ -615,10 +622,10 @@ pub fn get_allowances_list(
             if result.len() >= max_results as usize || from_account_id != from {
                 break;
             }
-            if let Some(expires_at) = storable_allowance.expires_at {
-                if expires_at.as_nanos_since_unix_epoch() <= now {
-                    continue;
-                }
+            if let Some(expires_at) = storable_allowance.expires_at
+                && expires_at.as_nanos_since_unix_epoch() <= now
+            {
+                continue;
             }
             result.push(Allowance103 {
                 from_account_id,

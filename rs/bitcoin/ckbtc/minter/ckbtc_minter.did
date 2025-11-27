@@ -1,8 +1,15 @@
 // Represents an account on the ckBTC ledger.
 type Account = record { owner : principal; subaccount : opt blob };
 
+type environment_variable = record { 
+    name: text; 
+    value: text;
+};
+
 type CanisterStatusResponse = record {
   status : CanisterStatusType;
+  ready_for_migration : bool;
+  version : nat64;
   memory_size : nat;
   cycles : nat;
   settings : DefiniteCanisterSettings;
@@ -10,6 +17,7 @@ type CanisterStatusResponse = record {
   module_hash : opt vec nat8;
   query_stats : QueryStats;
   reserved_cycles : nat;
+  memory_metrics : MemoryMetrics;
 };
 
 type QueryStats = record {
@@ -17,6 +25,17 @@ type QueryStats = record {
   num_instructions_total : nat;
   num_calls_total : nat;
   request_payload_bytes_total : nat;
+};
+
+type MemoryMetrics = record {
+    wasm_memory_size : nat;
+    stable_memory_size : nat;
+    global_memory_size : nat;
+    wasm_binary_size : nat;
+    custom_sections_size : nat;
+    canister_history_size : nat;
+    wasm_chunk_store_size : nat;
+    snapshots_size : nat;
 };
 
 type CanisterStatusType = variant { stopped; stopping; running };
@@ -29,6 +48,8 @@ type DefiniteCanisterSettings = record {
   reserved_cycles_limit : nat;
   log_visibility: LogVisibility;
   wasm_memory_limit : nat;
+  wasm_memory_threshold : nat;
+  environment_variables : vec environment_variable;
 };
 
 type LogVisibility = variant {
@@ -349,12 +370,35 @@ type ReimbursementReason = variant {
     };
 };
 
+type ReplacedReason = variant {
+  to_retry;
+  to_cancel : record {
+    reason : WithdrawalReimbursementReason;
+  };
+};
+
+type WithdrawalReimbursementReason = variant {
+    invalid_transaction : InvalidTransactionError;
+};
+
+type InvalidTransactionError = variant {
+  too_many_inputs : record {
+        num_inputs : nat64;
+        max_num_inputs : nat64;
+  };
+};
+
 type SuspendedReason = variant {
     // The minter ignored this UTXO because UTXO's value is too small to pay
     // the check fees.
     ValueTooSmall;
     // The Bitcoin checker considered this UTXO to be tainted.
     Quarantined;
+};
+
+type WithdrawalFee = record {
+    minter_fee : nat64;
+    bitcoin_fee : nat64;
 };
 
 type Event = record {
@@ -387,13 +431,17 @@ type EventType = variant {
         change_output : opt record { vout : nat32; value : nat64 };
         submitted_at : nat64;
         fee: opt nat64;
+        withdrawal_fee : opt WithdrawalFee;
     };
     replaced_transaction : record {
         new_txid : blob;
         old_txid : blob;
         change_output : record { vout : nat32; value : nat64 };
         submitted_at : nat64;
-        fee: nat64;
+        fee : nat64;
+        withdrawal_fee : opt WithdrawalFee;
+        reason : opt ReplacedReason;
+        new_utxos : opt vec Utxo;
     };
     confirmed_transaction : record { txid : blob };
     checked_utxo : record {
@@ -427,6 +475,19 @@ type EventType = variant {
         reason : ReimbursementReason;
     };
     reimbursed_failed_deposit : record { burn_block_index : nat64; mint_block_index : nat64 };
+    schedule_withdrawal_reimbursement : record {
+        account : Account;
+        burn_block_index : nat64;
+        amount : nat64;
+        reason : WithdrawalReimbursementReason;
+    };
+    quarantined_withdrawal_reimbursement : record {
+        burn_block_index : nat64;
+    };
+    reimbursed_withdrawal : record {
+        burn_block_index : nat64;
+        mint_block_index : nat64;
+    };
 };
 
 type MinterArg = variant {

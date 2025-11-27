@@ -90,7 +90,7 @@
 
 use hpke::rand_core::{CryptoRng, RngCore};
 use hpke::{
-    aead::AesGcm256, kdf::HkdfSha384, kem::DhP384HkdfSha384, Deserializable, Kem, Serializable,
+    Deserializable, Kem, Serializable, aead::AesGcm256, kdf::HkdfSha384, kem::DhP384HkdfSha384,
 };
 
 /*
@@ -137,7 +137,7 @@ type V1PrivateKey = <V1Kem as hpke::Kem>::PrivateKey;
  * A helper macro for reading the header and optionally checking the length
  */
 macro_rules! check_header {
-    (@common $err:ty, $val:expr) => {
+    (@common $err:ty, $val:expr_2021) => {
         if $val.len() < HEADER_SIZE {
             Err(<$err>::InvalidLength)
         } else {
@@ -151,10 +151,10 @@ macro_rules! check_header {
             }
         }
     };
-    ($err:ty, $val:expr) => {
+    ($err:ty, $val:expr_2021) => {
         check_header!(@common $err, $val)
     };
-    ($err:ty, $val:expr, $req_len:expr) => {
+    ($err:ty, $val:expr_2021, $req_len:expr_2021) => {
         match check_header!(@common $err, $val) {
             Ok(len) => {
                 if len == $req_len {

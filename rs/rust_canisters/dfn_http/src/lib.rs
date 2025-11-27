@@ -120,7 +120,7 @@ pub enum Method {
 ///
 /// ```no_run
 /// # use dfn_http::*;
-/// #[export_name = "canister_query http_query"]
+/// #[unsafe(export_name = "canister_query http_query")]
 /// pub fn main() {
 ///     http(handler)
 /// }
@@ -147,10 +147,7 @@ where
     if http_caller == caller {
         http_unchecked(handler)
     } else {
-        panic!(
-            "Expected caller {:?} but found caller {:?}",
-            http_caller, caller
-        )
+        panic!("Expected caller {http_caller:?} but found caller {caller:?}")
     }
 }
 

@@ -4,6 +4,7 @@ package_group(
         # Keep sorted.
         "//rs/nervous_system/...",
         "//rs/nns/...",
+        "//rs/node_rewards/...",
         "//rs/registry/...",
         "//rs/sns/...",
         "//rs/tests/...",

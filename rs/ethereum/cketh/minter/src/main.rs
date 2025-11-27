@@ -1,9 +1,10 @@
+#![allow(deprecated)]
 use crate::dashboard::DashboardPaginationParameters;
 use candid::Nat;
 use dashboard::DashboardTemplate;
 use ic_canister_log::log;
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
-use ic_cketh_minter::address::{validate_address_as_destination, AddressValidationError};
+use ic_cketh_minter::address::{AddressValidationError, validate_address_as_destination};
 use ic_cketh_minter::deposit::scrape_logs;
 use ic_cketh_minter::endpoints::ckerc20::{
     RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
@@ -26,25 +27,25 @@ use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::INFO;
 use ic_cketh_minter::memo::BurnMemo;
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
-use ic_cketh_minter::state::audit::{process_event, Event, EventType};
+use ic_cketh_minter::state::audit::{Event, EventType, process_event};
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
 use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
     ReimbursementRequest,
 };
 use ic_cketh_minter::state::{
-    lazy_call_ecdsa_public_key, mutate_state, read_state, transactions, State, STATE,
+    STATE, State, lazy_call_ecdsa_public_key, mutate_state, read_state, transactions,
 };
 use ic_cketh_minter::tx::lazy_refresh_gas_fee_estimate;
 use ic_cketh_minter::withdraw::{
-    process_reimbursement, process_retrieve_eth_requests, CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
-    CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+    CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT, CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+    process_reimbursement, process_retrieve_eth_requests,
+};
+use ic_cketh_minter::{
+    PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT, SCRAPING_ETH_LOGS_INTERVAL,
+    state, storage,
 };
 use ic_cketh_minter::{endpoints, erc20};
-use ic_cketh_minter::{
-    state, storage, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
-    SCRAPING_ETH_LOGS_INTERVAL,
-};
 use ic_ethereum_types::Address;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use icrc_ledger_types::icrc1::account::Account;
@@ -73,20 +74,22 @@ fn validate_ckerc20_active() {
 }
 
 fn setup_timers() {
-    ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+    ic_cdk_timers::set_timer(Duration::from_secs(0), async {
         // Initialize the minter's public key to make the address known.
-        ic_cdk::spawn(async {
-            let _ = lazy_call_ecdsa_public_key().await;
-        })
+        let _ = lazy_call_ecdsa_public_key().await;
     });
     // Start scraping logs immediately after the install, then repeat with the interval.
-    ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(scrape_logs()));
-    ic_cdk_timers::set_timer_interval(SCRAPING_ETH_LOGS_INTERVAL, || ic_cdk::spawn(scrape_logs()));
-    ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, || {
-        ic_cdk::spawn(process_retrieve_eth_requests())
+    ic_cdk_timers::set_timer(Duration::from_secs(0), async {
+        scrape_logs().await;
     });
-    ic_cdk_timers::set_timer_interval(PROCESS_REIMBURSEMENT, || {
-        ic_cdk::spawn(process_reimbursement())
+    ic_cdk_timers::set_timer_interval(SCRAPING_ETH_LOGS_INTERVAL, async || {
+        scrape_logs().await;
+    });
+    ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, async || {
+        process_retrieve_eth_requests().await;
+    });
+    ic_cdk_timers::set_timer_interval(PROCESS_REIMBURSEMENT, async || {
+        process_reimbursement().await;
     });
 }
 
@@ -177,9 +180,8 @@ async fn eip_1559_transaction_price(
                     if ckerc20_ledger_id == read_state(|s| s.cketh_ledger_id) {
                         CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT
                     } else {
-                        ic_cdk::trap(&format!(
-                            "ERROR: Unsupported ckERC20 token ledger {}",
-                            ckerc20_ledger_id
+                        ic_cdk::trap(format!(
+                            "ERROR: Unsupported ckERC20 token ledger {ckerc20_ledger_id}"
                         ))
                     }
                 }
@@ -271,15 +273,14 @@ async fn withdraw_eth(
 ) -> Result<RetrieveEthRequest, WithdrawalError> {
     let caller = validate_caller_not_anonymous();
     let _guard = retrieve_withdraw_guard(caller).unwrap_or_else(|e| {
-        ic_cdk::trap(&format!(
-            "Failed retrieving guard for principal {}: {:?}",
-            caller, e
+        ic_cdk::trap(format!(
+            "Failed retrieving guard for principal {caller}: {e:?}"
         ))
     });
 
     let destination = validate_address_as_destination(&recipient).map_err(|e| match e {
         AddressValidationError::Invalid { .. } | AddressValidationError::NotSupported(_) => {
-            ic_cdk::trap(&e.to_string())
+            ic_cdk::trap(e.to_string())
         }
         AddressValidationError::Blocked(address) => WithdrawalError::RecipientAddressBlocked {
             address: address.to_string(),
@@ -399,15 +400,14 @@ async fn withdraw_erc20(
     validate_ckerc20_active();
     let caller = validate_caller_not_anonymous();
     let _guard = retrieve_withdraw_guard(caller).unwrap_or_else(|e| {
-        ic_cdk::trap(&format!(
-            "Failed retrieving guard for principal {}: {:?}",
-            caller, e
+        ic_cdk::trap(format!(
+            "Failed retrieving guard for principal {caller}: {e:?}"
         ))
     });
 
     let destination = validate_address_as_destination(&recipient).map_err(|e| match e {
         AddressValidationError::Invalid { .. } | AddressValidationError::NotSupported(_) => {
-            ic_cdk::trap(&e.to_string())
+            ic_cdk::trap(e.to_string())
         }
         AddressValidationError::Blocked(address) => WithdrawErc20Error::RecipientAddressBlocked {
             address: address.to_string(),
@@ -556,7 +556,7 @@ async fn estimate_erc20_transaction_fee() -> Option<Wei> {
 #[query]
 fn is_address_blocked(address_string: String) -> bool {
     let address = Address::from_str(&address_string)
-        .unwrap_or_else(|e| ic_cdk::trap(&format!("invalid recipient address: {:?}", e)));
+        .unwrap_or_else(|e| ic_cdk::trap(format!("invalid recipient address: {e:?}")));
     ic_cketh_minter::blocklist::is_blocked(&address)
 }
 
@@ -565,13 +565,12 @@ async fn add_ckerc20_token(erc20_token: AddCkErc20Token) {
     let orchestrator_id = read_state(|s| s.ledger_suite_orchestrator_id)
         .unwrap_or_else(|| ic_cdk::trap("ERROR: ERC-20 feature is not activated"));
     if orchestrator_id != ic_cdk::caller() {
-        ic_cdk::trap(&format!(
-            "ERROR: only the orchestrator {} can add ERC-20 tokens",
-            orchestrator_id
+        ic_cdk::trap(format!(
+            "ERROR: only the orchestrator {orchestrator_id} can add ERC-20 tokens"
         ));
     }
     let ckerc20_token = erc20::CkErc20Token::try_from(erc20_token)
-        .unwrap_or_else(|e| ic_cdk::trap(&format!("ERROR: {}", e)));
+        .unwrap_or_else(|e| ic_cdk::trap(format!("ERROR: {e}")));
     mutate_state(|s| process_event(s, EventType::AddedCkErc20Token(ckerc20_token)));
 }
 
@@ -765,7 +764,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     transaction,
                 } => EP::SignedTransaction {
                     withdrawal_id: withdrawal_id.get().into(),
-                    raw_transaction: transaction.raw_transaction_hex(),
+                    raw_transaction: transaction.raw_transaction_hex_string(),
                 },
                 EventType::ReplacedTransaction {
                     withdrawal_id,
@@ -944,8 +943,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                         last_processed_block_metric_name(id),
                         scraping_state.last_scraped_block_number().as_f64(),
                         &format!(
-                            "The last Ethereum block the ckETH minter checked for {} deposits.",
-                            id
+                            "The last Ethereum block the ckETH minter checked for {id} deposits."
                         ),
                     )?;
                 }
@@ -1027,7 +1025,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
-                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
                     .build()
             }
         }
@@ -1039,7 +1037,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
             Err(error) => {
                 return HttpResponseBuilder::bad_request()
                     .with_body_and_content_length(error)
-                    .build()
+                    .build();
             }
         };
         let dashboard = read_state(|state| DashboardTemplate::from_state(state, paging_parameters));
@@ -1169,14 +1167,13 @@ fn check_candid_interface_compatibility() {
             Ok(_) => {}
             Err(e) => {
                 eprintln!(
-                    "{} is not compatible with {}!\n\n\
-            {}:\n\
-            {}\n\n\
-            {}:\n\
-            {}\n",
-                    new_name, old_name, new_name, new_str, old_name, old_str
+                    "{new_name} is not compatible with {old_name}!\n\n\
+            {new_name}:\n\
+            {new_str}\n\n\
+            {old_name}:\n\
+            {old_str}\n"
                 );
-                panic!("{:?}", e);
+                panic!("{e:?}");
             }
         }
     }

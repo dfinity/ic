@@ -11,12 +11,13 @@ use ic_base_types::SubnetId;
 use ic_crypto_internal_types::NodeIndex;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use serde::{de::Error, Deserialize, Deserializer, Serialize};
-use std::collections::{btree_map, BTreeMap, BTreeSet};
+use serde::{Deserialize, Deserializer, Serialize, de::Error};
+use std::collections::{BTreeMap, BTreeSet, btree_map};
 use std::convert::TryFrom;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::num::TryFromIntError;
+use std::sync::Arc;
 
 pub mod conversions;
 pub mod proto_conversions;
@@ -721,7 +722,13 @@ pub struct IDkgTranscript {
     pub transcript_id: IDkgTranscriptId,
     pub receivers: IDkgReceivers,
     pub registry_version: RegistryVersion,
-    pub verified_dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+    /// Serializing and deserializing the `Arc` around the `verified_dealings` is safe because it
+    /// is just an implementation detail we apply to benefit from cheap clones, so we only care
+    /// about serializing the inner data. In particular, we do not rely on multiple `Arc`s pointing
+    /// to the same allocation being shared again after deserialization.
+    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
+    pub verified_dealings: Arc<BTreeMap<NodeIndex, BatchSignedIDkgDealing>>,
     pub transcript_type: IDkgTranscriptType,
     pub algorithm_id: AlgorithmId,
     #[serde(with = "serde_bytes")]
@@ -908,8 +915,7 @@ impl IDkgTranscript {
         if self.transcript_type != transcript_type_from_params_op {
             return Err(format!(
                 "transcript's type ({:?}) does not match transcript type derived from param's transcript operation ({:?})",
-                self.transcript_type,
-                transcript_type_from_params_op,
+                self.transcript_type, transcript_type_from_params_op,
             ));
         }
         if self.verified_dealings.len() < params.collection_threshold().get() as usize {
@@ -926,19 +932,15 @@ impl IDkgTranscript {
             .collect();
         for (dealer_index, dealer_id) in dealer_index_to_dealer_id {
             let dealer_index_in_params = params.dealer_index(dealer_id).ok_or_else(|| {
-                format!(
-                    "transcript contains dealings from non-dealer with ID {}",
-                    dealer_id
-                )
+                format!("transcript contains dealings from non-dealer with ID {dealer_id}")
             })?;
             if dealer_index != dealer_index_in_params {
                 return Err(format!(
-                    "mismatching dealer indexes in transcript ({}) and params ({}) for dealer {}",
-                    dealer_index, dealer_index_in_params, dealer_id
+                    "mismatching dealer indexes in transcript ({dealer_index}) and params ({dealer_index_in_params}) for dealer {dealer_id}"
                 ));
             }
         }
-        for (dealer_index, signed_dealing) in &self.verified_dealings {
+        for (dealer_index, signed_dealing) in self.verified_dealings.as_ref() {
             let signers: BTreeSet<NodeId> = signed_dealing.signers();
             let ineligible_signers: BTreeSet<NodeId> = signers
                 .difference(params.receivers.get())
@@ -946,8 +948,7 @@ impl IDkgTranscript {
                 .collect();
             if !ineligible_signers.is_empty() {
                 return Err(format!(
-                    "ineligible signers (non-receivers) for dealer index {}: {:?} ",
-                    dealer_index, ineligible_signers
+                    "ineligible signers (non-receivers) for dealer index {dealer_index}: {ineligible_signers:?} "
                 ));
             }
         }
@@ -1281,15 +1282,15 @@ fn should_fail_deserializing_invalid_initial_idkg_dealings() {
     use crate::crypto::canister_threshold_sig::IDkgUnmaskedTranscriptOrigin;
     use crate::{PrincipalId, SubnetId};
     use ic_crypto_test_utils_canister_threshold_sigs::set_of_nodes;
-    use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+    use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
     use ic_protobuf::proxy::ProxyDecodeError;
     use ic_protobuf::registry::subnet::v1::InitialIDkgDealings as InitialIDkgDealingsProto;
     use rand::Rng;
 
     fn random_transcript_id(rng: &mut ReproducibleRng) -> IDkgTranscriptId {
-        let id = rng.gen();
-        let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
-        let height = Height::from(rng.gen::<u64>());
+        let id = rng.r#gen();
+        let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.r#gen::<u64>()));
+        let height = Height::from(rng.r#gen::<u64>());
 
         IDkgTranscriptId::new(subnet, id, height)
     }
@@ -1301,7 +1302,7 @@ fn should_fail_deserializing_invalid_initial_idkg_dealings() {
         transcript_id: random_transcript_id(rng),
         receivers,
         registry_version: RegistryVersion::from(314),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random),
         algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
         internal_transcript_raw: vec![],

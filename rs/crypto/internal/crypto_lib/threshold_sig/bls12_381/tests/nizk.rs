@@ -5,8 +5,8 @@ use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg as dkg;
 use dkg::forward_secure::CHUNK_SIZE;
 use dkg::nizk_chunking::*;
 use dkg::nizk_sharing::{
-    prove_sharing, verify_sharing, ProofSharing, SharingInstance, SharingWitness,
-    ZkProofSharingError,
+    ProofSharing, SharingInstance, SharingWitness, ZkProofSharingError, prove_sharing,
+    verify_sharing,
 };
 use dkg::random_oracles::UniqueHash;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, G2Affine, Scalar};
@@ -119,13 +119,19 @@ fn sharing_nizk_is_stable() {
 
     let sharing_proof = sharing_proof.serialize();
 
-    assert_eq!(hex::encode(sharing_proof.first_move_a),
-               "b4dfde1eb1c9166296d1786f616fa46f1e8e32db76eb804d90b9d522567ee8b734a0c7a04ac53019804bff12aef185d01939da55ff87aefd873b73bf81a5d31c12d5284e5afaa15be4e7f262d17607380adf692c64e7c6cfbde7868f0346c43f");
+    assert_eq!(
+        hex::encode(sharing_proof.first_move_a),
+        "b4dfde1eb1c9166296d1786f616fa46f1e8e32db76eb804d90b9d522567ee8b734a0c7a04ac53019804bff12aef185d01939da55ff87aefd873b73bf81a5d31c12d5284e5afaa15be4e7f262d17607380adf692c64e7c6cfbde7868f0346c43f"
+    );
 
-    assert_eq!(hex::encode(sharing_proof.first_move_f),
-               "868ba5079bba6ad130defd8b287ddbfd9fb9943a85138d0ac8093772efc0227de1d2970911bf6cc7f104952908f6573c");
-    assert_eq!(hex::encode(sharing_proof.first_move_y),
-               "b6b0563c9dffa9e3972db09b9b5b06fc4a4e81dfc7fa39212cce0258a555fc25ffb6a9821c11b23a448283ac499af52a");
+    assert_eq!(
+        hex::encode(sharing_proof.first_move_f),
+        "868ba5079bba6ad130defd8b287ddbfd9fb9943a85138d0ac8093772efc0227de1d2970911bf6cc7f104952908f6573c"
+    );
+    assert_eq!(
+        hex::encode(sharing_proof.first_move_y),
+        "b6b0563c9dffa9e3972db09b9b5b06fc4a4e81dfc7fa39212cce0258a555fc25ffb6a9821c11b23a448283ac499af52a"
+    );
     assert_eq!(
         hex::encode(sharing_proof.response_z_a),
         "25628b2e64185161dddea213072df9b27676f59cd95eede58d7ee80afc4ba324"

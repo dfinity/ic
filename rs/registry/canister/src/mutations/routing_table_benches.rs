@@ -3,12 +3,9 @@ use crate::{
     registry_lifecycle::canister_post_upgrade,
 };
 
-use canbench_rs::{bench, bench_fn, bench_scope, BenchResult};
+use canbench_rs::{BenchResult, bench, bench_fn, bench_scope};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_protobuf::registry::routing_table::v1::RoutingTable;
-use ic_registry_keys::make_routing_table_record_key;
 use ic_registry_routing_table::CANISTER_IDS_PER_SUBNET;
-use ic_registry_transport::upsert;
 use prost::Message;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -16,14 +13,6 @@ use rand_chacha::ChaCha20Rng;
 /// Currently there are 37 subnets. We will use 100 subnets for the benchmark.
 const NUM_SUBNETS: u64 = 100;
 const MAX_CANISTER_ID_U64: u64 = CANISTER_IDS_PER_SUBNET * NUM_SUBNETS;
-
-fn setup_empty_routing_table(registry: &mut Registry) {
-    let routing_table_mutation = upsert(
-        make_routing_table_record_key(),
-        RoutingTable { entries: vec![] }.encode_to_vec(),
-    );
-    registry.apply_mutations_for_test(vec![routing_table_mutation]);
-}
 
 fn setup_subnets(registry: &mut Registry) {
     for id in 0..NUM_SUBNETS {
@@ -35,7 +24,7 @@ fn setup_subnets(registry: &mut Registry) {
 
 fn migrate_canisters_to_subnets(registry: &mut Registry, num_migrations: u64, rng: &mut impl Rng) {
     assert!(
-        num_migrations % NUM_SUBNETS == 0,
+        num_migrations.is_multiple_of(NUM_SUBNETS),
         "Please choose a number of migrations that is divisible by the number of subnets"
     );
     let num_canisters_per_subnet = num_migrations / NUM_SUBNETS;
@@ -58,7 +47,6 @@ fn migrate_canisters_to_subnets(registry: &mut Registry, num_migrations: u64, rn
 fn migrate_canisters(num_existing_migrations: u64, num_calls: u64) -> BenchResult {
     let mut registry = Registry::new();
 
-    setup_empty_routing_table(&mut registry);
     setup_subnets(&mut registry);
     let mut rng = ChaCha20Rng::seed_from_u64(0);
     migrate_canisters_to_subnets(&mut registry, num_existing_migrations, &mut rng);
@@ -95,7 +83,6 @@ fn migrate_canisters_10_times_10k() -> BenchResult {
 fn upgrade_with_routing_table(num_canisters: u64) -> BenchResult {
     let mut registry = Registry::new();
 
-    setup_empty_routing_table(&mut registry);
     setup_subnets(&mut registry);
     let mut rng = ChaCha20Rng::seed_from_u64(0);
     migrate_canisters_to_subnets(&mut registry, num_canisters, &mut rng);
@@ -110,16 +97,14 @@ fn upgrade_with_routing_table(num_canisters: u64) -> BenchResult {
             registry_storage.encode_to_vec()
         };
 
-        let new_registry = {
+        {
             let _s2 = bench_scope("post_upgrade");
             let registry_storage = RegistryCanisterStableStorage::decode(bytes.as_slice())
                 .expect("Error decoding from stable.");
             let mut new_registry = Registry::new();
             canister_post_upgrade(&mut new_registry, registry_storage);
             new_registry
-        };
-
-        new_registry
+        }
     })
 }
 
@@ -141,7 +126,6 @@ fn upgrade_with_routing_table_10k() -> BenchResult {
 fn get_subnet_for_canister(num_canisters: u64, num_calls: u64) -> BenchResult {
     let mut registry = Registry::new();
 
-    setup_empty_routing_table(&mut registry);
     setup_subnets(&mut registry);
     let mut rng = ChaCha20Rng::seed_from_u64(0);
     migrate_canisters_to_subnets(&mut registry, num_canisters, &mut rng);

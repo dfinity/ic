@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs/tests:__subpackages__"])
@@ -8,6 +8,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/bitcoin/adapter/test_utils",
     "//rs/bitcoin/checker:btc_checker_lib",
     "//rs/bitcoin/ckbtc/agent",
     "//rs/bitcoin/ckbtc/minter",
@@ -35,7 +36,6 @@ DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:assert_matches",
     "@crate_index//:bitcoin",
-    "@crate_index//:bitcoincore-rpc",
     "@crate_index//:candid",
     "@crate_index//:futures",
     "@crate_index//:ic-agent",
@@ -69,13 +69,10 @@ system_test_nns(
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         MESSAGE_CANISTER_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
             # Keep sorted.
@@ -103,7 +100,6 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         MESSAGE_CANISTER_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
             # Keep sorted.
@@ -127,12 +123,10 @@ system_test_nns(
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         MESSAGE_CANISTER_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
             # Keep sorted.
@@ -156,12 +150,10 @@ system_test_nns(
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         MESSAGE_CANISTER_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
             # Keep sorted.
@@ -185,12 +177,10 @@ system_test_nns(
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         MESSAGE_CANISTER_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
             # Keep sorted.
@@ -214,12 +204,10 @@ system_test_nns(
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         MESSAGE_CANISTER_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
             # Keep sorted.
@@ -233,20 +221,29 @@ system_test_nns(
     deps = DEPENDENCIES + [":ckbtc"],
 )
 
-system_test(
-    name = "adapter_basics_test",
-    env = MESSAGE_CANISTER_ENV | {
-        "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
-        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
-    },
-    tags = [],
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        MESSAGE_CANISTER_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
-            # Keep sorted.
-            "//rs/tests:ckbtc_uvm_config_image",
-            "//rs/universal_canister/impl:universal_canister.wasm.gz",
+[
+    system_test(
+        name = "adapter_basics_test",
+        env = MESSAGE_CANISTER_ENV | {
+            "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
+            "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+            "ADAPTER_TO_TEST": adapter,
+        },
+        tags = [
+            "long_test",  # this test has a P90 duration of over 6 minutes for the week starting on 2025-08-21.
         ],
-    deps = DEPENDENCIES + [":ckbtc"],
-)
+        test_name = adapter + "_adapter_basics_test",
+        runtime_deps =
+            MESSAGE_CANISTER_RUNTIME_DEPS +
+            UNIVERSAL_VM_RUNTIME_DEPS + [
+                # Keep sorted.
+                "//rs/tests:ckbtc_uvm_config_image",
+                "//rs/universal_canister/impl:universal_canister.wasm.gz",
+            ],
+        deps = DEPENDENCIES + [":ckbtc"],
+    )
+    for adapter in [
+        "btc",
+        "doge",
+    ]
+]

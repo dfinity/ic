@@ -3,8 +3,8 @@ mod tests;
 
 use crate::canister::TargetCanister;
 use crate::git::ArgsHash;
-use candid::types::{Type, TypeInner};
 use candid::TypeEnv;
+use candid::types::{Type, TypeInner};
 use std::path::Path;
 
 const EMPTY_UPGRADE_ARGS: &str = "()";
@@ -36,7 +36,7 @@ impl UpgradeArgs {
                 self.upgrade_args
             )
         } else {
-            format!("didc encode '{}'", EMPTY_UPGRADE_ARGS)
+            format!("didc encode '{EMPTY_UPGRADE_ARGS}'")
         }
     }
 }
@@ -73,7 +73,7 @@ fn parse_constructor_args(candid_file: &Path) -> (TypeEnv, Vec<Type>) {
     let class_type = class_type.expect("missing class type");
     let constructor_types = match class_type.as_ref() {
         TypeInner::Class(constructor_types, _service_type) => constructor_types,
-        type_inner => panic!("unexpected {:?}", type_inner),
+        type_inner => panic!("unexpected {type_inner:?}"),
     };
     (env, constructor_types.clone())
 }

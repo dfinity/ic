@@ -1,7 +1,7 @@
 use ic_base_types::PrincipalId;
 
 fn caller() -> PrincipalId {
-    PrincipalId::from(ic_cdk::caller())
+    PrincipalId::from(ic_cdk::api::msg_caller())
 }
 
 pub fn check_caller_is_root() {

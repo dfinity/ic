@@ -2,20 +2,20 @@
 pub use crate::prometheus::{get_counter, get_gauge, get_samples};
 
 use async_trait::async_trait;
+use candid::Nat;
 use dfn_core::CanisterId;
 use futures::{
+    StreamExt,
     channel::{
         mpsc::{UnboundedReceiver, UnboundedSender},
         oneshot::{self, Sender as OneShotSender},
     },
-    StreamExt,
 };
 use ic_nervous_system_canisters::ledger::{ICRC1Ledger, IcpLedger};
 use ic_nervous_system_common::NervousSystemError;
 use icp_ledger::{AccountIdentifier, Tokens};
-use icrc_ledger_types::icrc1::account::Account;
-use std::sync::{atomic, atomic::Ordering as AtomicOrdering, Arc, Mutex};
-
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use std::sync::{Arc, Mutex, atomic, atomic::Ordering as AtomicOrdering};
 mod prometheus;
 pub mod wasm_helpers;
 
@@ -125,6 +125,20 @@ impl ICRC1Ledger for InterleavingTestLedger {
         CanisterId::from_u64(1)
     }
 
+    async fn icrc2_approve(
+        &self,
+        _spender: Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
+    }
+
     async fn icrc3_get_blocks(
         &self,
         _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
@@ -230,8 +244,7 @@ impl ICRC1Ledger for SpyLedger {
         match ledger_reply {
             LedgerReply::TransferFunds(reply) => reply,
             reply => panic!(
-                "Expected LedgerReply::TransferFunds to be at the front of the queue. Had {:?}",
-                reply
+                "Expected LedgerReply::TransferFunds to be at the front of the queue. Had {reply:?}"
             ),
         }
     }
@@ -258,14 +271,27 @@ impl ICRC1Ledger for SpyLedger {
         match ledger_reply {
             LedgerReply::AccountBalance(reply) => reply,
             reply => panic!(
-                "Expected LedgerReply::AccountBalance to be at the front of the queue. Had {:?}",
-                reply
+                "Expected LedgerReply::AccountBalance to be at the front of the queue. Had {reply:?}"
             ),
         }
     }
 
     fn canister_id(&self) -> CanisterId {
         CanisterId::from_u64(1)
+    }
+
+    async fn icrc2_approve(
+        &self,
+        _spender: Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 
     async fn icrc3_get_blocks(
@@ -309,8 +335,7 @@ impl IcpLedger for SpyLedger {
         match ledger_reply {
             LedgerReply::TransferFunds(reply) => reply,
             reply => panic!(
-                "Expected LedgerReply::TransferFunds to be at the front of the queue. Had {:?}",
-                reply
+                "Expected LedgerReply::TransferFunds to be at the front of the queue. Had {reply:?}"
             ),
         }
     }
@@ -338,13 +363,24 @@ impl IcpLedger for SpyLedger {
         match ledger_reply {
             LedgerReply::AccountBalance(reply) => reply,
             reply => panic!(
-                "Expected LedgerReply::AccountBalance to be at the front of the queue. Had {:?}",
-                reply
+                "Expected LedgerReply::AccountBalance to be at the front of the queue. Had {reply:?}"
             ),
         }
     }
 
     fn canister_id(&self) -> CanisterId {
+        unimplemented!()
+    }
+
+    async fn icrc2_approve(
+        &self,
+        _spender: Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<Nat, NervousSystemError> {
         unimplemented!()
     }
 

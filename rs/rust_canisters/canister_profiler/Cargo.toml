@@ -8,4 +8,4 @@ documentation.workspace = true
 
 [dependencies]
 ic-metrics-encoder = "1.1.0"
-ic0 = "0.18.9"
+ic0 = { workspace = true }

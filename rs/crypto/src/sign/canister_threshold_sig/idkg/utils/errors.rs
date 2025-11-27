@@ -79,7 +79,7 @@ impl From<MegaKeyFromRegistryError> for IDkgOpenTranscriptError {
             MegaKeyFromRegistryError::UnsupportedAlgorithm { .. }
             | MegaKeyFromRegistryError::MalformedPublicKey { .. } => {
                 IDkgOpenTranscriptError::InternalError {
-                    internal_error: format!("Error retrieving public key: {:?}", error),
+                    internal_error: format!("Error retrieving public key: {error:?}"),
                 }
             }
         }

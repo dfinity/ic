@@ -26,7 +26,7 @@ impl fmt::Debug for CspFsEncryptionSecretKey {
         match self {
             // this prints no secret key parts since Debug for BTENodeBytes is redacted:
             CspFsEncryptionSecretKey::Groth20_Bls12_381(sk) => {
-                write!(f, "CspFsEncryptionSecretKey::Groth20_Bls12_381 - {:?}", sk)
+                write!(f, "CspFsEncryptionSecretKey::Groth20_Bls12_381 - {sk:?}")
             }
         }
     }

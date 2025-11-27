@@ -63,55 +63,51 @@ fn test_serve_logs_no_frills() {
     // Step 3.2: Inspect (JSON) payload.
     let body = String::from_utf8(body.into_vec()).unwrap();
     let body = json5::from_str::<LogsResponseBody>(&body).unwrap();
-    assert_eq!(body.entries.len(), 4, "{:#?}", body);
+    assert_eq!(body.entries.len(), 4, "{body:#?}");
 
     let e0 = &body.entries[0];
     let delay_0_ns = e0.timestamp - before_timestamp_nanoseconds;
-    assert_eq!(e0.severity, "Info", "{:#?}", body);
-    assert!(delay_0_ns < MAX_DELAY_NS, "{:#?}", body);
+    assert_eq!(e0.severity, "Info", "{body:#?}");
+    assert!(delay_0_ns < MAX_DELAY_NS, "{body:#?}");
     assert!(
         e0.file.contains("rs/nervous_system/common/src"),
-        "{:#?}",
-        body
+        "{body:#?}"
     );
-    assert!(e0.line > 0, "{:#?}", body);
-    assert_eq!(e0.message, "hi", "{:#?}", body);
+    assert!(e0.line > 0, "{body:#?}");
+    assert_eq!(e0.message, "hi", "{body:#?}");
 
     let e1 = &body.entries[1];
     let delay_1_ns = e1.timestamp - e0.timestamp;
-    assert_eq!(e1.severity, "Error", "{:#?}", body);
-    assert!(delay_1_ns < MAX_DELAY_NS, "{:#?}", body);
+    assert_eq!(e1.severity, "Error", "{body:#?}");
+    assert!(delay_1_ns < MAX_DELAY_NS, "{body:#?}");
     assert!(
         e1.file.contains("rs/nervous_system/common/src"),
-        "{:#?}",
-        body
+        "{body:#?}"
     );
-    assert!(e1.line > e0.line, "{:#?}", body);
-    assert_eq!(e1.message, "YIKES!", "{:#?}", body);
+    assert!(e1.line > e0.line, "{body:#?}");
+    assert_eq!(e1.message, "YIKES!", "{body:#?}");
 
     let e2 = &body.entries[2];
     let delay_2_ns = e2.timestamp - e1.timestamp;
-    assert_eq!(e2.severity, "Info", "{:#?}", body);
-    assert!(delay_2_ns < MAX_DELAY_NS, "{:#?}", body);
+    assert_eq!(e2.severity, "Info", "{body:#?}");
+    assert!(delay_2_ns < MAX_DELAY_NS, "{body:#?}");
     assert!(
         e2.file.contains("rs/nervous_system/common/src"),
-        "{:#?}",
-        body
+        "{body:#?}"
     );
-    assert!(e2.line > e1.line, "{:#?}", body);
-    assert_eq!(e2.message, "hol' up", "{:#?}", body);
+    assert!(e2.line > e1.line, "{body:#?}");
+    assert_eq!(e2.message, "hol' up", "{body:#?}");
 
     let e3 = &body.entries[3];
     let delay_3_ns = e3.timestamp - e2.timestamp;
-    assert_eq!(e3.severity, "Error", "{:#?}", body);
-    assert!(delay_3_ns < MAX_DELAY_NS, "{:#?}", body);
+    assert_eq!(e3.severity, "Error", "{body:#?}");
+    assert!(delay_3_ns < MAX_DELAY_NS, "{body:#?}");
     assert!(
         e3.file.contains("rs/nervous_system/common/src"),
-        "{:#?}",
-        body
+        "{body:#?}"
     );
-    assert!(e3.line > e1.line, "{:#?}", body);
-    assert_eq!(e3.message, "DA ROOF IS ON FAIYA", "{:#?}", body);
+    assert!(e3.line > e1.line, "{body:#?}");
+    assert_eq!(e3.message, "DA ROOF IS ON FAIYA", "{body:#?}");
 }
 
 #[test]
@@ -157,31 +153,29 @@ fn test_serve_logs_only_errors() {
     // Step 3.2: Inspect (JSON) payload.
     let body = String::from_utf8(body.into_vec()).unwrap();
     let body = json5::from_str::<LogsResponseBody>(&body).unwrap();
-    assert_eq!(body.entries.len(), 2, "{:#?}", body);
+    assert_eq!(body.entries.len(), 2, "{body:#?}");
 
     let e0 = &body.entries[0];
     let delay_0_ns = e0.timestamp - before_timestamp_nanoseconds;
-    assert_eq!(e0.severity, "Error", "{:#?}", body);
-    assert!(delay_0_ns < MAX_DELAY_NS, "{:#?}", body);
+    assert_eq!(e0.severity, "Error", "{body:#?}");
+    assert!(delay_0_ns < MAX_DELAY_NS, "{body:#?}");
     assert!(
         e0.file.contains("rs/nervous_system/common/src"),
-        "{:#?}",
-        body
+        "{body:#?}"
     );
-    assert!(e0.line > 0, "{:#?}", body);
-    assert_eq!(e0.message, "FOO!", "{:#?}", body);
+    assert!(e0.line > 0, "{body:#?}");
+    assert_eq!(e0.message, "FOO!", "{body:#?}");
 
     let e1 = &body.entries[1];
     let delay_1_ns = e1.timestamp - e0.timestamp;
-    assert_eq!(e1.severity, "Error", "{:#?}", body);
-    assert!(delay_1_ns < MAX_DELAY_NS, "{:#?}", body);
+    assert_eq!(e1.severity, "Error", "{body:#?}");
+    assert!(delay_1_ns < MAX_DELAY_NS, "{body:#?}");
     assert!(
         e1.file.contains("rs/nervous_system/common/src"),
-        "{:#?}",
-        body
+        "{body:#?}"
     );
-    assert!(e1.line > e0.line, "{:#?}", body);
-    assert_eq!(e1.message, "BAR!", "{:#?}", body);
+    assert!(e1.line > e0.line, "{body:#?}");
+    assert_eq!(e1.message, "BAR!", "{body:#?}");
 }
 
 #[test]
@@ -202,10 +196,7 @@ fn test_serve_logs_time_bound() {
     // Step 2: Call the code under test.
     let http_request = HttpRequest {
         method: "GET".to_string(),
-        url: format!(
-            "http://example.com/logs?time={}",
-            between_timestamp_nanoseconds
-        ),
+        url: format!("http://example.com/logs?time={between_timestamp_nanoseconds}"),
         headers: vec![],
         body: ByteBuf::new(),
     };
@@ -230,31 +221,29 @@ fn test_serve_logs_time_bound() {
     // Step 3.2: Inspect (JSON) payload.
     let body = String::from_utf8(body.into_vec()).unwrap();
     let body = json5::from_str::<LogsResponseBody>(&body).unwrap();
-    assert_eq!(body.entries.len(), 2, "{:#?}", body);
+    assert_eq!(body.entries.len(), 2, "{body:#?}");
 
     let e0 = &body.entries[0];
     let delay_0_ns = e0.timestamp - between_timestamp_nanoseconds;
-    assert_eq!(e0.severity, "Error", "{:#?}", body);
-    assert!(delay_0_ns < MAX_DELAY_NS, "{:#?}", body);
+    assert_eq!(e0.severity, "Error", "{body:#?}");
+    assert!(delay_0_ns < MAX_DELAY_NS, "{body:#?}");
     assert!(
         e0.file.contains("rs/nervous_system/common/src"),
-        "{:#?}",
-        body
+        "{body:#?}"
     );
-    assert!(e0.line > 0, "{:#?}", body);
-    assert_eq!(e0.message, "AFTER!", "{:#?}", body);
+    assert!(e0.line > 0, "{body:#?}");
+    assert_eq!(e0.message, "AFTER!", "{body:#?}");
 
     let e1 = &body.entries[1];
     let delay_1_ns = e1.timestamp - e0.timestamp;
-    assert_eq!(e1.severity, "Info", "{:#?}", body);
-    assert!(delay_1_ns < MAX_DELAY_NS, "{:#?}", body);
+    assert_eq!(e1.severity, "Info", "{body:#?}");
+    assert!(delay_1_ns < MAX_DELAY_NS, "{body:#?}");
     assert!(
         e1.file.contains("rs/nervous_system/common/src"),
-        "{:#?}",
-        body
+        "{body:#?}"
     );
-    assert!(e1.line > e0.line, "{:#?}", body);
-    assert_eq!(e1.message, "after", "{:#?}", body);
+    assert!(e1.line > e0.line, "{body:#?}");
+    assert_eq!(e1.message, "after", "{body:#?}");
 }
 
 #[test]

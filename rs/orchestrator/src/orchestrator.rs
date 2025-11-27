@@ -11,21 +11,24 @@ use crate::{
     registration::NodeRegistration,
     registry_helper::RegistryHelper,
     ssh_access_manager::SshAccessManager,
-    upgrade::Upgrade,
+    upgrade::{OrchestratorControlFlow, Upgrade},
 };
 use backoff::ExponentialBackoffBuilder;
 use get_if_addrs::get_if_addrs;
-use ic_config::metrics::{Config as MetricsConfig, Exporter};
+use guest_upgrade_server::orchestrator::new_disk_encryption_key_exchange_server_agent_for_orchestrator;
+use ic_config::{
+    Config,
+    metrics::{Config as MetricsConfig, Exporter},
+};
 use ic_crypto::CryptoComponent;
-use ic_crypto_node_key_generation::{generate_node_keys_once, NodeKeyGenerationError};
+use ic_crypto_node_key_generation::{NodeKeyGenerationError, generate_node_keys_once};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_image_upgrader::ImageUpgrader;
-use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_replicator::RegistryReplicator;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::{hostos_version::HostosVersion, ReplicaVersion, SubnetId};
-use slog_async::AsyncGuard;
+use ic_types::{ReplicaVersion, SubnetId, hostos_version::HostosVersion};
 use std::{
     collections::HashMap,
     convert::TryFrom,
@@ -36,13 +39,23 @@ use std::{
     thread,
     time::Duration,
 };
-use tokio::{sync::watch::Receiver, task::JoinSet};
+use tokio::task::JoinSet;
+use tokio_util::sync::CancellationToken;
 
 const CHECK_INTERVAL_SECS: Duration = Duration::from_secs(10);
 
+/// The subnet is initially in the `Unknown` state. After the upgrade loop runs for the first time,
+/// it will initialize it to either `Unassigned` or `Assigned(subnet_id)`.
+#[derive(Copy, Clone, Default)]
+pub(crate) enum SubnetAssignment {
+    #[default]
+    Unknown,
+    Unassigned,
+    Assigned(SubnetId),
+}
+
 pub struct Orchestrator {
-    pub logger: ReplicaLogger,
-    _async_log_guard: AsyncGuard,
+    logger: ReplicaLogger,
     _metrics_runtime: MetricsHttpEndpoint,
     upgrade: Option<Upgrade>,
     hostos_upgrade: Option<HostosUpgrader>,
@@ -51,8 +64,7 @@ pub struct Orchestrator {
     ssh_access_manager: Option<SshAccessManager>,
     orchestrator_dashboard: Option<OrchestratorDashboard>,
     registration: Option<NodeRegistration>,
-    // The subnet id of the node.
-    subnet_id: Arc<RwLock<Option<SubnetId>>>,
+    subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     ipv4_configurator: Option<Ipv4Configurator>,
     task_tracker: TaskTracker,
 }
@@ -83,10 +95,14 @@ fn load_version_from_file(logger: &ReplicaLogger, path: &Path) -> Result<Replica
 }
 
 impl Orchestrator {
-    pub async fn new(args: OrchestratorArgs) -> Result<Self, OrchestratorInstantiationError> {
+    pub async fn new(
+        args: OrchestratorArgs,
+        config: &Config,
+        cancellation_token: CancellationToken,
+        logger: ReplicaLogger,
+    ) -> Result<Self, OrchestratorInstantiationError> {
         args.create_dirs();
         let metrics_addr = args.get_metrics_addr();
-        let config = args.get_ic_config();
         let crypto_config = config.crypto.clone();
         let node_id = tokio::task::spawn_blocking(move || {
             generate_node_keys_once(&crypto_config, Some(tokio::runtime::Handle::current()))
@@ -100,8 +116,6 @@ impl Orchestrator {
         .await
         .unwrap()?;
 
-        let (logger, _async_log_guard) =
-            new_replica_logger_from_config(&config.orchestrator_logger);
         let metrics_registry = MetricsRegistry::global();
         let replica_version = load_version_from_file(&logger, &args.version_file)
             .map_err(|()| OrchestratorInstantiationError::VersionFileError)?;
@@ -110,33 +124,34 @@ impl Orchestrator {
             "Orchestrator started: version={}, config={:?}", replica_version, config
         );
         UtilityCommand::notify_host(
-            format!(
-                "node-id {}: starting with version {}",
-                node_id, replica_version
-            )
-            .as_str(),
+            format!("node-id {node_id}: starting with version {replica_version}").as_str(),
             1,
         );
 
-        UtilityCommand::notify_host("\nONBOARDING MAY NOT YET BE COMPLETE:\nIf a 'Join request successful!' message has NOT yet been logged, please wait for up to 10 minutes...\n", 3);
+        UtilityCommand::notify_host(
+            "\nONBOARDING MAY NOT YET BE COMPLETE:\nIf a 'Join request successful!' message has NOT yet been logged, please wait for up to 10 minutes...\n",
+            3,
+        );
 
         let version = replica_version.clone();
-        thread::spawn(move || loop {
-            // Sleep early because IPv4 takes several minutes to configure
-            thread::sleep(Duration::from_secs(10 * 60));
-            let (ipv4, ipv6) = Self::get_ip_addresses();
+        thread::spawn(move || {
+            loop {
+                // Sleep early because IPv4 takes several minutes to configure
+                thread::sleep(Duration::from_secs(10 * 60));
+                let (ipv4, ipv6) = Self::get_ip_addresses();
 
-            let message = indoc::formatdoc!(
-                r#"
+                let message = indoc::formatdoc!(
+                    r#"
                     Node-id: {node_id}
                     Replica version: {version}
                     IPv6: {ipv6}
                     IPv4: {ipv4}
 
                 "#
-            );
+                );
 
-            UtilityCommand::notify_host(&message, 1);
+                UtilityCommand::notify_host(&message, 1);
+            }
         });
 
         let slog_logger = logger.inner_logger.root.clone();
@@ -145,19 +160,11 @@ impl Orchestrator {
         let metrics = Arc::new(metrics);
         let mut task_tracker = TaskTracker::new(metrics.clone(), logger.clone());
 
-        let registry_replicator = Arc::new(RegistryReplicator::new_from_config(
-            logger.clone(),
-            Some(node_id),
-            &config,
-        ));
+        let registry_replicator = Arc::new(
+            RegistryReplicator::new_from_config(logger.clone(), Some(node_id), config).await,
+        );
 
-        let (nns_urls, nns_pub_key) =
-            registry_replicator.parse_registry_access_info_from_config(&config);
-
-        match registry_replicator
-            .start_polling(nns_urls, nns_pub_key)
-            .await
-        {
+        match registry_replicator.start_polling(cancellation_token) {
             Ok(future) => task_tracker.spawn("registry_replicator", future),
             Err(err) => {
                 metrics
@@ -213,7 +220,7 @@ impl Orchestrator {
             registry_local_store.clone(),
         );
 
-        let replica_process = Arc::new(Mutex::new(ProcessManager::new(slog_logger.clone())));
+        let replica_process = Arc::new(Mutex::new(ProcessManager::new(logger.clone())));
         let ic_binary_directory = args
             .ic_binary_directory
             .as_ref()
@@ -234,6 +241,12 @@ impl Orchestrator {
             registration.register_node().await;
         }
 
+        let disk_encryption_key_exchange_agent =
+            new_disk_encryption_key_exchange_server_agent_for_orchestrator(
+                tokio::runtime::Handle::current(),
+                Arc::clone(&registry_client),
+            );
+
         let upgrade = Some(
             Upgrade::new(
                 Arc::clone(&registry),
@@ -248,6 +261,7 @@ impl Orchestrator {
                 args.replica_binary_dir.clone(),
                 logger.clone(),
                 args.orchestrator_data_directory.clone(),
+                disk_encryption_key_exchange_agent,
             )
             .await,
         );
@@ -256,7 +270,7 @@ impl Orchestrator {
             .await
             .and_then(|v| {
                 HostosVersion::try_from(v)
-                    .map_err(|e| format!("Unable to parse HostOS version: {:?}", e))
+                    .map_err(|e| format!("Unable to parse HostOS version: {e:?}"))
             });
 
         let hostos_upgrade = match hostos_version.clone() {
@@ -312,7 +326,7 @@ impl Orchestrator {
             logger.clone(),
         );
 
-        let subnet_id: Arc<RwLock<Option<SubnetId>>> = Default::default();
+        let subnet_assignment: Arc<RwLock<SubnetAssignment>> = Default::default();
 
         let orchestrator_dashboard = Some(OrchestratorDashboard::new(
             Arc::clone(&registry),
@@ -321,7 +335,7 @@ impl Orchestrator {
             firewall.get_last_applied_version(),
             ipv4_configurator.get_last_applied_version(),
             replica_process,
-            Arc::clone(&subnet_id),
+            Arc::clone(&subnet_assignment),
             replica_version,
             hostos_version.ok(),
             cup_provider,
@@ -330,7 +344,6 @@ impl Orchestrator {
 
         Ok(Self {
             logger,
-            _async_log_guard,
             _metrics_runtime,
             upgrade,
             hostos_upgrade,
@@ -339,7 +352,7 @@ impl Orchestrator {
             ssh_access_manager: Some(ssh_access_manager),
             orchestrator_dashboard,
             registration: Some(registration),
-            subnet_id,
+            subnet_assignment,
             ipv4_configurator: Some(ipv4_configurator),
             task_tracker,
         })
@@ -366,42 +379,106 @@ impl Orchestrator {
     /// 4. Fourth task checks if this node is part of a threshold signing subnet. If so,
     ///    and it is also time to rotate the iDKG encryption key, instruct crypto
     ///    to do the rotation and attempt to register the rotated key.
-    pub async fn start_tasks(&mut self, exit_signal: Receiver<bool>) {
+    pub async fn start_tasks(&mut self, cancellation_token: CancellationToken) {
         async fn upgrade_checks(
-            maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
+            subnet_assignment: Arc<RwLock<SubnetAssignment>>,
             mut upgrade: Upgrade,
-            exit_signal: Receiver<bool>,
+            cancellation_token: CancellationToken,
             log: ReplicaLogger,
         ) {
             // This timeout is a last resort trying to revive the upgrade monitoring
             // in case it gets stuck in an unexpected situation for longer than 15 minutes.
-            let timeout = Duration::from_secs(60 * 15);
-            let metrics = upgrade.metrics.clone();
-            upgrade
-                .upgrade_loop(exit_signal, CHECK_INTERVAL_SECS, timeout, |r| async {
-                    match r {
-                        Ok(Ok(val)) => {
-                            *maybe_subnet_id.write().unwrap() = val;
-                            metrics.failed_consecutive_upgrade_checks.reset();
+            const UPGRADE_TIMEOUT: Duration = Duration::from_secs(60 * 15);
+
+            // Since the orchestrator is just starting, the last flow must have been a `Stop`
+            let mut last_flow = OrchestratorControlFlow::Stop;
+
+            loop {
+                match tokio::time::timeout(UPGRADE_TIMEOUT, upgrade.check_for_upgrade()).await {
+                    Ok(Ok(control_flow)) => {
+                        upgrade.metrics.failed_consecutive_upgrade_checks.reset();
+
+                        match control_flow {
+                            OrchestratorControlFlow::Assigned(subnet_id)
+                            | OrchestratorControlFlow::Leaving(subnet_id) => {
+                                *subnet_assignment.write().unwrap() =
+                                    SubnetAssignment::Assigned(subnet_id);
+                            }
+                            OrchestratorControlFlow::Unassigned => {
+                                *subnet_assignment.write().unwrap() = SubnetAssignment::Unassigned;
+                            }
+                            OrchestratorControlFlow::Stop => {
+                                // Wake up all orchestrator tasks and instruct them to stop.
+                                cancellation_token.cancel();
+                                break;
+                            }
                         }
-                        e => {
-                            warn!(log, "Check for upgrade failed: {:?}", e);
-                            metrics.failed_consecutive_upgrade_checks.inc();
+
+                        let node_id = upgrade.node_id();
+                        match (&last_flow, &control_flow) {
+                            (
+                                OrchestratorControlFlow::Assigned(subnet_id),
+                                OrchestratorControlFlow::Leaving(_),
+                            ) => {
+                                UtilityCommand::notify_host(
+                                    &format!(
+                                        "The node {node_id} has been unassigned from the subnet {subnet_id}\
+                                     in the registry. Please do not turn off the machine while it completes its graceful removal from the subnet.\
+                                      This process can take up to 15 minutes. A new message will be displayed here when the node has been \
+                                      successfully removed."
+                                    ),
+                                    1,
+                                );
+                            }
+                            (
+                                OrchestratorControlFlow::Leaving(subnet_id),
+                                OrchestratorControlFlow::Unassigned,
+                            ) => {
+                                UtilityCommand::notify_host(
+                                    &format!(
+                                        "The node {node_id} has gracefully left subnet {subnet_id}. The node can be turned off now."
+                                    ),
+                                    1,
+                                );
+                            }
+                            // Other transitions are not important at the moment.
+                            _ => {}
                         }
-                    };
-                })
-                .await;
+                        last_flow = control_flow;
+                    }
+                    Ok(Err(err)) => {
+                        warn!(log, "Check for upgrade failed: {err}");
+                        upgrade.metrics.failed_consecutive_upgrade_checks.inc();
+                    }
+                    Err(err) => {
+                        warn!(log, "Check for upgrade timed out: {err}");
+                        upgrade.metrics.failed_consecutive_upgrade_checks.inc();
+                    }
+                }
+
+                tokio::select! {
+                    _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
+                    _ = cancellation_token.cancelled() => break
+                };
+            }
+
             info!(log, "Shut down the upgrade loop");
             if let Err(e) = upgrade.stop_replica() {
-                warn!(log, "{}", e);
+                warn!(log, "Failed to stop the replica process: {e}");
             }
             info!(log, "Shut down the replica process");
         }
 
-        async fn hostos_upgrade_checks(mut upgrade: HostosUpgrader, exit_signal: Receiver<bool>) {
+        async fn hostos_upgrade_checks(
+            mut upgrade: HostosUpgrader,
+            cancellation_token: CancellationToken,
+        ) {
             // Wait for a minute before starting the first loop, to allow the
             // registry some time to catch up, after starting.
-            tokio::time::sleep(Duration::from_secs(60)).await;
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_secs(60)) => {}
+                _ = cancellation_token.cancelled() => return
+            }
 
             // Run the HostOS upgrade loop with an exponential backoff. A 15
             // minute liveness timeout will restart the loop if no progress is
@@ -422,76 +499,96 @@ impl Orchestrator {
             let liveness_timeout = Duration::from_secs(15 * 60);
 
             upgrade
-                .upgrade_loop(exit_signal, backoff, liveness_timeout)
+                .upgrade_loop(cancellation_token, backoff, liveness_timeout)
                 .await;
         }
 
         async fn boundary_node_check(
             mut boundary_node_manager: BoundaryNodeManager,
-            mut exit_signal: Receiver<bool>,
+            cancellation_token: CancellationToken,
         ) {
-            while !*exit_signal.borrow() {
+            loop {
                 boundary_node_manager.check().await;
 
                 tokio::select! {
                     _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
-                    _ = exit_signal.changed() => {}
+                    _ = cancellation_token.cancelled() => break
                 }
             }
         }
 
         async fn key_rotation_check(
-            maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
+            subnet_assignment: Arc<RwLock<SubnetAssignment>>,
             registration: NodeRegistration,
-            mut exit_signal: Receiver<bool>,
+            cancellation_token: CancellationToken,
         ) {
-            while !*exit_signal.borrow() {
-                let maybe_subnet_id = *maybe_subnet_id.read().unwrap();
-                if let Some(subnet_id) = maybe_subnet_id {
-                    registration
-                        .check_all_keys_registered_otherwise_register(subnet_id)
-                        .await;
+            loop {
+                let subnet_assignment = *subnet_assignment.read().unwrap();
+                match subnet_assignment {
+                    SubnetAssignment::Assigned(subnet_id) => {
+                        registration
+                            .check_all_keys_registered_otherwise_register(subnet_id)
+                            .await
+                    }
+                    SubnetAssignment::Unassigned | SubnetAssignment::Unknown => {}
                 }
 
                 tokio::select! {
                     _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
-                    _ = exit_signal.changed() => {}
+                    _ = cancellation_token.cancelled() => break
                 }
             }
         }
 
         async fn ssh_key_and_firewall_rules_and_ipv4_config_checks(
-            maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
+            subnet_assignment: Arc<RwLock<SubnetAssignment>>,
             mut ssh_access_manager: SshAccessManager,
             mut firewall: Firewall,
             mut ipv4_configurator: Ipv4Configurator,
-            mut exit_signal: Receiver<bool>,
+            cancellation_token: CancellationToken,
         ) {
-            while !*exit_signal.borrow() {
-                // Check if new SSH keys need to be deployed
-                ssh_access_manager.check_for_keyset_changes(*maybe_subnet_id.read().unwrap());
+            loop {
+                // Check if new SSH keys need to be deployed, but only once the subnet is known.
+                // Otherwise, if we just used the default value of `None`, we would incorrectly
+                // assume that we are unassigned, while it could just be that the upgrade loop has
+                // not already had the chance of setting `subnet_assignment`. In that case we would
+                // purge all SSH keys if we were actually assigned to a subnet, having to wait for
+                // the upgrade loop to actually set `subnet_assignment` and we would only at that
+                // point redeploy the purged keys.
+                match *subnet_assignment.read().unwrap() {
+                    SubnetAssignment::Assigned(subnet_id) => {
+                        ssh_access_manager.check_for_keyset_changes(Some(subnet_id));
+                    }
+                    SubnetAssignment::Unassigned => {
+                        ssh_access_manager.check_for_keyset_changes(None);
+                    }
+                    SubnetAssignment::Unknown => {}
+                };
                 // Check and update the firewall rules
                 firewall.check_and_update();
                 // Check and update the network configuration
                 ipv4_configurator.check_and_update().await;
                 tokio::select! {
                     _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
-                    _ = exit_signal.changed() => {}
+                    _ = cancellation_token.cancelled() => break
                 }
             }
         }
 
-        async fn serve_dashboard(dashboard: OrchestratorDashboard, exit_signal: Receiver<bool>) {
-            dashboard.run(exit_signal).await;
+        async fn serve_dashboard(
+            dashboard: OrchestratorDashboard,
+            cancellation_token: CancellationToken,
+        ) {
+            dashboard.run(cancellation_token).await;
         }
 
         if let Some(upgrade) = self.upgrade.take() {
             self.task_tracker.spawn(
-                "upgrade",
+                "GuestOS_upgrade",
                 upgrade_checks(
-                    Arc::clone(&self.subnet_id),
+                    Arc::clone(&self.subnet_assignment),
                     upgrade,
-                    exit_signal.clone(),
+                    cancellation_token.clone(),
                     self.logger.clone(),
                 ),
             );
@@ -500,14 +597,14 @@ impl Orchestrator {
         if let Some(hostos_upgrade) = self.hostos_upgrade.take() {
             self.task_tracker.spawn(
                 "HostOS_upgrade",
-                hostos_upgrade_checks(hostos_upgrade, exit_signal.clone()),
+                hostos_upgrade_checks(hostos_upgrade, cancellation_token.clone()),
             );
         }
 
         if let Some(boundary_node) = self.boundary_node_manager.take() {
             self.task_tracker.spawn(
                 "boundary_node_management",
-                boundary_node_check(boundary_node, exit_signal.clone()),
+                boundary_node_check(boundary_node, cancellation_token.clone()),
             );
         }
 
@@ -519,27 +616,29 @@ impl Orchestrator {
             self.task_tracker.spawn(
                 "ssh_key_firewall_rules_ipv4_config",
                 ssh_key_and_firewall_rules_and_ipv4_config_checks(
-                    Arc::clone(&self.subnet_id),
+                    Arc::clone(&self.subnet_assignment),
                     ssh,
                     firewall,
                     ipv4_configurator,
-                    exit_signal.clone(),
+                    cancellation_token.clone(),
                 ),
             );
         }
 
         if let Some(dashboard) = self.orchestrator_dashboard.take() {
-            self.task_tracker
-                .spawn("dashboard", serve_dashboard(dashboard, exit_signal.clone()));
+            self.task_tracker.spawn(
+                "dashboard",
+                serve_dashboard(dashboard, cancellation_token.clone()),
+            );
         }
 
         if let Some(registration) = self.registration.take() {
             self.task_tracker.spawn(
                 "key_rotation",
                 key_rotation_check(
-                    Arc::clone(&self.subnet_id),
+                    Arc::clone(&self.subnet_assignment),
                     registration,
-                    exit_signal.clone(),
+                    cancellation_token.clone(),
                 ),
             );
         }

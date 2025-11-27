@@ -25,6 +25,7 @@ assert_matches = { workspace = true }
 ic-consensus-mocks = { path = "../mocks" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-consensus = { path = "../../test_utilities/consensus" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-test-utilities-state = { path = "../../test_utilities/state" }
 ic-test-utilities-time = { path = "../../test_utilities/time" }

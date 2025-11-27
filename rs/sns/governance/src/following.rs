@@ -1,7 +1,7 @@
 use crate::pb::v1::{
+    Followee, NeuronId, Topic,
     manage_neuron::SetFollowing,
     neuron::{FolloweesForTopic, TopicFollowees},
-    Followee, NeuronId, Topic,
 };
 use itertools::{Either, Itertools};
 use lazy_static::lazy_static;
@@ -175,11 +175,11 @@ fn fmt_followee_groups(followee_groups: &FolloweeGroups) -> String {
         .map(|(neuron_id, followees)| {
             let followees = followees
                 .iter()
-                .map(|followee| format!("{}", followee))
+                .map(|followee| format!("{followee}"))
                 .collect::<Vec<_>>()
                 .join(", ");
 
-            format!("{}: {}", neuron_id, followees)
+            format!("{neuron_id}: {followees}")
         })
         .collect::<Vec<_>>()
         .join(", ")
@@ -242,11 +242,11 @@ fn fmt_alias_groups(followees: &FolloweeAliasGroups) -> String {
         .map(|(neuron_id, followees_for_this_neuron_id)| {
             let followees_for_this_neuron_id = followees_for_this_neuron_id
                 .iter()
-                .map(|followee| format!("{}", followee))
+                .map(|followee| format!("{followee}"))
                 .collect::<Vec<_>>()
                 .join(", ");
 
-            format!("{}: [{}]", neuron_id, followees_for_this_neuron_id)
+            format!("{neuron_id}: [{followees_for_this_neuron_id}]")
         })
         .collect::<Vec<_>>()
         .join(", ")
@@ -407,11 +407,7 @@ impl TryFrom<SetFollowing> for ValidatedSetFollowing {
             .into_iter()
             .filter_map(
                 |(topic, group)| {
-                    if group.count() > 1 {
-                        Some(topic)
-                    } else {
-                        None
-                    }
+                    if group.count() > 1 { Some(topic) } else { None }
                 },
             )
             .collect::<Vec<_>>();

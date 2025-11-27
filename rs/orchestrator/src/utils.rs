@@ -1,13 +1,12 @@
-use ic_logger::{warn, ReplicaLogger};
 use ic_protobuf::registry::node::v1::ConnectionEndpoint;
 use std::{net::IpAddr, str::FromStr};
 use url::Url;
 
-pub(crate) fn https_endpoint_to_url(http: &ConnectionEndpoint, log: &ReplicaLogger) -> Option<Url> {
+pub(crate) fn https_endpoint_to_url(http: &ConnectionEndpoint) -> Result<Url, String> {
     let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
         Ok(v) => {
             if v.is_ipv6() {
-                format!("[{}]", v)
+                format!("[{v}]")
             } else {
                 v.to_string()
             }
@@ -19,11 +18,5 @@ pub(crate) fn https_endpoint_to_url(http: &ConnectionEndpoint, log: &ReplicaLogg
     };
 
     let url = format!("https://{}:{}/", host_str, http.port);
-    match Url::parse(&url) {
-        Ok(v) => Some(v),
-        Err(e) => {
-            warn!(log, "Invalid url: {}: {:?}", url, e);
-            None
-        }
-    }
+    Url::parse(&url).map_err(|e| format!("Invalid HTTPS endpoint: {url}: {e:?}"))
 }

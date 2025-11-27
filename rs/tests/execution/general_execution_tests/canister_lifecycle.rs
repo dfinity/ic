@@ -27,6 +27,7 @@ AKA:: Testcase 2.4
 
 
 end::catalog[] */
+#![allow(deprecated)]
 
 use candid::{Decode, Encode};
 use ic_agent::{agent::RejectCode, export::Principal, identity::Identity};
@@ -39,15 +40,16 @@ use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use ic_system_test_driver::types::*;
 use ic_system_test_driver::util::*;
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{Cycles, PrincipalId};
-use ic_universal_canister::{call_args, management, wasm, CallInterface, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{CallInterface, UNIVERSAL_CANISTER_WASM, call_args, management, wasm};
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::{
-    management_canister::{
-        builders::{CanisterUpgradeOptions, InstallMode},
-        UpdateCanisterBuilder,
-    },
     ManagementCanister,
+    management_canister::{
+        UpdateCanisterBuilder,
+        builders::{CanisterUpgradeOptions, InstallMode},
+    },
 };
 use slog::info;
 
@@ -225,7 +227,11 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
                 balance_after < balance_before
                     && balance_before - balance_after
                         > cycles_account_manager
-                            .ingress_induction_cost_from_bytes(NumBytes::new(bytes.len() as u64), 1)
+                            .ingress_induction_cost_from_bytes(
+                                NumBytes::new(bytes.len() as u64),
+                                1,
+                                CanisterCyclesCostSchedule::Normal
+                            )
                             .get()
             );
         }
@@ -722,7 +728,7 @@ pub fn delete_running_canister_fails(env: TestEnv) {
 }
 
 /// Try to install a canister with a large wasm but a small memory allocation.
-/// It should be rejected.
+/// This should succeed.
 pub fn canister_large_wasm_small_memory_allocation(env: TestEnv) {
     let app_node = env.get_first_healthy_application_node_snapshot();
     let agent = app_node.build_default_agent();
@@ -739,18 +745,18 @@ pub fn canister_large_wasm_small_memory_allocation(env: TestEnv) {
                 .await
                 .expect("Couldn't create canister with provisional API.")
                 .0;
-            // Install a large wasm with a small memory allocation, it should fail.
-            let res = mgr
-                .install_code(&canister_id, &UNIVERSAL_CANISTER_WASM)
+            // Install a large wasm with a small memory allocation, this should succeed.
+            mgr.install_code(&canister_id, &UNIVERSAL_CANISTER_WASM)
+                .with_raw_arg(vec![])
                 .call_and_wait()
-                .await;
-            assert_reject(res, RejectCode::CanisterReject);
+                .await
+                .expect("Couldn't install code.");
         }
     })
 }
 
 /// Try to install a canister with a wasm that asks for a large memory but a
-/// small memory allocation. It should be rejected.
+/// small memory allocation. This should succeed.
 pub fn canister_large_initial_memory_small_memory_allocation(env: TestEnv) {
     // A wasm module that asks for 2GiB of initial memory.
     let wasm = wat::parse_str(
@@ -782,20 +788,14 @@ pub fn canister_large_initial_memory_small_memory_allocation(env: TestEnv) {
                 .await
                 .unwrap();
 
-            // Attempt to set 1GB memory allocation for the canister, it should fail.
-            let res = mgr
-                .update_settings(&canister_id)
+            // Attempt to set 1GB memory allocation for the canister, this should succeed.
+            mgr.update_settings(&canister_id)
                 .with_memory_allocation(1_u64 << 30)
                 .call_and_wait()
-                .await;
-            assert_reject(res, RejectCode::CanisterReject);
-
-            // Install the wasm with 3GiB memory allocation, it should succeed.
-            mgr.update_settings(&canister_id)
-                .with_memory_allocation(3_u64 << 30)
-                .call_and_wait()
                 .await
-                .unwrap();
+                .expect("Couldn't set memory allocation to 1GiB.");
+
+            // Reinstall the wasm with 1GiB memory allocation, this should also succeed.
             mgr.install_code(&canister_id, &wasm)
                 .with_mode(InstallMode::Reinstall)
                 .call_and_wait()
@@ -1088,7 +1088,7 @@ pub fn provisional_create_canister_with_no_settings(env: TestEnv) {
                 .call_and_wait()
                 .await
                 .unwrap_or_else(|err| {
-                    panic!("Couldn't create canister with provisional API: {}", err)
+                    panic!("Couldn't create canister with provisional API: {err}")
                 });
         }
     })

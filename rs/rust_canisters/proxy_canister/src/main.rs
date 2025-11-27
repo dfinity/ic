@@ -5,10 +5,12 @@
 //! as a canister message to client if the call was successful and agreed by majority nodes,
 //! otherwise errors out.
 //!
+#![allow(deprecated)]
 use candid::Principal;
 use futures::future::join_all;
+use futures::stream::{FuturesUnordered, StreamExt};
 use ic_cdk::api::call::RejectionCode;
-use ic_cdk::api::time;
+use ic_cdk::api::{data_certificate, in_replicated_execution, time};
 use ic_cdk::{caller, spawn};
 use ic_cdk::{query, update};
 use ic_management_canister_types_private::{
@@ -88,34 +90,23 @@ pub async fn start_continuous_requests(
     ))
 }
 
-// TODO: instead of sequentially awaiting on each batch, try to send the next requests anyway, with backoff.
-// This should improve the overall qps, as the canister message queue is the bottleneck, and it's not being saturated.
 async fn run_continuous_request_loop(request: RemoteHttpRequest) {
-    const BATCH_SIZE: usize = 500;
-    let futures_iter = (0..BATCH_SIZE).map(|_| send_request(request.clone()));
-    let results = join_all(futures_iter).await;
+    const PARALLEL_REQUESTS: usize = 500;
 
-    let mut successes = 0;
-    let mut errors = 0;
-    for result in results {
-        match result {
-            Ok(_resp) => {
-                successes += 1;
-            }
-            Err((rejection_code, msg)) => {
-                errors += 1;
-                println!("Request failed: {:?} - {}", rejection_code, msg);
-            }
-        }
+    let mut futures = FuturesUnordered::new();
+
+    for _ in 0..PARALLEL_REQUESTS {
+        futures.push(send_request(request.clone()));
     }
-    println!(
-        "Finished batch of {} requests => successes: {}, errors: {}",
-        BATCH_SIZE, successes, errors
-    );
 
-    spawn(async move {
-        run_continuous_request_loop(request).await;
-    });
+    while let Some(result) = futures.next().await {
+        match result {
+            Ok(_resp) => {}
+            Err((_rejection_code, _msg)) => {}
+        }
+
+        futures.push(send_request(request.clone()));
+    }
 }
 
 #[update]
@@ -278,6 +269,25 @@ fn very_large_but_allowed_transform(raw: TransformArgs) -> CanisterHttpResponseP
     transformed
 }
 
+#[query]
+fn data_certificate_in_transform(_raw: TransformArgs) -> CanisterHttpResponsePayload {
+    let data_certificate_present = data_certificate().is_some();
+    CanisterHttpResponsePayload {
+        status: 200,
+        body: vec![],
+        headers: vec![
+            HttpHeader {
+                name: "data_certificate_present".to_string(),
+                value: data_certificate_present.to_string(),
+            },
+            HttpHeader {
+                name: "in_replicated_execution".to_string(),
+                value: in_replicated_execution().to_string(),
+            },
+        ],
+    }
+}
+
 fn main() {}
 
 #[cfg(test)]
@@ -300,7 +310,7 @@ mod proxy_canister_test {
             context: vec![0, 1, 2],
         });
         let sanitized_body = std::str::from_utf8(&sanitized.body).unwrap();
-        println!("Sanitized body is: {}", sanitized_body);
+        println!("Sanitized body is: {sanitized_body}");
         assert!(sanitized.headers.is_empty());
         assert_eq!(sanitized_body, "homepage");
     }

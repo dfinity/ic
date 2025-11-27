@@ -9,7 +9,7 @@ use ic_nervous_system_clients::{
 use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_handler_root::{
-    encode_metrics, init::RootCanisterInitPayloadBuilder, PROXIED_CANISTER_CALLS_TRACKER,
+    PROXIED_CANISTER_CALLS_TRACKER, encode_metrics, init::RootCanisterInitPayloadBuilder,
 };
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_root_canister,
@@ -211,7 +211,7 @@ fn test_encode_metrics() {
         );
 
         let metric_value = lines[0]
-            .strip_suffix(&format!(" {}", now_millis))
+            .strip_suffix(&format!(" {now_millis}"))
             .unwrap_or_else(|| {
                 panic!(
                     "line = {:?}\n\
@@ -221,10 +221,7 @@ fn test_encode_metrics() {
                 )
             });
         f64::from_str(metric_value).unwrap_or_else(|err| {
-            panic!(
-                "{}\n\nError caused by trying to parse {:?} as a float",
-                err, metric_value
-            )
+            panic!("{err}\n\nError caused by trying to parse {metric_value:?} as a float")
         })
     }
 
@@ -238,14 +235,12 @@ fn test_encode_metrics() {
     }
 
     assert_less_than_50_ms(get_metric_value(&format!(
-        r#"nns_root_in_flight_proxied_canister_call_max_age_seconds{{caller="{}",callee="{}",method_name="some_method"}} "#,
-        caller, callee,
+        r#"nns_root_in_flight_proxied_canister_call_max_age_seconds{{caller="{caller}",callee="{callee}",method_name="some_method"}} "#,
     )));
 
     assert_eq!(
         get_metric_value(&format!(
-            r#"nns_root_in_flight_proxied_canister_call_count{{method_name="some_method",caller="{}",callee="{}"}} "#,
-            caller, callee
+            r#"nns_root_in_flight_proxied_canister_call_count{{method_name="some_method",caller="{caller}",callee="{callee}"}} "#
         )),
         1.0,
     );
@@ -290,27 +285,23 @@ fn test_encode_metrics() {
     };
 
     assert_less_than_50_ms(get_metric_value(&format!(
-        r#"nns_root_in_flight_proxied_canister_call_max_age_seconds{{caller="{}",callee="{}",method_name="some_method"}} "#,
-        caller, callee,
+        r#"nns_root_in_flight_proxied_canister_call_max_age_seconds{{caller="{caller}",callee="{callee}",method_name="some_method"}} "#,
     )));
 
     assert_less_than_50_ms(get_metric_value(&format!(
-        r#"nns_root_in_flight_proxied_canister_call_max_age_seconds{{caller="{}",callee="{}",method_name="canister_status"}} "#,
-        caller, callee,
+        r#"nns_root_in_flight_proxied_canister_call_max_age_seconds{{caller="{caller}",callee="{callee}",method_name="canister_status"}} "#,
     )));
 
     assert_eq!(
         get_metric_value(&format!(
-            r#"nns_root_in_flight_proxied_canister_call_count{{method_name="some_method",caller="{}",callee="{}"}} "#,
-            caller, callee
+            r#"nns_root_in_flight_proxied_canister_call_count{{method_name="some_method",caller="{caller}",callee="{callee}"}} "#
         )),
         1.0,
     );
 
     assert_eq!(
         get_metric_value(&format!(
-            r#"nns_root_in_flight_proxied_canister_call_count{{method_name="canister_status",caller="{}",callee="{}"}} "#,
-            caller, callee
+            r#"nns_root_in_flight_proxied_canister_call_count{{method_name="canister_status",caller="{caller}",callee="{callee}"}} "#
         )),
         1.0,
     );
@@ -322,8 +313,7 @@ fn test_encode_metrics() {
 
     assert_eq!(
         get_metric_value(&format!(
-            r#"nns_root_open_canister_status_calls{{canister_id="{}"}} "#,
-            caller,
+            r#"nns_root_open_canister_status_calls{{canister_id="{caller}"}} "#,
         )),
         1.0,
     );
@@ -348,17 +338,14 @@ fn test_encode_metrics() {
     };
 
     assert_less_than_50_ms(get_metric_value(&format!(
-        r#"nns_root_in_flight_proxied_canister_call_max_age_seconds{{caller="{}",callee="{}",method_name="some_method"}} "#,
-        caller, callee,
+        r#"nns_root_in_flight_proxied_canister_call_max_age_seconds{{caller="{caller}",callee="{callee}",method_name="some_method"}} "#,
     )));
 
     assert_eq!(
         metrics
             .lines()
             .filter(|line| line.starts_with(&format!(
-                r#"nns_root_in_flight_proxied_canister_call_max_age_seconds{{caller="{}",callee="{}",method_name="canister_status"}} "#,
-                caller,
-            callee,
+                r#"nns_root_in_flight_proxied_canister_call_max_age_seconds{{caller="{caller}",callee="{callee}",method_name="canister_status"}} "#,
             )))
             .count(),
         0,
@@ -366,8 +353,7 @@ fn test_encode_metrics() {
 
     assert_eq!(
         get_metric_value(&format!(
-            r#"nns_root_in_flight_proxied_canister_call_count{{method_name="some_method",caller="{}",callee="{}"}} "#,
-            caller, callee
+            r#"nns_root_in_flight_proxied_canister_call_count{{method_name="some_method",caller="{caller}",callee="{callee}"}} "#
         )),
         1.0,
     );
@@ -376,9 +362,7 @@ fn test_encode_metrics() {
         metrics
             .lines()
             .filter(|line| line.starts_with(&format!(
-                r#"nns_root_in_flight_proxied_canister_call_count{{method_name="canister_status",caller="{}",callee="{}"}} "#,
-                caller,
-                callee
+                r#"nns_root_in_flight_proxied_canister_call_count{{method_name="canister_status",caller="{caller}",callee="{callee}"}} "#
             )))
             .count(),
         0,
@@ -393,8 +377,7 @@ fn test_encode_metrics() {
         metrics
             .lines()
             .filter(|line| line.starts_with(&format!(
-                r#"nns_root_open_canister_status_calls{{canister_id="{}"}} "#,
-                caller,
+                r#"nns_root_open_canister_status_calls{{canister_id="{caller}"}} "#,
             )))
             .count(),
         0,

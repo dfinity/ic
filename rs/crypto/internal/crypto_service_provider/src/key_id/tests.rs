@@ -31,8 +31,8 @@ mod stability_tests {
     };
     use ic_crypto_internal_types::curves::bls12_381;
     use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
-    use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
     use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
+    use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
     use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
     use ic_crypto_tls_interfaces::TlsPublicKeyCert;
     use ic_types::crypto::AlgorithmId;

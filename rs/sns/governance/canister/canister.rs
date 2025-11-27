@@ -1,10 +1,11 @@
 // TODO: Jira ticket NNS1-3556
+#![allow(deprecated)]
 #![allow(static_mut_refs)]
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::{measure_span, measure_span_async};
-use ic_cdk::{caller as cdk_caller, init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk::{caller as cdk_caller, init, post_upgrade, pre_upgrade, println, query, update};
 use ic_cdk_timers::TimerId;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
@@ -12,7 +13,7 @@ use ic_nervous_system_clients::{
     canister_status::CanisterStatusResultV2, ledger_client::LedgerCanister,
 };
 use ic_nervous_system_common::{
-    dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
+    memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
     serve_logs, serve_logs_v2, serve_metrics,
 };
 use ic_nervous_system_proto::pb::v1::{
@@ -20,31 +21,17 @@ use ic_nervous_system_proto::pb::v1::{
 };
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
+#[cfg(feature = "test")]
+use ic_sns_governance::extensions::add_allowed_extension_spec;
+#[cfg(feature = "test")]
+use ic_sns_governance::pb::v1::AddAllowedExtensionRequest;
 use ic_sns_governance::{
-    governance::{
-        log_prefix, Governance, TimeWarp, ValidGovernanceProto, MATURITY_DISBURSEMENT_DELAY_SECONDS,
-    },
+    governance::{Governance, TimeWarp, ValidGovernanceProto, log_prefix},
     logs::{ERROR, INFO},
     pb::v1::{self as sns_gov_pb},
+    storage::with_upgrades_memory,
     types::{Environment, HeapGrowthPotential},
     upgrade_journal::serve_journal,
-};
-use ic_sns_governance_api::pb::v1::GovernanceError;
-use ic_sns_governance_api::pb::v1::{get_metrics_response, governance_error::ErrorType};
-use ic_sns_governance_api::pb::v1::{
-    get_running_sns_version_response::UpgradeInProgress,
-    governance::Version,
-    topics::{ListTopicsRequest, ListTopicsResponse},
-    ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
-    FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
-    GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMetricsRequest,
-    GetMode, GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
-    GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
-    GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
-    GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceApi,
-    ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-    ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
-    RewardEvent, SetMode, SetModeResponse,
 };
 #[cfg(feature = "test")]
 use ic_sns_governance_api::pb::v1::{
@@ -52,7 +39,22 @@ use ic_sns_governance_api::pb::v1::{
     AdvanceTargetVersionResponse, MintTokensRequest, MintTokensResponse,
     RefreshCachedUpgradeStepsRequest, RefreshCachedUpgradeStepsResponse,
 };
-use prost::Message;
+use ic_sns_governance_api::pb::v1::{
+    ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
+    FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
+    GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMetricsRequest,
+    GetMode, GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+    GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
+    GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
+    GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceApi,
+    GovernanceError, ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse,
+    ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse,
+    NervousSystemParameters, RewardEvent, SetMode, SetModeResponse, get_metrics_response,
+    get_running_sns_version_response::UpgradeInProgress,
+    governance::Version,
+    governance_error::ErrorType,
+    topics::{ListTopicsRequest, ListTopicsResponse},
+};
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::{
@@ -61,14 +63,6 @@ use std::{
     convert::TryFrom,
     time::{Duration, SystemTime},
 };
-
-/// Size of the buffer for stable memory reads and writes.
-///
-/// Smaller buffer size means more stable_write and stable_read calls. With
-/// 100MiB buffer size, when the heap is near full, we need ~40 system calls.
-/// Larger buffer size means we may not be able to serialize the heap fully in
-/// some cases.
-const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
 
 static mut GOVERNANCE: Option<Governance> = None;
 
@@ -266,14 +260,10 @@ fn canister_init_(init_payload: sns_gov_pb::Governance) {
 fn canister_pre_upgrade() {
     log!(INFO, "Executing pre upgrade");
 
-    let mut writer = BufferedStableMemWriter::new(STABLE_MEM_BUFFER_SIZE);
+    with_upgrades_memory(|memory| {
+        store_protobuf(memory, &governance().proto).expect("Failed to encode protobuf pre_upgrade")
+    });
 
-    governance()
-        .proto
-        .encode(&mut writer)
-        .expect("Error. Couldn't serialize canister pre-upgrade.");
-
-    writer.flush(); // or `drop(writer)`
     log!(INFO, "Completed pre upgrade");
 }
 
@@ -283,44 +273,20 @@ fn canister_pre_upgrade() {
 fn canister_post_upgrade() {
     log!(INFO, "Executing post upgrade");
 
-    let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
+    let governance_proto = with_upgrades_memory(|memory| {
+        let result: Result<sns_gov_pb::Governance, _> = load_protobuf(memory);
+        result
+    })
+    .expect(
+        "Error deserializing canister state post-upgrade with MemoryManager memory segment. \
+             CANISTER MIGHT HAVE BROKEN STATE!!!!.",
+    );
 
-    match sns_gov_pb::Governance::decode(reader) {
-        Err(err) => {
-            log!(
-                ERROR,
-                "Error deserializing canister state post-upgrade. \
-                 CANISTER MIGHT HAVE BROKEN STATE!!!!. Error: {:?}",
-                err
-            );
-            Err(err)
-        }
-        Ok(mut governance_proto) => {
-            // Post-process GovernanceProto
-
-            // TODO: Delete this once it's been released.
-            populate_finalize_disbursement_timestamp_seconds(&mut governance_proto);
-
-            canister_init_(governance_proto);
-            Ok(())
-        }
-    }
-    .expect("Couldn't upgrade canister.");
+    canister_init_(governance_proto);
 
     init_timers();
 
     log!(INFO, "Completed post upgrade");
-}
-
-fn populate_finalize_disbursement_timestamp_seconds(governance_proto: &mut sns_gov_pb::Governance) {
-    for neuron in governance_proto.neurons.values_mut() {
-        for disbursement in neuron.disburse_maturity_in_progress.iter_mut() {
-            disbursement.finalize_disbursement_timestamp_seconds = Some(
-                disbursement.timestamp_of_disbursement_seconds
-                    + MATURITY_DISBURSEMENT_DELAY_SECONDS,
-            );
-        }
-    }
 }
 
 /// Test only feature. Internal method for calling set_time_warp.
@@ -526,7 +492,9 @@ fn get_latest_reward_event() -> RewardEvent {
 #[update]
 #[allow(clippy::let_unit_value)] // clippy false positive
 async fn get_root_canister_status(_: ()) -> CanisterStatusResultV2 {
-    panic!("This method is deprecated and should not be used. Please use the root canister's `get_sns_canisters_summary` method.")
+    panic!(
+        "This method is deprecated and should not be used. Please use the root canister's `get_sns_canisters_summary` method."
+    )
 }
 
 /// Gets the current SNS version, as understood by Governance.  This is useful
@@ -661,8 +629,8 @@ fn init_timers() {
         ..Default::default()
     });
 
-    let new_timer_id = ic_cdk_timers::set_timer_interval(RUN_PERIODIC_TASKS_INTERVAL, || {
-        ic_cdk::spawn(run_periodic_tasks())
+    let new_timer_id = ic_cdk_timers::set_timer_interval(RUN_PERIODIC_TASKS_INTERVAL, async || {
+        run_periodic_tasks().await
     });
     TIMER_ID.with(|saved_timer_id| {
         let mut saved_timer_id = saved_timer_id.borrow_mut();
@@ -677,15 +645,14 @@ fn init_timers() {
 fn reset_timers(_request: ResetTimersRequest) -> ResetTimersResponse {
     let reset_timers_cool_down_interval_seconds = RESET_TIMERS_COOL_DOWN_INTERVAL.as_secs();
 
-    if let Some(timers) = governance_mut().proto.timers {
-        if let Some(last_reset_timestamp_seconds) = timers.last_reset_timestamp_seconds {
-            assert!(
-                now_seconds().saturating_sub(last_reset_timestamp_seconds)
-                    >= reset_timers_cool_down_interval_seconds,
-                "Reset has already been called within the past {:?} seconds",
-                reset_timers_cool_down_interval_seconds
-            );
-        }
+    if let Some(timers) = governance_mut().proto.timers
+        && let Some(last_reset_timestamp_seconds) = timers.last_reset_timestamp_seconds
+    {
+        assert!(
+            now_seconds().saturating_sub(last_reset_timestamp_seconds)
+                >= reset_timers_cool_down_interval_seconds,
+            "Reset has already been called within the past {reset_timers_cool_down_interval_seconds:?} seconds"
+        );
     }
 
     init_timers();
@@ -696,7 +663,10 @@ fn reset_timers(_request: ResetTimersRequest) -> ResetTimersResponse {
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}
 
 /// Serve an HttpRequest made to this canister
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 pub fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/journal/json" => {
@@ -814,6 +784,19 @@ async fn refresh_cached_upgrade_steps(
         .refresh_cached_upgrade_steps(deployed_version)
         .await;
     RefreshCachedUpgradeStepsResponse {}
+}
+
+#[cfg(feature = "test")]
+#[update(hidden = true)]
+async fn add_allowed_extension(request: AddAllowedExtensionRequest) {
+    log!(INFO, "Adding an allowed extension!");
+    let hash = <[u8; 32]>::try_from(request.wasm_hash).expect("Hash must be valid 32-bytes");
+    let extension = request
+        .spec
+        .expect("ExtensionSpec is required")
+        .try_into()
+        .unwrap();
+    add_allowed_extension_spec(hash, extension);
 }
 
 fn main() {

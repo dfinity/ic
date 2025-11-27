@@ -139,28 +139,25 @@ use super::{
 };
 use crate::{
     driver::{
-        constants::{self, kibana_link, GROUP_TTL, SSH_USERNAME},
+        constants::{self, GROUP_TTL, SSH_USERNAME},
         farm::{Farm, GroupSpec},
         log_events,
         test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
     },
-    k8s::{
-        tnet::TNet,
-        virtualmachine::{destroy_vm, restart_vm, start_vm},
-    },
-    retry_with_msg, retry_with_msg_async,
+    retry_with_msg, retry_with_msg_async, retry_with_msg_async_quiet,
     util::{block_on, create_agent},
 };
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use async_trait::async_trait;
 use canister_test::{RemoteTestRuntime, Runtime};
-use ic_agent::{export::Principal, Agent, AgentError};
-use ic_base_types::PrincipalId;
+use ic_agent::{Agent, AgentError, export::Principal};
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client::{Agent as InternalAgent, Sender};
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, GOVERNANCE_CANISTER_ID,
+    LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
 };
 use ic_nns_governance_api::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
@@ -182,17 +179,17 @@ use ic_registry_local_registry::LocalRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    malicious_behaviour::MaliciousBehaviour,
-    messages::{HttpStatusResponse, ReplicaHealthStatus},
     NodeId, RegistryVersion, ReplicaVersion, SubnetId,
+    malicious_behavior::MaliciousBehavior,
+    messages::{HttpStatusResponse, ReplicaHealthStatus},
 };
 use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
 use itertools::Itertools;
 use prost::Message;
-use regex::Regex;
+use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
 use serde::{Deserialize, Serialize};
-use slog::{debug, error, info, warn, Logger};
+use slog::{Logger, debug, info, warn};
 use ssh2::Session;
 use std::{
     cmp::max,
@@ -211,6 +208,8 @@ use std::{
 use tokio::{runtime::Runtime as Rt, sync::Mutex as TokioMutex};
 use url::Url;
 
+pub use super::ic_images::*;
+
 pub const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(500);
 pub const SSH_RETRY_TIMEOUT: Duration = Duration::from_secs(500);
 pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
@@ -218,11 +217,15 @@ const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
 // It usually takes below 60 secs to install nns canisters.
 const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(160);
+const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
+const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
+const FW_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
+const FW_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 // Be mindful when modifying this constant, as the event can be consumed by other parties.
 const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
-const KIBANA_URL_CREATED_EVENT_NAME: &str = "kibana_url_created_event";
-pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehaviour>>;
+pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehavior>>;
 
 pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
     let l = sha256.len();
@@ -230,27 +233,6 @@ pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
         bail!("option '{}': invalid sha256 value: {:?}", opt_name, sha256);
     }
     Ok(())
-}
-
-/// Checks whether the input string as the form [hostname:port{,hostname:port}]
-pub fn parse_elasticsearch_hosts(s: Option<String>) -> Result<Vec<String>> {
-    const HOST_START: &str = r"^(([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])\.)*";
-    const HOST_STOP: &str = r"([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])";
-    const PORT: &str = r#":[[:digit:]]{2,5}$"#;
-    let s = match s {
-        Some(s) => s,
-        None => return Ok(vec![]),
-    };
-    let rgx = format!("{}{}{}", HOST_START, HOST_STOP, PORT);
-    let rgx = Regex::new(&rgx).unwrap();
-    let mut res = vec![];
-    for target in s.trim().split(',') {
-        if !rgx.is_match(target) {
-            bail!("Invalid filebeat host: '{}'", s);
-        }
-        res.push(target.to_string());
-    }
-    Ok(res)
 }
 
 /// An immutable snapshot of the Internet Computer topology valid at a
@@ -449,7 +431,7 @@ impl TopologySnapshot {
                     .get_node_ids_on_subnet(subnet_id, registry_version)
                     .unwrap_result(
                         registry_version,
-                        &format!("node_ids_on_subnet(subnet_id={})", subnet_id),
+                        &format!("node_ids_on_subnet(subnet_id={subnet_id})"),
                     )
             })
             .collect();
@@ -499,6 +481,46 @@ impl TopologySnapshot {
         )
     }
 
+    pub fn system_api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
+        let registry_version = self.local_registry.get_latest_version();
+
+        Box::new(
+            self.local_registry
+                .get_system_api_boundary_node_ids(registry_version)
+                .unwrap()
+                .into_iter()
+                .map(|node_id| IcNodeSnapshot {
+                    node_id,
+                    registry_version,
+                    local_registry: self.local_registry.clone(),
+                    env: self.env.clone(),
+                    ic_name: self.ic_name.clone(),
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
+    }
+
+    pub fn app_api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
+        let registry_version = self.local_registry.get_latest_version();
+
+        Box::new(
+            self.local_registry
+                .get_app_api_boundary_node_ids(registry_version)
+                .unwrap()
+                .into_iter()
+                .map(|node_id| IcNodeSnapshot {
+                    node_id,
+                    registry_version,
+                    local_registry: self.local_registry.clone(),
+                    env: self.env.clone(),
+                    ic_name: self.ic_name.clone(),
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
+    }
+
     pub fn elected_replica_versions(&self) -> anyhow::Result<Vec<String>> {
         Ok(self
             .local_registry
@@ -513,7 +535,7 @@ impl TopologySnapshot {
                     .local_registry
                     .get_versioned_value(key, self.local_registry.get_latest_version())
                     .unwrap_or_else(|_| {
-                        panic!("Failed to get entry {} for blessed replica versions", key)
+                        panic!("Failed to get entry {key} for blessed replica versions")
                     });
 
                 r.as_ref().map(|v| {
@@ -542,7 +564,7 @@ impl TopologySnapshot {
                 let r = self
                     .local_registry
                     .get_versioned_value(key, self.local_registry.get_latest_version())
-                    .unwrap_or_else(|_| panic!("Failed to get entry for replica version {}", key));
+                    .unwrap_or_else(|_| panic!("Failed to get entry for replica version {key}"));
                 (
                     key[REPLICA_VERSION_KEY_PREFIX.len()..].to_string(),
                     r.as_ref()
@@ -647,7 +669,7 @@ impl TopologySnapshot {
     ) -> Result<TopologySnapshot> {
         let mut latest_version = self.local_registry.get_latest_version();
         if min_version > latest_version {
-            latest_version = retry_with_msg_async!(
+            latest_version = retry_with_msg_async_quiet!(
                 format!(
                     "check if latest registry version >= {}",
                     min_version.to_string()
@@ -695,7 +717,7 @@ impl TopologySnapshot {
         let backoff = Duration::from_secs(2);
         let prev_version: Arc<TokioMutex<RegistryVersion>> =
             Arc::new(TokioMutex::new(self.local_registry.get_latest_version()));
-        let version = retry_with_msg_async!(
+        let version = retry_with_msg_async_quiet!(
             "block_for_newest_mainnet_registry_version",
             &self.env.logger(),
             duration,
@@ -739,6 +761,40 @@ impl TopologySnapshot {
     }
 }
 
+/// Panics if not found.
+pub fn find_subnet_that_hosts_canister_id(
+    topology_snapshot: &TopologySnapshot,
+    canister_id: CanisterId,
+) -> SubnetSnapshot {
+    // Scan for subnet
+    let mut subnets = topology_snapshot
+        .subnets()
+        .filter(|subnet| {
+            subnet
+                .subnet_canister_ranges()
+                .into_iter()
+                .any(|canister_id_range| canister_id_range.contains(&canister_id))
+        })
+        .collect::<Vec<_>>();
+
+    // Only one subnet.
+    assert_eq!(
+        subnets.len(),
+        1,
+        "{:#?}\n\n{:#?}",
+        subnets
+            .into_iter()
+            .map(|subnet| subnet.subnet_id)
+            .collect::<Vec<_>>(),
+        topology_snapshot
+            .subnets()
+            .map(|subnet| (subnet.subnet_id, subnet.subnet_canister_ranges()))
+            .collect::<Vec<_>>(),
+    );
+
+    subnets.pop().unwrap()
+}
+
 #[derive(Clone)]
 pub struct SubnetSnapshot {
     pub subnet_id: SubnetId,
@@ -772,6 +828,20 @@ impl SubnetSnapshot {
     }
 }
 
+pub fn new_subnet_runtime(subnet: &SubnetSnapshot) -> Runtime {
+    let node = subnet.nodes().next().unwrap();
+
+    let agent = InternalAgent::new(
+        node.get_public_url(),
+        Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
+    );
+
+    Runtime::Remote(RemoteTestRuntime {
+        agent,
+        effective_canister_id: node.effective_canister_id(),
+    })
+}
+
 #[derive(Clone)]
 pub struct IcNodeSnapshot {
     pub ic_name: String,
@@ -786,7 +856,7 @@ impl IcNodeSnapshot {
         self.malicious_behavior().is_some()
     }
 
-    pub fn malicious_behavior(&self) -> Option<MaliciousBehaviour> {
+    pub fn malicious_behavior(&self) -> Option<MaliciousBehavior> {
         let nodes_info: NodesInfo = self
             .env
             .read_json_object(NODES_INFO)
@@ -813,7 +883,7 @@ impl IcNodeSnapshot {
 
     fn http_endpoint_to_url(http: &pb_node::ConnectionEndpoint) -> Url {
         let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
-            Ok(v) if v.is_ipv6() => format!("[{}]", v),
+            Ok(v) if v.is_ipv6() => format!("[{v}]"),
             Ok(v) => v.to_string(),
             Err(_) => http.ip_addr.clone(),
         };
@@ -864,7 +934,7 @@ impl IcNodeSnapshot {
                     .get_node_ids_on_subnet(*subnet_id, registry_version)
                     .unwrap_result(
                         registry_version,
-                        &format!("node_ids_on_subnet(subnet_id={})", subnet_id),
+                        &format!("node_ids_on_subnet(subnet_id={subnet_id})"),
                     )
                     .contains(&self.node_id)
             })
@@ -957,7 +1027,7 @@ impl IcNodeSnapshot {
             install_code
                 .call_and_wait()
                 .await
-                .map_err(|err| format!("Couldn't install canister: {}", err))?;
+                .map_err(|err| format!("Couldn't install canister: {err}"))?;
             Ok::<_, String>(canister_id)
         })
         .expect("Could not install canister");
@@ -981,7 +1051,7 @@ impl IcNodeSnapshot {
                 .with_effective_canister_id(effective_canister_id)
                 .call_and_wait()
                 .await
-                .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
+                .map_err(|err| format!("Couldn't create canister with provisional API: {err}"))?
                 .0;
 
             let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
@@ -991,50 +1061,136 @@ impl IcNodeSnapshot {
             install_code
                 .call_and_wait()
                 .await
-                .map_err(|err| format!("Couldn't install canister: {}", err))?;
+                .map_err(|err| format!("Couldn't install canister: {err}"))?;
             Ok::<_, String>(canister_id)
         })
         .expect("Could not install canister")
     }
+
+    pub fn wait_for_orchestrator_fw_rule(&self, logger: &Logger) -> Result<()> {
+        let result = retry_with_msg!(
+            "wait_for_orchestrator_rule",
+            logger.clone(),
+            FW_RETRY_TIMEOUT,
+            FW_RETRY_BACKOFF,
+            || self.wait_for_orchestrator_fw_rule_once(logger)
+        );
+
+        result.context("Timed out waiting for orchestrator rule.".to_string())
+    }
+
+    fn wait_for_orchestrator_fw_rule_once(&self, logger: &Logger) -> Result<()> {
+        // This checks that the rule "meta skuid ic-http-adapter ip6 daddr ::1" was applied
+        // This is a hardcoded rule that is applied regardless of what is in the registry
+        // Hence a change in the registry won't affect this check
+        let script = r#"
+            set -e
+            ADAPTER_UID=$(id -u ic-http-adapter)
+            RULE_PATTERN="meta skuid $ADAPTER_UID ip6 daddr ::1"
+            
+            sudo nft list chain ip6 filter OUTPUT | grep -qF "$RULE_PATTERN"
+        "#;
+
+        match self.block_on_bash_script(script) {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                debug!(logger, "Orchestrator rule not yet found.");
+                Err(e)
+            }
+        }
+    }
+
+    pub fn insert_egress_accept_rule_for_outcalls_adapter(
+        &self,
+        target: SocketAddr,
+    ) -> Result<String> {
+        self.insert_egress_rule_for_outcalls_adapter(target, "accept")
+    }
+
+    pub fn insert_egress_reject_rule_for_outcalls_adapter(
+        &self,
+        target: SocketAddr,
+    ) -> Result<String> {
+        self.insert_egress_rule_for_outcalls_adapter(target, "reject")
+    }
+
+    fn insert_egress_rule_for_outcalls_adapter(
+        &self,
+        target: SocketAddr,
+        action: &str,
+    ) -> Result<String> {
+        let ip = target.ip();
+        let port = target.port();
+        let node_id = self.node_id;
+
+        let family = match ip {
+            std::net::IpAddr::V4(_) => "ip",
+            std::net::IpAddr::V6(_) => "ip6",
+        };
+
+        let script = format!(
+            r#"
+            set -e
+            ADAPTER_UID=$(id -u ic-http-adapter)
+            echo "Inserting {action} rule on node {node_id} for destination {target}..."
+
+            sudo nft "insert rule {family} filter OUTPUT meta skuid $ADAPTER_UID {family} daddr {ip} tcp dport {port} {action}"
+            "#
+        );
+
+        self.block_on_bash_script(&script).context(format!(
+            "Failed to insert egress {action} rule on node {node_id} for target {target}"
+        ))
+    }
 }
 
 pub trait HasTopologySnapshot {
-    fn topology_snapshot(&self) -> TopologySnapshot;
-    fn topology_snapshot_by_name(&self, name: &str) -> TopologySnapshot;
-
+    fn safe_topology_snapshot(&self) -> Result<TopologySnapshot>;
+    fn safe_topology_snapshot_by_name(&self, name: &str) -> Result<TopologySnapshot>;
     fn create_topology_snapshot<S: ToString, P: AsRef<Path>>(
         name: S,
         local_store_path: P,
         env: TestEnv,
-    ) -> TopologySnapshot {
-        let local_registry = Arc::new(
-            LocalRegistry::new(local_store_path, REGISTRY_QUERY_TIMEOUT)
-                .expect("Could not create local registry"),
-        );
+    ) -> Result<TopologySnapshot> {
+        let local_registry = Arc::new(LocalRegistry::new(
+            local_store_path,
+            REGISTRY_QUERY_TIMEOUT,
+        )?);
         let registry_version = local_registry.get_latest_version();
-        TopologySnapshot {
+        Ok(TopologySnapshot {
             local_registry,
             registry_version,
             ic_name: name.to_string(),
             env,
-        }
+        })
+    }
+
+    fn topology_snapshot(&self) -> TopologySnapshot {
+        self.safe_topology_snapshot()
+            .unwrap_or_else(|e| panic!("Could not save topology snapshot because {e:?}"))
+    }
+    fn topology_snapshot_by_name(&self, name: &str) -> TopologySnapshot {
+        self.safe_topology_snapshot_by_name(name)
+            .unwrap_or_else(|e| {
+                panic!("Could not save topology snapshot by name {name} because {e:?}")
+            })
     }
 }
 
 impl HasTopologySnapshot for TestEnv {
-    fn topology_snapshot(&self) -> TopologySnapshot {
-        let local_store_path = self
+    fn safe_topology_snapshot(&self) -> Result<TopologySnapshot> {
+        let prep_dir = self
             .prep_dir("")
-            .expect("No no-name Internet Computer")
-            .registry_local_store_path();
+            .ok_or_else(|| anyhow!("No no-name Internet Computer"))?;
+        let local_store_path = prep_dir.registry_local_store_path();
         Self::create_topology_snapshot("", local_store_path, self.clone())
     }
 
-    fn topology_snapshot_by_name(&self, name: &str) -> TopologySnapshot {
-        let local_store_path = self
+    fn safe_topology_snapshot_by_name(&self, name: &str) -> Result<TopologySnapshot> {
+        let prep_dir = self
             .prep_dir(name)
-            .unwrap_or_else(|| panic!("No snapshot for internet computer: {:?}", name))
-            .registry_local_store_path();
+            .ok_or_else(|| anyhow!("No snapshot for internet computer: {name:?}"))?;
+        let local_store_path = prep_dir.registry_local_store_path();
         Self::create_topology_snapshot(name, local_store_path, self.clone())
     }
 }
@@ -1138,176 +1294,56 @@ impl HasRegistryLocalStore for TestEnv {
     }
 }
 
-pub trait HasIcDependencies {
+pub trait HasFarmUrl {
     fn get_farm_url(&self) -> Result<Url>;
-    fn get_initial_replica_version(&self) -> Result<ReplicaVersion>;
-    fn get_mainnet_ic_os_img_sha256(&self) -> Result<String>;
-    fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String>;
 }
 
-impl<T: HasTestEnv> HasIcDependencies for T {
+impl<T: HasTestEnv> HasFarmUrl for T {
     fn get_farm_url(&self) -> Result<Url> {
         let dep_rel_path = "farm_base_url";
         let url = read_dependency_to_string(dep_rel_path)
             .unwrap_or_else(|_| FarmBaseUrl::read_attribute(&self.test_env()).to_string());
         Ok(Url::parse(&url)?)
     }
-
-    fn get_initial_replica_version(&self) -> Result<ReplicaVersion> {
-        let initial_replica_version = InitialReplicaVersion::read_attribute(&self.test_env());
-        Ok(initial_replica_version.version)
-    }
-
-    fn get_mainnet_ic_os_img_sha256(&self) -> Result<String> {
-        let mainnet_version = get_mainnet_nns_revision();
-        fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img"), "disk-img.tar.zst", self.test_env().logger())
-    }
-
-    fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String> {
-        let mainnet_version = get_mainnet_nns_revision();
-        fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst", self.test_env().logger())
-    }
 }
 
-pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
-    let dep_rel_path = "elasticsearch_hosts";
-    let hosts = read_dependency_to_string(dep_rel_path)
-        .unwrap_or_else(|_| "elasticsearch.testnet.dfinity.network:443".to_string());
-    parse_elasticsearch_hosts(Some(hosts))
+pub fn get_current_branch_version() -> ReplicaVersion {
+    ReplicaVersion::try_from(
+        read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE").unwrap(),
+    )
+    .expect("Invalid ReplicaVersion")
 }
 
-pub fn get_ic_os_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
+pub fn get_mainnet_nns_revision() -> Result<ReplicaVersion> {
+    let replica_version = ReplicaVersion::try_from(
+        std::env::var("MAINNET_NNS_GUESTOS_REVISION_ENV")
+            .expect("could not read mainnet nns version from environment"),
+    )?;
+
+    Ok(replica_version)
 }
 
-pub fn get_ic_os_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_DISK_IMG_HASH")?)
-}
+pub fn get_mainnet_application_subnet_revision() -> Result<ReplicaVersion> {
+    let replica_version = ReplicaVersion::try_from(
+        std::env::var("MAINNET_APP_GUESTOS_REVISION_ENV")
+            .expect("could not read mainnet application subnet version from environment"),
+    )?;
 
-pub fn get_malicious_ic_os_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_malicious_ic_os_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_DISK_IMG_HASH")?)
-}
-
-pub fn get_ic_os_update_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_ic_os_update_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_HASH")?)
-}
-
-pub fn get_ic_os_update_img_test_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_ic_os_update_img_test_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__GUESTOS_UPDATE_IMG_TEST_HASH")?)
-}
-
-pub fn get_malicious_ic_os_update_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_malicious_ic_os_update_img_sha256() -> Result<String> {
-    Ok(std::env::var(
-        "ENV_DEPS__GUESTOS_MALICIOUS_UPDATE_IMG_HASH",
-    )?)
-}
-
-pub fn get_boundary_node_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_boundary_node_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_HASH")?)
-}
-
-pub fn get_mainnet_nns_revision() -> String {
-    std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
-        .expect("could not read mainnet nns version from environment")
-}
-
-pub fn get_mainnet_application_subnet_revision() -> String {
-    std::env::var("MAINNET_APPLICATION_SUBNET_REVISION_ENV")
-        .expect("could not read mainnet application subnet version from environment")
-}
-
-pub fn get_mainnet_ic_os_img_url() -> Result<Url> {
-    let mainnet_version = get_mainnet_nns_revision();
-    let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img/disk-img.tar.zst");
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_mainnet_ic_os_update_img_url() -> Result<Url> {
-    let mainnet_version = get_mainnet_nns_revision();
-    let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img/update-img.tar.zst");
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_hostos_update_img_test_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_hostos_update_img_test_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__HOSTOS_UPDATE_IMG_TEST_HASH")?)
+    Ok(replica_version)
 }
 
 pub fn get_empty_disk_img_url() -> Result<Url> {
-    let url = std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?;
-    Ok(Url::parse(&url)?)
+    let url = Url::parse(&std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?)?;
+
+    Ok(url)
 }
 
 pub fn get_empty_disk_img_sha256() -> Result<String> {
     Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
 }
 
-pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);
-pub const FETCH_SHA256SUMS_RETRY_BACKOFF: Duration = Duration::from_secs(5);
-
-fn fetch_sha256(base_url: String, file: &str, logger: Logger) -> Result<String> {
-    let url = &format!("{base_url}/SHA256SUMS");
-    let response = retry_with_msg!(
-        format!("GET {url}"),
-        logger.clone(),
-        FETCH_SHA256SUMS_RETRY_TIMEOUT,
-        FETCH_SHA256SUMS_RETRY_BACKOFF,
-        || reqwest::blocking::get(url).map_err(|e| anyhow!("{:?}", e))
-    )?;
-
-    if !response.status().is_success() {
-        error!(
-            logger,
-            "Failed to fetch sha256. Remote address: {:?}, Headers: {:?}",
-            response.remote_addr(),
-            response.headers()
-        );
-        return Err(anyhow!("Failed to fetch sha256"));
-    }
-    let body = response.text()?;
-
-    // body should look like:
-    // 7348b0f4b0267da7424306efddd57e26dc5a858cd642d64afaeaa592c4974af8 *disk-img.tar.zst
-
-    let lines = body
-        .split('\n')
-        .filter(|line| line.ends_with(file))
-        .collect::<Vec<&str>>();
-    let line = lines.first().unwrap();
-    let parts = line.split(' ').collect::<Vec<&str>>();
-    let sha256 = parts.first().unwrap();
-    bail_if_sha256_invalid(sha256, &format!("{base_url}/{file}"))?;
-    Ok(sha256.to_string())
+pub fn get_build_setupos_config_image_tool() -> PathBuf {
+    get_dependency_path_from_env("ENV_DEPS__SETUPOS_BUILD_CONFIG")
 }
 
 pub trait HasGroupSetup {
@@ -1346,17 +1382,10 @@ impl HasGroupSetup for TestEnv {
                     )
                     .unwrap();
                 }
-                InfraProvider::K8s => {
-                    let mut tnet =
-                        TNet::new(&group_base_name.replace('_', "-")).expect("new tnet failed");
-                    block_on(tnet.create()).expect("failed creating tnet");
-                    tnet.write_attribute(self);
-                }
             };
             group_setup.write_attribute(self);
             self.ssh_keygen().expect("ssh key generation failed");
             emit_group_event(&log, &group_setup.infra_group_name);
-            emit_kibana_url_event(&log, &kibana_link(&group_setup.infra_group_name));
         }
     }
 }
@@ -1426,13 +1455,9 @@ pub fn get_dependency_path<P: AsRef<Path>>(p: P) -> PathBuf {
 
 /// Return the (actual) path of the (runfiles-relative) artifact in environment variable `v`.
 pub fn get_dependency_path_from_env(v: &str) -> PathBuf {
-    let runfiles =
-        std::env::var("RUNFILES").expect("Expected environment variable RUNFILES to be defined!");
-
     let path_from_env =
-        std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {} not set", v));
-
-    Path::new(&runfiles).join(path_from_env)
+        std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {v} not set"));
+    get_dependency_path(path_from_env)
 }
 
 pub fn read_dependency_to_string<P: AsRef<Path>>(p: P) -> Result<String> {
@@ -1450,7 +1475,7 @@ pub fn read_dependency_to_string<P: AsRef<Path>>(p: P) -> Result<String> {
 
 pub fn read_dependency_from_env_to_string(v: &str) -> Result<String> {
     let path_from_env =
-        std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {} not set", v));
+        std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {v} not set"));
     read_dependency_to_string(path_from_env)
 }
 
@@ -1482,21 +1507,63 @@ pub fn load_wasm<P: AsRef<Path>>(p: P) -> Vec<u8> {
     wasm_bytes
 }
 
-pub trait SshSession {
+#[async_trait]
+pub trait SshSession: HasTestEnv {
+    /// Return the address of the SSH server to connect to.
+    fn get_host_ip(&self) -> Result<IpAddr>;
+
     /// Return an SSH session to the machine referenced from self authenticating with the given user.
-    fn get_ssh_session(&self) -> Result<Session>;
+    fn get_ssh_session(&self) -> Result<Session> {
+        get_ssh_session_from_env(&self.test_env(), self.get_host_ip()?)
+            .context("Failed to get SSH session")
+    }
+
+    /// Convenience wrapper for `block_on_ssh_session_with_timeout` with a default timeout.
+    fn block_on_ssh_session(&self) -> Result<Session> {
+        self.block_on_ssh_session_with_timeout(SSH_RETRY_TIMEOUT)
+    }
 
     /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
-    fn block_on_ssh_session(&self) -> Result<Session>;
+    fn block_on_ssh_session_with_timeout(&self, timeout: Duration) -> Result<Session> {
+        let ip = self.get_host_ip()?;
+        retry_with_msg!(
+            format!("get_ssh_session to {ip}"),
+            self.test_env().logger(),
+            timeout,
+            RETRY_BACKOFF,
+            || { self.get_ssh_session() }
+        )
+    }
+
+    /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
+    /// This is the async version of `block_on_ssh_session`.
+    async fn block_on_ssh_session_async(&self) -> Result<Session> {
+        let ip = self.get_host_ip()?;
+        retry_with_msg_async!(
+            format!("get_ssh_session to {ip}"),
+            &self.test_env().logger(),
+            SSH_RETRY_TIMEOUT,
+            RETRY_BACKOFF,
+            || async { self.get_ssh_session() }
+        )
+        .await
+    }
 
     fn block_on_bash_script(&self, script: &str) -> Result<String> {
         let session = self.block_on_ssh_session()?;
         self.block_on_bash_script_from_session(&session, script)
     }
 
+    async fn block_on_bash_script_async(&self, script: &str) -> Result<String> {
+        let session = self.block_on_ssh_session_async().await?;
+        self.block_on_bash_script_from_session(&session, script)
+    }
+
     fn block_on_bash_script_from_session(&self, session: &Session, script: &str) -> Result<String> {
         let mut channel = session.channel_session()?;
-        channel.exec("bash").unwrap();
+        channel.exec("bash").map_err(|e| {
+            anyhow::anyhow!("Failed to execute bash on SSH channel: {:?}. This may occur during system reboot or network instability.", e)
+        })?;
 
         channel.write_all(script.as_bytes())?;
         channel.flush()?;
@@ -1647,13 +1714,9 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || async {
-                self.status_is_healthy_async().await.and_then(|s| {
-                    if !s {
-                        bail!("Not ready!")
-                    } else {
-                        Ok(())
-                    }
-                })
+                self.status_is_healthy_async()
+                    .await
+                    .and_then(|s| if !s { bail!("Not ready!") } else { Ok(()) })
             }
         )
         .await
@@ -1661,7 +1724,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
 
     /// Checks if the Orchestrator dashboard endpoint is accessible
     fn is_orchestrator_dashboard_accessible(ip: Ipv6Addr, timeout_secs: u64) -> bool {
-        let dashboard_endpoint = format!("http://[{}]:7070", ip);
+        let dashboard_endpoint = format!("http://[{ip}]:7070");
 
         let client = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(timeout_secs))
@@ -1671,7 +1734,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
         let resp = match client.get(&dashboard_endpoint).send() {
             Ok(resp) => resp,
             Err(e) => {
-                eprintln!("Failed to send request: {}", e);
+                eprintln!("Failed to send request: {e}");
                 return false;
             }
         };
@@ -1774,8 +1837,8 @@ impl HasPublicApiUrl for IcNodeSnapshot {
         // API boundary nodes listen on port 443, while replicas listen on port 8080
         if self.is_api_boundary_node() {
             match self.get_ip_addr() {
-                IpAddr::V4(ipv4) => Url::parse(&format!("https://{}", ipv4)).unwrap(),
-                IpAddr::V6(ipv6) => Url::parse(&format!("https://[{}]", ipv6)).unwrap(),
+                IpAddr::V4(ipv4) => Url::parse(&format!("https://{ipv4}")).unwrap(),
+                IpAddr::V6(ipv6) => Url::parse(&format!("https://[{ipv6}]")).unwrap(),
             }
         } else {
             IcNodeSnapshot::http_endpoint_to_url(&node_record.http.expect("Node doesn't have URL"))
@@ -1802,17 +1865,29 @@ impl HasPublicApiUrl for IcNodeSnapshot {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct NnsCustomizations {
     /// Summarizes the custom parameters that a newly installed NNS should have.
     pub ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
     pub neurons: Option<Vec<Neuron>>,
     pub install_at_ids: bool,
+    pub registry_canister_init_payload: RegistryCanisterInitPayload,
+}
+
+impl NnsCustomizations {
+    pub fn with_balance(mut self, account_identifier: AccountIdentifier, amount: Tokens) -> Self {
+        self.ledger_balances
+            .get_or_insert_default()
+            .insert(account_identifier, amount);
+        self
+    }
 }
 
 pub struct NnsInstallationBuilder {
     customizations: NnsCustomizations,
     installation_timeout: Duration,
+    is_subnet_rental_canister_enabled: bool,
+    is_exchange_rate_canister_enabled: bool,
 }
 
 impl Default for NnsInstallationBuilder {
@@ -1826,6 +1901,8 @@ impl NnsInstallationBuilder {
         Self {
             customizations: NnsCustomizations::default(),
             installation_timeout: NNS_CANISTER_INSTALL_TIMEOUT,
+            is_subnet_rental_canister_enabled: false,
+            is_exchange_rate_canister_enabled: false,
         }
     }
 
@@ -1844,6 +1921,26 @@ impl NnsInstallationBuilder {
         self
     }
 
+    pub fn with_subnet_rental_canister(mut self) -> Self {
+        self.is_subnet_rental_canister_enabled = true;
+        self
+    }
+
+    /// WARNING: Due to technical limitations, this does not actually cause
+    /// Exchange Rate canister (XRC) to be created. Rather, this just makes the
+    /// Cycles Minting canister aware of the XRC. Creating XRC is done outside
+    /// of Self. The technical limitation is related to the fact that XRC is NOT
+    /// hosted on the NNS subnet, but rather on the II subnet.
+    pub fn with_exchange_rate_canister(mut self) -> Self {
+        self.is_exchange_rate_canister_enabled = true;
+        self
+    }
+
+    pub fn with_balance(mut self, account_identifier: AccountIdentifier, amount: Tokens) -> Self {
+        self.customizations = self.customizations.with_balance(account_identifier, amount);
+        self
+    }
+
     pub fn install(&self, node: &IcNodeSnapshot, test_env: &TestEnv) -> Result<()> {
         let log = test_env.logger();
         let ic_name = node.ic_name();
@@ -1855,15 +1952,7 @@ impl NnsInstallationBuilder {
         info!(log, "Wait for node reporting healthy status");
         node.await_status_is_healthy().unwrap();
 
-        let install_future = install_nns_canisters(
-            &log,
-            url,
-            &prep_dir,
-            true,
-            self.customizations.install_at_ids,
-            self.customizations.ledger_balances.clone(),
-            self.customizations.neurons.clone(),
-        );
+        let install_future = install_nns_canisters(&log, url, &prep_dir, self);
         block_on(async {
             let timeout_result =
                 tokio::time::timeout(self.installation_timeout, install_future).await;
@@ -1886,7 +1975,8 @@ pub fn set_var_to_path<K: AsRef<OsStr>>(env_name: K, file_path: PathBuf) {
     } else {
         file_path
     };
-    std::env::set_var(env_name, path);
+    // TODO: Audit that the environment access only happens in single-threaded code.
+    unsafe { std::env::set_var(env_name, path) };
 }
 
 pub trait HasRegistryVersion {
@@ -1970,7 +2060,6 @@ pub struct HostedVm {
     farm: Farm,
     group_name: String,
     vm_name: String,
-    k8s: bool,
 }
 
 /// VmControl enables a user to interact with VMs, i.e. change their state.
@@ -1978,33 +2067,21 @@ pub struct HostedVm {
 /// unsuccessful.
 impl VmControl for HostedVm {
     fn kill(&self) {
-        if self.k8s {
-            block_on(destroy_vm(&self.vm_name)).expect("could not kill VM");
-        } else {
-            self.farm
-                .destroy_vm(&self.group_name, &self.vm_name)
-                .expect("could not kill VM");
-        }
+        self.farm
+            .destroy_vm(&self.group_name, &self.vm_name)
+            .expect("could not kill VM");
     }
 
     fn reboot(&self) {
-        if self.k8s {
-            block_on(restart_vm(&self.vm_name)).expect("could not reboot VM");
-        } else {
-            self.farm
-                .reboot_vm(&self.group_name, &self.vm_name)
-                .expect("could not reboot VM");
-        }
+        self.farm
+            .reboot_vm(&self.group_name, &self.vm_name)
+            .expect("could not reboot VM");
     }
 
     fn start(&self) {
-        if self.k8s {
-            block_on(start_vm(&self.vm_name)).expect("could not start VM");
-        } else {
-            self.farm
-                .start_vm(&self.group_name, &self.vm_name)
-                .expect("could not start VM");
-        }
+        self.farm
+            .start_vm(&self.group_name, &self.vm_name)
+            .expect("could not start VM");
     }
 }
 
@@ -2024,31 +2101,17 @@ where
         let farm_base_url = self.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, env.logger());
 
-        let mut vm_name = self.vm_name();
-        let mut k8s = false;
-        if InfraProvider::read_attribute(&env) == InfraProvider::K8s {
-            k8s = true;
-            let tnet = TNet::read_attribute(&env);
-            let tnet_node = tnet
-                .nodes
-                .iter()
-                .find(|n| n.node_id.clone().expect("node_id missing") == vm_name.clone())
-                .expect("tnet doesn't have this node")
-                .clone();
-            vm_name = tnet_node.name.expect("nameless node");
-        }
-
+        let vm_name = self.vm_name();
         Box::new(HostedVm {
             farm,
             group_name: pot_setup.infra_group_name,
             vm_name,
-            k8s,
         })
     }
 }
 
 pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
-    let tcp = TcpStream::connect((ip, 22))?;
+    let tcp = TcpStream::connect_timeout(&SocketAddr::new(ip, 22), TCP_CONNECT_TIMEOUT)?;
     let mut sess = Session::new()?;
     sess.set_tcp_stream(tcp);
     sess.handshake()?;
@@ -2060,24 +2123,10 @@ pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
 }
 
 impl SshSession for IcNodeSnapshot {
-    fn get_ssh_session(&self) -> Result<Session> {
+    fn get_host_ip(&self) -> Result<IpAddr> {
         let node_record = self.raw_node_record();
         let connection_endpoint = node_record.http.unwrap();
-        let ip_addr = IpAddr::from_str(&connection_endpoint.ip_addr)?;
-        get_ssh_session_from_env(&self.env, ip_addr)
-    }
-
-    fn block_on_ssh_session(&self) -> Result<Session> {
-        let node_record = self.raw_node_record();
-        let connection_endpoint = node_record.http.unwrap();
-        let ip_addr = IpAddr::from_str(&connection_endpoint.ip_addr)?;
-        retry_with_msg!(
-            format!("get_ssh_session to {}", ip_addr.to_string()),
-            self.env.logger(),
-            SSH_RETRY_TIMEOUT,
-            RETRY_BACKOFF,
-            || { self.get_ssh_session() }
-        )
+        IpAddr::from_str(&connection_endpoint.ip_addr).context("Failed to parse IP address")
     }
 }
 
@@ -2089,7 +2138,7 @@ impl SshSession for IcNodeSnapshot {
 /// The log messages will include the source file path and code location of the macro call site.
 #[macro_export]
 macro_rules! retry_with_msg {
-    ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
+    ($msg:expr_2021, $log:expr_2021, $timeout:expr_2021, $backoff:expr_2021, $f:expr_2021) => {
         $crate::driver::test_env_api::retry(
             format!("{} [{}:{}]", $msg, file!(), line!()),
             $log,
@@ -2159,8 +2208,22 @@ fn trunc_error(err_str: String) -> String {
 /// The log messages will include the source file path and code location of the macro call site.
 #[macro_export]
 macro_rules! retry_with_msg_async {
-    ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
+    ($msg:expr_2021, $log:expr_2021, $timeout:expr_2021, $backoff:expr_2021, $f:expr_2021) => {
         $crate::driver::test_env_api::retry_async(
+            format!("{} [{}:{}]", $msg, file!(), line!()),
+            $log,
+            $timeout,
+            $backoff,
+            $f,
+        )
+    };
+}
+
+/// This is a quieter version of retry_with_msg_async that only logs the initial attempt and final result, not every intermediate failure.
+#[macro_export]
+macro_rules! retry_with_msg_async_quiet {
+    ($msg:expr_2021, $log:expr_2021, $timeout:expr_2021, $backoff:expr_2021, $f:expr_2021) => {
+        $crate::driver::test_env_api::retry_async_quiet(
             format!("{} [{}:{}]", $msg, file!(), line!()),
             $log,
             $timeout,
@@ -2199,7 +2262,7 @@ where
                 break Ok(v);
             }
             Err(err) => {
-                let err_msg = err.to_string();
+                let err_msg = format!("{err:?}");
                 if start.elapsed() > timeout {
                     break Err(err.context(format!(
                         "Func=\"{msg}\" timed out after {:?} on attempt {attempt}. Last error: {err_msg}",
@@ -2218,6 +2281,52 @@ where
     }
 }
 
+/// A quieter version of `retry_async` that only logs the initial attempt and final result.
+/// This reduces log noise when there are many retry attempts.
+pub async fn retry_async_quiet<S: AsRef<str>, F, Fut, R>(
+    msg: S,
+    log: &slog::Logger,
+    timeout: Duration,
+    backoff: Duration,
+    f: F,
+) -> Result<R>
+where
+    Fut: Future<Output = Result<R>>,
+    F: Fn() -> Fut,
+{
+    let msg = msg.as_ref();
+    let mut attempt = 1;
+    let start = Instant::now();
+    debug!(
+        log,
+        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a constant backoff of {backoff:?}"
+    );
+    loop {
+        match f().await {
+            Ok(v) => {
+                debug!(
+                    log,
+                    "Func=\"{msg}\" succeeded after {:?} on attempt {attempt}",
+                    start.elapsed()
+                );
+                break Ok(v);
+            }
+            Err(err) => {
+                let err_msg = format!("{err:?}");
+                if start.elapsed() > timeout {
+                    break Err(err.context(format!(
+                        "Func=\"{msg}\" timed out after {:?} on attempt {attempt}. \n Last error: {err_msg}",
+                        start.elapsed(),
+                    )));
+                }
+                debug!(log, "Func=\"{msg}\" failed on attempt {attempt}",);
+                tokio::time::sleep(backoff).await;
+                attempt += 1;
+            }
+        }
+    }
+}
+
 pub fn secs(sec: u64) -> Duration {
     Duration::from_secs(sec)
 }
@@ -2226,13 +2335,10 @@ impl<T> RegistryResultHelper<T> for RegistryClientResult<T> {
     fn unwrap_result(self, registry_version: RegistryVersion, key_name: &str) -> T {
         match self {
             Ok(value) => value.unwrap_or_else(|| {
-                panic!(
-                    "registry (v.{}) does not have value for key `{}`",
-                    registry_version, key_name
-                )
+                panic!("registry (v.{registry_version}) does not have value for key `{key_name}`")
             }),
             Err(err) => {
-                panic!("registry (v.{}) error: {}", registry_version, err)
+                panic!("registry (v.{registry_version}) error: {err}")
             }
         }
     }
@@ -2252,17 +2358,31 @@ pub async fn install_nns_canisters(
     logger: &Logger,
     url: Url,
     ic_prep_state_dir: &IcPrepStateDir,
-    nns_test_neurons_present: bool,
-    install_at_ids: bool,
-    ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
-    neurons: Option<Vec<Neuron>>,
+    nns_installation_builder: &NnsInstallationBuilder,
 ) {
     info!(
         logger,
         "Compiling/installing NNS canisters (might take a while)."
     );
+
+    let NnsCustomizations {
+        install_at_ids,
+        ledger_balances,
+        neurons,
+        mut registry_canister_init_payload,
+    } = nns_installation_builder.customizations.clone();
+
     let mut init_payloads = NnsInitPayloadsBuilder::new();
-    if nns_test_neurons_present {
+
+    if nns_installation_builder.is_subnet_rental_canister_enabled {
+        init_payloads.with_subnet_rental_canister();
+    }
+    if nns_installation_builder.is_exchange_rate_canister_enabled {
+        init_payloads.with_exchange_rate_canister(EXCHANGE_RATE_CANISTER_ID);
+    }
+
+    // Neurons.
+    {
         let mut ledger_balances = ledger_balances.unwrap_or_default();
         let neurons = neurons.unwrap_or_default();
         ledger_balances.insert(
@@ -2298,9 +2418,43 @@ pub async fn install_nns_canisters(
             .with_additional_neurons(neurons)
             .with_ledger_init_state(ledger_init_payload);
     }
+
     let registry_local_store = ic_prep_state_dir.registry_local_store_path();
     let initial_mutations = read_initial_mutations_from_local_store_dir(&registry_local_store);
-    init_payloads.with_initial_mutations(initial_mutations);
+    if !registry_canister_init_payload.mutations.is_empty() {
+        panic!(
+            "Provided registry canister init payload via NnsCustomizations weren't empty! These will be overriden by local store registry mutations"
+        );
+    }
+    registry_canister_init_payload.mutations = initial_mutations;
+    init_payloads.registry = {
+        let mut builder = RegistryCanisterInitPayloadBuilder::new();
+
+        for mutation in registry_canister_init_payload.mutations {
+            builder.push_init_mutate_request(mutation);
+        }
+
+        if registry_canister_init_payload
+            .is_swapping_feature_enabled
+            .unwrap_or_default()
+        {
+            builder.enable_swapping_feature_globally();
+        }
+        for caller in registry_canister_init_payload
+            .swapping_whitelisted_callers
+            .unwrap_or_default()
+        {
+            builder.whitelist_swapping_feature_caller(caller);
+        }
+        for subnet in registry_canister_init_payload
+            .swapping_enabled_subnets
+            .unwrap_or_default()
+        {
+            builder.enable_swapping_feature_for_subnet(subnet);
+        }
+
+        builder
+    };
 
     let agent = InternalAgent::new(
         url,
@@ -2363,18 +2517,12 @@ where
     fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
         let env = self.test_env();
         let log = env.logger();
-        if InfraProvider::read_attribute(&env) == InfraProvider::Farm {
-            let farm_base_url = self.get_farm_url().unwrap();
-            let farm = Farm::new(farm_base_url, log);
-            let group_setup = GroupSetup::read_attribute(&env);
-            let group_name = group_setup.infra_group_name;
-            farm.create_playnet_dns_records(&group_name, dns_records)
-                .expect("Failed to create playnet DNS records")
-        } else {
-            let tnet = TNet::read_attribute(&env);
-            block_on(tnet.create_playnet_dns_records(dns_records))
-                .expect("Failed to acquire a certificate for a playnet")
-        }
+        let farm_base_url = self.get_farm_url().unwrap();
+        let farm = Farm::new(farm_base_url, log);
+        let group_setup = GroupSetup::read_attribute(&env);
+        let group_name = group_setup.infra_group_name;
+        farm.create_playnet_dns_records(&group_name, dns_records)
+            .expect("Failed to create playnet DNS records")
     }
 }
 
@@ -2391,18 +2539,12 @@ where
     fn acquire_playnet_certificate(&self) -> PlaynetCertificate {
         let env = self.test_env();
         let log = env.logger();
-        if InfraProvider::read_attribute(&env) == InfraProvider::Farm {
-            let farm_base_url = self.get_farm_url().unwrap();
-            let farm = Farm::new(farm_base_url, log);
-            let group_setup = GroupSetup::read_attribute(&env);
-            let group_name = group_setup.infra_group_name;
-            farm.acquire_playnet_certificate(&group_name)
-                .expect("Failed to acquire a certificate for a playnet")
-        } else {
-            let tnet = TNet::from_env(&env);
-            block_on(tnet.acquire_playnet_certificate())
-                .expect("Failed to acquire a certificate for a playnet")
-        }
+        let farm_base_url = self.get_farm_url().unwrap();
+        let farm = Farm::new(farm_base_url, log);
+        let group_setup = GroupSetup::read_attribute(&env);
+        let group_name = group_setup.infra_group_name;
+        farm.acquire_playnet_certificate(&group_name)
+            .expect("Failed to acquire a certificate for a playnet")
     }
 }
 
@@ -2439,17 +2581,6 @@ impl TestEnvAttribute for FarmBaseUrl {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct InitialReplicaVersion {
-    pub version: ReplicaVersion,
-}
-
-impl TestEnvAttribute for InitialReplicaVersion {
-    fn attribute_name() -> String {
-        "initial_replica_version".to_string()
-    }
-}
-
 pub fn emit_group_event(log: &slog::Logger, group: &str) {
     #[derive(Deserialize, Serialize)]
     pub struct GroupName {
@@ -2466,18 +2597,72 @@ pub fn emit_group_event(log: &slog::Logger, group: &str) {
     event.emit_log(log);
 }
 
-pub fn emit_kibana_url_event(log: &slog::Logger, kibana_url: &str) {
-    #[derive(Deserialize, Serialize)]
-    pub struct KibanaUrl {
-        message: String,
-        url: String,
-    }
-    let event = log_events::LogEvent::new(
-        KIBANA_URL_CREATED_EVENT_NAME.to_string(),
-        KibanaUrl {
-            message: "Replica logs will appear in Kibana".to_string(),
-            url: kibana_url.to_string(),
-        },
-    );
-    event.emit_log(log);
+/// Copy a local file via SSH to a remote host.
+pub fn scp_send_to(
+    log: Logger,
+    session: &Session,
+    from_local: &std::path::Path,
+    to_remote: &std::path::Path,
+    mode: i32,
+) {
+    let size = fs::metadata(from_local).unwrap().len();
+    retry_with_msg!(
+        format!("scp-ing local {from_local:?} of {size:?} B to remote {to_remote:?}"),
+        log.clone(),
+        SCP_RETRY_TIMEOUT,
+        SCP_RETRY_BACKOFF,
+        || {
+            let mut remote_file = session.scp_send(to_remote, mode, size, None)?;
+            let mut from_file = std::fs::File::open(from_local)?;
+            std::io::copy(&mut from_file, &mut remote_file)?;
+            remote_file.flush()?;
+            remote_file.send_eof()?;
+            remote_file.wait_eof()?;
+            remote_file.close()?;
+            remote_file.wait_close()?;
+
+            info!(
+                log,
+                "scp-ed local {from_local:?} of {size:?} B to remote {to_remote:?} ."
+            );
+            Ok(())
+        }
+    )
+    .unwrap_or_else(|e| {
+        panic!("Failed to scp local {from_local:?} to remote {to_remote:?} because: {e}")
+    });
+}
+
+/// Copy a file from a remote host to a local file.
+pub fn scp_recv_from(
+    log: Logger,
+    session: &Session,
+    from_remote: &std::path::Path,
+    to_local: &std::path::Path,
+) {
+    retry_with_msg!(
+        format!("scp-ing remote {from_remote:?} to local {to_local:?}"),
+        log.clone(),
+        SCP_RETRY_TIMEOUT,
+        SCP_RETRY_BACKOFF,
+        || {
+            let (mut remote_file, scp_file_stat) = session.scp_recv(from_remote)?;
+            let size = scp_file_stat.size();
+            let mut to_file = std::fs::File::create(to_local)?;
+            std::io::copy(&mut remote_file, &mut to_file)?;
+            remote_file.send_eof()?;
+            remote_file.wait_eof()?;
+            remote_file.close()?;
+            remote_file.wait_close()?;
+
+            info!(
+                log,
+                "scp-ed remote {from_remote:?} of {size:?} B to local {to_local:?}."
+            );
+            Ok(())
+        }
+    )
+    .unwrap_or_else(|e| {
+        panic!("Failed to scp remote {from_remote:?} to local {to_local:?} because: {e}")
+    });
 }

@@ -30,26 +30,31 @@
 //!
 use std::{
     collections::{BTreeSet, HashMap},
-    fmt::Debug,
+    fmt::{self, Debug, Display, Formatter},
     future::Future,
     net::SocketAddr,
+    num::TryFromIntError,
     sync::{Arc, RwLock},
 };
 
-use anyhow::anyhow;
 use async_trait::async_trait;
 use axum::{
-    http::{Request, Response},
     Router,
+    http::{Request, Response},
 };
 use bytes::Bytes;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use ic_metrics::MetricsRegistry;
 use phantom_newtype::AmountOf;
-use quinn::{AsyncUdpSocket, SendStream, VarInt};
+use prometheus::IntGauge;
+use quinn::{
+    AsyncUdpSocket, ClosedStream, ConnectError, ConnectionError, ReadToEndError, SendStream,
+    StoppedError, VarInt, WriteError,
+};
+use std::error::Error;
 use tokio::sync::watch;
 use tokio::task::{JoinError, JoinHandle};
 use tokio_util::{sync::CancellationToken, task::task_tracker::TaskTracker};
@@ -139,7 +144,7 @@ impl QuicTransport {
         log: &ReplicaLogger,
         metrics_registry: &MetricsRegistry,
         rt: &tokio::runtime::Handle,
-        tls_config: Arc<dyn TlsConfig + Send + Sync>,
+        tls_config: Arc<dyn TlsConfig>,
         registry_client: Arc<dyn RegistryClient>,
         node_id: NodeId,
         // The receiver is passed here mainly to be consistent with other managers that also
@@ -192,18 +197,27 @@ const QUIC_STREAM_CANCELLED: VarInt = VarInt::from_u32(0x80000006);
 /// This struct overrides that behavior by sending a reset frame instead, signaling
 /// that the message transmission was canceled. This approach helps optimize bandwidth
 /// usage in scenarios involving message cancellation.
+/// Additionally, keep track of the number of ongoing streams in the given metric.
 struct ResetStreamOnDrop {
     send_stream: SendStream,
+    ongoing_streams: IntGauge,
 }
 
 impl ResetStreamOnDrop {
-    fn new(send_stream: SendStream) -> Self {
-        Self { send_stream }
+    fn new(send_stream: SendStream, ongoing_streams: IntGauge) -> Self {
+        // Increment the metric when a new stream is created.
+        ongoing_streams.inc();
+        Self {
+            send_stream,
+            ongoing_streams,
+        }
     }
 }
 
 impl Drop for ResetStreamOnDrop {
     fn drop(&mut self) {
+        // Decrement the metric when the stream is dropped.
+        self.ongoing_streams.dec();
         // fails silently if the stream is already closed.
         let _ = self.send_stream.reset(QUIC_STREAM_CANCELLED);
     }
@@ -216,13 +230,15 @@ impl Transport for QuicTransport {
         &self,
         peer_id: &NodeId,
         request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, anyhow::Error> {
+    ) -> Result<Response<Bytes>, P2PError> {
         let peer = self
             .conn_handles
             .read()
             .unwrap()
             .get(peer_id)
-            .ok_or(anyhow!("Currently not connected to this peer"))?
+            .ok_or(P2PError::from(
+                "Currently not connected to this peer".to_string(),
+            ))?
             .clone();
         peer.rpc(request).await.inspect_err(|err| {
             info!(every_n_seconds => 5, self.log, "Error sending rpc request to {}: {:?}", peer_id, err);
@@ -239,6 +255,80 @@ impl Transport for QuicTransport {
     }
 }
 
+#[derive(Debug)]
+/// Opaque error type wrapping any P2P error, without capturing expensive backtraces.
+pub struct P2PError {
+    inner: Box<dyn Error + Send + Sync>,
+}
+
+impl P2PError {
+    pub fn new<E>(error: E) -> Self
+    where
+        E: Into<Box<dyn Error + Send + Sync>>,
+    {
+        P2PError {
+            inner: error.into(),
+        }
+    }
+}
+
+impl Display for P2PError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.inner)
+    }
+}
+
+impl Error for P2PError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.inner.source()
+    }
+}
+
+impl From<String> for P2PError {
+    fn from(value: String) -> Self {
+        P2PError::new(GenericError(value))
+    }
+}
+
+macro_rules! impl_from_for_p2p_error {
+    ($($err_ty:ty),+ $(,)?) => {
+        $(
+            impl From<$err_ty> for P2PError {
+                fn from(err: $err_ty) -> Self {
+                    P2PError::new(err)
+                }
+            }
+        )+
+    };
+}
+
+impl_from_for_p2p_error!(
+    ConnectError,
+    WriteError,
+    StoppedError,
+    ClosedStream,
+    ReadToEndError,
+    ConnectionError,
+    prost::DecodeError,
+    prost::UnknownEnumValue,
+    http::Error,
+    axum::Error,
+    TryFromIntError,
+);
+
+#[derive(Debug, Clone)]
+/// A generic error type for wrapping human-readable messages.
+/// This is useful because `String` does not implement `Error`.
+pub struct GenericError(pub String);
+
+impl Display for GenericError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Error for GenericError {}
+
 /// Low-level transport interface for exchanging messages between nodes.
 ///
 /// It intentionally uses http::Request and http::Response types.
@@ -249,7 +339,7 @@ pub trait Transport: Send + Sync {
         &self,
         peer_id: &NodeId,
         request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, anyhow::Error>;
+    ) -> Result<Response<Bytes>, P2PError>;
 
     fn peers(&self) -> Vec<(NodeId, ConnId)>;
 }

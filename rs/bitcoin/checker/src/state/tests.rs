@@ -50,8 +50,8 @@ fn test_fetch_status() {
 \xed\xfc\x0a\x8b\x66\xfe\xeb\xae\x5c\x2e\x25\xa7\xb6\xa5\xd1\xcf\x31\x88\xac\x7c\x2e\x00\x00\x00\
 \x00\x00\x00\x19\x76\xa9\x14\xb9\x73\x68\xd8\xbf\x0a\x37\x69\x00\x85\x16\x57\xf3\x7f\xbe\x73\xa6\
 \x56\x61\x33\x88\xac\x14\xa4\x0c\x00";
-    use bitcoin::consensus::Decodable;
     use bitcoin::Network;
+    use bitcoin::consensus::Decodable;
     let tx = Transaction::consensus_decode(&mut bytes.to_vec().as_slice()).unwrap();
     let txid_1 = Txid::from(*(tx.compute_txid().as_ref() as &[u8; 32]));
     let from_tx = |tx: &bitcoin::Transaction| {
@@ -75,7 +75,7 @@ fn test_fetch_status() {
             assert_eq!(fetched.input_addresses[0], Some(address))
         }
         _ => {
-            panic!("txid {} is not found", txid_1)
+            panic!("txid {txid_1} is not found")
         }
     }
     clear_fetch_status(txid_1);

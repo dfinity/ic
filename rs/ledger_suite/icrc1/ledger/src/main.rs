@@ -1,8 +1,9 @@
+#![allow(deprecated)]
 #[cfg(feature = "canbench-rs")]
 mod benches;
 
+use candid::Principal;
 use candid::types::number::Nat;
-use candid::{candid_method, Principal};
 use ic_canister_log::{declare_log_buffer, export, log};
 use ic_cdk::api::stable::StableReader;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
@@ -12,18 +13,18 @@ use ic_cdk::api::instruction_counter;
 use ic_cdk::init;
 use ic_cdk::{post_upgrade, pre_upgrade, query, update};
 use ic_icrc1::{
-    endpoints::{convert_transfer_error, StandardRecord},
     Operation, Transaction,
-};
-use ic_icrc1_ledger::{
-    balances_len, clear_stable_allowance_data, clear_stable_balances_data,
-    clear_stable_blocks_data, get_allowances, is_ready, ledger_state, panic_if_not_ready,
-    set_ledger_state, LEDGER_VERSION, UPGRADES_MEMORY,
+    endpoints::{StandardRecord, convert_transfer_error},
 };
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
+use ic_icrc1_ledger::{
+    LEDGER_VERSION, UPGRADES_MEMORY, balances_len, clear_stable_allowance_data,
+    clear_stable_balances_data, clear_stable_blocks_data, get_allowances, is_ready, ledger_state,
+    panic_if_not_ready, read_first_balance, set_ledger_state, wasm_token_type,
+};
 use ic_ledger_canister_core::ledger::{
-    apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
-    TransferError as CoreTransferError,
+    LedgerAccess, LedgerContext, LedgerData, TransferError as CoreTransferError, apply_transaction,
+    archive_blocks,
 };
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::BlockIndex;
@@ -31,19 +32,19 @@ use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Zero;
 use ic_stable_structures::reader::{BufferedReader, Reader};
 use ic_stable_structures::writer::{BufferedWriter, Writer};
-use icrc_ledger_types::icrc103::get_allowances::{
-    Allowances, GetAllowancesArgs, GetAllowancesError,
-};
-use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
-use icrc_ledger_types::icrc21::{
-    errors::Icrc21Error, lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
-    requests::ConsentMessageRequest, responses::ConsentInfo,
-};
 use icrc_ledger_types::icrc3::blocks::DataCertificate;
 #[cfg(not(feature = "get-blocks-disabled"))]
 use icrc_ledger_types::icrc3::blocks::GetBlocksResponse;
 use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
+use icrc_ledger_types::icrc21::{
+    errors::Icrc21Error, lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
+    requests::ConsentMessageRequest, responses::ConsentInfo,
+};
+use icrc_ledger_types::icrc103::get_allowances::{
+    Allowances, GetAllowancesArgs, GetAllowancesError,
+};
+use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc3::{
@@ -67,7 +68,7 @@ use icrc_ledger_types::{
     icrc1::transfer::{TransferArg, TransferError},
     icrc2::transfer_from::{TransferFromArgs, TransferFromError},
 };
-use num_traits::{bounds::Bounded, ToPrimitive};
+use num_traits::{ToPrimitive, bounds::Bounded};
 use serde_bytes::ByteBuf;
 use std::{
     cell::RefCell,
@@ -119,13 +120,14 @@ impl LedgerAccess for Access {
 }
 
 #[cfg(not(feature = "canbench-rs"))]
-#[candid_method(init)]
 #[init]
 fn init(args: LedgerArgument) {
     match args {
         LedgerArgument::Init(init_args) => init_state(init_args),
         LedgerArgument::Upgrade(_) => {
-            panic!("Cannot initialize the canister with an Upgrade argument. Please provide an Init argument.");
+            panic!(
+                "Cannot initialize the canister with an Upgrade argument. Please provide an Init argument."
+            );
         }
     }
     ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
@@ -231,6 +233,15 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
         state
     });
     ic_cdk::println!("Successfully read state from memory manager managed stable structures");
+
+    if state.token_type != wasm_token_type() {
+        panic!(
+            "Incompatible token type, the upgraded ledger token type is {}, current wasm token type is {}",
+            state.token_type,
+            wasm_token_type()
+        );
+    }
+
     LEDGER.with_borrow_mut(|ledger| *ledger = Some(state));
 
     let upgrade_from_version = Access::with_ledger_mut(|ledger| {
@@ -247,7 +258,9 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
 
     if let Some(args) = args {
         match args {
-            LedgerArgument::Init(_) => panic!("Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."),
+            LedgerArgument::Init(_) => panic!(
+                "Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."
+            ),
             LedgerArgument::Upgrade(upgrade_args) => {
                 if let Some(upgrade_args) = upgrade_args {
                     Access::with_ledger_mut(|ledger| ledger.upgrade(&LOG, upgrade_args));
@@ -259,9 +272,6 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
     initialize_total_volume();
-
-    // TODO(FI-1747): Remove once this has been rolled out to the SNS and chain fusion ledgers.
-    ensure_index_principal();
 
     if upgrade_from_version < 3 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Blocks));
@@ -278,7 +288,9 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
     }
     if upgrade_from_version == 0 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
-        log_message("Upgrading from version 0 which does not use stable structures, clearing stable allowance data.");
+        log_message(
+            "Upgrading from version 0 which does not use stable structures, clearing stable allowance data.",
+        );
         clear_stable_allowance_data();
         Access::with_ledger_mut(|ledger| {
             ledger.clear_arrivals();
@@ -291,6 +303,12 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
         );
     }
 
+    // This will fail if we try to upgrade a u64 ledger with a u256 wasm and at least one balance is present.
+    // The wasms use incompatible encodings for storing numbers in stable structures.
+    // If the upgrade was successful, the ledger would later fail when trying to read the balances map.
+    // Upgrading a u256 ledger with a u64 wasm will fail earlier, while reading the `UPGRADES_MEMORY`.
+    read_first_balance();
+
     let end = ic_cdk::api::instruction_counter();
     let instructions_consumed = end - start;
     POST_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = instructions_consumed);
@@ -302,332 +320,6 @@ fn initialize_total_volume() {
     TOTAL_VOLUME_DENOMINATOR.with(|n| *n.borrow_mut() = denominator);
     if fee != Tokens::ZERO {
         TOTAL_VOLUME_FEE_IN_DECIMALS.with(|n| *n.borrow_mut() = tokens_to_f64(fee) / denominator);
-    }
-}
-
-struct LedgerSuite {
-    pub name: &'static str,
-    pub ledger: Principal,
-    pub index: Principal,
-}
-
-#[cfg(not(feature = "u256-tokens"))]
-const LEDGER_SUITES: &[LedgerSuite; 40] = &[
-    // Chain fusion ledger suites
-    LedgerSuite {
-        name: "ckBTC",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 0, 6, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 0, 8, 1, 1]),
-    },
-    // Chain fusion test tokens
-    LedgerSuite {
-        name: "ckTestBTC",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 0, 1, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 0, 3, 1, 1]),
-    },
-    // SNSs
-    LedgerSuite {
-        name: "ALICE",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 1, 14, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 1, 16, 1, 1]),
-    },
-    LedgerSuite {
-        name: "BOOM-DAO",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 80, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 82, 1, 1]),
-    },
-    LedgerSuite {
-        name: "CATALYZE",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 90, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 92, 1, 1]),
-    },
-    LedgerSuite {
-        name: "CECIL-THE-LION-DAO",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 1, 44, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 1, 46, 1, 1]),
-    },
-    LedgerSuite {
-        name: "DECIDEAI-DAO",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 75, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 77, 1, 1]),
-    },
-    LedgerSuite {
-        name: "DOLR-AI",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 43, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 45, 1, 1]),
-    },
-    LedgerSuite {
-        name: "DRAGGINZ",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 12, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 14, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ELNA-AI",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 155, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 157, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ESTATEDAO",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 185, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 187, 1, 1]),
-    },
-    LedgerSuite {
-        name: "FOMOWELL",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 1, 9, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 1, 11, 1, 1]),
-    },
-    LedgerSuite {
-        name: "FUELEV",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 1, 26, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 1, 28, 1, 1]),
-    },
-    LedgerSuite {
-        name: "GOLD-DAO",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 126, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 128, 1, 1]),
-    },
-    LedgerSuite {
-        name: "IC-EXPLORER",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 1, 33, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 1, 35, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ICFC",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 161, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 163, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ICLIGHTHOUSE-DAO",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 150, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 152, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ICPANDA",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 167, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 169, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ICPEX",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 1, 49, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 1, 51, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ICPSWAP",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 172, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 174, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ICVC",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 232, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 234, 1, 1]),
-    },
-    LedgerSuite {
-        name: "KINIC",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 37, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 39, 1, 1]),
-    },
-    LedgerSuite {
-        name: "KONGSWAP",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 243, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 245, 1, 1]),
-    },
-    LedgerSuite {
-        name: "MIMIC",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 54, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 56, 1, 1]),
-    },
-    LedgerSuite {
-        name: "MOTOKO",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 197, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 199, 1, 1]),
-    },
-    LedgerSuite {
-        name: "NEUTRINITE",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 136, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 138, 1, 1]),
-    },
-    LedgerSuite {
-        name: "NFID-WALLET",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 1, 21, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 1, 23, 1, 1]),
-    },
-    LedgerSuite {
-        name: "NUANCE",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 103, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 105, 1, 1]),
-    },
-    LedgerSuite {
-        name: "OPENCHAT",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 25, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 27, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ORIGYN",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 207, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 209, 1, 1]),
-    },
-    LedgerSuite {
-        name: "PERSONAL-DAO",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 1, 39, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 1, 41, 1, 1]),
-    },
-    LedgerSuite {
-        name: "POKEDBOTS",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 227, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 229, 1, 1]),
-    },
-    LedgerSuite {
-        name: "SEERS",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 97, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 99, 1, 1]),
-    },
-    LedgerSuite {
-        name: "SNEED",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 144, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 146, 1, 1]),
-    },
-    LedgerSuite {
-        name: "SONIC",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 109, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 111, 1, 1]),
-    },
-    LedgerSuite {
-        name: "SWAMPIES",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 202, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 204, 1, 1]),
-    },
-    LedgerSuite {
-        name: "TACO-DAO",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 1, 56, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 1, 58, 1, 1]),
-    },
-    LedgerSuite {
-        name: "TRAX",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 131, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 133, 1, 1]),
-    },
-    LedgerSuite {
-        name: "WATERNEURON",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 215, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 217, 1, 1]),
-    },
-    LedgerSuite {
-        name: "YUKU-AI",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 177, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 0, 0, 179, 1, 1]),
-    },
-];
-
-#[cfg(feature = "u256-tokens")]
-const LEDGER_SUITES: &[LedgerSuite; 16] = &[
-    // Chain fusion ledger suites
-    LedgerSuite {
-        name: "ckETH",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 0, 157, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 0, 158, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ckEURC",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 236, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 237, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ckUNI",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 206, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 207, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ckWBTC",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 175, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 176, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ckLINK",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 137, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 138, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ckXAUT",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 243, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 244, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ckPEPE",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 144, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 145, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ckWSTETH",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 197, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 198, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ckSHIB",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 156, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 157, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ckUSDC",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 91, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 92, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ckUSDT",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 185, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 186, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ckOCT",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 150, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 151, 1, 1]),
-    },
-    // Chain fusion test tokens
-    LedgerSuite {
-        name: "ckSepoliaETH",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 0, 88, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 0, 154, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ckSepoliaUSDC",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 22, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 23, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ckSepoliaLINK",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 115, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 116, 1, 1]),
-    },
-    LedgerSuite {
-        name: "ckSepoliaPEPE",
-        ledger: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 135, 1, 1]),
-        index: Principal::from_slice(&[0, 0, 0, 0, 2, 48, 1, 136, 1, 1]),
-    },
-];
-
-/// Ensure the principal of the index canister corresponding to this ledger canister is set.
-/// This will only set the index principal if:
-/// - The index principal is not already set, and;
-/// - The ledger principal of the current canister is found in the list of ledgers.
-fn ensure_index_principal() {
-    let index_principal = Access::with_ledger(|ledger| ledger.index_principal());
-    if index_principal.is_none() {
-        let ledger_canister_id = ic_cdk::api::id();
-        for suite in LEDGER_SUITES {
-            if ledger_canister_id == suite.ledger {
-                Access::with_ledger_mut(|ledger| {
-                    ledger.set_index_principal(suite.index);
-                    log_message(&format!(
-                        "Set index principal of ledger canister {} for {} to {}",
-                        suite.ledger, suite.name, suite.index
-                    ));
-                });
-                return;
-            }
-        }
-        log_message(&format!(
-            "Not setting index principal of ledger canister {}",
-            ledger_canister_id
-        ));
     }
 }
 
@@ -681,13 +373,15 @@ fn migrate_next_part(instruction_limit: u64) {
             }
         }
         let instructions_migration = instruction_counter() - instructions_migration_start;
-        let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances} blocks: {migrated_blocks}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
-            instruction_counter());
+        let msg = format!(
+            "Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances} blocks: {migrated_blocks}. Migration step instructions: {instructions_migration}, total instructions used in message: {}.",
+            instruction_counter()
+        );
         if !is_ready() {
             log_message(
                 format!("Migration partially done. Scheduling the next part. {msg}").as_str(),
             );
-            ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+            ic_cdk_timers::set_timer(Duration::from_secs(0), async {
                 migrate_next_part(MAX_INSTRUCTIONS_PER_TIMER_CALL)
             });
         } else {
@@ -813,6 +507,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
                 / 1_000_000_000) as f64,
             "IC timestamp of the most recent block.",
         )?;
+        w.encode_counter(
+            "ledger_archiving_failures",
+            ledger.get_archiving_failure_metric() as f64,
+            "Number of archiving failures since canister initialization.",
+        )?;
         match ledger.blockchain().archive.read() {
             Ok(archive_guard) => {
                 let num_archives = archive_guard
@@ -825,10 +524,9 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
                     "Total number of archives.",
                 )?;
             }
-            Err(err) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to read number of archives: {}", err),
-            ))?,
+            Err(err) => Err(std::io::Error::other(format!(
+                "Failed to read number of archives: {err}"
+            )))?,
         }
         if is_ready() {
             w.encode_gauge(
@@ -885,7 +583,10 @@ fn tokens_to_f64(tokens: Tokens) -> f64 {
     tokens.to_u256().as_f64()
 }
 
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -898,7 +599,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
-                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
                     .build()
             }
         }
@@ -923,49 +624,41 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_name() -> String {
     Access::with_ledger(|ledger| ledger.token_name().to_string())
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_symbol() -> String {
     Access::with_ledger(|ledger| ledger.token_symbol().to_string())
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_decimals() -> u8 {
     Access::with_ledger(|ledger| ledger.decimals())
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_fee() -> Nat {
     Access::with_ledger(|ledger| ledger.transfer_fee().into())
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_metadata() -> Vec<(String, Value)> {
     Access::with_ledger(|ledger| ledger.metadata())
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_minting_account() -> Option<Account> {
     Access::with_ledger(|ledger| Some(*ledger.minting_account()))
 }
 
 #[query(name = "icrc1_balance_of")]
-#[candid_method(query, rename = "icrc1_balance_of")]
 fn icrc1_balance_of(account: Account) -> Nat {
     Access::with_ledger(|ledger| ledger.balances().account_balance(&account).into())
 }
 
 #[query(name = "icrc1_total_supply")]
-#[candid_method(query, rename = "icrc1_total_supply")]
 fn icrc1_total_supply() -> Nat {
     Access::with_ledger(|ledger| ledger.balances().total_supply().into())
 }
@@ -1012,7 +705,7 @@ fn execute_transfer_not_async(
 
         match memo.as_ref() {
             Some(memo) if memo.0.len() > ledger.max_memo_length() as usize => {
-                ic_cdk::trap(&format!(
+                ic_cdk::trap(format!(
                     "the memo field size of {} bytes is above the allowed limit of {} bytes",
                     memo.0.len(),
                     ledger.max_memo_length()
@@ -1056,6 +749,7 @@ fn execute_transfer_not_async(
                         from: from_account,
                         spender,
                         amount,
+                        fee: None,
                     },
                     created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
                     memo,
@@ -1102,7 +796,6 @@ fn execute_transfer_not_async(
 }
 
 #[update]
-#[candid_method(update)]
 async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
     panic_if_not_ready();
     let from_account = Account {
@@ -1130,7 +823,6 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
 }
 
 #[update]
-#[candid_method(update)]
 async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
     panic_if_not_ready();
     let spender_account = Account {
@@ -1182,7 +874,6 @@ fn archives() -> Vec<ArchiveInfo> {
 }
 
 #[query(name = "icrc1_supported_standards")]
-#[candid_method(query, rename = "icrc1_supported_standards")]
 fn supported_standards() -> Vec<StandardRecord> {
     let standards = vec![
         StandardRecord {
@@ -1218,7 +909,6 @@ fn supported_standards() -> Vec<StandardRecord> {
 }
 
 #[query]
-#[candid_method(query)]
 fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
     panic_if_not_ready();
     let (start, length) = req
@@ -1229,7 +919,6 @@ fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
 
 #[cfg(not(feature = "get-blocks-disabled"))]
 #[query]
-#[candid_method(query)]
 fn get_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
     panic_if_not_ready();
     let (start, length) = req
@@ -1239,7 +928,6 @@ fn get_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
 }
 
 #[query]
-#[candid_method(query)]
 fn get_data_certificate() -> DataCertificate {
     panic_if_not_ready();
     let hash_tree = Access::with_ledger(|ledger| ledger.construct_hash_tree());
@@ -1326,7 +1014,6 @@ fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<u64, A
 }
 
 #[update]
-#[candid_method(update)]
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     let block_idx = icrc2_approve_not_async(ic_cdk::api::caller(), arg)?;
 
@@ -1339,7 +1026,6 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
     Access::with_ledger(|ledger| {
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
@@ -1354,13 +1040,11 @@ fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_get_archives(args: GetArchivesArgs) -> GetArchivesResult {
     Access::with_ledger(|ledger| ledger.icrc3_get_archives(args))
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
     panic_if_not_ready();
     let certificate = ByteBuf::from(ic_cdk::api::data_certificate()?);
@@ -1374,7 +1058,6 @@ fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::SupportedBlockType> {
     use icrc_ledger_types::icrc3::blocks::SupportedBlockType;
 
@@ -1408,20 +1091,17 @@ fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::Suppor
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_get_blocks(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
     panic_if_not_ready();
     Access::with_ledger(|ledger| ledger.icrc3_get_blocks(args))
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc10_supported_standards() -> Vec<StandardRecord> {
     supported_standards()
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc106_get_index_principal() -> Result<Principal, Icrc106Error> {
     Access::with_ledger(|ledger| match ledger.index_principal() {
         None => Err(Icrc106Error::IndexPrincipalNotSet),
@@ -1430,13 +1110,13 @@ fn icrc106_get_index_principal() -> Result<Principal, Icrc106Error> {
 }
 
 #[update]
-#[candid_method(update)]
 fn icrc21_canister_call_consent_message(
     consent_msg_request: ConsentMessageRequest,
 ) -> Result<ConsentInfo, Icrc21Error> {
     let caller_principal = ic_cdk::api::caller();
     let ledger_fee = icrc1_fee();
     let token_symbol = icrc1_symbol();
+    let token_name = icrc1_name();
     let decimals = icrc1_decimals();
 
     build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
@@ -1444,18 +1124,17 @@ fn icrc21_canister_call_consent_message(
         caller_principal,
         ledger_fee,
         token_symbol,
+        token_name,
         decimals,
     )
 }
 
 #[query]
-#[candid_method(query)]
 fn is_ledger_ready() -> bool {
     is_ready()
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc103_get_allowances(arg: GetAllowancesArgs) -> Result<Allowances, GetAllowancesError> {
     let from_account = arg.from_account.unwrap_or_else(|| Account {
         owner: ic_cdk::api::caller(),
@@ -1486,7 +1165,7 @@ fn main() {}
 
 #[test]
 fn check_candid_interface() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
 
     let new_interface = __export_service();
     let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
@@ -1502,339 +1181,4 @@ fn check_candid_interface() {
             e
         )
     });
-}
-
-#[cfg(feature = "u256-tokens")]
-#[test]
-fn test_principals_u256() {
-    const LEDGER_SUITES_STRINGS: &[LedgerSuiteStrings; 16] = &[
-        // Chain fusion ledger suites
-        LedgerSuiteStrings {
-            name: "ckETH",
-            ledger: "ss2fx-dyaaa-aaaar-qacoq-cai",
-            index: "s3zol-vqaaa-aaaar-qacpa-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ckEURC",
-            ledger: "pe5t5-diaaa-aaaar-qahwa-cai",
-            index: "pd4vj-oqaaa-aaaar-qahwq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ckUNI",
-            ledger: "ilzky-ayaaa-aaaar-qahha-cai",
-            index: "imymm-naaaa-aaaar-qahhq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ckWBTC",
-            ledger: "bptq2-faaaa-aaaar-qagxq-cai",
-            index: "dso6s-wiaaa-aaaar-qagya-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ckLINK",
-            ledger: "g4tto-rqaaa-aaaar-qageq-cai",
-            index: "gvqys-hyaaa-aaaar-qagfa-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ckXAUT",
-            ledger: "nza5v-qaaaa-aaaar-qahzq-cai",
-            index: "nmhmy-riaaa-aaaar-qah2a-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ckPEPE",
-            ledger: "etik7-oiaaa-aaaar-qagia-cai",
-            index: "eujml-dqaaa-aaaar-qagiq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ckWSTETH",
-            ledger: "j2tuh-yqaaa-aaaar-qahcq-cai",
-            index: "jtq73-oyaaa-aaaar-qahda-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ckSHIB",
-            ledger: "fxffn-xiaaa-aaaar-qagoa-cai",
-            index: "fqedz-2qaaa-aaaar-qagoq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ckUSDC",
-            ledger: "xevnm-gaaaa-aaaar-qafnq-cai",
-            index: "xrs4b-hiaaa-aaaar-qafoa-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ckUSDT",
-            ledger: "cngnf-vqaaa-aaaar-qag4q-cai",
-            index: "cefgz-dyaaa-aaaar-qag5a-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ckOCT",
-            ledger: "ebo5g-cyaaa-aaaar-qagla-cai",
-            index: "egp3s-paaaa-aaaar-qaglq-cai",
-        },
-        // Chain fusion test tokens
-        LedgerSuiteStrings {
-            name: "ckSepoliaETH",
-            ledger: "apia6-jaaaa-aaaar-qabma-cai",
-            index: "sh5u2-cqaaa-aaaar-qacna-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ckSepoliaUSDC",
-            ledger: "yfumr-cyaaa-aaaar-qaela-cai",
-            index: "ycvkf-paaaa-aaaar-qaelq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ckSepoliaLINK",
-            ledger: "r52mc-qaaaa-aaaar-qafzq-cai",
-            index: "ri55p-riaaa-aaaar-qaf2a-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ckSepoliaPEPE",
-            ledger: "hw4ru-taaaa-aaaar-qagdq-cai",
-            index: "g3sv2-4iaaa-aaaar-qagea-cai",
-        },
-    ];
-    assert_ledger_suite_principals(LEDGER_SUITES_STRINGS, LEDGER_SUITES);
-}
-
-#[cfg(not(feature = "u256-tokens"))]
-#[test]
-fn test_principals_u64() {
-    const LEDGER_SUITES_STRINGS: &[LedgerSuiteStrings; 40] = &[
-        // Chain fusion ledger suites
-        LedgerSuiteStrings {
-            name: "ckBTC",
-            ledger: "mxzaz-hqaaa-aaaar-qaada-cai",
-            index: "n5wcd-faaaa-aaaar-qaaea-cai",
-        },
-        // Chain fusion test tokens
-        LedgerSuiteStrings {
-            name: "ckTestBTC",
-            ledger: "mc6ru-gyaaa-aaaar-qaaaq-cai",
-            index: "mm444-5iaaa-aaaar-qaabq-cai",
-        },
-        // SNSs
-        LedgerSuiteStrings {
-            name: "ALICE",
-            ledger: "oj6if-riaaa-aaaaq-aaeha-cai",
-            index: "mtcaz-pyaaa-aaaaq-aaeia-cai",
-        },
-        LedgerSuiteStrings {
-            name: "BOOM-DAO",
-            ledger: "vtrom-gqaaa-aaaaq-aabia-cai",
-            index: "v5tde-5aaaa-aaaaq-aabja-cai",
-        },
-        LedgerSuiteStrings {
-            name: "CATALYZE",
-            ledger: "uf2wh-taaaa-aaaaq-aabna-cai",
-            index: "ux4b6-7qaaa-aaaaq-aaboa-cai",
-        },
-        LedgerSuiteStrings {
-            name: "CECIL-THE-LION-DAO",
-            ledger: "jg2ra-syaaa-aaaaq-aaewa-cai",
-            index: "jiy4i-jiaaa-aaaaq-aaexa-cai",
-        },
-        LedgerSuiteStrings {
-            name: "DECIDEAI-DAO",
-            ledger: "xsi2v-cyaaa-aaaaq-aabfq-cai",
-            index: "xaonm-oiaaa-aaaaq-aabgq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "DOLR-AI",
-            ledger: "6rdgd-kyaaa-aaaaq-aaavq-cai",
-            index: "6dfr2-giaaa-aaaaq-aaawq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "DRAGGINZ",
-            ledger: "zfcdd-tqaaa-aaaaq-aaaga-cai",
-            index: "zlaol-iaaaa-aaaaq-aaaha-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ELNA-AI",
-            ledger: "gemj7-oyaaa-aaaaq-aacnq-cai",
-            index: "gwk6g-ciaaa-aaaaq-aacoq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ESTATEDAO",
-            ledger: "bliq2-niaaa-aaaaq-aac4q-cai",
-            index: "bfk5s-wyaaa-aaaaq-aac5q-cai",
-        },
-        LedgerSuiteStrings {
-            name: "FOMOWELL",
-            ledger: "o4zzi-qaaaa-aaaaq-aaeeq-cai",
-            index: "os3ua-lqaaa-aaaaq-aaefq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "FUELEV",
-            ledger: "nfjys-2iaaa-aaaaq-aaena-cai",
-            index: "nxppl-wyaaa-aaaaq-aaeoa-cai",
-        },
-        LedgerSuiteStrings {
-            name: "GOLD-DAO",
-            ledger: "tyyy3-4aaaa-aaaaq-aab7a-cai",
-            index: "efv5g-kqaaa-aaaaq-aacaa-cai",
-        },
-        LedgerSuiteStrings {
-            name: "IC-EXPLORER",
-            ledger: "ifwyg-gaaaa-aaaaq-aaeqq-cai",
-            index: "iluvo-5qaaa-aaaaq-aaerq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ICFC",
-            ledger: "ddsp7-7iaaa-aaaaq-aacqq-cai",
-            index: "dnqcx-eyaaa-aaaaq-aacrq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ICLIGHTHOUSE-DAO",
-            ledger: "hhaaz-2aaaa-aaaaq-aacla-cai",
-            index: "gnpcd-yqaaa-aaaaq-aacma-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ICPANDA",
-            ledger: "druyg-tyaaa-aaaaq-aactq-cai",
-            index: "c3324-riaaa-aaaaq-aacuq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ICPEX",
-            ledger: "lvfsa-2aaaa-aaaaq-aaeyq-cai",
-            index: "l3h7i-bqaaa-aaaaq-aaezq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ICPSWAP",
-            ledger: "ca6gz-lqaaa-aaaaq-aacwa-cai",
-            index: "co4lr-qaaaa-aaaaq-aacxa-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ICVC",
-            ledger: "m6xut-mqaaa-aaaaq-aadua-cai",
-            index: "mqvz3-xaaaa-aaaaq-aadva-cai",
-        },
-        LedgerSuiteStrings {
-            name: "KINIC",
-            ledger: "73mez-iiaaa-aaaaq-aaasq-cai",
-            index: "7vojr-tyaaa-aaaaq-aaatq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "KONGSWAP",
-            ledger: "o7oak-iyaaa-aaaaq-aadzq-cai",
-            index: "onixt-eiaaa-aaaaq-aad2q-cai",
-        },
-        LedgerSuiteStrings {
-            name: "MIMIC",
-            ledger: "4c4fd-caaaa-aaaaq-aaa3a-cai",
-            index: "5ithz-aqaaa-aaaaq-aaa4a-cai",
-        },
-        LedgerSuiteStrings {
-            name: "MOTOKO",
-            ledger: "k45jy-aiaaa-aaaaq-aadcq-cai",
-            index: "ks7eq-3yaaa-aaaaq-aaddq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "NEUTRINITE",
-            ledger: "f54if-eqaaa-aaaaq-aacea-cai",
-            index: "ft6fn-7aaaa-aaaaq-aacfa-cai",
-        },
-        LedgerSuiteStrings {
-            name: "NFID-WALLET",
-            ledger: "mih44-vaaaa-aaaaq-aaekq-cai",
-            index: "mgfru-oqaaa-aaaaq-aaelq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "NUANCE",
-            ledger: "rxdbk-dyaaa-aaaaq-aabtq-cai",
-            index: "q5mdq-biaaa-aaaaq-aabuq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "OPENCHAT",
-            ledger: "2ouva-viaaa-aaaaq-aaamq-cai",
-            index: "2awyi-oyaaa-aaaaq-aaanq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "ORIGYN",
-            ledger: "lkwrt-vyaaa-aaaaq-aadhq-cai",
-            index: "jqkzp-liaaa-aaaaq-aadiq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "PERSONAL-DAO",
-            ledger: "ixqp7-kqaaa-aaaaq-aaetq-cai",
-            index: "j57nf-iaaaa-aaaaq-aaeuq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "POKEDBOTS",
-            ledger: "np5km-uyaaa-aaaaq-aadrq-cai",
-            index: "n535v-yiaaa-aaaaq-aadsq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "SEERS",
-            ledger: "rffwt-piaaa-aaaaq-aabqq-cai",
-            index: "rlh33-uyaaa-aaaaq-aabrq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "SNEED",
-            ledger: "hvgxa-wqaaa-aaaaq-aacia-cai",
-            index: "h3e2i-naaaa-aaaaq-aacja-cai",
-        },
-        LedgerSuiteStrings {
-            name: "SONIC",
-            ledger: "qbizb-wiaaa-aaaaq-aabwq-cai",
-            index: "qpkuj-nyaaa-aaaaq-aabxq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "SWAMPIES",
-            ledger: "lrtnw-paaaa-aaaaq-aadfa-cai",
-            index: "ldv2p-dqaaa-aaaaq-aadga-cai",
-        },
-        LedgerSuiteStrings {
-            name: "TACO-DAO",
-            ledger: "kknbx-zyaaa-aaaaq-aae4a-cai",
-            index: "kepm7-ciaaa-aaaaq-aae5a-cai",
-        },
-        LedgerSuiteStrings {
-            name: "TRAX",
-            ledger: "emww2-4yaaa-aaaaq-aacbq-cai",
-            index: "e6qbd-qiaaa-aaaaq-aaccq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "WATERNEURON",
-            ledger: "jcmow-hyaaa-aaaaq-aadlq-cai",
-            index: "iidmm-fiaaa-aaaaq-aadmq-cai",
-        },
-        LedgerSuiteStrings {
-            name: "YUKU-AI",
-            ledger: "atbfz-diaaa-aaaaq-aacyq-cai",
-            index: "a5dir-yyaaa-aaaaq-aaczq-cai",
-        },
-    ];
-
-    assert_ledger_suite_principals(LEDGER_SUITES_STRINGS, LEDGER_SUITES);
-}
-
-#[cfg(test)]
-struct LedgerSuiteStrings {
-    pub name: &'static str,
-    pub ledger: &'static str,
-    pub index: &'static str,
-}
-
-#[cfg(test)]
-fn assert_ledger_suite_principals(
-    ledger_suite_strings: &[LedgerSuiteStrings],
-    ledger_suite_principals: &[LedgerSuite],
-) {
-    assert_eq!(ledger_suite_strings.len(), ledger_suite_principals.len());
-    let mut found = 0;
-    for suite in ledger_suite_strings {
-        for principal_suite in ledger_suite_principals {
-            if suite.name == principal_suite.name {
-                assert_eq!(
-                    Principal::from_text(suite.ledger).unwrap(),
-                    principal_suite.ledger
-                );
-                assert_eq!(
-                    Principal::from_text(suite.index).unwrap(),
-                    principal_suite.index
-                );
-                found += 1;
-                break;
-            }
-        }
-    }
-    assert_eq!(found, ledger_suite_principals.len());
 }

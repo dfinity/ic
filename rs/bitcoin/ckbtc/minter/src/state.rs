@@ -6,6 +6,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::Priority;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
@@ -17,17 +18,19 @@ pub mod invariants;
 
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
-use crate::logs::P0;
+use crate::reimbursement::{
+    InvalidTransactionError, ReimburseWithdrawalTask, ReimbursedError, ReimbursedWithdrawal,
+    ReimbursedWithdrawalResult, WithdrawalReimbursementReason,
+};
 use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use crate::updates::update_balance::SuspendedUtxo;
 use crate::{
-    address::BitcoinAddress, compute_min_withdrawal_amount, ECDSAPublicKey, GetUtxosCache, Network,
-    Timestamp,
+    ECDSAPublicKey, GetUtxosCache, Network, Timestamp, WithdrawalFee, address::BitcoinAddress,
 };
 use candid::{CandidType, Deserialize, Principal};
+use canlog::log;
 use ic_base_types::CanisterId;
-use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Txid, Utxo};
-use ic_canister_log::log;
+use ic_btc_interface::{OutPoint, Txid, Utxo};
 use ic_utils_ensure::ensure_eq;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
@@ -45,7 +48,9 @@ thread_local! {
 }
 
 // A pending retrieve btc request
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize, candid::CandidType,
+)]
 pub struct RetrieveBtcRequest {
     /// The amount to convert to BTC.
     /// The minter withdraws BTC transfer fees from this amount.
@@ -78,11 +83,53 @@ pub struct ChangeOutput {
     pub value: u64,
 }
 
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum SubmittedWithdrawalRequests {
+    ToConfirm {
+        requests: BTreeSet<RetrieveBtcRequest>,
+    },
+    ToCancel {
+        requests: BTreeSet<RetrieveBtcRequest>,
+        reason: WithdrawalReimbursementReason,
+    },
+}
+
+impl From<Vec<RetrieveBtcRequest>> for SubmittedWithdrawalRequests {
+    fn from(requests: Vec<RetrieveBtcRequest>) -> Self {
+        Self::ToConfirm {
+            requests: requests.into_iter().collect(),
+        }
+    }
+}
+
+impl SubmittedWithdrawalRequests {
+    pub fn iter(&self) -> impl Iterator<Item = &RetrieveBtcRequest> {
+        match self {
+            Self::ToConfirm { requests } => requests.iter(),
+            Self::ToCancel { requests, .. } => requests.iter(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::ToConfirm { requests } => requests.is_empty(),
+            Self::ToCancel { requests, .. } => requests.is_empty(),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            Self::ToConfirm { requests } => requests.len(),
+            Self::ToCancel { requests, .. } => requests.len(),
+        }
+    }
+}
+
 /// Represents a transaction sent to the Bitcoin network.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SubmittedBtcTransaction {
     /// The original retrieve_btc requests that initiated the transaction.
-    pub requests: Vec<RetrieveBtcRequest>,
+    pub requests: SubmittedWithdrawalRequests,
     /// The identifier of the unconfirmed transaction.
     pub txid: Txid,
     /// The list of UTXOs we used in the transaction.
@@ -90,11 +137,11 @@ pub struct SubmittedBtcTransaction {
     /// The IC time at which we submitted the Bitcoin transaction.
     pub submitted_at: u64,
     /// The tx output from the submitted transaction that the minter owns.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub change_output: Option<ChangeOutput>,
     /// Fee per vbyte in millisatoshi.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub fee_per_vbyte: Option<u64>,
+    /// Include both the fee paid for the transaction and the minter fee.
+    pub withdrawal_fee: Option<WithdrawalFee>,
 }
 
 /// Pairs a retrieve_btc request with its outcome.
@@ -270,6 +317,12 @@ pub struct CheckedUtxo {
 #[derive(Copy, Clone, Debug)]
 pub struct Overdraft(pub u64);
 
+/// Type alias for a ledger burn block index
+pub type LedgerBurnIndex = u64;
+
+/// Type alias for a ledger mint block index
+pub type LedgerMintIndex = u64;
+
 /// The state of the ckBTC Minter.
 ///
 /// Every piece of state of the Minter should be stored as field of this struct.
@@ -376,6 +429,9 @@ pub struct CkBtcMinterState {
 
     pub last_fee_per_vbyte: Vec<u64>,
 
+    /// The last median fee per vbyte computed from `last_fee_per_vbyte`.
+    pub last_median_fee_per_vbyte: Option<u64>,
+
     /// The fee for a single Bitcoin check request.
     pub check_fee: u64,
 
@@ -394,6 +450,20 @@ pub struct CkBtcMinterState {
 
     /// Map from burn block index to the the reimbursed request.
     pub reimbursed_transactions: BTreeMap<u64, ReimbursedDeposit>,
+
+    /// Map from burn block index to the pending reimbursed withdrawal request.
+    ///
+    /// # Requirement
+    ///
+    /// A withdrawal request should only be reimbursed
+    /// when it is certain that no Bitcoin transactions for that withdrawal will ever make it. That means,
+    /// 1. Either the minter never issued a Bitcoin transaction including that withdrawal request;
+    /// 2. Or it's guaranteed that such a transaction is no longer valid because some of its UTXOs
+    ///    have been used by another transaction that is considered finalized in the meantime.
+    pub pending_withdrawal_reimbursements: BTreeMap<LedgerBurnIndex, ReimburseWithdrawalTask>,
+
+    /// Map from burn block index to the reimbursed withdrawal request.
+    pub reimbursed_withdrawals: BTreeMap<LedgerBurnIndex, ReimbursedWithdrawalResult>,
 
     /// Cache of get_utxos call results
     pub get_utxos_cache: GetUtxosCache,
@@ -421,6 +491,12 @@ pub enum ReimbursementReason {
         kyt_fee: u64,
     },
     CallFailed,
+}
+
+pub struct WithdrawalCancellation {
+    pub fee: u64,
+    pub reason: WithdrawalReimbursementReason,
+    pub requests: BTreeSet<RetrieveBtcRequest>,
 }
 
 impl CkBtcMinterState {
@@ -491,7 +567,7 @@ impl CkBtcMinterState {
                 self.min_confirmations = min_conf;
             } else {
                 log!(
-                    P0,
+                    Priority::Info,
                     "Didn't increase min_confirmations to {} (current value: {})",
                     min_conf,
                     self.min_confirmations
@@ -558,7 +634,7 @@ impl CkBtcMinterState {
         target: Option<Account>,
     ) -> Vec<BtcRetrievalStatusV2> {
         let target_account = target.unwrap_or(Account {
-            owner: ic_cdk::caller(),
+            owner: ic_cdk::api::msg_caller(),
             subaccount: None,
         });
 
@@ -580,12 +656,44 @@ impl CkBtcMinterState {
     }
 
     pub fn retrieve_btc_status_v2(&self, block_index: u64) -> RetrieveBtcStatusV2 {
+        // Hack to avoid a Candid breaking change in `ReimbursementReason`
+        // which is in the return type of `retrieve_btc_status_v2`
+        fn map_reimbursement_reason(reason: &WithdrawalReimbursementReason) -> ReimbursementReason {
+            match reason {
+                WithdrawalReimbursementReason::InvalidTransaction(
+                    InvalidTransactionError::TooManyInputs { .. },
+                ) => ReimbursementReason::CallFailed,
+            }
+        }
+
         if let Some(reimbursement) = self.pending_reimbursements.get(&block_index) {
             return RetrieveBtcStatusV2::WillReimburse(reimbursement.clone());
         }
 
+        if let Some(reimbursement) = self.pending_withdrawal_reimbursements.get(&block_index) {
+            return RetrieveBtcStatusV2::WillReimburse(ReimburseDepositTask {
+                account: reimbursement.account,
+                amount: reimbursement.amount,
+                reason: map_reimbursement_reason(&reimbursement.reason),
+            });
+        }
+
         if let Some(reimbursement) = self.reimbursed_transactions.get(&block_index) {
             return RetrieveBtcStatusV2::Reimbursed(reimbursement.clone());
+        }
+
+        if let Some(maybe_reimbursed) = self.reimbursed_withdrawals.get(&block_index) {
+            return match maybe_reimbursed {
+                Ok(reimbursement) => RetrieveBtcStatusV2::Reimbursed(ReimbursedDeposit {
+                    account: reimbursement.account,
+                    amount: reimbursement.amount,
+                    reason: map_reimbursement_reason(&reimbursement.reason),
+                    mint_block_index: reimbursement.mint_block_index,
+                }),
+                Err(err) => match err {
+                    ReimbursedError::Quarantined => RetrieveBtcStatusV2::Unknown,
+                },
+            };
         }
 
         let status_v2: RetrieveBtcStatusV2 = self.retrieve_btc_status(block_index).into();
@@ -611,9 +719,16 @@ impl CkBtcMinterState {
             };
         }
 
-        if let Some(txid) = self.submitted_transactions.iter().find_map(|tx| {
-            (tx.requests.iter().any(|r| r.block_index == block_index)).then_some(tx.txid)
-        }) {
+        if let Some(txid) = self
+            .submitted_transactions
+            .iter()
+            .find_map(|tx| match &tx.requests {
+                SubmittedWithdrawalRequests::ToConfirm { requests } => {
+                    (requests.iter().any(|r| r.block_index == block_index)).then_some(tx.txid)
+                }
+                SubmittedWithdrawalRequests::ToCancel { .. } => None,
+            })
+        {
             return RetrieveBtcStatus::Submitted { txid };
         }
 
@@ -623,14 +738,10 @@ impl CkBtcMinterState {
             .find(|finalized_request| finalized_request.request.block_index == block_index)
             .map(|final_req| final_req.state.clone())
         {
-            Some(FinalizedStatus::AmountTooLow) => return RetrieveBtcStatus::AmountTooLow,
-            Some(FinalizedStatus::Confirmed { txid }) => {
-                return RetrieveBtcStatus::Confirmed { txid }
-            }
-            None => (),
+            Some(FinalizedStatus::AmountTooLow) => RetrieveBtcStatus::AmountTooLow,
+            Some(FinalizedStatus::Confirmed { txid }) => RetrieveBtcStatus::Confirmed { txid },
+            None => RetrieveBtcStatus::Unknown,
         }
-
-        RetrieveBtcStatus::Unknown
     }
 
     /// Returns true if the pending requests queue has enough requests to form a
@@ -640,29 +751,26 @@ impl CkBtcMinterState {
             return true;
         }
 
-        if let Some(req) = self.pending_retrieve_btc_requests.first() {
-            if self.max_time_in_queue_nanos < now.saturating_sub(req.received_at) {
-                return true;
-            }
+        if let Some(req) = self.pending_retrieve_btc_requests.first()
+            && self.max_time_in_queue_nanos < now.saturating_sub(req.received_at)
+        {
+            return true;
         }
 
-        if let Some(req) = self.pending_retrieve_btc_requests.last() {
-            if let Some(last_submission_time) = self.last_transaction_submission_time_ns {
-                if self.max_time_in_queue_nanos
-                    < req.received_at.saturating_sub(last_submission_time)
-                {
-                    return true;
-                }
-            }
+        if let Some(req) = self.pending_retrieve_btc_requests.last()
+            && let Some(last_submission_time) = self.last_transaction_submission_time_ns
+            && self.max_time_in_queue_nanos < req.received_at.saturating_sub(last_submission_time)
+        {
+            return true;
         }
 
         false
     }
 
     /// Forms a batch of retrieve_btc requests that the minter can fulfill.
-    pub fn build_batch(&mut self, max_size: usize) -> Vec<RetrieveBtcRequest> {
+    pub fn build_batch(&mut self, max_size: usize) -> BTreeSet<RetrieveBtcRequest> {
         let available_utxos_value = self.available_utxos.iter().map(|u| u.value).sum::<u64>();
-        let mut batch = vec![];
+        let mut batch = BTreeSet::new();
         let mut tx_amount = 0;
         for req in std::mem::take(&mut self.pending_retrieve_btc_requests) {
             if available_utxos_value < req.amount + tx_amount || batch.len() >= max_size {
@@ -670,7 +778,7 @@ impl CkBtcMinterState {
                 self.pending_retrieve_btc_requests.push(req);
             } else {
                 tx_amount += req.amount;
-                batch.push(req);
+                batch.insert(req);
             }
         }
 
@@ -719,7 +827,9 @@ impl CkBtcMinterState {
         }
     }
 
-    pub(crate) fn finalize_transaction(&mut self, txid: &Txid) {
+    // Because finalizing a transaction may trigger a replaced transaction to be canceled,
+    // the return value here is the corresponding canceled requests.
+    pub(crate) fn finalize_transaction(&mut self, txid: &Txid) -> Option<WithdrawalCancellation> {
         let finalized_tx = if let Some(pos) = self
             .submitted_transactions
             .iter()
@@ -733,27 +843,51 @@ impl CkBtcMinterState {
         {
             self.stuck_transactions.swap_remove(pos)
         } else {
-            ic_cdk::trap(&format!(
-                "Attempted to finalized a non-existent transaction {}",
-                txid
+            ic_cdk::trap(format!(
+                "Attempted to finalized a non-existent transaction {txid}"
             ));
         };
 
         for utxo in finalized_tx.used_utxos.iter() {
             self.forget_utxo(utxo);
         }
-        self.finalized_requests_count += finalized_tx.requests.len() as u64;
-        for request in finalized_tx.requests {
-            self.push_finalized_request(FinalizedBtcRetrieval {
-                request,
-                state: FinalizedStatus::Confirmed { txid: *txid },
-            });
-        }
+        match finalized_tx.requests {
+            SubmittedWithdrawalRequests::ToConfirm { requests } => {
+                self.finalized_requests_count += requests.len() as u64;
+                for request in requests {
+                    self.push_finalized_request(FinalizedBtcRetrieval {
+                        request,
+                        state: FinalizedStatus::Confirmed { txid: *txid },
+                    });
+                }
 
-        self.cleanup_tx_replacement_chain(txid);
+                self.cleanup_tx_replacement_chain(txid);
+                None
+            }
+            SubmittedWithdrawalRequests::ToCancel { requests, reason } => {
+                let requests = requests.into_iter().collect::<BTreeSet<_>>();
+                let fee = finalized_tx.withdrawal_fee.unwrap_or_default();
+                let fee = fee.bitcoin_fee + fee.minter_fee;
+                assert!(fee > 0, "withdraw_fee is zero");
+                let canceled_requests = self.cancel_tx_replacement(
+                    txid,
+                    finalized_tx.used_utxos.iter().collect::<BTreeSet<_>>(),
+                );
+                debug_assert_eq!(
+                    canceled_requests, requests,
+                    "Cancelled requests set does not match what was in cancellation tx {txid}"
+                );
+                Some(WithdrawalCancellation {
+                    reason,
+                    fee,
+                    requests,
+                })
+            }
+        }
     }
 
-    fn cleanup_tx_replacement_chain(&mut self, confirmed_txid: &Txid) {
+    // Return removed txids
+    fn cleanup_tx_replacement_chain(&mut self, confirmed_txid: &Txid) -> BTreeSet<Txid> {
         let mut txids_to_remove = BTreeSet::new();
 
         // Collect transactions preceding the confirmed transaction.
@@ -778,14 +912,50 @@ impl CkBtcMinterState {
             self.rev_replacement_txid.remove(txid);
         }
 
-        if txids_to_remove.is_empty() {
-            return;
+        if !txids_to_remove.is_empty() {
+            self.submitted_transactions
+                .retain(|tx| !txids_to_remove.contains(&tx.txid));
+            self.stuck_transactions
+                .retain(|tx| !txids_to_remove.contains(&tx.txid));
         }
 
-        self.submitted_transactions
-            .retain(|tx| !txids_to_remove.contains(&tx.txid));
-        self.stuck_transactions
-            .retain(|tx| !txids_to_remove.contains(&tx.txid));
+        txids_to_remove
+    }
+
+    fn cancel_tx_replacement(
+        &mut self,
+        confirmed_txid: &Txid,
+        used_utxos: BTreeSet<&Utxo>,
+    ) -> BTreeSet<RetrieveBtcRequest> {
+        // At this point, confirmed_txid has already been removed from submitted_transactions/stuck_transactions.
+        // Any other transaction in there with input UTXOs overlapping with `used_utxos` should be
+        // considered for cancellation, their input UTXOs (non-overlapping with `used_utxos`) should be returned to the available set, and
+        // corresponding requests should be refunded.
+        let mut txids_to_remove = BTreeSet::new();
+        let mut canceled_requests = BTreeSet::new();
+        for tx in self
+            .submitted_transactions
+            .iter()
+            .chain(self.stuck_transactions.iter())
+        {
+            let tx_used_utxos = tx.used_utxos.iter().collect::<BTreeSet<_>>();
+            if !tx_used_utxos.is_disjoint(&used_utxos) {
+                debug_assert!(&tx.txid != confirmed_txid);
+                txids_to_remove.insert(tx.txid);
+                for &utxo in tx_used_utxos.difference(&used_utxos) {
+                    self.available_utxos.insert(utxo.clone());
+                }
+                let mut requests = match &tx.requests {
+                    SubmittedWithdrawalRequests::ToConfirm { requests } => requests.clone(),
+                    SubmittedWithdrawalRequests::ToCancel { .. } => BTreeSet::new(),
+                };
+                canceled_requests.append(&mut requests);
+            }
+        }
+        // Drop all replaced txs before return
+        let txids_removed = self.cleanup_tx_replacement_chain(confirmed_txid);
+        assert_eq!(txids_to_remove, txids_removed);
+        canceled_requests
     }
 
     pub(crate) fn longest_resubmission_chain_size(&self) -> usize {
@@ -874,13 +1044,13 @@ impl CkBtcMinterState {
     /// same identifier.
     pub fn push_from_in_flight_to_pending_requests(
         &mut self,
-        mut requests: Vec<RetrieveBtcRequest>,
+        requests: BTreeSet<RetrieveBtcRequest>,
     ) {
-        for req in requests.iter() {
+        for req in requests.into_iter() {
             assert!(!self.has_pending_request(req.block_index));
             self.requests_in_flight.remove(&req.block_index);
+            self.pending_retrieve_btc_requests.push(req);
         }
-        self.pending_retrieve_btc_requests.append(&mut requests);
         self.pending_retrieve_btc_requests
             .sort_by_key(|r| r.received_at);
     }
@@ -1150,6 +1320,39 @@ impl CkBtcMinterState {
             .insert(burn_block_index, reimburse_deposit_task);
     }
 
+    pub fn schedule_withdrawal_reimbursement(
+        &mut self,
+        ledger_burn_index: LedgerBurnIndex,
+        reimburse_deposit_task: ReimburseWithdrawalTask,
+    ) {
+        self.pending_retrieve_btc_requests
+            .retain(|req| req.block_index != ledger_burn_index);
+
+        if let Some(tx_status) = self.requests_in_flight.get(&ledger_burn_index) {
+            panic!(
+                "BUG: Cannot reimburse withdrawal request {ledger_burn_index} since there is a transaction for that withdrawal with status: {tx_status:?}"
+            )
+        }
+
+        for submitted_tx in self
+            .submitted_transactions
+            .iter()
+            .chain(self.stuck_transactions.iter())
+        {
+            if submitted_tx
+                .requests
+                .iter()
+                .any(|req| req.block_index == ledger_burn_index)
+            {
+                panic!(
+                    "BUG: Cannot reimburse withdrawal request {ledger_burn_index} since there is a submitted transaction for that withdrawal: {submitted_tx:?}"
+                );
+            }
+        }
+        self.pending_withdrawal_reimbursements
+            .insert(ledger_burn_index, reimburse_deposit_task);
+    }
+
     /// Checks whether the internal state of the minter matches the other state
     /// semantically (the state holds the same data, but maybe in a slightly
     /// different form).
@@ -1310,52 +1513,44 @@ impl CkBtcMinterState {
         })
     }
 
-    pub fn estimate_median_fee_per_vbyte(&self) -> Option<MillisatoshiPerByte> {
-        /// The default fee we use on regtest networks.
-        const DEFAULT_REGTEST_FEE: MillisatoshiPerByte = 5_000;
-
-        let median_fee = match &self.btc_network {
-            Network::Mainnet | Network::Testnet => {
-                if self.last_fee_per_vbyte.len() < 100 {
-                    return None;
-                }
-                Some(self.last_fee_per_vbyte[50])
-            }
-            Network::Regtest => Some(DEFAULT_REGTEST_FEE),
-        };
-        median_fee.map(|f| f.max(self.minimum_fee_per_vbyte()))
+    /// Quarantine the reimbursement request identified by its index to prevent double minting.
+    /// WARNING!: It's crucial that this method does not panic,
+    /// since it's called inside the clean-up callback, when an unexpected panic did occur before.
+    pub fn quarantine_withdrawal_reimbursement(&mut self, burn_index: LedgerBurnIndex) {
+        self.pending_withdrawal_reimbursements.remove(&burn_index);
+        self.reimbursed_withdrawals
+            .insert(burn_index, Err(ReimbursedError::Quarantined));
     }
 
-    pub fn update_median_fee_per_vbyte(
+    /// The reimbursement of withdrawal request with id `burn_index` was successfully completed.
+    pub fn reimburse_withdrawal_completed(
         &mut self,
-        fees: Vec<MillisatoshiPerByte>,
-    ) -> Option<MillisatoshiPerByte> {
-        if fees.len() < 100 {
-            log!(
-                P0,
-                "[update_median_fee_per_vbyte]: not enough data points ({}) to compute the fee",
-                fees.len()
-            );
-            return None;
-        }
-        self.last_fee_per_vbyte = fees;
-        let median_fee = self
-            .estimate_median_fee_per_vbyte()
-            .expect("BUG: last_fee_per_vbyte set");
-        self.fee_based_retrieve_btc_min_amount =
-            compute_min_withdrawal_amount(median_fee, self.retrieve_btc_min_amount, self.check_fee);
-        Some(median_fee)
-    }
+        burn_index: LedgerBurnIndex,
+        mint_index: LedgerMintIndex,
+    ) {
+        assert_ne!(
+            burn_index, mint_index,
+            "BUG: mint index cannot be the same as the burn index"
+        );
 
-    /// An estimated fee per vbyte of 142 millistatoshis per vbyte was selected around 2025.06.21 01:09:50 UTC
-    /// for Bitcoin Mainnet, whereas the median fee around that time should have been 2_000.
-    /// Until we know the root cause, we ensure that the estimated fee has a meaningful minimum value.
-    pub const fn minimum_fee_per_vbyte(&self) -> MillisatoshiPerByte {
-        match &self.btc_network {
-            Network::Mainnet => 1_500,
-            Network::Testnet => 1_000,
-            Network::Regtest => 0,
-        }
+        let reimbursement = self
+            .pending_withdrawal_reimbursements
+            .remove(&burn_index)
+            .unwrap_or_else(|| {
+                panic!("BUG: missing pending reimbursement of withdrawal {burn_index}.")
+            });
+        let reimbursed = ReimbursedWithdrawal {
+            account: reimbursement.account,
+            amount: reimbursement.amount,
+            reason: reimbursement.reason.clone(),
+            mint_block_index: mint_index,
+        };
+        assert_eq!(
+            self.reimbursed_withdrawals
+                .insert(burn_index, Ok(reimbursed)),
+            None,
+            "BUG: Reimbursement of withdrawal {reimbursement:?} was already completed!"
+        );
     }
 }
 
@@ -1557,6 +1752,7 @@ impl From<InitArgs> for CkBtcMinterState {
             is_distributing_fee: false,
             mode: args.mode,
             last_fee_per_vbyte: vec![1; 100],
+            last_median_fee_per_vbyte: Some(1),
             check_fee: args
                 .check_fee
                 .unwrap_or(crate::lifecycle::init::DEFAULT_CHECK_FEE),
@@ -1568,6 +1764,8 @@ impl From<InitArgs> for CkBtcMinterState {
             get_utxos_cache: GetUtxosCache::new(Duration::from_secs(
                 args.get_utxos_cache_expiration_seconds.unwrap_or_default(),
             )),
+            pending_withdrawal_reimbursements: Default::default(),
+            reimbursed_withdrawals: Default::default(),
         }
     }
 }

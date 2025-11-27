@@ -1,8 +1,8 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use candid::{Decode, Encode};
 use itertools::Itertools;
 use k256::SecretKey;
-use slog::{debug, info};
+use slog::{debug, info, warn};
 use std::{collections::HashSet, net::SocketAddr, sync::Arc, time::Duration, time::Instant};
 use tokio::time::sleep;
 
@@ -20,7 +20,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot,
-            SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF, SshSession,
         },
     },
     nns::{self, vote_execute_proposal_assert_executed},
@@ -34,25 +34,27 @@ use registry_canister::mutations::{
 };
 
 use ic_agent::{
+    Agent,
     agent::{
-        http_transport::reqwest_transport::reqwest::{redirect::Policy, Client, ClientBuilder},
-        route_provider::RouteProvider,
         ApiBoundaryNode,
+        http_transport::reqwest_transport::reqwest::{Client, ClientBuilder, redirect::Policy},
+        route_provider::RouteProvider,
     },
     export::Principal,
     identity::{AnonymousIdentity, Secp256k1Identity},
-    Agent,
 };
 use ic_boundary_nodes_system_test_utils::{
     constants::COUNTER_CANISTER_WAT,
     helpers::{
         install_canisters, read_counters_on_counter_canisters, set_counters_on_counter_canisters,
     },
-    setup::{setup_ic, TEST_PRIVATE_KEY},
+    setup::{TEST_PRIVATE_KEY, setup_ic},
 };
 
 const CANISTER_RETRY_TIMEOUT: Duration = Duration::from_secs(30);
 const CANISTER_RETRY_BACKOFF: Duration = Duration::from_secs(2);
+const HTTP_CLIENT_TOTAL_TIMEOUT: Duration = Duration::from_secs(35);
+const HTTP_CLIENT_TCP_TIMEOUT: Duration = Duration::from_secs(15);
 
 /* tag::catalog[]
 Title:: API Boundary Nodes Decentralization
@@ -146,6 +148,8 @@ async fn test(env: TestEnv) {
     // HTTP client with a custom domain resolution policy, as API domains are not registered in system-tests.
     let http_client = {
         let mut client_builder = ClientBuilder::new()
+            .timeout(HTTP_CLIENT_TOTAL_TIMEOUT)
+            .connect_timeout(HTTP_CLIENT_TCP_TIMEOUT)
             .redirect(Policy::none())
             .danger_accept_invalid_certs(true);
 
@@ -382,9 +386,8 @@ async fn add_api_boundary_nodes_via_proposal(
             "sudo openssl req -x509 -newkey rsa:2048 \
             -keyout /var/lib/ic/data/ic-boundary-tls.key \
             -out /var/lib/ic/data/ic-boundary-tls.crt -sha256 -days 3650 -nodes \
-            -subj \"/C=CH/ST=Zurich/L=Zurich/O=DFINITY/OU=BoundaryNodes/CN={}\" && \
-            sudo chmod +r /var/lib/ic/data/ic-boundary-tls.key",
-            domain
+            -subj \"/C=CH/ST=Zurich/L=Zurich/O=DFINITY/OU=BoundaryNodes/CN={domain}\" && \
+            sudo chmod +r /var/lib/ic/data/ic-boundary-tls.key"
         ))
         .expect("unable to setup TLS files");
 
@@ -447,17 +450,36 @@ async fn assert_api_bns_healthy(log: &slog::Logger, http_client: Client, api_dom
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || async {
-                let response = http_client
-                    .get(format!("https://{domain}/health"))
-                    .send()
-                    .await?;
+                let url = format!("https://{domain}/health");
+                info!(log, "Checking API BN health endpoint {url}");
 
-                if response.status().is_success() {
-                    info!(log, "API BN with domain {domain} came up healthy");
-                    return Ok(());
+                let response = http_client.get(&url).send().await;
+
+                match response {
+                    Ok(resp) => {
+                        if resp.status().is_success() {
+                            info!(log, "API BN with domain {domain} is healthy");
+                            Ok(())
+                        } else {
+                            warn!(
+                                log,
+                                "API BN with domain {domain} returned non-success status: {}",
+                                resp.status()
+                            );
+                            bail!("API BN with domain {domain} is not yet healthy");
+                        }
+                    }
+                    Err(e) => {
+                        if e.is_timeout() {
+                            warn!(log, "HTTP request to domain {domain} timed out: {e}");
+                        } else if e.is_connect() {
+                            warn!(log, "Connection error when connecting to {domain}: {e}");
+                        } else {
+                            warn!(log, "Unexpected error for http request to {domain}: {e}");
+                        }
+                        bail!("API BN with domain {domain} is not yet healthy");
+                    }
                 }
-
-                bail!("API BN with domain {domain} is not yet healthy");
             }
         )
         .await
@@ -546,7 +568,9 @@ async fn _assert_routing_via_domains(
 
         sleep(route_call_interval).await;
     }
-    panic!("Expected routes {expected_domains:?} were not observed over {route_calls} consecutive routing calls");
+    panic!(
+        "Expected routes {expected_domains:?} were not observed over {route_calls} consecutive routing calls"
+    );
 }
 
 fn main() -> Result<()> {

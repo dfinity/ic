@@ -25,8 +25,8 @@ fn test_can_be_purged_retain_recent_transfer_sns_treasury_funds() {
     // behavior of can_be_purged is different in the special case of TransferSnsTreasuryFunds.
     let status = settled_proposal.status();
     let reward_status = settled_proposal.reward_status(now_timestamp_seconds);
-    assert!(status.is_final(), "{:?}", status);
-    assert!(reward_status.is_final(), "{:?}", status);
+    assert!(status.is_final(), "{status:?}");
+    assert!(reward_status.is_final(), "{status:?}");
 
     // Ordinarily (e.g. when the proposal is of type Motion), when the is_final methods of status
     // and reward_status return true, can_be_purged is supposed to return true.
@@ -44,8 +44,8 @@ fn test_can_be_purged_retain_recent_transfer_sns_treasury_funds() {
     // status and reward_status are supposed to be unaffected by action.
     let status = settled_proposal.status();
     let reward_status = settled_proposal.reward_status(now_timestamp_seconds);
-    assert!(status.is_final(), "{:?}", status);
-    assert!(reward_status.is_final(), "{:?}", status);
+    assert!(status.is_final(), "{status:?}");
+    assert!(reward_status.is_final(), "{status:?}");
 
     // Step 2: Run the code under test under various scenarios.
 
@@ -84,8 +84,8 @@ fn test_can_be_purged_retain_recent_transfer_sns_treasury_funds() {
         // be true.
         let status = failed_proposal.status();
         let reward_status = failed_proposal.reward_status(now_timestamp_seconds);
-        assert!(status.is_final(), "{:?}", status);
-        assert!(reward_status.is_final(), "{:?}", status);
+        assert!(status.is_final(), "{status:?}");
+        assert!(reward_status.is_final(), "{status:?}");
 
         // Substep 2: Run the code under test.
         let can_be_purged = failed_proposal.can_be_purged(now_timestamp_seconds);

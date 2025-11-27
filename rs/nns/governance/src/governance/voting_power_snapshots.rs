@@ -8,7 +8,7 @@ use crate::{
 use ic_cdk::eprintln;
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_stable_structures::{
-    memory_manager::VirtualMemory, storable::Bound, DefaultMemoryImpl, StableBTreeMap, Storable,
+    DefaultMemoryImpl, StableBTreeMap, Storable, memory_manager::VirtualMemory, storable::Bound,
 };
 use prost::Message;
 use std::{borrow::Cow, collections::HashMap};
@@ -159,12 +159,14 @@ impl VotingPowerSnapshots {
         total_potential_voting_power: u64,
         now_seconds: TimestampSeconds,
     ) -> Option<(TimestampSeconds, VotingPowerSnapshot)> {
-        // Step 1: check if there are enough snapshots to detect a spike.
-        if self.voting_power_totals.len() < MAX_VOTING_POWER_SNAPSHOTS {
+        // Step 0: skip the check in test mode when the snapshots are not yet full. Otherwise it
+        // would be difficult to get around the spike detection in tests, and a lot of test setups
+        // involve creating a lot of voting power.
+        if cfg!(feature = "test") && self.voting_power_totals.len() < MAX_VOTING_POWER_SNAPSHOTS {
             return None;
         }
 
-        // Step 2: find the voting power totals entry with the minimum total potential voting power,
+        // Step 1: find the voting power totals entry with the minimum total potential voting power,
         // if a spike is detected.
         let Some((
             timestamp_with_minimum_total_potential_voting_power,
@@ -181,7 +183,7 @@ impl VotingPowerSnapshots {
             return None;
         };
 
-        // Step 3: find the voting power map for the timestamp with the minimum potential voting power.
+        // Step 2: find the voting power map for the timestamp with the minimum potential voting power.
         let Some(voting_power_map) = self
             .neuron_id_to_voting_power_maps
             .get(&timestamp_with_minimum_total_potential_voting_power)
@@ -194,7 +196,7 @@ impl VotingPowerSnapshots {
             return None;
         };
 
-        // Step 4: returns one of the previous voting power maps (with minimum total potential
+        // Step 3: returns one of the previous voting power maps (with minimum total potential
         // voting power) since a voting power spike is detected.
         let previous_voting_power_snapshot = VotingPowerSnapshot::from((
             voting_power_map,

@@ -10,10 +10,10 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Parser;
 use reqwest::blocking::ClientBuilder;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use url::Url;
 
 use ic_prep_lib::{
@@ -35,8 +35,7 @@ const UPD_IMG_DEFAULT_SHA256_URL: &str =
 /// in case the replica version id is specified on the command line, but not the
 /// release package url and hash, the following url-template will be used to
 /// specify the update image.
-const UPD_IMG_DEFAULT_URL: &str =
-    "https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img-dev/update-img.tar.zst";
+const UPD_IMG_DEFAULT_URL: &str = "https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img-dev/update-img.tar.zst";
 const CDN_HTTP_ATTEMPTS: usize = 3;
 const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(12);
@@ -169,16 +168,16 @@ fn main() -> Result<()> {
     let mut valid_args = CliArgs::parse().validate()?;
 
     // set replica update image if necessary
-    if let Some(ref replica_version_id) = valid_args.replica_version_id {
-        if !valid_args.allow_empty_update_image && valid_args.release_package_download_url.is_none()
-        {
-            let url = Url::parse(
-                &UPD_IMG_DEFAULT_URL.replace("<REPLICA_VERSION>", replica_version_id.as_ref()),
-            )?;
-            valid_args.release_package_download_url = Some(url);
-            valid_args.release_package_sha256_hex =
-                Some(fetch_replica_version_sha256(replica_version_id.clone())?);
-        }
+    if let Some(ref replica_version_id) = valid_args.replica_version_id
+        && !valid_args.allow_empty_update_image
+        && valid_args.release_package_download_url.is_none()
+    {
+        let url = Url::parse(
+            &UPD_IMG_DEFAULT_URL.replace("<REPLICA_VERSION>", replica_version_id.as_ref()),
+        )?;
+        valid_args.release_package_download_url = Some(url);
+        valid_args.release_package_sha256_hex =
+            Some(fetch_replica_version_sha256(replica_version_id.clone())?);
     }
 
     let replica_version = valid_args.replica_version_id.unwrap_or_default();
@@ -227,6 +226,7 @@ fn main() -> Result<()> {
         Some(root_subnet_idx),
         valid_args.release_package_download_url,
         valid_args.release_package_sha256_hex,
+        /*guest_launch_measurements = */ None,
         valid_args.provisional_whitelist,
         valid_args.initial_node_operator,
         valid_args.initial_node_provider,
@@ -356,7 +356,7 @@ impl CliArgs {
                         .iter()
                         .map(|s| {
                             PrincipalId::from_str(s)
-                                .with_context(|| format!("could not convert {} to principal", s))
+                                .with_context(|| format!("could not convert {s} to principal"))
                         })
                         .collect::<Result<BTreeSet<PrincipalId>>>()?;
 
@@ -406,13 +406,9 @@ impl CliArgs {
             ssh_backup_access: self
                 .ssh_backup_access_file
                 .map_or(vec![], read_keys_from_pub_file),
-            max_ingress_bytes_per_message: self.max_ingress_bytes_per_message.and_then(|x| {
-                if x >= 0 {
-                    Some(x as u64)
-                } else {
-                    None
-                }
-            }),
+            max_ingress_bytes_per_message: self
+                .max_ingress_bytes_per_message
+                .and_then(|x| if x >= 0 { Some(x as u64) } else { None }),
             max_block_payload_size: self.max_block_payload_size,
             allow_empty_update_image: self.allow_empty_update_image,
             use_specified_ids_allocation_range: self.use_specified_ids_allocation_range,
@@ -424,20 +420,23 @@ impl CliArgs {
 
 fn read_keys_from_pub_file(filename: PathBuf) -> Vec<String> {
     let mut keys = Vec::<String>::new();
-    if let Ok(file) = fs::File::open(filename.clone()) {
-        for line in io::BufReader::new(file).lines() {
-            match line {
-                Ok(key) => keys.push(key),
-                Err(e) => eprintln!(
-                    "Error while reading a key from {}: {}",
-                    filename.as_path().display(),
-                    e
-                ),
+    match fs::File::open(filename.clone()) {
+        Ok(file) => {
+            for line in io::BufReader::new(file).lines() {
+                match line {
+                    Ok(key) => keys.push(key),
+                    Err(e) => eprintln!(
+                        "Error while reading a key from {}: {}",
+                        filename.as_path().display(),
+                        e
+                    ),
+                }
             }
+            keys
         }
-        keys
-    } else {
-        vec![]
+        _ => {
+            vec![]
+        }
     }
 }
 
@@ -485,7 +484,11 @@ fn fetch_replica_version_sha256(version_id: ReplicaVersion) -> Result<String> {
         }
     }
 
-    bail!("SHA256 hash is not found at: {}. Make sure the file is downloadable and contains an entry for {}", url, UPD_IMG_FILENAME);
+    bail!(
+        "SHA256 hash is not found at: {}. Make sure the file is downloadable and contains an entry for {}",
+        url,
+        UPD_IMG_FILENAME
+    );
 }
 
 #[cfg(test)]
@@ -536,7 +539,7 @@ mod test_flag_node_parser {
     /// Verifies that unknown fields return an Err
     #[test]
     fn unknown_fields() {
-        let flag = format!("new_field:0,{}", GOOD_FLAG);
+        let flag = format!("new_field:0,{GOOD_FLAG}");
         assert_matches!(Node::from_json5_without_braces(&flag), Err(_));
     }
 

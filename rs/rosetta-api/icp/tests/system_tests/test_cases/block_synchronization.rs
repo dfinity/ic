@@ -5,10 +5,10 @@ use crate::common::utils::test_identity;
 use crate::common::utils::wait_for_rosetta_to_sync_up_to_block;
 use candid::Encode;
 use candid::Principal;
-use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
+use ic_agent::identity::BasicIdentity;
 use ic_icp_rosetta_runner::RosettaOptions;
-use ic_icrc1_test_utils::{minter_identity, valid_transactions_strategy, DEFAULT_TRANSFER_FEE};
+use ic_icrc1_test_utils::{DEFAULT_TRANSFER_FEE, minter_identity, valid_transactions_strategy};
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use icp_ledger::LedgerCanisterPayload;
 use icp_ledger::LedgerCanisterUpgradePayload;
@@ -113,21 +113,23 @@ fn test_ledger_upgrade_synchronization() {
                         .reinstall_canister(
                             ledger_canister_id,
                             ledger_wasm_mainnet,
-                            Encode!(&icp_ledger::LedgerCanisterInitPayload::builder()
-                                .minting_account(MINTING_IDENTITY.sender().unwrap().into())
-                                // We need some initial values otherwise the install fails
-                                .initial_values(
-                                    [(
-                                        icp_ledger::AccountIdentifier::new(
-                                            test_identity().sender().unwrap().into(),
-                                            None
-                                        ),
-                                        icp_ledger::Tokens::from_tokens(1_000_000_000).unwrap(),
-                                    )]
-                                    .into()
-                                )
-                                .build()
-                                .unwrap())
+                            Encode!(
+                                &icp_ledger::LedgerCanisterInitPayload::builder()
+                                    .minting_account(MINTING_IDENTITY.sender().unwrap().into())
+                                    // We need some initial values otherwise the install fails
+                                    .initial_values(
+                                        [(
+                                            icp_ledger::AccountIdentifier::new(
+                                                test_identity().sender().unwrap().into(),
+                                                None
+                                            ),
+                                            icp_ledger::Tokens::from_tokens(1_000_000_000).unwrap(),
+                                        )]
+                                        .into()
+                                    )
+                                    .build()
+                                    .unwrap()
+                            )
                             .unwrap(),
                             None,
                         )
@@ -175,10 +177,8 @@ fn test_ledger_upgrade_synchronization() {
                     .await;
 
                     // Now we upgrade the ledger canister to the latest version of the current branch
-                    let ledger_wasm_current_branch = std::fs::read(
-                        std::env::var("LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH").unwrap(),
-                    )
-                    .unwrap();
+                    let ledger_wasm_current_branch =
+                        std::fs::read(std::env::var("LEDGER_CANISTER_WASM_PATH").unwrap()).unwrap();
                     env.pocket_ic
                         .upgrade_canister(
                             ledger_canister_id,

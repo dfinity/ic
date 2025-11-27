@@ -1,0 +1,39 @@
+package(default_visibility = ["//visibility:public"])
+
+# There is no way using new_git_repository to check out only a limited number of submodules, furthermore
+# new_git_repository does not cache the git repo, therefore it takes much longer. We found a bug in new_git_repository,
+# with filenames containing non-ASCII characters. Because of all these reasons, we use a genrule instead.
+genrule(
+    name = "ovmf_sev",
+    outs = ["OVMF_SEV.fd"],
+    cmd = """
+        REPOSITORY=https://github.com/tianocore/edk2.git
+        COMMIT=6951dfe7d59d144a3a980bd7eda699db2d8554ac # edk2-stable202505
+
+        out="$$(realpath $@)"
+        workdir="$$(mktemp -d)"
+        trap "rm -rf $$workdir" EXIT
+        cd "$$workdir"
+        git clone "$$REPOSITORY"
+        cd edk2
+        git checkout "$$COMMIT"
+        git submodule update --init \
+            BaseTools/Source/C/BrotliCompress/brotli \
+            MdePkg/Library/MipiSysTLib/mipisyst \
+            MdeModulePkg/Library/BrotliCustomDecompressLib/brotli \
+            SecurityPkg/DeviceSecurity/SpdmLib/libspdm \
+            CryptoPkg/Library/OpensslLib/openssl \
+            CryptoPkg/Library/MbedTlsLib/mbedtls
+
+
+        # Required for building AmdSev package without grub. Workaround found in
+        # https://github.com/kata-containers/kata-containers/blob/d0df91935b8840036c2891b1f93dd8059ebe486a/tools/packaging/static-build/ovmf/build-ovmf.sh#L53
+        touch OvmfPkg/AmdSev/Grub/grub.efi
+
+        OvmfPkg/build.sh -a X64 -b RELEASE -t CLANGDWARF -p OvmfPkg/AmdSev/AmdSevX64.dsc
+
+        mv Build/AmdSev/RELEASE_CLANGDWARF/FV/OVMF.fd "$$out"
+    """,
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+)

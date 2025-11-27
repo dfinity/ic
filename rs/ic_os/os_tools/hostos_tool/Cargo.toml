@@ -1,7 +1,7 @@
 [package]
 name = "hostos_tool"
 version = "1.0.0"
-edition = "2021"
+edition.workspace = true
 
 [[bin]]
 name = "hostos_tool"
@@ -13,7 +13,10 @@ clap = { workspace = true }
 config = { path = "../../config" }
 config_types = { path = "../../config_types" }
 deterministic_ips = { path = "../../deterministic_ips" }
+guestos_recovery_tui = { path = "../guestos_recovery_tui" }
+itertools = { workspace = true }
 network = { path = "../../network" }
+regex = { workspace = true }
 utils = { path = "../../utils" }
 
 [features]

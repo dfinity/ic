@@ -1,12 +1,11 @@
 use super::*;
 use assert_matches::assert_matches;
-use candid_parser::utils::{service_equal, CandidSource};
+use candid_parser::utils::{CandidSource, service_equal};
 use ic_sns_governance::pb::v1::{
+    UpgradeJournal, UpgradeJournalEntry,
     governance::{Version, Versions},
     upgrade_journal_entry::{Event, UpgradeStepsRefreshed},
-    DisburseMaturityInProgress, Neuron, UpgradeJournal, UpgradeJournalEntry,
 };
-use maplit::btreemap;
 use pretty_assertions::assert_eq;
 use std::collections::HashSet;
 
@@ -57,60 +56,8 @@ fn test_set_time_warp() {
     environment.set_time_warp(TimeWarp { delta_s: 1_000 });
     let delta_s = environment.now() - start;
 
-    assert!(delta_s >= 1000, "delta_s = {}", delta_s);
-    assert!(delta_s < 1005, "delta_s = {}", delta_s);
-}
-
-#[test]
-fn test_populate_finalize_disbursement_timestamp_seconds() {
-    // Step 1: prepare a neuron with 2 in progress disbursement, one with
-    // finalize_disbursement_timestamp_seconds as None, and the other has incorrect timestamp.
-    let mut governance_proto = sns_gov_pb::Governance {
-        neurons: btreemap! {
-            "1".to_string() => Neuron {
-                disburse_maturity_in_progress: vec![
-                    DisburseMaturityInProgress {
-                        timestamp_of_disbursement_seconds: 1,
-                        finalize_disbursement_timestamp_seconds: None,
-                        ..Default::default()
-                    },
-                    DisburseMaturityInProgress {
-                        timestamp_of_disbursement_seconds: 2,
-                        finalize_disbursement_timestamp_seconds: Some(3),
-                        ..Default::default()
-                    }
-                ],
-                ..Default::default()
-            },
-        },
-        ..Default::default()
-    };
-
-    // Step 2: populates the timestamps.
-    populate_finalize_disbursement_timestamp_seconds(&mut governance_proto);
-
-    // Step 3: verifies that both disbursements have the correct finalization timestamps.
-    let expected_governance_proto = sns_gov_pb::Governance {
-        neurons: btreemap! {
-            "1".to_string() => Neuron {
-                disburse_maturity_in_progress: vec![
-                    DisburseMaturityInProgress {
-                        timestamp_of_disbursement_seconds: 1,
-                        finalize_disbursement_timestamp_seconds: Some(1 + MATURITY_DISBURSEMENT_DELAY_SECONDS),
-                        ..Default::default()
-                    },
-                    DisburseMaturityInProgress {
-                        timestamp_of_disbursement_seconds: 2,
-                        finalize_disbursement_timestamp_seconds: Some(2 + MATURITY_DISBURSEMENT_DELAY_SECONDS),
-                        ..Default::default()
-                    },
-                ],
-                ..Default::default()
-            },
-        },
-        ..Default::default()
-    };
-    assert_eq!(governance_proto, expected_governance_proto);
+    assert!(delta_s >= 1000, "delta_s = {delta_s}");
+    assert!(delta_s < 1005, "delta_s = {delta_s}");
 }
 
 #[test]
@@ -153,9 +100,7 @@ fn test_upgrade_journal() {
 
     assert!(
         expected_headers.is_subset(&observed_headers),
-        "{:?} is expected to be a subset of {:?}",
-        expected_headers,
-        observed_headers
+        "{expected_headers:?} is expected to be a subset of {observed_headers:?}"
     );
 
     let observed_journal_str = std::str::from_utf8(&observed_body).unwrap();

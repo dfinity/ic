@@ -26,6 +26,6 @@ pub async fn transfer(
         .await?;
     match res {
         Ok(n) => Ok(n.0.to_u64().unwrap()),
-        Err(e) => Err(format!("{:?}", e)),
+        Err(e) => Err(format!("{e:?}")),
     }
 }

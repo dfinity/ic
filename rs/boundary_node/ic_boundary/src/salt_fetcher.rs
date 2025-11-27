@@ -9,14 +9,14 @@ use async_trait::async_trait;
 use candid::{Decode, Encode, Principal};
 use ic_agent::Agent;
 use ic_bn_lib::prometheus::{
-    register_int_counter_vec_with_registry, register_int_gauge_with_registry, IntCounterVec,
-    IntGauge, Registry,
+    IntCounterVec, IntGauge, Registry, register_int_counter_vec_with_registry,
+    register_int_gauge_with_registry,
 };
-use ic_bn_lib::tasks::Run;
+use ic_bn_lib_common::traits::Run;
 use salt_sharing_api::{GetSaltError, GetSaltResponse};
 use tokio::{
     select,
-    time::{interval, MissedTickBehavior},
+    time::{MissedTickBehavior, interval},
 };
 use tokio_util::sync::CancellationToken;
 use tracing::warn;

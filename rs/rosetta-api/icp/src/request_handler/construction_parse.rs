@@ -1,25 +1,26 @@
 use crate::{
-    convert::{self, from_arg, to_model_account_identifier},
+    convert::{self, from_account_or_account_identifier, from_arg, to_model_account_identifier},
     errors::ApiError,
     models::{ConstructionParseRequest, ConstructionParseResponse, ParsedTransaction},
-    request_handler::{verify_network_id, RosettaRequestHandler},
+    request_handler::{RosettaRequestHandler, verify_network_id},
     request_types::{
-        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, NeuronInfo,
-        PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey, RequestType,
-        SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, DisburseMaturity, Follow, ListNeurons,
+        NeuronInfo, PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey,
+        RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve,
+        StopDissolve,
     },
 };
 use rosetta_core::objects::ObjectMap;
 
 use ic_nns_governance_api::{
-    manage_neuron::{self, Command, NeuronIdOrSubaccount},
-    ClaimOrRefreshNeuronFromAccount, ManageNeuron,
+    ClaimOrRefreshNeuronFromAccount, ManageNeuronCommandRequest, ManageNeuronRequest,
+    manage_neuron::{self, NeuronIdOrSubaccount},
 };
 
 use crate::{models::seconds::Seconds, request::Request};
 use ic_types::{
-    messages::{Blob, HttpCallContent, HttpCanisterUpdate},
     PrincipalId,
+    messages::{Blob, HttpCallContent, HttpCanisterUpdate},
 };
 use icp_ledger::{AccountIdentifier, Operation, SendArgs};
 use std::convert::TryFrom;
@@ -77,6 +78,9 @@ impl RosettaRequestHandler {
                 }
                 RequestType::Disburse { neuron_index } => {
                     disburse(&mut requests, arg, from, neuron_index)?
+                }
+                RequestType::DisburseMaturity { neuron_index } => {
+                    disburse_maturity(&mut requests, arg, from, neuron_index)?
                 }
                 RequestType::AddHotKey { neuron_index } => {
                     add_hotkey(&mut requests, arg, from, neuron_index)?
@@ -163,7 +167,7 @@ fn stake(
     neuron_index: u64,
 ) -> Result<(), ApiError> {
     let _: ClaimOrRefreshNeuronFromAccount = candid::decode_one(arg.0.as_ref()).map_err(|e| {
-        ApiError::internal_error(format!("Could not decode Create Stake argument: {:?}", e))
+        ApiError::internal_error(format!("Could not decode Create Stake argument: {e:?}"))
     })?;
     requests.push(Request::Stake(Stake {
         account: from,
@@ -178,19 +182,17 @@ fn change_auto_stake_maturity(
     from: AccountIdentifier,
     neuron_index: u64,
 ) -> Result<(), ApiError> {
-    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+    let manage: ManageNeuronRequest = candid::decode_one(arg.0.as_ref()).map_err(|e| {
         ApiError::internal_error(format!(
-            "Could not decode Change Auto Stake Maturity argument: {:?}",
-            e
+            "Could not decode Change Auto Stake Maturity argument: {e:?}"
         ))
     })?;
     let requested_setting_for_auto_stake_maturity = match manage.command {
-        Some(Command::Configure(manage_neuron::Configure {
+        Some(ManageNeuronCommandRequest::Configure(manage_neuron::Configure {
             operation: Some(manage_neuron::configure::Operation::ChangeAutoStakeMaturity(d)),
         })) => Ok(d.requested_setting_for_auto_stake_maturity),
         Some(e) => Err(ApiError::internal_error(format!(
-            "Incompatible manage_neuron command: {:?}",
-            e
+            "Incompatible manage_neuron command: {e:?}"
         ))),
         None => Err(ApiError::internal_error(
             "Missing manage_neuron command".to_string(),
@@ -211,19 +213,17 @@ fn set_dissolve_timestamp(
     from: AccountIdentifier,
     neuron_index: u64,
 ) -> Result<(), ApiError> {
-    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+    let manage: ManageNeuronRequest = candid::decode_one(arg.0.as_ref()).map_err(|e| {
         ApiError::internal_error(format!(
-            "Could not decode Set Dissolve Timestamp argument: {:?}",
-            e
+            "Could not decode Set Dissolve Timestamp argument: {e:?}"
         ))
     })?;
     let timestamp = Seconds(match manage.command {
-        Some(Command::Configure(manage_neuron::Configure {
+        Some(ManageNeuronCommandRequest::Configure(manage_neuron::Configure {
             operation: Some(manage_neuron::configure::Operation::SetDissolveTimestamp(d)),
         })) => Ok(d.dissolve_timestamp_seconds),
         Some(e) => Err(ApiError::internal_error(format!(
-            "Incompatible manage_neuron command: {:?}",
-            e
+            "Incompatible manage_neuron command: {e:?}"
         ))),
         None => Err(ApiError::internal_error(
             "Missing manage_neuron command".to_string(),
@@ -244,16 +244,18 @@ fn start_dissolve(
     from: AccountIdentifier,
     neuron_index: u64,
 ) -> Result<(), ApiError> {
-    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
-        ApiError::internal_error(format!("Could not decode Start Dissolve argument: {:?}", e))
+    let manage: ManageNeuronRequest = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+        ApiError::internal_error(format!("Could not decode Start Dissolve argument: {e:?}"))
     })?;
     if !matches!(
         manage.command,
-        Some(Command::Configure(manage_neuron::Configure {
-            operation: Some(manage_neuron::configure::Operation::StartDissolving(
-                manage_neuron::StartDissolving {},
-            )),
-        }))
+        Some(ManageNeuronCommandRequest::Configure(
+            manage_neuron::Configure {
+                operation: Some(manage_neuron::configure::Operation::StartDissolving(
+                    manage_neuron::StartDissolving {},
+                )),
+            }
+        ))
     ) {
         return Err(ApiError::internal_error(
             "Incompatible manage_neuron command".to_string(),
@@ -273,16 +275,18 @@ fn stop_dissolve(
     from: AccountIdentifier,
     neuron_index: u64,
 ) -> Result<(), ApiError> {
-    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
-        ApiError::internal_error(format!("Could not decode Stop Dissolve argument: {:?}", e))
+    let manage: ManageNeuronRequest = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+        ApiError::internal_error(format!("Could not decode Stop Dissolve argument: {e:?}"))
     })?;
     if !matches!(
         manage.command,
-        Some(Command::Configure(manage_neuron::Configure {
-            operation: Some(manage_neuron::configure::Operation::StopDissolving(
-                manage_neuron::StopDissolving {},
-            )),
-        }))
+        Some(ManageNeuronCommandRequest::Configure(
+            manage_neuron::Configure {
+                operation: Some(manage_neuron::configure::Operation::StopDissolving(
+                    manage_neuron::StopDissolving {},
+                )),
+            }
+        ))
     ) {
         return Err(ApiError::internal_error(
             "Incompatible manage_neuron command".to_string(),
@@ -302,11 +306,12 @@ fn disburse(
     from: AccountIdentifier,
     neuron_index: u64,
 ) -> Result<(), ApiError> {
-    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
-        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {:?}", e))
+    let manage: ManageNeuronRequest = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:?}"))
     })?;
-    if let ManageNeuron {
-        command: Some(Command::Disburse(manage_neuron::Disburse { to_account, amount })),
+    if let ManageNeuronRequest {
+        command:
+            Some(ManageNeuronCommandRequest::Disburse(manage_neuron::Disburse { to_account, amount })),
         ..
     } = manage
     {
@@ -317,12 +322,47 @@ fn disburse(
                 AccountIdentifier::try_from(&a)
                     .map_err(|e| {
                         ApiError::internal_error(format!(
-                            "Could not parse recipient AccountIdentifier {:?}",
-                            e
+                            "Could not parse recipient AccountIdentifier {e:?}"
                         ))
                     })
                     .map(Some)
             })?,
+            neuron_index,
+        }));
+    } else {
+        return Err(ApiError::internal_error(
+            "Incompatible manage_neuron command".to_string(),
+        ));
+    };
+    Ok(())
+}
+
+/// Handle DISBURSE_MATURITY.
+fn disburse_maturity(
+    requests: &mut Vec<Request>,
+    arg: Blob,
+    from: AccountIdentifier,
+    neuron_index: u64,
+) -> Result<(), ApiError> {
+    let manage: ManageNeuronRequest = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:?}"))
+    })?;
+    if let ManageNeuronRequest {
+        command:
+            Some(ManageNeuronCommandRequest::DisburseMaturity(manage_neuron::DisburseMaturity {
+                to_account,
+                percentage_to_disburse,
+                to_account_identifier,
+            })),
+        ..
+    } = manage
+    {
+        let recipient = from_account_or_account_identifier(to_account, to_account_identifier)?;
+
+        requests.push(Request::DisburseMaturity(DisburseMaturity {
+            account: from,
+            percentage_to_disburse,
+            recipient,
             neuron_index,
         }));
     } else {
@@ -340,10 +380,10 @@ fn add_hotkey(
     from: AccountIdentifier,
     neuron_index: u64,
 ) -> Result<(), ApiError> {
-    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
-        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {:?}", e))
+    let manage: ManageNeuronRequest = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:?}"))
     })?;
-    if let Some(Command::Configure(manage_neuron::Configure {
+    if let Some(ManageNeuronCommandRequest::Configure(manage_neuron::Configure {
         operation:
             Some(manage_neuron::configure::Operation::AddHotKey(manage_neuron::AddHotKey {
                 new_hot_key: Some(pid),
@@ -370,10 +410,10 @@ fn remove_hotkey(
     from: AccountIdentifier,
     neuron_index: u64,
 ) -> Result<(), ApiError> {
-    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
-        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {:?}", e))
+    let manage: ManageNeuronRequest = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:?}"))
     })?;
-    if let Some(Command::Configure(manage_neuron::Configure {
+    if let Some(ManageNeuronCommandRequest::Configure(manage_neuron::Configure {
         operation:
             Some(manage_neuron::configure::Operation::RemoveHotKey(manage_neuron::RemoveHotKey {
                 hot_key_to_remove: Some(pid),
@@ -400,10 +440,10 @@ fn spawn(
     from: AccountIdentifier,
     neuron_index: u64,
 ) -> Result<(), ApiError> {
-    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
-        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {:?}", e))
+    let manage: ManageNeuronRequest = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:?}"))
     })?;
-    if let Some(Command::Spawn(manage_neuron::Spawn {
+    if let Some(ManageNeuronCommandRequest::Spawn(manage_neuron::Spawn {
         new_controller,
         nonce,
         percentage_to_spawn,
@@ -436,11 +476,13 @@ fn register_vote(
     from: AccountIdentifier,
     neuron_index: u64,
 ) -> Result<(), ApiError> {
-    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
-        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {:?}", e))
+    let manage: ManageNeuronRequest = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:?}"))
     })?;
-    if let Some(Command::RegisterVote(manage_neuron::RegisterVote { proposal, vote })) =
-        manage.command
+    if let Some(ManageNeuronCommandRequest::RegisterVote(manage_neuron::RegisterVote {
+        proposal,
+        vote,
+    })) = manage.command
     {
         requests.push(Request::RegisterVote(RegisterVote {
             account: from,
@@ -463,10 +505,10 @@ fn stake_maturity(
     from: AccountIdentifier,
     neuron_index: u64,
 ) -> Result<(), ApiError> {
-    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
-        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {:?}", e))
+    let manage: ManageNeuronRequest = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:?}"))
     })?;
-    if let Some(Command::StakeMaturity(manage_neuron::StakeMaturity {
+    if let Some(ManageNeuronCommandRequest::StakeMaturity(manage_neuron::StakeMaturity {
         percentage_to_stake,
     })) = manage.command
     {
@@ -492,7 +534,7 @@ fn neuron_info(
     controller: Option<PublicKeyOrPrincipal>,
 ) -> Result<(), ApiError> {
     let _: NeuronIdOrSubaccount = candid::decode_one(arg.0.as_ref()).map_err(|e| {
-        ApiError::internal_error(format!("Could not decode neuron info argument: {:?}", e))
+        ApiError::internal_error(format!("Could not decode neuron info argument: {e:?}"))
     })?;
 
     match controller.map(convert::principal_id_from_public_key_or_principal) {
@@ -539,10 +581,12 @@ fn follow(
     neuron_index: u64,
     controller: Option<PublicKeyOrPrincipal>,
 ) -> Result<(), ApiError> {
-    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
-        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {:?}", e))
+    let manage: ManageNeuronRequest = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:?}"))
     })?;
-    if let Some(Command::Follow(manage_neuron::Follow { topic, followees })) = manage.command {
+    if let Some(ManageNeuronCommandRequest::Follow(manage_neuron::Follow { topic, followees })) =
+        manage.command
+    {
         let ids = followees.iter().map(|x| x.id).collect();
         match controller.map(convert::principal_id_from_public_key_or_principal) {
             None => {
@@ -582,10 +626,12 @@ fn refresh_voting_power(
     neuron_index: u64,
     controller: Option<PublicKeyOrPrincipal>,
 ) -> Result<(), ApiError> {
-    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
-        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {:?}", e))
+    let manage: ManageNeuronRequest = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {e:?}"))
     })?;
-    if let Some(Command::RefreshVotingPower(manage_neuron::RefreshVotingPower {})) = manage.command
+    if let Some(ManageNeuronCommandRequest::RefreshVotingPower(
+        manage_neuron::RefreshVotingPower {},
+    )) = manage.command
     {
         let pid = match controller.map(convert::principal_id_from_public_key_or_principal) {
             None => None,
@@ -622,10 +668,10 @@ mod tests {
     use crate::{
         ledger_client::LedgerClient,
         models::{
-            operation::OperationType, Amount, ConstructionCombineRequest,
-            ConstructionDeriveRequest, ConstructionParseRequest, ConstructionPayloadsRequest,
+            Amount, ConstructionCombineRequest, ConstructionDeriveRequest,
+            ConstructionParseRequest, ConstructionPayloadsRequest,
             ConstructionPayloadsRequestMetadata, Currency, CurveType, Operation,
-            OperationIdentifier, PublicKey, Signature, SignatureType,
+            OperationIdentifier, PublicKey, Signature, SignatureType, operation::OperationType,
         },
         request_handler::RosettaRequestHandler,
     };

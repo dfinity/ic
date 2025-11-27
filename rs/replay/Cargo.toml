@@ -17,6 +17,7 @@ ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-certification = { path = "../consensus/certification" }
+ic-consensus-cup-utils = { path = "../consensus/cup_utils" }
 ic-consensus-dkg = { path = "../consensus/dkg" }
 ic-consensus-utils = { path = "../consensus/utils" }
 ic-crypto-for-verification-only = { path = "../crypto/for_verification_only" }
@@ -49,6 +50,7 @@ icp-ledger = { path = "../ledger_suite/icp" }
 mockall = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
+rayon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }

@@ -98,6 +98,13 @@ impl NetworkEconomics {
             voting_power_economics: Some(VotingPowerEconomics::with_default_values()),
         }
     }
+
+    pub fn with_mainnet_values() -> Self {
+        let mut network_economics = Self::with_default_values();
+        network_economics.reject_cost_e8s = 25 * E8S_PER_ICP; // 25 ICP
+        network_economics.maximum_node_provider_rewards_e8s = 100_000 * E8S_PER_ICP; // 100k ICP
+        network_economics
+    }
 }
 
 impl VotingPowerEconomics {
@@ -245,15 +252,11 @@ impl CreateServiceNervousSystem {
                 .find(|&timestamp| timestamp > swap_approved_timestamp_seconds + ONE_DAY_SECONDS)
                 .ok_or(format!(
                     "Unable to find a swap start time after the swap was approved. \
-                     swap_approved_timestamp_seconds = {}, \
-                     midnight_after_swap_approved_timestamp_seconds = {}, \
-                     start_time_of_day = {}, \
-                     duration = {} \
+                     swap_approved_timestamp_seconds = {swap_approved_timestamp_seconds}, \
+                     midnight_after_swap_approved_timestamp_seconds = {midnight_after_swap_approved_timestamp_seconds}, \
+                     start_time_of_day = {start_time_of_day}, \
+                     duration = {duration} \
                      This is probably a bug.",
-                    swap_approved_timestamp_seconds,
-                    midnight_after_swap_approved_timestamp_seconds,
-                    start_time_of_day,
-                    duration,
                 ))?
         };
 

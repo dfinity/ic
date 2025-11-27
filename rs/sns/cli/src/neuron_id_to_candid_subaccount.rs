@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use candid_utils::printing;
 use clap::Parser;
 use ic_sns_governance_api::pb::v1::NeuronId;

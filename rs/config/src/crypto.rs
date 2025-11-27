@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 #[cfg(test)]
-use proptest::prelude::{any, prop_oneof, Strategy};
+use proptest::prelude::{Strategy, any, prop_oneof};
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use std::fs::Permissions;
@@ -175,7 +175,6 @@ impl CryptoConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir as tempdir_deleted_at_end_of_scope;
 
     // TODO(CRP-1338): review the creation/usage of the temp dirs.
@@ -195,18 +194,6 @@ mod tests {
     #[test]
     fn default_config_serializes_and_deserializes() {
         CryptoConfig::run_with_temp_config(serde_test);
-    }
-
-    proptest! {
-        #[allow(dead_code)]
-        // #[test]
-        // TODO(CRP-323): The current json5 implementation is buggy:
-        // Unicode code points U+2028 and U+2029 are not escaped/parsed properly.
-        // This test is disabled until issue is fixed.
-        // https://github.com/callum-oakley/json5-rs/issues/21
-        fn arbitrary_config_serializes_and_deserializes(config: CryptoConfig) {
-            serde_test(config);
-        }
     }
 
     #[test]
@@ -234,18 +221,18 @@ mod tests {
             dir.path().to_owned()
         };
         let result = CryptoConfig::check_dir_has_required_permissions(&dir_path);
-        assert!(result.is_err(), "{:?}", result);
+        assert!(result.is_err(), "{result:?}");
     }
 
     #[test]
     fn config_dir_check_should_fail_for_paths_that_are_widely_readable() {
         let dir = mk_temp_dir_with_permissions(0o700);
         let result = CryptoConfig::check_dir_has_required_permissions(dir.as_ref());
-        assert!(result.is_ok(), "{:?}", result);
+        assert!(result.is_ok(), "{result:?}");
         for mode in 0o701..=0o707 {
             let dir = mk_temp_dir_with_permissions(mode);
             let result = CryptoConfig::check_dir_has_required_permissions(dir.as_ref());
-            assert!(result.is_err(), "{:?}", result);
+            assert!(result.is_err(), "{result:?}");
         }
     }
 
@@ -253,11 +240,11 @@ mod tests {
     fn config_dir_check_should_fail_for_paths_that_are_not_accessible_for_owner() {
         let dir = mk_temp_dir_with_permissions(0o700);
         let result = CryptoConfig::check_dir_has_required_permissions(dir.as_ref());
-        assert!(result.is_ok(), "{:?}", result);
+        assert!(result.is_ok(), "{result:?}");
         for mode in [0o000, 0o100, 0o200, 0o300, 0o400, 0o500, 0o600] {
             let dir = mk_temp_dir_with_permissions(mode);
             let result = CryptoConfig::check_dir_has_required_permissions(dir.as_ref());
-            assert!(result.is_err(), "{:?}", result);
+            assert!(result.is_err(), "{result:?}");
         }
     }
 }

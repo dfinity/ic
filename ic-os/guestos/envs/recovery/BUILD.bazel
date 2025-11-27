@@ -11,7 +11,6 @@ icos_images = icos_build(
     name = "recovery",
     image_deps_func = image_deps,
     tags = [
-        "manual",
         "no-cache",
     ],
     visibility = [
@@ -23,18 +22,30 @@ file_size_check(
     name = "disk_img_size_check",
     file = icos_images.disk_image,
     max_file_size = 450 * 1000 * 1000,  # 419 MB on 2025-06-26
+    tags = [
+        "manual",
+        "no-cache",
+    ],
 )
 
 file_size_check(
     name = "update_img_size_check",
     file = icos_images.update_image,
     max_file_size = 450 * 1000 * 1000,  # 417 MB on 2025-06-26
+    tags = [
+        "manual",
+        "no-cache",
+    ],
 )
 
 file_size_check(
     name = "update_img_test_size_check",
     file = icos_images.update_image_test,
     max_file_size = 450 * 1000 * 1000,  # 417 MB on 2025-06-26
+    tags = [
+        "manual",
+        "no-cache",
+    ],
 )
 
 artifact_bundle(
@@ -42,13 +53,12 @@ artifact_bundle(
     inputs = [
         icos_images.update_image,
         icos_images.update_image_test,
+        icos_images.launch_measurements,
+        icos_images.launch_measurements_test,
     ],
     prefix = "guest-os/update-img-recovery",
     tags = [
         "manual",
-        "no-cache",
     ],
-    visibility = [
-        "//rs:ic-os-pkg",
-    ],
+    visibility = ["//visibility:public"],
 )

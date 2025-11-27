@@ -17,7 +17,7 @@
 //! into a complete finalization, at which point the block and its ancestors
 //! become finalized.
 use crate::consensus::{
-    batch_delivery::deliver_batches,
+    batch_delivery::deliver_batches_with_result_processor,
     metrics::{BatchStats, BlockStats, FinalizerMetrics},
 };
 use ic_consensus_utils::{
@@ -29,23 +29,23 @@ use ic_interfaces::{
     time_source::system_time_now,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{debug, trace, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, trace};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
+    Height,
     consensus::{FinalizationContent, FinalizationShare, HashedBlock},
     replica_config::ReplicaConfig,
-    Height,
 };
 use std::{cell::RefCell, sync::Arc, time::Instant};
 
-pub struct Finalizer {
-    pub(crate) replica_config: ReplicaConfig,
+pub(crate) struct Finalizer {
+    replica_config: ReplicaConfig,
     registry_client: Arc<dyn RegistryClient>,
     membership: Arc<Membership>,
     pub(crate) crypto: Arc<dyn ConsensusCrypto>,
     message_routing: Arc<dyn MessageRouting>,
     ingress_selector: Arc<dyn IngressSelector>,
-    pub(crate) log: ReplicaLogger,
+    log: ReplicaLogger,
     metrics: FinalizerMetrics,
     prev_finalized_height: RefCell<Height>,
     last_batch_delivered_at: RefCell<Option<Instant>>,
@@ -95,7 +95,7 @@ impl Finalizer {
         }
 
         // Try to deliver finalized batches to messaging
-        let _ = deliver_batches(
+        let _ = deliver_batches_with_result_processor(
             &*self.message_routing,
             &self.membership,
             pool,
@@ -116,7 +116,6 @@ impl Finalizer {
     }
 
     /// Write logs, report metrics depending on the batch deliver result.
-    #[allow(clippy::too_many_arguments)]
     fn process_batch_delivery_result(
         &self,
         result: &Result<(), MessageRoutingError>,
@@ -253,7 +252,7 @@ impl Finalizer {
 mod tests {
     //! Finalizer unit tests
     use super::*;
-    use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies, dependencies_with_subnet_params};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{
@@ -262,8 +261,8 @@ mod tests {
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::{HasHeight, HashedBlock},
         RegistryVersion,
+        consensus::{HasHeight, HashedBlock},
     };
     use std::sync::Arc;
 

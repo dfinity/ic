@@ -1,6 +1,6 @@
 use clap::Parser;
 use ic_adapter_metrics_server::start_metrics_grpc;
-use ic_btc_adapter::{start_server, IncomingSource};
+use ic_btc_adapter::{IncomingSource, start_server};
 use ic_http_endpoints_async_utils::abort_on_panic;
 use ic_http_endpoints_async_utils::incoming_from_nth_systemd_socket;
 use ic_http_endpoints_async_utils::shutdown_signal;
@@ -21,7 +21,7 @@ pub async fn main() {
     let config = match cli.get_config() {
         Ok(config) => config,
         Err(err) => {
-            panic!("An error occurred while getting the config: {}", err);
+            panic!("An error occurred while getting the config: {err}");
         }
     };
     let (log, _async_log_guard) = new_replica_logger_from_config(&config.logger);
@@ -44,11 +44,6 @@ pub async fn main() {
         start_metrics_grpc(metrics_registry.clone(), log.clone(), stream);
     }
 
-    start_server(
-        &log,
-        &metrics_registry,
-        &tokio::runtime::Handle::current(),
-        config,
-    );
-    shutdown_signal(log.inner_logger.root.clone()).await;
+    start_server(log.clone(), metrics_registry, config).await;
+    shutdown_signal(log).await;
 }

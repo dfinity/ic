@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
-    arb_account, install_ledger, total_supply, transfer, ChangeFeeCollector, InitArgs,
-    LedgerArgument, UpgradeArgs, FEE, MINTER,
+    ChangeFeeCollector, FEE, InitArgs, LedgerArgument, MINTER, UpgradeArgs, arb_account,
+    install_ledger, total_supply, transfer,
 };
 use candid::{CandidType, Encode};
 use ic_state_machine_tests::StateMachine;
@@ -47,8 +47,7 @@ where
                 assert_eq!(
                     total_supply_before,
                     total_supply(&env, ledger_id) + FEE,
-                    "Total supply should have been decreased of the (burned) fee {}",
-                    FEE
+                    "Total supply should have been decreased of the (burned) fee {FEE}"
                 );
 
                 // Test 2: upgrade the ledger to have a fee collector.
@@ -111,8 +110,7 @@ where
                 assert_eq!(
                     total_supply_before,
                     total_supply(&env, ledger_id) + FEE,
-                    "Total supply should have been decreased of the (burned) fee {}",
-                    FEE
+                    "Total supply should have been decreased of the (burned) fee {FEE}"
                 );
 
                 // The fee collector must have collected no fee this time.
@@ -163,7 +161,7 @@ pub fn test_fee_collector_blocks<T>(
             Value::Nat64(n) => *n,
             Value::Nat(n) => n.0.to_u64().expect("block index should fit into u64"),
             Value::Int(int) => int.0.to_u64().expect("block index should fit into u64"),
-            value => panic!("Expected a numeric value but found {:?}", value),
+            value => panic!("Expected a numeric value but found {value:?}"),
         }
     }
 
@@ -185,9 +183,9 @@ pub fn test_fee_collector_blocks<T>(
                             .expect("failed to parse subaccount"),
                     ),
                 },
-                _ => panic!("Unexpected account representation: {:?}", array),
+                _ => panic!("Unexpected account representation: {array:?}"),
             },
-            value => panic!("Expected Value::Array but found {:?}", value),
+            value => panic!("Expected Value::Array but found {value:?}"),
         }
     }
 

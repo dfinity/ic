@@ -1,7 +1,7 @@
 #![no_main]
 use arbitrary::Arbitrary;
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::Memory as OtherMemory;
+use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, StableMinHeap, StableVec};
 use libfuzzer_sys::fuzz_target;
 use serde::{Deserialize, Serialize};
@@ -12,7 +12,7 @@ use std::time::SystemTime;
 use tempfile::{Builder, TempDir};
 
 mod data;
-use data::{BoundedFuzzStruct, UnboundedFuzzStruct, MAX_VALUE_SIZE};
+use data::{BoundedFuzzStruct, MAX_VALUE_SIZE, UnboundedFuzzStruct};
 
 const KEY_SIZE: usize = 4;
 type Memory = VirtualMemory<DefaultMemoryImpl>;

@@ -4,8 +4,14 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/nervous_system/proto",
+    "//rs/node_rewards/rewards_calculation",
+    "//rs/protobuf",
+    "//rs/types/base_types",
     "@crate_index//:candid",
+    "@crate_index//:chrono_canisters",
     "@crate_index//:ic-cdk",
+    "@crate_index//:rust_decimal",
     "@crate_index//:serde",
 ]
 

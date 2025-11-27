@@ -6,6 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-error-types",
     "//packages/icrc-ledger-client:icrc_ledger_client",
+    "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/nervous_system/canisters",

@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -15,8 +15,10 @@ DEPENDENCIES = [
     "//rs/ledger_suite/icrc1",
     "//rs/ledger_suite/icrc1/ledger",
     "//rs/ledger_suite/icrc1/test_utils",
+    "//rs/ledger_suite/test_utils/in_memory_ledger:ic-ledger-suite-in-memory-ledger",
+    "//rs/ledger_suite/test_utils/state_machine_helpers:ic-ledger-suite-state-machine-helpers",
+    "//rs/ledger_suite/tests/sm-tests/constants:ic-ledger-suite-state-machine-tests-constants",
     "//rs/registry/subnet_type",
-    "//rs/rosetta-api/icp/test_utils",
     "//rs/state_machine_tests",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
@@ -34,6 +36,7 @@ DEPENDENCIES = [
     "@crate_index//:num-bigint",
     "@crate_index//:num-traits",
     "@crate_index//:proptest",
+    "@crate_index//:serde_bytes",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -55,32 +58,6 @@ MACRO_DEPENDENCIES = [
         ],
         proc_macro_deps = MACRO_DEPENDENCIES,
         version = "0.9.0",
-        deps = DEPENDENCIES + extra_deps,
-    )
-    for (name_suffix, features, extra_deps) in [
-        (
-            "",
-            [],
-            ["//rs/ledger_suite/icrc1/tokens_u64"],
-        ),
-        (
-            "_u256",
-            ["u256-tokens"],
-            ["//rs/ledger_suite/icrc1/tokens_u256"],
-        ),
-        (
-            "_icp",
-            ["icp-tokens"],
-            [],
-        ),
-    ]
-]
-
-[
-    rust_test(
-        name = "ic-ledger-suite-state-machine-unit-tests" + name_suffix,
-        crate = ":ic-ledger-suite-state-machine-tests" + name_suffix,
-        crate_features = features,
         deps = DEPENDENCIES + extra_deps,
     )
     for (name_suffix, features, extra_deps) in [

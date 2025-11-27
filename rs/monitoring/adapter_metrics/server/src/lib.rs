@@ -1,16 +1,16 @@
 use futures::stream::Stream;
 use ic_adapter_metrics_service::{
-    adapter_metrics_service_server::{AdapterMetricsService, AdapterMetricsServiceServer},
     ScrapeRequest, ScrapeResponse,
+    adapter_metrics_service_server::{AdapterMetricsService, AdapterMetricsServiceServer},
 };
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error};
 use ic_metrics::MetricsRegistry;
 use protobuf::Message;
 use std::error::Error;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tonic::{
-    transport::{server::Connected, Server},
     Code, Request, Response, Status,
+    transport::{Server, server::Connected},
 };
 
 /// Adapter metrics server

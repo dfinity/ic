@@ -1,17 +1,12 @@
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_ledger_core::block::{BlockIndex, BlockType};
+use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
+use ic_ledger_core::block::{BlockIndex, BlockType};
 use icp_ledger::{
-    AccountIdentifier, ArchiveInfo, Block, GetBlocksArgs, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, TransferArgs, MAX_BLOCKS_PER_REQUEST,
+    AccountIdentifier, ArchiveInfo, Block, GetBlocksArgs, LEDGER_CANISTER_ID,
+    MAX_BLOCKS_PER_REQUEST, QueryBlocksResponse, QueryEncodedBlocksResponse, TransferArgs,
 };
 use icp_ledger::{BinaryAccountBalanceArgs, TransferError};
 use pocket_ic::PocketIc;
-
-const LEDGER_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 2;
-
-pub const LEDGER_CANISTER_ID: CanisterId =
-    CanisterId::from_u64(LEDGER_CANISTER_INDEX_IN_NNS_SUBNET);
 
 pub fn account_balance(pocket_ic: &PocketIc, account: &AccountIdentifier) -> Tokens {
     super::query_or_panic(

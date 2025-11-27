@@ -12,7 +12,7 @@ use ic_types::registry::RegistryClientError;
 pub fn epoch(registry_version: RegistryVersion) -> Epoch {
     u32::try_from(registry_version.get())
         .map(Epoch::new)
-        .unwrap_or_else(|error| panic!("Cannot convert registry version to epoch: {}", error))
+        .unwrap_or_else(|error| panic!("Cannot convert registry version to epoch: {error}"))
 }
 
 pub fn index_in_resharing_committee_or_panic(
@@ -21,8 +21,7 @@ pub fn index_in_resharing_committee_or_panic(
 ) -> NodeIndex {
     committee.position(*node_id).unwrap_or_else(|| {
         panic!(
-            "DKG config invariant violated: node {} not in resharing committee ({:?})",
-            node_id, committee
+            "DKG config invariant violated: node {node_id} not in resharing committee ({committee:?})"
         )
     })
 }
@@ -33,10 +32,7 @@ pub fn index_in_resharing_committee_or_panic(
 /// * If the dealer is not included in `NiDkgDealers`.
 pub fn dealer_index_in_dealers_or_panic(dealers: &NiDkgDealers, dealer: NodeId) -> NodeIndex {
     dealers.position(dealer).unwrap_or_else(|| {
-        panic!(
-            "This operation requires node ({}) to be a dealer, but it is not.",
-            dealer
-        )
+        panic!("This operation requires node ({dealer}) to be a dealer, but it is not.")
     })
 }
 

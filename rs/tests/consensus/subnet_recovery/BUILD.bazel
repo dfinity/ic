@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -17,10 +17,10 @@ STATIC_FILE_SERVER_IMAGE_RUNTIME_DEPS = [
 ]
 
 rust_library(
-    name = "common",
+    name = "lib",
     testonly = True,
-    srcs = ["common.rs"],
-    crate_name = "ic_consensus_system_test_subnet_recovery_common",
+    srcs = glob(["**/*.rs"]),
+    crate_name = "ic_consensus_system_test_subnet_recovery",
     deps = [
         # Keep sorted.
         "//rs/nns/constants",
@@ -41,6 +41,7 @@ rust_library(
         "@crate_index//:serde",
         "@crate_index//:serde_json",
         "@crate_index//:slog",
+        "@crate_index//:ssh2",
         "@crate_index//:url",
     ],
 )
@@ -48,17 +49,16 @@ rust_library(
 system_test_nns(
     name = "sr_app_same_nodes_test",
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
-        "experimental_system_test_colocation",
-        "k8s",
+        "colocate",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -69,15 +69,15 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 3.33% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "experimental_system_test_colocation",
-        "k8s",
+        "colocate",
         "long_test",
         "subnet_recovery",
     ],
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -87,15 +87,15 @@ system_test_nns(
     name = "sr_app_same_nodes_with_chain_keys_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "experimental_system_test_colocation",
-        "k8s",
+        "colocate",
         "long_test",
         "subnet_recovery",
     ],
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -104,17 +104,16 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_failover_nodes_test",
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
-        "experimental_system_test_colocation",
-        "k8s",
+        "colocate",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -125,16 +124,16 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 1.67% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "experimental_system_test_colocation",
-        "k8s",
+        "colocate",
         "long_test",
         "subnet_recovery",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -145,16 +144,16 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of 3.33% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "experimental_system_test_colocation",
-        "k8s",
+        "colocate",
         "long_test",
         "subnet_recovery",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -163,17 +162,16 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_no_upgrade_test",
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
-        "experimental_system_test_colocation",
-        "k8s",
+        "colocate",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -181,18 +179,21 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_local_test",
-    env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
+    env = MESSAGE_CANISTER_ENV | {
+        "IC_ADMIN_PATH": "$(rootpath //rs/registry/admin:ic-admin)",
+    },
     tags = [
-        "experimental_system_test_colocation",
-        "k8s",
+        "colocate",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + [
+        "//rs/registry/admin:ic-admin",
+    ],
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -202,16 +203,16 @@ system_test_nns(
     name = "sr_app_no_upgrade_enable_chain_keys_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "experimental_system_test_colocation",
-        "k8s",
+        "colocate",
         "long_test",
         "subnet_recovery",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -222,16 +223,16 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 6% over the month from 2025-02-11 till 2025-03-11 (only for //rs/tests/consensus/subnet_recovery:sr_app_no_upgrade_with_chain_keys_test_head_nns_colocate).
     tags = [
-        "experimental_system_test_colocation",
-        "k8s",
+        "colocate",
         "long_test",
         "subnet_recovery",
     ],
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    test_timeout = "eternal",
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -239,66 +240,41 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_large_with_chain_keys_test",
+    enable_head_nns_variant = False,  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = ["manual"],  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
     flaky = True,  # flakiness rate of over 2.21% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "experimental_system_test_colocation",
+        "colocate",
         "subnet_recovery",
         "system_test_large",  # only run as part of release-testing since this test requires many resources.
     ],
     test_timeout = "eternal",
-    uses_guestos_dev = True,
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    uses_guestos_img = True,
+    uses_guestos_test_update = True,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
-    ],
-)
-
-system_test_nns(
-    name = "sr_nns_same_nodes_test",
-    env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    tags = [
-        "experimental_system_test_colocation",
-        "k8s",
-        "long_test",  # since it takes longer than 5 minutes.
-        "subnet_recovery",
-    ],
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
-    deps = [
-        # Keep sorted.
-        "//rs/recovery",
-        "//rs/registry/subnet_type",
-        "//rs/tests/consensus/utils",
-        "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/types",
-        "@crate_index//:anyhow",
-        "@crate_index//:slog",
     ],
 )
 
 system_test_nns(
     name = "sr_nns_failover_nodes_test",
     env = MESSAGE_CANISTER_ENV,
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
-        "experimental_system_test_colocation",
-        "k8s",
+        "colocate",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
+    test_timeout = "eternal",
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
         MESSAGE_CANISTER_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         SUBNET_RECOVERY_RUNTIME_DEPS + ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION + STATIC_FILE_SERVER_IMAGE_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
+        ":lib",
         "//rs/recovery",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",

@@ -1,8 +1,8 @@
 use crate::endpoints::CandidBlockTag;
 use crate::logs::INFO;
-use crate::state::audit::{process_event, replay_events, EventType};
-use crate::state::mutate_state;
 use crate::state::STATE;
+use crate::state::audit::{EventType, process_event, replay_events};
+use crate::state::mutate_state;
 use crate::storage::total_event_count;
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_canister_log::log;

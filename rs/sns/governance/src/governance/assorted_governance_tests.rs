@@ -2,22 +2,26 @@
 //! here, so that Bazel does not recompile the whole production crate each time the tests are run.
 //! The name of this file is indeed too generic; feel free to factor specific tests out into
 //! more appropriate locations, or create new file modules for them, whatever makes more sense.
-use super::test_helpers::{
-    basic_governance_proto, canister_status_for_test,
-    canister_status_from_management_canister_for_test, DoNothingLedger, A_MOTION_PROPOSAL,
-    A_NEURON, A_NEURON_ID, A_NEURON_PRINCIPAL_ID, TEST_ARCHIVES_CANISTER_IDS,
-    TEST_DAPP_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID, TEST_INDEX_CANISTER_ID,
-    TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID, TEST_SWAP_CANISTER_ID,
-};
-use super::*;
 use crate::{
+    extensions::{ExtensionSpec, ExtensionType, ExtensionVersion},
+    governance::{
+        test_helpers::{
+            A_MOTION_PROPOSAL, A_NEURON, A_NEURON_ID, A_NEURON_PRINCIPAL_ID, DoNothingLedger,
+            TEST_ARCHIVES_CANISTER_IDS, TEST_DAPP_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID,
+            TEST_INDEX_CANISTER_ID, TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID,
+            TEST_SWAP_CANISTER_ID, basic_governance_proto, canister_status_for_test,
+            canister_status_from_management_canister_for_test,
+        },
+        *,
+    },
     pb::v1::{
+        Account as AccountProto, Motion, NervousSystemFunction, NeuronPermissionType, ProposalData,
+        ProposalId, Tally, UpgradeJournalEntry, UpgradeSnsControlledCanister,
+        UpgradeSnsToNextVersion, VotingRewardsParameters, WaitForQuietState,
         governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
         manage_neuron_response,
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
-        neuron, Account as AccountProto, Motion, NervousSystemFunction, NeuronPermissionType,
-        ProposalData, ProposalId, Tally, UpgradeJournalEntry, UpgradeSnsControlledCanister,
-        UpgradeSnsToNextVersion, VotingRewardsParameters, WaitForQuietState,
+        neuron,
     },
     reward,
     sns_upgrade::{
@@ -26,21 +30,24 @@ use crate::{
         GetWasmResponse, ListUpgradeStep, ListUpgradeStepsRequest, ListUpgradeStepsResponse,
         SnsCanisterType, SnsVersion, SnsWasm,
     },
-    topics::{ListTopicsResponse, NervousSystemFunctions, TopicInfo},
+    storage::cache_registered_extension,
+    topics::{
+        ListTopicsResponse, NervousSystemFunctions, RegisteredExtensionOperationSpec, TopicInfo,
+    },
     types::test_helpers::NativeEnvironment,
 };
 use assert_matches::assert_matches;
 use async_trait::async_trait;
-use candid::Principal;
-use futures::{join, FutureExt};
+use candid::{Nat, Principal};
+use futures::{FutureExt, join};
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_canisters::cmc::FakeCmc;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusType,
 };
 use ic_nervous_system_common::{
-    assert_is_err, assert_is_ok, ledger::compute_neuron_staking_subaccount_bytes, E8,
-    ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
+    E8, ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS, assert_is_err, assert_is_ok,
+    ledger::compute_neuron_staking_subaccount_bytes,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
@@ -50,8 +57,7 @@ use ic_sns_governance_api::pb::v1::topics::Topic;
 use ic_sns_governance_token_valuation::{Token, ValuationFactors};
 use ic_sns_test_utils::itest_helpers::UserInfo;
 use ic_test_utilities_types::ids::canister_test_id;
-use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
-use icrc_ledger_types::icrc3::blocks::GetBlocksResult;
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
 use proptest::prelude::{prop_assert, proptest};
@@ -87,6 +93,20 @@ impl ICRC1Ledger for AlwaysSucceedingLedger {
         CanisterId::from_u64(42)
     }
 
+    async fn icrc2_approve(
+        &self,
+        _spender: Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
+    }
+
     async fn icrc3_get_blocks(
         &self,
         _args: Vec<GetBlocksRequest>,
@@ -117,11 +137,7 @@ fn unspecified_mode_is_invalid() {
         mode: governance::Mode::Unspecified as i32,
         ..basic_governance_proto()
     };
-    assert!(
-        ValidGovernanceProto::try_from(g.clone()).is_err(),
-        "{:#?}",
-        g
-    );
+    assert!(ValidGovernanceProto::try_from(g.clone()).is_err(), "{g:#?}");
 }
 
 #[test]
@@ -130,11 +146,7 @@ fn garbage_mode_is_invalid() {
         mode: 0xDEADBEF,
         ..basic_governance_proto()
     };
-    assert!(
-        ValidGovernanceProto::try_from(g.clone()).is_err(),
-        "{:#?}",
-        g
-    );
+    assert!(ValidGovernanceProto::try_from(g.clone()).is_err(), "{g:#?}");
 }
 
 #[tokio::test]
@@ -172,6 +184,20 @@ async fn test_perform_transfer_sns_treasury_funds_execution_fails_when_another_c
 
         fn canister_id(&self) -> CanisterId {
             unimplemented!()
+        }
+
+        async fn icrc2_approve(
+            &self,
+            _spender: Account,
+            _amount: u64,
+            _expires_at: Option<u64>,
+            _fee: u64,
+            _from_subaccount: Option<Subaccount>,
+            _expected_allowance: Option<u64>,
+        ) -> Result<Nat, NervousSystemError> {
+            Err(NervousSystemError {
+                error_message: "Not Implemented".to_string(),
+            })
         }
 
         async fn icrc3_get_blocks(
@@ -270,7 +296,7 @@ async fn test_perform_transfer_sns_treasury_funds_execution_fails_when_another_c
         "already",
         "in progress",
     ] {
-        assert!(error_message.contains(term), "{:#?}", err);
+        assert!(error_message.contains(term), "{err:#?}");
     }
 }
 
@@ -307,6 +333,20 @@ async fn test_neuron_operations_exclude_one_another() {
 
         fn canister_id(&self) -> CanisterId {
             unimplemented!()
+        }
+
+        async fn icrc2_approve(
+            &self,
+            _spender: Account,
+            _amount: u64,
+            _expires_at: Option<u64>,
+            _fee: u64,
+            _from_subaccount: Option<Subaccount>,
+            _expected_allowance: Option<u64>,
+        ) -> Result<Nat, NervousSystemError> {
+            Err(NervousSystemError {
+                error_message: "Not Implemented".to_string(),
+            })
         }
 
         async fn icrc3_get_blocks(
@@ -429,13 +469,13 @@ async fn test_neuron_operations_exclude_one_another() {
                         err,
                     );
                 }
-                _ => panic!("configure_result: {:#?}", configure_result),
+                _ => panic!("configure_result: {configure_result:#?}"),
             }
 
             // Allow disburse to complete.
             transfer_funds_continue.notify_one();
             let disburse_result = disburse_future.await;
-            assert!(disburse_result.is_ok(), "{:#?}", disburse_result);
+            assert!(disburse_result.is_ok(), "{disburse_result:#?}");
         })
         .await;
 }
@@ -501,17 +541,12 @@ fn swap_canister_id_is_required_when_mode_is_pre_initialization_swap() {
 
     let r = ValidGovernanceProto::try_from(proto.clone());
     match r {
-        Ok(_ok) => panic!(
-            "Invalid Governance proto, but wasn't rejected: {:#?}",
-            proto
-        ),
+        Ok(_ok) => panic!("Invalid Governance proto, but wasn't rejected: {proto:#?}"),
         Err(err) => {
             for key_word in ["swap_canister_id", "populate"] {
                 assert!(
                     err.contains(key_word),
-                    "{:#?} not present in the error: {:#?}",
-                    key_word,
-                    err
+                    "{key_word:#?} not present in the error: {err:#?}"
                 );
             }
         }
@@ -731,7 +766,7 @@ fn execute_proposal(governance: &mut Governance, proposal_id: u64) -> ProposalDa
             .unwrap();
         let proposal_data = match result {
             get_proposal_response::Result::Proposal(p) => p,
-            _ => panic!("get_proposal result: {:#?}", result),
+            _ => panic!("get_proposal result: {result:#?}"),
         };
 
         let upgrade_sns_action_id = 7;
@@ -822,21 +857,16 @@ async fn test_disallow_enabling_voting_rewards_while_in_pre_initialization_swap(
 
     // Step 3: Inspect result(s).
     let err = match result {
-        Ok(ok) => panic!("Proposal should have been rejected: {:#?}", ok),
+        Ok(ok) => panic!("Proposal should have been rejected: {ok:#?}"),
         Err(err) => err,
     };
 
     let err = err.error_message.to_lowercase();
-    assert!(
-        err.contains("manage nervous system parameters"),
-        "{:#?}",
-        err
-    );
-    assert!(err.contains("not allowed"), "{:#?}", err);
+    assert!(err.contains("manage nervous system parameters"), "{err:#?}");
+    assert!(err.contains("not allowed"), "{err:#?}");
     assert!(
         err.contains("in preinitializationswap (2) mode"),
-        "{:#?}",
-        err
+        "{err:#?}"
     );
 }
 
@@ -936,8 +966,7 @@ async fn no_new_reward_event_when_there_are_no_new_proposals() {
     let original_latest_reward_event = governance.proto.latest_reward_event.clone();
     assert!(
         original_latest_reward_event.is_some(),
-        "{:#?}",
-        original_latest_reward_event
+        "{original_latest_reward_event:#?}"
     );
 
     // Step 1.4: Make a proposal.
@@ -1028,10 +1057,8 @@ async fn no_new_reward_event_when_there_are_no_new_proposals() {
     let distributed_e8s_range = min_distributed_e8s..max_distributed_e8s;
     assert!(
         distributed_e8s_range.contains(&i2d(final_latest_reward_event.distributed_e8s_equivalent)),
-        "distributed_e8s_range = {:?}\n\
-            final_latest_reward_event = {:#?}",
-        distributed_e8s_range,
-        final_latest_reward_event,
+        "distributed_e8s_range = {distributed_e8s_range:?}\n\
+            final_latest_reward_event = {final_latest_reward_event:#?}",
     );
 
     assert_eq!(
@@ -1190,7 +1217,7 @@ fn test_disallow_concurrent_upgrade_execution(
             .unwrap();
         let proposal_data = match result {
             get_proposal_response::Result::Proposal(p) => p,
-            _ => panic!("get_proposal result: {:#?}", result),
+            _ => panic!("get_proposal result: {result:#?}"),
         };
 
         if proposal_data.status().is_final() {
@@ -1497,13 +1524,11 @@ fn setup_env_for_sns_upgrade_to_next_version_test(
             env.require_call_canister_invocation(
                 root_canister_id,
                 "change_canister",
-                Encode!(&ChangeCanisterRequest::new(
-                    true,
-                    CanisterInstallMode::Upgrade,
-                    canister_id
+                Encode!(
+                    &ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, canister_id)
+                        .with_wasm(vec![9, 8, 7, 6, 5, 4, 3, 2])
+                        .with_arg(Encode!().unwrap())
                 )
-                .with_wasm(vec![9, 8, 7, 6, 5, 4, 3, 2])
-                .with_arg(Encode!().unwrap()))
                 .unwrap(),
                 // We don't actually look at the response from this call anywhere
                 Some(Ok(Encode!().unwrap())),
@@ -3192,7 +3217,7 @@ fn test_allow_canister_upgrades_while_motion_proposal_execution_is_in_progress()
     let result = governance.check_no_upgrades_in_progress(Some(upgrade_proposal_id));
 
     // Step 3: Inspect result.
-    assert!(result.is_ok(), "{:#?}", result);
+    assert!(result.is_ok(), "{result:#?}");
 }
 
 #[test]
@@ -3252,7 +3277,7 @@ fn test_allow_canister_upgrades_while_another_upgrade_proposal_is_open() {
     let result = governance.check_no_upgrades_in_progress(Some(executing_upgrade_proposal_id));
 
     // Step 3: Inspect result.
-    assert!(result.is_ok(), "{:#?}", result);
+    assert!(result.is_ok(), "{result:#?}");
 }
 
 #[test]
@@ -3313,7 +3338,7 @@ fn test_allow_canister_upgrades_after_another_upgrade_proposal_has_executed() {
     let result = governance.check_no_upgrades_in_progress(Some(upgrade_proposal_id));
 
     // Step 3: Inspect result.
-    assert!(result.is_ok(), "{:#?}", result);
+    assert!(result.is_ok(), "{result:#?}");
 }
 
 #[test]
@@ -3356,7 +3381,7 @@ fn test_allow_canister_upgrades_proposal_does_not_block_itself_but_does_block_ot
 
     // Step 2 & 3: Run code under test, and inspect results.
     let result = governance.check_no_upgrades_in_progress(Some(proposal_id));
-    assert!(result.is_ok(), "{:#?}", result);
+    assert!(result.is_ok(), "{result:#?}");
 
     // Other upgrades should be blocked by proposal 1 though.
     let some_other_proposal_id = 99_u64;
@@ -3480,8 +3505,10 @@ fn test_upgrade_proposals_not_blocked_by_old_upgrade_proposals() {
 
     // Step 2: Check that the proposal is not blocked by an old proposal.
     match governance.check_no_upgrades_in_progress(Some(some_other_proposal_id)) {
-        Ok(_) => {},
-        Err(err) => panic!("The proposal should not have gotten blocked by an old proposal. Instead, it was blocked due to: {:#?}", err),
+        Ok(_) => {}
+        Err(err) => panic!(
+            "The proposal should not have gotten blocked by an old proposal. Instead, it was blocked due to: {err:#?}"
+        ),
     }
 
     // Step 3: Make the proposal newer
@@ -3569,14 +3596,15 @@ fn test_cant_add_generic_nervous_system_function_without_topic() {
         )),
     };
 
-    match crate::proposal::validate_and_render_add_generic_nervous_system_function(&Default::default(), &valid, &Default::default()) {
+    match crate::proposal::validate_and_render_add_generic_nervous_system_function(
+        &Default::default(),
+        &valid,
+        &Default::default(),
+    ) {
         Ok(_) => panic!(
             "Should not be able to add generic nervous system functions without a topic, but was able to add it."
         ),
-        Err(err) => assert_eq!(
-            err,
-            "NervousSystemFunction must have a topic",
-        ),
+        Err(err) => assert_eq!(err, "NervousSystemFunction must have a topic",),
     }
 }
 
@@ -4552,9 +4580,7 @@ fn assert_adding_generic_nervous_system_function_fails_for_target_and_validator(
         .perform_add_generic_nervous_system_function(nns_function_invalid_validator.clone());
     assert!(
         result.is_err(),
-        "function: {:?}\nresult: {:?}",
-        nns_function_invalid_validator,
-        result
+        "function: {nns_function_invalid_validator:?}\nresult: {result:?}"
     );
 
     let nns_function_invalid_target = NervousSystemFunction {
@@ -4575,9 +4601,7 @@ fn assert_adding_generic_nervous_system_function_fails_for_target_and_validator(
         governance.perform_add_generic_nervous_system_function(nns_function_invalid_target.clone());
     assert!(
         result.is_err(),
-        "function: {:?}\nresult: {:?}",
-        nns_function_invalid_target,
-        result
+        "function: {nns_function_invalid_target:?}\nresult: {result:?}"
     );
 }
 
@@ -4712,6 +4736,19 @@ fn test_list_topics() {
         Box::new(FakeCmc::new()),
     );
 
+    let registered_spec = ExtensionSpec {
+        name: "KongSwap".to_string(),
+        version: ExtensionVersion(1),
+        topic: Topic::TreasuryAssetManagement.into(),
+        extension_type: ExtensionType::TreasuryManager,
+    };
+
+    let deposit_operation_spec = registered_spec.get_operation("deposit").unwrap();
+    let withdraw_operation_spec = registered_spec.get_operation("withdraw").unwrap();
+
+    cache_registered_extension(CanisterId::from_u64(100_001), registered_spec.clone());
+    cache_registered_extension(CanisterId::from_u64(100_002), registered_spec);
+
     // Call the API under test
     let ListTopicsResponse {
         topics: topic_infos,
@@ -4768,6 +4805,7 @@ fn test_list_topics() {
                     function_1,
                 ],
             },
+            extension_operations: vec![],
             is_critical: true,
         },
         TopicInfo {
@@ -4805,6 +4843,7 @@ fn test_list_topics() {
                     function_2
                 ],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo {
@@ -4852,6 +4891,7 @@ fn test_list_topics() {
                 ],
                 custom_functions: vec![],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo {
@@ -4862,12 +4902,13 @@ fn test_list_topics() {
                 native_functions: vec![],
                 custom_functions: vec![],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo {
             topic: Topic::Governance,
             name: "Governance".to_string(),
-            description: "Proposals that represent community polls or other forms of community opinion but don’t have any immediate effect in terms of code changes.".to_string(),
+            description: "Proposals that represent community polls or other forms of community opinion but don't have any immediate effect in terms of code changes.".to_string(),
             functions: NervousSystemFunctions {
                 native_functions: vec![
                     NervousSystemFunction {
@@ -4885,6 +4926,7 @@ fn test_list_topics() {
                 ],
                 custom_functions: vec![],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo {
@@ -4920,6 +4962,12 @@ fn test_list_topics() {
                 ],
                 custom_functions: vec![],
             },
+            extension_operations: vec![
+                RegisteredExtensionOperationSpec { canister_id: CanisterId::from_u64(100_001), spec:  deposit_operation_spec.clone() },
+                RegisteredExtensionOperationSpec { canister_id: CanisterId::from_u64(100_001), spec:  withdraw_operation_spec.clone() },
+                RegisteredExtensionOperationSpec { canister_id: CanisterId::from_u64(100_002), spec:  deposit_operation_spec },
+                RegisteredExtensionOperationSpec { canister_id: CanisterId::from_u64(100_002), spec:  withdraw_operation_spec },
+            ],
             is_critical: true,
         },
         TopicInfo {
@@ -4988,9 +5036,22 @@ fn test_list_topics() {
                             ),
                         ),
                     },
+                    NervousSystemFunction {
+                        id: 19,
+                        name: "Upgrade SNS extension".to_string(),
+                        description: Some(
+                            "Proposal to upgrade the WASM of a registered SNS extension.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
                 ],
                 custom_functions: vec![],
             },
+            extension_operations: vec![],
             is_critical: true,
         },
     ];

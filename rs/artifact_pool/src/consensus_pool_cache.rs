@@ -6,8 +6,8 @@ use ic_interfaces::consensus_pool::{
 };
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
-    consensus::{Block, CatchUpPackage, ConsensusMessage, Finalization, HasHeight, HashedBlock},
     Height, Time,
+    consensus::{Block, CatchUpPackage, ConsensusMessage, Finalization, HasHeight, HashedBlock},
 };
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -101,22 +101,36 @@ impl<'a> CachedChainIterator<'a> {
             }
         }
         // Use cached blocks if the height is finalized
-        if parent_height <= self.finalized_chain.tip().height() {
-            if let Ok(block) = self.finalized_chain.get_block_by_height(parent_height) {
-                return Some(block.clone());
-            }
+        if parent_height <= self.finalized_chain.tip().height()
+            && let Ok(block) = self.finalized_chain.get_block_by_height(parent_height)
+        {
+            return Some(block.clone());
         }
-        self.consensus_pool
+
+        for proposal in self
+            .consensus_pool
             .validated()
             .block_proposal()
             .get_by_height(parent_height)
-            .find_map(|proposal| {
-                if proposal.content.get_hash() == parent_hash {
-                    Some(proposal.content.into_inner())
-                } else {
-                    None
-                }
-            })
+        {
+            if proposal.content.get_hash() == parent_hash {
+                return Some(proposal.content.into_inner());
+            }
+        }
+
+        if let Ok(cup) = self
+            .consensus_pool
+            .validated()
+            .catch_up_package()
+            .get_only_by_height(parent_height)
+        {
+            let (hash, block) = cup.content.block.decompose();
+            if hash == *parent_hash {
+                return Some(block);
+            }
+        }
+
+        None
     }
 }
 
@@ -268,10 +282,7 @@ pub(crate) fn get_highest_finalized_block(
                         return proposal.content.into_inner();
                     }
                 }
-                panic!(
-                    "Missing validated block proposal matching finalization {:?}",
-                    finalization
-                )
+                panic!("Missing validated block proposal matching finalization {finalization:?}")
             }
         }
         Err(_) => catch_up_package.content.block.as_ref().clone(),
@@ -291,7 +302,9 @@ pub(crate) fn update_summary_block(
         Ordering::Less => {
             panic!(
                 "DKG start_height {} of the given finalized block at height {} is less than summary block height {}",
-                start_height, finalized_tip.height(), summary_height
+                start_height,
+                finalized_tip.height(),
+                summary_height
             );
         }
         Ordering::Equal => (),
@@ -315,8 +328,7 @@ pub(crate) fn update_summary_block(
                     });
                 *summary_block = block.unwrap_or_else(|| {
                     panic!(
-                        "Consensus pool has finalization {:?}, but its referenced block is not found",
-                        finalization
+                        "Consensus pool has finalization {finalization:?}, but its referenced block is not found"
                     )
                 });
                 return;
@@ -374,6 +386,25 @@ impl ConsensusBlockChainImpl {
         }
 
         Self { blocks }
+    }
+
+    pub(crate) fn new_from_cache(
+        consensus_pool: &dyn ConsensusPool,
+        start_height: Height,
+        tip: Block,
+    ) -> Self {
+        let iter = CachedChainIterator::new(
+            consensus_pool,
+            consensus_pool.as_block_cache().finalized_chain(),
+            tip,
+            None,
+        )
+        .take_while(|block| block.height() >= start_height)
+        .map(|block| (block.height(), block));
+
+        Self {
+            blocks: BTreeMap::from_iter(iter),
+        }
     }
 
     /// Updates the blocks based on the new summary_block/tip.
@@ -460,20 +491,30 @@ impl ConsensusBlockChain for ConsensusBlockChainImpl {
     fn len(&self) -> usize {
         self.blocks.len()
     }
+
+    fn iter_above(&self, height: Height) -> Box<dyn Iterator<Item = &Block> + '_> {
+        Box::new(
+            self.blocks
+                .range(height.increment()..)
+                .map(|(_, block)| block),
+        )
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::test_utils::fake_block_proposal;
-    use ic_interfaces::consensus_pool::{ValidatedConsensusArtifact, HEIGHT_CONSIDERED_BEHIND};
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
+    use ic_interfaces::consensus_pool::{HEIGHT_CONSIDERED_BEHIND, ValidatedConsensusArtifact};
     use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};
-    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::FakeStateManager};
+    use ic_test_utilities::state_manager::FakeStateManager;
     use ic_test_utilities_consensus::fake::*;
-    use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
+    use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::consensus::*;
+    use ic_types::crypto::crypto_hash;
     use ic_types::time::UNIX_EPOCH;
     use std::sync::Arc;
     use std::time::Duration;
@@ -655,5 +696,90 @@ mod test {
         chain.blocks.insert(height, block);
         assert_eq!(chain.len(), 2);
         assert!(chain.get_block_by_height(height).is_ok());
+    }
+
+    #[test]
+    fn test_new_block_chain_from_cache() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let subnet_size = 7;
+            let subnet_records = vec![(
+                1,
+                SubnetRecordBuilder::from(
+                    &(0..subnet_size).map(node_test_id).collect::<Vec<_>>()[..],
+                )
+                .with_dkg_interval_length(9)
+                .build(),
+            )];
+
+            let mut pool = TestConsensusPool::new(
+                node_test_id(0),
+                subnet_test_id(1),
+                pool_config,
+                FastForwardTimeSource::new(),
+                setup_registry(subnet_test_id(1), subnet_records),
+                Arc::new(CryptoReturningOk::default()),
+                Arc::new(FakeStateManager::new()),
+                None,
+            );
+
+            // Finalize a couple rounds
+            pool.advance_round_normal_operation_n(3);
+
+            // Advance a couple rounds without finalization
+            let mut round = pool
+                .prepare_round()
+                .dont_finalize()
+                .with_replicas(subnet_size as u32)
+                .with_new_block_proposals(3)
+                .with_blocks_to_notarize(2);
+            for _ in 0..3 {
+                round.advance();
+            }
+
+            let next_block_proposal = pool.make_next_block();
+            let next_block = next_block_proposal.content.get_value().clone();
+            assert_eq!(next_block.height().get(), 7);
+
+            let chain =
+                ConsensusBlockChainImpl::new_from_cache(&pool, Height::from(0), next_block.clone());
+            assert_eq!(chain.blocks.len(), 8);
+            assert_valid_chain(&chain, &next_block, 0);
+
+            // Advance past the summary without creating a CUP
+            pool.advance_round_with_block(&next_block_proposal);
+            pool.advance_round_normal_operation_no_cup_n(3);
+
+            let next_block_proposal = pool.make_next_block();
+            let next_block = next_block_proposal.content.get_value().clone();
+            assert_eq!(next_block.height().get(), 11);
+
+            // The genesis block should still be part of the chain, even if we have a newer summary
+            let chain =
+                ConsensusBlockChainImpl::new_from_cache(&pool, Height::from(0), next_block.clone());
+            assert_eq!(chain.blocks.len(), 12);
+            assert_valid_chain(&chain, &next_block, 0);
+
+            // Test a start height != 0
+            let chain =
+                ConsensusBlockChainImpl::new_from_cache(&pool, Height::from(4), next_block.clone());
+            assert_eq!(chain.blocks.len(), 8);
+            assert_valid_chain(&chain, &next_block, 4);
+        })
+    }
+
+    fn assert_valid_chain(
+        chain: &ConsensusBlockChainImpl,
+        expected_tip: &Block,
+        start_height: u64,
+    ) {
+        let tip = chain.tip();
+        assert_eq!(tip, expected_tip);
+
+        let mut expected_hash = tip.parent.clone();
+        for height in (start_height..tip.height().get()).rev() {
+            let next = chain.get_block_by_height(height.into()).unwrap();
+            assert_eq!(crypto_hash(next), expected_hash);
+            expected_hash = next.parent.clone();
+        }
     }
 }

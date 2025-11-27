@@ -1,9 +1,17 @@
-use crate::governance::test_helpers::basic_governance_proto;
-use crate::governance::ValidGovernanceProto;
-use crate::governance::{test_helpers::DoNothingLedger, Governance};
-use crate::pb::v1::{self as pb, nervous_system_function};
-use crate::types::{native_action_ids::nervous_system_functions, test_helpers::NativeEnvironment};
-use ic_base_types::PrincipalId;
+use crate::{
+    extensions::{ExtensionSpec, ExtensionType::TreasuryManager, ExtensionVersion},
+    governance::{
+        Governance, ValidGovernanceProto,
+        test_helpers::{DoNothingLedger, basic_governance_proto},
+    },
+    pb::v1::{
+        self as pb, ExecuteExtensionOperation, Topic::TreasuryAssetManagement,
+        nervous_system_function,
+    },
+    storage::cache_registered_extension,
+    types::{native_action_ids::nervous_system_functions, test_helpers::NativeEnvironment},
+};
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_canisters::cmc::FakeCmc;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use maplit::btreemap;
@@ -185,14 +193,81 @@ fn test_all_topics() {
                 ProposalCriticality::Critical,
             )),
         ),
+        (
+            pb::proposal::Action::UpgradeExtension(Default::default()),
+            Ok((
+                Some(pb::Topic::CriticalDappOperations),
+                ProposalCriticality::Critical,
+            )),
+        ),
     ];
 
     // Smoke test
     assert_eq!(
         test_cases.len(),
-        nervous_system_functions().len() - 1,
+        nervous_system_functions().len() - 2,
         "Missing some test cases for native proposals."
     );
+
+    // Extension Test Cases
+    let extension_canister_id = CanisterId::from_u64(100_000);
+    let extension_spec = ExtensionSpec {
+        name: "foo".to_string(),
+        version: ExtensionVersion(1),
+        topic: TreasuryAssetManagement,
+        extension_type: TreasuryManager,
+    };
+    cache_registered_extension(extension_canister_id, extension_spec);
+    test_cases.push((
+        pb::proposal::Action::ExecuteExtensionOperation(ExecuteExtensionOperation {
+            extension_canister_id: Some(extension_canister_id.get()),
+            operation_name: Some("deposit".to_string()),
+            operation_arg: None,
+        }),
+        Ok((
+            Some(pb::Topic::TreasuryAssetManagement),
+            ProposalCriticality::Critical,
+        )),
+    ));
+    test_cases.push((
+        pb::proposal::Action::ExecuteExtensionOperation(ExecuteExtensionOperation {
+            extension_canister_id: Some(extension_canister_id.get()),
+            operation_name: Some("withdraw".to_string()),
+            operation_arg: None,
+        }),
+        Ok((
+            Some(pb::Topic::TreasuryAssetManagement),
+            ProposalCriticality::Critical,
+        )),
+    ));
+    test_cases.push((
+        pb::proposal::Action::ExecuteExtensionOperation(ExecuteExtensionOperation {
+            extension_canister_id: Some(PrincipalId::new_user_test_id(11)),
+            operation_name: Some("withdraw".to_string()),
+            operation_arg: None,
+        }),
+        Err("Cannot interpret extension_canister_id as canister ID: \
+            Got an invalid principal id Byte 8 (9th) of Principal ID \
+            4zjg6-jalaa-aaaaa-aaaap-4ai is not 0x01: 0b00000000000000fe01"
+            .to_string()),
+    ));
+    test_cases.push((
+        pb::proposal::Action::ExecuteExtensionOperation(ExecuteExtensionOperation {
+            extension_canister_id: Some(extension_canister_id.get()),
+            operation_name: None,
+            operation_arg: None,
+        }),
+        Err("operation_name is required.".to_string()),
+    ));
+
+    test_cases.push((
+        pb::proposal::Action::ExecuteExtensionOperation(ExecuteExtensionOperation {
+            extension_canister_id: Some(extension_canister_id.get()),
+            operation_name: Some("other_op".to_string()),
+            operation_arg: None,
+        }),
+        Err("No operation found called 'other_op' for extension with canister id: ug6pj-fqaaa-aaaaa-bq2qa-cai".to_string()),
+    ));
 
     // Special case: Undefined function.
     test_cases.push((

@@ -1,6 +1,6 @@
 use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
-    pb::v1::{install_code::CanisterInstallMode, GovernanceError, InstallCode, Topic},
+    pb::v1::{GovernanceError, InstallCode, Topic, install_code::CanisterInstallMode},
     proposals::call_canister::CallCanister,
 };
 
@@ -90,7 +90,7 @@ impl InstallCode {
             wasm_module,
             module_arg,
         })
-        .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {}", e)))
+        .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {e}")))
     }
 
     fn payload_to_upgrade_non_root(&self) -> Result<Vec<u8>, GovernanceError> {
@@ -108,7 +108,7 @@ impl InstallCode {
             arg,
             chunked_canister_wasm: None,
         })
-        .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {}", e)))
+        .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {e}")))
     }
 
     pub fn allowed_when_resources_are_low(&self) -> bool {
@@ -141,9 +141,8 @@ impl CallCanister for InstallCode {
                 // (uninstall cancels open calls), and that is achieved by
                 // HardResetNnsRootToVersion.
                 Err(invalid_proposal_error(&format!(
-                    "InstallCode mode {:?} is not supported for root canister, consider using \
-                     HardResetNnsRootToVersion proposal instead",
-                    install_mode
+                    "InstallCode mode {install_mode:?} is not supported for root canister, consider using \
+                     HardResetNnsRootToVersion proposal instead"
                 )))
             }
             RootCanisterInstallMode::Upgrade => Ok((LIFELINE_CANISTER_ID, "upgrade_root")),
@@ -193,9 +192,7 @@ mod tests {
                 let error_message = error.error_message.to_lowercase();
                 assert!(
                     error_message.contains(keyword),
-                    "{} not found in {:#?}",
-                    keyword,
-                    error_message
+                    "{keyword} not found in {error_message:#?}"
                 );
             }
         };
@@ -390,7 +387,7 @@ mod tests {
             (SNS_WASM_CANISTER_ID, Topic::ServiceNervousSystemManagement),
             (
                 CanisterId::from_u64(123_456_789),
-                Topic::NetworkCanisterManagement,
+                Topic::ApplicationCanisterManagement,
             ),
         ];
 

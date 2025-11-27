@@ -12,6 +12,7 @@ assert_matches = { workspace = true }
 candid = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }
 futures = { workspace = true }
+hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
@@ -22,6 +23,7 @@ ic-nervous-system-common = { path = "../common" }
 ic-nervous-system-proto = { path = "../proto" }
 ic-nervous-system-root = { path = "../root" }
 ic-nervous-system-runtime = { path = "../runtime" }
+sns-treasury-manager = { path = "../../sns/treasury_manager" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-governance = { path = "../../nns/governance" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
@@ -53,6 +55,7 @@ ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-icrc1 = { path = "../../ledger_suite/icrc1/" }
 ic-icrc1-index-ng = { path = "../../ledger_suite/icrc1/index-ng" }
+ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
 ic-icrc1-tokens-u64 = { path = "../../ledger_suite/icrc1/tokens_u64" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nervous-system-common-test-keys = { path = "../common/test_keys" }
@@ -81,4 +84,4 @@ num-traits = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 rustc-hash = "1.1.0"
 serde = { workspace = true }
-xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }
+xrc-mock = { path = "../../rust_canisters/xrc_mock" }

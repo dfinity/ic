@@ -1,25 +1,25 @@
 use crate::common::LOG_PREFIX;
 use crate::invariants::{
     common::{
-        get_node_records_from_snapshot, get_subnet_ids_from_snapshot, get_value_from_snapshot,
-        InvariantCheckError, RegistrySnapshot,
+        InvariantCheckError, RegistrySnapshot, get_node_records_from_snapshot,
+        get_subnet_ids_from_snapshot, get_value_from_snapshot,
     },
     subnet::get_subnet_records_map,
 };
-use ic_base_types::{subnet_id_try_from_protobuf, NodeId, SubnetId};
+use ic_base_types::{NodeId, SubnetId, subnet_id_try_from_protobuf};
 use ic_crypto_utils_ni_dkg::extract_subnet_threshold_sig_public_key;
 use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
 use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetRecord};
 use ic_protobuf::types::v1::MasterPublicKeyId;
 use ic_registry_keys::{
+    CRYPTO_RECORD_KEY_PREFIX, CRYPTO_TLS_CERT_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
     get_master_public_key_id_from_signing_subnet_list_key, make_catch_up_package_contents_key,
     make_crypto_threshold_signing_pubkey_key, make_node_record_key, make_subnet_record_key,
-    maybe_parse_crypto_node_key, maybe_parse_crypto_tls_cert_key, CRYPTO_RECORD_KEY_PREFIX,
-    CRYPTO_TLS_CERT_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
+    maybe_parse_crypto_node_key, maybe_parse_crypto_tls_cert_key,
 };
 use ic_registry_subnet_features::ChainKeyConfig;
-use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::KeyPurpose;
+use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use prost::Message;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
@@ -74,7 +74,7 @@ pub(crate) fn check_node_crypto_keys_invariants(
 fn check_node_crypto_keys_exist_and_are_unique(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
-    println!("{}node_crypto_keys_invariants_check_start", LOG_PREFIX);
+    println!("{LOG_PREFIX}node_crypto_keys_invariants_check_start");
     let nodes = get_node_records_from_snapshot(snapshot);
     let (pks, certs) = get_all_nodes_public_keys_and_certs(snapshot)?;
 
@@ -104,8 +104,7 @@ fn check_node_crypto_keys_exist_and_are_unique(
         "node_crypto_keys_invariants_check_failure"
     };
     println!(
-        "{}{}: # of ok nodes: {}, # of bad nodes: {}, result: {:?}",
-        LOG_PREFIX, label, ok_node_count, bad_node_count, result
+        "{LOG_PREFIX}{label}: # of ok nodes: {ok_node_count}, # of bad nodes: {bad_node_count}, result: {result:?}"
     );
     result
 }
@@ -135,16 +134,16 @@ fn node_has_all_keys_and_cert_and_valid_node_id(
                 }
             }
             None => {
-                let msg = format!("node {} has no key for purpose {:?} ", node_id, key_purpose);
-                println!("{} {}", LOG_PREFIX, msg);
+                let msg = format!("node {node_id} has no key for purpose {key_purpose:?} ");
+                println!("{LOG_PREFIX} {msg}");
                 maybe_error =
                     Some(maybe_error.unwrap_or(Err(InvariantCheckError { msg, source: None })));
             }
         }
     }
     if certs.get(node_id).is_none() {
-        let msg = format!("node {} has no TLS cert", node_id);
-        println!("{} {}", LOG_PREFIX, msg);
+        let msg = format!("node {node_id} has no TLS cert");
+        println!("{LOG_PREFIX} {msg}");
         maybe_error = Some(maybe_error.unwrap_or(Err(InvariantCheckError { msg, source: None })));
     }
     maybe_error.unwrap_or(Ok(()))
@@ -166,8 +165,7 @@ fn node_id_is_consistently_derived(
         }
         Err(err) => {
             maybe_err_msg = Some(format!(
-                "node {} has a corrupted NodeSigning key: {:?}",
-                node_id, err
+                "node {node_id} has a corrupted NodeSigning key: {err:?}"
             ));
         }
     }
@@ -192,7 +190,7 @@ fn nodes_crypto_keys_and_certs_are_unique(
                     "nodes {} and {} use the same public key {:?}",
                     prev, node_id, pk.key_value
                 );
-                println!("{} {}", LOG_PREFIX, msg);
+                println!("{LOG_PREFIX} {msg}");
                 maybe_error =
                     Some(maybe_error.unwrap_or(Err(InvariantCheckError { msg, source: None })));
             }
@@ -208,7 +206,7 @@ fn nodes_crypto_keys_and_certs_are_unique(
                     "nodes {} and {} use the same certificate {:?}",
                     prev, node_id, cert.certificate_der
                 );
-                println!("{} {}", LOG_PREFIX, msg);
+                println!("{LOG_PREFIX} {msg}");
                 maybe_error =
                     Some(maybe_error.unwrap_or(Err(InvariantCheckError { msg, source: None })));
             }
@@ -230,7 +228,7 @@ fn get_all_nodes_public_keys_and_certs(
     for (k, v) in snapshot {
         if k.starts_with(CRYPTO_RECORD_KEY_PREFIX.as_bytes()) {
             let key = String::from_utf8(k.to_owned()).map_err(|e| InvariantCheckError {
-                msg: format!("invalid crypto node key bytes: {}", e),
+                msg: format!("invalid crypto node key bytes: {e}"),
                 source: None,
             })?;
             let (node_id, key_purpose) =
@@ -239,13 +237,13 @@ fn get_all_nodes_public_keys_and_certs(
                     source: None,
                 })?;
             let pk = PublicKey::decode(v.as_slice()).map_err(|e| InvariantCheckError {
-                msg: format!("invalid serialised public key: {}", e),
+                msg: format!("invalid serialised public key: {e}"),
                 source: None,
             })?;
             pks.insert((node_id, key_purpose), pk);
         } else if k.starts_with(CRYPTO_TLS_CERT_KEY_PREFIX.as_bytes()) {
             let key = String::from_utf8(k.to_owned()).map_err(|e| InvariantCheckError {
-                msg: format!("invalid tls cert key bytes: {}", e),
+                msg: format!("invalid tls cert key bytes: {e}"),
                 source: None,
             })?;
             let node_id = maybe_parse_crypto_tls_cert_key(&key).ok_or(InvariantCheckError {
@@ -254,7 +252,7 @@ fn get_all_nodes_public_keys_and_certs(
             })?;
             let cert =
                 X509PublicKeyCert::decode(v.as_slice()).map_err(|e| InvariantCheckError {
-                    msg: format!("invalid serialised public key: {}", e),
+                    msg: format!("invalid serialised public key: {e}"),
                     source: None,
                 })?;
             certs.insert(node_id, cert);
@@ -271,10 +269,7 @@ fn check_chain_key_configs(snapshot: &RegistrySnapshot) -> Result<(), InvariantC
         let subnet_record: SubnetRecord = subnet_records_map
             .remove(&make_subnet_record_key(subnet_id).into_bytes())
             .unwrap_or_else(|| {
-                panic!(
-                    "Subnet {:} is in subnet list but no record exists",
-                    subnet_id
-                )
+                panic!("Subnet {subnet_id:} is in subnet list but no record exists")
             });
 
         let Some(chain_key_config_pb) = subnet_record.chain_key_config else {
@@ -285,8 +280,7 @@ fn check_chain_key_configs(snapshot: &RegistrySnapshot) -> Result<(), InvariantC
             ChainKeyConfig::try_from(chain_key_config_pb.clone()).map_err(|err| {
                 InvariantCheckError {
                     msg: format!(
-                        "ChainKeyConfig {:?} of subnet {:} could not be deserialized: {}",
-                        chain_key_config_pb, subnet_id, err,
+                        "ChainKeyConfig {chain_key_config_pb:?} of subnet {subnet_id:} could not be deserialized: {err}",
                     ),
                     source: None,
                 }
@@ -300,8 +294,7 @@ fn check_chain_key_configs(snapshot: &RegistrySnapshot) -> Result<(), InvariantC
             {
                 return Err(InvariantCheckError {
                     msg: format!(
-                        "`pre_signatures_to_create_in_advance` for key {} of subnet {:} cannot be zero.",
-                        key_id, subnet_id,
+                        "`pre_signatures_to_create_in_advance` for key {key_id} of subnet {subnet_id:} cannot be zero.",
                     ),
                     source: None,
                 });
@@ -336,8 +329,7 @@ fn check_chain_key_signing_subnet_lists(
             let master_key_id =  get_master_public_key_id_from_signing_subnet_list_key(key_id)
                 .map_err(|err| InvariantCheckError {
                     msg: format!(
-                        "Registry key_id {} could not be converted to an MasterPublicKeyId",
-                        key_id,
+                        "Registry key_id {key_id} could not be converted to an MasterPublicKeyId",
                     ),
                     source: Some(Box::new(err)),
                 })?;
@@ -356,15 +348,14 @@ fn check_chain_key_signing_subnet_lists(
                         .get(&make_subnet_record_key(subnet_id).into_bytes())
                         .ok_or(InvariantCheckError {
                             msg: format!(
-                                "A non-existent subnet {} was set as the holder of a key_id {}",
-                                subnet_id, key_id
+                                "A non-existent subnet {subnet_id} was set as the holder of a key_id {key_id}"
                             ),
                             source: None,
                         })?
                         .chain_key_config
                         .as_ref()
                         .ok_or(InvariantCheckError {
-                            msg: format!("The subnet {} does not have a ChainKeyConfig", subnet_id),
+                            msg: format!("The subnet {subnet_id} does not have a ChainKeyConfig"),
                             source: None,
                         })?
                         .key_configs
@@ -375,8 +366,7 @@ fn check_chain_key_signing_subnet_lists(
                         } else {
                             Err(InvariantCheckError {
                                 msg: format!(
-                                    "The subnet {} does not have the key with {} in its chain key configurations",
-                                    subnet_id, key_id
+                                    "The subnet {subnet_id} does not have the key with {key_id} in its chain key configurations"
                                 ),
                                 source: None,
                             })
@@ -413,11 +403,7 @@ fn check_no_orphaned_node_crypto_records(
     if !nodes_with_orphaned_records.is_empty() {
         return Err(InvariantCheckError {
             msg: format!(
-                "There are {} or {} entries without a corresponding {} entry: {:?}",
-                CRYPTO_RECORD_KEY_PREFIX,
-                CRYPTO_TLS_CERT_KEY_PREFIX,
-                NODE_RECORD_KEY_PREFIX,
-                nodes_with_orphaned_records
+                "There are {CRYPTO_RECORD_KEY_PREFIX} or {CRYPTO_TLS_CERT_KEY_PREFIX} entries without a corresponding {NODE_RECORD_KEY_PREFIX} entry: {nodes_with_orphaned_records:?}"
             ),
             source: None,
         });
@@ -428,10 +414,7 @@ fn check_no_orphaned_node_crypto_records(
 fn check_high_threshold_public_key_matches_the_one_in_cup(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
-    println!(
-        "{}high_threshold_public_key_matches_the_one_in_cup_check_start",
-        LOG_PREFIX
-    );
+    println!("{LOG_PREFIX}high_threshold_public_key_matches_the_one_in_cup_check_start");
 
     let mut bad_subnets: Vec<SubnetId> = vec![];
     let mut ok_subnet_count = 0;
@@ -455,8 +438,7 @@ fn check_high_threshold_public_key_matches_the_one_in_cup(
                     bad_subnets.push(subnet_id);
                     bad_subnet_count += 1;
                     println!(
-                        "{}high_threshold_public_key_matches_the_one_in_cup_check: error converting high threshold public key proto to ThresholdSigPublicKey for subnet {}: {:?}",
-                        LOG_PREFIX, subnet_id, e
+                        "{LOG_PREFIX}high_threshold_public_key_matches_the_one_in_cup_check: error converting high threshold public key proto to ThresholdSigPublicKey for subnet {subnet_id}: {e:?}"
                     );
                     continue;
                 }
@@ -473,8 +455,7 @@ fn check_high_threshold_public_key_matches_the_one_in_cup(
                     bad_subnets.push(subnet_id);
                     bad_subnet_count += 1;
                     println!(
-                        "{}high_threshold_public_key_matches_the_one_in_cup_check: high threshold public key set, but no high threshold public key in cup contents for subnet {}",
-                        LOG_PREFIX, subnet_id
+                        "{LOG_PREFIX}high_threshold_public_key_matches_the_one_in_cup_check: high threshold public key set, but no high threshold public key in cup contents for subnet {subnet_id}"
                     );
                     continue;
                 }
@@ -487,8 +468,7 @@ fn check_high_threshold_public_key_matches_the_one_in_cup(
                     bad_subnets.push(subnet_id);
                     bad_subnet_count += 1;
                     println!(
-                        "{}high_threshold_public_key_matches_the_one_in_cup_check: error extracting high threshold public key bytes from cup contents for subnet {}: {:?}",
-                        LOG_PREFIX, subnet_id, e
+                        "{LOG_PREFIX}high_threshold_public_key_matches_the_one_in_cup_check: error extracting high threshold public key bytes from cup contents for subnet {subnet_id}: {e:?}"
                     );
                     continue;
                 }
@@ -498,8 +478,7 @@ fn check_high_threshold_public_key_matches_the_one_in_cup(
                 bad_subnets.push(subnet_id);
                 bad_subnet_count += 1;
                 println!(
-                    "{}high_threshold_public_key_matches_the_one_in_cup_check: explicitly set high threshold public key does not match the one in cup contents for subnet {}",
-                    LOG_PREFIX, subnet_id
+                    "{LOG_PREFIX}high_threshold_public_key_matches_the_one_in_cup_check: explicitly set high threshold public key does not match the one in cup contents for subnet {subnet_id}"
                 );
             } else {
                 ok_subnet_count += 1;
@@ -508,8 +487,7 @@ fn check_high_threshold_public_key_matches_the_one_in_cup(
             bad_subnets.push(subnet_id);
             bad_subnet_count += 1;
             println!(
-                "{}high_threshold_public_key_matches_the_one_in_cup_check: high threshold public key and/or cup contents not found for subnet {}",
-                LOG_PREFIX, subnet_id
+                "{LOG_PREFIX}high_threshold_public_key_matches_the_one_in_cup_check: high threshold public key and/or cup contents not found for subnet {subnet_id}"
             );
         }
     }
@@ -534,8 +512,7 @@ fn check_high_threshold_public_key_matches_the_one_in_cup(
         "high_threshold_public_key_matches_the_one_in_cup_check_failure"
     };
     println!(
-        "{}{}: # of ok subnets: {}, # of bad subnets: {}, result: {:?}",
-        LOG_PREFIX, label, ok_subnet_count, bad_subnet_count, result
+        "{LOG_PREFIX}{label}: # of ok subnets: {ok_subnet_count}, # of bad subnets: {bad_subnet_count}, result: {result:?}"
     );
     result
 }

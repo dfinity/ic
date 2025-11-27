@@ -9,9 +9,9 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
+    InstallCodeRequest, MakeProposalRequest, ProposalActionRequest, ProposalStatus, Vote,
     install_code::CanisterInstallMode as GovernanceCanisterInstallMode,
-    manage_neuron_response::Command as CommandResponse, InstallCodeRequest, MakeProposalRequest,
-    ProposalActionRequest, ProposalStatus, Vote,
+    manage_neuron_response::Command as CommandResponse,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -95,10 +95,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
     {
         resp.proposal_id.unwrap()
     } else {
-        panic!(
-            "Unexpected proposal submission response: {:?}",
-            proposal_submission_response
-        );
+        panic!("Unexpected proposal submission response: {proposal_submission_response:?}");
     };
 
     // Should have 1 pending proposals
@@ -123,8 +120,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
     assert_eq!(
         proposal_info.status,
         ProposalStatus::Executed as i32,
-        "{:#?}",
-        proposal_info
+        "{proposal_info:#?}"
     );
 
     // No proposals should be pending now.
@@ -197,10 +193,7 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
     {
         resp.proposal_id.unwrap()
     } else {
-        panic!(
-            "Unexpected proposal submission response: {:?}",
-            proposal_submission_response
-        );
+        panic!("Unexpected proposal submission response: {proposal_submission_response:?}");
     };
 
     // Should have 1 pending proposals
@@ -224,8 +217,7 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
     assert_eq!(
         proposal_info.status,
         ProposalStatus::Executed as i32,
-        "{:#?}",
-        proposal_info
+        "{proposal_info:#?}"
     );
 
     // No proposals should be pending now.

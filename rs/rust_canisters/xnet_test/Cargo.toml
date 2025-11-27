@@ -13,8 +13,9 @@ path = "src/main.rs"
 [dependencies]
 candid = { workspace = true }
 futures = { workspace = true }
-ic-cdk = "^0.18.0-alpha.2"
+ic-cdk = { workspace = true }
 ic-management-canister-types = { workspace = true }
+ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for-wasm" }
 rand = { workspace = true }
 rand_pcg = "0.3"
 serde = { workspace = true }

@@ -11,7 +11,7 @@ mod tests;
 mod xnet_client_tests;
 
 use crate::certified_slice_pool::{
-    certified_slice_count_bytes, CertifiedSliceError, CertifiedSlicePool, CertifiedSliceResult,
+    CertifiedSliceError, CertifiedSlicePool, CertifiedSliceResult, certified_slice_count_bytes,
 };
 use async_trait::async_trait;
 use http_body_util::BodyExt;
@@ -29,14 +29,14 @@ use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
-use ic_logger::{error, info, log, warn, ReplicaLogger};
-use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
+use ic_logger::{ReplicaLogger, error, info, log, warn};
 use ic_metrics::MetricsRegistry;
+use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetListRegistry};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{replicated_state::ReplicatedStateMessageRouting, ReplicatedState};
+use ic_replicated_state::{ReplicatedState, replicated_state::ReplicatedStateMessageRouting};
 use ic_types::batch::{ValidationContext, XNetPayload};
 use ic_types::registry::RegistryClientError;
 use ic_types::state_manager::StateManagerError;
@@ -46,7 +46,7 @@ use ic_xnet_hyper::TlsConnector;
 use ic_xnet_uri::XNetAuthority;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 pub use proximity::{GenRangeFn, ProximityMap};
-use rand::{rngs::StdRng, thread_rng, Rng};
+use rand::{Rng, rngs::StdRng, thread_rng};
 use std::collections::{BTreeMap, VecDeque};
 use std::net::SocketAddr;
 use std::ops::DerefMut;
@@ -326,7 +326,7 @@ impl XNetPayloadBuilderImpl {
     pub fn new(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        tls_handshake: Arc<dyn TlsConfig + Send + Sync>,
+        tls_handshake: Arc<dyn TlsConfig>,
         registry: Arc<dyn RegistryClient>,
         runtime_handle: runtime::Handle,
         node_id: NodeId,
@@ -537,11 +537,7 @@ impl XNetPayloadBuilderImpl {
         // Must expect signal for existing message (or just beyond last message).
         assert!(
             self_messages_begin <= expected && expected <= self_messages_end,
-            "Subnet {}: invalid expected signal; messages_begin() ({}) <= expected ({}) <= messages_end() ({})",
-            subnet_id,
-            self_messages_begin,
-            expected,
-            self_messages_end
+            "Subnet {subnet_id}: invalid expected signal; messages_begin() ({self_messages_begin}) <= expected ({expected}) <= messages_end() ({self_messages_end})"
         );
 
         if expected > signals_end || signals_end > self_messages_end {
@@ -643,8 +639,7 @@ impl XNetPayloadBuilderImpl {
                     "Failed to decode stream slice from subnet {}: {}", subnet_id, err
                 );
                 return SliceValidationResult::Invalid(format!(
-                    "Invalid stream from {}: {}",
-                    subnet_id, err
+                    "Invalid stream from {subnet_id}: {err}"
                 ));
             }
         };
@@ -660,8 +655,7 @@ impl XNetPayloadBuilderImpl {
                 slice.header().end()
             );
             return SliceValidationResult::Invalid(format!(
-                "Invalid stream bounds in stream from {}",
-                subnet_id
+                "Invalid stream bounds in stream from {subnet_id}"
             ));
         }
 
@@ -680,8 +674,7 @@ impl XNetPayloadBuilderImpl {
                 slice.header().end()
             );
             return SliceValidationResult::Invalid(format!(
-                "Unexpected messages in stream from {}",
-                subnet_id
+                "Unexpected messages in stream from {subnet_id}"
             ));
         }
 
@@ -706,8 +699,7 @@ impl XNetPayloadBuilderImpl {
                     slice.header().end()
                 );
                 return SliceValidationResult::Invalid(format!(
-                    "Invalid slice bounds in stream from {}",
-                    subnet_id
+                    "Invalid slice bounds in stream from {subnet_id}"
                 ));
             }
 
@@ -722,27 +714,25 @@ impl XNetPayloadBuilderImpl {
                     messages.begin()
                 );
                 return SliceValidationResult::Invalid(format!(
-                    "Unexpected messages in stream from {}",
-                    subnet_id
+                    "Unexpected messages in stream from {subnet_id}"
                 ));
             }
 
             // Ensure the message limit (dictated e.g. by the backlog size) is respected.
-            if let Some(msg_limit) = get_msg_limit(subnet_id, state) {
-                if messages.len() > msg_limit {
-                    log!(
-                        self.log,
-                        log_level,
-                        "Stream from {}: slice length ({}) above limit ({})",
-                        subnet_id,
-                        messages.len(),
-                        msg_limit
-                    );
-                    return SliceValidationResult::Invalid(format!(
-                        "Stream from {}: slice length above limit",
-                        subnet_id
-                    ));
-                }
+            if let Some(msg_limit) = get_msg_limit(subnet_id, state)
+                && messages.len() > msg_limit
+            {
+                log!(
+                    self.log,
+                    log_level,
+                    "Stream from {}: slice length ({}) above limit ({})",
+                    subnet_id,
+                    messages.len(),
+                    msg_limit
+                );
+                return SliceValidationResult::Invalid(format!(
+                    "Stream from {subnet_id}: slice length above limit"
+                ));
             }
 
             // Ensure the signal limit is respected.
@@ -757,8 +747,7 @@ impl XNetPayloadBuilderImpl {
                     max_message_index
                 );
                 return SliceValidationResult::Invalid(format!(
-                    "Stream from {}: inducting slice would produce too many signals",
-                    subnet_id
+                    "Stream from {subnet_id}: inducting slice would produce too many signals"
                 ));
             }
         }
@@ -776,8 +765,7 @@ impl XNetPayloadBuilderImpl {
                 );
                 self.metrics.critical_error_slice_count_bytes_failed.inc();
                 return SliceValidationResult::Invalid(format!(
-                    "Failed to compute CertifiedStreamSlice byte size: {}",
-                    e
+                    "Failed to compute CertifiedStreamSlice byte size: {e}"
                 ));
             }
         };
@@ -802,8 +790,7 @@ impl XNetPayloadBuilderImpl {
             },
 
             SignalsValidationResult::Invalid => SliceValidationResult::Invalid(format!(
-                "Unexpected signals in stream from {}",
-                subnet_id
+                "Unexpected signals in stream from {subnet_id}"
             )),
         }
     }
@@ -891,8 +878,7 @@ impl XNetPayloadBuilderImpl {
                     {
                         // This is a bug: inconsistent size estimate between packed and unpacked slice.
                         let message = format!(
-                            "Slice from {} has packed byte size {}, unpacked byte size {}, limit was {}",
-                            subnet_id, byte_size, slice_bytes, byte_limit
+                            "Slice from {subnet_id} has packed byte size {byte_size}, unpacked byte size {slice_bytes}, limit was {byte_limit}"
                         );
                         debug_assert!(false, "{}", message);
                         error!(
@@ -909,7 +895,11 @@ impl XNetPayloadBuilderImpl {
                     SliceValidationResult::Invalid(_) => {
                         info!(
                             self.log,
-                            "Invalid slice from {}: {:?}", subnet_id, validation_result
+                            "Invalid slice from {}: {:?}. Referenced certified height {}. Gap to chain tip {}.",
+                            subnet_id,
+                            validation_result,
+                            validation_context.certified_height,
+                            past_payloads.len()
                         );
                     }
 
@@ -1061,14 +1051,17 @@ impl XNetEndpointResolver {
         log: ReplicaLogger,
     ) -> Self {
         let newest_registry = registry.get_latest_version();
-        let node_operator_id =
-            get_node_operator_id(&node_id, registry.as_ref(), &newest_registry, &log)
-                .unwrap_or_else(|| {
-                    panic!(
-                    "Could not read own node's ({:?}) node record from registry of version ({:?}).",
-                    node_id, newest_registry
-                )
-                });
+        let node_operator_id = get_node_operator_id(
+            &node_id,
+            registry.as_ref(),
+            &newest_registry,
+            &log,
+        )
+        .unwrap_or_else(|| {
+            panic!(
+                "Could not read own node's ({node_id:?}) node record from registry of version ({newest_registry:?})."
+            )
+        });
         Self {
             registry,
             subnet_id,
@@ -1127,7 +1120,7 @@ impl XNetEndpointResolver {
 
         url.parse::<Uri>()
             .map_err(|e| {
-                panic!("Could not parse URL {} : {}", url, e);
+                panic!("Could not parse URL {url} : {e}");
             })
             .map(|url| EndpointLocator {
                 node_id: node,
@@ -1691,7 +1684,7 @@ impl XNetClientImpl {
     /// most 1 idle connection per host.
     fn new(
         metrics_registry: &MetricsRegistry,
-        tls: Arc<dyn TlsConfig + Send + Sync>,
+        tls: Arc<dyn TlsConfig>,
         proximity_map: Arc<ProximityMap>,
     ) -> XNetClientImpl {
         #[cfg(not(test))]
@@ -1825,9 +1818,9 @@ impl XNetClientError {
 /// Internal functionality, exposed for use by integration tests.
 pub mod testing {
     pub use super::{
-        EndpointLocator, GenRangeFn, PoolRefillTask, ProximityMap, RefillTaskHandle, XNetClient,
-        XNetClientError, XNetEndpointResolver, XNetPayloadBuilderMetrics, LABEL_STATUS,
-        METRIC_BUILD_PAYLOAD_DURATION, METRIC_SLICE_MESSAGES, METRIC_SLICE_PAYLOAD_SIZE,
-        POOL_SLICE_BYTE_SIZE_MAX, STATUS_SUCCESS,
+        EndpointLocator, GenRangeFn, LABEL_STATUS, METRIC_BUILD_PAYLOAD_DURATION,
+        METRIC_SLICE_MESSAGES, METRIC_SLICE_PAYLOAD_SIZE, POOL_SLICE_BYTE_SIZE_MAX, PoolRefillTask,
+        ProximityMap, RefillTaskHandle, STATUS_SUCCESS, XNetClient, XNetClientError,
+        XNetEndpointResolver, XNetPayloadBuilderMetrics,
     };
 }

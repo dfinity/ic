@@ -127,7 +127,7 @@ impl fmt::Display for EccCurveType {
             Self::Ed25519 => "ed25519",
         };
 
-        write!(f, "{}", curve_name)
+        write!(f, "{curve_name}")
     }
 }
 
@@ -196,6 +196,78 @@ impl EccScalar {
             Self::K256(s) => s.invert().map(Self::K256),
             Self::P256(s) => s.invert().map(Self::P256),
             Self::Ed25519(s) => s.invert().map(Self::Ed25519),
+        }
+    }
+
+    /// Compute the modular inverse of Self
+    ///
+    /// This function may leak the value of self to side channels, and should only
+    /// be used for public inputs
+    ///
+    /// Returns None if self is equal to zero
+    pub fn invert_vartime(&self) -> Option<Self> {
+        match self {
+            Self::K256(s) => s.invert_vartime().map(Self::K256),
+            Self::P256(s) => s.invert_vartime().map(Self::P256),
+            Self::Ed25519(s) => s.invert_vartime().map(Self::Ed25519),
+        }
+    }
+
+    /// Variable time batch inversion
+    ///
+    /// If all the scalars are invertible then returns the inverse of
+    /// each. Same as calling `invert_vartime` but potentially faster.
+    ///
+    /// All of the scalars must be in the same group
+    pub fn batch_invert_vartime(scalars: &[Self]) -> Result<Vec<Self>, CanisterThresholdError> {
+        if scalars.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let curve = scalars[0].curve_type();
+
+        let n = scalars.len();
+        let mut accum = EccScalar::one(curve);
+        let mut products = Vec::with_capacity(scalars.len());
+
+        /*
+         * This uses Montgomery's Trick to compute many inversions using just a
+         * single field inversion. This is worthwhile because field inversions
+         * are quite expensive.
+         *
+         * The basic idea here (for n=2) is taking advantage of the fact that if
+         * x and y both have inverses then so does x*y, and (x*y)^-1 * x = y^-1
+         * and (x*y)^-1 * y = x^-1
+         *
+         * This is described in more detail in various texts such as
+         *  - <https://eprint.iacr.org/2008/199.pdf> section 2
+         *  - "Guide to Elliptic Curve Cryptography" Algorithm 2.26
+         */
+
+        for s in scalars {
+            // This will fail if any of the elements are not of the
+            // expected curve type
+            accum = accum.mul(s)?;
+            products.push(accum.clone());
+        }
+
+        if let Some(mut inv) = accum.invert_vartime() {
+            let mut result = Vec::with_capacity(n);
+
+            for i in (1..n).rev() {
+                result.push(inv.mul(&products[i - 1])?);
+                inv = inv.mul(&scalars[i])?;
+            }
+
+            result.push(inv);
+            result.reverse();
+
+            Ok(result)
+        } else {
+            // There was a zero...
+            Err(CanisterThresholdError::InvalidArguments(
+                "Zero during batch inversion".to_string(),
+            ))
         }
     }
 
@@ -455,7 +527,7 @@ impl<'de> Deserialize<'de> for EccScalar {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let helper: EccScalarSerializationHelper = Deserialize::deserialize(deserializer)?;
         EccScalar::deserialize_tagged(&helper.0)
-            .map_err(|e| serde::de::Error::custom(format!("{:?}", e)))
+            .map_err(|e| serde::de::Error::custom(format!("{e:?}")))
     }
 }
 
@@ -497,17 +569,17 @@ impl TryFrom<&EccScalar> for EccScalarBytes {
         match scalar.curve_type() {
             EccCurveType::K256 => {
                 Ok(Self::K256(scalar.serialize().try_into().map_err(|e| {
-                    CanisterThresholdSerializationError(format!("{:?}", e))
+                    CanisterThresholdSerializationError(format!("{e:?}"))
                 })?))
             }
             EccCurveType::P256 => {
                 Ok(Self::P256(scalar.serialize().try_into().map_err(|e| {
-                    CanisterThresholdSerializationError(format!("{:?}", e))
+                    CanisterThresholdSerializationError(format!("{e:?}"))
                 })?))
             }
             EccCurveType::Ed25519 => {
                 Ok(Self::Ed25519(scalar.serialize().try_into().map_err(
-                    |e| CanisterThresholdSerializationError(format!("{:?}", e)),
+                    |e| CanisterThresholdSerializationError(format!("{e:?}")),
                 )?))
             }
         }
@@ -918,7 +990,7 @@ impl EccPoint {
         let mut mul_states: Vec<SlidingWindowMulState> = point_scalar_pairs
             .iter()
             .zip(luts.iter())
-            .map(|(&(_p, s), lut)| (SlidingWindowMulState::new(s, lut.window_size)))
+            .map(|(&(_p, s), lut)| SlidingWindowMulState::new(s, lut.window_size))
             .collect();
 
         let mut accum = EccPoint::identity(point_scalar_pairs[0].0.curve_type());
@@ -1289,7 +1361,7 @@ impl<'de> Deserialize<'de> for EccPoint {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let helper: EccPointSerializationHelper = Deserialize::deserialize(deserializer)?;
         EccPoint::deserialize_tagged(&helper.0)
-            .map_err(|e| serde::de::Error::custom(format!("{:?}", e)))
+            .map_err(|e| serde::de::Error::custom(format!("{e:?}")))
     }
 }
 

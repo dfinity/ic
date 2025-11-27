@@ -1,9 +1,9 @@
 use ic_base_types::PrincipalId;
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities_metrics::fetch_int_counter_vec;
-use ic_types::ingress::IngressStatus;
 use ic_types::Cycles;
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_types::ingress::IngressStatus;
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);

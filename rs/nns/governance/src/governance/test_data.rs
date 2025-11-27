@@ -26,13 +26,13 @@ const SPECIFIED_CANISTER_ID: CanisterId = CanisterId::from_u64(0x2100000);
 // similar names as types found in ic_sns_init.
 mod src {
     pub use crate::pb::v1::create_service_nervous_system::{
+        GovernanceParameters, InitialTokenDistribution, SwapParameters,
         governance_parameters::VotingRewardParameters,
         initial_token_distribution::{
-            developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
-            TreasuryDistribution,
+            DeveloperDistribution, SwapDistribution, TreasuryDistribution,
+            developer_distribution::NeuronDistribution,
         },
         swap_parameters::NeuronBasketConstructionParameters,
-        GovernanceParameters, InitialTokenDistribution, SwapParameters,
     };
 } // end mod src
 

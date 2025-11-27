@@ -18,9 +18,11 @@ DEPENDENCIES = [
     "//rs/crypto/sha2",
     "//rs/crypto/utils/basic_sig",
     "//rs/crypto/utils/ni_dkg",
+    "//rs/nervous_system/access_list",
     "//rs/nervous_system/chunks",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/rate_limits",
     "//rs/nervous_system/string",
     "//rs/nervous_system/temporary",
     "//rs/nervous_system/time_helpers",
@@ -84,6 +86,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:candid_parser",
     "@crate_index//:itertools",
+    "@crate_index//:pretty_assertions",
     "@crate_index//:rand",
     "@crate_index//:rand_distr",
     "@crate_index//:serde_json",
@@ -105,6 +108,18 @@ BUILD_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:build-info-build",
 ]
+
+POCKET_IC_DEPS = [
+    "//packages/pocket-ic",
+]
+
+POCKET_IC_DATA = [
+    "//rs/pocket_ic_server:pocket-ic-server",
+]
+
+POCKET_IC_ENV = {
+    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+}
 
 ALIASES = {}
 
@@ -234,7 +249,7 @@ rust_ic_test_suite_with_extra_srcs(
         ":registry-canister-test",
         "//rs/nns/cmc:cycles-minting-canister",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
-    ],
+    ] + POCKET_IC_DATA,
     env = {
         # Keep sorted.
         "CARGO_MANIFEST_DIR": "rs/registry/canister",
@@ -242,10 +257,14 @@ rust_ic_test_suite_with_extra_srcs(
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath :registry-canister)",
         "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath :registry-canister-test)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
-    },
+    } | POCKET_IC_ENV,
     extra_srcs = glob(["tests/common/*.rs"]),
     proc_macro_deps = DEV_MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":canister"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":canister",
+        "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
+        "//rs/state_machine_tests",
+    ] + POCKET_IC_DEPS,
 )
 
 generated_files_check(
@@ -256,7 +275,6 @@ generated_files_check(
         ":protos",
         "//rs/nns/common:protos",
         "//rs/protobuf:protos",
-        "//rs/registry/transport:protos",
         "//rs/types/base_types:protos",
     ] + glob(["src/gen/**"]),
     manifest_dir = "rs/registry/canister",

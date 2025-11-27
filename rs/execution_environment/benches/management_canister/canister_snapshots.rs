@@ -1,7 +1,7 @@
 // To run the benchmarks:
 // bazel run //rs/execution_environment:management_canister_bench -- canister_snapshot
 use crate::utils::env;
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion};
+use criterion::{BatchSize, BenchmarkGroup, Criterion, criterion_group, criterion_main};
 use ic_management_canister_types_private::{
     CanisterSettingsArgsBuilder, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
     LoadCanisterSnapshotArgs, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
@@ -9,7 +9,7 @@ use ic_management_canister_types_private::{
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::{CanisterId, Cycles, SnapshotId};
-use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use rand::Rng;
 
 const MIB: u64 = 1024 * 1024;
@@ -68,7 +68,7 @@ fn env_and_writeable_canister_snapshot(
             canister_id,
             None,
             md.wasm_module_size,
-            md.exported_globals,
+            md.globals,
             md.wasm_memory_size,
             md.stable_memory_size,
             md.certified_data,
@@ -233,7 +233,7 @@ fn read_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
                 let args = ReadCanisterSnapshotDataArgs::new(
                     canister_id,
                     snapshot_id,
-                    CanisterSnapshotDataKind::MainMemory { offset, size: 1 },
+                    CanisterSnapshotDataKind::WasmMemory { offset, size: 1 },
                 );
                 let _ = env
                     .read_canister_snapshot_data(&args)
@@ -252,7 +252,7 @@ fn read_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
                 let args = ReadCanisterSnapshotDataArgs::new(
                     canister_id,
                     snapshot_id,
-                    CanisterSnapshotDataKind::MainMemory { offset, size: 1 },
+                    CanisterSnapshotDataKind::WasmMemory { offset, size: 1 },
                 );
                 let _ = env
                     .read_canister_snapshot_data(&args)
@@ -279,7 +279,7 @@ fn write_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
                 let args = UploadCanisterSnapshotDataArgs::new(
                     canister_id,
                     snapshot_id,
-                    CanisterSnapshotDataOffset::MainMemory { offset },
+                    CanisterSnapshotDataOffset::WasmMemory { offset },
                     vec![42],
                 );
                 env.upload_canister_snapshot_data(&args)
@@ -298,7 +298,7 @@ fn write_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
                 let args = UploadCanisterSnapshotDataArgs::new(
                     canister_id,
                     snapshot_id,
-                    CanisterSnapshotDataOffset::MainMemory { offset },
+                    CanisterSnapshotDataOffset::WasmMemory { offset },
                     vec![42],
                 );
                 env.upload_canister_snapshot_data(&args)

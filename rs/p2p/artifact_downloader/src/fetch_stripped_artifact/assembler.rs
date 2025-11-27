@@ -7,17 +7,17 @@ use thiserror::Error;
 use ic_interfaces::p2p::consensus::{
     ArtifactAssembler, AssembleResult, BouncerFactory, Peers, ValidatedPoolReader,
 };
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
 use ic_quic_transport::Transport;
 use ic_types::{
+    CountBytes, NodeId,
     artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId},
     batch::IngressPayload,
     consensus::{BlockProposal, ConsensusMessage},
     messages::SignedIngress,
-    CountBytes, NodeId,
 };
 
 use crate::FetchArtifact;
@@ -27,10 +27,10 @@ use super::{
     metrics::{FetchStrippedConsensusArtifactMetrics, IngressMessageSource, IngressSenderMetrics},
     stripper::Strippable,
     types::{
+        SignedIngressId,
         stripped::{
             MaybeStrippedConsensusMessage, StrippedBlockProposal, StrippedConsensusMessageId,
         },
-        SignedIngressId,
     },
 };
 
@@ -199,7 +199,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
         let mut ingress_messages_from_peers = 0;
 
         while let Some(join_result) = join_set.join_next().await {
-            let Ok((ingress, peer_id)) = join_result else {
+            let Ok((ingress, ingress_id, peer_id)) = join_result else {
                 return AssembleResult::Unwanted;
             };
 
@@ -212,7 +212,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
                 ingress_messages_from_peers += 1;
             }
 
-            if let Err(err) = assembler.try_insert_ingress_message(ingress) {
+            if let Err(err) = assembler.try_insert_ingress_message(ingress, ingress_id) {
                 warn!(
                     self.log,
                     "Failed to ingress message {}. This is a bug.", err
@@ -266,7 +266,7 @@ async fn get_or_fetch<P: Peers>(
     metrics: Arc<FetchStrippedConsensusArtifactMetrics>,
     node_id: NodeId,
     peer_rx: P,
-) -> (SignedIngress, NodeId) {
+) -> (SignedIngress, SignedIngressId, NodeId) {
     // First check if the ingress message exists in the Ingress Pool.
     if let Some(ingress_message) = ingress_pool
         .read()
@@ -276,19 +276,21 @@ async fn get_or_fetch<P: Peers>(
         // Make sure that this is the correct ingress message. [`IngressMessageId`] does _not_
         // uniquely identify ingress messages, we thus need to perform an extra check.
         if SignedIngressId::from(&ingress_message) == signed_ingress_id {
-            return (ingress_message, node_id);
+            return (ingress_message, signed_ingress_id, node_id);
         }
     }
 
-    download_ingress(
+    let (ingress_message, peer_id) = download_ingress(
         transport,
-        signed_ingress_id,
+        &signed_ingress_id,
         full_consensus_message_id,
         &log,
         &metrics,
         peer_rx,
     )
-    .await
+    .await;
+
+    (ingress_message, signed_ingress_id, peer_id)
 }
 
 #[derive(Debug, PartialEq, Error)]
@@ -344,9 +346,8 @@ impl BlockProposalAssembler {
     pub(crate) fn try_insert_ingress_message(
         &mut self,
         ingress_message: SignedIngress,
+        signed_ingress_id: SignedIngressId,
     ) -> Result<(), InsertionError> {
-        let signed_ingress_id = SignedIngressId::from(&ingress_message);
-
         // We can have at most 1000 elements in the vector, so it should be reasonably fast to do a
         // linear scan here.
         let (_, ingress) = self
@@ -376,13 +377,15 @@ impl BlockProposalAssembler {
             .ingress_messages
             .into_iter()
             .map(|(id, message)| {
-                message.ok_or_else(|| AssemblyError::Missing(id.ingress_message_id))
+                message
+                    .ok_or_else(|| AssemblyError::Missing(id.ingress_message_id.clone()))
+                    .map(|message| (id.ingress_message_id, message))
             })
             .collect::<Result<Vec<_>, _>>()?;
         let reconstructed_ingress_payload = IngressPayload::from(ingresses);
 
         let reconstructed_ingress_payload_proto =
-            pb::IngressPayload::from(&reconstructed_ingress_payload);
+            pb::IngressPayload::from(reconstructed_ingress_payload);
 
         if let Some(block) = reconstructed_block_proposal_proto.value.as_mut() {
             block.ingress_payload = Some(reconstructed_ingress_payload_proto);
@@ -415,8 +418,8 @@ mod tests {
 
     #[test]
     fn strip_assemble_roundtrip_test() {
-        let (ingress_1, _ingress_id_1) = fake_ingress_message_with_arg_size("fake_1", 1024);
-        let (ingress_2, _ingress_id_2) = fake_ingress_message_with_arg_size("fake_2", 1024);
+        let (ingress_1, ingress_id_1) = fake_ingress_message_with_arg_size("fake_1", 1024);
+        let (ingress_2, ingress_id_2) = fake_ingress_message_with_arg_size("fake_2", 1024);
         let block_proposal =
             fake_block_proposal_with_ingresses(vec![ingress_1.clone(), ingress_2.clone()]);
         let consensus_message = ConsensusMessage::BlockProposal(block_proposal.clone());
@@ -431,8 +434,12 @@ mod tests {
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         // insert back the missing messages
-        assembler.try_insert_ingress_message(ingress_1).unwrap();
-        assembler.try_insert_ingress_message(ingress_2).unwrap();
+        assembler
+            .try_insert_ingress_message(ingress_1, ingress_id_1)
+            .unwrap();
+        assembler
+            .try_insert_ingress_message(ingress_2, ingress_id_2)
+            .unwrap();
 
         // try to reassemble the block
         let assembled_block = assembler.try_assemble().unwrap();
@@ -442,7 +449,7 @@ mod tests {
 
     #[test]
     fn strip_assemble_fails_when_still_missing_ingress_test() {
-        let (ingress_1, _ingress_id_1) = fake_ingress_message_with_arg_size("fake_1", 1024);
+        let (ingress_1, ingress_id_1) = fake_ingress_message_with_arg_size("fake_1", 1024);
         let (ingress_2, _ingress_id_2) = fake_ingress_message_with_arg_size("fake_2", 1024);
         let block_proposal =
             fake_block_proposal_with_ingresses(vec![ingress_1.clone(), ingress_2.clone()]);
@@ -458,7 +465,9 @@ mod tests {
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         // insert back only one missing messages
-        assembler.try_insert_ingress_message(ingress_1).unwrap();
+        assembler
+            .try_insert_ingress_message(ingress_1, ingress_id_1)
+            .unwrap();
 
         // try to reassemble the block
         let assembly_error = assembler.try_assemble().unwrap_err();
@@ -495,7 +504,7 @@ mod tests {
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         assembler
-            .try_insert_ingress_message(ingress_2)
+            .try_insert_ingress_message(ingress_2, ingress_2_id.clone())
             .expect("Should successfully insert the missing ingress");
 
         assert!(assembler.missing_ingress_messages().is_empty());
@@ -510,18 +519,18 @@ mod tests {
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         assembler
-            .try_insert_ingress_message(ingress_2.clone())
+            .try_insert_ingress_message(ingress_2.clone(), ingress_2_id.clone())
             .expect("Should successfully insert the missing ingress");
 
         assert_eq!(
-            assembler.try_insert_ingress_message(ingress_2),
+            assembler.try_insert_ingress_message(ingress_2, ingress_2_id),
             Err(InsertionError::AlreadyInserted)
         );
     }
 
     #[test]
     fn ingress_payload_insertion_unknown_fails_test() {
-        let (ingress_1, _ingress_1_id) = fake_ingress_message("fake_1");
+        let (ingress_1, ingress_1_id) = fake_ingress_message("fake_1");
         let (_ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
         let stripped_block_proposal =
             fake_stripped_block_proposal_with_ingresses(vec![ingress_2_id.clone()]);
@@ -529,7 +538,7 @@ mod tests {
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         assert_eq!(
-            assembler.try_insert_ingress_message(ingress_1),
+            assembler.try_insert_ingress_message(ingress_1, ingress_1_id),
             Err(InsertionError::NotNeeded)
         );
     }
@@ -567,7 +576,7 @@ mod tests {
 
             mock_transport
                 .expect_rpc()
-                .returning(move |_, _| (Ok(fake_response.clone())));
+                .returning(move |_, _| Ok(fake_response.clone()));
         }
 
         let consensus_pool = MockValidatedPoolReader::<ConsensusMessage>::default();

@@ -22,8 +22,10 @@ ic-nervous-system-clients = { path = "../../clients" }
 ic-nervous-system-common-test-keys = { path = "../../common/test_keys" }
 ic-nns-common = { path = "../../../nns/common" }
 ic-nns-constants = { path = "../../../nns/constants" }
+reqwest = { workspace = true }
 rgb = "0.8.37"
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

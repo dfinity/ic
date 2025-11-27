@@ -1,24 +1,22 @@
 use std::{
     net::IpAddr,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicU64, Ordering},
     },
     time::{Duration, Instant},
 };
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{Context, Error, bail};
 use async_trait::async_trait;
 use axum::{body::Body, extract::State, middleware::Next, response::IntoResponse};
 use dashmap::DashMap;
 use http::Request;
-use ic_bn_lib::{
-    http::ConnInfo,
-    prometheus::{
-        register_histogram_with_registry, register_int_gauge_vec_with_registry, Histogram,
-        IntGaugeVec, Registry,
-    },
+use ic_bn_lib::prometheus::{
+    Histogram, IntGaugeVec, Registry, register_histogram_with_registry,
+    register_int_gauge_vec_with_registry,
 };
+use ic_bn_lib_common::types::http::ConnInfo;
 use tracing::{debug, error, info, warn};
 
 use crate::{
@@ -72,11 +70,11 @@ impl Bouncer {
         registry: &Registry,
     ) -> Result<Self, Error> {
         if rate_per_second == 0 {
-            return Err(anyhow!("rate_per_second should be > 0"));
+            bail!("rate_per_second should be > 0");
         }
 
         if burst_size < rate_per_second {
-            return Err(anyhow!("burst_size should be >= rate_per_second"));
+            bail!("burst_size should be >= rate_per_second");
         }
 
         let metrics = Metrics {

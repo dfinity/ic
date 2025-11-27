@@ -50,7 +50,7 @@ fn should_return_error_if_algorithm_invalid() {
         result.unwrap_err(),
         PublicKeyBytesFromProtoError {
             key_bytes: pk_proto.key_value,
-            internal_error: format!("Unknown algorithm: {}", unknown_algorithm,)
+            internal_error: format!("Unknown algorithm: {unknown_algorithm}",)
         }
     );
 }

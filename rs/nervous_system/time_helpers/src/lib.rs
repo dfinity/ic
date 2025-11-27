@@ -1,6 +1,4 @@
-use std::time::Duration;
-#[cfg(not(target_arch = "wasm32"))]
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 #[cfg(target_arch = "wasm32")]
 pub fn now_nanoseconds() -> u64 {
@@ -19,4 +17,8 @@ pub fn now_nanoseconds() -> u64 {
 
 pub fn now_seconds() -> u64 {
     Duration::from_nanos(now_nanoseconds()).as_secs()
+}
+
+pub fn now_system_time() -> SystemTime {
+    SystemTime::UNIX_EPOCH + Duration::from_nanos(now_nanoseconds())
 }

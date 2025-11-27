@@ -3,7 +3,7 @@
 /// A custom macro to serialize from and to bytes.
 #[macro_export]
 macro_rules! derive_serde {
-    ($name:ident, $size:expr) => {
+    ($name:ident, $size:expr_2021) => {
         impl serde::Serialize for $name {
             fn serialize<S: serde::ser::Serializer>(
                 &self,

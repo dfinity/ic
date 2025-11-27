@@ -6,8 +6,8 @@ use serde::Serialize;
 
 use ic_crypto_sha2::Sha256;
 use ic_protobuf::registry::firewall::v1::{FirewallRule, FirewallRuleSet};
-use ic_registry_keys::{make_firewall_rules_record_key, FirewallRulesScope};
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
+use ic_registry_keys::{FirewallRulesScope, make_firewall_rules_record_key};
+use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue, registry_mutation};
 use prost::Message;
 use std::fmt::Write;
 
@@ -20,16 +20,14 @@ impl Registry {
         expected_hash: String,
     ) {
         println!(
-            "{}do_set_firewall_rules: scope: {:?}, rules: {:?}, expected_hash: {:?}",
-            LOG_PREFIX, scope, rules, expected_hash
+            "{LOG_PREFIX}do_set_firewall_rules: scope: {scope:?}, rules: {rules:?}, expected_hash: {expected_hash:?}"
         );
 
         // Compare hash
         let result_hash = compute_firewall_ruleset_hash(&rules);
         if result_hash != expected_hash {
             panic!(
-                "{}Provided expected hash for new firewall ruleset does not match. Expected hash: {:?}, actual hash: {:?}.",
-                LOG_PREFIX, expected_hash, result_hash
+                "{LOG_PREFIX}Provided expected hash for new firewall ruleset does not match. Expected hash: {expected_hash:?}, actual hash: {result_hash:?}."
             );
         }
 
@@ -76,7 +74,10 @@ impl Registry {
     ///
     /// This method is called by the governance canister.
     pub fn do_add_firewall_rules(&mut self, payload: AddFirewallRulesPayload) {
-        println!("{}do_add_firewall_rules: scope: {:?}, rules: {:?}, positions: {:?}, expected_hash: {:?}", LOG_PREFIX, payload.scope, payload.rules, payload.positions, payload.expected_hash);
+        println!(
+            "{}do_add_firewall_rules: scope: {:?}, rules: {:?}, positions: {:?}, expected_hash: {:?}",
+            LOG_PREFIX, payload.scope, payload.rules, payload.positions, payload.expected_hash
+        );
 
         let mut entries = self.fetch_current_ruleset(&payload.scope);
         add_firewall_rules_compute_entries(&mut entries, &payload);
@@ -105,7 +106,10 @@ impl Registry {
     ///
     /// This method is called by the governance canister.
     pub fn do_update_firewall_rules(&mut self, payload: UpdateFirewallRulesPayload) {
-        println!("{}do_update_firewall_rules: scope: {:?}, rules: {:?}, positions: {:?}, expected_hash: {:?}", LOG_PREFIX, payload.scope, payload.rules, payload.positions, payload.expected_hash);
+        println!(
+            "{}do_update_firewall_rules: scope: {:?}, rules: {:?}, positions: {:?}, expected_hash: {:?}",
+            LOG_PREFIX, payload.scope, payload.rules, payload.positions, payload.expected_hash
+        );
 
         let mut entries = self.fetch_current_ruleset(&payload.scope);
         update_firewall_rules_compute_entries(&mut entries, &payload);
@@ -124,7 +128,7 @@ pub fn compute_firewall_ruleset_hash(rules: &[FirewallRule]) -> String {
     let bytes = &hasher.finish();
     let mut result_hash = String::new();
     for b in bytes {
-        let _ = write!(result_hash, "{:02X}", b);
+        let _ = write!(result_hash, "{b:02X}");
     }
     result_hash
 }
@@ -162,7 +166,9 @@ pub fn add_firewall_rules_compute_entries(
         if pos > current_entries.len() as i32 {
             panic!(
                 "{}Provided position does not match the size of the existing ruleset. Position: {:?}, ruleset size: {:?}.",
-                LOG_PREFIX, pos, current_entries.len()
+                LOG_PREFIX,
+                pos,
+                current_entries.len()
             );
         }
         current_entries.insert(pos as usize, rule);
@@ -206,7 +212,9 @@ pub fn update_firewall_rules_compute_entries(
         if pos < 0 || pos >= current_entries.len() as i32 {
             panic!(
                 "{}Provided position is out of bounds for the existing ruleset. Position: {:?}, ruleset size: {:?}.",
-                LOG_PREFIX, pos, current_entries.len()
+                LOG_PREFIX,
+                pos,
+                current_entries.len()
             );
         }
         current_entries[pos as usize] = payload.rules[rule_idx].clone();
@@ -268,7 +276,7 @@ mod tests {
     use ic_protobuf::registry::firewall::v1::{
         FirewallAction, FirewallRule, FirewallRuleDirection, FirewallRuleSet,
     };
-    use ic_registry_keys::{make_firewall_rules_record_key, FirewallRulesScope};
+    use ic_registry_keys::{FirewallRulesScope, make_firewall_rules_record_key};
     use prost::Message;
 
     const MUTATION_ID: u8 = 0;

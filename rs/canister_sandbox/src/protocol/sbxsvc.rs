@@ -8,12 +8,12 @@ use crate::protocol::structs;
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_management_canister_types_private::Global;
 use ic_replicated_state::{
+    NumWasmPages,
     page_map::{
         BaseFileSerialization, CheckpointSerialization, MappingSerialization,
         OverlayFileSerialization, PageAllocatorSerialization, PageMapSerialization,
         StorageSerialization,
     },
-    NumWasmPages,
 };
 use ic_types::CanisterId;
 use serde::{Deserialize, Serialize};
@@ -318,22 +318,23 @@ mod tests {
     use std::time::Duration;
 
     use ic_base_types::NumSeconds;
-    use ic_config::{flag_status::FlagStatus, subnet_config::CyclesAccountManagerConfig};
+    use ic_config::subnet_config::CyclesAccountManagerConfig;
     use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
     use ic_embedders::wasmtime_embedder::system_api::{
-        sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
-        InstructionLimits,
+        ApiType, ExecutionParameters, InstructionLimits,
+        sandbox_safe_system_state::SandboxSafeSystemState,
     };
-    use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
+    use ic_interfaces::execution_environment::{
+        ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
+    };
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{
-        Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages, PageMap, SystemState,
-    };
+    use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages, PageMap, SystemState};
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::{
+        ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId, Time,
+        batch::CanisterCyclesCostSchedule,
         messages::{CallContextId, RequestMetadata},
         methods::{FuncRef, WasmMethod},
-        ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId, Time,
     };
 
     use crate::protocol::{
@@ -463,19 +464,18 @@ mod tests {
                 },
                 execution_parameters: ExecutionParameters {
                     instruction_limits: InstructionLimits::new(
-                        FlagStatus::Enabled,
                         NumInstructions::new(123),
                         NumInstructions::new(12),
                     ),
                     wasm_memory_limit: Some(NumBytes::new(123)),
-                    memory_allocation: MemoryAllocation::Reserved(NumBytes::new(123)),
+                    memory_allocation: NumBytes::new(123).into(),
                     canister_guaranteed_callback_quota: 123,
                     compute_allocation: ComputeAllocation::zero(),
                     subnet_type: SubnetType::Application,
                     execution_mode: ExecutionMode::Replicated,
                     subnet_memory_saturation: ResourceSaturation::new(8, 5, 10),
                 },
-                subnet_available_memory: SubnetAvailableMemory::new(123, 12, 1),
+                subnet_available_memory: SubnetAvailableMemory::new_for_testing(123, 12, 1),
                 next_wasm_memory_id: MemoryId::new(),
                 next_stable_memory_id: MemoryId::new(),
                 sandbox_safe_system_state: SandboxSafeSystemState::new(
@@ -494,6 +494,7 @@ mod tests {
                     Some(canister_test_id(1).get()),
                     Some(CallContextId::new(123)),
                     IS_WASM64_EXECUTION,
+                    CanisterCyclesCostSchedule::Normal,
                 ),
                 wasm_reserved_pages: NumWasmPages::new(1),
             },

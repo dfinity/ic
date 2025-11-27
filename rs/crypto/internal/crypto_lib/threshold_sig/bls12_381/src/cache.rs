@@ -1,6 +1,7 @@
 //! Cache for BLS signatures
 
 use cached::{Cached, SizedCache};
+use std::sync::LazyLock;
 
 #[cfg(test)]
 mod tests;
@@ -42,9 +43,8 @@ pub(crate) struct SignatureCache {
     cache: parking_lot::Mutex<SizedCache<SignatureCacheEntry, ()>>,
 }
 
-lazy_static::lazy_static! {
-    static ref GLOBAL_SIGNATURE_CACHE: SignatureCache = SignatureCache::new(SignatureCache::SIZE_OF_GLOBAL_CACHE);
-}
+static GLOBAL_SIGNATURE_CACHE: LazyLock<SignatureCache> =
+    LazyLock::new(|| SignatureCache::new(SignatureCache::SIZE_OF_GLOBAL_CACHE));
 
 impl SignatureCache {
     /// Specify the size of the global signature cache

@@ -30,12 +30,12 @@ table filter {
     #   - The rule drops all new connections that goes over the configured limit.
     ct state new add @connection_limit { ip saddr ct count over 1000 } counter name connection_limit_v4_counter drop
     icmp type $icmp_v4_types_accept accept
-    ip saddr {1.1.1.1,2.0.0.2,3.0.0.3,4.0.0.4} ct state { new } tcp dport {22,2497,4100,8080} accept # Automatic node whitelisting
+    ip saddr {1.1.1.1,3.0.0.3,4.0.0.4} ct state { new } tcp dport {22,2497,4100,8080} accept # Automatic node whitelisting
 ip saddr {5.5.5.5} ct state { new } tcp dport {1005} accept # node_gwp4o-eaaaa-aaaaa-aaaap-2ai
 ip saddr {3.3.3.3} ct state { new } tcp dport {1003} accept # subnet_yndj2-3ybaa-aaaaa-aaaap-yai
 ip saddr {4.4.4.4} ct state { new } tcp dport {1004} accept # replica_nodes
 ip saddr {6.6.6.6} ct state { new } tcp dport {1006} accept # global
-    ip saddr {1.1.1.1,2.0.0.2,3.0.0.3,4.0.0.4} udp dport {4100} accept # Automatic node whitelisting
+    ip saddr {1.1.1.1,3.0.0.3,4.0.0.4} udp dport {4100} accept # Automatic node whitelisting
     ct state { invalid } drop
     #   - The rule accepts all established and related connections. It's required for the IPv4 connectivity check.
     ct state { established, related } accept
@@ -49,7 +49,7 @@ ip saddr {6.6.6.6} ct state { new } tcp dport {1006} accept # global
   chain OUTPUT {
     type filter hook output priority 0; policy accept;
     meta skuid ic-http-adapter ip daddr { 127.0.0.0/8 } ct state { new } tcp dport { 1-19999 } reject # Block restricted localhost ic-http-adapter HTTPS access
-    meta skuid ic-http-adapter ip daddr {1.1.1.1,2.0.0.2,3.0.0.3,4.0.0.4} ct state { new } tcp dport {22,2497,4100,7070,8080,9090,9091,9100,19100,19531} reject # Automatic blacklisting for ic-http-adapter
+    meta skuid ic-http-adapter ip daddr {1.1.1.1,3.0.0.3,4.0.0.4} ct state { new } tcp dport {22,2497,4100,7070,8080,9090,9091,9100,19100,19523,19531} reject # Automatic blacklisting for ic-http-adapter
   }
 }
 
@@ -91,14 +91,14 @@ table ip6 filter {
     #   - The rule drops all new connections that goes over the configured limit.
     ct state new add @connection_limit { ip6 saddr ct count over 1000 } counter name connection_limit_v6_counter drop
     icmpv6 type $icmp_v6_types_accept accept
-    ip6 saddr { {{ ipv6_prefix }} } ct state { new } tcp dport { 7070, 9090, 9091, 9100, 19531, 19100 } accept
+    ip6 saddr { ::/64 } ct state { new } tcp dport { 7070, 9090, 9091, 9100, 19531, 19100, 19522 } accept
     ip6 saddr { hostos } ct state { new } tcp dport { 42372 } accept # Allow access from HostOS metrics-proxy so GuestOS metrics-proxy can proxy certain metrics to HostOS.
-    ip6 saddr {fd5b:693c:f8ea::1} ct state { new } tcp dport {22,2497,4100,8080} accept # Automatic node whitelisting
+    ip6 saddr {3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e5,a4c2:7f91:3db6:1e8c:5a4f:cc92:b37:6e41} ct state { new } tcp dport {22,2497,4100,8080} accept # Automatic node whitelisting
 ip6 saddr {::ffff:5.5.5.5} ct state { new } tcp dport {1005} accept # node_gwp4o-eaaaa-aaaaa-aaaap-2ai
 ip6 saddr {::ffff:3.3.3.3} ct state { new } tcp dport {1003} accept # subnet_yndj2-3ybaa-aaaaa-aaaap-yai
 ip6 saddr {::ffff:4.4.4.4} ct state { new } tcp dport {1004} accept # replica_nodes
 ip6 saddr {::ffff:6.6.6.6} ct state { new } tcp dport {1006} accept # global
-    ip6 saddr {fd5b:693c:f8ea::1} udp dport {4100} accept # Automatic node whitelisting
+    ip6 saddr {3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e5,a4c2:7f91:3db6:1e8c:5a4f:cc92:b37:6e41} udp dport {4100} accept # Automatic node whitelisting
     log prefix "Drop - default policy: "
   }
 
@@ -110,6 +110,6 @@ ip6 saddr {::ffff:6.6.6.6} ct state { new } tcp dport {1006} accept # global
     type filter hook output priority 0; policy accept;
     meta skuid ic-http-adapter ip6 daddr { ::1/128 } ct state { new } tcp dport { 1-19999 } reject # Block restricted localhost ic-http-adapter HTTPS access
     meta skuid ic-http-adapter ip6 daddr { 2a00:fb01:400:42::/64, 2602:fb2b:110::/48, 2602:fb2b:100::/48, 2602:fb2b:120::/48 } ct state { new } tcp dport { 1-19999 } reject # Block restricted outbound ic-http-adapter HTTPS access
-    meta skuid ic-http-adapter ip6 daddr {fd5b:693c:f8ea::1} ct state { new } tcp dport {22,2497,4100,7070,8080,9090,9091,9100,19100,19531} reject # Automatic blacklisting for ic-http-adapter
+    meta skuid ic-http-adapter ip6 daddr {3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e5,a4c2:7f91:3db6:1e8c:5a4f:cc92:b37:6e41} ct state { new } tcp dport {22,2497,4100,7070,8080,9090,9091,9100,19100,19523,19531} reject # Automatic blacklisting for ic-http-adapter
   }
 }

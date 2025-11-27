@@ -18,7 +18,7 @@ pub struct RemoveApiBoundaryNodesPayload {
 impl Registry {
     /// Remove a set of ApiBoundaryNodeRecords from the registry
     pub fn do_remove_api_boundary_nodes(&mut self, payload: RemoveApiBoundaryNodesPayload) {
-        println!("{}do_remove_api_boundary_nodes: {:?}", LOG_PREFIX, payload);
+        println!("{LOG_PREFIX}do_remove_api_boundary_nodes: {payload:?}");
 
         // Ensure payload is valid
         self.validate_remove_api_boundary_nodes_payload(&payload);

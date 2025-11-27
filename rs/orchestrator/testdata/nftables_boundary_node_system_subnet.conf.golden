@@ -1,0 +1,112 @@
+table filter {
+  set rate_limit {
+    type ipv4_addr
+    size 65535
+    flags dynamic
+  }
+
+  set connection_limit {
+    type ipv4_addr
+    size 65535
+    flags dynamic
+  }
+
+  set blackhole {
+    type ipv4_addr
+    size 65535
+  }
+
+  counter rate_limit_v4_counter {}
+  counter connection_limit_v4_counter {}
+
+  chain INPUT {
+    type filter hook input priority 0; policy drop;
+    iif lo accept
+    ip saddr @blackhole drop
+    ct state new add @rate_limit { ip saddr limit rate over 2000/minute burst 1000 packets } counter name rate_limit_v4_counter drop
+    #  Notes about the rule below:
+    #   - The rule allows a maximum of 400 persistent connections to any ip address.
+    #   - The rule drops all new connections that goes over the configured limit.
+    ct state new add @connection_limit { ip saddr ct count over 400 } counter name connection_limit_v4_counter drop
+    icmp type { echo-reply, destination-unreachable, source-quench, echo-request, time-exceeded } accept
+    ct state invalid drop
+    ct state { established, related } accept
+    ip saddr { 0.0.0.0-255.255.255.255 } ct state new tcp dport 443 accept
+
+    ip saddr {5.5.5.5} ct state { new } tcp dport {1005} accept # node_gwp4o-eaaaa-aaaaa-aaaap-2ai
+ip saddr {7.7.7.7} ct state { new } tcp dport {1007} accept # api_boundary_nodes
+ip saddr {6.6.6.6} ct state { new } tcp dport {1006} accept # global
+    
+  }
+
+  chain FORWARD {
+    type filter hook forward priority 0; policy drop;
+  }
+
+  chain OUTPUT {
+    type filter hook output priority 0; policy drop;
+    oif "lo" accept
+    icmp type { echo-reply, destination-unreachable, source-quench, echo-request, time-exceeded } accept
+    ct state invalid drop
+    ct state { established, related } accept
+    ct state new tcp dport { 53, 80, 443, 8080 } accept
+    ct state new udp dport { 53, 123 } accept
+  }
+}
+
+table ip6 filter {
+  set rate_limit {
+    type ipv6_addr
+    size 65535
+    flags dynamic
+  }
+
+  set connection_limit {
+    type ipv6_addr
+    size 65535
+    flags dynamic
+  }
+
+  set blackhole6 {
+    type ipv6_addr
+    size 65535
+  }
+
+  counter rate_limit_v6_counter {}
+  counter connection_limit_v6_counter {}
+
+  chain INPUT {
+    type filter hook input priority 0; policy drop;
+    iif lo accept
+    ip6 saddr @blackhole6 drop
+    ct state new add @rate_limit { ip6 saddr limit rate over 2000/minute burst 1000 packets } counter name rate_limit_v6_counter drop
+    #  Notes about the rule below:
+    #   - The rule allows a maximum of 400 persistent connections to any ip6 address.
+    #   - The rule drops all new connections that goes over the configured limit.
+    ct state new add @connection_limit { ip6 saddr ct count over 400 } counter name connection_limit_v6_counter drop
+    icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept
+    ct state { invalid } drop
+    ct state { established, related } accept
+    ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport 443 accept
+
+    ip6 saddr {a4c2:7f91:3db6:1e8c:5a4f:cc92:b37:6e41} ct state { new } tcp dport {1080} accept # nodes for SOCKS proxy
+ip6 saddr {::ffff:5.5.5.5} ct state { new } tcp dport {1005} accept # node_gwp4o-eaaaa-aaaaa-aaaap-2ai
+ip6 saddr {::ffff:7.7.7.7} ct state { new } tcp dport {1007} accept # api_boundary_nodes
+ip6 saddr {::ffff:6.6.6.6} ct state { new } tcp dport {1006} accept # global
+    
+  }
+
+  chain FORWARD {
+    type filter hook forward priority 0; policy drop;
+  }
+
+  chain OUTPUT {
+    type filter hook output priority 0; policy drop;
+    oif "lo" accept
+    icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-solicit, nd-neighbor-solicit, nd-neighbor-advert } accept
+    ct state invalid drop
+    ct state { established, related } accept
+    ct state new tcp dport { 53, 80, 443, 4460, 8080 } accept
+    ct state new udp dport { 53, 123 } accept
+  }
+}

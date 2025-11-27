@@ -1,22 +1,22 @@
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
+    NodeId, RegistryVersion, SubnetId,
     consensus::{
-        dkg::{DkgPayloadCreationError, DkgSummary},
         Block,
+        dkg::{DkgPayloadCreationError, DkgSummary},
     },
     crypto::{
+        AlgorithmId,
         canister_threshold_sig::MasterPublicKey,
         threshold_sig::{
-            ni_dkg::{NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag},
             ThresholdSigPublicKey,
+            ni_dkg::{NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag},
         },
-        AlgorithmId,
     },
-    NodeId, RegistryVersion, SubnetId,
 };
 use std::collections::{BTreeMap, HashSet};
 
@@ -29,7 +29,7 @@ pub fn get_vetkey_public_keys(
     logger: &ReplicaLogger,
 ) -> (
     BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-    BTreeMap<MasterPublicKeyId, NiDkgId>,
+    BTreeMap<NiDkgMasterPublicKeyId, NiDkgId>,
 ) {
     // Get all next transcripts
     // If there is a current transcript, but no next transcript, use that one instead.
@@ -74,7 +74,7 @@ pub fn get_vetkey_public_keys(
                         public_key: pubkey.into_bytes().to_vec(),
                     },
                 ),
-                (key_id.clone().into(), ni_dkg_id),
+                (key_id.clone(), ni_dkg_id),
             )
         })
         .unzip();
@@ -174,7 +174,7 @@ mod tests {
     use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::{crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId, RegistryVersion};
+    use ic_types::{RegistryVersion, crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId};
 
     /// Test that `get_enabled_vet_keys` correctly extracts the vet keys that are in the [`SubnetRecord`] of the
     /// subnet.
@@ -213,6 +213,7 @@ mod tests {
                 ],
                 signature_request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
+                max_parallel_pre_signature_transcripts_in_creation: None,
             })
             .build();
 

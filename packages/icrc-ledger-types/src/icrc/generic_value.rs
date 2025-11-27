@@ -186,7 +186,7 @@ impl Value {
             Self::Nat64(n) => Ok(Nat::from(n)),
             Self::Int(i) => match BigUint::try_from(i.0) {
                 Ok(n) => Ok(Nat(n)),
-                Err(e) => Err(format!("Failed to convert Int to Nat: {:?}", e)),
+                Err(e) => Err(format!("Failed to convert Int to Nat: {e:?}")),
             },
             _ => Err(self.variant_name()),
         }
@@ -299,7 +299,10 @@ impl TryFrom<Value> for Account {
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         let mut array = value.as_array()?;
         if array.len() > 2 {
-            return Err(format!("Account should be an array of either one or two elements but found an array of {} elements", array.len()));
+            return Err(format!(
+                "Account should be an array of either one or two elements but found an array of {} elements",
+                array.len()
+            ));
         }
         let owner = Principal::try_from_slice(array.remove(0).as_blob()?.as_slice())
             .map_err(|err| format!("Unable to decode the owner of the account, error {err}"))?;
@@ -331,14 +334,29 @@ impl From<Account> for Value {
     }
 }
 
+impl TryFrom<Value> for Principal {
+    type Error = String;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        Principal::try_from_slice(value.as_blob()?.as_slice())
+            .map_err(|err| format!("Unable to decode the principal, error {err}"))
+    }
+}
+
+impl From<Principal> for Value {
+    fn from(principal: Principal) -> Self {
+        Self::blob(principal.as_slice())
+    }
+}
+
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Blob(bytes) => write!(f, "{}", hex::encode(bytes.as_ref())),
-            Value::Text(text) => write!(f, "{}", text),
-            Value::Nat(nat) => write!(f, "{}", nat),
-            Value::Nat64(nat64) => write!(f, "{}", nat64),
-            Value::Int(int) => write!(f, "{}", int),
+            Value::Text(text) => write!(f, "{text}"),
+            Value::Nat(nat) => write!(f, "{nat}"),
+            Value::Nat64(nat64) => write!(f, "{nat64}"),
+            Value::Int(int) => write!(f, "{int}"),
             Value::Array(array) => {
                 write!(f, "Array(")?;
                 let mut first = true;
@@ -348,7 +366,7 @@ impl std::fmt::Display for Value {
                     } else {
                         write!(f, ", ")?
                     }
-                    write!(f, "{}", e)?;
+                    write!(f, "{e}")?;
                 }
                 write!(f, ")")
             }
@@ -361,7 +379,7 @@ impl std::fmt::Display for Value {
                     } else {
                         write!(f, ", ")?
                     }
-                    write!(f, "{}: {}", k, v)?;
+                    write!(f, "{k}: {v}")?;
                 }
                 write!(f, ")")
             }
@@ -446,7 +464,7 @@ fn test_leb128() {
         ),
     ] {
         let i = leb128(&mut buf, n);
-        assert_eq!(&buf[0..=i], b, "invalid encoding of integer {}", n);
+        assert_eq!(&buf[0..=i], b, "invalid encoding of integer {n}");
     }
 }
 
@@ -455,7 +473,7 @@ fn test_sleb128() {
     let mut buf = [0; INT128_BUF_SIZE];
     for (n, b) in [(0, &[0][..]), (-123456, &[0xc0, 0xbb, 0x78][..])] {
         let i = sleb128(&mut buf, n);
-        assert_eq!(&buf[0..=i], b, "invalid encoding of integer {}", n);
+        assert_eq!(&buf[0..=i], b, "invalid encoding of integer {n}");
     }
 }
 
@@ -514,8 +532,7 @@ fn test_test_vectors() {
         assert_eq!(
             input.hash().to_vec(),
             hex::decode(expected).unwrap(),
-            "input: {}",
-            input
+            "input: {input}"
         );
     }
 }
@@ -523,7 +540,7 @@ fn test_test_vectors() {
 #[cfg(test)]
 pub fn arb_value() -> impl proptest::prelude::Strategy<Value = Value> {
     use num_bigint::{BigInt, Sign};
-    use proptest::prelude::{any, prop_oneof, Just};
+    use proptest::prelude::{Just, any, prop_oneof};
     use proptest::strategy::Strategy;
 
     // https://altsysrq.github.io/proptest-book/proptest/tutorial/recursive.html

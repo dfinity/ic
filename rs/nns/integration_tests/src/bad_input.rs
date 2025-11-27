@@ -5,7 +5,7 @@ use assert_matches::assert_matches;
 use dfn_candid::candid;
 use ic_base_types::PrincipalId;
 use ic_nns_common::types::ProposalId;
-use ic_nns_governance_api::ProposalInfo;
+use ic_nns_governance_api::{GovernanceError, NeuronInfo, ProposalInfo};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_test_utils::itest_helpers::{
     set_up_governance_canister, state_machine_test_on_nns_subnet,
@@ -21,25 +21,23 @@ fn test_skipping_quota() {
         )
         .await;
 
-        // the skipping quota is set to 10_000 (`DEFAULT_SKIPPING_QUOTA`) so the following input passes
+        // the skipping quota is set to 10_000 by `ic-cdk` macros
         let skipped: Vec<u8> = vec![42; 9_042];
-        let res: Result<Option<ProposalInfo>, String> = canister
-            .query_("get_pending_proposals", candid, (skipped,))
+        let res: Result<Result<NeuronInfo, GovernanceError>, String> = canister
+            .query_("get_full_neuron", candid, (0u64, Some(skipped)))
             .await;
-        res.unwrap();
+        let _ = res.unwrap();
 
         // but the next one is rejected
         let skipped: Vec<u8> = vec![42; 10_042];
-        let res: Result<Option<ProposalInfo>, String> = canister
-            .query_("get_pending_proposals", candid, (skipped,))
+        let res: Result<Result<NeuronInfo, GovernanceError>, String> = canister
+            .query_("get_full_neuron", candid, (0u64, Some(skipped)))
             .await;
         let err = res.unwrap_err();
-        let expected_err = "failed to decode";
+        let expected_err = "Skipping cost exceeds the limit";
         assert!(
             err.contains(expected_err),
-            "Expected `{}` did not occur within the observed error:\n{}",
-            expected_err,
-            err
+            "Expected `{expected_err}` did not occur within the observed error:\n{err}"
         );
 
         Ok(())

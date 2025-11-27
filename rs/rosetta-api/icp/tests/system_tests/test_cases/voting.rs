@@ -4,13 +4,13 @@ use crate::common::{
 };
 use candid::Principal;
 use futures::future::join_all;
-use ic_agent::{identity::BasicIdentity, Identity};
+use ic_agent::{Identity, identity::BasicIdentity};
 use ic_icp_rosetta_client::{
     RosettaCreateNeuronArgs, RosettaRegisterVoteArgs, RosettaSetNeuronDissolveDelayArgs,
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance_api::{proposal::Action, Motion, Proposal, ProposalInfo, Vote};
+use ic_nns_governance_api::{Motion, Proposal, ProposalInfo, Vote, proposal::Action};
 use ic_rosetta_api::models::ConstructionSubmitResponse;
 use icp_ledger::AccountIdentifier;
 use lazy_static::lazy_static;
@@ -53,8 +53,12 @@ fn test_neuron_voting() {
             .expect("failed to get the minimum dissolve delay")
             .expect("optional dissolve delay not provided");
 
+        // Set the dissolve delay for voting neurons to be slightly above the minimum to account
+        // for timing issues.
+        let neuron_dissolve_delay = minimum_dissolve_delay + 100;
+
         // Create neurons
-        let neuron_ids = create_neurons(&env, INITIAL_BALANCE / 10, minimum_dissolve_delay).await;
+        let neuron_ids = create_neurons(&env, INITIAL_BALANCE / 10, neuron_dissolve_delay).await;
 
         // Create a neuron that cannot vote due to too short dissolve delay.
         let non_voting_neuron_id = create_neuron_with_dissolve(
@@ -79,12 +83,13 @@ fn test_neuron_voting() {
         assert!(error_string.contains("Neuron's dissolve delay is too short."));
 
         // Ensure no proposals exist initially
-        assert!(env
-            .rosetta_client
-            .get_pending_proposals(env.network_identifier.clone())
-            .await
-            .unwrap()
-            .is_empty());
+        assert!(
+            env.rosetta_client
+                .get_pending_proposals(env.network_identifier.clone())
+                .await
+                .unwrap()
+                .is_empty()
+        );
 
         // Submit multiple proposals
         for i in 0..3 {
@@ -92,9 +97,9 @@ fn test_neuron_voting() {
                 .submit_proposal(
                     TEST_IDENTITY.sender().unwrap(),
                     neuron_ids[0].into(),
-                    &format!("dummy title {}", i),
-                    &format!("test summary {}", i),
-                    &format!("dummy text {}", i),
+                    &format!("dummy title {i}"),
+                    &format!("test summary {i}"),
+                    &format!("dummy text {i}"),
                 )
                 .await
                 .expect("failed to submit proposal");
@@ -119,6 +124,7 @@ fn test_neuron_voting() {
                     motion_text: "dummy text 0".to_string(),
                 })),
                 url: "".to_string(),
+                self_describing_action: None,
             },
             Proposal {
                 title: Some("dummy title 1".to_string()),
@@ -127,6 +133,7 @@ fn test_neuron_voting() {
                     motion_text: "dummy text 1".to_string(),
                 })),
                 url: "".to_string(),
+                self_describing_action: None,
             },
             Proposal {
                 title: Some("dummy title 2".to_string()),
@@ -135,6 +142,7 @@ fn test_neuron_voting() {
                     motion_text: "dummy text 2".to_string(),
                 })),
                 url: "".to_string(),
+                self_describing_action: None,
             },
         ];
 
@@ -261,10 +269,12 @@ fn test_neuron_voting() {
         // Try to vote again on the same proposal with the same neuron and verify the error
         let invalid_vote_result =
             register_vote(&env, proposal_ids[2], NEURON_INDEX[3], Vote::No).await;
-        assert!(invalid_vote_result
-            .unwrap_err()
-            .to_string()
-            .contains("NeuronAlreadyVoted"));
+        assert!(
+            invalid_vote_result
+                .unwrap_err()
+                .to_string()
+                .contains("NeuronAlreadyVoted")
+        );
 
         // Register remaining votes for the third proposal and verify the proposal is no longer pending
         register_vote(&env, proposal_ids[2], NEURON_INDEX[1], Vote::Yes)

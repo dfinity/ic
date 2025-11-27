@@ -9,12 +9,13 @@ use ic_interfaces::{
     validation::ValidationError,
 };
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    CanisterId, Height, NodeId, NumBytes, QueryStatsEpoch,
     batch::{LocalQueryStats, QueryStats, QueryStatsPayload, ValidationContext},
-    epoch_from_height, CanisterId, Height, NodeId, NumBytes, QueryStatsEpoch,
+    epoch_from_height,
 };
 use std::{
     collections::BTreeSet,
@@ -166,7 +167,7 @@ impl QueryStatsPayloadBuilderImpl {
                         "Current stats are uninitialized. This warning should go away after some minutes if the replica is processing query calls."
                     );
                     vec![]
-                }
+                };
             }
         };
 
@@ -230,7 +231,7 @@ impl QueryStatsPayloadBuilderImpl {
             Err(err) => {
                 return Err(invalid_artifact(
                     InvalidQueryStatsPayloadReason::DeserializationFailed(err),
-                ))
+                ));
             }
         };
 
@@ -363,7 +364,7 @@ impl QueryStatsPayloadBuilderImpl {
 
         // Check the certified state for stats that we have already sent
         if let Some(state_stats) = get_stats_for_node_id_and_epoch(state_stats, &node_id, &epoch)
-            .map(|record| record.iter().map(|(canister_id, _)| canister_id))
+            .map(|record| record.keys())
         {
             previous_ids.extend(state_stats);
         }
@@ -420,10 +421,10 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_state::ReplicatedStateBuilder;
     use ic_types::{
+        RegistryVersion,
         batch::{CanisterQueryStats, QueryStats, RawQueryStats},
         crypto::{CryptoHash, CryptoHashOf},
         time::UNIX_EPOCH,
-        RegistryVersion,
     };
     use ic_types_test_utils::ids::{canister_test_id, node_test_id};
     use std::{ops::Range, time::Duration};
@@ -610,10 +611,9 @@ mod tests {
                     InvalidQueryStatsPayloadReason::InvalidNodeId { expected, reported },
                 ),
             )) if expected == node_test_id(1) && reported == node_test_id(2) => (),
-            Err(err) => panic!(
-                "QueryStatsPayload had wrong node id, yet instead got error {:?}",
-                err
-            ),
+            Err(err) => {
+                panic!("QueryStatsPayload had wrong node id, yet instead got error {err:?}")
+            }
             Ok(_) => panic!("QueryStatsPayload had wrong node id, yet got validated"),
         }
     }
@@ -655,10 +655,9 @@ mod tests {
                 ),
             )) if highest_aggregated_epoch == QueryStatsEpoch::new(1234)
                 && payload_epoch == QueryStatsEpoch::new(0) => {}
-            Err(err) => panic!(
-                "QueryStatsPayload had epoch too low, yet instead got error {:?}",
-                err
-            ),
+            Err(err) => {
+                panic!("QueryStatsPayload had epoch too low, yet instead got error {err:?}")
+            }
             Ok(_) => panic!("QueryStatsPayload had epoch too low, yet got validated"),
         }
     }
@@ -695,10 +694,9 @@ mod tests {
                 ),
             )) if expected == QueryStatsEpoch::new(0) && reported == QueryStatsEpoch::new(1234) => {
             }
-            Err(err) => panic!(
-                "QueryStatsPayload had epoch too high, yet instead got error {:?}",
-                err
-            ),
+            Err(err) => {
+                panic!("QueryStatsPayload had epoch too high, yet instead got error {err:?}")
+            }
             Ok(_) => panic!("QueryStatsPayload had epoch too high, yet got validated"),
         }
     }
@@ -740,7 +738,7 @@ mod tests {
                 Height::new(1),
                 &proposal_context,
                 &payload,
-                &[past_payload.clone()],
+                std::slice::from_ref(&past_payload),
             );
 
             match validation_result {
@@ -751,13 +749,9 @@ mod tests {
                     ),
                 )) if canister_id == canister_test_id(id as u64) => (),
                 Err(err) => panic!(
-                    "QueryStatsPayload test {} had duplicates, yet instead got error {:?}",
-                    id, err
+                    "QueryStatsPayload test {id} had duplicates, yet instead got error {err:?}"
                 ),
-                Ok(_) => panic!(
-                    "QueryStatsPayload test {} had duplicates, yet got validated",
-                    id
-                ),
+                Ok(_) => panic!("QueryStatsPayload test {id} had duplicates, yet got validated"),
             }
         }
     }
@@ -791,9 +785,11 @@ mod tests {
             proposal_context.validation_context,
         );
 
-        assert!(payload_builder
-            .validate_payload_impl(height, proposal_context, &payload, past_payloads)
-            .is_ok());
+        assert!(
+            payload_builder
+                .validate_payload_impl(height, proposal_context, &payload, past_payloads)
+                .is_ok()
+        );
 
         (
             QueryStatsPayload::deserialize(&payload).unwrap().unwrap(),
@@ -895,7 +891,7 @@ mod tests {
         past_payload.serialize_with_limit(MAX_PAYLOAD_SIZE)
     }
 
-    fn as_past_payload(payload: &[u8], height: u64) -> PastPayload {
+    fn as_past_payload(payload: &[u8], height: u64) -> PastPayload<'_> {
         PastPayload {
             height: Height::from(height),
             time: UNIX_EPOCH + Duration::from_nanos(10 * height),

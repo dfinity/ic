@@ -12,10 +12,11 @@ use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
-use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
+use ic_logger::{ReplicaLogger, debug, fatal, info, warn};
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
+use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto;
 use ic_query_stats::QueryStatsAggregatorMetrics;
 use ic_registry_client_helpers::api_boundary_node::ApiBoundaryNodeRegistry;
 use ic_registry_client_helpers::chain_keys::ChainKeysRegistry;
@@ -24,7 +25,7 @@ use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::provisional_whitelist::ProvisionalWhitelistRegistry;
 use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
 use ic_registry_client_helpers::subnet::{
-    get_node_ids_from_subnet_record, SubnetListRegistry, SubnetRegistry,
+    SubnetListRegistry, SubnetRegistry, get_node_ids_from_subnet_record,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
@@ -33,8 +34,8 @@ use ic_replicated_state::metadata_state::ApiBoundaryNodeEntry;
 use ic_replicated_state::{
     DroppedMessageMetrics, NetworkTopology, ReplicatedState, SubnetTopology,
 };
-use ic_types::batch::{Batch, BatchSummary};
-use ic_types::crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose};
+use ic_types::batch::{Batch, BatchContent, BatchSummary, CanisterCyclesCostSchedule};
+use ic_types::crypto::{KeyPurpose, threshold_sig::ThresholdSigPublicKey};
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::registry::RegistryClientError;
 use ic_types::state_manager::StateManagerError;
@@ -52,7 +53,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{AsRef, TryFrom};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::ops::Range;
-use std::sync::mpsc::{sync_channel, TrySendError};
+use std::sync::mpsc::{TrySendError, sync_channel};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::sleep;
 use std::time::Instant;
@@ -100,6 +101,7 @@ const METRIC_SHED_MESSAGE_BYTES_TOTAL: &str = "mr_shed_message_bytes_total";
 const METRIC_SUBNET_SPLIT_HEIGHT: &str = "mr_subnet_split_height";
 const BLOCKS_PROPOSED_TOTAL: &str = "mr_blocks_proposed_total";
 const BLOCKS_NOT_PROPOSED_TOTAL: &str = "mr_blocks_not_proposed_total";
+const BLOCKS_NOT_PROPOSED_BY_BLOCKMAKER_TOTAL: &str = "mr_blocks_not_proposed_by_blockmaker_total";
 const METRIC_NEXT_CHECKPOINT_HEIGHT: &str = "mr_next_checkpoint_height";
 const METRIC_REMOTE_CERTIFIED_HEIGHTS: &str = "mr_remote_certified_heights";
 
@@ -311,6 +313,8 @@ pub(crate) struct MessageRoutingMetrics {
     pub(crate) blocks_proposed_total: IntCounter,
     /// Number of blocks not proposed.
     pub(crate) blocks_not_proposed_total: IntCounter,
+    /// Number of blocks not proposed by blockmaker ID.
+    pub(crate) blocks_not_proposed_by_blockmaker_total: IntCounterVec,
 
     /// The memory footprint of all the canisters on this subnet. Note that this
     /// counter is from the perspective of the canisters and does not account
@@ -444,6 +448,11 @@ impl MessageRoutingMetrics {
             blocks_not_proposed_total: metrics_registry.int_counter(
                 BLOCKS_NOT_PROPOSED_TOTAL,
                 "Failures to propose a block (when the node was block maker rank R but the subnet accepted the block from the block maker with rank S > R)."
+            ),
+            blocks_not_proposed_by_blockmaker_total: metrics_registry.int_counter_vec(
+                BLOCKS_NOT_PROPOSED_BY_BLOCKMAKER_TOTAL,
+                "Failures to propose a block (when the node was block maker rank R but the subnet accepted the block from the block maker with rank S > R).",
+                &["blockmaker_id"],
             ),
             canisters_memory_usage_bytes: metrics_registry.int_gauge(
                 "canister_memory_usage_bytes",
@@ -616,11 +625,8 @@ fn registry_error(
     err: RegistryClientError,
 ) -> ReadRegistryError {
     let errmsg = match subnet_id {
-        Some(subnet_id) => format!(
-            "'{} [for subnet {}]', RegistryClientError: {}",
-            what, subnet_id, err
-        ),
-        None => format!("'{}', RegistryClientError: {}", what, err),
+        Some(subnet_id) => format!("'{what} [for subnet {subnet_id}]', RegistryClientError: {err}"),
+        None => format!("'{what}', RegistryClientError: {err}"),
     };
     if err.is_reproducible() {
         ReadRegistryError::Persistent(errmsg)
@@ -633,8 +639,8 @@ fn registry_error(
 /// absent. This error is always considered persistent.
 fn not_found_error(what: &str, subnet_id: Option<SubnetId>) -> ReadRegistryError {
     let errmsg = match subnet_id {
-        Some(subnet_id) => format!("'{} for subnet {}' not found", what, subnet_id),
-        None => format!("'{}' not found", what),
+        Some(subnet_id) => format!("'{what} for subnet {subnet_id}' not found"),
+        None => format!("'{what}' not found"),
     };
     ReadRegistryError::Persistent(errmsg)
 }
@@ -679,7 +685,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             ingress_history_writer,
             cycles_account_manager,
             metrics_registry,
-            subnet_id,
             log.clone(),
         ));
         let demux = Box::new(routing::demux::DemuxImpl::new(
@@ -848,8 +853,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         let nodes = get_node_ids_from_subnet_record(&subnet_record)
             .map_err(|err| {
                 ReadRegistryError::Persistent(format!(
-                    "'nodes from subnet record for subnet {}', err: {}",
-                    own_subnet_id, err
+                    "'nodes from subnet record for subnet {own_subnet_id}', err: {err}"
                 ))
             })?
             .into_iter()
@@ -863,8 +867,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         let chain_key_settings = if let Some(chain_key_config) = subnet_record.chain_key_config {
             let chain_key_config = ChainKeyConfig::try_from(chain_key_config).map_err(|err| {
                 ReadRegistryError::Persistent(format!(
-                    "'failed to read chain key config', err: {:?}",
-                    err
+                    "'failed to read chain key config', err: {err:?}"
                 ))
             })?;
 
@@ -901,6 +904,10 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 .collect::<BTreeSet<_>>()
                 .len()
         };
+        let canister_cycles_cost_schedule = CanisterCyclesCostSchedule::from(
+            CanisterCyclesCostScheduleProto::try_from(subnet_record.canister_cycles_cost_schedule)
+                .unwrap_or(CanisterCyclesCostScheduleProto::Normal),
+        );
 
         let own_subnet_type: SubnetType = subnet_record.subnet_type.try_into().unwrap_or_default();
         self.metrics
@@ -945,6 +952,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 chain_key_settings,
                 subnet_size,
                 node_ids: nodes,
+                registry_version,
+                canister_cycles_cost_schedule,
             },
             node_public_keys,
             api_boundary_nodes,
@@ -1042,7 +1051,17 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 })
                 .transpose()?
                 .unwrap_or_default();
-
+            let cost_schedule = CanisterCyclesCostSchedule::from(
+                CanisterCyclesCostScheduleProto::try_from(
+                    subnet_record.canister_cycles_cost_schedule,
+                )
+                .map_err(|err| {
+                    Persistent(format!(
+                        "'CanisterCyclesCostSchedule type from subnet record for subnet {}', err: {}",
+                        *subnet_id, err
+                    ))
+                })?,
+            );
             subnets.insert(
                 *subnet_id,
                 SubnetTopology {
@@ -1051,6 +1070,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                     subnet_type,
                     subnet_features,
                     chain_keys_held,
+                    cost_schedule,
                 },
             );
         }
@@ -1103,7 +1123,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 .registry
                 .get_crypto_key_for_node(*node_id, KeyPurpose::NodeSigning, registry_version)
                 .map_err(|err| {
-                    registry_error(&format!("public key of node {}", node_id), None, err)
+                    registry_error(&format!("public key of node {node_id}"), None, err)
                 })?;
 
             // If the public key is missing, we continue without stalling the subnet.
@@ -1173,29 +1193,26 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 .registry
                 .get_node_record(api_bn_id, registry_version)
                 .map_err(|err| {
-                    registry_error(&format!("NodeRecord for node_id {}", api_bn_id), None, err)
+                    registry_error(&format!("NodeRecord for node_id {api_bn_id}"), None, err)
                 })?;
 
             let Some(node_record) = node_record else {
                 raise_critical_error_for_api_boundary_nodes(&format!(
-                    "NodeRecord for node_id {} is missing in registry.",
-                    api_bn_id,
+                    "NodeRecord for node_id {api_bn_id} is missing in registry.",
                 ));
                 continue;
             };
 
             let Some(domain) = node_record.domain else {
                 raise_critical_error_for_api_boundary_nodes(&format!(
-                    "domain field in NodeRecord for node_id {} is None.",
-                    api_bn_id,
+                    "domain field in NodeRecord for node_id {api_bn_id} is None.",
                 ));
                 continue;
             };
 
             let Some(http) = node_record.http else {
                 raise_critical_error_for_api_boundary_nodes(&format!(
-                    "http field in NodeRecord for node_id {} is None.",
-                    api_bn_id,
+                    "http field in NodeRecord for node_id {api_bn_id} is None.",
                 ));
                 continue;
             };
@@ -1212,13 +1229,13 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             let ipv4_address = node_record
                 .public_ipv4_config
                 .map(|ipv4_config| ipv4_config.ip_addr);
-            if let Some(ref ipv4) = ipv4_address {
-                if ipv4.parse::<Ipv4Addr>().is_err() {
-                    raise_critical_error_for_api_boundary_nodes(&format!(
-                        "failed to parse ipv4 address of node {api_bn_id}",
-                    ));
-                    continue;
-                }
+            if let Some(ref ipv4) = ipv4_address
+                && ipv4.parse::<Ipv4Addr>().is_err()
+            {
+                raise_critical_error_for_api_boundary_nodes(&format!(
+                    "failed to parse ipv4 address of node {api_bn_id}",
+                ));
+                continue;
             }
 
             api_boundary_nodes.insert(
@@ -1313,6 +1330,13 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         self.metrics
             .blocks_not_proposed_total
             .inc_by(batch.blockmaker_metrics.failed_blockmakers.len() as u64);
+        for failed_blockmaker in &batch.blockmaker_metrics.failed_blockmakers {
+            self.metrics
+                .blocks_not_proposed_by_blockmaker_total
+                .with_label_values(&[&failed_blockmaker.to_string()])
+                .inc();
+        }
+
         state
             .metadata
             .blockmaker_metrics_time_series
@@ -1418,7 +1442,10 @@ impl BatchProcessor for FakeBatchProcessorImpl {
         state.metadata.batch_time = time;
 
         // Get only ingress out of the batch_messages
-        let signed_ingress_msgs = batch.messages.signed_ingress_msgs;
+        let signed_ingress_msgs = match batch.content {
+            BatchContent::Data { batch_messages, .. } => batch_messages.signed_ingress_msgs,
+            BatchContent::Splitting { .. } => unimplemented!("Subnet splitting is not yet enabled"),
+        };
 
         // Treat all ingress messages as already executed.
         let all_ingress_execution_results = signed_ingress_msgs.into_iter().map(|ingress| {

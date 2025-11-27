@@ -1,11 +1,10 @@
-use candid::candid_method;
+#![allow(deprecated)]
 use ic_cdk::{api::call, update};
 use ic_principal::Principal;
 
 const MB: usize = 1024 * 1024;
 
 /// Takes the total number of bytes to send in a single message (in megabytes).
-#[candid_method(update)]
 #[update]
 async fn send_calls(megabytes_to_send: u32) {
     let calls = (0..megabytes_to_send)

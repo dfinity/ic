@@ -147,13 +147,12 @@ pub fn test(env: TestEnv) {
             "query",
             Blob(wasm().caller().append_and_reply().build()),
         ));
-        let principal = match response {
+        match response {
             HttpQueryResponse::Replied { reply } => Principal::from_slice(reply.arg.as_ref()),
             HttpQueryResponse::Rejected { reject_message, .. } => {
                 panic!("Query call was rejected: {reject_message}")
             }
-        };
-        principal
+        }
     };
     assert_eq!(expected_principal, observed_principal);
     info!(log, "Asserting caller identity of the update call");

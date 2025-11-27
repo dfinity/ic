@@ -19,7 +19,7 @@ use registry_canister::{
 };
 
 mod common;
-use common::test_helpers::{check_error_message, get_routing_table};
+use common::test_helpers::{check_error_message, check_subnet_for_canisters};
 
 #[test]
 fn test_reroute_canister_ranges() {
@@ -102,24 +102,16 @@ fn test_reroute_canister_ranges() {
             .await
             .unwrap();
 
-            let routing_table = get_routing_table(&registry).await;
-
-            assert_eq!(
-                routing_table.route(CanisterId::from(9).into()),
-                Some(subnet_id_2)
-            );
-            assert_eq!(
-                routing_table.route(CanisterId::from(10).into()),
-                Some(subnet_id_1)
-            );
-            assert_eq!(
-                routing_table.route(CanisterId::from(11).into()),
-                Some(subnet_id_1)
-            );
-            assert_eq!(
-                routing_table.route(CanisterId::from(12).into()),
-                Some(subnet_id_2)
-            );
+            check_subnet_for_canisters(
+                &registry,
+                vec![
+                    (CanisterId::from(9), subnet_id_2),
+                    (CanisterId::from(10), subnet_id_1),
+                    (CanisterId::from(11), subnet_id_1),
+                    (CanisterId::from(12), subnet_id_2),
+                ],
+            )
+            .await;
 
             check_error_message(
                 registry
@@ -179,7 +171,16 @@ fn test_reroute_canister_ranges() {
                 "not a known subnet",
             );
 
-            assert_eq!(get_routing_table(&registry).await, routing_table);
+            check_subnet_for_canisters(
+                &registry,
+                vec![
+                    (CanisterId::from(9), subnet_id_2),
+                    (CanisterId::from(10), subnet_id_1),
+                    (CanisterId::from(11), subnet_id_1),
+                    (CanisterId::from(12), subnet_id_2),
+                ],
+            )
+            .await;
 
             Ok(())
         }

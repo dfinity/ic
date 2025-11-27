@@ -5,7 +5,7 @@
 use std::fs::read_dir;
 
 use ic_config::embedders::Config;
-use ic_embedders::{wasm_utils::compile, CompilationCacheBuilder, WasmtimeEmbedder};
+use ic_embedders::{CompilationCacheBuilder, WasmtimeEmbedder, wasm_utils::compile};
 use ic_logger::no_op_logger;
 use ic_wasm_types::{BinaryEncodedWasm, CanisterModule};
 

@@ -37,10 +37,10 @@ impl<R: CanisterApi> AccessLevelResolver<R> {
 
 impl<R: CanisterApi> ResolveAccessLevel for AccessLevelResolver<R> {
     fn get_access_level(&self) -> AccessLevel {
-        if let Some(authorized_principal) = self.canister_api.get_authorized_principal() {
-            if self.caller_id == authorized_principal {
-                return AccessLevel::FullAccess;
-            }
+        if let Some(authorized_principal) = self.canister_api.get_authorized_principal()
+            && self.caller_id == authorized_principal
+        {
+            return AccessLevel::FullAccess;
         }
 
         let has_full_read_access = self

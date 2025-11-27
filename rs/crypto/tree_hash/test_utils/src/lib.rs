@@ -286,7 +286,9 @@ fn labeled_tree_without_leaf_or_empty_subtree_impl(
             unreachable!("We never descend into children for valid trees");
         }
         (p, t) => {
-            panic!("Mismatching structure by truncating {p:?} from {t:?} or less than 2 leaves/empty subtrees");
+            panic!(
+                "Mismatching structure by truncating {p:?} from {t:?} or less than 2 leaves/empty subtrees"
+            );
         }
     }
 }

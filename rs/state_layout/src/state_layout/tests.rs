@@ -3,16 +3,17 @@ use super::*;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
 };
-use ic_replicated_state::canister_state::system_state::PausedExecutionId;
 use ic_replicated_state::ExecutionTask;
+use ic_replicated_state::canister_state::system_state::PausedExecutionId;
 use ic_replicated_state::{
-    canister_state::system_state::CanisterHistory,
-    metadata_state::subnet_call_context_manager::InstallCodeCallId, page_map::Shard, NumWasmPages,
+    NumWasmPages, canister_state::system_state::CanisterHistory,
+    metadata_state::subnet_call_context_manager::InstallCodeCallId, page_map::Shard,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::{ids::canister_test_id, ids::user_test_id};
+use ic_types::DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT;
 use ic_types::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask};
 use ic_types::time::UNIX_EPOCH;
 use itertools::Itertools;
@@ -24,7 +25,6 @@ fn default_canister_state_bits() -> CanisterStateBits {
     CanisterStateBits {
         controllers: BTreeSet::new(),
         last_full_execution_round: ExecutionRound::from(0),
-        call_context_manager: None,
         compute_allocation: ComputeAllocation::try_from(0).unwrap(),
         accumulated_priority: AccumulatedPriority::default(),
         priority_credit: AccumulatedPriority::default(),
@@ -56,7 +56,8 @@ fn default_canister_state_bits() -> CanisterStateBits {
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
         total_query_stats: TotalQueryStats::default(),
         log_visibility: Default::default(),
-        canister_log: Default::default(),
+        log_memory_limit: NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64),
+        canister_log: CanisterLog::default_aggregate(),
         wasm_memory_limit: None,
         next_snapshot_id: 0,
         snapshots_memory_usage: NumBytes::from(0),
@@ -78,9 +79,11 @@ fn test_state_layout_diverged_state_paths() {
             state_layout.diverged_state_heights().unwrap(),
             vec![Height::new(1)],
         );
-        assert!(state_layout
-            .diverged_state_marker_path(Height::new(1))
-            .starts_with(root_path.join("diverged_state_markers")));
+        assert!(
+            state_layout
+                .diverged_state_marker_path(Height::new(1))
+                .starts_with(root_path.join("diverged_state_markers"))
+        );
         state_layout
             .remove_diverged_state_marker(Height::new(1))
             .unwrap();
@@ -243,7 +246,7 @@ fn test_canister_snapshots_decode() {
         wasm_memory_size: NumWasmPages::new(10),
         total_size: NumBytes::new(100),
         exported_globals: vec![Global::I32(1), Global::I64(2), Global::F64(0.1)],
-        source: SnapshotSource::TakenFromCanister,
+        source: SnapshotSource::taken_from_canister(),
         global_timer: Some(CanisterTimer::Inactive),
         on_low_wasm_memory_hook_status: Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied),
     };
@@ -498,7 +501,7 @@ fn test_can_remove_unverified_marker_file_twice() {
         let state_layout = StateLayout::try_new(log, root_path, &metrics_registry).unwrap();
 
         let height = Height::new(1);
-        let state_sync_scratchpad = state_layout.state_sync_scratchpad(height).unwrap();
+        let state_sync_scratchpad = state_layout.state_sync_scratchpad(height);
         let scratchpad_layout =
             CheckpointLayout::<RwPolicy<()>>::new_untracked(state_sync_scratchpad, height)
                 .expect("failed to create checkpoint layout");
@@ -619,9 +622,11 @@ fn overlay_height_test() {
             .unwrap(),
         Height::new(4096)
     );
-    assert!(page_map_layout
-        .overlay_height(&PathBuf::from("/a/b/c/vmemory.overlay"))
-        .is_err());
+    assert!(
+        page_map_layout
+            .overlay_height(&PathBuf::from("/a/b/c/vmemory.overlay"))
+            .is_err()
+    );
     // Test that parsing is consistent with encoding.
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<WriteOnly> =
@@ -655,11 +660,13 @@ fn overlay_shard_test() {
             .unwrap(),
         Shard::new(16)
     );
-    assert!(page_map_layout
-        .overlay_shard(&PathBuf::from(
-            "/a/b/c/0000000000001000_0Q10_vmemory.overlay"
-        ))
-        .is_err());
+    assert!(
+        page_map_layout
+            .overlay_shard(&PathBuf::from(
+                "/a/b/c/0000000000001000_0Q10_vmemory.overlay"
+            ))
+            .is_err()
+    );
     // Test that parsing is consistent with encoding.
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<WriteOnly> =
@@ -681,10 +688,12 @@ fn test_all_existing_pagemaps() {
     let tmp = tmpdir("checkpoint");
     let checkpoint_layout: CheckpointLayout<RwPolicy<()>> =
         CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
-    assert!(checkpoint_layout
-        .all_existing_pagemaps()
-        .unwrap()
-        .is_empty());
+    assert!(
+        checkpoint_layout
+            .all_existing_pagemaps()
+            .unwrap()
+            .is_empty()
+    );
     let canister_layout = checkpoint_layout.canister(&canister_test_id(123)).unwrap();
     let canister_wasm_base = canister_layout.wasm_chunk_store().base();
     File::create(&canister_wasm_base).unwrap();
@@ -707,10 +716,12 @@ fn test_all_existing_wasm_files() {
     let tmp = tmpdir("checkpoint");
     let checkpoint_layout: CheckpointLayout<RwPolicy<()>> =
         CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
-    assert!(checkpoint_layout
-        .all_existing_wasm_files()
-        .unwrap()
-        .is_empty());
+    assert!(
+        checkpoint_layout
+            .all_existing_wasm_files()
+            .unwrap()
+            .is_empty()
+    );
 
     // Create directories for a canister and its corresponding snapshot, both containing wasm files.
     let wasm_path_1 = checkpoint_layout

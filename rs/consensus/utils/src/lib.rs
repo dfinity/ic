@@ -6,19 +6,17 @@ use ic_interfaces::{
     validation::ValidationError,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::subnet::{NotarizationDelaySettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    consensus::{
-        idkg::IDkgPayload, Block, BlockProposal, HasCommittee, HasHeight, HasRank, Threshold,
-    },
-    crypto::{
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgReceivers, NiDkgTag, NiDkgTranscript},
-        CryptoHash, CryptoHashable, Signed,
-    },
     Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
+    consensus::{Block, BlockProposal, HasCommittee, HasHeight, HasRank, Threshold},
+    crypto::{
+        CryptoHash, CryptoHashable, Signed,
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgReceivers, NiDkgTag, NiDkgTranscript},
+    },
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -412,6 +410,20 @@ fn get_transcript_data_at_given_summary<T>(
     }
 }
 
+/// Check if the [`ReplicaVersion`] is the current version
+///
+/// # Arguments
+///
+/// - `version`: the [`ReplicaVersion`] to check against
+///
+/// # Returns
+///
+/// - `true` if `version` matches the current version
+/// - `false` otherwise
+pub fn is_current_protocol_version(version: &ReplicaVersion) -> bool {
+    version == &ReplicaVersion::default()
+}
+
 /// Get the [`SubnetRecord`] of this subnet with the specified [`RegistryVersion`]
 pub fn get_subnet_record(
     registry_client: &dyn RegistryClient,
@@ -436,59 +448,47 @@ pub fn get_subnet_record(
     }
 }
 
-/// Return the oldest registry version of transcripts in the given IDKG summary payload that are
-/// referenced by the given replicated state.
-pub fn get_oldest_idkg_state_registry_version(
-    idkg: &IDkgPayload,
-    state: &ReplicatedState,
-) -> Option<RegistryVersion> {
+/// Return the oldest registry version of transcripts that were matched to signature
+/// request contexts in the given replicated state.
+pub fn get_oldest_idkg_state_registry_version(state: &ReplicatedState) -> Option<RegistryVersion> {
     state
         .signature_request_contexts()
         .values()
-        .flat_map(|context| context.matched_pre_signature.as_ref())
-        .flat_map(|(pre_sig_id, _)| idkg.available_pre_signatures.get(pre_sig_id))
-        .flat_map(|pre_signature| pre_signature.get_refs())
-        .flat_map(|transcript_ref| idkg.idkg_transcripts.get(&transcript_ref.transcript_id))
+        .flat_map(|context| context.iter_idkg_transcripts())
         .map(|transcript| transcript.registry_version)
         .min()
+}
+
+/// Calculate the number of heights in the given range (inclusive)
+pub fn range_len(start: Height, end: Height) -> usize {
+    if end >= start {
+        (end.get() - start.get())
+            .checked_add(1)
+            .expect("We should never reach the maximum number of heights") as usize
+    } else {
+        0
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use std::{str::FromStr, sync::Arc};
+    use ic_test_utilities_consensus::idkg::{
+        fake_master_public_key_ids_for_all_idkg_algorithms,
+        fake_signature_request_context_with_registry_version,
+    };
 
     use super::*;
-    use ic_consensus_mocks::{dependencies, Dependencies};
-    use ic_management_canister_types_private::{EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId};
-    use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-        EcdsaArguments, SchnorrArguments, SignWithThresholdContext, ThresholdArguments,
-    };
+    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_management_canister_types_private::MasterPublicKeyId;
+    use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
     use ic_test_utilities_state::ReplicatedStateBuilder;
-    use ic_test_utilities_types::{
-        ids::{node_test_id, subnet_test_id},
-        messages::RequestBuilder,
-    };
+    use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
-        consensus::{
-            get_faults_tolerated,
-            idkg::{
-                common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef,
-                schnorr::PreSignatureTranscriptRef, KeyTranscriptCreation, MaskedTranscript,
-                MasterKeyTranscript, PreSigId, UnmaskedTranscript,
-            },
-            Rank,
-        },
-        crypto::{
-            canister_threshold_sig::idkg::{
-                IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
-                IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
-            },
-            ThresholdSigShare, ThresholdSigShareOf,
-        },
+        consensus::{Rank, get_faults_tolerated, idkg::PreSigId},
+        crypto::{ThresholdSigShare, ThresholdSigShareOf},
         messages::CallbackId,
         signature::ThresholdSignatureShare,
-        time::UNIX_EPOCH,
     };
 
     /// Test that two shares with the same content are grouped together, and
@@ -560,118 +560,6 @@ mod tests {
         assert_eq!(round_robin.call_next(&calls), vec![1]);
     }
 
-    fn empty_idkg_payload(key_id: MasterPublicKeyId) -> IDkgPayload {
-        IDkgPayload::empty(
-            Height::new(0),
-            subnet_test_id(0),
-            vec![MasterKeyTranscript::new(
-                key_id.try_into().unwrap(),
-                KeyTranscriptCreation::Begin,
-            )],
-        )
-    }
-
-    fn fake_transcript(id: IDkgTranscriptId, registry_version: RegistryVersion) -> IDkgTranscript {
-        IDkgTranscript {
-            transcript_id: id,
-            receivers: IDkgReceivers::new(BTreeSet::from_iter([node_test_id(0)])).unwrap(),
-            registry_version,
-            verified_dealings: Default::default(),
-            transcript_type: IDkgTranscriptType::Unmasked(
-                IDkgUnmaskedTranscriptOrigin::ReshareMasked(fake_transcript_id(0)),
-            ),
-            algorithm_id: ic_types::crypto::AlgorithmId::EcdsaSecp256k1,
-            internal_transcript_raw: vec![],
-        }
-    }
-
-    fn fake_transcript_id(id: u64) -> IDkgTranscriptId {
-        IDkgTranscriptId::new(subnet_test_id(0), id, Height::from(0))
-    }
-
-    // Create a fake ecdsa pre-signature, it will use transcripts with ids
-    // id, id+1, id+2, and id+3.
-    fn fake_ecdsa_quadruple(id: u64, key_id: EcdsaKeyId) -> PreSignatureQuadrupleRef {
-        let temp_rv = RegistryVersion::from(0);
-        let kappa_unmasked = fake_transcript(fake_transcript_id(id), temp_rv);
-        let mut lambda_masked = kappa_unmasked.clone();
-        lambda_masked.transcript_id = fake_transcript_id(id + 1);
-        lambda_masked.transcript_type =
-            IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random);
-        let mut kappa_times_lambda = lambda_masked.clone();
-        kappa_times_lambda.transcript_id = fake_transcript_id(id + 2);
-        let mut key_times_lambda = lambda_masked.clone();
-        key_times_lambda.transcript_id = fake_transcript_id(id + 3);
-        let mut key_unmasked = kappa_unmasked.clone();
-        key_unmasked.transcript_id = fake_transcript_id(id + 4);
-        let h = Height::from(0);
-        PreSignatureQuadrupleRef {
-            key_id,
-            kappa_unmasked_ref: UnmaskedTranscript::try_from((h, &kappa_unmasked)).unwrap(),
-            lambda_masked_ref: MaskedTranscript::try_from((h, &lambda_masked)).unwrap(),
-            kappa_times_lambda_ref: MaskedTranscript::try_from((h, &kappa_times_lambda)).unwrap(),
-            key_times_lambda_ref: MaskedTranscript::try_from((h, &key_times_lambda)).unwrap(),
-            key_unmasked_ref: UnmaskedTranscript::try_from((h, &key_unmasked)).unwrap(),
-        }
-    }
-
-    // Create a fake schnorr pre-signature, it will use transcripts with ids
-    // id and id+1.
-    fn fake_schnorr_transcript(id: u64, key_id: SchnorrKeyId) -> PreSignatureTranscriptRef {
-        let temp_rv = RegistryVersion::from(0);
-        let blinder_unmasked = fake_transcript(fake_transcript_id(id), temp_rv);
-        let mut key_unmasked = blinder_unmasked.clone();
-        key_unmasked.transcript_id = fake_transcript_id(id + 1);
-        let h = Height::from(0);
-        PreSignatureTranscriptRef {
-            key_id,
-            blinder_unmasked_ref: UnmaskedTranscript::try_from((h, &blinder_unmasked)).unwrap(),
-            key_unmasked_ref: UnmaskedTranscript::try_from((h, &key_unmasked)).unwrap(),
-        }
-    }
-
-    fn fake_pre_signature(id: u64, key_id: &MasterPublicKeyId) -> PreSignatureRef {
-        match key_id {
-            MasterPublicKeyId::Ecdsa(key_id) => {
-                PreSignatureRef::Ecdsa(fake_ecdsa_quadruple(id, key_id.clone()))
-            }
-            MasterPublicKeyId::Schnorr(key_id) => {
-                PreSignatureRef::Schnorr(fake_schnorr_transcript(id, key_id.clone()))
-            }
-            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
-        }
-    }
-
-    fn fake_context(
-        pre_signature_id: Option<PreSigId>,
-        key_id: &MasterPublicKeyId,
-    ) -> SignWithThresholdContext {
-        SignWithThresholdContext {
-            request: RequestBuilder::new().build(),
-            args: match key_id {
-                MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
-                    message_hash: [0; 32],
-                    key_id: key_id.clone(),
-                    pre_signature: None,
-                }),
-                MasterPublicKeyId::Schnorr(key_id) => {
-                    ThresholdArguments::Schnorr(SchnorrArguments {
-                        message: Arc::new(vec![1; 64]),
-                        key_id: key_id.clone(),
-                        taproot_tree_root: None,
-                        pre_signature: None,
-                    })
-                }
-                MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
-            },
-            derivation_path: Arc::new(vec![]),
-            pseudo_random_id: [0; 32],
-            matched_pre_signature: pre_signature_id.map(|qid| (qid, Height::from(0))),
-            nonce: None,
-            batch_time: UNIX_EPOCH,
-        }
-    }
-
     fn fake_state_with_contexts(contexts: Vec<SignWithThresholdContext>) -> ReplicatedState {
         let mut state = ReplicatedStateBuilder::default().build();
         let iter = contexts
@@ -686,52 +574,30 @@ mod tests {
     }
 
     fn fake_key_ids() -> Vec<MasterPublicKeyId> {
-        vec![
-            MasterPublicKeyId::Ecdsa(EcdsaKeyId::from_str("Secp256k1:some_key").unwrap()),
-            MasterPublicKeyId::Schnorr(SchnorrKeyId::from_str("Ed25519:some_key").unwrap()),
-        ]
-    }
-
-    // Create an IDKG payload with 10 pre-signatures, each using registry version 2, 3 or 4.
-    fn idkg_payload_with_pre_sigs(key_id: &MasterPublicKeyId) -> IDkgPayload {
-        let mut idkg = empty_idkg_payload(key_id.clone());
-        let mut rvs = [
-            RegistryVersion::from(2),
-            RegistryVersion::from(3),
-            RegistryVersion::from(4),
-        ]
-        .into_iter()
-        .cycle();
-        for i in (0..50).step_by(5) {
-            let pre_sig = fake_pre_signature(i as u64, key_id);
-            let rv = rvs.next().unwrap();
-            for r in pre_sig.get_refs() {
-                idkg.idkg_transcripts
-                    .insert(r.transcript_id, fake_transcript(r.transcript_id, rv));
-            }
-            idkg.available_pre_signatures
-                .insert(PreSigId(i as u64), pre_sig);
-        }
-        idkg
+        fake_master_public_key_ids_for_all_idkg_algorithms()
+            .into_iter()
+            .map(|id| id.inner().clone())
+            .collect()
     }
 
     #[test]
     fn test_empty_state_should_return_no_registry_version() {
-        for key_id in fake_key_ids() {
-            println!("Running test for key ID {key_id}");
-            let idkg = idkg_payload_with_pre_sigs(&key_id);
-            let state = fake_state_with_contexts(vec![]);
-            assert_eq!(None, get_oldest_idkg_state_registry_version(&idkg, &state));
-        }
+        let state = fake_state_with_contexts(vec![]);
+        assert_eq!(None, get_oldest_idkg_state_registry_version(&state));
     }
 
     #[test]
     fn test_state_without_matches_should_return_no_registry_version() {
         for key_id in fake_key_ids() {
             println!("Running test for key ID {key_id}");
-            let idkg = idkg_payload_with_pre_sigs(&key_id);
-            let state = fake_state_with_contexts(vec![fake_context(None, &key_id)]);
-            assert_eq!(None, get_oldest_idkg_state_registry_version(&idkg, &state));
+            let state = fake_state_with_contexts(vec![
+                fake_signature_request_context_with_registry_version(
+                    None,
+                    &key_id,
+                    RegistryVersion::from(4),
+                ),
+            ]);
+            assert_eq!(None, get_oldest_idkg_state_registry_version(&state));
         }
     }
 
@@ -744,38 +610,38 @@ mod tests {
     }
 
     fn test_should_return_oldest_registry_version(key_id: MasterPublicKeyId) {
-        let idkg = idkg_payload_with_pre_sigs(&key_id);
-        // create contexts for all pre-signatures, but only create a match for
-        // pre-signatures with registry version >= 3 (not 2!). Thus the oldest
-        // registry version referenced by the state should be 3.
-        let contexts = idkg
-            .available_pre_signatures
-            .iter()
-            .map(|(id, pre_sig)| {
-                let t_id = pre_sig.key_unmasked().as_ref().transcript_id;
-                let transcript = idkg.idkg_transcripts.get(&t_id).unwrap();
-                (transcript.registry_version.get() >= 3).then_some(*id)
-            })
-            .map(|id| fake_context(id, &key_id))
-            .collect();
+        let mut contexts = vec![];
+        // Create some contexts with registry version 4 and some unmatched ones
+        for i in 0..3 {
+            contexts.push(fake_signature_request_context_with_registry_version(
+                Some(PreSigId(i)),
+                &key_id,
+                RegistryVersion::from(4),
+            ));
+            contexts.push(fake_signature_request_context_with_registry_version(
+                None,
+                &key_id,
+                RegistryVersion::from(4),
+            ));
+        }
+        // Create one context with registry version 2
+        contexts.push(fake_signature_request_context_with_registry_version(
+            Some(PreSigId(3)),
+            &key_id,
+            RegistryVersion::from(2),
+        ));
+        // Create some contexts with registry version 3
+        for i in 4..7 {
+            contexts.push(fake_signature_request_context_with_registry_version(
+                Some(PreSigId(i)),
+                &key_id,
+                RegistryVersion::from(3),
+            ));
+        }
         let state = fake_state_with_contexts(contexts);
         assert_eq!(
-            Some(RegistryVersion::from(3)),
-            get_oldest_idkg_state_registry_version(&idkg, &state)
-        );
-
-        let mut idkg_without_transcripts = idkg.clone();
-        idkg_without_transcripts.idkg_transcripts = BTreeMap::new();
-        assert_eq!(
-            None,
-            get_oldest_idkg_state_registry_version(&idkg_without_transcripts, &state)
-        );
-
-        let mut idkg_without_pre_sigs = idkg.clone();
-        idkg_without_pre_sigs.available_pre_signatures = BTreeMap::new();
-        assert_eq!(
-            None,
-            get_oldest_idkg_state_registry_version(&idkg_without_pre_sigs, &state)
+            Some(RegistryVersion::from(2)),
+            get_oldest_idkg_state_registry_version(&state)
         );
     }
 
@@ -812,5 +678,17 @@ mod tests {
                 }
             }
         });
+    }
+
+    #[test]
+    fn test_range_len() {
+        assert_eq!(range_len(Height::new(0), Height::new(0)), 1);
+        assert_eq!(range_len(Height::new(0), Height::new(1)), 2);
+        assert_eq!(range_len(Height::new(0), Height::new(10)), 11);
+        assert_eq!(range_len(Height::new(5), Height::new(10)), 6);
+        assert_eq!(range_len(Height::new(10), Height::new(10)), 1);
+        assert_eq!(range_len(Height::new(10), Height::new(5)), 0);
+        assert_eq!(range_len(Height::new(10), Height::new(0)), 0);
+        assert_eq!(range_len(Height::new(1), Height::new(0)), 0);
     }
 }

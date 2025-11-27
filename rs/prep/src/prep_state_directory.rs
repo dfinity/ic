@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 use crate::internet_computer::{IC_REGISTRY_LOCAL_STORE_PATH, IC_ROOT_PUB_KEY_PATH};
 
@@ -169,9 +169,10 @@ mod tests {
             /* nns_subnet_index= */ Some(0),
             /* release_package_download_url= */ None,
             /* release_package_sha256_hex */ None,
-            None,
-            None,
-            None,
+            /* guest_launch_measurements */ None,
+            /* provisional_whitelist */ None,
+            /* initial_node_operator */ None,
+            /* initial_node_provider */ None,
             /* ssh_readonly_access_to_unassigned_nodes */ vec![],
         );
         let _init_ic = ic_config.initialize()?;

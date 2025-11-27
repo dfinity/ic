@@ -1,0 +1,64 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+DEPENDENCIES = [
+    "@crate_index//:anyhow",
+    "@crate_index//:der",
+    "@crate_index//:http",
+    "@crate_index//:hyper-util",
+    "@crate_index//:hyper-rustls",
+    "@crate_index//:rcgen",
+    "@crate_index//:rustls",
+    "@crate_index//:sev",
+    "@crate_index//:tokio",
+    "@crate_index//:tonic",
+    "@crate_index//:tower",
+    "@crate_index//:x509-parser",
+    "//rs/crypto/utils/threshold_sig_der",
+    "//rs/ic_os/attestation",
+    "//rs/ic_os/config_types",
+    "//rs/ic_os/guest_upgrade/shared",
+    "//rs/ic_os/os_tools/guest_disk:guest_disk_lib",
+    "//rs/ic_os/sev",
+    "//rs/interfaces/registry",
+    "//rs/registry/client",
+    "//rs/registry/nns_data_provider_wrappers",
+]
+
+rust_binary(
+    name = "client",
+    srcs = ["src/main.rs"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    deps = DEPENDENCIES + [
+        ":lib",
+        "//rs/ic_os/config:config_lib",
+    ],
+)
+
+rust_binary(
+    name = "client_dev",
+    srcs = ["src/main.rs"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    deps = DEPENDENCIES + [
+        ":lib",
+        "//rs/ic_os/config:config_lib_dev",
+    ],
+)
+
+rust_library(
+    name = "lib",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    crate_name = "guest_upgrade_client",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    deps = DEPENDENCIES,
+)

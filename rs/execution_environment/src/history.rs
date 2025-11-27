@@ -5,14 +5,17 @@ use ic_interfaces::{
     time_source::system_time_now,
 };
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{fatal, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_logger::{ReplicaLogger, fatal};
+use ic_metrics::{
+    MetricsRegistry,
+    buckets::{decimal_buckets, linear_buckets},
+};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    Height, Time,
     ingress::{IngressState, IngressStatus},
     messages::MessageId,
     state_manager::StateManagerError,
-    Height, Time,
 };
 use prometheus::{Histogram, HistogramVec};
 use std::{
@@ -87,18 +90,23 @@ struct TransitionStartTime {
 pub struct IngressHistoryWriterImpl {
     config: Config,
     log: ReplicaLogger,
-    // Wrapped in a RwLock for interior mutability, otherwise &self in methods
-    // has to be &mut self.
-    received_time: RwLock<HashMap<MessageId, TransitionStartTime>>,
-    message_state_transition_received_duration_seconds: Histogram,
-    message_state_transition_processing_duration_seconds: Histogram,
-    message_state_transition_received_to_processing_duration_seconds: Histogram,
-    message_state_transition_completed_ic_duration_seconds: Histogram,
-    message_state_transition_completed_wall_clock_duration_seconds: Histogram,
-    message_state_transition_failed_ic_duration_seconds: HistogramVec,
-    message_state_transition_failed_wall_clock_duration_seconds: HistogramVec,
+    metrics: IngressHistoryMetrics,
     completed_execution_messages_tx: Sender<(MessageId, Height)>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+}
+
+struct IngressHistoryMetrics {
+    // Wrapped in a RwLock for interior mutability, otherwise &self in methods
+    // has to be &mut self.
+    pub received_time: RwLock<HashMap<MessageId, TransitionStartTime>>,
+    pub message_state_transition_received_duration_seconds: Histogram,
+    pub message_state_transition_processing_duration_seconds: Histogram,
+    pub message_state_transition_received_to_processing_duration_seconds: Histogram,
+    pub message_state_transition_completed_ic_duration_seconds: Histogram,
+    pub message_state_transition_completed_wall_clock_duration_seconds: Histogram,
+    pub message_state_transition_failed_ic_duration_seconds: HistogramVec,
+    pub message_state_transition_failed_wall_clock_duration_seconds: HistogramVec,
+    pub message_state_time_in_terminal_state_seconds: Histogram,
 }
 
 impl IngressHistoryWriterImpl {
@@ -112,59 +120,66 @@ impl IngressHistoryWriterImpl {
         Self {
             config,
             log,
-            received_time: RwLock::new(HashMap::new()),
-            message_state_transition_received_duration_seconds: metrics_registry.histogram(
-                "message_state_transition_received_duration_seconds",
-                "Per-ingress-message wall-clock duration between block maker and ingress queue",
-                // 10ms, 20ms, 50ms, ..., 100s, 200s, 500s
-                decimal_buckets(-2,2),
-            ),
-            message_state_transition_processing_duration_seconds: metrics_registry.histogram(
-                "message_state_transition_processing_duration_seconds",
-                "Per-ingress-message wall-clock duration between block maker and completed (message, not call) execution",
-                // 10ms, 20ms, 50ms, ..., 100s, 200s, 500s
-                decimal_buckets(-2,2),
-            ),
-            message_state_transition_received_to_processing_duration_seconds: metrics_registry.histogram(
-                "message_state_transition_received_to_processing_duration_seconds",
-                "Per-ingress-message wall-clock duration between induction and completed (message, not call) execution",
-                // 10ms, 20ms, 50ms, ..., 100s, 200s, 500s
-                decimal_buckets(-2,2),
-            ),
-            message_state_transition_completed_ic_duration_seconds: metrics_registry.histogram(
-                "message_state_transition_completed_ic_duration_seconds",
-                "The IC time taken for a message to transition from the Received state to Completed state",
-                // 100μs, 200μs, 500μs, ..., 10s, 20s, 50s
-                decimal_buckets(-4, 1),
-            ),
-            message_state_transition_completed_wall_clock_duration_seconds: metrics_registry.histogram(
-                "message_state_transition_completed_wallclock_duration_seconds",
-                "The wall-clock time taken for a message to transition from the Received state to Completed state",
-                // 100μs, 200μs, 500μs, ..., 10s, 20s, 50s
-                decimal_buckets(-4, 1),
-            ),
-            message_state_transition_failed_ic_duration_seconds: metrics_registry.histogram_vec(
-                "message_state_transition_failed_ic_duration_seconds",
-                "The IC time taken for a message to transition from the Received state to Failed state",
-                // 100μs, 200μs, 500μs, ..., 10s, 20s, 50s
-                decimal_buckets(-4, 1),
-                // The `reject_code` label corresponds to the rejection codes described in
-                // the public spec.
-                // The `user_error_code` label is internal information that provides more
-                // detail about the reason for rejection.
-                &["reject_code", "user_error_code"],
-            ),
-            message_state_transition_failed_wall_clock_duration_seconds: metrics_registry.histogram_vec(
-                "message_state_transition_failed_wall_clock_duration_seconds",
-                "The wall-clock time taken for a message to transition from the Received state to Failed state",
-                // 100μs, 200μs, 500μs, ..., 10s, 20s, 50s
-                decimal_buckets(-4, 1),
-                // The `reject_code` label corresponds to the rejection codes described in
-                // the public spec.
-                // The `user_error_code` label is internal information that provides more
-                // detail about the reason for rejection.
-                &["reject_code", "user_error_code"],
-            ),
+            metrics: IngressHistoryMetrics {
+                received_time: RwLock::new(HashMap::new()),
+                message_state_transition_received_duration_seconds: metrics_registry.histogram(
+                    "message_state_transition_received_duration_seconds",
+                    "Per-ingress-message wall-clock duration between block maker and ingress queue",
+                    // 10ms, 20ms, 50ms, ..., 100s, 200s, 500s
+                    decimal_buckets(-2,2),
+                ),
+                message_state_transition_processing_duration_seconds: metrics_registry.histogram(
+                    "message_state_transition_processing_duration_seconds",
+                    "Per-ingress-message wall-clock duration between block maker and completed (message, not call) execution",
+                    // 10ms, 20ms, 50ms, ..., 100s, 200s, 500s
+                    decimal_buckets(-2,2),
+                ),
+                message_state_transition_received_to_processing_duration_seconds: metrics_registry.histogram(
+                    "message_state_transition_received_to_processing_duration_seconds",
+                    "Per-ingress-message wall-clock duration between induction and completed (message, not call) execution",
+                    // 10ms, 20ms, 50ms, ..., 100s, 200s, 500s
+                    decimal_buckets(-2,2),
+                ),
+                message_state_transition_completed_ic_duration_seconds: metrics_registry.histogram(
+                    "message_state_transition_completed_ic_duration_seconds",
+                    "The IC time taken for a message to transition from the Received state to Completed state",
+                    // 100μs, 200μs, 500μs, ..., 10s, 20s, 50s
+                    decimal_buckets(-4, 1),
+                ),
+                message_state_transition_completed_wall_clock_duration_seconds: metrics_registry.histogram(
+                    "message_state_transition_completed_wallclock_duration_seconds",
+                    "The wall-clock time taken for a message to transition from the Received state to Completed state",
+                    // 100μs, 200μs, 500μs, ..., 10s, 20s, 50s
+                    decimal_buckets(-4, 1),
+                ),
+                message_state_transition_failed_ic_duration_seconds: metrics_registry.histogram_vec(
+                    "message_state_transition_failed_ic_duration_seconds",
+                    "The IC time taken for a message to transition from the Received state to Failed state",
+                    // 100μs, 200μs, 500μs, ..., 10s, 20s, 50s
+                    decimal_buckets(-4, 1),
+                    // The `reject_code` label corresponds to the rejection codes described in
+                    // the public spec.
+                    // The `user_error_code` label is internal information that provides more
+                    // detail about the reason for rejection.
+                    &["reject_code", "user_error_code"],
+                ),
+                message_state_transition_failed_wall_clock_duration_seconds: metrics_registry.histogram_vec(
+                    "message_state_transition_failed_wall_clock_duration_seconds",
+                    "The wall-clock time taken for a message to transition from the Received state to Failed state",
+                    // 100μs, 200μs, 500μs, ..., 10s, 20s, 50s
+                    decimal_buckets(-4, 1),
+                    // The `reject_code` label corresponds to the rejection codes described in
+                    // the public spec.
+                    // The `user_error_code` label is internal information that provides more
+                    // detail about the reason for rejection.
+                    &["reject_code", "user_error_code"],
+                ),
+                message_state_time_in_terminal_state_seconds: metrics_registry.histogram(
+                    "message_state_time_in_terminal_state_seconds",
+                    "The time a message spent in a terminal state before being forced to transition to `Done` due to memory pressure. Excludes messages that never transition to `Done`.",
+                    linear_buckets(0.0, 10.0, 30),
+                )
+            },
             completed_execution_messages_tx,
             state_reader
         }
@@ -208,7 +223,8 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
             ) => {
                 // Wall clock duration since the message was included into a block.
                 let duration_since_block_made = system_time_now().saturating_duration_since(time);
-                self.message_state_transition_received_duration_seconds
+                self.metrics
+                    .message_state_transition_received_duration_seconds
                     .observe(duration_since_block_made.as_secs_f64());
             }
 
@@ -219,16 +235,18 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                 },
                 Known { state, .. },
             ) if state != &Received => {
-                if let Some(timer) = self.received_time.read().unwrap().get(&message_id) {
+                if let Some(timer) = self.metrics.received_time.read().unwrap().get(&message_id) {
                     // Wall clock duration since the message was included into a block.
                     let duration_since_block_made =
                         system_time_now().saturating_duration_since(timer.ic_time);
                     // Wall clock duration since the message was inducted.
                     let duration_since_induction =
                         Instant::now().saturating_duration_since(timer.system_time);
-                    self.message_state_transition_processing_duration_seconds
+                    self.metrics
+                        .message_state_transition_processing_duration_seconds
                         .observe(duration_since_block_made.as_secs_f64());
-                    self.message_state_transition_received_to_processing_duration_seconds
+                    self.metrics
+                        .message_state_transition_received_to_processing_duration_seconds
                         .observe(duration_since_induction.as_secs_f64());
                 }
             }
@@ -239,7 +257,7 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
             Known {
                 state: Received, ..
             } => {
-                let mut map = self.received_time.write().unwrap();
+                let mut map = self.metrics.received_time.write().unwrap();
                 map.insert(
                     message_id.clone(),
                     TransitionStartTime {
@@ -255,9 +273,11 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                 if let Some((ic_duration, wall_duration)) =
                     self.calculate_durations(&message_id, time)
                 {
-                    self.message_state_transition_completed_ic_duration_seconds
+                    self.metrics
+                        .message_state_transition_completed_ic_duration_seconds
                         .observe(ic_duration);
-                    self.message_state_transition_completed_wall_clock_duration_seconds
+                    self.metrics
+                        .message_state_transition_completed_wall_clock_duration_seconds
                         .observe(wall_duration);
                 }
             }
@@ -272,11 +292,13 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                     let reject_code = RejectCode::from(user_error_code).to_string();
                     let user_error_code_string = dashboard_label_value_from(user_error_code);
 
-                    self.message_state_transition_failed_ic_duration_seconds
+                    self.metrics
+                        .message_state_transition_failed_ic_duration_seconds
                         .with_label_values(&[&reject_code, user_error_code_string])
                         .observe(ic_duration);
 
-                    self.message_state_transition_failed_wall_clock_duration_seconds
+                    self.metrics
+                        .message_state_transition_failed_wall_clock_duration_seconds
                         .with_label_values(&[&reject_code, user_error_code_string])
                         .observe(wall_duration);
                 }
@@ -284,28 +306,33 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
             _ => {}
         };
 
-        if let IngressStatus::Known { state, .. } = &status {
-            if state.is_terminal() {
-                // We want to send the height of the replicated state where
-                // ingress message went into a terminal state.
-                //
-                // latest_state_height() will return the height of the last committed state, `H`.
-                // The ingress message will have completed execution AND be updated to a terminal state from the next state, `H+1`.
-                let last_committed_height = self.state_reader.latest_state_height();
-                let completed_execution_and_updated_to_terminal_state: Height =
-                    last_committed_height + Height::from(1);
+        if let IngressStatus::Known { state, .. } = &status
+            && state.is_terminal()
+        {
+            // We want to send the height of the replicated state where
+            // ingress message went into a terminal state.
+            //
+            // latest_state_height() will return the height of the last committed state, `H`.
+            // The ingress message will have completed execution AND be updated to a terminal state from the next state, `H+1`.
+            let last_committed_height = self.state_reader.latest_state_height();
+            let completed_execution_and_updated_to_terminal_state: Height =
+                last_committed_height + Height::from(1);
 
-                let _ = self.completed_execution_messages_tx.try_send((
-                    message_id.clone(),
-                    completed_execution_and_updated_to_terminal_state,
-                ));
-            }
+            let _ = self.completed_execution_messages_tx.try_send((
+                message_id.clone(),
+                completed_execution_and_updated_to_terminal_state,
+            ));
         };
-
+        let observe_time_in_terminal_state = |time: u64| {
+            self.metrics
+                .message_state_time_in_terminal_state_seconds
+                .observe(time as f64);
+        };
         state.set_ingress_status(
             message_id,
             status,
             self.config.ingress_history_memory_capacity,
+            observe_time_in_terminal_state,
         )
     }
 }
@@ -313,7 +340,7 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
 impl IngressHistoryWriterImpl {
     /// Return an Option<(ic_time_duration, wall_clock_duration)>.
     fn calculate_durations(&self, message_id: &MessageId, time: Time) -> Option<(f64, f64)> {
-        let mut map = self.received_time.write().unwrap();
+        let mut map = self.metrics.received_time.write().unwrap();
         map.remove(message_id).map(|timer| {
             (
                 (time.saturating_duration_since(timer.ic_time)).as_secs_f64(),

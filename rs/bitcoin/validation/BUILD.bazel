@@ -1,34 +1,16 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
-
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:bitcoin",
-]
-
-MACRO_DEPENDENCIES = []
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:csv",
-    "@crate_index//:hex",
-    "@crate_index//:proptest",
-    "@crate_index//:rstest",
-]
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
 
 rust_library(
     name = "validation",
     srcs = glob(["src/**"]),
-    aliases = ALIASES,
     crate_name = "ic_btc_validation",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:bitcoin",
+    ],
 )
 
 rust_test(
@@ -37,18 +19,25 @@ rust_test(
     data = [
         # Keep sorted.
         "tests/data/headers.csv",
+        "@dogecoin_adapter_mainnet_headers//file",
+        "@dogecoin_adapter_mainnet_headers_auxpow_parsed//file",
+        "@dogecoin_adapter_mainnet_headers_parsed//file",
+        "@dogecoin_adapter_testnet_headers//file",
+        "@dogecoin_adapter_testnet_headers_auxpow_parsed//file",
+        "@dogecoin_adapter_testnet_headers_parsed//file",
     ],
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
-)
-
-rust_test_suite(
-    name = "validation_integration",
-    srcs = glob(["tests/**/*.rs"]),
-    aliases = ALIASES,
-    data = [
+    env = {
+        "DOGE_MAINNET_HEADERS_0_700000_RAW_DATA_PATH": "$(rootpath @dogecoin_adapter_mainnet_headers//file)",
+        "DOGE_MAINNET_HEADERS_1_15000_PARSED_DATA_PATH": "$(rootpath @dogecoin_adapter_mainnet_headers_parsed//file)",
+        "DOGE_MAINNET_HEADERS_521337_536336_AUXPOW_PARSED_DATA_PATH": "$(rootpath @dogecoin_adapter_mainnet_headers_auxpow_parsed//file)",
+        "DOGE_TESTNET_HEADERS_0_2000000_RAW_DATA_PATH": "$(rootpath @dogecoin_adapter_testnet_headers//file)",
+        "DOGE_TESTNET_HEADERS_1_15000_PARSED_DATA_PATH": "$(rootpath @dogecoin_adapter_testnet_headers_parsed//file)",
+        "DOGE_TESTNET_HEADERS_293100_308099_AUXPOW_PARSED_DATA_PATH": "$(rootpath @dogecoin_adapter_testnet_headers_auxpow_parsed//file)",
+    },
+    deps = [
         # Keep sorted.
-        "tests/data/headers.csv",
+        "@crate_index//:csv",
+        "@crate_index//:hex",
+        "@crate_index//:rstest",
     ],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":validation"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

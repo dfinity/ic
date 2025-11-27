@@ -97,10 +97,6 @@ class BazelRustDependencyManager(DependencyManager):
         return "BAZEL_RUST"
 
     @staticmethod
-    def __dependency_to_transitive_bazel_string(dep: Dependency) -> str:
-        return f"@crate_index__{dep.name}-{dep.version}//:*"
-
-    @staticmethod
     def __transitive_bazel_string_to_dependency(bazel_string: str) -> typing.Optional[Dependency]:
         # @crate_index__zstd-sys-2.0.2-zstd.1.5.2//
         result = parse.parse("@crate_index__{0}//", bazel_string)
@@ -123,17 +119,6 @@ class BazelRustDependencyManager(DependencyManager):
                 id=f"{CRATES_IO_URL}{name}", name=name, version=version_str, fix_version_for_vulnerability={}
             )
         return
-
-    @staticmethod
-    def __dependency_to_direct_bazel_string(dep: Dependency) -> str:
-        # Needs to be updated manually.
-        # TODO : Automate getting versioned names
-        versioned_names = ["mockall", "rand", "rand_chacha", "rand_distr", "rsa", "sha2"]
-        if dep.name in versioned_names:
-            vers = dep.version.replace(".", "_")
-            return f"@crate_index//:{dep.name}_{vers}"
-
-        return f"@crate_index//:{dep.name}"
 
     @staticmethod
     def __parse_vulnerable_dependency_from_cargo_audit(
@@ -255,25 +240,21 @@ class BazelRustDependencyManager(DependencyManager):
 
         path = self.root.parent / project.path
 
-        # currently only the ic repo uses bazel
-        use_bazel = repository_name == "ic"
-        if use_bazel:
-            logging.info("Performing cargo audit on old Cargo.lock")
-            old_cargo_audit = self.executor.get_cargo_audit_output(path)
-            logging.info("Old cargo audit output %s", old_cargo_audit)
-
+        # currently only the ic and utopia repos use bazel
+        is_bazel_repo = repository_name == "ic" or repository_name == "utopia"
+        if is_bazel_repo:
+            # bazel repos use "Cargo.Bazel.toml.lock" as source of truth
+            # we need to rename it to "Cargo.lock" before using "cargo audit"
             # move Cargo.Bazel.toml.lock to Cargo.lock
             logging.info("Moving Cargo.Bazel.toml.lock to Cargo.lock")
-            src = self.root / "Cargo.Bazel.toml.lock"
-            dst = self.root / "Cargo.lock"
+            src = path / "Cargo.Bazel.toml.lock"
+            dst = path / "Cargo.lock"
 
             if src.is_file() and dst.is_file():
                 shutil.copy(src, dst)
 
         logging.info("Performing cargo audit on new Cargo.lock")
         new_cargo_audit = self.executor.get_cargo_audit_output(path)
-
-        # cargo_audit_diff = jsondiff.diff(old_cargo_audit, new_cargo_audit)
 
         if "vulnerabilities" in new_cargo_audit and "list" in new_cargo_audit["vulnerabilities"]:
             logging.info("Iterating through vulnerable crates in cargo audit")
@@ -284,17 +265,9 @@ class BazelRustDependencyManager(DependencyManager):
                 vulnerable_dependency = self.__parse_vulnerable_dependency_from_cargo_audit(
                     vulnerability.id, audit_vulnerability
                 )
-                if use_bazel:
-                    first_level_dependencies = self.__get_first_level_dependencies_for_vulnerable_dependency(
-                        vulnerable_dependency
-                    )
-                    projects = self.__get_projects_for_vulnerable_dependency(
-                        project, vulnerable_dependency, first_level_dependencies
-                    )
-                else:
-                    first_level_dependencies, projects = self.__get_first_level_dependencies_and_projects_from_cargo(
-                        vulnerable_dependency, path
-                    )
+                first_level_dependencies, projects = self.__get_first_level_dependencies_and_projects_from_cargo(
+                    vulnerable_dependency, path
+                )
                 lookup = next(
                     (
                         index
@@ -447,64 +420,3 @@ class BazelRustDependencyManager(DependencyManager):
             )
 
         return list(first_level_dependencies.values()), list(projects)
-
-    def __is_transitive_dependency_first_level_dependency(self, dep: Dependency) -> bool:
-        direct_dependency_string = self.__dependency_to_direct_bazel_string(dep)
-        # Need to provide keep_going
-        bazel_query = f'"rdeps(@crate_index//:all, {direct_dependency_string} ,1)" --keep_going'
-        # TODO : require a way for supressing bazel query ERRORs
-        # Since, ERROR signifies the package is not declared in the crate_index
-        result = self.executor.get_bazel_query_output(bazel_query, self.root)
-        if not result:
-            return False
-        result = result.split("\n")
-        if "@crate_index//" in result and len(result) == 1:
-            # direct_dependency
-            return True
-        return False
-
-    def __get_first_level_dependencies_for_vulnerable_dependency(self, dep: Dependency) -> typing.List[Dependency]:
-        dependency_builder: typing.List[Dependency] = []
-        bazel_dependency = self.__dependency_to_transitive_bazel_string(dep)
-        bazel_query = f'"rdeps(@crate_index//:all, {bazel_dependency}) except {bazel_dependency}"'
-        result = self.executor.get_bazel_query_output(bazel_query, self.root)
-
-        if not result:
-            return dependency_builder
-
-        result = result.split("\n")
-
-        if "@crate_index//" in result and len(result) == 1:
-            # direct_dependency
-            return dependency_builder
-        result.remove("@crate_index//")
-        for transitive_bazel_string in sorted(result):
-            transitive_dependency = self.__transitive_bazel_string_to_dependency(transitive_bazel_string)
-            if transitive_dependency and self.__is_transitive_dependency_first_level_dependency(transitive_dependency):
-                dependency_builder.append(transitive_dependency)
-        return dependency_builder
-
-    def __get_projects_for_vulnerable_dependency(
-        self, project: Project, vulnerable_dependency: Dependency, first_level_dependencies: typing.List[Dependency]
-    ) -> typing.List[str]:
-        project_builder: typing.Set = set()
-
-        dependencies = [vulnerable_dependency]
-        if first_level_dependencies:
-            dependencies += first_level_dependencies
-
-        for dependency in dependencies:
-            bazel_dependency = self.__dependency_to_transitive_bazel_string(dependency)
-            # rank 2 because package -> crate_index -> dependency
-            bazel_query = f'"kind("rust_library", rdeps(//rs/..., {bazel_dependency}, 2)) except rdeps(@crate_index//:all, {bazel_dependency})" --keep_going'
-            result = self.executor.get_bazel_query_output(bazel_query, self.root)
-
-            if not result:
-                continue
-
-            result = result.split("\n")
-            for project_string in result:
-                project_builder.add(f"{project.path}/{project_string}")
-
-        project_builder.discard("")
-        return list(project_builder)

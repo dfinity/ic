@@ -2,12 +2,12 @@ mod commands;
 mod commit_switcher;
 mod utils;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
 use colored::*;
 use commands::{run_script, run_script_in_current_process};
 use commit_switcher::CommitSwitcher;
-use std::path::PathBuf;
+use std::{collections::BTreeSet, path::PathBuf};
 use url::Url;
 use utils::*;
 
@@ -142,14 +142,16 @@ fn run_pick_commit() -> Result<()> {
     let ic = ic_dir();
 
     // Build the absolute path to the cmd.sh script.
-    let cmd_path = ic.join("testnet/tools/nns-tools/cmd.sh");
+    let cmd_path = ic.join("rs/nervous_system/tools/helpers/cmd.sh");
 
     // Run the command with the required argument.
     let output = run_script(cmd_path, &["latest_commit_with_prebuilt_artifacts"], &ic)?;
 
     let commit = if output.status.success() {
         let commit = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        println!("A commit with prebuilt artifacts was found with the following command: `./testnet/tools/nns-tools/cmd.sh latest_commit_with_prebuilt_artifacts`.");
+        println!(
+            "A commit with prebuilt artifacts was found with the following command: `./rs/nervous_system/tools/helpers/cmd.sh latest_commit_with_prebuilt_artifacts`."
+        );
         input_with_default("Commit to release", &commit)?
     } else {
         println!(
@@ -157,13 +159,15 @@ fn run_pick_commit() -> Result<()> {
             String::from_utf8_lossy(&output.stderr)
         );
         // get input from user for the commit
-        input("Enter the commit hash, which you can find by running `./testnet/tools/nns-tools/cmd.sh latest_commit_with_prebuilt_artifacts`")?
+        input(
+            "Enter the commit hash, which you can find by running `./rs/nervous_system/tools/helpers/cmd.sh latest_commit_with_prebuilt_artifacts`",
+        )?
     };
 
     print_step(
         1,
         "Pick Release Candidate Commit",
-        &format!("Chosen commit: {}", commit),
+        &format!("Chosen commit: {commit}"),
     )?;
 
     // Continue to next step.
@@ -172,7 +176,9 @@ fn run_pick_commit() -> Result<()> {
 
 fn run_determine_targets(cmd: DetermineTargets) -> Result<()> {
     let DetermineTargets { commit } = cmd;
-    println!("Now choose which canisters to upgrade. You can run ./testnet/tools/nns-tools/list-new-commits.sh to see the changes for each canister.");
+    println!(
+        "Now choose which canisters to upgrade. You can run ./rs/nervous_system/tools/helpers/list-new-commits.sh to see the changes for each canister."
+    );
 
     // Define the candidate canisters.
     let nns_candidates = [
@@ -184,6 +190,7 @@ fn run_determine_targets(cmd: DetermineTargets) -> Result<()> {
         "Cycles-Minting",
         "Genesis-Token",
         "Node-Rewards",
+        "Migration",
     ];
     let sns_candidates = ["Root", "Governance", "Swap", "Index", "Ledger", "Archive"];
 
@@ -194,7 +201,7 @@ fn run_determine_targets(cmd: DetermineTargets) -> Result<()> {
     // Ask about NNS canisters.
     println!("NNS canisters:");
     for &canister in nns_candidates.iter() {
-        if input_yes_or_no(&format!("   Release {}?", canister), false)? {
+        if input_yes_or_no(&format!("   Release {canister}?"), false)? {
             nns_canisters.push(canister.to_string().to_lowercase());
         }
     }
@@ -202,18 +209,34 @@ fn run_determine_targets(cmd: DetermineTargets) -> Result<()> {
     // Ask about SNS canisters.
     println!("SNS canisters:");
     for &canister in sns_candidates.iter() {
-        if input_yes_or_no(&format!("   Release {}?", canister), false)? {
+        if input_yes_or_no(&format!("   Release {canister}?"), false)? {
             sns_canisters.push(canister.to_string().to_lowercase());
         }
     }
+
+    let icrc_ledger_suite: BTreeSet<String> = ["index", "ledger", "archive"]
+        .into_iter()
+        .map(String::from)
+        .collect();
+    let sns_canisters_set: BTreeSet<String> = sns_canisters.iter().map(String::from).collect();
+    let has_icrc_ledger_suite = sns_canisters_set.intersection(&icrc_ledger_suite).count() > 0;
+    let not_exactly_icrc_ledger_suite =
+        !nns_canisters.is_empty() || sns_canisters_set != icrc_ledger_suite;
+    let maybe_warning = if has_icrc_ledger_suite && not_exactly_icrc_ledger_suite {
+        "\nWARNING: You are releasing some of the ICRC ledger suite but also some other canisters at the same commit. \
+        ICRC ledger suite usually requires a specific commit, so you might want to consider releasing them separately."
+    } else {
+        ""
+    };
 
     print_step(
         2,
         "Determine Upgrade Targets",
         &format!(
-            "NNS canisters selected for release: {}\nSNS canisters selected for release: {}",
+            "NNS canisters selected for release: {}\nSNS canisters selected for release: {}{}",
             nns_canisters.join(", "),
-            sns_canisters.join(", ")
+            sns_canisters.join(", "),
+            maybe_warning
         ),
     )?;
 
@@ -235,8 +258,8 @@ fn run_run_tests(cmd: RunTests) -> Result<()> {
         "Verify the commit you chose at the previous step has a green check on this page: https://github.com/dfinity/ic/actions/workflows/ci-main.yml?query=branch:master+event:push+is:success
 
 If not, you can also run the upgrade tests manually:
-    - Follow instructions in: testnet/tools/nns-tools/README.md#upgrade-testing-via-bazel
-   
+    - Follow instructions in: rs/nervous_system/tools/helpers/README.md#upgrade-testing-via-bazel
+
 2. SNS Testing Note:
    - No manual testing needed for SNS
    - Covered by sns_release_qualification in CI
@@ -263,7 +286,7 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
     let proposals_dir = ic
         .join("..")
         .join("proposals")
-        .join(format!("release-{}", today));
+        .join(format!("release-{today}"));
 
     // ensure the directory is empty
     // check if the directory exists
@@ -288,8 +311,9 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
 
         // For each NNS canister, run the prepare-nns-upgrade-proposal-text.sh script and write its output to a file.
         for canister in &nns_canisters {
-            println!("Creating proposal text for NNS canister: {}", canister);
-            let script = ic.join("testnet/tools/nns-tools/prepare-nns-upgrade-proposal-text.sh");
+            println!("Creating proposal text for NNS canister: {canister}");
+            let script =
+                ic.join("rs/nervous_system/tools/helpers/prepare-nns-upgrade-proposal-text.sh");
             // cycles minting requires an upgrade arg, usually '()'
             let output = if canister != "cycles-minting" {
                 run_script(script, &[canister, &commit], &ic)
@@ -301,24 +325,24 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
             };
             if !output.status.success() {
                 bail!(
-                "Failed to create proposal text for NNS canister {} due to error: stdout: {}, stderr: {}",
-                canister,
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
+                    "Failed to create proposal text for NNS canister {} due to error: stdout: {}, stderr: {}",
+                    canister,
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                );
             }
-            let file_path = proposals_dir.join(format!("nns-{}.md", canister));
+            let file_path = proposals_dir.join(format!("nns-{canister}.md"));
             std::fs::write(&file_path, output.stdout).expect("Failed to write NNS proposal file");
             nns_proposal_text_paths.push(file_path);
         }
 
         // For each SNS canister, run the prepare-publish-sns-wasm-proposal-text.sh script.
         for canister in &sns_canisters {
-            println!("Creating proposal text for SNS canister: {}", canister);
-            let script =
-                ic.join("testnet/tools/nns-tools/prepare-publish-sns-wasm-proposal-text.sh");
+            println!("Creating proposal text for SNS canister: {canister}");
+            let script = ic
+                .join("rs/nervous_system/tools/helpers/prepare-publish-sns-wasm-proposal-text.sh");
             // The SNS script is expected to write directly to the file provided as an argument.
-            let file_path = proposals_dir.join(format!("sns-{}.md", canister));
+            let file_path = proposals_dir.join(format!("sns-{canister}.md"));
             let file_path_str = file_path.to_str().expect("Invalid file path");
             let output = run_script(script, &[canister, &commit, file_path_str], &ic)
                 .expect("Failed to run SNS proposal text script");
@@ -345,7 +369,9 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
             break;
         }
 
-        println!("The following proposals have TODOs. Please review them and remove the TODOs before submitting.");
+        println!(
+            "The following proposals have TODOs. Please review them and remove the TODOs before submitting."
+        );
         for proposal_text_path in &proposals_with_todos {
             println!("  - {}", proposal_text_path.display());
             let mut cmd = std::process::Command::new("code");
@@ -396,7 +422,9 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
     println!();
 
     // Ask the user for the SUBMITTING_NEURON_ID (example: 51)
-    println!("We are now going to submit the proposals. For this step, we need your neuron ID. If you are submitting on behalf of DFINITY, your neuron ID is written at this notion page: <https://www.notion.so/dfinityorg/3a1856c603704d51a6fcd2a57c98f92f?v=fc597afede904e499744f3528cad6682>.");
+    println!(
+        "We are now going to submit the proposals. For this step, we need your neuron ID. If you are submitting on behalf of DFINITY, your neuron ID is written at this notion page: <https://www.notion.so/dfinityorg/3a1856c603704d51a6fcd2a57c98f92f?v=fc597afede904e499744f3528cad6682>."
+    );
     let neuron_id = input("Enter your neuron ID (e.g. 51)")?;
 
     println!("Plug in your HSM key. Unplug your Ubikey.");
@@ -414,7 +442,8 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
     // For each NNS proposal, run the submission script.
     for proposal_path in &nns_proposal_text_paths {
         println!("Submitting NNS proposal: {}", proposal_path.display());
-        let script = ic.join("testnet/tools/nns-tools/submit-mainnet-nns-upgrade-proposal.sh");
+        let script =
+            ic.join("rs/nervous_system/tools/helpers/submit-mainnet-nns-upgrade-proposal.sh");
         let output = run_script_in_current_process(
             script,
             &[
@@ -439,7 +468,8 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
     // For each SNS proposal, run the submission script.
     for proposal_path in &sns_proposal_text_paths {
         println!("Submitting SNS proposal: {}", proposal_path.display());
-        let script = ic.join("testnet/tools/nns-tools/submit-mainnet-publish-sns-wasm-proposal.sh");
+        let script =
+            ic.join("rs/nervous_system/tools/helpers/submit-mainnet-publish-sns-wasm-proposal.sh");
         let output = run_script_in_current_process(
             script,
             &[
@@ -466,22 +496,20 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
         5,
         "Submit Proposals",
         &format!(
-            "I submitted the following proposals: 
+            "I submitted the following proposals:
             NNS: {}
             SNS: {}",
             nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
                 let _ = write!(
                     acc,
-                    "\n  - https://dashboard.internetcomputer.org/proposal/{}",
-                    id
+                    "\n  - https://dashboard.internetcomputer.org/proposal/{id}"
                 );
                 acc
             }),
             sns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
                 let _ = write!(
                     acc,
-                    "\n  - https://dashboard.internetcomputer.org/proposal/{}",
-                    id
+                    "\n  - https://dashboard.internetcomputer.org/proposal/{id}"
                 );
                 acc
             })
@@ -510,7 +538,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
 
     // --- Generate NNS forum post ---
     if !nns_proposal_text_paths.is_empty() {
-        let script = ic.join("testnet/tools/nns-tools/cmd.sh");
+        let script = ic.join("rs/nervous_system/tools/helpers/cmd.sh");
         let mut args = vec!["generate_forum_post_nns_upgrades"];
         let path_strs: Vec<&str> = nns_proposal_text_paths
             .iter()
@@ -531,7 +559,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
             .append_pair("title", &title)
             .append_pair("body", body)
             .append_pair("category", "Governance/NNS proposal discussions")
-            .append_pair("tags", "nns");
+            .append_pair("tags", "nns,Protocol-canister-management");
 
         open_webpage(&url)?;
 
@@ -541,8 +569,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
             nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
                 let _ = write!(
                     acc,
-                    "\n  - https://dashboard.internetcomputer.org/proposal/{}",
-                    id
+                    "\n  - [Proposal {id}](https://dashboard.internetcomputer.org/proposal/{id})",
                 );
                 acc
             })
@@ -553,7 +580,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
 
     // --- Generate SNS forum post ---
     if !sns_proposal_text_paths.is_empty() {
-        let script = ic.join("testnet/tools/nns-tools/cmd.sh");
+        let script = ic.join("rs/nervous_system/tools/helpers/cmd.sh");
         let mut args = vec!["generate_forum_post_sns_wasm_publish"];
         let path_strs: Vec<&str> = sns_proposal_text_paths
             .iter()
@@ -574,7 +601,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
             .append_pair("title", &title)
             .append_pair("body", body)
             .append_pair("category", "Governance/NNS proposal discussions")
-            .append_pair("tags", "SNS");
+            .append_pair("tags", "SNS,Service-nervous-system-mgmt");
 
         open_webpage(&url)?;
 
@@ -584,8 +611,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
             sns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
                 let _ = write!(
                     acc,
-                    "\n  - https://dashboard.internetcomputer.org/proposal/{}",
-                    id
+                    "\n  - [Proposal {id}](https://dashboard.internetcomputer.org/proposal/{id})",
                 );
                 acc
             })
@@ -629,16 +655,14 @@ SNS: {}",
         nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
             let _ = write!(
                 acc,
-                "\n  - http://dashboard.internetcomputer.org/proposal/{}",
-                id
+                "\n  - http://dashboard.internetcomputer.org/proposal/{id}"
             );
             acc
         }),
         sns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
             let _ = write!(
                 acc,
-                "\n  - http://dashboard.internetcomputer.org/proposal/{}",
-                id
+                "\n  - http://dashboard.internetcomputer.org/proposal/{id}"
             );
             acc
         }),
@@ -647,7 +671,9 @@ SNS: {}",
     println!("Copying instructions for Trusted Neurons to clipboard...");
     copy(instructions.as_bytes())?;
     input("Press Enter to open the calendar event...")?;
-    open_webpage(&Url::parse("https://calendar.google.com/calendar/u/0/r/eventedit/duplicate/MjJvMTdva2xtdGJuZDhoYjRjN2poZzNwM2ogY182NGYwZDdmZDYzYjNlMDYxZjE1Zjk2MTU1NWYzMmFiN2EyZmY3M2NjMWJmM2Q3ZTRkNGI3NGVjYjk1ZWVhM2M0QGc")?)?;
+    open_webpage(&Url::parse(
+        "https://calendar.google.com/calendar/u/0/r/eventedit/duplicate/MjJvMTdva2xtdGJuZDhoYjRjN2poZzNwM2ogY182NGYwZDdmZDYzYjNlMDYxZjE1Zjk2MTU1NWYzMmFiN2EyZmY3M2NjMWJmM2Q3ZTRkNGI3NGVjYjk1ZWVhM2M0QGc",
+    )?)?;
 
     print_step(7,
         "Schedule Trusted Neurons Vote",
@@ -699,11 +725,11 @@ fn run_update_changelog(cmd: UpdateChangelog) -> Result<()> {
 NNS: {}
 SNS: {}",
             nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
-                let _ = write!(acc, "\n  - {}", id);
+                let _ = write!(acc, "\n  - {id}");
                 acc
             }),
             sns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
-                let _ = write!(acc, "\n  - {}", id);
+                let _ = write!(acc, "\n  - {id}");
                 acc
             }),
         ),
@@ -715,29 +741,28 @@ SNS: {}",
 
         // update the changelog for each proposal
         for proposal_id in nns_proposal_ids.iter().chain(sns_proposal_ids.iter()) {
-            println!("Updating changelog for proposal {}", proposal_id);
-            let script = ic.join("testnet/tools/nns-tools/add-release-to-changelog.sh");
+            println!("Updating changelog for proposal {proposal_id}");
+            let script = ic.join("rs/nervous_system/tools/helpers/add-release-to-changelog.sh");
             let output = run_script(script, &[proposal_id], &ic)?;
 
             if !output.status.success() {
                 println!("{}", String::from_utf8_lossy(&output.stderr));
-                println!("Failed to update changelog for proposal {}", proposal_id);
+                println!("Failed to update changelog for proposal {proposal_id}");
             }
         }
 
-        println!("Changelogs updated. Now I'm going to create a branch, commit, push it, then create a PR using `gh`.");
+        println!(
+            "Changelogs updated. Now I'm going to create a branch, commit, push it, then create a PR using `gh`."
+        );
         press_enter_to_continue()?;
 
         // Create branch with today's date
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let branch_name = format!("changelog-update-{}", today);
+        let branch_name = format!("changelog-update-{today}");
         commit_all_into_branch(&branch_name)?;
 
         // Create PR
-        let title = format!(
-            "chore(nervous-system): Update changelog for release {}",
-            today
-        );
+        let title = format!("chore(nervous-system): Update changelog for release {today}");
         let body = &format!(
             "Update CHANGELOG.md for today's release.
 
@@ -761,7 +786,9 @@ SNS: {}",
         );
         let pr_url = create_pr(&title, body)?;
         open_webpage(&pr_url)?;
-        println!("PR created. Please share it with the team. It can be merged before the proposals are executed.");
+        println!(
+            "PR created. Please share it with the team. It can be merged before the proposals are executed."
+        );
     }
 
     println!("{}", "\nRelease process complete!".bright_green().bold());

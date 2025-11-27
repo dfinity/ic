@@ -1,6 +1,6 @@
 [package]
 name = "icrc-ledger-agent"
-version = "0.1.0"
+version = "0.1.1"
 description = "Functions for interacting with DFINITY's implementation of the ICRC-1 fungible token standard."
 license = "Apache-2.0"
 readme = "README.md"
@@ -19,5 +19,5 @@ hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-cbor = { workspace = true }
 ic-certification = { workspace = true }
-icrc-ledger-types = { path = "../icrc-ledger-types", version = "0.1.2" }
+icrc-ledger-types = { path = "../icrc-ledger-types", version = "0.1.10" }
 leb128 = { workspace = true }

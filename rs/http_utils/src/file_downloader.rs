@@ -1,11 +1,11 @@
 use flate2::read::GzDecoder;
 use http::Method;
 use ic_crypto_sha2::Sha256;
-use ic_logger::{log, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, log};
 use reqwest::{Client, Response};
 use slog::Level;
 use std::error::Error;
-use std::fmt::{self, Display};
+use std::fmt;
 use std::fs::{self, File};
 use std::io;
 use std::io::prelude::*;
@@ -27,6 +27,36 @@ pub struct FileDownloader {
     /// This is a timeout that is applied to the whole operation of downloading
     /// a specific resource.
     overall_timeout: Duration,
+}
+
+macro_rules! maybe_log {
+    ($logger:expr, $level:expr, $($arg:tt)+) => {
+        if let Some(logger) = $logger.as_ref() {
+            log!(logger, $level, $($arg)+);
+        }
+    };
+}
+
+macro_rules! maybe_info {
+    (every_n_seconds => $seconds:expr, $logger:expr, $($arg:tt)+) => {
+        if let Some(logger) = $logger.as_ref() {
+            info!(every_n_seconds => $seconds, logger, $($arg)+);
+        }
+    };
+    ($logger:expr, $($arg:tt)+) => {
+        maybe_log!($logger, Level::Info, $($arg)+);
+    };
+}
+
+macro_rules! maybe_warn {
+    (every_n_seconds => $seconds:expr, $logger:expr, $($arg:tt)+) => {
+        if let Some(logger) = $logger.as_ref() {
+            warn!(every_n_seconds => $seconds, logger, $($arg)+);
+        }
+    };
+    ($logger:expr, $($arg:tt)+) => {
+        maybe_log!($logger, Level::Warning, $($arg)+);
+    };
 }
 
 impl FileDownloader {
@@ -63,20 +93,6 @@ impl FileDownloader {
         Ok(())
     }
 
-    fn log<S: Display>(&self, level: Level, message: S) {
-        if let Some(logger) = self.logger.as_ref() {
-            log!(logger, level, "{}", message);
-        }
-    }
-
-    fn info<S: Display>(&self, message: S) {
-        self.log(Level::Info, message);
-    }
-
-    fn warn<S: Display>(&self, message: S) {
-        self.log(Level::Warning, message);
-    }
-
     /// Make a GET HTTP request to `url`, stream the response body to
     /// `file_path` and verify that the resulting file has hash
     /// `expected_sha256_hex`.
@@ -103,21 +119,25 @@ impl FileDownloader {
             // a hash check is required, try the hash check
             // first to save time if possible.
             Some(hash) if file_path.exists() => {
-                self.info("File already exists. Checking hash.");
+                maybe_info!(self.logger, "File already exists. Checking hash.");
                 match check_file_hash(file_path, hash) {
                     Ok(()) => return Ok(()),
                     Err(e) => {
-                        self.warn(format!(
+                        maybe_warn!(
+                            self.logger,
                             "Hash mismatch. Assuming incomplete file. Error: {:?}",
                             e
-                        ));
+                        );
                     }
                 }
             }
             // If the hash check wasn't required assume that
             // the file on the disk is stale and remove it.
             None if file_path.exists() => {
-                self.info("Expected hash not provided and the file already exist. Removing file.");
+                maybe_info!(
+                    self.logger,
+                    "Expected hash not provided and the file already exist. Removing file."
+                );
                 fs::remove_file(file_path)
                     .map_err(|e| FileDownloadError::file_remove_error(file_path, e))?;
             }
@@ -134,13 +154,15 @@ impl FileDownloader {
             // We have some parts of the file but still require to fetch the
             // rest from the server.
             let offset = metadata.len();
-            self.info(format!(
+            maybe_info!(
+                self.logger,
                 "Resuming downloading file from {} starting from byte {}",
-                url, offset
-            ));
+                url,
+                offset
+            );
             offset
         } else {
-            self.info(format!("Downloading file from: {}", url));
+            maybe_info!(self.logger, "Downloading file from: {}", url);
             0
         };
 
@@ -148,11 +170,12 @@ impl FileDownloader {
 
         // There are new bytes that should be written
         if let Some(response) = maybe_response {
-            self.info(format!(
+            maybe_info!(
+                self.logger,
                 "Download request initiated to {:?}, headers: {:?}",
                 response.remote_addr(),
                 response.headers()
-            ));
+            );
             let file = fs::OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -165,17 +188,18 @@ impl FileDownloader {
 
         match expected_sha256_hex.as_ref() {
             Some(expected_hash) => {
-                self.info("Response read. Checking hash.");
+                maybe_info!(self.logger, "Response read. Checking hash.");
                 match check_file_hash(file_path, expected_hash) {
                     Ok(()) => {
-                        self.info("Hash check passed successfully.");
+                        maybe_info!(self.logger, "Hash check passed successfully.");
                         Ok(())
                     }
                     Err(hash_invalid_err) => {
-                        self.warn(format!(
+                        maybe_warn!(
+                            self.logger,
                             "Hash check failed: {:?} - deleting file",
                             hash_invalid_err
-                        ));
+                        );
                         fs::remove_file(file_path)
                             .map_err(|err| FileDownloadError::file_remove_error(file_path, err))?;
                         Err(hash_invalid_err)
@@ -183,7 +207,10 @@ impl FileDownloader {
                 }
             }
             None => {
-                self.info("Response read. Skipping hash verification since it wasn't provided.");
+                maybe_info!(
+                    self.logger,
+                    "Response read. Skipping hash verification since it wasn't provided."
+                );
                 Ok(())
             }
         }
@@ -197,7 +224,7 @@ impl FileDownloader {
         let response = self
             .client
             .get(url)
-            .header("range", format!("bytes={}-", offset))
+            .header("range", format!("bytes={offset}-"))
             .timeout(self.overall_timeout)
             .send()
             .await?;
@@ -205,13 +232,18 @@ impl FileDownloader {
         if response.status().is_success() {
             Ok(Some(response))
         } else if response.status() == http::StatusCode::RANGE_NOT_SATISFIABLE {
-            self.warn(format!(
+            maybe_warn!(
+                self.logger,
                 "Requesting resource '{}' from offset {}, resulted in `RANGE_NOT_SATISFIABLE`",
-                url, offset,
-            ));
+                url,
+                offset,
+            );
             Ok(None)
         } else {
-            Err(FileDownloadError::NonSuccessResponse(Method::GET, response))
+            Err(FileDownloadError::NonSuccessResponse(
+                Method::GET,
+                Box::new(response),
+            ))
         }
     }
 
@@ -222,6 +254,8 @@ impl FileDownloader {
         mut file: fs::File,
         file_path: &Path,
     ) -> FileDownloadResult<()> {
+        let mut chunks_cnt: i32 = 0;
+        let mut chunks_total_len: usize = 0;
         while let Some(chunk) = tokio::time::timeout(self.chunk_timeout, response.chunk())
             .await
             // This error comes from `tokio::time::timeout`
@@ -237,9 +271,26 @@ impl FileDownloader {
                 }
             })?
         {
+            chunks_cnt += 1;
+            chunks_total_len += chunk.len();
+            maybe_info!(
+                every_n_seconds => 1,
+                self.logger,
+                "Streaming {} bytes to {:?} (this is chunk #{} from the beginning).",
+                chunk.len(),
+                file_path,
+                chunks_cnt
+            );
             file.write_all(&chunk)
                 .map_err(|e| FileDownloadError::file_write_error(file_path, e))?;
         }
+        maybe_info!(
+            self.logger,
+            "Streamed {} chunks totalling {} bytes to file {:?}.",
+            chunks_cnt,
+            chunks_total_len,
+            file_path
+        );
         Ok(())
     }
 }
@@ -308,7 +359,7 @@ pub fn extract_tar_into_dir(tar_path: &Path, target_dir: &Path) -> FileDownloadR
     } else {
         Err(FileDownloadError::untar_error(
             tar_path,
-            io::Error::new(io::ErrorKind::Other, "Unrecognized file type"),
+            io::Error::other("Unrecognized file type"),
         ))
     }
 }
@@ -325,7 +376,7 @@ pub enum FileDownloadError {
     ReqwestError(reqwest::Error),
 
     /// A non-success HTTP response was received from the given URI
-    NonSuccessResponse(http::Method, Response),
+    NonSuccessResponse(http::Method, Box<Response>),
 
     /// A file's computed hash did not match the expected hash
     FileHashMismatchError {
@@ -338,55 +389,53 @@ pub enum FileDownloadError {
 
 impl FileDownloadError {
     pub(crate) fn file_write_error(file_path: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(format!("Failed to write to file: {:?}", file_path), e)
+        FileDownloadError::IoError(format!("Failed to write to file: {file_path:?}"), e)
     }
 
     pub(crate) fn file_open_error(file_path: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(format!("Failed to open file: {:?}", file_path), e)
+        FileDownloadError::IoError(format!("Failed to open file: {file_path:?}"), e)
     }
 
     pub(crate) fn file_remove_error(file_path: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(format!("Failed to remove file: {:?}", file_path), e)
+        FileDownloadError::IoError(format!("Failed to remove file: {file_path:?}"), e)
     }
 
     pub(crate) fn untar_error(file_path: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(format!("Failed to unpack tar file: {:?}", file_path), e)
+        FileDownloadError::IoError(format!("Failed to unpack tar file: {file_path:?}"), e)
     }
 
     pub(crate) fn compute_hash_error(file_path: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(format!("Failed to hash of: {:?}", file_path), e)
+        FileDownloadError::IoError(format!("Failed to hash of: {file_path:?}"), e)
     }
 }
 
 impl fmt::Display for FileDownloadError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FileDownloadError::IoError(msg, e) => write!(
-                f,
-                "IO error, message: {}, error: {:?}",
-                msg, e
-            ),
-            FileDownloadError::ReqwestError(e) => write!(
-                f,
-                "Encountered error when making Http request: {}",
-                e
-            ),
+            FileDownloadError::IoError(msg, e) => {
+                write!(f, "IO error, message: {msg}, error: {e:?}")
+            }
+            FileDownloadError::ReqwestError(e) => {
+                write!(f, "Encountered error when making Http request: {e}")
+            }
             FileDownloadError::NonSuccessResponse(method, response) => write!(
                 f,
                 "Received non-success response from endpoint: method: {}, uri: {}, remote_addr: {:?}, status_code: {}, headers: {:?}",
-                method.as_str(), response.url(), response.remote_addr(), response.status(), response.headers()
+                method.as_str(),
+                response.url(),
+                response.remote_addr(),
+                response.status(),
+                response.headers()
             ),
-            FileDownloadError::FileHashMismatchError { computed_hash, expected_hash, file_path } =>
-                write!(
-                    f,
-                    "File failed hash validation: computed_hash: {}, expected_hash: {}, file: {:?}",
-                    computed_hash, expected_hash, file_path
-                ),
-            FileDownloadError::TimeoutError =>
-                write!(
-                    f,
-                    "File downloader timed out."
-                )
+            FileDownloadError::FileHashMismatchError {
+                computed_hash,
+                expected_hash,
+                file_path,
+            } => write!(
+                f,
+                "File failed hash validation: computed_hash: {computed_hash}, expected_hash: {expected_hash}, file: {file_path:?}"
+            ),
+            FileDownloadError::TimeoutError => write!(f, "File downloader timed out."),
         }
     }
 }
@@ -402,9 +451,9 @@ impl Error for FileDownloadError {}
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use flate2::write::GzEncoder;
     use flate2::Compression;
-    use ic_test_utilities_in_memory_logger::{assertions::LogEntriesAssert, InMemoryReplicaLogger};
+    use flate2::write::GzEncoder;
+    use ic_test_utilities_in_memory_logger::{InMemoryReplicaLogger, assertions::LogEntriesAssert};
     use mockito::{Mock, Request, ServerGuard};
     use slog::Level;
     use tar::Builder;
@@ -427,7 +476,7 @@ mod tests {
 
     fn extract_offset(request: &Request) -> usize {
         let header = request.header("range");
-        println!("Received request for headers: {:?}", header);
+        println!("Received request for headers: {header:?}");
         match header.first() {
             Some(h) => h
                 .to_str()
@@ -557,7 +606,7 @@ mod tests {
     async fn test_invalid_file_can_be_overwritten() {
         let body = String::from("Success");
         let hash = hash(&body);
-        let invalid_hash = format!("invalid_{}", hash);
+        let invalid_hash = format!("invalid_{hash}");
         let setup = Setup::new(&body).await.expect_routes(1, 0, 0, 0);
 
         let downloader = FileDownloader::new(Some(ReplicaLogger::from(&setup.logger)));
@@ -818,10 +867,7 @@ mod tests {
 
         match result {
             Err(FileDownloadError::IoError(message, _)) => {
-                assert_eq!(
-                    message,
-                    format!("Failed to unpack tar file: {:?}", tar_path)
-                );
+                assert_eq!(message, format!("Failed to unpack tar file: {tar_path:?}"));
             }
             _ => panic!("Expected FileDownloadError::IoError"),
         }

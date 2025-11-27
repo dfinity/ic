@@ -1,9 +1,9 @@
-use anyhow::{bail, Context, Error, Result};
+use anyhow::{Context, Error, Result, bail};
 use candid::{Decode, Encode, Principal};
 use ic_agent::Agent;
 use rate_limits_api::{
-    v1::{RateLimitRule, SCHEMA_VERSION},
     AddConfigError, AddConfigResponse, IncidentId, InputConfig, InputRule,
+    v1::{RateLimitRule, SCHEMA_VERSION},
 };
 use serde::Deserialize;
 use std::{fs, path::PathBuf, str};
@@ -59,15 +59,15 @@ pub async fn submit_config(
             }
 
             AddConfigError::InvalidInputConfig(x) => {
-                bail!("rules file is malformed: {}", x.to_string());
+                bail!("rules file is malformed: {x}");
             }
 
             AddConfigError::PolicyViolation(x) => {
-                bail!("rules violate a policy: {}", x.to_string());
+                bail!("rules violate a policy: {x}");
             }
 
             AddConfigError::Internal(x) => {
-                bail!("unexpected error: {}", x.to_string());
+                bail!("unexpected error: {x}");
             }
         }
     }

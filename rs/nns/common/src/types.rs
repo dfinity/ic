@@ -72,7 +72,7 @@ impl From<ProposalId> for ProposalIdProto {
 
 impl Debug for ProposalId {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -106,7 +106,7 @@ pub struct UpdateIcpXdrConversionRatePayload {
 
 // A proposal payload to call a canister.
 #[derive(Clone, Debug, candid::CandidType, candid::Deserialize, serde::Serialize)]
-pub struct CallCanisterProposal {
+pub struct CallCanisterRequest {
     pub canister_id: CanisterId,
     pub method_name: String,
     #[serde(with = "serde_bytes")]

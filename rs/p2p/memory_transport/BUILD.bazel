@@ -8,7 +8,6 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/p2p/quic_transport",
     "//rs/types/types",
-    "@crate_index//:anyhow",
     "@crate_index//:axum",
     "@crate_index//:bytes",
     "@crate_index//:tokio",

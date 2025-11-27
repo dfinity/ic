@@ -147,15 +147,14 @@ pub fn construction_payloads(
 
     if ingress_start >= ingress_end {
         return Err(Error::processing_construction_failed(&format!(
-            "Ingress start should start before ingress end: Start: {}, End: {}",
-            ingress_start, ingress_end
+            "Ingress start should start before ingress end: Start: {ingress_start}, End: {ingress_end}"
         )));
     }
 
     if ingress_end < now + ingress_interval {
-        return Err(Error::processing_construction_failed(
-            &format!("Ingress end should be at least one interval from the current time: Current time: {}, End: {}",now, ingress_end),
-        ));
+        return Err(Error::processing_construction_failed(&format!(
+            "Ingress end should be at least one interval from the current time: Current time: {now}, End: {ingress_end}"
+        )));
     }
 
     // Every ingress message sent to the IC has an expiry timestamp until which the signature associated with that message is valid
@@ -238,18 +237,18 @@ mod tests {
     use crate::construction_api::types::CanisterMethodName;
     use crate::construction_api::utils::build_icrc1_transaction_from_canister_method_args;
     use candid::Encode;
-    use ic_agent::agent::EnvelopeContent;
     use ic_agent::Identity;
-    use ic_icrc1_test_utils::construction_payloads_request_metadata;
-    use ic_icrc1_test_utils::minter_identity;
-    use ic_icrc1_test_utils::valid_transactions_strategy;
-    use ic_icrc1_test_utils::KeyPairGenerator;
-    use ic_icrc1_test_utils::LedgerEndpointArg;
-    use ic_icrc1_test_utils::DEFAULT_TRANSFER_FEE;
-    use ic_icrc1_tokens_u256::U256;
+    use ic_agent::agent::EnvelopeContent;
     use ic_icrc_rosetta_client::RosettaClient;
     use ic_icrc_rosetta_runner::DEFAULT_DECIMAL_PLACES;
     use ic_icrc_rosetta_runner::DEFAULT_TOKEN_SYMBOL;
+    use ic_icrc1_test_utils::DEFAULT_TRANSFER_FEE;
+    use ic_icrc1_test_utils::KeyPairGenerator;
+    use ic_icrc1_test_utils::LedgerEndpointArg;
+    use ic_icrc1_test_utils::construction_payloads_request_metadata;
+    use ic_icrc1_test_utils::minter_identity;
+    use ic_icrc1_test_utils::valid_transactions_strategy;
+    use ic_icrc1_tokens_u256::U256;
     use ic_ledger_canister_core::ledger::LedgerTransaction;
     use proptest::prelude::any;
     use proptest::proptest;
@@ -294,10 +293,7 @@ mod tests {
             assert!(
                 operations.contains(&operation),
                 "{}",
-                format!(
-                    "Operation {:?} not found in operations {:?}",
-                    operation, operations
-                )
+                format!("Operation {operation:?} not found in operations {operations:?}")
             )
         });
 
@@ -405,10 +401,12 @@ mod tests {
 
                         assert_eq!(
                             required_public_keys,
-                            Some(vec![icrc_ledger_types::icrc1::account::Account::from(
-                                arg_with_caller.caller.sender().unwrap()
-                            )
-                            .into()])
+                            Some(vec![
+                                icrc_ledger_types::icrc1::account::Account::from(
+                                    arg_with_caller.caller.sender().unwrap()
+                                )
+                                .into()
+                            ])
                         );
 
                         let payloads_metadata: ConstructionPayloadsRequestMetadata =
@@ -546,6 +544,9 @@ mod tests {
                             ic_icrc1::Operation::Approve { .. } => CanisterMethodName::Icrc2Approve,
                             ic_icrc1::Operation::Mint { .. } => CanisterMethodName::Icrc1Transfer,
                             ic_icrc1::Operation::Burn { .. } => CanisterMethodName::Icrc1Transfer,
+                            ic_icrc1::Operation::FeeCollector { .. } => {
+                                panic!("FeeCollector107 not implemented")
+                            }
                         };
                         let args = match arg_with_caller.arg {
                             LedgerEndpointArg::TransferArg(arg) => Encode!(&arg),

@@ -18,7 +18,7 @@ ic-validator = { path = "../../validator" }
 time = { workspace = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-ic-cdk = { version = "0.17.2", optional = true }
+ic-cdk = { workspace = true, optional = true }
 
 [features]
 default = ["dep:ic-cdk"]

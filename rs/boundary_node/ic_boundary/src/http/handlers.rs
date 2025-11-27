@@ -8,27 +8,25 @@ use std::{
 #[cfg(test)]
 use axum::extract::ConnectInfo;
 use axum::{
+    Extension,
     body::Body,
     extract::{
-        ws::{CloseFrame, Message, Utf8Bytes, WebSocket, WebSocketUpgrade},
         Path, Request, State,
+        ws::{CloseFrame, Message, Utf8Bytes, WebSocket, WebSocketUpgrade},
     },
     http::StatusCode,
     response::IntoResponse,
-    Extension,
 };
 use bytes::Bytes;
 use candid::Principal;
 use http::header::{CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
-#[cfg(not(test))]
-use ic_bn_lib::http::ConnInfo;
 use ic_bn_lib::{
     http::headers::{CONTENT_TYPE_CBOR, X_CONTENT_TYPE_OPTIONS_NO_SNIFF, X_FRAME_OPTIONS_DENY},
     pubsub::{Broker, Subscriber},
 };
 use ic_types::{
-    messages::{HttpStatusResponse, ReplicaHealthStatus},
     CanisterId, SubnetId,
+    messages::{HttpStatusResponse, ReplicaHealthStatus},
 };
 use moka::sync::{Cache, CacheBuilder};
 use serde::Serialize;
@@ -72,7 +70,7 @@ impl LogsState {
 /// Handles websocket requests for canister logs
 pub async fn logs_canister(
     ws: WebSocketUpgrade,
-    #[cfg(not(test))] Extension(conn_info): Extension<Arc<ConnInfo>>,
+    #[cfg(not(test))] Extension(conn_info): Extension<Arc<ic_bn_lib_common::types::http::ConnInfo>>,
     #[cfg(test)] ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Path(canister_id): Path<CanisterId>,
     State(state): State<Arc<LogsState>>,
@@ -271,14 +269,15 @@ pub async fn handle_subnet(
 
 #[cfg(test)]
 mod test {
-    use axum::{routing::any, Router};
+    use axum::{Router, routing::any};
     use futures_util::StreamExt;
-    use ic_bn_lib::principal;
     use ic_bn_lib::pubsub::BrokerBuilder;
+    use ic_bn_lib_common::principal;
     use tokio_tungstenite::tungstenite;
 
     use super::*;
-    use crate::{persist::RouteSubnet, routes::test::test_route_subnet};
+    use crate::persist::test::generate_test_subnets;
+    use crate::snapshot::Subnet;
     use std::future::IntoFuture;
     use std::net::{Ipv4Addr, SocketAddr};
 
@@ -288,14 +287,11 @@ mod test {
         fn lookup_subnet_by_canister_id(
             &self,
             _id: &CanisterId,
-        ) -> Result<Arc<RouteSubnet>, ErrorCause> {
-            Ok(Arc::new(test_route_subnet(1)))
+        ) -> Result<Arc<Subnet>, ErrorCause> {
+            Ok(Arc::new(generate_test_subnets(0)[0].clone()))
         }
 
-        fn lookup_subnet_by_id(
-            &self,
-            _id: &SubnetId,
-        ) -> Result<Arc<crate::persist::RouteSubnet>, ErrorCause> {
+        fn lookup_subnet_by_id(&self, _id: &SubnetId) -> Result<Arc<Subnet>, ErrorCause> {
             Err(ErrorCause::NoRoutingTable)
         }
     }

@@ -1,4 +1,4 @@
-use crate::{balances_len, AccountIdentifier, Ledger, StorableAllowance};
+use crate::{AccountIdentifier, Ledger, StorableAllowance, balances_len};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_canister_core::{
     archive::Archive,
@@ -14,8 +14,8 @@ use ic_ledger_core::{
 };
 use ic_stable_structures::Storable;
 use icp_ledger::{
-    apply_operation, ArchiveOptions, Block, Memo, Operation, PaymentError, Transaction,
-    TransferError, DEFAULT_TRANSFER_FEE,
+    ArchiveOptions, Block, DEFAULT_TRANSFER_FEE, Memo, Operation, PaymentError, Transaction,
+    TransferError, apply_operation,
 };
 use proptest::prelude::{any, prop_assert_eq, proptest};
 use proptest::strategy::Strategy;
@@ -221,9 +221,9 @@ fn serialize() {
     let block_bytes = block.clone().encode();
     println!("block bytes = {:02x?}", block_bytes.0);
     let block_hash = Block::block_hash(&block_bytes);
-    println!("block hash = {}", block_hash);
+    println!("block hash = {block_hash}");
     let block_decoded = Block::decode(block_bytes).unwrap();
-    println!("block decoded = {:#?}", block_decoded);
+    println!("block decoded = {block_decoded:#?}");
     assert_eq!(block, block_decoded);
 
     state.add_block(block).unwrap();
@@ -656,10 +656,7 @@ fn apply_at(ledger: &mut Ledger, op: &Operation, ts: TimeStamp) -> BlockIndex {
     ledger
         .add_payment_with_timestamp(memo, op.clone(), None, ts)
         .unwrap_or_else(|e| {
-            panic!(
-                "Failed to execute operation {:?} with memo {:?} at {:?}: {:?}",
-                op, memo, ts, e
-            )
+            panic!("Failed to execute operation {op:?} with memo {memo:?} at {ts:?}: {e:?}")
         })
         .0
 }

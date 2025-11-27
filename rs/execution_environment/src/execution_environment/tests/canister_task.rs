@@ -1,27 +1,28 @@
 use assert_matches::assert_matches;
-use ic_base_types::NumSeconds;
+use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{
-    CanisterSettingsArgsBuilder, CanisterStatusType, OnLowWasmMemoryHookStatus,
+    CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions,
+    IC_00, OnLowWasmMemoryHookStatus, Payload, WasmMemoryPersistence,
 };
-use ic_management_canister_types_private::{CanisterUpgradeOptions, WasmMemoryPersistence};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
+use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
 use ic_replicated_state::page_map::PAGE_SIZE;
-use ic_replicated_state::NumWasmPages;
 use ic_state_machine_tests::StateMachine;
 use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig, WasmResult};
-use ic_test_utilities_execution_environment::{wat_compilation_cost, ExecutionTestBuilder};
+use ic_test_utilities_execution_environment::{ExecutionTestBuilder, wat_compilation_cost};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
-use ic_types::messages::CanisterTask;
 use ic_types::Cycles;
+use ic_types::messages::CanisterTask;
 use ic_types::{CanisterId, NumBytes};
-use ic_universal_canister::wasm;
-use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
 use std::time::{Duration, UNIX_EPOCH};
+use strum::IntoEnumIterator;
 
 #[test]
 fn heartbeat_is_executed() {
@@ -235,9 +236,10 @@ fn global_timer_can_be_cancelled() {
     env.advance_time(Duration::from_secs(1));
     // Setup global timer to increase a global counter
     let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+    let deadline = now_nanos + 1_000; // set the deadline in 1_000 rounds from now, i.e., far in the future so that the timer does not trigger before getting cancelled
     let set_global_timer = wasm()
         .set_global_timer_method(wasm().inc_global_counter())
-        .api_global_timer_set(now_nanos + 3) // set the deadline in three rounds from now
+        .api_global_timer_set(deadline)
         .get_global_counter()
         .reply_int64()
         .build();
@@ -260,17 +262,18 @@ fn global_timer_can_be_cancelled() {
     let result = env
         .execute_ingress(canister_id, "update", cancel_global_timer)
         .unwrap();
-    assert_eq!(
-        result,
-        WasmResult::Reply((now_nanos + 3).to_le_bytes().into())
-    );
+    assert_eq!(result, WasmResult::Reply(deadline.to_le_bytes().into()));
 
-    // The timer should not be called
+    // The timer should not be called even after bumping time by 1s = 1_000_000_000ns
+    // to exceed the deadline.
     env.advance_time(Duration::from_secs(1));
-    let result = env
-        .execute_ingress(canister_id, "update", get_global_counter)
-        .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    // We execute rounds to exercise all possible next scheduled method types (to ensure a canister task would run if scheduled).
+    for _ in NextScheduledMethod::iter() {
+        let result = env
+            .execute_ingress(canister_id, "update", get_global_counter.clone())
+            .unwrap();
+        assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    }
 }
 
 #[test]
@@ -299,10 +302,13 @@ fn global_timer_can_be_immediately_cancelled() {
     let get_global_counter = wasm().get_global_counter().reply_int64().build();
 
     // The counter must be zero as the timer should have been immediately cancelled
-    let result = env
-        .execute_ingress(canister_id, "update", get_global_counter)
-        .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    // We execute rounds to exercise all possible next scheduled method types (to ensure a canister task would run if scheduled).
+    for _ in NextScheduledMethod::iter() {
+        let result = env
+            .execute_ingress(canister_id, "update", get_global_counter.clone())
+            .unwrap();
+        assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    }
 }
 
 #[test]
@@ -343,12 +349,49 @@ fn global_timer_is_one_off() {
     assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
 
     // The timer should be called just once
-    env.advance_time(Duration::from_secs(1));
-    env.tick();
-    let result = env
-        .execute_ingress(canister_id, "update", get_global_counter)
+    // We execute rounds to exercise all possible next scheduled method types (to ensure a canister task would run if scheduled).
+    for _ in NextScheduledMethod::iter() {
+        env.advance_time(Duration::from_secs(1));
+        env.tick();
+        let result = env
+            .execute_ingress(canister_id, "update", get_global_counter.clone())
+            .unwrap();
+        assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
+    }
+}
+
+#[test]
+fn global_timer_in_far_future_does_not_run() {
+    let env = StateMachine::new();
+    let canister_id = env
+        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
+
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    // Setup global timer to increase a global counter
+    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+    let set_global_timer = wasm()
+        .set_global_timer_method(wasm().inc_global_counter())
+        .api_global_timer_set(now_nanos + 1_000_000) // set the deadline in many rounds from now
+        .get_global_counter()
+        .reply_int64()
+        .build();
+    let result = env
+        .execute_ingress(canister_id, "update", set_global_timer)
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+
+    let get_global_counter = wasm().get_global_counter().reply_int64().build();
+
+    // We execute rounds to exercise all possible next scheduled method types (to ensure a canister task would run if scheduled).
+    for _ in NextScheduledMethod::iter() {
+        env.tick();
+        let result = env
+            .execute_ingress(canister_id, "update", get_global_counter.clone())
+            .unwrap();
+        assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    }
 }
 
 #[test]
@@ -380,10 +423,13 @@ fn global_timer_can_be_reactivated() {
 
     // The timer should be called just once
     env.advance_time(Duration::from_secs(1));
-    let result = env
-        .execute_ingress(canister_id, "update", get_global_counter.clone())
-        .unwrap();
-    assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
+    // We execute rounds to exercise all possible next scheduled method types (to ensure a canister task would run if scheduled).
+    for _ in NextScheduledMethod::iter() {
+        let result = env
+            .execute_ingress(canister_id, "update", get_global_counter.clone())
+            .unwrap();
+        assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
+    }
 
     let set_global_timer = wasm()
         .api_global_timer_set(1)
@@ -701,6 +747,236 @@ fn global_timer_set_returns_zero_in_canister_global_timer_method() {
 }
 
 #[test]
+fn global_timer_in_pre_and_post_upgrade() {
+    let env = StateMachine::new();
+
+    // Pre-upgrade pushes the timer it sees into stable memory and sets the timer into the past.
+    let canister_id = env
+        .install_canister(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            wasm()
+                .set_pre_upgrade(
+                    wasm()
+                        .stable_grow(1)
+                        .push_int(0)
+                        .api_global_timer_set(1)
+                        .int64_to_blob()
+                        .stable_write_offset_blob()
+                        .build(),
+                )
+                .build(),
+            None,
+        )
+        .unwrap();
+
+    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+    let far_future_time = now_nanos + 1_000_000;
+    let other_far_future_time = now_nanos + 2_000_000;
+
+    // We set the timer (to confirm that pre-upgrade sees the timer) into far future (so that it does not actually run).
+    env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().api_global_timer_set(far_future_time).reply().build(),
+    )
+    .unwrap();
+
+    // Upgrade the canister to trigger pre-upgrade and post-upgrade.
+    // Post-upgrade pushes the timer it sees into stable memory and sets the timer (to confirm that post-upgrade set the timer) into far future (so that it does not actually run).
+    let set_global_timer_in_post_upgrade = wasm()
+        .push_int(8)
+        .api_global_timer_set(other_far_future_time)
+        .int64_to_blob()
+        .stable_write_offset_blob()
+        .build();
+    let result = env.upgrade_canister(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        set_global_timer_in_post_upgrade,
+    );
+    assert_eq!(result, Ok(()));
+
+    // We fetch the two timers from stable memory:
+    // - the first timer is the custom timer seen in pre-upgrade;
+    // - the second timer is the cleared timer seen in post-uprade.
+    let result = env
+        .execute_ingress(
+            canister_id,
+            "update",
+            wasm().stable_read(0, 16).append_and_reply().build(),
+        )
+        .unwrap();
+    match result {
+        WasmResult::Reply(data) => {
+            assert_eq!(
+                data,
+                [far_future_time.to_le_bytes(), 0_u64.to_le_bytes()].concat()
+            );
+        }
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
+    };
+
+    // We confirm that post-upgrade set the timer by resetting the timer and checking its previous value.
+    let result = env
+        .execute_ingress(
+            canister_id,
+            "update",
+            wasm()
+                .api_global_timer_set(far_future_time)
+                .reply_int64()
+                .build(),
+        )
+        .unwrap();
+    match result {
+        WasmResult::Reply(data) => {
+            assert_eq!(data, other_far_future_time.to_le_bytes());
+        }
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
+    };
+}
+
+#[test]
+fn global_timer_in_init() {
+    let env = StateMachine::new();
+    let canister_id = env
+        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), wasm().build(), None)
+        .unwrap();
+
+    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+    let far_future_time = now_nanos + 1_000_000;
+    let other_far_future_time = now_nanos + 2_000_000;
+
+    // We set the timer (to confirm that init sees the cleared timer) into far future (so that it does not actually run).
+    env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().api_global_timer_set(far_future_time).reply().build(),
+    )
+    .unwrap();
+
+    // Reinstall the canister to trigger init.
+    // Init pushes the timer it sees into stable memory and sets the timer (to confirm that init set the timer) into far future (so that it does not actually run).
+    let set_global_timer_in_init = wasm()
+        .stable_grow(1)
+        .push_int(0)
+        .api_global_timer_set(other_far_future_time)
+        .int64_to_blob()
+        .stable_write_offset_blob()
+        .build();
+    let result = env.reinstall_canister(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        set_global_timer_in_init,
+    );
+    assert_eq!(result, Ok(()));
+
+    // We fetch the cleared timer seen in init from stable memory.
+    let result = env
+        .execute_ingress(
+            canister_id,
+            "update",
+            wasm().stable_read(0, 8).append_and_reply().build(),
+        )
+        .unwrap();
+    match result {
+        WasmResult::Reply(data) => {
+            assert_eq!(data, 0_u64.to_le_bytes(),);
+        }
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
+    };
+
+    // We confirm that init set the timer by resetting the timer and checking its previous value.
+    let result = env
+        .execute_ingress(
+            canister_id,
+            "update",
+            wasm()
+                .api_global_timer_set(far_future_time)
+                .reply_int64()
+                .build(),
+        )
+        .unwrap();
+    match result {
+        WasmResult::Reply(data) => {
+            assert_eq!(data, other_far_future_time.to_le_bytes());
+        }
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
+    };
+}
+
+#[test]
+fn global_timer_runs_if_set_in_stopping_canister_post_upgrade() {
+    let env = StateMachine::new();
+    let canister_id = env
+        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), wasm().build(), None)
+        .unwrap();
+
+    // Make the canister control itself so that it can try to stop itself.
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_controllers(vec![PrincipalId::new_anonymous(), canister_id.get()])
+        .build();
+    env.update_settings(&canister_id, settings).unwrap();
+
+    // Make the canister stopping (not stopped) by trying to stop itself.
+    let stop_arg: CanisterIdRecord = canister_id.into();
+    let result = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm()
+            .call_simple(
+                IC_00,
+                "stop_canister",
+                call_args().other_side(stop_arg.encode()),
+            )
+            .reply()
+            .build(),
+    );
+    assert_matches!(result, Ok(_));
+
+    // Make sure the canister is indeed stopping.
+    let status = env.canister_status(canister_id).unwrap().unwrap();
+    assert_eq!(status.status(), CanisterStatusType::Stopping);
+
+    // Upgrade the canister.
+    let set_global_timer_in_post_upgrade = wasm()
+        .set_global_timer_method(wasm().inc_global_counter().api_global_timer_set(1))
+        .api_global_timer_set(1)
+        .build();
+    let result = env.upgrade_canister(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        set_global_timer_in_post_upgrade,
+    );
+    assert_eq!(result, Ok(()));
+
+    // The timer should not be triggered as the canister is stopping.
+    // We execute rounds to exercise all possible next scheduled method types (to ensure a canister task would run if scheduled).
+    for _ in NextScheduledMethod::iter() {
+        env.advance_time(Duration::from_secs(1));
+        env.tick();
+    }
+
+    // Any update calls should fail as the canister is stopping.
+    let result = env.execute_ingress(canister_id, "update", vec![]);
+    assert_matches!(result, Err(_));
+
+    // Start the canister.
+    let result = env.start_canister(canister_id);
+    assert_matches!(result, Ok(_));
+
+    // The timer should be triggered and reactivated each round.
+    for _ in 1..5 {
+        env.advance_time(Duration::from_secs(1));
+        env.tick();
+    }
+
+    // Assert the global timer is running.
+    let get_global_counter = wasm().get_global_counter().reply_int64().build();
+    let result = env.query(canister_id, "query", get_global_counter).unwrap();
+    assert_eq!(result, WasmResult::Reply(5_u64.to_le_bytes().into()));
+}
+
+#[test]
 fn global_timer_runs_if_set_in_stopped_canister_post_upgrade() {
     let env = StateMachine::new();
     let canister_id = env.install_canister_wat("(module)", vec![], None);
@@ -722,8 +998,11 @@ fn global_timer_runs_if_set_in_stopped_canister_post_upgrade() {
     assert_eq!(result, Ok(()));
 
     // The timer should not be triggered as the canister is stopped.
-    env.advance_time(Duration::from_secs(1));
-    env.tick();
+    // We execute rounds to exercise all possible next scheduled method types (to ensure a canister task would run if scheduled).
+    for _ in NextScheduledMethod::iter() {
+        env.advance_time(Duration::from_secs(1));
+        env.tick();
+    }
 
     // Any update calls should fail as the canister is stopped.
     let result = env.execute_ingress(canister_id, "update", vec![]);
@@ -920,7 +1199,7 @@ fn on_low_wasm_memory_hook_is_run_after_freezing() {
     .unwrap();
 
     // Here we have:
-    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_limit = 20 Wasm Pages
     // wasm_memory_threshold = 15 Wasm Pages
 
     // Initially wasm_memory.size = 1
@@ -941,7 +1220,7 @@ fn on_low_wasm_memory_hook_is_run_after_freezing() {
         NumWasmPages::new(8)
     );
 
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // Hook condition is satisfied.
     // Hence hook should be executed next.
     assert_eq!(
@@ -1028,7 +1307,7 @@ fn on_low_wasm_memory_is_executed() {
     .unwrap();
 
     // Here we have:
-    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_limit = 20 Wasm Pages
     // wasm_memory_threshold = 10 Wasm Pages
 
     // Initially wasm_memory.size = 1
@@ -1038,7 +1317,7 @@ fn on_low_wasm_memory_is_executed() {
     );
 
     // wasm_memory.size = 1 + 7 = 8
-    // wasm_capacity - used_wasm_memory > self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory >= self.wasm_memory_threshold
     // hook is not executed.
     test.ingress(canister_id, "grow_mem", vec![]).unwrap();
     assert_eq!(
@@ -1047,7 +1326,7 @@ fn on_low_wasm_memory_is_executed() {
     );
 
     // wasm_memory.size = 8 + 7 = 15
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // hence hook will be executed. After hook execution we have:
     // wasm_memory.size = 15 + 5 = 20.
     test.ingress(canister_id, "grow_mem", vec![]).unwrap();
@@ -1078,7 +1357,7 @@ fn on_low_wasm_memory_is_executed_before_message() {
     .unwrap();
 
     // Here we have:
-    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_limit = 20 Wasm Pages
     // wasm_memory_threshold = 15 Wasm Pages
 
     // Initially wasm_memory.size = 1
@@ -1092,7 +1371,7 @@ fn on_low_wasm_memory_is_executed_before_message() {
 
     // First ingress messages gets executed.
     // wasm_memory.size = 1 + 7 = 8
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // Hook condition is satisfied.
     test.execute_slice(canister_id);
     assert_eq!(
@@ -1136,7 +1415,7 @@ fn on_low_wasm_memory_is_executed_after_upgrade_if_condition_holds() {
     .unwrap();
 
     // Here we have:
-    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_limit = 20 Wasm Pages
     // wasm_memory_threshold = 15 Wasm Pages
 
     // Initially wasm_memory.size = 1
@@ -1150,7 +1429,7 @@ fn on_low_wasm_memory_is_executed_after_upgrade_if_condition_holds() {
 
     // First ingress messages gets executed.
     // wasm_memory.size = 1 + 7 = 8
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // Hook condition is satisfied.
     test.execute_slice(canister_id);
     assert_eq!(
@@ -1236,7 +1515,7 @@ fn on_low_wasm_memory_is_not_executed_after_upgrade_if_condition_becomes_unsatis
     .unwrap();
 
     // Here we have:
-    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_limit = 20 Wasm Pages
     // wasm_memory_threshold = 15 Wasm Pages
 
     // Initially wasm_memory.size = 1
@@ -1251,7 +1530,7 @@ fn on_low_wasm_memory_is_not_executed_after_upgrade_if_condition_becomes_unsatis
 
     // First ingress messages gets executed.
     // wasm_memory.size = 1 + 3 = 4
-    // wasm_capacity - used_wasm_memory > self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory >= self.wasm_memory_threshold
     // Hook condition is not satisfied.
     test.execute_slice(canister_id);
     assert_eq!(
@@ -1261,7 +1540,7 @@ fn on_low_wasm_memory_is_not_executed_after_upgrade_if_condition_becomes_unsatis
 
     // Second ingress messages gets executed.
     // wasm_memory.size = 4 + 3 = 7
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // Hook condition is satisfied.
     test.execute_slice(canister_id);
     assert_eq!(
@@ -1338,7 +1617,7 @@ fn upgrade_changes_hook_status_to_not_satisfied() {
     .unwrap();
 
     // Here we have:
-    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_limit = 20 Wasm Pages
     // wasm_memory_threshold = 15 Wasm Pages
 
     // Initially wasm_memory.size = 1
@@ -1351,7 +1630,7 @@ fn upgrade_changes_hook_status_to_not_satisfied() {
 
     // Ingress messages gets executed.
     // wasm_memory.size = 1 + 7 = 8
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // Hook condition is satisfied.
     test.execute_slice(canister_id);
     assert_eq!(
@@ -1383,8 +1662,8 @@ fn upgrade_changes_hook_status_to_not_satisfied() {
     );
 
     // Canister upgrade.
-    assert!(test
-        .upgrade_canister_v2(
+    assert!(
+        test.upgrade_canister_v2(
             canister_id,
             wat::parse_str(wat).unwrap(),
             CanisterUpgradeOptions {
@@ -1392,10 +1671,11 @@ fn upgrade_changes_hook_status_to_not_satisfied() {
                 wasm_memory_persistence: None,
             },
         )
-        .is_ok());
+        .is_ok()
+    );
 
     // Upgrade is executed, and the wasm_memory size reset to 1.
-    // wasm_capacity - used_wasm_memory > self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory >= self.wasm_memory_threshold
     // Hook condition is not satisfied.
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
@@ -1432,7 +1712,7 @@ fn hook_status_remains_executed_if_condition_holds_after_upgrade() {
     .unwrap();
 
     // Here we have:
-    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_limit = 20 Wasm Pages
     // wasm_memory_threshold = 15 Wasm Pages
 
     // Initially wasm_memory.size = 1
@@ -1446,7 +1726,7 @@ fn hook_status_remains_executed_if_condition_holds_after_upgrade() {
 
     // First ingress messages gets executed.
     // wasm_memory.size = 1 + 7 = 8
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // Hook condition is satisfied.
     test.execute_slice(canister_id);
     assert_eq!(
@@ -1488,7 +1768,7 @@ fn hook_status_remains_executed_if_condition_holds_after_upgrade() {
     assert_eq!(result, Ok(()));
 
     // Hook condition is still satisfied.
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
         NumWasmPages::new(13)
@@ -1521,11 +1801,11 @@ fn upgrade_changes_hook_status_to_ready() {
     .unwrap();
 
     // Here we have:
-    // wasm_capacity = wasm_memory_limit = 10 Wasm Pages
+    // wasm_memory_limit = 10 Wasm Pages
     // wasm_memory_threshold = 9 Wasm Pages
 
     // Initially wasm_memory.size = 1
-    // wasm_capacity - used_wasm_memory = wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory = wasm_memory_threshold
     // Hook condition is not satisfied.
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
@@ -1545,8 +1825,8 @@ fn upgrade_changes_hook_status_to_ready() {
     )"#;
 
     // Canister upgrade.
-    assert!(test
-        .upgrade_canister_v2(
+    assert!(
+        test.upgrade_canister_v2(
             canister_id,
             wat::parse_str(wat2).unwrap(),
             CanisterUpgradeOptions {
@@ -1554,10 +1834,11 @@ fn upgrade_changes_hook_status_to_ready() {
                 wasm_memory_persistence: None,
             },
         )
-        .is_ok());
+        .is_ok()
+    );
 
     // Upgrade is executed, and the used_wasm_memory size is 2.
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // Hook condition is satisfied.
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
@@ -1594,7 +1875,7 @@ fn on_low_wasm_memory_is_executed_once() {
     .unwrap();
 
     // Here we have:
-    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_limit = 20 Wasm Pages
     // wasm_memory_threshold = 15 Wasm Pages
 
     // Initially wasm_memory.size = 1
@@ -1604,7 +1885,7 @@ fn on_low_wasm_memory_is_executed_once() {
     );
 
     // wasm_memory.size = 1 + 7 = 8
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // hence hook will be executed. After hook execution we have:
     // wasm_memory.size = 8 + 2 = 10.
     test.ingress(canister_id, "grow_mem", vec![]).unwrap();
@@ -1614,7 +1895,7 @@ fn on_low_wasm_memory_is_executed_once() {
     );
 
     // wasm_memory.size = 10 + 7 = 17
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // but because the hook is already executed it will not be executed again.
     test.ingress(canister_id, "grow_mem", vec![]).unwrap();
 
@@ -1659,7 +1940,7 @@ fn on_low_wasm_memory_runs_after_dts_execution() {
     .unwrap();
 
     // Here we have:
-    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_limit = 20 Wasm Pages
     // wasm_memory_threshold = 15 Wasm Pages
 
     // Initially wasm_memory.size = 1
@@ -1684,7 +1965,7 @@ fn on_low_wasm_memory_runs_after_dts_execution() {
 
     // After dts execution we should have the following:
     // wasm_memory.size = 1 + 7 = 8
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // wasm_memory_limit - used_wasm_memory < self.wasm_memory_threshold
     // hence hook will be executed.
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
@@ -1699,78 +1980,6 @@ fn on_low_wasm_memory_runs_after_dts_execution() {
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
         NumWasmPages::new(13)
-    );
-}
-
-#[test]
-fn on_low_wasm_memory_is_executed_after_growing_stable_memory() {
-    let mut test = ExecutionTestBuilder::new().build();
-
-    let wat = r#"(module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (import "ic0" "stable_grow"
-                    (func $ic0_stable_grow (param $pages i32) (result i32)))
-            (func $stable_grow
-                (drop (call $ic0_stable_grow (i32.const 7)))
-                (call $msg_reply)
-            )
-            (export "canister_update stable_grow" (func $stable_grow))
-            (func (export "canister_on_low_wasm_memory")
-                (drop (memory.grow (i32.const 5)))
-            )
-            (memory 1 20)
-        )"#;
-
-    let canister_id = test.canister_from_wat(wat).unwrap();
-
-    test.canister_update_memory_allocation_and_wasm_memory_threshold(
-        canister_id,
-        (30 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
-        (20 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
-    )
-    .unwrap();
-
-    // Here we have:
-    // wasm_capacity = memory_allocation - used_stable_memory = 30 Wasm Pages - used_stable_memory
-    // wasm_memory_threshold = 20 Wasm Pages
-
-    // Initially wasm_memory.size = 1
-    assert_eq!(
-        test.execution_state(canister_id).wasm_memory.size,
-        NumWasmPages::new(1)
-    );
-    assert_eq!(
-        test.execution_state(canister_id).stable_memory.size,
-        NumWasmPages::new(0)
-    );
-
-    // stable_memory.size = 7
-    // wasm_capacity - used_wasm_memory > self.wasm_memory_threshold
-    // memory_allocation - used_stable_memory - used_wasm_memory > self.wasm_memory_threshold
-    // hence hook will not be executed.
-    test.ingress(canister_id, "stable_grow", vec![]).unwrap();
-    assert_eq!(
-        test.execution_state(canister_id).stable_memory.size,
-        NumWasmPages::new(7)
-    );
-    assert_eq!(
-        test.execution_state(canister_id).wasm_memory.size,
-        NumWasmPages::new(1)
-    );
-
-    // stable_memory.size = 7 + 7 = 14
-    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
-    // memory_allocation - used_stable_memory - used_wasm_memory < self.wasm_memory_threshold
-    // hence hook will be executed. After hook execution we have:
-    // wasm_memory.size = 1 + 5 = 6.
-    test.ingress(canister_id, "stable_grow", vec![]).unwrap();
-    assert_eq!(
-        test.execution_state(canister_id).stable_memory.size,
-        NumWasmPages::new(14)
-    );
-    assert_eq!(
-        test.execution_state(canister_id).wasm_memory.size,
-        NumWasmPages::new(6)
     );
 }
 

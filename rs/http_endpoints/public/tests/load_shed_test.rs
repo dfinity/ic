@@ -1,26 +1,30 @@
 pub mod common;
 
 use crate::common::{
-    default_certified_state_reader, default_get_latest_state, default_latest_certified_height,
-    default_read_certified_state, get_free_localhost_socket_addr, HttpEndpointBuilder,
-    MockIngressPoolThrottler,
+    HttpEndpointBuilder, MockIngressPoolThrottler, default_certified_state_reader,
+    default_get_latest_state, default_latest_certified_height, default_read_certified_state,
+    get_free_localhost_socket_addr,
 };
 use async_trait::async_trait;
 use axum::body::Body;
 use hyper::{Method, Request, StatusCode};
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_config::http_handler::Config;
+use ic_crypto_tree_hash::{Label, Path};
+use ic_http_endpoints_public::query;
+use ic_http_endpoints_public::read_state;
 use ic_http_endpoints_test_agent::{
-    self, wait_for_status_healthy, Call, CanisterReadState, IngressMessage, Query,
+    self, Call, CanisterReadState, IngressMessage, Query, wait_for_status_healthy,
 };
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_pprof::{Error, PprofCollector};
+use ic_types::PrincipalId;
 use ic_types::{ingress::WasmResult, time::current_time};
 use rstest::rstest;
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
     time::Duration,
 };
@@ -28,8 +32,10 @@ use tokio::{runtime::Runtime, sync::Notify};
 
 /// Test concurrency limiter for `/query` endpoint and that when the load shedder kicks in
 /// we return 429.
-#[test]
-fn test_load_shedding_query() {
+#[rstest]
+fn test_load_shedding_query(
+    #[values(query::Version::V2, query::Version::V3)] version: query::Version,
+) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
 
@@ -51,7 +57,9 @@ fn test_load_shedding_query() {
     let load_shedded_request = rt.spawn(async move {
         query_exec_running_clone.notified().await;
 
-        let response = Query::default().query(addr).await;
+        let response = Query::new(PrincipalId::default(), PrincipalId::default(), version)
+            .query(addr)
+            .await;
 
         load_shedder_returned_clone.notify_one();
 
@@ -73,13 +81,14 @@ fn test_load_shedding_query() {
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
 
-        let response = Query::default().query(addr).await;
+        let response = Query::new(PrincipalId::default(), PrincipalId::default(), version)
+            .query(addr)
+            .await;
 
         assert_eq!(
             StatusCode::OK,
             response.status(),
-            "Received unexpected response: {:?}",
-            response
+            "Received unexpected response: {response:?}"
         );
 
         let response = load_shedded_request.await.unwrap();
@@ -97,8 +106,11 @@ fn test_load_shedding_query() {
 /// Test scenario:
 /// 1. Set the read state concurrency limiter to 1.
 /// 2. We make two concurrent polls. We expect the last poll request to hit the load shedder.
-#[test]
-fn test_load_shedding_read_state() {
+#[rstest]
+fn test_load_shedding_read_state(
+    #[values(read_state::canister::Version::V2, read_state::canister::Version::V3)]
+    version: read_state::canister::Version,
+) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
 
@@ -167,7 +179,13 @@ fn test_load_shedding_read_state() {
     // This agent's request will be load shedded
     let load_shedded_request = rt.spawn(async move {
         read_state_running.notified().await;
-        let response = CanisterReadState::default().read_state(addr).await;
+        let response = CanisterReadState::new(
+            vec![Path::from(Label::from("time"))],
+            PrincipalId::default(),
+            version,
+        )
+        .read_state(addr)
+        .await;
         load_shedder_returned.notify_one();
         response
     });
@@ -176,7 +194,13 @@ fn test_load_shedding_read_state() {
         wait_for_status_healthy(&addr).await.unwrap();
         service_is_healthy.store(true, Ordering::Relaxed);
 
-        let response = CanisterReadState::default().read_state(addr).await;
+        let response = CanisterReadState::new(
+            vec![Path::from(Label::from("time"))],
+            PrincipalId::default(),
+            version,
+        )
+        .read_state(addr)
+        .await;
 
         assert_eq!(
             StatusCode::OK,
@@ -278,7 +302,7 @@ fn test_load_shedding_pprof() {
     let pprof_base_req = move || {
         Request::builder()
             .method(Method::GET)
-            .uri(format!("http://{}/_/pprof", addr))
+            .uri(format!("http://{addr}/_/pprof"))
             .body(Body::empty())
             .expect("request builder")
     };
@@ -354,7 +378,7 @@ fn test_load_shedding_update_call() {
         let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
         ingress_filter_running.notify_one();
         load_shedder_returned.notified().await;
-        resp.send_response(Ok(()))
+        resp.send_response(Ok(Ok(())))
     });
 
     rt.block_on(async {
@@ -380,6 +404,7 @@ fn test_load_shedding_update_call() {
 #[rstest]
 #[case::v2_endpoint(Call::V2)]
 #[case::v3_endpoint(Call::V3)]
+#[case::v4_endpoint(Call::V4)]
 fn test_load_shedding_update_call_when_ingress_pool_is_full(#[case] endpoint: Call) {
     use std::sync::RwLock;
 
@@ -406,7 +431,57 @@ fn test_load_shedding_update_call_when_ingress_pool_is_full(#[case] endpoint: Ca
         let call_response = endpoint.call(addr, message).await;
         assert_eq!(
             call_response.status(),
-            StatusCode::TOO_MANY_REQUESTS,
+            StatusCode::SERVICE_UNAVAILABLE,
+            "{:?}",
+            call_response.text().await.unwrap()
+        );
+    });
+}
+
+/// Test that the call endpoints load shed requests when the ingress channel is full.
+#[rstest]
+#[case::v2_endpoint(Call::V2)]
+#[case::v3_endpoint(Call::V3)]
+#[case::v4_endpoint(Call::V4)]
+fn test_load_shedding_update_call_when_ingress_channel_is_full(#[case] endpoint: Call) {
+    let rt = Runtime::new().unwrap();
+
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let capacity = 5;
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_ingress_channel_capacity(capacity)
+        .run();
+
+    // Mock ingress filter
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(Ok(())));
+        }
+    });
+
+    rt.block_on(async move {
+        wait_for_status_healthy(&addr).await.unwrap();
+        for _ in 0..capacity {
+            let message = Default::default();
+            let call_response = endpoint.call(addr, message).await;
+            assert_eq!(
+                call_response.status(),
+                StatusCode::ACCEPTED,
+                "{:?}",
+                call_response.text().await.unwrap()
+            );
+        }
+        let message = Default::default();
+        let call_response = endpoint.call(addr, message).await;
+        assert_eq!(
+            call_response.status(),
+            StatusCode::SERVICE_UNAVAILABLE,
             "{:?}",
             call_response.text().await.unwrap()
         );

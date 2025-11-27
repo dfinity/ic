@@ -48,7 +48,7 @@ impl Metric {
             let labels: Vec<String> = self
                 .labels
                 .iter()
-                .map(|(k, v)| format!("{}=\"{}\"", k, v))
+                .map(|(k, v)| format!("{k}=\"{v}\""))
                 .collect();
             format!("{{{}}}", labels.join(","))
         };

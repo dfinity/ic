@@ -11,15 +11,26 @@ anyhow = { workspace = true }
 candid = { workspace = true }
 ic-agent = { workspace = true }
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
+ic-certification = { workspace = true }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
+ic-crypto-internal-basic-sig-der-utils = { path = "../../crypto/internal/crypto_lib/basic_sig/der_utils" }
+ic-crypto-internal-bls12-381-type = { path = "../../crypto/internal/crypto_lib/bls12_381/type" }
+ic-crypto-test-utils = { path = "../../crypto/test_utils" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-fstrim-tool = { path = "../../ic_os/fstrim_tool" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
 ic-types = { path = "../../types/types" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
+ic-ed25519 = { path = "../../../packages/ic-ed25519" }
+ic-secp256k1 = { path = "../../../packages/ic-secp256k1" }
+ic-secp256r1 = { path = "../../../packages/ic-secp256r1" }
 k256 = { workspace = true }
+p256 = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
+simple_asn1 = { workspace = true }
+serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
@@ -52,3 +63,7 @@ path = "request_signature_test.rs"
 [[bin]]
 name = "rpc_csp_vault_reconnection_test"
 path = "rpc_csp_vault_reconnection_test.rs"
+
+[[bin]]
+name = "ingress_verification_test"
+path = "ingress_verification_test.rs"

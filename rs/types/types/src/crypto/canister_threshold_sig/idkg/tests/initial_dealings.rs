@@ -1,3 +1,4 @@
+use crate::NodeId;
 use crate::crypto::canister_threshold_sig::error::InitialIDkgDealingsValidationError;
 use crate::crypto::canister_threshold_sig::idkg::tests::test_utils::{
     create_idkg_params, mock_masked_transcript_type, mock_transcript,
@@ -8,7 +9,6 @@ use crate::crypto::canister_threshold_sig::idkg::{
 };
 use crate::crypto::{BasicSig, BasicSigOf};
 use crate::signature::BasicSignature;
-use crate::NodeId;
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_canister_threshold_sigs::{ordered_node_id, set_of_nodes};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -390,7 +390,7 @@ fn mock_signed_dealings(
         let signed_dealing = SignedIDkgDealing {
             content: IDkgDealing {
                 transcript_id,
-                internal_dealing_raw: format!("Dummy raw dealing for dealer {}", node_id)
+                internal_dealing_raw: format!("Dummy raw dealing for dealer {node_id}")
                     .into_bytes(),
             },
             signature: BasicSignature {

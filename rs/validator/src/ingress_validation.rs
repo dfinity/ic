@@ -1,18 +1,20 @@
 use crate::webauthn::validate_webauthn_sig;
+use AuthenticationError::*;
+use RequestValidationError::*;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
-use ic_crypto_standalone_sig_verifier::{user_public_key_from_bytes, KeyBytesContentType};
+use ic_crypto_standalone_sig_verifier::{KeyBytesContentType, user_public_key_from_bytes};
 use ic_crypto_tree_hash::Path;
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
 use ic_types::{
+    CanisterId, PrincipalId, Time, UserId,
     crypto::{
-        threshold_sig::RootOfTrustProvider, AlgorithmId, BasicSig, BasicSigOf, CanisterSig,
-        CanisterSigOf, CryptoError, UserPublicKey,
+        AlgorithmId, BasicSig, BasicSigOf, CanisterSig, CanisterSigOf, CryptoError, UserPublicKey,
+        threshold_sig::RootOfTrustProvider,
     },
     messages::{
         Authentication, Delegation, HasCanisterId, HttpRequest, HttpRequestContent, MessageId,
         Query, ReadState, SignedDelegation, SignedIngressContent, UserSignature, WebAuthnSignature,
     },
-    CanisterId, PrincipalId, Time, UserId,
 };
 use std::{
     collections::{BTreeSet, HashSet},
@@ -20,8 +22,6 @@ use std::{
     sync::Arc,
 };
 use thiserror::Error;
-use AuthenticationError::*;
-use RequestValidationError::*;
 
 #[cfg(test)]
 mod tests;
@@ -92,11 +92,11 @@ pub trait HttpRequestVerifier<C, R>: Send + Sync {
 }
 
 pub struct HttpRequestVerifierImpl {
-    validator: Arc<dyn IngressSigVerifier + Send + Sync>,
+    validator: Arc<dyn IngressSigVerifier>,
 }
 
 impl HttpRequestVerifierImpl {
-    pub fn new(validator: Arc<dyn IngressSigVerifier + Send + Sync>) -> Self {
+    pub fn new(validator: Arc<dyn IngressSigVerifier>) -> Self {
         Self { validator }
     }
 }
@@ -246,9 +246,13 @@ pub enum RequestValidationError {
     AnonymousSignatureNotAllowed,
     #[error("Canister '{0}' is not one of the delegation targets.")]
     CanisterNotInDelegationTargets(CanisterId),
-    #[error("Too many paths in read state request: got {length} paths, but at most {maximum} are allowed.")]
+    #[error(
+        "Too many paths in read state request: got {length} paths, but at most {maximum} are allowed."
+    )]
     TooManyPaths { length: usize, maximum: usize },
-    #[error("At least one path in read state request is too deep: got {length} labels, but at most {maximum} are allowed.")]
+    #[error(
+        "At least one path in read state request is too deep: got {length} labels, but at most {maximum} are allowed."
+    )]
     PathTooLong { length: usize, maximum: usize },
     #[error(
         "Nonce in request is too big: got {num_bytes} bytes, but at most {maximum} are allowed."
@@ -449,10 +453,9 @@ fn validate_ingress_expiry<C: HttpRequestContent>(
     if !(min_allowed_expiry <= provided_expiry && provided_expiry <= max_allowed_expiry) {
         let msg = format!(
             "Specified ingress_expiry not within expected range: \
-             Minimum allowed expiry: {}, \
-             Maximum allowed expiry: {}, \
-             Provided expiry:        {}",
-            min_allowed_expiry, max_allowed_expiry, provided_expiry
+             Minimum allowed expiry: {min_allowed_expiry}, \
+             Maximum allowed expiry: {max_allowed_expiry}, \
+             Provided expiry:        {provided_expiry}"
         );
         return Err(InvalidRequestExpiry(msg));
     }
@@ -487,9 +490,8 @@ fn validate_sender_delegation_expiry(
             if delegation.delegation().expiration() < current_time {
                 return Err(InvalidDelegationExpiry(format!(
                     "Specified sender delegation has expired:\n\
-                     Provided expiry:    {}\n\
-                     Local replica time: {}",
-                    expiry, current_time,
+                     Provided expiry:    {expiry}\n\
+                     Local replica time: {current_time}",
                 )));
             }
         }
@@ -649,8 +651,7 @@ fn ensure_delegations_does_not_contain_too_many_targets(
                 if number_of_targets > MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION =>
             {
                 Err(InvalidDelegation(DelegationTargetError(format!(
-                    "expected at most {} targets per delegation, but got {}",
-                    MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION, number_of_targets
+                    "expected at most {MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION} targets per delegation, but got {number_of_targets}"
                 ))))
             }
             _ => Ok(()),

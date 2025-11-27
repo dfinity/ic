@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 ic-consensus-manager = { path = "../consensus_manager" }
 ic-interfaces = { path = "../../interfaces" }
+ic-limits = { path = "../../limits" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-types = { path = "../../types/types" }
 futures = { workspace = true }

@@ -15,18 +15,17 @@ use ic_logger::ReplicaLogger;
 use ic_test_utilities_consensus::{fake::*, make_genesis};
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
+    Height,
     artifact::ConsensusMessageId,
     consensus::{
-        dkg::DkgSummary, Block, BlockPayload, BlockProposal, ConsensusMessage,
-        ConsensusMessageHashable, EquivocationProof, Finalization, FinalizationContent,
-        FinalizationShare, Notarization, NotarizationContent, NotarizationShare, RandomBeacon,
-        RandomBeaconContent, RandomBeaconShare, RandomTape, RandomTapeContent, RandomTapeShare,
-        Rank,
+        Block, BlockPayload, BlockProposal, ConsensusMessage, ConsensusMessageHashable,
+        EquivocationProof, Finalization, FinalizationContent, FinalizationShare, Notarization,
+        NotarizationContent, NotarizationShare, RandomBeacon, RandomBeaconContent,
+        RandomBeaconShare, RandomTape, RandomTapeContent, RandomTapeShare, Rank, dkg::DkgSummary,
     },
     crypto::{BasicSigOf, CryptoHash, CryptoHashOf, ThresholdSigShare, ThresholdSigShareOf},
     signature::*,
     time::UNIX_EPOCH,
-    Height,
 };
 use std::{
     collections::HashSet,
@@ -295,7 +294,7 @@ where
                     if let PoolSectionOp::Insert(artifact) = op {
                         &artifact.msg
                     } else {
-                        panic!("Expect Insert but found {:?}", op)
+                        panic!("Expect Insert but found {op:?}")
                     }
                 })
                 .collect::<Vec<_>>();

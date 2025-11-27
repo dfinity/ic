@@ -1,17 +1,17 @@
-use criterion::{black_box, BatchSize, BenchmarkId, Criterion};
+use criterion::{BatchSize, BenchmarkId, Criterion, black_box};
 use criterion_time::ProcessTime;
 use ic_base_types::NumBytes;
 use ic_canonical_state::{lazy_tree_conversion::replicated_state_as_lazy_tree, traverse};
 use ic_canonical_state_tree_hash::hash_tree::hash_lazy_tree;
 use ic_canonical_state_tree_hash_test_utils::{build_witness_gen, crypto_hash_lazy_tree};
 use ic_certification_version::CURRENT_CERTIFICATION_VERSION;
-use ic_crypto_tree_hash::{flatmap, FlatMap, Label, LabeledTree, MixedHashTree, WitnessGenerator};
+use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree, MixedHashTree, WitnessGenerator, flatmap};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    ReplicatedState,
     canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
     metadata_state::Stream,
     testing::ReplicatedStateTesting,
-    ReplicatedState,
 };
 use ic_state_manager::labeled_tree_visitor::LabeledTreeVisitor;
 use ic_state_manager::{stream_encoding::encode_stream_slice, tree_hash::hash_state};
@@ -21,10 +21,10 @@ use ic_test_utilities_types::{
     messages::{RequestBuilder, ResponseBuilder},
 };
 use ic_types::{
+    Cycles,
     messages::{CallbackId, Payload},
     time::UNIX_EPOCH,
     xnet::StreamIndex,
-    Cycles,
 };
 use maplit::btreemap;
 
@@ -120,7 +120,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
             5 => Unknown,
             _ => unreachable!(),
         };
-        state.set_ingress_status(message_test_id(i), status, NumBytes::from(u64::MAX));
+        state.set_ingress_status(message_test_id(i), status, NumBytes::from(u64::MAX), |_| {});
     }
 
     assert_eq!(

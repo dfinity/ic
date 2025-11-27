@@ -1,6 +1,6 @@
 use candid::Encode;
 use canister_test::{Canister, Runtime};
-use ic_base_types::{subnet_id_into_protobuf, NodeId, PrincipalId, SubnetId};
+use ic_base_types::{NodeId, PrincipalId, SubnetId, subnet_id_into_protobuf};
 use ic_config::Config;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces_registry::RegistryClient;
@@ -28,22 +28,22 @@ use ic_registry_keys::{
     make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_subnet_features::{
-    ChainKeyConfig, KeyConfig as KeyConfigInternal, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+    ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig as KeyConfigInternal,
 };
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest, upsert};
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
+    Height, RegistryVersion, ReplicaVersion,
     crypto::{
+        AlgorithmId, BasicSig, BasicSigOf,
         canister_threshold_sig::idkg::{
             IDkgDealing, IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation,
             IDkgTranscriptParams, IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
             InitialIDkgDealings, SignedIDkgDealing,
         },
-        AlgorithmId, BasicSig, BasicSigOf,
     },
     signature::BasicSignature,
-    Height, RegistryVersion, ReplicaVersion,
 };
 use prost::Message;
 use rand::{CryptoRng, Rng, RngCore};
@@ -60,6 +60,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
     str::FromStr,
+    sync::Arc,
 };
 
 mod common;
@@ -191,7 +192,7 @@ fn test_recover_subnet_with_replacement_nodes() {
             assert_eq!(subnet_record.membership.len(), num_unassigned_nodes);
             for node_id in unassigned_node_ids {
                 let node_id = node_id.get().to_vec();
-                assert!(subnet_record.membership.iter().any(|x| *x == node_id));
+                assert!(subnet_record.membership.contains(&node_id));
             }
 
             let updated_cup_contents: CatchUpPackageContents =
@@ -296,6 +297,7 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         }));
 
         let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
@@ -368,6 +370,7 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
 
         let signature_request_timeout_ns = Some(12345);
         let idkg_key_rotation_period_ms = Some(12345);
+        let max_parallel_pre_signature_transcripts_in_creation = Some(12345);
         let payload = RecoverSubnetPayload {
             subnet_id: subnet_to_recover_subnet_id.get(),
             height: 10,
@@ -386,6 +389,7 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
                 }],
                 signature_request_timeout_ns,
                 idkg_key_rotation_period_ms,
+                max_parallel_pre_signature_transcripts_in_creation,
             }),
         };
 
@@ -420,6 +424,10 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
         assert_eq!(
             chain_key_config.idkg_key_rotation_period_ms,
             idkg_key_rotation_period_ms
+        );
+        assert_eq!(
+            chain_key_config.max_parallel_pre_signature_transcripts_in_creation,
+            max_parallel_pre_signature_transcripts_in_creation
         );
 
         assert_eq!(
@@ -531,6 +539,7 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
                 }],
                 signature_request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
+                max_parallel_pre_signature_transcripts_in_creation: None,
             };
             Some(chain_key_config_pb)
         };
@@ -615,6 +624,7 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
 
         let signature_request_timeout_ns = Some(12345);
         let idkg_key_rotation_period_ms = Some(12345);
+        let max_parallel_pre_signature_transcripts_in_creation = Some(12345);
         let payload = RecoverSubnetPayload {
             subnet_id: subnet_to_recover_subnet_id.get(),
             height: 10,
@@ -626,6 +636,7 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
                 key_configs: vec![],
                 signature_request_timeout_ns,
                 idkg_key_rotation_period_ms,
+                max_parallel_pre_signature_transcripts_in_creation,
             }),
         };
 
@@ -656,6 +667,10 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
         assert_eq!(
             chain_key_config.idkg_key_rotation_period_ms,
             idkg_key_rotation_period_ms
+        );
+        assert_eq!(
+            chain_key_config.max_parallel_pre_signature_transcripts_in_creation,
+            max_parallel_pre_signature_transcripts_in_creation
         );
 
         assert_eq!(chain_key_config.key_configs, vec![]);
@@ -827,9 +842,9 @@ fn dummy_initial_idkg_dealing_for_tests<R: Rng + CryptoRng>(
         nodes
     }
     fn random_transcript_id<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
-        let id = rng.gen::<u64>();
-        let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
-        let height = Height::from(rng.gen::<u64>());
+        let id = rng.r#gen::<u64>();
+        let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.r#gen::<u64>()));
+        let height = Height::from(rng.r#gen::<u64>());
 
         IDkgTranscriptId::new(subnet, id, height)
     }
@@ -842,7 +857,7 @@ fn dummy_initial_idkg_dealing_for_tests<R: Rng + CryptoRng>(
             let signed_dealing = SignedIDkgDealing {
                 content: IDkgDealing {
                     transcript_id,
-                    internal_dealing_raw: format!("Dummy raw dealing for dealer {}", node_id)
+                    internal_dealing_raw: format!("Dummy raw dealing for dealer {node_id}")
                         .into_bytes(),
                 },
                 signature: BasicSignature {
@@ -864,7 +879,7 @@ fn dummy_initial_idkg_dealing_for_tests<R: Rng + CryptoRng>(
             transcript_id: random_transcript_id(rng),
             receivers: IDkgReceivers::new(previous_receivers).unwrap(),
             registry_version: RegistryVersion::from(314),
-            verified_dealings: BTreeMap::new(),
+            verified_dealings: Arc::new(BTreeMap::new()),
             transcript_type,
             algorithm_id: alg,
             internal_transcript_raw: vec![],
@@ -986,6 +1001,7 @@ fn test_recover_subnet_resets_cup_contents() {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         }));
 
         let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
@@ -1085,6 +1101,7 @@ fn test_recover_subnet_resets_cup_contents() {
 
         let signature_request_timeout_ns = Some(12345);
         let idkg_key_rotation_period_ms = Some(12345);
+        let max_parallel_pre_signature_transcripts_in_creation = Some(12345);
         let payload = RecoverSubnetPayload {
             subnet_id: subnet_to_recover_subnet_id.get(),
             height: 10,
@@ -1103,6 +1120,7 @@ fn test_recover_subnet_resets_cup_contents() {
                 }],
                 signature_request_timeout_ns,
                 idkg_key_rotation_period_ms,
+                max_parallel_pre_signature_transcripts_in_creation,
             }),
         };
 
@@ -1141,6 +1159,10 @@ fn test_recover_subnet_resets_cup_contents() {
         assert_eq!(
             chain_key_config.idkg_key_rotation_period_ms,
             idkg_key_rotation_period_ms
+        );
+        assert_eq!(
+            chain_key_config.max_parallel_pre_signature_transcripts_in_creation,
+            max_parallel_pre_signature_transcripts_in_creation
         );
 
         assert_eq!(

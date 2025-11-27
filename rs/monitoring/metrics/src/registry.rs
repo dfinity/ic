@@ -1,8 +1,8 @@
 use crate::adapter_metrics_registry::AdapterMetricsRegistry;
 use ic_adapter_metrics_client::AdapterMetrics;
 use prometheus::{
-    core::Collector, Gauge, GaugeVec, Histogram, HistogramOpts, HistogramVec, IntCounter,
-    IntCounterVec, IntGauge, IntGaugeVec, Opts,
+    Gauge, GaugeVec, Histogram, HistogramOpts, HistogramVec, IntCounter, IntCounterVec, IntGauge,
+    IntGaugeVec, Opts, core::Collector,
 };
 
 /// A wrapper around `prometheus::Registry` with helpers for creating metrics

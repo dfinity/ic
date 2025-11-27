@@ -1,9 +1,9 @@
 use super::{services, types::ConstructionPayloadsRequestMetadata};
 use crate::{
-    common::{types::Error, utils::utils::get_state_from_network_id},
     MultiTokenAppState,
+    common::{types::Error, utils::utils::get_state_from_network_id},
 };
-use axum::{extract::State, response::Result, Json};
+use axum::{Json, extract::State, response::Result};
 use rosetta_core::{request_types::*, response_types::*};
 use std::sync::Arc;
 use std::time::SystemTime;

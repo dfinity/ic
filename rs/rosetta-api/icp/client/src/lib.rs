@@ -1,19 +1,20 @@
-use anyhow::bail;
 use anyhow::Context;
+use anyhow::bail;
 use candid::Nat;
 use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_nns_governance_api::Proposal;
 use ic_rosetta_api::ledger_client::minimum_dissolve_delay_response::MinimumDissolveDelayResponse;
 use ic_rosetta_api::ledger_client::pending_proposals_response::PendingProposalsResponse;
-use ic_rosetta_api::models::seconds::Seconds;
 use ic_rosetta_api::models::AccountType;
 use ic_rosetta_api::models::BlockIdentifier;
 use ic_rosetta_api::models::ConstructionDeriveRequestMetadata;
 use ic_rosetta_api::models::ConstructionMetadataRequestOptions;
 use ic_rosetta_api::models::ConstructionPayloadsRequestMetadata;
 use ic_rosetta_api::models::OperationIdentifier;
+use ic_rosetta_api::models::seconds::Seconds;
 use ic_rosetta_api::request_types::ChangeAutoStakeMaturityMetadata;
+use ic_rosetta_api::request_types::DisburseMaturityMetadata;
 use ic_rosetta_api::request_types::DisburseMetadata;
 use ic_rosetta_api::request_types::KeyMetadata;
 use ic_rosetta_api::request_types::NeuronIdentifierMetadata;
@@ -26,8 +27,8 @@ use ic_rosetta_api::request_types::SpawnMetadata;
 use ic_rosetta_api::request_types::StakeMaturityMetadata;
 use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::account::Subaccount;
 use icrc_ledger_types::icrc1::account::DEFAULT_SUBACCOUNT;
+use icrc_ledger_types::icrc1::account::Subaccount;
 use num_bigint::BigInt;
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::NetworkIdentifier;
@@ -399,6 +400,37 @@ impl RosettaClient {
                 DisburseMetadata {
                     neuron_index,
                     recipient,
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+            ),
+        }])
+    }
+
+    pub async fn build_disburse_maturity_operations(
+        signer_principal: Principal,
+        neuron_index: u64,
+        recipient: Option<AccountIdentifier>,
+        percentage_to_disburse: u32,
+    ) -> anyhow::Result<Vec<Operation>> {
+        Ok(vec![Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "DISBURSE_MATURITY".to_string(),
+            status: None,
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
+            amount: None,
+            coin_change: None,
+            metadata: Some(
+                DisburseMaturityMetadata {
+                    neuron_index,
+                    recipient,
+                    percentage_to_disburse,
                 }
                 .try_into()
                 .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
@@ -1308,6 +1340,34 @@ impl RosettaClient {
         .await
     }
 
+    /// Disburse the maturity associated with a neuron directly to an account identifier.
+    pub async fn disburse_maturity<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: &T,
+        disburse_maturity_args: RosettaDisburseMaturityArgs,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let disburse_maturity_operations = RosettaClient::build_disburse_maturity_operations(
+            signer_keypair.generate_principal_id()?.0,
+            disburse_maturity_args.neuron_index,
+            disburse_maturity_args.recipient,
+            disburse_maturity_args.percentage_to_disburse,
+        )
+        .await?;
+
+        self.make_submit_and_wait_for_transaction(
+            signer_keypair,
+            network_identifier,
+            disburse_maturity_operations,
+            None,
+            None,
+        )
+        .await
+    }
+
     pub async fn get_neuron_info<T>(
         &self,
         network_identifier: NetworkIdentifier,
@@ -1821,6 +1881,50 @@ impl RosettaDisburseNeuronArgsBuilder {
     pub fn build(self) -> RosettaDisburseNeuronArgs {
         RosettaDisburseNeuronArgs {
             neuron_index: self.neuron_index,
+            recipient: self.recipient,
+        }
+    }
+}
+
+pub struct RosettaDisburseMaturityArgs {
+    pub neuron_index: u64,
+    pub percentage_to_disburse: u32,
+    pub recipient: Option<AccountIdentifier>,
+}
+
+impl RosettaDisburseMaturityArgs {
+    pub fn builder(
+        neuron_index: u64,
+        percentage_to_disburse: u32,
+    ) -> RosettaDisburseMaturityArgsBuilder {
+        RosettaDisburseMaturityArgsBuilder::new(neuron_index, percentage_to_disburse)
+    }
+}
+
+pub struct RosettaDisburseMaturityArgsBuilder {
+    neuron_index: u64,
+    percentage_to_disburse: u32,
+    recipient: Option<AccountIdentifier>,
+}
+
+impl RosettaDisburseMaturityArgsBuilder {
+    pub fn new(neuron_index: u64, percentage_to_disburse: u32) -> Self {
+        Self {
+            neuron_index,
+            percentage_to_disburse,
+            recipient: None,
+        }
+    }
+
+    pub fn with_recipient(mut self, recipient: AccountIdentifier) -> Self {
+        self.recipient = Some(recipient);
+        self
+    }
+
+    pub fn build(self) -> RosettaDisburseMaturityArgs {
+        RosettaDisburseMaturityArgs {
+            neuron_index: self.neuron_index,
+            percentage_to_disburse: self.percentage_to_disburse,
             recipient: self.recipient,
         }
     }

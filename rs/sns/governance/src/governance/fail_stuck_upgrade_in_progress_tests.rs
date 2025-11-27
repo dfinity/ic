@@ -1,16 +1,15 @@
 use super::test_helpers::{
-    basic_governance_proto, DoNothingLedger, TEST_GOVERNANCE_CANISTER_ID, TEST_ROOT_CANISTER_ID,
+    DoNothingLedger, TEST_GOVERNANCE_CANISTER_ID, TEST_ROOT_CANISTER_ID, basic_governance_proto,
 };
 use crate::{
     governance::{Governance, ValidGovernanceProto},
     pb::v1::{
-        get_proposal_response,
+        Ballot, FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse, GetProposal,
+        Governance as GovernanceProto, Proposal, ProposalData, ProposalId, Tally,
+        UpgradeSnsToNextVersion, Vote, WaitForQuietState, get_proposal_response,
         governance::{PendingVersion, Version},
         governance_error::ErrorType,
         proposal::Action,
-        Ballot, FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse, GetProposal,
-        Governance as GovernanceProto, Proposal, ProposalData, ProposalId, Tally,
-        UpgradeSnsToNextVersion, Vote, WaitForQuietState,
     },
     types::test_helpers::NativeEnvironment,
 };
@@ -265,7 +264,7 @@ fn test_fails_proposal_and_removes_upgrade_if_upgrade_attempt_is_expired() {
 
     // Assert pending version has been cleared.
     let pending_version = &governance.proto.pending_version;
-    assert!(pending_version.is_none(), "{:#?}", pending_version);
+    assert!(pending_version.is_none(), "{pending_version:#?}");
     // Assert deployed_version unchanged from before.
     assert_eq!(
         governance.proto.deployed_version.clone().unwrap(),
@@ -291,12 +290,10 @@ fn test_fails_proposal_and_removes_upgrade_if_upgrade_attempt_is_expired() {
     assert_eq!(
         ErrorType::try_from(governance_error.error_type),
         Ok(ErrorType::External),
-        "{:#?}",
-        governance_error,
+        "{governance_error:#?}",
     );
     assert!(
         governance_error.error_message.contains("manually aborted"),
-        "{:#?}",
-        governance_error,
+        "{governance_error:#?}",
     );
 }

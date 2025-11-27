@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::util::block_on;
-use slog::{error, info, Logger};
+use slog::{Logger, error, info};
 use std::time::Duration;
 use url::Url;
 
@@ -50,11 +50,11 @@ impl NotificationClient {
     }
 
     pub fn report_failure_slack(&self, message: String) {
-        self.message_slack(format!("<!channel> ❌ {}", message))
+        self.message_slack(format!("<!channel> ❌ {message}"))
     }
 
     pub fn report_warning_slack(&self, message: String) {
-        self.message_slack(format!("⚠️ {}", message))
+        self.message_slack(format!("⚠️ {message}"))
     }
 
     fn push_metrics(&self, message: String) {
@@ -78,8 +78,7 @@ impl NotificationClient {
             "# TYPE backup_last_restored_height gauge\n\
             # HELP backup_last_restored_height The height of the last restored state on a backup pod.\n\
             backup_last_restored_height{{ic=\"{}\"}} {}\n",
-            self.network_name,
-            height
+            self.network_name, height
         );
         self.push_metrics(message)
     }
