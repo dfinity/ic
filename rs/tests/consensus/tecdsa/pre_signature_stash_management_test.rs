@@ -53,9 +53,6 @@ const MAX_PARALLEL_PRE_SIGNATURES: u32 = 10;
 const DKG_INTERVAL_LENGTH: u64 = 19;
 
 fn setup(test_env: TestEnv) {
-    if !STORE_PRE_SIGNATURES_IN_STATE {
-        return;
-    }
     let key_ids = make_key_ids_for_all_idkg_schemes();
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
@@ -175,6 +172,9 @@ fn test(test_env: TestEnv) {
 }
 
 fn main() -> Result<()> {
+    if !STORE_PRE_SIGNATURES_IN_STATE {
+        return Ok(());
+    }
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))
