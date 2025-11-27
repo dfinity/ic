@@ -8,7 +8,9 @@ on the process that this file is part of, see
 
 ## Added
 
-- #7812: Migration Swiss subnet Node Operators max_rewardable_nodes to btreemap! {"type3.1" => 1} as requested by
+* Temporary logging for when add_node traps.
+
+* #7812: Migration Swiss subnet Node Operators max_rewardable_nodes to btreemap! {"type3.1" => 1} as requested by
   Alexander Ufimtsev.
 
 ## Changed

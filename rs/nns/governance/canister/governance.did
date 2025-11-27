@@ -1431,16 +1431,16 @@ type Vote = variant {
 type SelfDescribingProposalAction = record {
   type_name : opt text;
   type_description : opt text;
-  value : opt Value;
+  value : opt SelfDescribingValue;
 };
 
-type Value = variant {
+type SelfDescribingValue = variant {
   Blob : blob;
   Text : text;
   Nat : nat;
   Int : int;
-  Array : vec Value;
-  Map : vec record { text; Value };
+  Array : vec SelfDescribingValue;
+  Map : vec record { text; SelfDescribingValue };
 };
 
 type GetPendingProposalsRequest = record {

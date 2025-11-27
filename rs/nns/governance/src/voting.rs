@@ -1393,8 +1393,8 @@ mod test {
         assert_eq!(proposal.decided_timestamp_seconds, 1234);
     }
 
-    #[test]
-    fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine() {
+    #[tokio::test]
+    async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine() {
         let now = 1733433219;
         let topic = Topic::Governance;
         let environment = MockEnvironment::new(
@@ -1504,7 +1504,7 @@ mod test {
         set_governance_for_tests(governance);
         let governance = governance_mut();
         governance.distribute_voting_rewards_to_neurons(Tokens::from_e8s(100_000_000));
-        run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(2), 2);
+        run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(2), 2).await;
 
         assert_eq!(
             governance
@@ -1523,7 +1523,7 @@ mod test {
             .unwrap();
         governance.distribute_voting_rewards_to_neurons(Tokens::from_e8s(100_000_000));
         // Now rewards should be able to be distributed
-        run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(2), 2);
+        run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(2), 2).await;
 
         assert_eq!(
             governance

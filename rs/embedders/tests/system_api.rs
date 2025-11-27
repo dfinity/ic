@@ -2129,7 +2129,7 @@ fn test_save_log_message_keeps_total_log_size_limited() {
     // Expect only one log record to be kept, staying within the size limit.
     let log = api.canister_log();
     assert_eq!(log.records().len(), initial_records_number + 1);
-    assert_le!(log.used_space(), TEST_DEFAULT_LOG_MEMORY_LIMIT);
+    assert_le!(log.bytes_used(), TEST_DEFAULT_LOG_MEMORY_LIMIT);
 }
 
 #[test]
