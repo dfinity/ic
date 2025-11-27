@@ -144,7 +144,6 @@ rust_test(
     crate_features = test_with_tla(),
     data = [
         ":tla_models",
-        "@bazel_tools//tools/jdk:current_java_runtime",
         "@tla_apalache//:bin/apalache-mc",
     ],
     env = {
@@ -240,9 +239,12 @@ rust_ic_test(
     crate_features = test_with_tla(),
     data = [
         ":ckbtc_minter_debug.wasm.gz",
+        ":tla_models",
         "//rs/bitcoin/checker:btc_checker_canister",
         "//rs/bitcoin/mock:bitcoin_canister_mock",
         "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+        "@bazel_tools//tools/jdk:current_java_runtime",
+        "@tla_apalache//:bin/apalache-mc",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/ckbtc/minter",
@@ -250,7 +252,11 @@ rust_ic_test(
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
         "IC_BTC_CHECKER_WASM_PATH": "$(rootpath //rs/bitcoin/checker:btc_checker_canister)",
         "IC_BITCOIN_CANISTER_MOCK_WASM_PATH": "$(rootpath //rs/bitcoin/mock:bitcoin_canister_mock)",
+        "JAVABASE": "$(JAVABASE)",
+        "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
+        "TLA_MODULES": "$(locations :tla_models)",
     },
+    toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
     deps = [
         # Keep sorted.
         ":ckbtc_minter_lib",
