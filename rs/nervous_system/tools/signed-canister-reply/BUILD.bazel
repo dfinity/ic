@@ -30,9 +30,20 @@ rust_test(
         "signed_reply.cbor",
     ],
     crate_root = "src/main.rs",
+    data = [
+        "//rs/nervous_system/common/test_canister",
+        "//rs/pocket_ic_server:pocket-ic-server-head-nns",
+    ],
+    env = {
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server-head-nns)",
+        "TEST_CANISTER_WASM_PATH": "$(rootpath //rs/nervous_system/common/test_canister)",
+    },
     deps = DEPENDENCIES + [
+        "//packages/pocket-ic",
+        "//rs/rust_canisters/canister_test",
         "@crate_index//:candid",
         "@crate_index//:hex",
+        "@crate_index//:lazy_static",
         "@crate_index//:tempfile",
     ],
 )

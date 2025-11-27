@@ -7,14 +7,18 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-base64 = { workspace = true }
-clap = { workspace = true }
-ic-agent = { workspace = true }
+base64           = { workspace = true }
+clap             = { workspace = true }
+ic-agent         = { workspace = true }
 ic-certification = { workspace = true }
-serde_cbor = { workspace = true }
-tempfile = { workspace = true }
-tokio = { workspace = true }
+serde_cbor       = { workspace = true }
+tokio            = { workspace = true }
 
 [dev-dependencies]
-candid = { workspace = true }
-hex = { workspace = true }
+canister-test = { path = "../../../rust_canisters/canister_test" }
+pocket-ic     = { path = "../../../../packages/pocket-ic" }
+
+candid      = { workspace = true }
+hex         = { workspace = true }
+lazy_static = { workspace = true }
+tempfile    = { workspace = true }

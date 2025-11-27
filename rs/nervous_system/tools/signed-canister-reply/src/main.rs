@@ -8,6 +8,8 @@ use std::{
     time::Duration,
 };
 
+const PRODUCTION_AGENT_URL: &str = "https://ic0.app";
+
 /// Supports calling a canister, printing out the signed reply, loading a signed
 /// reply from a file, and printing just the reply content itself.
 ///
@@ -24,11 +26,27 @@ use std::{
 struct Argv {
     #[command(subcommand)]
     subcommand: Subcommand,
+
+    /// This defaults to a value that is appropriate for production.
+    #[clap(long, default_value = PRODUCTION_AGENT_URL)]
+    agent_url: String,
 }
 
 impl Argv {
-    async fn execute(self) {
-        self.subcommand.execute().await;
+    async fn execute(self, stdout: &mut impl Write) {
+        let Self {
+            subcommand,
+            agent_url,
+        } = self;
+
+        let a_very_long_time = Duration::from_secs(365_250_000 * 24 * 60 * 60);
+        let agent = Agent::builder()
+            .with_url(agent_url)
+            .with_ingress_expiry(a_very_long_time)
+            .build()
+            .unwrap();
+
+        subcommand.execute(agent, stdout).await;
     }
 }
 
@@ -39,14 +57,11 @@ enum Subcommand {
 }
 
 impl Subcommand {
-    async fn execute(self) {
-        let stdout = stdout();
-        let mut stdout = stdout.lock();
-
+    async fn execute(self, agent: Agent, stdout: &mut impl Write) {
         #[rustfmt::skip] // Keep alignment, because it strongly triggers the human brain.
         match self {
-            Self::CallCanister (ok) => ok.execute(&mut stdout).await,
-            Self::LoadFromFile (ok) => ok.execute(&mut stdout),
+            Self::CallCanister (ok) => ok.execute(agent, stdout).await,
+            Self::LoadFromFile (ok) => ok.execute(agent, stdout).await,
         };
     }
 }
@@ -68,7 +83,7 @@ struct CallCanister {
 }
 
 impl CallCanister {
-    async fn execute(self, stdout: &mut impl Write) {
+    async fn execute(self, agent: Agent, stdout: &mut impl Write) {
         let Self {
             callee,
             method,
@@ -77,9 +92,13 @@ impl CallCanister {
 
         let arg = read_flag_path(&arg_path);
 
-        let signed_proposal = download_signed_proposal(callee, &method, arg).await;
+        // Call canister, fetching signed reply.
+        let signed_proposal = download_signed_proposal(&agent, callee, &method, arg).await;
+
+        // Re-encode signed reply in preparation for output.
         let signed_proposal = serde_cbor::to_vec(&signed_proposal).unwrap();
 
+        // Output signed reply.
         stdout.write_all(&signed_proposal).unwrap();
         stdout.flush().unwrap();
 
@@ -100,17 +119,24 @@ struct LoadFromFile {
 }
 
 impl LoadFromFile {
-    fn execute(self, stdout: &mut impl Write) {
+    /// Does not actually need to be async (as of Nov, 2025), but we do it
+    /// anyway for consistency.
+    async fn execute(self, agent: Agent, stdout: &mut impl Write) {
         let Self { signed_reply_path } = self;
 
+        // Read file.
         let content = read_flag_path(&signed_reply_path);
+        // Parse.
         let certificate = serde_cbor::from_slice::<Certificate>(&content).unwrap();
-        let reply = verify_signed_proposal(certificate);
+        // Verify signature.
+        let reply = verify_signed_proposal(&agent, certificate);
 
+        // Format output.
         let reply = reply
             .into_iter()
             .map(|element| format!("{:02X}", element))
             .collect::<String>();
+        // Send output.
         write!(stdout, "{reply}").unwrap();
     }
 }
@@ -127,19 +153,18 @@ fn read_flag_path(path: &str) -> Vec<u8> {
 
 #[tokio::main]
 async fn main() {
-    Argv::parse().execute().await;
+    let stdout = stdout();
+    let mut stdout = stdout.lock();
+
+    Argv::parse().execute(&mut stdout).await;
 }
 
 async fn download_signed_proposal(
+    agent: &Agent,
     callee: Principal,
     method_name: &str,
     arg: Vec<u8>,
 ) -> Certificate {
-    let agent = Agent::builder()
-        .with_url("https://ic0.app")
-        .build()
-        .unwrap();
-
     let (_reply, certificate): (Vec<u8>, Certificate) = agent
         .update(&callee, method_name)
         .with_arg(arg)
@@ -151,15 +176,7 @@ async fn download_signed_proposal(
     certificate
 }
 
-fn verify_signed_proposal(certificate: Certificate) -> Vec<u8> {
-    let a_very_long_time = Duration::from_secs(365_250_000 * 24 * 60 * 60);
-
-    let agent = Agent::builder()
-        .with_url("https://ic0.app")
-        .with_ingress_expiry(a_very_long_time)
-        .build()
-        .unwrap();
-
+fn verify_signed_proposal(agent: &Agent, certificate: Certificate) -> Vec<u8> {
     // This is copied from ic-admin.
     const IC_ROOT_PUBLIC_KEY_BASE64: &str = r#"MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAIFMDm7HH6tYOwi9gTc8JVw8NxsuhIY8mKTx4It0I10U+12cDNVG2WhfkToMCyzFNBWDv0tDkuRn25bWW5u0y3FxEvhHLg1aTRRQX/10hLASkQkcX4e5iINGP5gJGguqrg=="#;
     // This is copied from rs/embedders.
@@ -220,7 +237,7 @@ fn verify_signed_proposal(certificate: Certificate) -> Vec<u8> {
     request_status.reply
 }
 
-#[derive(Debug, PartialEq, Eq, Default)] // DO NOT MERGE
+#[derive(Debug, PartialEq, Eq)]
 struct RequestStatus {
     time: Vec<u8>,
     id: Vec<u8>,
