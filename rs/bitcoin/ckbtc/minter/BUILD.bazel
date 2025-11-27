@@ -103,6 +103,11 @@ TLA_PROC_MACRO_DEPS = select({
     ]
 ]
 
+LIB_DEP_WITH_CONDITIONAL_TLA = select({
+    "//rs/bitcoin/ckbtc/minter:tla_disabled": [":ckbtc_minter_lib"],
+    "//conditions:default": [":ckbtc_minter_lib-tla"],
+})
+
 TLA_DATA = select({
     "//rs/bitcoin/ckbtc/minter:tla_disabled": [],
     "//conditions:default": [
@@ -279,9 +284,8 @@ rust_ic_test(
         "IC_BITCOIN_CANISTER_MOCK_WASM_PATH": "$(rootpath //rs/bitcoin/mock:bitcoin_canister_mock)",
     },
     toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
-    deps = [
+    deps = LIB_DEP_WITH_CONDITIONAL_TLA + [
         # Keep sorted.
-        ":ckbtc_minter_lib",
         "//packages/canlog",
         "//packages/ic-http-types",
         "//packages/ic-metrics-assert",
