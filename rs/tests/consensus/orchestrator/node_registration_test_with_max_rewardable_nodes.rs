@@ -163,7 +163,7 @@ WIgAGf+2BAs2ac0RonxQZdQTmZMvrw==
 EOT
 
         jq '.icos_settings.node_reward_type = "type3.1"' /run/config/config.json > /tmp/config.json.tmp
-        # sudo cp /tmp/config.json.tmp /run/config/config.json
+        sudo cp /tmp/config.json.tmp /run/config/config.json
 
         sudo cp /tmp/node_operator_private_key.pem /var/lib/ic/data/node_operator_private_key.pem
         sudo chmod a+r /var/lib/ic/data/node_operator_private_key.pem
