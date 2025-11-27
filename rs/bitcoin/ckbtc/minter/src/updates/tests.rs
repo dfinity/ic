@@ -10,11 +10,11 @@ mod update_balance {
     };
     #[cfg(feature = "tla")]
     use crate::tla::{TLA_TRACES_LKEY, check_traces as tla_check_traces};
+    use crate::updates::get_btc_address::account_to_p2wpkh_address_from_state;
     use crate::updates::update_balance;
     use crate::updates::update_balance::{
         SuspendedUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
     };
-    use crate::updates::get_btc_address::account_to_p2wpkh_address_from_state;
     use crate::{CanisterRuntime, GetUtxosResponse, Timestamp, storage};
     use ic_btc_checker::{CheckTransactionResponse, CheckTransactionStatus};
     use ic_btc_interface::Utxo;
