@@ -351,10 +351,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 default_features = False,
             ),
             "canbench": crate.spec(
-                version = "^0.2.1",
+                version = "^0.4.0",
             ),
             "canbench-rs": crate.spec(
-                version = "^0.2.1",
+                version = "^0.4.0",
             ),
             "candid": crate.spec(
                 version = "^0.10.20",
@@ -511,10 +511,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 features = ["serde"],
             ),
             "evm_rpc_client": crate.spec(
-                version = "^0.2.0",
+                version = "^0.3.0",
             ),
             "evm_rpc_types": crate.spec(
-                version = "^3.0.0",
+                version = "^3.1.0",
             ),
             "exec": crate.spec(
                 version = "^0.3.1",
@@ -648,20 +648,24 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "ic-canister-log": crate.spec(
                 version = "^0.2.0",
             ),
+            "ic-canister-runtime": crate.spec(
+                version = "^0.1.0",
+            ),
             "ic-canister-sig-creation": crate.spec(
-                version = "^1.3.0",
+                git = "https://github.com/dfinity/ic-canister-sig-creation.git",
+                rev = "c790e58434be9bf30e656b418c14f7862353a476",
             ),
             "ic-cbor": crate.spec(
                 version = "3.0.3",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.18.7",
+                version = "^0.19.0",
             ),
             "ic-cdk-executor": crate.spec(
-                version = "^1.0.2",
+                version = "^2.0.0",
             ),
             "ic-cdk-timers": crate.spec(
-                version = "^0.12.2",
+                version = "^1.0.0",
             ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
@@ -695,7 +699,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^1.1.1",
             ),
             "ic-management-canister-types": crate.spec(
-                version = "0.3.1",
+                version = "^0.5.0",
             ),
             "ic_principal": crate.spec(
                 version = "^0.1.1",
@@ -740,7 +744,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 default_features = False,
             ),
             "ic-vetkeys": crate.spec(
-                version = "^0.4.0",
+                version = "^0.6.0",
             ),
             "ic-wasm": crate.spec(
                 version = "^0.8.4",

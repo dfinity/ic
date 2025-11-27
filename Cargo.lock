@@ -355,7 +355,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_qs",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -598,7 +598,7 @@ dependencies = [
  "nom 7.1.3",
  "num-traits",
  "rusticata-macros",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "time",
 ]
 
@@ -865,7 +865,7 @@ dependencies = [
  "ring 0.17.14",
  "serde",
  "sev",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tonic 0.12.3",
 ]
 
@@ -1913,9 +1913,9 @@ dependencies = [
 
 [[package]]
 name = "canbench-rs"
-version = "0.2.1"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce6a55bed4e45003d254afc26e86cbc47a808d0db83f1a1c03f535a39f8b38ee"
+checksum = "0dfe0fee0135b3face2ff259fddc28fff3c28e7acd84ae7746e25972f11230f9"
 dependencies = [
  "canbench-rs-macros",
  "candid",
@@ -1925,9 +1925,9 @@ dependencies = [
 
 [[package]]
 name = "canbench-rs-macros"
-version = "0.2.1"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5369e35db0ccebbf4a15b05533c23320f84ca1bee4179874eb28f18335ebff60"
+checksum = "237e2e5d914039918eee4bdf141e976ff34cf4130c6760808a047c081710e0a8"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2027,7 +2027,7 @@ dependencies = [
  "ic-canister-client",
  "ic-config",
  "ic-crypto-sha2",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-management-canister-types-private",
  "ic-registry-transport",
  "ic-replica-tests",
@@ -2222,7 +2222,7 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "sha2 0.10.9",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
  "tower 0.5.2",
  "tracing",
@@ -2253,7 +2253,7 @@ dependencies = [
  "serde",
  "serde_cbor",
  "sha2 0.10.9",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -2265,7 +2265,7 @@ dependencies = [
  "ic-stable-structures 0.6.8",
  "serde",
  "serde_bytes",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -2528,7 +2528,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "serde_with 3.16.0",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "url",
  "urlencoding",
  "uuid",
@@ -2540,7 +2540,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fa961b519f0b462e3a3b4a34b64d119eeaca1d59af726fe450bbba07a9fc0a1"
 dependencies = [
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -2682,7 +2682,7 @@ dependencies = [
  "serde_json",
  "serde_with 1.14.0",
  "strum 0.26.3",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "url",
 ]
 
@@ -4646,36 +4646,34 @@ dependencies = [
 
 [[package]]
 name = "evm_rpc_client"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94f29eabef9267a8e6c416ad89d6b36d5ec9be5e6ffd143bd1b4514cfc7cfb9e"
+checksum = "11d6b4ecbd21ee4f46919e9640838a54517fe36bad263a3778d8117eb284b44e"
 dependencies = [
  "async-trait",
  "candid",
  "evm_rpc_types",
- "ic-cdk",
- "ic-error-types 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ic-canister-runtime",
  "serde",
  "serde_json",
- "strum 0.27.1",
- "thiserror 2.0.12",
+ "strum 0.27.2",
 ]
 
 [[package]]
 name = "evm_rpc_types"
-version = "3.0.0"
+version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd456f71555aa2a0d99637037b30cd3d9d2899b8cf39d3dce21e248989d6f132"
+checksum = "75922b95f9ccc305d90df9dc4dca69d6935c2d961528b8a4916900de1880135b"
 dependencies = [
  "candid",
  "canlog 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hex",
  "ic-error-types 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "num-bigint 0.4.6",
  "serde",
- "strum 0.27.1",
- "thiserror 2.0.12",
+ "strum 0.27.2",
+ "thiserror 2.0.17",
  "url",
 ]
 
@@ -5459,7 +5457,7 @@ dependencies = [
  "regex",
  "strum 0.26.3",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -5528,7 +5526,7 @@ dependencies = [
  "rcgen 0.13.2",
  "rustls 0.23.27",
  "sev",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-rustls 0.26.1",
  "tokio-util",
@@ -5595,7 +5593,7 @@ dependencies = [
  "regex",
  "systemd",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-util",
  "url",
@@ -5912,7 +5910,7 @@ dependencies = [
  "ring 0.17.14",
  "rustls 0.23.27",
  "rustls-pki-types",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "time",
  "tinyvec",
  "tokio",
@@ -5939,7 +5937,7 @@ dependencies = [
  "resolv-conf",
  "rustls 0.23.27",
  "smallvec",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-rustls 0.26.1",
  "tracing",
@@ -6497,7 +6495,7 @@ dependencies = [
  "sha2 0.10.9",
  "simple_asn1",
  "stop-token",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "time",
  "tokio",
  "tower-service",
@@ -6548,7 +6546,7 @@ dependencies = [
  "serde_repr",
  "sha2 0.10.9",
  "stop-token",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "time",
  "tokio",
  "tower-service",
@@ -6585,7 +6583,7 @@ dependencies = [
  "prost 0.13.4",
  "rand 0.8.5",
  "slog",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
  "tower 0.5.2",
  "tracing",
@@ -6805,12 +6803,12 @@ dependencies = [
  "sha1",
  "sha2 0.10.9",
  "socket2 0.6.1",
- "strum 0.27.1",
+ "strum 0.27.2",
  "strum_macros 0.27.1",
  "systemstat",
  "tar",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-io-timeout",
  "tokio-rustls 0.26.1",
@@ -6858,9 +6856,9 @@ dependencies = [
  "rustls 0.23.27",
  "serde",
  "socket2 0.6.1",
- "strum 0.27.1",
+ "strum 0.27.2",
  "strum_macros 0.27.1",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio-util",
  "tower-service",
  "url",
@@ -6940,7 +6938,7 @@ dependencies = [
  "simple_moving_average",
  "slog",
  "strum 0.26.3",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tikv-jemalloc-ctl",
  "tikv-jemallocator",
  "tokio",
@@ -7058,7 +7056,7 @@ dependencies = [
  "slog-async",
  "static_assertions",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-socks",
  "tonic 0.12.3",
@@ -7122,7 +7120,7 @@ dependencies = [
  "ic-canister-log 0.2.0",
  "ic-cdk",
  "ic-http-types",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-metrics-assert",
  "ic-metrics-encoder",
  "ic-stable-structures 0.6.8",
@@ -7166,7 +7164,7 @@ dependencies = [
  "proptest",
  "prost 0.13.4",
  "slog",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -7290,6 +7288,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-canister-runtime"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01a81a68bc6825ab81142a4e176ee04d0cc73deeed69753603e90e57b3ddcd3f"
+dependencies = [
+ "async-trait",
+ "candid",
+ "ic-cdk",
+ "ic-error-types 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "ic-canister-sandbox-backend-lib"
 version = "0.9.0"
 dependencies = [
@@ -7356,21 +7368,21 @@ dependencies = [
 
 [[package]]
 name = "ic-canister-sig-creation"
-version = "1.3.0"
+version = "1.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4de4a335e8f13986a39e8d1c02aa6999c7aa5736bc0083dacafe3a99b26f3a2"
+checksum = "d8b2a507d1bebb111fc8c76098468e4de9c745e9b9ef160a079568ae1d6f7fef"
 dependencies = [
  "candid",
  "hex",
- "ic-cdk",
  "ic-certification 3.0.3",
  "ic-representation-independent-hash",
+ "ic0",
  "lazy_static",
  "serde",
  "serde_bytes",
  "serde_cbor",
  "sha2 0.10.9",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -7429,7 +7441,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "scoped_threadpool",
  "test-strategy 0.4.0",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -7457,37 +7469,39 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk"
-version = "0.18.7"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4efb278f5d3ef033b3eed7f01f1096eaf67701896aa5ef69f5eddf5a84833dc0"
+checksum = "818d6d5416a8f0212e1b132703b0da51e36c55f2b96677e96f2bbe7702e1bd85"
 dependencies = [
  "candid",
  "ic-cdk-executor",
  "ic-cdk-macros",
  "ic-error-types 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic0",
+ "pin-project-lite",
  "serde",
  "serde_bytes",
  "slotmap",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
 name = "ic-cdk-executor"
-version = "1.0.2"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99f4ee8930fd2e491177e2eb7fff53ee1c407c13b9582bdc7d6920cf83109a2d"
+checksum = "33716b730ded33690b8a704bff3533fda87d229e58046823647d28816e9bcee7"
 dependencies = [
  "ic0",
  "slotmap",
+ "smallvec",
 ]
 
 [[package]]
 name = "ic-cdk-macros"
-version = "0.18.7"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7eb14c5d691cc9d72bb95459b4761e3a4b3444b85a63d17555d5ddd782969a1e"
+checksum = "66dad91a214945cb3605bc9ef6901b87e2ac41e3624284c2cabba49d43aa4f43"
 dependencies = [
  "candid",
  "darling 0.20.11",
@@ -7498,16 +7512,12 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk-timers"
-version = "0.12.2"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ea87cf31444de833db85bbd15e97bc135ee14529b13158ffdaf6530bf6d7e85"
+checksum = "6852b9c1d4a82ff50fc7318599298aee8bfb082bd7e9fe7e5c1420692b2170f7"
 dependencies = [
- "candid",
- "futures",
- "ic-cdk",
+ "ic-cdk-executor",
  "ic0",
- "serde",
- "serde_bytes",
  "slotmap",
 ]
 
@@ -7644,7 +7654,7 @@ dependencies = [
  "ic-icrc1",
  "ic-icrc1-ledger",
  "ic-ledger-core",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-management-canister-types-private",
  "ic-metrics-assert",
  "ic-metrics-encoder",
@@ -7708,7 +7718,7 @@ dependencies = [
  "ic-ckdoge-minter",
  "ic-http-types",
  "ic-icrc1-ledger",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-metrics-assert",
  "icrc-ledger-types",
  "pocket-ic",
@@ -7734,6 +7744,7 @@ dependencies = [
  "ic-agent 0.40.1",
  "ic-base-types",
  "ic-canister-log 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ic-canister-runtime",
  "ic-cdk",
  "ic-cdk-timers",
  "ic-cketh-test-utils",
@@ -7769,7 +7780,7 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "thousands",
  "time",
  "tokio",
@@ -8250,7 +8261,7 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
 ]
 
@@ -8548,7 +8559,7 @@ dependencies = [
  "stubborn-io",
  "tarpc",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "time",
  "tokio",
  "tokio-serde",
@@ -8789,7 +8800,7 @@ dependencies = [
  "serde_cbor",
  "strum 0.26.3",
  "strum_macros 0.26.4",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "zeroize",
 ]
 
@@ -9134,7 +9145,7 @@ version = "0.9.0"
 dependencies = [
  "ic-types",
  "mockall",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -9204,7 +9215,7 @@ dependencies = [
  "maplit",
  "rustls 0.23.27",
  "serde",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "x509-parser 0.16.0",
 ]
 
@@ -9237,7 +9248,7 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "test-strategy 0.4.0",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -9250,7 +9261,7 @@ dependencies = [
  "proptest",
  "rand 0.8.5",
  "test-strategy 0.4.0",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -9316,7 +9327,7 @@ name = "ic-crypto-utils-tls"
 version = "0.9.0"
 dependencies = [
  "ic-base-types",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "x509-parser 0.16.0",
 ]
 
@@ -9373,8 +9384,8 @@ dependencies = [
  "prometheus 0.14.0",
  "serde",
  "serde_json",
- "strum 0.27.1",
- "thiserror 2.0.12",
+ "strum 0.27.2",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-util",
  "tower-http",
@@ -9406,8 +9417,8 @@ dependencies = [
  "pem 3.0.6",
  "prometheus 0.14.0",
  "serde",
- "strum 0.27.1",
- "thiserror 2.0.12",
+ "strum 0.27.2",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-util",
  "tracing",
@@ -9423,8 +9434,8 @@ dependencies = [
  "candid",
  "derive-new",
  "serde",
- "strum 0.27.1",
- "thiserror 2.0.12",
+ "strum 0.27.2",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -9539,7 +9550,7 @@ dependencies = [
  "hkdf",
  "pem 1.1.1",
  "rand 0.8.5",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "zeroize",
 ]
 
@@ -9556,7 +9567,7 @@ dependencies = [
  "ic_principal",
  "pem 1.1.1",
  "rand 0.8.5",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "zeroize",
 ]
 
@@ -9573,7 +9584,7 @@ dependencies = [
  "pem 3.0.6",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "wycheproof",
  "zeroize",
 ]
@@ -9841,8 +9852,8 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "strum 0.27.1",
- "thiserror 2.0.12",
+ "strum 0.27.2",
+ "thiserror 2.0.17",
  "tikv-jemalloc-ctl",
  "tikv-jemallocator",
  "time",
@@ -9936,7 +9947,7 @@ dependencies = [
  "prometheus 0.13.4",
  "reqwest 0.12.24",
  "slog",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-io-timeout",
  "tower 0.5.2",
@@ -10164,7 +10175,7 @@ dependencies = [
  "slog",
  "socks5-impl",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-rustls 0.26.1",
  "tonic 0.12.3",
@@ -10365,7 +10376,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-suite-state-machine-tests-constants",
  "ic-limits",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-rosetta-api",
  "ic-rosetta-test-utils",
  "ic-sys",
@@ -10477,7 +10488,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "test-strategy 0.4.0",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -10685,7 +10696,7 @@ dependencies = [
  "pkcs11",
  "sha2 0.10.9",
  "simple_asn1",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -10764,7 +10775,7 @@ dependencies = [
  "serde",
  "strum 0.26.3",
  "strum_macros 0.26.4",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tower 0.5.2",
 ]
 
@@ -10773,7 +10784,7 @@ name = "ic-interfaces-adapter-client"
 version = "0.9.0"
 dependencies = [
  "strum_macros 0.26.4",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -10828,7 +10839,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-types",
  "phantom_newtype",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -10968,7 +10979,7 @@ dependencies = [
  "ic-icrc1-index-ng",
  "ic-icrc1-ledger",
  "ic-ledger-suite-orchestrator-test-utils",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-management-canister-types-private",
  "ic-metrics-encoder",
  "ic-stable-structures 0.6.8",
@@ -11000,7 +11011,7 @@ dependencies = [
  "ic-http-types",
  "ic-icrc1-ledger",
  "ic-ledger-suite-orchestrator",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-management-canister-types-private",
  "ic-metrics-assert",
  "ic-state-machine-tests",
@@ -11088,7 +11099,7 @@ dependencies = [
  "ic-base-types",
  "ic-icp-index",
  "ic-ledger-core",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-state-machine-tests",
  "icp-ledger",
  "icrc-ledger-types",
@@ -11142,9 +11153,9 @@ dependencies = [
 
 [[package]]
 name = "ic-management-canister-types"
-version = "0.3.3"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea7e5b8a0f7c3b320d9450ac950547db4f24a31601b5d398f9680b64427455d2"
+checksum = "8b5a939a84adbc30769d47e5de72c7b9f3713284e3ac87df4eb24795677a8df8"
 dependencies = [
  "candid",
  "serde",
@@ -11153,9 +11164,9 @@ dependencies = [
 
 [[package]]
 name = "ic-management-canister-types"
-version = "0.4.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b5a939a84adbc30769d47e5de72c7b9f3713284e3ac87df4eb24795677a8df8"
+checksum = "3149217e24186df3f13dc45eee14cdb3e5cad07d0b2b67bd53555c1c55462957"
 dependencies = [
  "candid",
  "serde",
@@ -11291,7 +11302,7 @@ dependencies = [
  "async-trait",
  "candid",
  "ic-http-types",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "pocket-ic",
  "regex",
  "serde",
@@ -11323,7 +11334,7 @@ dependencies = [
  "ic-base-types",
  "ic-cdk",
  "ic-cdk-timers",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-management-canister-types-private",
  "ic-nns-test-utils",
  "ic-stable-structures 0.7.0",
@@ -11353,7 +11364,7 @@ dependencies = [
  "ic-agent 0.40.1",
  "ic-base-types",
  "ic-error-types 0.2.0",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-nervous-system-clients",
  "ic-nns-common",
  "ic-nns-constants",
@@ -11375,7 +11386,7 @@ dependencies = [
  "serde_cbor",
  "sns-treasury-manager",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
 ]
 
@@ -11623,7 +11634,7 @@ dependencies = [
  "ic-icrc1-tokens-u64",
  "ic-interfaces-registry",
  "ic-ledger-core",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-management-canister-types-private",
  "ic-nervous-system-agent",
  "ic-nervous-system-clients",
@@ -11847,6 +11858,7 @@ version = "0.9.0"
 dependencies = [
  "ic-cdk-timers",
  "slotmap",
+ "tokio",
 ]
 
 [[package]]
@@ -12539,7 +12551,7 @@ dependencies = [
  "ic-cdk-timers",
  "ic-http-types",
  "ic-interfaces-registry",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-metrics-encoder",
  "ic-nervous-system-agent",
  "ic-nervous-system-canisters",
@@ -12667,7 +12679,7 @@ dependencies = [
  "pprof",
  "prost 0.12.6",
  "regex",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
 ]
 
@@ -12714,7 +12726,7 @@ dependencies = [
  "serde_json",
  "slog",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "url",
  "x509-cert",
 ]
@@ -12753,7 +12765,7 @@ version = "0.2.0"
 dependencies = [
  "hex",
  "ic-ed25519 0.4.0",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-secp256k1 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-vetkeys",
 ]
@@ -12828,7 +12840,7 @@ dependencies = [
  "slog",
  "socket2 0.5.9",
  "static_assertions",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-metrics",
  "tokio-util",
@@ -12922,7 +12934,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
  "url",
 ]
@@ -12937,7 +12949,7 @@ dependencies = [
  "ic-registry-transport",
  "ic-utils 0.9.0",
  "serde",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -13018,7 +13030,7 @@ dependencies = [
  "ic-registry-subnet-features",
  "ic-types",
  "serde_cbor",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -13080,7 +13092,7 @@ dependencies = [
  "ic-registry-transport",
  "ic-test-utilities-registry",
  "ic-types",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
  "url",
 ]
@@ -13169,7 +13181,7 @@ dependencies = [
  "ic-registry-transport",
  "ic-sys",
  "ic-types",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -13645,7 +13657,7 @@ dependencies = [
  "ic-ledger-hash-of",
  "ic-ledger-suite-state-machine-tests-constants",
  "ic-limits",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
@@ -13847,7 +13859,7 @@ dependencies = [
  "serde",
  "serde_json",
  "textplots",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
 ]
 
@@ -13891,7 +13903,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
  "url",
 ]
@@ -13977,7 +13989,7 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-test",
 ]
@@ -14353,7 +14365,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-client-sender",
  "ic-cdk",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-management-canister-types-private",
  "ic-nervous-system-agent",
  "ic-nervous-system-clients",
@@ -14381,7 +14393,7 @@ dependencies = [
  "serde",
  "slog",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
  "url",
 ]
@@ -14670,7 +14682,7 @@ dependencies = [
  "prost 0.13.4",
  "rand 0.8.5",
  "slog",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
  "tokio-metrics",
  "tokio-util",
@@ -14746,7 +14758,7 @@ dependencies = [
  "prost 0.13.4",
  "rand 0.8.5",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
  "wsl",
 ]
@@ -14860,7 +14872,7 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "time",
  "tokio",
  "tokio-util",
@@ -15186,7 +15198,7 @@ dependencies = [
  "ic-ckbtc-minter",
  "ic-config",
  "ic-icrc1-ledger",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-management-canister-types-private",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
@@ -15298,7 +15310,7 @@ dependencies = [
  "serde_cbor",
  "serde_repr",
  "sha2 0.10.9",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -15316,7 +15328,7 @@ dependencies = [
  "serde_cbor",
  "serde_repr",
  "sha2 0.10.9",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -15364,7 +15376,7 @@ dependencies = [
  "serde_with 1.14.0",
  "strum 0.26.3",
  "strum_macros 0.26.4",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "thousands",
 ]
 
@@ -15418,7 +15430,7 @@ dependencies = [
  "sha2 0.10.9",
  "strum 0.26.3",
  "strum_macros 0.26.4",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "time",
  "tokio",
 ]
@@ -15441,7 +15453,7 @@ dependencies = [
  "sha2 0.10.9",
  "strum 0.26.3",
  "strum_macros 0.26.4",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "time",
 ]
 
@@ -15505,7 +15517,7 @@ dependencies = [
  "ic-types",
  "mockall",
  "rand 0.8.5",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -15614,17 +15626,17 @@ dependencies = [
 
 [[package]]
 name = "ic-vetkeys"
-version = "0.4.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89db8e638924d9e07dd8fa33dc5cfcdc69b7331bed7fcc72e2586f3956b12e58"
+checksum = "fc87ee136e49cc95d9883d2b2c4fedadd6b286b17dd90ce531e7c56ebc36dc6e"
 dependencies = [
+ "aes-gcm",
  "anyhow",
  "candid",
  "futures",
  "hex-literal 1.0.0",
  "hkdf",
  "ic-cdk",
- "ic-cdk-macros",
  "ic-stable-structures 0.7.0",
  "ic_bls12_381",
  "lazy_static",
@@ -15636,7 +15648,7 @@ dependencies = [
  "serde_cbor",
  "sha2 0.10.9",
  "sha3",
- "strum 0.27.1",
+ "strum 0.27.2",
  "strum_macros 0.27.1",
  "subtle",
  "zeroize",
@@ -15742,7 +15754,7 @@ dependencies = [
  "slog",
  "tempfile",
  "test-strategy 0.4.0",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
  "url",
 ]
@@ -15767,9 +15779,9 @@ dependencies = [
 
 [[package]]
 name = "ic0"
-version = "1.0.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8877193e1921b5fd16accb0305eb46016868cd1935b05c05eca0ec007b943272"
+checksum = "1499d08fd5be8f790d477e1865d63bab6a8d748300e141270c4296e6d5fdd6bc"
 
 [[package]]
 name = "ic_bls12_381"
@@ -16159,7 +16171,7 @@ dependencies = [
  "ic-ledger-suite-in-memory-ledger",
  "ic-ledger-suite-state-machine-helpers",
  "ic-ledger-test-utils",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-nns-constants",
  "ic-nns-test-utils-golden-nns-state",
  "ic-stable-structures 0.6.8",
@@ -16718,7 +16730,7 @@ dependencies = [
  "rustls-pki-types",
  "serde",
  "serde_json",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
 ]
 
@@ -17816,7 +17828,7 @@ dependencies = [
  "log",
  "memchr",
  "serde",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -17935,7 +17947,7 @@ dependencies = [
  "dfn_candid",
  "ic-agent 0.40.1",
  "ic-base-types",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
@@ -19429,7 +19441,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b7cafe60d6cf8e62e1b9b2ea516a089c008945bb5a275416789e7db0bc199dc"
 dependencies = [
  "memchr",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "ucd-trie",
 ]
 
@@ -19741,7 +19753,7 @@ dependencies = [
  "ic-cdk",
  "ic-certification 3.0.3",
  "ic-error-types 0.2.0",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-management-canister-types-private",
  "ic-migration-canister",
  "ic-nns-governance-api",
@@ -19768,7 +19780,7 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
  "tracing",
  "tracing-appender",
@@ -20176,9 +20188,9 @@ checksum = "dc375e1527247fe1a97d8b7156678dfe7c1af2fc075c9a4db3690ecd2a148068"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.95"
+version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02b3e5e68a3a1a02aad3ec490a98007cbc13c37cbe84a3cd7b8e406d76e7f778"
+checksum = "5ee95bc4ef87b8d5ba32e8b7714ccc834865276eab0aed5c9958d00ec45f49e8"
 dependencies = [
  "unicode-ident",
 ]
@@ -20250,7 +20262,7 @@ dependencies = [
  "memchr",
  "parking_lot",
  "protobuf 3.7.2",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -20596,7 +20608,7 @@ dependencies = [
  "rustc-hash 2.1.0",
  "rustls 0.23.27",
  "socket2 0.5.9",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
  "tracing",
 ]
@@ -20615,7 +20627,7 @@ dependencies = [
  "rustls 0.23.27",
  "rustls-pki-types",
  "slab",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tinyvec",
  "tracing",
  "web-time",
@@ -20637,9 +20649,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.40"
+version = "1.0.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1885c039570dc00dcb4ff087a89e185fd56bae234ddc7f056a945bf36467248d"
+checksum = "a338cc41d27e6cc6dce6cefc13a0729dfbb81c262b1f519331575dd80ef3067f"
 dependencies = [
  "proc-macro2",
 ]
@@ -20880,7 +20892,7 @@ dependencies = [
  "canister-test",
  "ic-base-types",
  "ic-crypto-sha2",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-nervous-system-integration-tests",
  "ic-nns-constants",
  "ic-nns-test-utils",
@@ -20951,7 +20963,7 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "strum 0.26.3",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "uuid",
 ]
 
@@ -21059,7 +21071,7 @@ checksum = "dd6f9d3d47bdd2ad6945c5015a226ec6155d0bcdfd8f7cd29f86b71f8de99d2b"
 dependencies = [
  "getrandom 0.2.15",
  "libredox",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -21492,7 +21504,7 @@ dependencies = [
  "nix 0.30.1",
  "regex",
  "tempfile",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -22012,7 +22024,7 @@ dependencies = [
  "ring 0.17.14",
  "serde",
  "serde_json",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "webpki-roots 1.0.4",
  "x509-parser 0.16.0",
 ]
@@ -22188,7 +22200,7 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-sha2",
  "ic-http-types",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-nervous-system-integration-tests",
  "ic-nns-constants",
  "ic-nns-test-utils",
@@ -22654,7 +22666,7 @@ dependencies = [
  "futures",
  "percent-encoding",
  "serde",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -23028,7 +23040,7 @@ checksum = "297f631f50729c8c99b84667867963997ec0b50f32b2a7dbcab828ef0541e8bb"
 dependencies = [
  "num-bigint 0.4.6",
  "num-traits",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "time",
 ]
 
@@ -23168,9 +23180,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.13.2"
+version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
+checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 dependencies = [
  "serde",
 ]
@@ -23310,7 +23322,7 @@ dependencies = [
  "byteorder",
  "bytes",
  "percent-encoding",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tokio",
 ]
 
@@ -23544,9 +23556,9 @@ dependencies = [
 
 [[package]]
 name = "strum"
-version = "0.27.1"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f64def088c51c9510a8579e3c5d67c65349dcf755e5479ad3d010aa6454e2c32"
+checksum = "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
 dependencies = [
  "strum_macros 0.27.1",
 ]
@@ -23766,7 +23778,7 @@ dependencies = [
  "canister-test",
  "dfn_candid",
  "futures",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "ic-system-test-driver",
  "slog",
  "xnet-test",
@@ -24009,11 +24021,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.12"
+version = "2.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "567b8a2dae586314f7be2a752ec7474332959c6460e02bde30d702a66d488708"
+checksum = "f63587ca0f12b72a0600bcba1d40081f830876000bb46dd2337a3051618f4fc8"
 dependencies = [
- "thiserror-impl 2.0.12",
+ "thiserror-impl 2.0.17",
 ]
 
 [[package]]
@@ -24029,9 +24041,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.12"
+version = "2.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f7cf42b4507d8ea322120659672cf1b9dbb93f8f2d4ecfd6e51350ff5b17a1d"
+checksum = "3ff15c8ecd7de3849db632e14d18d2571fa09dfc5ed93479bc4485c7a517c913"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -24625,7 +24637,7 @@ dependencies = [
  "governor 0.8.1",
  "http 1.3.1",
  "pin-project",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tower 0.5.2",
  "tracing",
 ]
@@ -24641,7 +24653,7 @@ dependencies = [
  "governor 0.10.2",
  "http 1.3.1",
  "pin-project",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "tonic 0.14.2",
  "tower 0.5.2",
  "tracing",
@@ -24914,7 +24926,7 @@ dependencies = [
  "log",
  "rand 0.9.0",
  "sha1",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "utf-8",
 ]
 
@@ -25716,7 +25728,7 @@ dependencies = [
  "pulley-interpreter",
  "smallvec",
  "target-lexicon",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "wasmparser 0.239.0",
  "wasmtime-environ",
  "wasmtime-internal-math",
@@ -25995,7 +26007,7 @@ dependencies = [
  "regalloc2",
  "smallvec",
  "target-lexicon",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "wasmparser 0.239.0",
  "wasmtime-environ",
  "wasmtime-internal-cranelift",
@@ -26524,7 +26536,7 @@ dependencies = [
  "nom 7.1.3",
  "oid-registry 0.8.1",
  "rusticata-macros",
- "thiserror 2.0.12",
+ "thiserror 2.0.17",
  "time",
 ]
 
@@ -26562,7 +26574,7 @@ dependencies = [
  "futures",
  "ic-cdk",
  "ic-dummy-getrandom-for-wasm",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.5.0",
  "rand 0.8.5",
  "rand_pcg 0.3.1",
  "serde",
