@@ -200,6 +200,8 @@ impl NodeRegistration {
         if let Some(nns_pub_key) = self.get_nns_pub_key_der_from_config() {
             agent.set_root_key(nns_pub_key);
         } else {
+            // If we cannot determine the NNS public key, we log a warning but still proceed. The
+            // agent will use the mainnet public key hardcoded in the agent library.
             let message = "Failed to get NNS public key";
             warn!(self.log, "{}", message);
             UtilityCommand::notify_host(message, 1);
@@ -475,7 +477,9 @@ impl NodeRegistration {
         {
             agent.set_root_key(nns_pub_key);
         } else {
-            warn!(self.log, "Failed to get NNS public key from the registry");
+            // If we cannot determine the NNS public key, we log a warning but still proceed. The
+            // agent will use the mainnet public key hardcoded in the agent library.
+            warn!(self.log, "Failed to get NNS public key");
         }
 
         let update_node_payload = UpdateNodeDirectlyPayload {
