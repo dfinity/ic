@@ -921,8 +921,33 @@ impl StateMachineStateManager {
     }
 
     fn into_state_dir(mut self) -> Box<dyn StateMachineStateDir> {
-        let _ = self.inner.take();
+        let state_manager = self
+            .inner
+            .take()
+            .expect("StateMachineStateManager uninitialized");
+
+        // Finish any asynchronous state manager operations before dropping the state manager.
+        state_manager.flush_tip_channel();
+        state_manager
+            .state_layout()
+            .flush_checkpoint_removal_channel();
+
+        // Drop the state manager before handing out the state directory.
+        drop(state_manager);
+
         self.state_dir.take().unwrap()
+    }
+}
+
+impl Drop for StateMachineStateManager {
+    fn drop(&mut self) {
+        if let Some(state_manager) = self.inner.take() {
+            // Finish any asynchronous state manager operations before dropping the state manager.
+            state_manager.flush_tip_channel();
+            state_manager
+                .state_layout()
+                .flush_checkpoint_removal_channel();
+        }
     }
 }
 
@@ -933,12 +958,6 @@ impl Deref for StateMachineStateManager {
         self.inner
             .as_ref()
             .expect("StateMachineStateManager uninitialized")
-    }
-}
-
-impl Drop for StateMachineStateManager {
-    fn drop(&mut self) {
-        let _ = self.inner.take();
     }
 }
 
