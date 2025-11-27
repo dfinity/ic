@@ -307,7 +307,7 @@ async fn get_or_fetch<P: Peers>(
             .await
         }
         StrippedMessageId::IDkgDealing(dealing_id, node_index) => {
-            // First check if the ingress message exists in the idkg Pool.
+            // First check if the dealing exists in the IDKG Pool.
             if let Some(IDkgMessage::Dealing(signed_dealing)) =
                 idkg_pool.read().unwrap().get(&dealing_id)
             {
