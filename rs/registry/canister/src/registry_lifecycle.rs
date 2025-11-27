@@ -1,11 +1,8 @@
+use crate::certification::recertify_registry;
 use crate::max_rewardable_nodes_mapping::MAX_REWARDABLE_NODES_MAPPING;
-use crate::{
-    certification::recertify_registry, mutations::node_management::common::get_key_family,
-    pb::v1::RegistryCanisterStableStorage, registry::Registry,
-};
-use ic_base_types::PrincipalId;
+use crate::{pb::v1::RegistryCanisterStableStorage, registry::Registry};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-use ic_registry_keys::{NODE_OPERATOR_RECORD_KEY_PREFIX, make_node_operator_record_key};
+use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::{pb::v1::RegistryMutation, update};
 use prost::Message;
 
@@ -65,27 +62,35 @@ fn fill_swiss_subnet_node_operators_max_rewardable_nodes(
     registry: &Registry,
 ) -> Vec<RegistryMutation> {
     let mut mutations = Vec::new();
-    let max_rewardable_nodes_mapping = &MAX_REWARDABLE_NODES_MAPPING;
 
-    for (_, mut record) in
-        get_key_family::<NodeOperatorRecord>(registry, NODE_OPERATOR_RECORD_KEY_PREFIX).into_iter()
-    {
-        let node_operator_id = PrincipalId::try_from(&record.node_operator_principal_id).unwrap();
-        if !&record.max_rewardable_nodes.is_empty() {
+    for (operator, max_rewardable_nodes) in MAX_REWARDABLE_NODES_MAPPING.iter() {
+        let registry_value = match registry.get(
+            make_node_operator_record_key(operator.clone()).as_bytes(),
+            registry.latest_version(),
+        ) {
+            Some(record) => record,
+            None => continue,
+        };
+
+        let mut node_operator_record =
+            match NodeOperatorRecord::decode(registry_value.value.as_slice()) {
+                Ok(node_operator_record) => node_operator_record,
+                _ => continue,
+            };
+
+        // This avoids re-modifying existing max_rewardable_nodes entries.
+        if !node_operator_record.max_rewardable_nodes.is_empty() {
             continue;
         }
-        if let Some(max_rewardable_nodes) =
-            max_rewardable_nodes_mapping.get(&node_operator_id).cloned()
-        {
-            record.max_rewardable_nodes = max_rewardable_nodes
-                .into_iter()
-                .map(|(node_reward_type, count)| (node_reward_type.to_string(), count))
-                .collect();
-            mutations.push(update(
-                make_node_operator_record_key(node_operator_id),
-                record.encode_to_vec(),
-            ));
-        }
+
+        node_operator_record.max_rewardable_nodes = max_rewardable_nodes
+            .into_iter()
+            .map(|(node_reward_type, count)| (node_reward_type.to_string(), *count))
+            .collect();
+        mutations.push(update(
+            make_node_operator_record_key(operator.clone()),
+            node_operator_record.encode_to_vec(),
+        ));
     }
 
     mutations
@@ -259,11 +264,8 @@ mod test {
         let record = registry.get_node_operator_or_panic(no_1);
 
         let expected_record = NodeOperatorRecord {
-            node_operator_principal_id: no_1.clone().to_vec(),
-            dc_id: "dummy_dc_id_1".to_string(),
-            ipv6: Some("dummy_ipv6_1".to_string()),
             max_rewardable_nodes: btreemap! {"type3.1".to_string() => 1},
-            ..NodeOperatorRecord::default()
+            ..record_no_1
         };
 
         assert_eq!(
@@ -277,6 +279,7 @@ mod test {
         let mut registry = invariant_compliant_registry(0);
         let mut node_operator_additions = Vec::new();
 
+        // This node operator is not in the swiss subnet mapping
         let no_1 = PrincipalId::from_str(
             "xph6u-z3z2t-s7hh7-gtlxh-bbgbx-aatlm-eab4o-bsank-nqruh-3ub4q-sae",
         )

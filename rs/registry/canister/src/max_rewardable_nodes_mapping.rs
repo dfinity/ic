@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 lazy_static! {
+    // TODO(DRE-625): Remove one-off migration
     pub static ref MAX_REWARDABLE_NODES_MAPPING: BTreeMap<PrincipalId, BTreeMap<NodeRewardType, u32>> =
         btreemap! {
             "q4gds-li2kf-dhmi6-vmtxg-zrgep-3te7r-2a4ji-nszwv-66biu-dkl6k-eqe" => btreemap! {"type3.1" => 1},
