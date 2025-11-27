@@ -81,7 +81,6 @@ system_test_nns(
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:anyhow",
-        "@crate_index//:maplit",
         "@crate_index//:slog",
     ],
 )

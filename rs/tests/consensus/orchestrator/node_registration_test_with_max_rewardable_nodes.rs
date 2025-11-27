@@ -13,7 +13,6 @@ use ic_system_test_driver::{
     systest,
     util::{block_on, runtime_from_url},
 };
-use maplit::btreemap;
 use registry_canister::mutations::do_update_node_operator_config::UpdateNodeOperatorConfigPayload;
 use registry_canister::mutations::node_management::do_remove_nodes::RemoveNodesPayload;
 use slog::info;
@@ -92,20 +91,22 @@ fn test(env: TestEnv) {
             UpdateNodeRewardsTableProposalPayload {
                 // The rates themselves are not important, what is important
                 // is that at least some NodeRewardTable exists
-                new_entries: btreemap! {
-                    "CH".to_string() =>  NodeRewardRates {
-                        rates: btreemap!{
-                            "default".to_string() => NodeRewardRate {
+                new_entries: [(
+                    "CH".to_string(),
+                    NodeRewardRates {
+                        rates: [(
+                            "default".to_string(),
+                            NodeRewardRate {
                                 xdr_permyriad_per_node_per_month: 240,
                                 reward_coefficient_percent: None,
                             },
-                            "small".to_string() => NodeRewardRate {
-                                xdr_permyriad_per_node_per_month: 350,
-                                reward_coefficient_percent: None,
-                            },
-                        }
-                    }
-                },
+                        )]
+                        .into_iter()
+                        .collect(),
+                    },
+                )]
+                .into_iter()
+                .collect(),
             },
         )
         .await;
@@ -123,12 +124,7 @@ fn test(env: TestEnv) {
                 // Only one node is enough for this test, but the
                 // real setup would include all of the nodes that
                 // the node operator is linked to.
-                max_rewardable_nodes: Some(btreemap! {
-                    "type3.1".to_string() => 1,
-                }),
-                rewardable_nodes: btreemap! {
-                    "type3.1".to_string() => 1,
-                },
+                max_rewardable_nodes: Some([("type3.1".to_string(), 1)].into_iter().collect()),
                 ..Default::default()
             },
         )

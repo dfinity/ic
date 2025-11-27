@@ -2725,7 +2725,6 @@ dependencies = [
  "ic-types",
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
- "maplit",
  "registry-canister",
  "slog",
  "ssh2",

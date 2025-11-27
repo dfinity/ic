@@ -31,7 +31,6 @@ ssh2 = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
-maplit = "1.0.2"
 
 [[bin]]
 name = "ic-systest-cup-compatibility"
