@@ -264,6 +264,9 @@ mod benches {
 
         canbench_rs::bench_fn(|| {
             state::mutate_state(|s| {
+                let _scope = canbench_rs::bench_scope("clone");
+                let utxos = s.available_utxos.clone();
+
                 let _scope = canbench_rs::bench_scope("utxos_selection");
                 let selected_utxos = crate::utxos_selection(withdrawal_amount, &mut s.available_utxos, 1);
 
