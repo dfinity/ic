@@ -164,7 +164,7 @@ alias(
         (
             "ckbtc_minter_debug",
             ["self_check"] + test_with_tla(),
-            TLA_PROC_MACRO_DEPS + TLA_PROC_MACRO_DEPS,
+            LIB_PROC_MACRO_DEPS + TLA_PROC_MACRO_DEPS,
             LIB_DEP_WITH_CONDITIONAL_TLA + TLA_DEPS,
         ),
     ]
