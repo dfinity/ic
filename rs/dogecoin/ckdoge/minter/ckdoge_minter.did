@@ -202,10 +202,28 @@ type RetrieveDogeStatus = variant {
     // transaction for this request.  The payload contains the
     // identifier of the transaction on the Dogecoin network.
     Confirmed : record { txid : blob };
-    /// The retrieve Dogecoin request has been reimbursed.
+    // The retrieve Dogecoin request has been reimbursed.
     Reimbursed : ReimbursedDeposit;
-    /// The minter will try to reimburse this transaction.
+    // The minter will try to reimburse this transaction.
     WillReimburse : ReimbursementRequest;
+};
+
+type WithdrawalFee = record {
+    // Fee paid to the Dogecoin network to include the transaction in a block.
+    dogecoin_fee : nat64;
+    // Fee paid to the minter for its cycles consumption when building, signing and sending a transaction.
+    minter_fee : nat64;
+};
+
+type EstimateWithdrawalFeeError = variant {
+    // The given withdrawal amount is too low to pay for the transaction and minter fee.
+    // The minimum withdrawal amount may vary depending on the current transaction fees.
+    AmountTooLow : record { min_amount : nat64};
+
+    // The current withdrawal amount is too high so that either the minter does not have enough
+    // funds to satisfy that request; or, it would use too many UTXOs so that the transaction may be
+    // non-standard.
+    AmountTooHigh;
 };
 
 service : (minter_arg : MinterArg) -> {
@@ -233,6 +251,10 @@ service : (minter_arg : MinterArg) -> {
     // * The owner deposited some DOGE to the address that the
     //   [get_doge_address] endpoint returns.
     update_balance : (record { owner: opt principal; subaccount : opt blob }) -> (variant { Ok : vec UtxoStatus; Err : UpdateBalanceError });
+
+    /// Returns an estimate of the user's fee (in Koinu) for a
+    /// retrieve_doge_with_approval request based on the current status of the Dogecoin network.
+    estimate_withdrawal_fee : (record { amount : opt nat64 }) -> (variant { Ok : WithdrawalFee; Err : EstimateWithdrawalFeeError }) query;
 
     // Submits a request to convert ckDOGE to DOGE.
     //

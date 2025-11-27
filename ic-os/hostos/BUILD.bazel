@@ -8,6 +8,27 @@ exports_files([
     "grub.cfg",
 ])
 
+# Aliases to allow installing the same file in multiple locations
+alias(
+    name = "console-override-dev",
+    actual = "//ic-os/components:misc/console-getty@/hostos-dev/override.conf",
+)
+
+alias(
+    name = "console-override-dev-alias",
+    actual = "//ic-os/components:misc/console-getty@/hostos-dev/override.conf",
+)
+
+alias(
+    name = "console-override-prod",
+    actual = "//ic-os/components:misc/console-getty@/hostos-prod/override.conf",
+)
+
+alias(
+    name = "console-override-prod-alias",
+    actual = "//ic-os/components:misc/console-getty@/hostos-prod/override.conf",
+)
+
 ext4_image(
     name = "partition-config.tzst",
     partition_size = "100M",

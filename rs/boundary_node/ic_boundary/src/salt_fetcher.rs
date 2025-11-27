@@ -12,7 +12,7 @@ use ic_bn_lib::prometheus::{
     IntCounterVec, IntGauge, Registry, register_int_counter_vec_with_registry,
     register_int_gauge_with_registry,
 };
-use ic_bn_lib::tasks::Run;
+use ic_bn_lib_common::traits::Run;
 use salt_sharing_api::{GetSaltError, GetSaltResponse};
 use tokio::{
     select,
