@@ -559,6 +559,9 @@ fn test_illegal_caller() {
         Encode!(&update_balance_args).unwrap(),
     );
     assert!(res.is_err());
+
+    #[cfg(feature = "tla")]
+    check_traces(&env, minter_id);
 }
 
 pub fn get_btc_address(
@@ -1546,9 +1549,6 @@ fn test_transaction_finalization() {
     assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
 
     assert_eq!(ckbtc.get_known_utxos(user), vec![]);
-
-    #[cfg(feature = "tla")]
-    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -1796,9 +1796,6 @@ fn test_transaction_resubmission_finalize_new() {
     ckbtc.finalize_transaction(new_tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), new_txid);
     ckbtc.minter_self_check();
-
-    #[cfg(feature = "tla")]
-    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -1828,9 +1825,6 @@ fn test_transaction_resubmission_finalize_old() {
     ckbtc.finalize_transaction(&tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), old_txid);
     ckbtc.minter_self_check();
-
-    #[cfg(feature = "tla")]
-    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -1881,9 +1875,6 @@ fn test_transaction_resubmission_finalize_middle() {
     ckbtc.finalize_transaction(second_tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), second_txid);
     ckbtc.minter_self_check();
-
-    #[cfg(feature = "tla")]
-    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -1949,9 +1940,6 @@ fn test_taproot_transaction_finalization() {
 
     ckbtc.finalize_transaction(tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
-
-    #[cfg(feature = "tla")]
-    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -2024,9 +2012,6 @@ fn test_ledger_memo() {
         },
         "memo not found in burn"
     );
-
-    #[cfg(feature = "tla")]
-    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -2061,9 +2046,6 @@ fn test_filter_logs() {
     let logs_filtered = ckbtc.get_logs_with_params(format!("?time={}", nanos + 30 * 1_000_000_000));
 
     assert_ne!(logs.len(), logs_filtered.len());
-
-    #[cfg(feature = "tla")]
-    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -2160,9 +2142,6 @@ fn test_retrieve_btc_with_approval() {
 
         ckbtc.finalize_transaction(tx);
         assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
-
-        #[cfg(feature = "tla")]
-        check_traces(ckbtc.env(), ckbtc.minter_id);
 
         ckbtc
             .check_minter_metrics()
@@ -2288,9 +2267,6 @@ fn test_retrieve_btc_with_approval_from_subaccount() {
         }]
     );
 
-    #[cfg(feature = "tla")]
-    check_traces(ckbtc.env(), ckbtc.minter_id);
-
     ckbtc
         .check_minter_metrics()
         .assert_contains_metric_matching(
@@ -2403,9 +2379,6 @@ fn test_retrieve_btc_with_approval_fail() {
         ckbtc.retrieve_btc_status_v2_by_account(Some(user_account)),
         vec![]
     );
-
-    #[cfg(feature = "tla")]
-    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
