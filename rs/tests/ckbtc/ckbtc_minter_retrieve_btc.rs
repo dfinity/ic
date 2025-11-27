@@ -257,7 +257,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
         assert_eq!(5, retrieve_result.block_index);
 
         #[cfg(feature = "tla")]
-        fetch_and_check_traces(minter_canister.clone(), runtime.as_ref());
+        fetch_and_check_traces(&minter_agent);
     });
 }
 fn main() -> Result<()> {

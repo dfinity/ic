@@ -15230,6 +15230,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "slog",
+ "tla_instrumentation",
  "tokio",
 ]
 

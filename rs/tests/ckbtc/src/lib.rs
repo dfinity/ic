@@ -1,5 +1,5 @@
 use bitcoin::{Network as BtcNetwork, dogecoin::Network as DogeNetwork};
-use candid::{Encode, Principal};
+use candid::{Encode, Principal, decode_one};
 use canister_test::{Canister, Runtime, ic00::EcdsaKeyId};
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -8,6 +8,8 @@ use ic_btc_checker::{
     CheckArg, CheckMode, InitArg as CheckerInitArg, UpgradeArg as CheckerUpgradeArg,
 };
 use ic_btc_interface::{Config, Fees, Flag, Network};
+#[cfg(feature = "tla")]
+use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::{
     CKBTC_LEDGER_MEMO_SIZE,
     lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg, Mode},
@@ -80,24 +82,20 @@ pub const CHECK_FEE: u64 = 1001;
 const UNIVERSAL_VM_NAME: &str = "btc-node";
 
 #[cfg(feature = "tla")]
-pub fn fetch_and_check_traces(minter_canister: Canister, runtime: &Runtime) {
+pub fn fetch_and_check_traces(agent: &CkBtcMinterAgent) {
     // Fetch traces from the canister
-    let traces: Vec<tla_instrumentation::UpdateTrace> = runtime
-        .block_on(minter_canister.query_("get_tla_traces", candid, ()))
-        .expect("query get_tla_traces failed");
+    let traces: Vec<tla_instrumentation::UpdateTrace> = decode_one(
+        &block_on(
+            agent
+                .agent
+                .query(&agent.minter_canister_id, "get_tla_traces")
+                .call(),
+        )
+        .expect("Failed to query get_tla_traces"),
+    )
+    .expect("Failed to decode traces");
 
     perform_trace_check(traces);
-}
-
-#[cfg(feature = "tla")]
-fn get_tla_module_path(module: &str) -> std::path::PathBuf {
-    let modules =
-        std::env::var("TLA_MODULES").expect("TLA_MODULES must be set for TLA trace checking");
-    modules
-        .split_whitespace()
-        .map(std::path::PathBuf::from)
-        .find(|p| p.file_name().is_some_and(|f| f == module))
-        .unwrap_or_else(|| panic!("Could not find TLA module {module} in TLA_MODULES"))
 }
 
 pub(crate) const BITCOIND_RPC_USER: &str = "btc-dev-preview";

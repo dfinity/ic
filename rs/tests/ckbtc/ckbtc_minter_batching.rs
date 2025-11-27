@@ -286,7 +286,7 @@ pub fn test_batching(env: TestEnv) {
         assert_eq!(unspent_result.len(), RETRIEVE_REQUESTS_COUNT_TO_BATCH);
 
         #[cfg(feature = "tla")]
-        fetch_and_check_traces(minter_canister.clone(), runtime.as_ref());
+        fetch_and_check_traces(&minter_agent);
     })
 }
 

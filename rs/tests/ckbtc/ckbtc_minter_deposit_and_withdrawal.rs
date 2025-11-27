@@ -187,9 +187,6 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
         // Check that we can modify the fee
         assert!(get_tx_infos.bip125_replaceable);
 
-        #[cfg(feature = "tla")]
-        fetch_and_check_traces(minter_canister.clone(), runtime.as_ref());
-
         // Try to retrieve btc to minter's main_address
         let main_btc_address = minter_agent
             .get_btc_address(Some(minter_id.get().into()), None)
@@ -257,6 +254,9 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
             ),
             "missing the tx confirmation in the event log: {events:?}"
         );
+
+        #[cfg(feature = "tla")]
+        fetch_and_check_traces(&minter_agent);
     })
 }
 fn main() -> Result<()> {

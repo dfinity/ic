@@ -308,7 +308,7 @@ pub fn test_update_balance(env: TestEnv) {
         }
 
         #[cfg(feature = "tla")]
-        fetch_and_check_traces(minter_canister.clone(), runtime.as_ref());
+        fetch_and_check_traces(&minter_agent);
     });
 }
 fn main() -> Result<()> {

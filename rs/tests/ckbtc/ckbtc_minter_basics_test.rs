@@ -210,7 +210,7 @@ async fn test_update_balance(agent: &CkBtcMinterAgent) {
     assert!(res.is_err());
 
     #[cfg(feature = "tla")]
-    fetch_and_check_traces(agent.minter_canister.clone(), agent.runtime());
+    fetch_and_check_traces(agent);
 }
 
 fn main() -> Result<()> {

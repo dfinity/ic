@@ -260,9 +260,6 @@ pub fn test_btc_checker(env: TestEnv) {
             metrics.get("ckbtc_minter_owed_kyt_amount").unwrap().value;
         assert_eq!(owed_kyt_amount_after_update_balance as u64, 0);
 
-        #[cfg(feature = "tla")]
-        fetch_and_check_traces(minter_canister.clone(), runtime.as_ref());
-
         // Now let's send ckBTC back to the BTC network
         let withdrawal_account = minter_agent
             .get_withdrawal_account()
@@ -357,6 +354,9 @@ pub fn test_btc_checker(env: TestEnv) {
         let metrics = minter_agent.get_metrics_map().await;
         let owed_kyt_amount = metrics.get("ckbtc_minter_owed_kyt_amount").unwrap().value;
         assert_eq!(owed_kyt_amount, 0_f64);
+
+        #[cfg(feature = "tla")]
+        fetch_and_check_traces(&minter_agent);
     });
 }
 
