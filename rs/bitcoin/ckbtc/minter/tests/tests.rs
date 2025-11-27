@@ -444,6 +444,10 @@ fn test_no_new_utxos() {
             suspended_utxos: Some(vec![]),
         })
     );
+
+    #[cfg(feature = "tla")]
+    check_traces(ckbtc.env(), ckbtc.minter_id);
+
     ckbtc
         .check_minter_metrics()
         .assert_contains_metric_matching(
@@ -452,9 +456,6 @@ fn test_no_new_utxos() {
         .assert_does_not_contain_metric_matching(
             r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="1".*"#,
         ); // no metrics for update call with new UTXOs
-
-    #[cfg(feature = "tla")]
-    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -514,6 +515,10 @@ fn update_balance_should_return_correct_confirmations() {
             suspended_utxos: Some(vec![]),
         })
     );
+
+    #[cfg(feature = "tla")]
+    check_traces(ckbtc.env(), ckbtc.minter_id);
+
     ckbtc
         .check_minter_metrics()
         .assert_contains_metric_matching(
@@ -522,9 +527,6 @@ fn update_balance_should_return_correct_confirmations() {
         .assert_contains_metric_matching(
             r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="1",le="(\d+|\+Inf)"\} 1 \d+"#,
         ); // exactly 1 match for an update call with new UTXOs
-
-    #[cfg(feature = "tla")]
-    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -798,11 +800,6 @@ impl CkBtcSetup {
             minter_id,
             btc_checker_id,
         }
-    }
-
-    #[cfg(feature = "tla")]
-    pub fn env(&self) -> &StateMachine {
-        &self.env
     }
 
     #[cfg(feature = "tla")]
@@ -2176,9 +2173,6 @@ fn test_retrieve_btc_with_approval() {
             .assert_does_not_contain_metric_matching(
                 r#"ckbtc_minter_sign_with_ecdsa_latency_bucket\{result="failure",le="(\d+|\+Inf)"\} 1 \d+"#
             );
-
-        #[cfg(feature = "tla")]
-        check_traces(ckbtc.env(), ckbtc.minter_id);
     }
 
     // regular fees, use median
@@ -2306,9 +2300,6 @@ fn test_retrieve_btc_with_approval_from_subaccount() {
         .assert_does_not_contain_metric_matching(
             r#"ckbtc_minter_sign_with_ecdsa_latency_bucket\{result="failure",le="(\d+|\+Inf)"\} 1 \d+"#
         );
-
-    #[cfg(feature = "tla")]
-    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
