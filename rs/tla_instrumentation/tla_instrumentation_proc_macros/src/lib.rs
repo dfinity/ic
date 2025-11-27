@@ -195,7 +195,8 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
     } else {
         quote! {
             #(#attrs)* #vis #sig {
-                let enabled = TLA_TRACES_LKEY.try_with(|_| ()).is_ok() || TLA_TRACES_MUTEX.is_some();
+                let enabled = tla_instrumentation::is_tla_enabled()
+                    && (TLA_TRACES_LKEY.try_with(|_| ()).is_ok() || TLA_TRACES_MUTEX.is_some());
                 if !enabled {
                     #noninstrumented_invocation
                 } else {

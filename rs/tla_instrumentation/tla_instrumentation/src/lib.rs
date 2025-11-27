@@ -3,6 +3,7 @@ pub mod tla_state;
 pub mod tla_value;
 use std::fmt::Formatter;
 use std::mem;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use candid::{CandidType, Deserialize};
@@ -42,6 +43,22 @@ pub struct Update {
     pub canister_name: String,
     /// Cleans up the trace and extracts the constants from it
     pub post_process: fn(&mut Vec<ResolvedStatePair>) -> TlaConstantAssignment,
+}
+
+// Global toggle for instrumentation; defaults to enabled. Can be turned off at runtime
+// by canisters that want to skip logging (e.g. very heavy test scenarios).
+static TLA_ENABLED: AtomicBool = AtomicBool::new(true);
+
+pub fn disable_tla() {
+    TLA_ENABLED.store(false, Ordering::SeqCst);
+}
+
+pub fn enable_tla() {
+    TLA_ENABLED.store(true, Ordering::SeqCst);
+}
+
+pub fn is_tla_enabled() -> bool {
+    TLA_ENABLED.load(Ordering::SeqCst)
 }
 
 #[derive(Debug, Clone, CandidType, Deserialize)]

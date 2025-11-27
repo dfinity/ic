@@ -237,6 +237,7 @@ rust_test(
 rust_ic_test(
     name = "ckbtc_minter_tests",
     srcs = ["tests/tests.rs"],
+    crate_features = test_with_tla(),
     data = [
         ":ckbtc_minter_debug.wasm.gz",
         "//rs/bitcoin/checker:btc_checker_canister",

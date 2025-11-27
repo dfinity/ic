@@ -6,7 +6,7 @@ use std::sync::mpsc;
 use ic_btc_interface::{OutPoint, Utxo};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use lazy_static::lazy_static;
-use tla_instrumentation::{GlobalState, ResolvedStatePair, TlaConstantAssignment, TlaValue, ToTla, Update, UpdateTrace, VarAssignment};
+use tla_instrumentation::{GlobalState, ResolvedStatePair, TlaConstantAssignment, TlaValue, ToTla, Update, VarAssignment};
 
 use crate::state::{self, CkBtcMinterState};
 use crate::updates::get_btc_address::account_to_p2wpkh_address_from_state;
@@ -15,6 +15,7 @@ mod store;
 
 pub use store::{TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX};
 pub use tla_instrumentation::checker::{check_tla_code_link, PredicateDescription};
+pub use tla_instrumentation::{disable_tla, enable_tla, UpdateTrace};
 
 const UPDATE_BALANCE_PROCESS_ID: &str = "Update_Balance";
 pub const UPDATE_BALANCE_START: &str = "Update_Balance_Start";

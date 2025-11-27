@@ -187,7 +187,7 @@ pub async fn update_balance<R: CanisterRuntime>(
     };
     let _guard = balance_update_guard(caller_account)?;
 
-   let address = state::read_state(|s| runtime.derive_user_address(s, &caller_account));
+    let address = state::read_state(|s| runtime.derive_user_address(s, &caller_account));
 
     let (btc_network, min_confirmations) =
         state::read_state(|s| (s.btc_network, s.min_confirmations));

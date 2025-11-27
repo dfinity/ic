@@ -208,6 +208,12 @@ fn get_tla_traces() -> Vec<tla_instrumentation::UpdateTrace> {
     drained
 }
 
+#[cfg(feature = "tla")]
+#[update(hidden = true)]
+fn disable_tla_logging() {
+    ic_ckbtc_minter::tla::disable_tla();
+}
+
 #[cfg(feature = "self_check")]
 #[update]
 async fn upload_events(events: Vec<Event>) {

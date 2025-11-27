@@ -32,10 +32,6 @@ use ic_ckbtc_minter::{
     CKBTC_LEDGER_MEMO_SIZE, MAX_NUM_INPUTS_IN_TRANSACTION, MIN_RESUBMISSION_DELAY, MinterInfo,
     Network, UTXOS_COUNT_THRESHOLD,
 };
-#[cfg(feature = "tla")]
-use tla_instrumentation::UpdateTrace;
-#[cfg(feature = "tla")]
-use ic_ckbtc_minter::tla::perform_trace_check;
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
@@ -584,9 +580,15 @@ fn check_traces(env: &StateMachine, minter_id: CanisterId) {
     let res = env
         .query(minter_id, "get_tla_traces", Encode!(&()).unwrap())
         .expect("get_tla_traces query failed");
-    let traces: Vec<UpdateTrace> = Decode!(&res.bytes(), Vec<UpdateTrace>)
+    let traces= Decode!(&res.bytes(), Vec<ic_ckbtc_minter::tla::UpdateTrace>)
         .expect("failed to decode get_tla_traces response");
     perform_trace_check(traces);
+}
+
+#[cfg(feature = "tla")]
+fn disable_tla_logging(env: &StateMachine, minter_id: CanisterId) {
+    env.execute_ingress(minter_id, "disable_tla_logging", Encode!(&()).unwrap())
+        .expect("disable_tla_logging failed");
 }
 
 #[test]
@@ -1679,6 +1681,10 @@ fn test_transaction_resubmission_finalize_setup() -> (CkBtcSetup, u64, Txid, bit
 #[test]
 fn test_transaction_resubmission_finalize_new_above_threshold() {
     let ckbtc = CkBtcSetup::new();
+    // This test generates very long traces (lots of inter-canister
+    // calls). Disable TLA logging to avoid timeouts.
+    #[cfg(feature = "tla")]
+    disable_tla_logging(ckbtc.env(), ckbtc.minter_id);
     let user = Principal::from(ckbtc.caller);
 
     let deposit_value = 1_000_000;
@@ -1758,8 +1764,6 @@ fn test_transaction_resubmission_finalize_new_above_threshold() {
     assert_eq!(ckbtc.await_finalization(block_index, 10), new_txid);
     ckbtc.minter_self_check();
 
-    #[cfg(feature = "tla")]
-    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -2161,6 +2165,9 @@ fn test_retrieve_btc_with_approval() {
         ckbtc.finalize_transaction(tx);
         assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
 
+        #[cfg(feature = "tla")]
+        check_traces(ckbtc.env(), ckbtc.minter_id);
+
         ckbtc
             .check_minter_metrics()
             .assert_contains_metric_matching(
@@ -2288,6 +2295,9 @@ fn test_retrieve_btc_with_approval_from_subaccount() {
         }]
     );
 
+    #[cfg(feature = "tla")]
+    check_traces(ckbtc.env(), ckbtc.minter_id);
+
     ckbtc
         .check_minter_metrics()
         .assert_contains_metric_matching(
@@ -2411,6 +2421,11 @@ fn test_retrieve_btc_with_approval_fail() {
 #[test]
 fn should_cancel_and_reimburse_large_withdrawal() {
     let ckbtc = CkBtcSetup::new();
+    // This test generates very long traces (lots of inter-canister
+    // calls to mint the UTXOs). Disable TLA logging to avoid timeouts.
+    #[cfg(feature = "tla")]
+    disable_tla_logging(ckbtc.env(), ckbtc.minter_id);
+
     let user = Principal::from(ckbtc.caller);
     let subaccount: Option<[u8; 32]> = Some([1; 32]);
     let user_account = Account {
@@ -2512,7 +2527,4 @@ fn should_cancel_and_reimburse_large_withdrawal() {
         ckbtc.balance_of(user_account),
         balance_before_withdrawal.clone() - BitcoinFeeEstimator::COST_OF_ONE_BILLION_CYCLES
     );
-
-    #[cfg(feature = "tla")]
-    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
