@@ -222,6 +222,8 @@ async fn start(runtime: Arc<Runtime>) {
         let nns_url = Url::parse("https://icp0.io").unwrap();
         let (routing_table, _) = get_routing_table(vec![nns_url]);
         let routing_table_json = serde_json::to_string_pretty(&routing_table).unwrap();
+        // `#[clap(long, default_value_t = false, requires = "mainnet_routing_table")]`
+        // ensures that the mainnet routing table file path is specified.
         let mainnet_routing_table_path = args.mainnet_routing_table.unwrap();
         std::fs::write(mainnet_routing_table_path, &routing_table_json)
             .expect("Failed to write mainnet routing table file");
