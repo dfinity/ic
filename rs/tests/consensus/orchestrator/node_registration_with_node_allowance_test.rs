@@ -15,7 +15,6 @@ Success:: We end the test again with 1 registered unassigned nodes.
 end::catalog[] */
 
 use anyhow::Result;
-use std::time::Duration;
 
 use ic_consensus_system_test_node_registration_test_common::{setup, test_with_node_allowance};
 use ic_system_test_driver::driver::group::SystemTestGroup;

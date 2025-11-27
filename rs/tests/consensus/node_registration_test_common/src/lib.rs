@@ -155,7 +155,7 @@ EOT
 /// and update the node operator config to include 1 max rewardable node.
 async fn add_node_reward_table_and_rewardable_node(governance_canister: &Canister<'_>) {
     let proposal_id = submit_external_proposal_with_test_id(
-        &governance_canister,
+        governance_canister,
         NnsFunction::UpdateNodeRewardsTable,
         UpdateNodeRewardsTableProposalPayload {
             // The rates themselves are not important, what is important
@@ -179,11 +179,11 @@ async fn add_node_reward_table_and_rewardable_node(governance_canister: &Caniste
         },
     )
     .await;
-    vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
+    vote_execute_proposal_assert_executed(governance_canister, proposal_id).await;
 
     let principal = PrincipalId::from_str(TEST_PRINCIPAL).unwrap();
     let proposal_id = submit_external_proposal_with_test_id(
-        &governance_canister,
+        governance_canister,
         NnsFunction::UpdateNodeOperatorConfig,
         UpdateNodeOperatorConfigPayload {
             node_operator_id: Some(principal),
@@ -195,5 +195,5 @@ async fn add_node_reward_table_and_rewardable_node(governance_canister: &Caniste
         },
     )
     .await;
-    vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
+    vote_execute_proposal_assert_executed(governance_canister, proposal_id).await;
 }
