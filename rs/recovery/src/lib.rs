@@ -168,7 +168,7 @@ impl Recovery {
                     format!(
                         "No permission to create recovery directory. Consider manually \
                         creating the directory with the right permissions by running:\n\n  \
-                        sudo mkdir -p {} && sudo chown $USER {}\n",
+                        mkdir -p {} && chown $USER {}\n",
                         recovery_dir.display(),
                         recovery_dir.display()
                     ),
