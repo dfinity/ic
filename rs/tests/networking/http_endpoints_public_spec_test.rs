@@ -456,7 +456,7 @@ fn method_name_edge_cases(env: TestEnv) {
     let api_bn_url = get_api_bn_url(&snapshot);
 
     block_on(async {
-        for url in [subnet_replica_url.clone(), api_bn_url.clone()] {
+        for (url, is_api_bn) in [(subnet_replica_url, false), (api_bn_url, true)] {
             let client = reqwest::Client::builder()
                 .danger_accept_invalid_certs(true)
                 .build()
@@ -537,18 +537,18 @@ fn method_name_edge_cases(env: TestEnv) {
                 .await
                 .unwrap_err();
 
-            if url == subnet_replica_url {
-                // When bypassing the API BN, the replica responds with a reject.
-                assert!(
-                    matches!(err, AgentError::CertifiedReject { .. }),
-                    "direct replica update for 'x' * 2**20: got error {}",
-                    err
-                );
-            } else {
+            if is_api_bn {
                 // When going through the API BN, the request is rejected with HTTP 400 Bad Request.
                 assert!(
                     matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16()),
                     "api bn update for 'x' * 2**20: got error {}",
+                    err
+                );
+            } else {
+                // When bypassing the API BN, the replica responds with a reject.
+                assert!(
+                    matches!(err, AgentError::CertifiedReject { .. }),
+                    "direct replica update for 'x' * 2**20: got error {}",
                     err
                 );
             }
@@ -558,18 +558,18 @@ fn method_name_edge_cases(env: TestEnv) {
                 .await
                 .unwrap_err();
 
-            if url == subnet_replica_url {
-                // When bypassing the API BN, the replica responds with a reject.
-                assert!(
-                    matches!(err, AgentError::UncertifiedReject { .. }),
-                    "direct replica update for 'x' * 2**20: got error {}",
-                    err
-                );
-            } else {
+            if is_api_bn {
                 // When going through the API BN, the request is rejected with HTTP 400 Bad Request.
                 assert!(
                     matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16()),
                     "api bn update for 'x' * 2**20: got error {}",
+                    err
+                );
+            } else {
+                // When bypassing the API BN, the replica responds with a reject.
+                assert!(
+                    matches!(err, AgentError::UncertifiedReject { .. }),
+                    "direct replica update for 'x' * 2**20: got error {}",
                     err
                 );
             }
@@ -590,15 +590,15 @@ fn method_name_edge_cases(env: TestEnv) {
                 };
             };
 
-            if url == subnet_replica_url {
-                payload_too_large(err);
-            } else {
+            if is_api_bn {
                 // The API BN has more generous limits, so it still responds with HTTP 400 Bad Request.
                 assert!(
                     matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16()),
                     "api bn update for 'x' * 3**20: got error {}",
                     err
                 );
+            } else {
+                payload_too_large(err);
             }
 
             let err = agent
@@ -607,18 +607,18 @@ fn method_name_edge_cases(env: TestEnv) {
                 .await
                 .unwrap_err();
 
-            if url == subnet_replica_url {
-                // When bypassing the API BN, the replica responds with a reject.
-                assert!(
-                    matches!(err, AgentError::UncertifiedReject { .. }),
-                    "direct replica update for 'x' * 3**20: got error {}",
-                    err
-                );
-            } else {
+            if is_api_bn {
                 // When going through the API BN, the request is rejected with HTTP 400 Bad Request.
                 assert!(
                     matches!(err, AgentError::HttpError(ref payload) if payload.status == StatusCode::BAD_REQUEST.as_u16()),
                     "api bn update for 'x' * 3**20: got error {}",
+                    err
+                );
+            } else {
+                // When bypassing the API BN, the replica responds with a reject.
+                assert!(
+                    matches!(err, AgentError::UncertifiedReject { .. }),
+                    "direct replica update for 'x' * 3**20: got error {}",
                     err
                 );
             }
