@@ -107,6 +107,7 @@ system_test_nns(
         "//rs/rust_canisters/canister_test",
         "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
         "@crate_index//:tokio",
