@@ -1256,6 +1256,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
     #[instrument(skip_all)]
     fn process_batch(&self, batch: Batch) {
         let since = Instant::now();
+        let _process_batch_start = since;
 
         // Fetch the mutable tip from StateManager
         let mut state = match self

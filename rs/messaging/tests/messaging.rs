@@ -517,27 +517,31 @@ fn subnet_splitting_smoke_test(
     subnet3.env.stop_canister(canister2).unwrap();
 }
 
-/// Tests that all calls are concluded successfully during subnet splitting and whilst upholding
-/// ordering guarantees.
+/// Tests that all calls are concluded successfully during subnet splitting,
+/// whilst upholding ordering guarantees.
 ///
-/// The setup is one subnet with two canisters; this is the subnet that will undergo the split;
-/// and another subnet with one canister. All canisters produce random traffic to all the other
-/// canisters.
+/// The setup is one subnet with two canisters; this is the subnet that will
+/// undergo the split; and another subnet with one canister. All canisters
+/// produce random traffic to all the other canisters.
 ///
-/// The changes reflecting the subnet split are made up front, but the registry in either subnet
-/// is updated only later at a random index through the split of `subnet1` and at a different
-/// random index through a regular registry update to the newest version on `subnet2`.
+/// The registry changes reflecting the subnet split are made up front, but the
+/// registry on either subnet is only updated later, at a random index through
+/// the split of `subnet1`; and at a different random index through a regular
+/// registry update to the newest version on `subnet2`.
 ///
-/// These two random indices produce all the cases relevant for subnet splitting:
-/// - `subnet1` splits before `subnet2` observes the changes in the registry.
-/// - `subnet2` observed the changes on the registry before `subnet1` splits, i.e. before
-///    the new `subnet3` even exists (but is referred to in the routing table).
-/// -  The two events happen in the same round.
+/// These two random indices produce all the cases relevant for subnet
+/// splitting:
+///  - `subnet1` splits before `subnet2` observes the changes in the registry.
+///  - `subnet2` observed the changes on the registry before `subnet1` splits,
+///    i.e. before the new `subnet3` even exists (but is referred to in the
+///    routing table).
+///  - The two events happen in the same round.
 ///
-/// After both these events have occurred a few more calls are made. If after some more rounds
-/// all calls conclude (without any canister trapping which indicates a sequencing error)
-/// and the canisters can be stopped, correct routing is implied because hanging calls would
-/// prevent stopping at least one canister and no sequencing errors have occurred.
+/// After both these events have occurred, a few more calls are made. If after
+/// some more rounds all calls conclude (without any canister trapping, which
+/// would indicate a sequencing error) and the canisters can be stopped, correct
+/// routing is implied because hanging calls would prevent stopping at least one
+/// canister and no sequencing errors have occurred.
 #[test_strategy::proptest(ProptestConfig::with_cases(3), max_shrink_iters = 0)]
 fn test_subnet_split(
     #[strategy(arb_test_subnets(
