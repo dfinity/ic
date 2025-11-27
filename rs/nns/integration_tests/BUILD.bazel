@@ -301,6 +301,28 @@ rust_ic_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
+rust_ic_test(
+    name = "performance_based_rewards_remuneration_with_golden_nns_state",
+    # This uses on the order of 10 GB of disk space.
+    # Therefore, size = "large" is not large enough.
+    size = "enormous",
+    srcs = [
+        "src/performance_based_rewards_remuneration_with_golden_nns_state.rs",
+    ],
+    aliases = ALIASES,
+    crate_root = "src/performance_based_rewards_remuneration_with_golden_nns_state.rs",
+    data = DEV_DATA,
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
+        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
+        "requires-network",  # Because mainnet state is downloaded (and used).
+    ],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+
 # Run this test as follows:
 #
 #     bazel \
