@@ -2,7 +2,7 @@ use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsF
 
 /// Serialized log record stored in the data region.
 ///
-/// Unlike `CanisterLogRecord`, it stores the content length explicitly in `len`
+/// Unlike `CanisterLogRecord`, it stores the content length explicitly
 /// to enable serialization and deserialization of content.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LogRecord {

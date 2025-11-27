@@ -12,15 +12,16 @@ use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
 use ic_management_canister_types_private::{
     CanisterLogRecord, FetchCanisterLogsFilter, FetchCanisterLogsRange,
 };
-use ic_types::CanisterLog;
+use ic_types::{CanisterLog, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-/// Upper bound on how many delta log sizes is retained.
-/// Prevents unbounded growth of `delta_log_sizes`.
-const DELTA_LOG_SIZES_CAP: usize = 100;
+/// Upper bound on stored delta-log sizes used for metrics.
+/// Limits memory growth, 10k covers expected per-round
+/// number of messages per canister (and so delta log appends).
+const DELTA_LOG_SIZES_CAP: usize = 10_000;
 
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct LogMemoryStore {
@@ -41,7 +42,7 @@ impl LogMemoryStore {
         Self::new_inner(PageMap::new(fd_factory))
     }
 
-    /// Creates a new `LogMemoryStore` that will use the temp file system for allocating new pages.
+    /// Creates a new store that will use the temp file system for allocating new pages.
     pub fn new_for_testing() -> Self {
         Self::new_inner(PageMap::new_for_testing())
     }
@@ -66,17 +67,28 @@ impl LogMemoryStore {
     }
 
     fn load_ring_buffer(&self) -> RingBuffer {
-        let default_data_capacity = MemorySize::new(10_000_000); // TODO: populate it properly
-        RingBuffer::load_or_new(self.page_map.clone(), default_data_capacity)
+        RingBuffer::load_or_new(
+            self.page_map.clone(),
+            MemorySize::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64),
+        )
+    }
+
+    pub fn byte_capacity(&self) -> usize {
+        self.load_ring_buffer().byte_capacity()
+    }
+
+    #[cfg(test)]
+    pub fn bytes_used(&self) -> usize {
+        self.load_ring_buffer().bytes_used()
     }
 
     /// Set the ring buffer capacity — preserves existing records by collecting and re-appending them.
-    pub fn set_capacity(&mut self, new_capacity: u64) {
+    pub fn set_byte_capacity(&mut self, new_byte_capacity: usize) {
         // TODO: PageMap cannot be shrunk today; reducing capacity does not free allocated pages
         // (practical ring buffer max currently ~55 MB). Future improvement: allocate a new PageMap
         // with the desired capacity, refeed records, then drop the old map or provide a `PageMap::shrink` API.
         let old = self.load_ring_buffer();
-        if old.capacity() == new_capacity {
+        if old.byte_capacity() == new_byte_capacity {
             return;
         }
 
@@ -98,7 +110,10 @@ impl LogMemoryStore {
         }
 
         // Recreate ring buffer with new capacity and restore records.
-        let mut new = RingBuffer::new(old.to_page_map(), MemorySize::new(new_capacity));
+        let mut new = RingBuffer::new(
+            self.page_map.clone(),
+            MemorySize::new(new_byte_capacity as u64),
+        );
         new.append_log(records);
         self.page_map = new.to_page_map();
     }
@@ -141,6 +156,290 @@ impl LogMemoryStore {
     /// Atomically snapshot and clear the per-round delta_log sizes — use at end of round.
     pub fn take_delta_log_sizes(&mut self) -> Vec<usize> {
         self.delta_log_sizes.drain(..).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::canister_state::system_state::log_memory_store::ring_buffer::RESULT_MAX_SIZE;
+    use ic_management_canister_types_private::DataSize;
+
+    fn make_canister_record(idx: u64, ts: u64, message: &str) -> CanisterLogRecord {
+        CanisterLogRecord {
+            idx,
+            timestamp_nanos: ts,
+            content: message.as_bytes().to_vec(),
+        }
+    }
+
+    fn make_delta(
+        mut next_idx: u64,
+        byte_capacity: usize,
+        count: usize,
+        content_len: usize,
+    ) -> CanisterLog {
+        let mut delta = CanisterLog::new_delta_with_next_index(next_idx, byte_capacity);
+        for _ in 0..count {
+            delta.add_record(next_idx * 1_000, vec![b'x'; content_len]);
+            next_idx = delta.next_idx();
+        }
+        delta
+    }
+
+    fn append_deltas(
+        store: &mut LogMemoryStore,
+        start_idx: u64,
+        batches: usize,
+        per_batch: usize,
+        content_len: usize,
+    ) {
+        let mut next_idx = start_idx;
+        for _ in 0..batches {
+            let mut delta = make_delta(next_idx, 2_500_000, per_batch, content_len);
+            store.append_delta_log(&mut delta);
+            next_idx = store.next_id();
+        }
+    }
+
+    fn total_size(records: &[CanisterLogRecord]) -> usize {
+        records.iter().map(|r| r.data_size()).sum()
+    }
+
+    #[test]
+    fn initialization_defaults() {
+        let s = LogMemoryStore::new_for_testing();
+        assert_eq!(s.next_id(), 0);
+        assert!(s.is_empty());
+        assert_eq!(s.bytes_used(), 0);
+        assert_eq!(s.byte_capacity(), DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
+        assert_eq!(s.records(None).len(), 0);
+    }
+
+    #[test]
+    fn append_preserves_order_and_metadata() {
+        // Append a small delta and verify ordering + metadata.
+        let mut delta = CanisterLog::default_delta();
+        delta.add_record(100, b"a".to_vec());
+        delta.add_record(200, b"bb".to_vec());
+        delta.add_record(300, b"ccc".to_vec());
+
+        let mut s = LogMemoryStore::new_for_testing();
+        s.append_delta_log(&mut delta);
+
+        assert_eq!(s.next_id(), 3);
+        assert!(!s.is_empty());
+        assert!(s.bytes_used() > 0);
+        assert_eq!(
+            s.records(None),
+            vec![
+                make_canister_record(0, 100, "a"),
+                make_canister_record(1, 200, "bb"),
+                make_canister_record(2, 300, "ccc"),
+            ]
+        );
+    }
+
+    #[test]
+    fn filtering_by_idx_and_timestamp() {
+        // Same small dataset — test index and timestamp filters.
+        let mut delta = CanisterLog::default_delta();
+        delta.add_record(10, b"a".to_vec());
+        delta.add_record(20, b"b".to_vec());
+        delta.add_record(30, b"c".to_vec());
+
+        let mut s = LogMemoryStore::new_for_testing();
+        s.append_delta_log(&mut delta);
+
+        // By index — inclusive range.
+        let records = s.records(Some(FetchCanisterLogsFilter::ByIdx(
+            FetchCanisterLogsRange { start: 1, end: 2 },
+        )));
+        assert_eq!(records, vec![make_canister_record(1, 20, "b")]);
+
+        // By timestamp — inclusive range that picks middle record.
+        let records = s.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
+            FetchCanisterLogsRange { start: 15, end: 25 },
+        )));
+        assert_eq!(records, vec![make_canister_record(1, 20, "b")]);
+    }
+
+    #[test]
+    fn eviction_when_capacity_reached() {
+        // Force repeated large appends so aggregate log approaches capacity — beginning records should be dropped.
+        let aggregate_capacity = 50_000; // keep small for the test.
+        let start_idx = 0;
+        let mut s = LogMemoryStore::new_for_testing();
+        s.set_byte_capacity(aggregate_capacity);
+
+        // Append many records in batches to exceed capacity.
+        // 10 batches x 20 records x ~1 KB = ~200 KB total appended.
+        append_deltas(&mut s, start_idx, 10, 20, 1_000);
+
+        let used = s.bytes_used();
+        assert!(used <= s.byte_capacity());
+        // If store is non-empty, at least one record should remain and next_id advances.
+        let records = s.records(None);
+        assert!(!records.is_empty());
+        assert_ne!(
+            records.first().unwrap().idx,
+            start_idx,
+            "beginning records should be evicted"
+        );
+        assert_eq!(
+            records.last().unwrap().idx + 1,
+            s.next_id(),
+            "end records should be present"
+        );
+    }
+
+    #[test]
+    fn max_response_size_respected_without_filtering() {
+        // Ensure results are trimmed to RESULT_MAX_SIZE — both for full range and for range-filtered queries.
+        let aggregate_capacity = 15_000_000;
+        let start_idx = 1_000;
+        assert!(
+            aggregate_capacity > RESULT_MAX_SIZE.get() as usize,
+            "large enough capacity"
+        );
+
+        let mut s = LogMemoryStore::new_for_testing();
+        s.set_byte_capacity(aggregate_capacity);
+        // 10 batches x 100 records x ~10 KB = ~10 MB total appended.
+        append_deltas(&mut s, start_idx, 10, 100, 10_000);
+
+        // Without filters — returned bytes must not exceed RESULT_MAX_SIZE.
+        let result = s.records(None);
+        assert!(total_size(&result) <= RESULT_MAX_SIZE.get() as usize);
+        // And recent records (tail) must be present.
+        assert_eq!(result.last().unwrap().idx + 1, s.next_id());
+    }
+
+    #[test]
+    fn max_response_size_respected_with_filtering_by_idx() {
+        // Ensure results are trimmed to RESULT_MAX_SIZE — both for full range and for range-filtered queries.
+        let aggregate_capacity = 15_000_000;
+        let start_idx = 1_000;
+        assert!(
+            aggregate_capacity > RESULT_MAX_SIZE.get() as usize,
+            "large enough capacity"
+        );
+
+        let mut s = LogMemoryStore::new_for_testing();
+        s.set_byte_capacity(aggregate_capacity);
+        // 10 batches x 100 records x ~10 KB = ~10 MB total appended.
+        append_deltas(&mut s, start_idx, 10, 100, 10_000);
+
+        // With an explicit wide index filter — response must also be capped.
+        let result = s.records(Some(FetchCanisterLogsFilter::ByIdx(
+            FetchCanisterLogsRange {
+                start: 0,
+                end: u64::MAX,
+            },
+        )));
+        assert!(total_size(&result) <= RESULT_MAX_SIZE.get() as usize);
+        // Oldest records (head) must be present.
+        assert_eq!(result.first().unwrap().idx, start_idx);
+
+        // For a partial range that fits within the available records — beginning should match requested start.
+        let partial_start = start_idx + 50;
+        let result = s.records(Some(FetchCanisterLogsFilter::ByIdx(
+            FetchCanisterLogsRange {
+                start: partial_start,
+                end: partial_start + 300,
+            },
+        )));
+        assert!(total_size(&result) <= RESULT_MAX_SIZE.get() as usize);
+        // Oldest records (head) must be present.
+        assert_eq!(result.first().unwrap().idx, partial_start);
+    }
+
+    #[test]
+    fn max_response_size_respected_with_filtering_by_timestamp() {
+        // Ensure results are trimmed to RESULT_MAX_SIZE — both for full range and for range-filtered queries.
+        let aggregate_capacity = 15_000_000;
+        let start_idx = 1_000;
+        assert!(
+            aggregate_capacity > RESULT_MAX_SIZE.get() as usize,
+            "large enough capacity"
+        );
+
+        let mut s = LogMemoryStore::new_for_testing();
+        s.set_byte_capacity(aggregate_capacity);
+        // 10 batches x 100 records x ~10 KB = ~10 MB total appended.
+        append_deltas(&mut s, start_idx, 10, 100, 10_000);
+
+        // With an explicit wide timestamp filter — response must also be capped.
+        let result = s.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
+            FetchCanisterLogsRange {
+                start: 0,
+                end: u64::MAX,
+            },
+        )));
+        assert!(total_size(&result) <= RESULT_MAX_SIZE.get() as usize);
+        // Oldest records (head) must be present.
+        assert_eq!(result.first().unwrap().timestamp_nanos, start_idx * 1_000);
+
+        // For a partial range that fits within the available records — beginning should match requested start.
+        let partial_start_ts = (start_idx + 50) * 1_000;
+        let result = s.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
+            FetchCanisterLogsRange {
+                start: partial_start_ts,
+                end: partial_start_ts + 300_000,
+            },
+        )));
+        assert!(total_size(&result) <= RESULT_MAX_SIZE.get() as usize);
+        // Oldest records (head) must be present.
+        assert_eq!(result.first().unwrap().timestamp_nanos, partial_start_ts);
+    }
+
+    #[test]
+    fn test_increasing_capacity_preserves_records() {
+        let mut store = LogMemoryStore::new_for_testing();
+        store.set_byte_capacity(1_000_000); // 1 MB
+
+        // Append some records.
+        // 5 batches x 10 records x ~10 KB = ~500 KB total appended.
+        append_deltas(&mut store, 0, 5, 10, 10_000);
+
+        let records_before = store.records(None);
+        let bytes_used_before = store.bytes_used();
+
+        // Increase capacity.
+        store.set_byte_capacity(2_000_000); // 2 MB
+
+        let records_after = store.records(None);
+        let bytes_used_after = store.bytes_used();
+
+        // Verify all records are preserved.
+        assert_eq!(records_before, records_after);
+        assert_eq!(bytes_used_before, bytes_used_after);
+    }
+
+    #[test]
+    fn test_decreasing_capacity_drops_oldest_records_but_preserves_recent() {
+        let mut store = LogMemoryStore::new_for_testing();
+        store.set_byte_capacity(500_000); // 500 KB
+
+        // Append some records.
+        // 2 batches x 10 records x ~10 KB = ~200 KB total appended.
+        append_deltas(&mut store, 0, 2, 10, 10_000);
+
+        let records_before = store.records(None);
+        let bytes_used_before = store.bytes_used();
+        let next_idx_before = store.next_id();
+
+        // Decrease capacity.
+        store.set_byte_capacity(100_000); // 100 KB
+
+        let records_after = store.records(None);
+        let bytes_used_after = store.bytes_used();
+
+        // Verify some records are dropped.
+        assert!(records_after.len() < records_before.len());
+        assert!(bytes_used_after < bytes_used_before);
+        // Verify recent records are preserved.
+        assert_eq!(next_idx_before, store.next_id());
     }
 }
 

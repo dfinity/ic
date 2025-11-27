@@ -9,20 +9,24 @@ use ic_management_canister_types_private::FetchCanisterLogsFilter;
 /// Sentinel value for invalid index entries.
 const INVALID_INDEX_ENTRY: u64 = u64::MAX;
 
-/// Lightweight pointer to a single log record used by the index table.
-/// Holds the record `idx` (unique increasing id), its `timestamp` and the
-/// `position` inside the data region where the record header begins.
+/// Lightweight descriptor of a single log record used by the index table.
+/// It stores the record’s start position in the data region and basic
+/// metadata for range queries (idx, timestamp, byte length).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct IndexEntry {
+    /// Start position of the record within the data region.
     pub position: MemoryPosition,
+    /// Record unituque sequential index.
     pub idx: u64,
+    /// Record timestamp.
     pub timestamp: u64,
+    /// Record total byte length.
     pub bytes_len: u32,
 }
 const _: () = assert!(INDEX_ENTRY_SIZE.get() as usize == 8 + 8 + 8 + 4);
 
 impl IndexEntry {
-    /// Creates an `IndexEntry` pointing to `position` for `record`.
+    /// Creates an entry for a record at the given position with its indexing metadata.
     pub fn new(position: MemoryPosition, record: &LogRecord) -> Self {
         Self {
             position,

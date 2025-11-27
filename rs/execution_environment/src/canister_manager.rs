@@ -567,7 +567,7 @@ impl CanisterManager {
             canister
                 .system_state
                 .log_memory_store
-                .set_capacity(log_memory_limit.get());
+                .set_byte_capacity(log_memory_limit.get());
         }
         if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);

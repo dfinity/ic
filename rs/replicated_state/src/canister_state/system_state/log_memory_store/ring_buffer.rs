@@ -69,16 +69,16 @@ impl RingBuffer {
         self.io.to_page_map()
     }
 
-    pub fn capacity(&self) -> u64 {
-        self.io.load_header().data_capacity.get()
+    pub fn byte_capacity(&self) -> usize {
+        self.io.load_header().data_capacity.get() as usize
     }
 
-    pub fn used_space(&self) -> usize {
+    pub fn bytes_used(&self) -> usize {
         self.io.load_header().data_size.get() as usize
     }
 
     pub fn is_empty(&self) -> bool {
-        self.used_space() == 0
+        self.bytes_used() == 0
     }
 
     pub fn next_id(&self) -> u64 {
@@ -103,7 +103,7 @@ impl RingBuffer {
             }
 
             let added_size = MemorySize::new(record.bytes_len() as u64);
-            let capacity = MemorySize::new(self.capacity());
+            let capacity = MemorySize::new(self.byte_capacity() as u64);
             if added_size > capacity {
                 debug_assert!(false, "log record size exceeds ring buffer capacity",);
                 return;
@@ -129,8 +129,8 @@ impl RingBuffer {
     }
 
     fn make_free_space(&mut self, added_size: MemorySize) {
-        let capacity = MemorySize::new(self.capacity());
-        while MemorySize::new(self.used_space() as u64) + added_size > capacity {
+        let capacity = MemorySize::new(self.byte_capacity() as u64);
+        while MemorySize::new(self.bytes_used() as u64) + added_size > capacity {
             if self.pop_front().is_none() {
                 break; // No more records to pop, limit reached.
             }
@@ -251,6 +251,7 @@ mod tests {
         }
     }
 
+    /// Calculates the byte size inside the log memory store.
     fn bytes_len(r: &CanisterLogRecord) -> usize {
         LogRecord::from(r.clone()).bytes_len()
     }
@@ -262,8 +263,8 @@ mod tests {
 
         let rb = RingBuffer::new(page_map, data_capacity);
 
-        assert_eq!(rb.capacity(), data_capacity.get());
-        assert_eq!(rb.used_space(), 0);
+        assert_eq!(rb.byte_capacity(), data_capacity.get() as usize);
+        assert_eq!(rb.bytes_used(), 0);
         assert_eq!(rb.next_id(), 0);
     }
 
@@ -278,7 +279,7 @@ mod tests {
         rb.append(&r0);
         rb.append(&r1);
 
-        assert_eq!(rb.used_space(), bytes_len(&r0) + bytes_len(&r1));
+        assert_eq!(rb.bytes_used(), bytes_len(&r0) + bytes_len(&r1));
         assert_eq!(rb.pop_front().unwrap(), r0);
         assert_eq!(rb.pop_front().unwrap(), r1);
         assert!(rb.pop_front().is_none());
@@ -350,7 +351,7 @@ mod tests {
         for i in 0..1_000 {
             let record = log_record(i, i * 100, "12345");
             // Free space until the new record fits, popped records are collected.
-            while rb.used_space() + bytes_len(&record) > rb.capacity() as usize {
+            while rb.bytes_used() + bytes_len(&record) > rb.byte_capacity() {
                 popped.push(rb.pop_front().expect("expected record to pop"));
             }
             rb.append(&record);
@@ -405,55 +406,5 @@ mod tests {
             res,
             vec![log_record(1, 2000, "beta"), log_record(2, 3000, "gamma")]
         );
-    }
-
-    /*
-    bazel test //rs/replicated_state:replicated_state_test \
-      --test_output=streamed \
-      --test_arg=--nocapture \
-      --test_arg=log_memory_store
-
-    bazel test //rs/replicated_state:replicated_state_test \
-      --test_output=streamed \
-      --test_arg=--nocapture \
-      --test_arg=tmp_test_performance
-
-    bazel test //rs/execution_environment:execution_environment_test \
-      --test_output=streamed \
-      --test_arg=--nocapture \
-      --test_arg=canister_manager::tests::can_rename_canister
-
-      100 KB
-    */
-    #[test]
-    fn tmp_test_performance() {
-        // TODO: remove this test.
-        let page_map = PageMap::new_for_testing();
-        let data_capacity = MemorySize::new(51_000_000);
-        let data_size = MemorySize::new(50_000_000);
-        let mut rb = RingBuffer::new(page_map, data_capacity);
-        let msg = "a".repeat(32_000);
-
-        let start = std::time::Instant::now();
-        let mut i = 0;
-        while rb.used_space() < data_size.get() as usize {
-            rb.append(&log_record(i, i * 1000, &msg));
-            i += 1;
-        }
-        println!("ABC populate time: {:.3?}", start.elapsed().as_secs_f64());
-
-        let collatz = |x| if x % 2 == 0 { x / 2 } else { 3 * x + 1 };
-
-        let start = std::time::Instant::now();
-        for j in 0..1_000 {
-            let a = collatz(j);
-            let b = collatz(a);
-            let start = a.min(b) % i;
-            let end = a.max(b) % i;
-            let _res = rb.records(Some(FetchCanisterLogsFilter::ByIdx(
-                FetchCanisterLogsRange { start, end },
-            )));
-        }
-        println!("ABC records time: {:.3?}", start.elapsed().as_secs_f64());
     }
 }
