@@ -192,6 +192,11 @@ impl TestSubnet {
     pub fn split(&self, seed: [u8; 32]) -> Result<Self, String> {
         self.env.split(seed).map(|env| Self { env })
     }
+
+    /// Attempts to split `self` and returns the split off `Self`.
+    pub fn full_split(&self, seed: [u8; 32]) -> Result<Self, String> {
+        self.env.full_split(seed).map(|env| Self { env })
+    }
 }
 
 /// Checks for an async rejection in the `Reply` that indicates the canister trapped.

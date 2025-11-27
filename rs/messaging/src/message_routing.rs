@@ -1255,7 +1255,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
 impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<RegistryClient_> {
     #[instrument(skip_all)]
     fn process_batch(&self, batch: Batch) {
-        let _process_batch_start = Instant::now();
         let since = Instant::now();
 
         // Fetch the mutable tip from StateManager
@@ -1292,6 +1291,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         }
 
         // If the subnet is starting up after a split, execute splitting phase 2.
+        //
+        // TODO: Repurpose `split_from` as a `subnet_split_height` signal only.
         if let Some(split_from) = state.metadata.split_from {
             info!(
                 self.log,
