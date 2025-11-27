@@ -22,11 +22,6 @@ const MAX_CHECK_TRANSACTION_RETRY: usize = 10;
 
 use super::get_btc_address::init_ecdsa_public_key;
 
-#[cfg(feature = "tla")]
-use crate::tla::{
-    UPDATE_BALANCE_DESC, account_to_tla, btc_address_to_tla, dummy_utxo, utxo_set_to_tla,
-    utxo_to_tla,
-};
 use crate::{
     CanisterRuntime, Timestamp,
     guard::{GuardError, balance_update_guard},
@@ -37,8 +32,11 @@ use crate::{
 };
 #[cfg(feature = "tla")]
 use crate::{
-    tla::TLA_INSTRUMENTATION_STATE, tla::TLA_TRACES_LKEY, tla::TLA_TRACES_MUTEX, tla_log_locals,
-    tla_log_request, tla_log_response, tla_snapshotter,
+    tla::{
+        TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX, UPDATE_BALANCE_DESC,
+        account_to_tla, btc_address_to_tla, dummy_utxo, utxo_set_to_tla, utxo_to_tla,
+    },
+    tla_log_locals, tla_log_request, tla_log_response, tla_snapshotter,
 };
 #[cfg(feature = "tla")]
 use tla_instrumentation::{Destination, InstrumentationState, TlaValue, ToTla};
@@ -215,7 +213,7 @@ pub async fn update_balance<R: CanisterRuntime>(
         runtime,
     )
     .await
-    .map_err(|e| {
+    .inspect_err(|_| {
         #[cfg(feature = "tla")]
         tla_log_response!(
             Destination::new("btc_canister"),
@@ -224,7 +222,6 @@ pub async fn update_balance<R: CanisterRuntime>(
                 value: Box::new(TlaValue::Constant("UNIT".to_string())),
             }
         );
-        e
     })?
     .utxos;
 

@@ -44,6 +44,22 @@ pub fn update_balance_desc() -> Update {
     UPDATE_BALANCE_DESC.clone()
 }
 
+pub fn retrieve_btc_desc() -> Update {
+    let default_locals = VarAssignment::new()
+        .add("caller_account", default_ckbtc_address())
+        .add("utxos", TlaValue::Set(BTreeSet::new()))
+        .add("utxo", dummy_utxo());
+    Update {
+        default_start_locals: default_locals.clone(),
+        default_end_locals: default_locals,
+        start_label: tla_instrumentation::Label::new("Retrieve_BTC_Start"),
+        end_label: tla_instrumentation::Label::new("Retrieve_BTC_Start"),
+        process_id: "Retrieve_BTC".to_string(),
+        canister_name: "minter".to_string(),
+        post_process: |trace| post_process_update_balance(trace),
+    }
+}
+
 pub fn account_to_tla(account: &Account) -> TlaValue {
     TlaValue::Record(BTreeMap::from([
         ("owner".to_string(), account.owner.to_tla_value()),
@@ -285,7 +301,7 @@ fn snapshot_state(state: &CkBtcMinterState) -> GlobalState {
 }
 
 fn post_process_update_balance(
-    trace: &mut Vec<tla_instrumentation::ResolvedStatePair>,
+    trace: &mut [tla_instrumentation::ResolvedStatePair],
 ) -> TlaConstantAssignment {
     let mut principals = BTreeSet::new();
     let mut subaccounts = BTreeSet::new();
@@ -323,12 +339,11 @@ fn post_process_update_balance(
                     if deposit_addresses.contains_key(acct) {
                         continue;
                     }
-                    if let TlaValue::Set(us) = utxos {
-                        if let Some(TlaValue::Record(first)) = us.iter().next() {
-                            if let Some(owner) = first.get("owner") {
-                                deposit_addresses.insert(acct.clone(), owner.clone());
-                            }
-                        }
+                    if let TlaValue::Set(us) = utxos
+                        && let Some(TlaValue::Record(first)) = us.iter().next()
+                        && let Some(owner) = first.get("owner")
+                    {
+                        deposit_addresses.insert(acct.clone(), owner.clone());
                     }
                 }
             }
@@ -355,13 +370,13 @@ fn post_process_update_balance(
             let mut utxo_owner_map: BTreeMap<TlaValue, TlaValue> = BTreeMap::new();
             if let Some(TlaValue::Function(addrs)) = state.get("utxos_state_addresses") {
                 for (acct, utxos) in addrs {
-                    if let Some(addr) = deposit_addresses.get(acct) {
-                        if let TlaValue::Set(us) = utxos {
-                            for u in us {
-                                if let TlaValue::Record(r) = u {
-                                    if let Some(id) = r.get("id") {
-                                        utxo_owner_map.insert(id.clone(), addr.clone());
-                                    }
+                    if let Some(addr) = deposit_addresses.get(acct)
+                        && let TlaValue::Set(us) = utxos
+                    {
+                        for u in us {
+                            if let TlaValue::Record(r) = u {
+                                if let Some(id) = r.get("id") {
+                                    utxo_owner_map.insert(id.clone(), addr.clone());
                                 }
                             }
                         }
@@ -405,10 +420,10 @@ fn post_process_update_balance(
                     .map(|u| match u {
                         TlaValue::Record(r) => {
                             let mut r = r.clone();
-                            if let Some(id) = r.get("id") {
-                                if let Some(owner) = utxo_owner_map.get(id) {
-                                    r.insert("owner".to_string(), owner.clone());
-                                }
+                            if let Some(id) = r.get("id")
+                                && let Some(owner) = utxo_owner_map.get(id)
+                            {
+                                r.insert("owner".to_string(), owner.clone());
                             }
                             TlaValue::Record(r)
                         }
