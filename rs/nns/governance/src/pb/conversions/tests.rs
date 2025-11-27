@@ -144,126 +144,128 @@ fn test_value_conversions() {
     let mut int_bytes = Vec::new();
     int_value.encode(&mut int_bytes).unwrap();
 
-    // Create a comprehensive map with all possible Value types
-    let value_pb = pb::Value {
-        value: Some(pb::value::Value::Map(pb::ValueMap {
-            values: hashmap! {
-                // Test Text type
-                "text_field".to_string() => pb::Value {
-                    value: Some(pb::value::Value::Text("some text".to_string())),
-                },
-                // Test Blob type
-                "blob_field".to_string() => pb::Value {
-                    value: Some(pb::value::Value::Blob(vec![1, 2, 3, 4, 5])),
-                },
-                // Test Nat type
-                "nat_field".to_string() => pb::Value {
-                    value: Some(pb::value::Value::Nat(nat_bytes.clone())),
-                },
-                // Test Int type
-                "int_field".to_string() => pb::Value {
-                    value: Some(pb::value::Value::Int(int_bytes.clone())),
-                },
-                // Test Array type with various elements
-                "array_field".to_string() => pb::Value {
-                    value: Some(pb::value::Value::Array(pb::ValueArray {
-                        values: vec![
-                            pb::Value {
-                                value: Some(pb::value::Value::Text("first".to_string())),
+    // Create a comprehensive map with all possible SelfDescribingValue types
+    let value_pb = pb::SelfDescribingValue {
+        value: Some(pb::self_describing_value::Value::Map(
+            pb::SelfDescribingValueMap {
+                values: hashmap! {
+                    // Test Text type
+                    "text_field".to_string() => pb::SelfDescribingValue {
+                        value: Some(pb::self_describing_value::Value::Text("some text".to_string())),
+                    },
+                    // Test Blob type
+                    "blob_field".to_string() => pb::SelfDescribingValue {
+                        value: Some(pb::self_describing_value::Value::Blob(vec![1, 2, 3, 4, 5])),
+                    },
+                    // Test Nat type
+                    "nat_field".to_string() => pb::SelfDescribingValue {
+                        value: Some(pb::self_describing_value::Value::Nat(nat_bytes.clone())),
+                    },
+                    // Test Int type
+                    "int_field".to_string() => pb::SelfDescribingValue {
+                        value: Some(pb::self_describing_value::Value::Int(int_bytes.clone())),
+                    },
+                    // Test Array type with various elements
+                    "array_field".to_string() => pb::SelfDescribingValue {
+                        value: Some(pb::self_describing_value::Value::Array(pb::SelfDescribingValueArray {
+                            values: vec![
+                                pb::SelfDescribingValue {
+                                    value: Some(pb::self_describing_value::Value::Text("first".to_string())),
+                                },
+                                pb::SelfDescribingValue {
+                                    value: Some(pb::self_describing_value::Value::Text("second".to_string())),
+                                },
+                                pb::SelfDescribingValue {
+                                    value: Some(pb::self_describing_value::Value::Blob(vec![10, 20, 30])),
+                                },
+                            ],
+                        })),
+                    },
+                    // Test nested Map type
+                    "nested_map_field".to_string() => pb::SelfDescribingValue {
+                        value: Some(pb::self_describing_value::Value::Map(pb::SelfDescribingValueMap {
+                            values: hashmap! {
+                                "nested_text".to_string() => pb::SelfDescribingValue {
+                                    value: Some(pb::self_describing_value::Value::Text("nested value".to_string())),
+                                },
+                                "nested_blob".to_string() => pb::SelfDescribingValue {
+                                    value: Some(pb::self_describing_value::Value::Blob(vec![255, 254, 253])),
+                                },
+                                "nested_nat".to_string() => pb::SelfDescribingValue {
+                                    value: Some(pb::self_describing_value::Value::Nat(nat_bytes.clone())),
+                                },
                             },
-                            pb::Value {
-                                value: Some(pb::value::Value::Text("second".to_string())),
-                            },
-                            pb::Value {
-                                value: Some(pb::value::Value::Blob(vec![10, 20, 30])),
-                            },
-                        ],
-                    })),
-                },
-                // Test nested Map type
-                "nested_map_field".to_string() => pb::Value {
-                    value: Some(pb::value::Value::Map(pb::ValueMap {
-                        values: hashmap! {
-                            "nested_text".to_string() => pb::Value {
-                                value: Some(pb::value::Value::Text("nested value".to_string())),
-                            },
-                            "nested_blob".to_string() => pb::Value {
-                                value: Some(pb::value::Value::Blob(vec![255, 254, 253])),
-                            },
-                            "nested_nat".to_string() => pb::Value {
-                                value: Some(pb::value::Value::Nat(nat_bytes.clone())),
-                            },
-                        },
-                    })),
-                },
-                // Test empty Array
-                "empty_array_field".to_string() => pb::Value {
-                    value: Some(pb::value::Value::Array(pb::ValueArray {
-                        values: vec![],
-                    })),
-                },
-                // Test empty Map
-                "empty_map_field".to_string() => pb::Value {
-                    value: Some(pb::value::Value::Map(pb::ValueMap {
-                        values: hashmap! {},
-                    })),
-                },
-                // Test Array containing Maps
-                "array_of_maps_field".to_string() => pb::Value {
-                    value: Some(pb::value::Value::Array(pb::ValueArray {
-                        values: vec![
-                            pb::Value {
-                                value: Some(pb::value::Value::Map(pb::ValueMap {
-                                    values: hashmap! {
-                                        "key1".to_string() => pb::Value {
-                                            value: Some(pb::value::Value::Text("value1".to_string())),
+                        })),
+                    },
+                    // Test empty Array
+                    "empty_array_field".to_string() => pb::SelfDescribingValue {
+                        value: Some(pb::self_describing_value::Value::Array(pb::SelfDescribingValueArray {
+                            values: vec![],
+                        })),
+                    },
+                    // Test empty Map
+                    "empty_map_field".to_string() => pb::SelfDescribingValue {
+                        value: Some(pb::self_describing_value::Value::Map(pb::SelfDescribingValueMap {
+                            values: hashmap! {},
+                        })),
+                    },
+                    // Test Array containing Maps
+                    "array_of_maps_field".to_string() => pb::SelfDescribingValue {
+                        value: Some(pb::self_describing_value::Value::Array(pb::SelfDescribingValueArray {
+                            values: vec![
+                                pb::SelfDescribingValue {
+                                    value: Some(pb::self_describing_value::Value::Map(pb::SelfDescribingValueMap {
+                                        values: hashmap! {
+                                            "key1".to_string() => pb::SelfDescribingValue {
+                                                value: Some(pb::self_describing_value::Value::Text("value1".to_string())),
+                                            },
                                         },
-                                    },
-                                })),
-                            },
-                            pb::Value {
-                                value: Some(pb::value::Value::Map(pb::ValueMap {
-                                    values: hashmap! {
-                                        "key2".to_string() => pb::Value {
-                                            value: Some(pb::value::Value::Text("value2".to_string())),
+                                    })),
+                                },
+                                pb::SelfDescribingValue {
+                                    value: Some(pb::self_describing_value::Value::Map(pb::SelfDescribingValueMap {
+                                        values: hashmap! {
+                                            "key2".to_string() => pb::SelfDescribingValue {
+                                                value: Some(pb::self_describing_value::Value::Text("value2".to_string())),
+                                            },
                                         },
-                                    },
-                                })),
-                            },
-                        ],
-                    })),
+                                    })),
+                                },
+                            ],
+                        })),
+                    },
                 },
             },
-        })),
+        )),
     };
 
-    let value_pb_api = pb_api::Value::from(value_pb);
+    let value_pb_api = pb_api::SelfDescribingValue::from(value_pb);
 
     assert_eq!(
         value_pb_api,
-        pb_api::Value::Map(hashmap! {
-            "text_field".to_string() => pb_api::Value::Text("some text".to_string()),
-            "blob_field".to_string() => pb_api::Value::Blob(vec![1, 2, 3, 4, 5]),
-            "nat_field".to_string() => pb_api::Value::Nat(nat_value.clone()),
-            "int_field".to_string() => pb_api::Value::Int(int_value.clone()),
-            "array_field".to_string() => pb_api::Value::Array(vec![
-                pb_api::Value::Text("first".to_string()),
-                pb_api::Value::Text("second".to_string()),
-                pb_api::Value::Blob(vec![10, 20, 30]),
+        pb_api::SelfDescribingValue::Map(hashmap! {
+            "text_field".to_string() => pb_api::SelfDescribingValue::Text("some text".to_string()),
+            "blob_field".to_string() => pb_api::SelfDescribingValue::Blob(vec![1, 2, 3, 4, 5]),
+            "nat_field".to_string() => pb_api::SelfDescribingValue::Nat(nat_value.clone()),
+            "int_field".to_string() => pb_api::SelfDescribingValue::Int(int_value.clone()),
+            "array_field".to_string() => pb_api::SelfDescribingValue::Array(vec![
+                pb_api::SelfDescribingValue::Text("first".to_string()),
+                pb_api::SelfDescribingValue::Text("second".to_string()),
+                pb_api::SelfDescribingValue::Blob(vec![10, 20, 30]),
             ]),
-            "nested_map_field".to_string() => pb_api::Value::Map(hashmap! {
-                "nested_text".to_string() => pb_api::Value::Text("nested value".to_string()),
-                "nested_blob".to_string() => pb_api::Value::Blob(vec![255, 254, 253]),
-                "nested_nat".to_string() => pb_api::Value::Nat(nat_value.clone()),
+            "nested_map_field".to_string() => pb_api::SelfDescribingValue::Map(hashmap! {
+                "nested_text".to_string() => pb_api::SelfDescribingValue::Text("nested value".to_string()),
+                "nested_blob".to_string() => pb_api::SelfDescribingValue::Blob(vec![255, 254, 253]),
+                "nested_nat".to_string() => pb_api::SelfDescribingValue::Nat(nat_value.clone()),
             }),
-            "empty_array_field".to_string() => pb_api::Value::Array(vec![]),
-            "empty_map_field".to_string() => pb_api::Value::Map(hashmap! {}),
-            "array_of_maps_field".to_string() => pb_api::Value::Array(vec![
-                pb_api::Value::Map(hashmap! {
-                    "key1".to_string() => pb_api::Value::Text("value1".to_string()),
+            "empty_array_field".to_string() => pb_api::SelfDescribingValue::Array(vec![]),
+            "empty_map_field".to_string() => pb_api::SelfDescribingValue::Map(hashmap! {}),
+            "array_of_maps_field".to_string() => pb_api::SelfDescribingValue::Array(vec![
+                pb_api::SelfDescribingValue::Map(hashmap! {
+                    "key1".to_string() => pb_api::SelfDescribingValue::Text("value1".to_string()),
                 }),
-                pb_api::Value::Map(hashmap! {
-                    "key2".to_string() => pb_api::Value::Text("value2".to_string()),
+                pb_api::SelfDescribingValue::Map(hashmap! {
+                    "key2".to_string() => pb_api::SelfDescribingValue::Text("value2".to_string()),
                 }),
             ]),
         })

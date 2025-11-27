@@ -183,7 +183,7 @@ impl ValidProposalAction {
         _env: Arc<dyn Environment>,
     ) -> Result<SelfDescribingProposalAction, GovernanceError> {
         match self {
-            ValidProposalAction::Motion(motion) => Ok(motion.to_self_describing()),
+            ValidProposalAction::Motion(motion) => Ok(motion.to_self_describing_action()),
             _ => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 "Self describing proposal actions are not supported for this proposal action yet.",
