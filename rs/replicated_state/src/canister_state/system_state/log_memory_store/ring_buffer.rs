@@ -5,7 +5,7 @@ use crate::canister_state::system_state::log_memory_store::{
     struct_io::StructIO,
 };
 use crate::page_map::{PAGE_SIZE, PageMap};
-use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
+use ic_management_canister_types_private::{CanisterLogRecord, DataSize, FetchCanisterLogsFilter};
 
 // PageMap file layout.
 // Header layout constants.
@@ -173,33 +173,33 @@ impl RingBuffer {
             pos = header.advance_position(pos, MemorySize::new(record.bytes_len() as u64));
         }
 
-        let records = match filter {
+        match filter {
             Some(ref f) => {
                 // When a filter is present — keep oldest records (prefix) that match the filter.
-                let filtered: Vec<_> = records.into_iter().filter(|r| r.matches(f)).collect();
+                let filtered: Vec<_> = records
+                    .into_iter()
+                    .filter(|r| r.matches(f))
+                    .map(CanisterLogRecord::from)
+                    .collect();
                 take_by_size(&filtered, RESULT_MAX_SIZE, true)
             }
             None => {
                 // No filter — return newest records (suffix) up to the size limit.
+                let records: Vec<_> = records.into_iter().map(CanisterLogRecord::from).collect();
                 take_by_size(&records, RESULT_MAX_SIZE, false)
             }
-        };
-
-        records
-            .into_iter()
-            .map(|r| CanisterLogRecord {
-                idx: r.idx,
-                timestamp_nanos: r.timestamp,
-                content: r.content,
-            })
-            .collect()
+        }
     }
 }
 
 /// Keep a prefix or a suffix of `records` whose total serialized size does not
 /// exceed `limit` bytes — prefix keeps oldest-first; suffix keeps newest-first.
 /// Returns records in chronological order (oldest-first).
-pub fn take_by_size(records: &[LogRecord], limit: MemorySize, take_prefix: bool) -> Vec<LogRecord> {
+pub fn take_by_size(
+    records: &[CanisterLogRecord],
+    limit: MemorySize,
+    take_prefix: bool,
+) -> Vec<CanisterLogRecord> {
     let limit = limit.get() as usize;
     if limit == 0 || records.is_empty() {
         return Vec::new();
@@ -210,7 +210,7 @@ pub fn take_by_size(records: &[LogRecord], limit: MemorySize, take_prefix: bool)
         // Find how many from the front fit.
         let mut end: usize = 0;
         for r in records.iter() {
-            let sz = r.bytes_len();
+            let sz = r.data_size();
             if total + sz > limit {
                 break;
             }
@@ -223,7 +223,7 @@ pub fn take_by_size(records: &[LogRecord], limit: MemorySize, take_prefix: bool)
         // fit into the limit — walk backward and then clone that tail.
         let mut start: usize = records.len();
         while start > 0 {
-            let sz = records[start - 1].bytes_len();
+            let sz = records[start - 1].data_size();
             if total + sz > limit {
                 break;
             }

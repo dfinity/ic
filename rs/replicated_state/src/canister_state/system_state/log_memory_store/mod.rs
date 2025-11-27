@@ -173,13 +173,11 @@ mod tests {
         }
     }
 
-    fn make_delta(
-        mut next_idx: u64,
-        byte_capacity: usize,
-        count: usize,
-        content_len: usize,
-    ) -> CanisterLog {
+    /// Creates a full delta log without exceeding the byte capacity.
+    fn make_full_delta(mut next_idx: u64, byte_capacity: usize, content_len: usize) -> CanisterLog {
         let mut delta = CanisterLog::new_delta_with_next_index(next_idx, byte_capacity);
+        let fake_record = make_canister_record(0, 0, &"x".repeat(content_len));
+        let count = byte_capacity / fake_record.data_size();
         for _ in 0..count {
             delta.add_record(next_idx * 1_000, vec![b'x'; content_len]);
             next_idx = delta.next_idx();
@@ -190,13 +188,18 @@ mod tests {
     fn append_deltas(
         store: &mut LogMemoryStore,
         start_idx: u64,
-        batches: usize,
-        per_batch: usize,
+        volume_bytes: usize,
+        delta_log_byte_capacity: usize,
         content_len: usize,
     ) {
         let mut next_idx = start_idx;
-        for _ in 0..batches {
-            let mut delta = make_delta(next_idx, 2_500_000, per_batch, content_len);
+        let mut total = 0;
+        loop {
+            let mut delta = make_full_delta(next_idx, delta_log_byte_capacity, content_len);
+            total += delta.bytes_used();
+            if total > volume_bytes {
+                return;
+            }
             store.append_delta_log(&mut delta);
             next_idx = store.next_id();
         }
@@ -272,9 +275,8 @@ mod tests {
         let mut s = LogMemoryStore::new_for_testing();
         s.set_byte_capacity(aggregate_capacity);
 
-        // Append many records in batches to exceed capacity.
-        // 10 batches x 20 records x ~1 KB = ~200 KB total appended.
-        append_deltas(&mut s, start_idx, 10, 20, 1_000);
+        // Append 100k records in batches of 10k deltas of ~1KB record each.
+        append_deltas(&mut s, start_idx, 100_000, 10_000, 1_000);
 
         let used = s.bytes_used();
         assert!(used <= s.byte_capacity());
@@ -296,7 +298,7 @@ mod tests {
     #[test]
     fn max_response_size_respected_without_filtering() {
         // Ensure results are trimmed to RESULT_MAX_SIZE — both for full range and for range-filtered queries.
-        let aggregate_capacity = 15_000_000;
+        let aggregate_capacity = 10_000_000;
         let start_idx = 1_000;
         assert!(
             aggregate_capacity > RESULT_MAX_SIZE.get() as usize,
@@ -305,8 +307,8 @@ mod tests {
 
         let mut s = LogMemoryStore::new_for_testing();
         s.set_byte_capacity(aggregate_capacity);
-        // 10 batches x 100 records x ~10 KB = ~10 MB total appended.
-        append_deltas(&mut s, start_idx, 10, 100, 10_000);
+        // Append 5 MB records in batches of 1 MB deltas of ~1KB record each.
+        append_deltas(&mut s, start_idx, 5_000_000, 1_000_000, 1_000);
 
         // Without filters — returned bytes must not exceed RESULT_MAX_SIZE.
         let result = s.records(None);
@@ -318,7 +320,7 @@ mod tests {
     #[test]
     fn max_response_size_respected_with_filtering_by_idx() {
         // Ensure results are trimmed to RESULT_MAX_SIZE — both for full range and for range-filtered queries.
-        let aggregate_capacity = 15_000_000;
+        let aggregate_capacity = 10_000_000;
         let start_idx = 1_000;
         assert!(
             aggregate_capacity > RESULT_MAX_SIZE.get() as usize,
@@ -327,8 +329,8 @@ mod tests {
 
         let mut s = LogMemoryStore::new_for_testing();
         s.set_byte_capacity(aggregate_capacity);
-        // 10 batches x 100 records x ~10 KB = ~10 MB total appended.
-        append_deltas(&mut s, start_idx, 10, 100, 10_000);
+        // Append 5 MB records in batches of 1 MB deltas of ~1KB record each.
+        append_deltas(&mut s, start_idx, 5_000_000, 1_000_000, 1_000);
 
         // With an explicit wide index filter — response must also be capped.
         let result = s.records(Some(FetchCanisterLogsFilter::ByIdx(
@@ -357,7 +359,7 @@ mod tests {
     #[test]
     fn max_response_size_respected_with_filtering_by_timestamp() {
         // Ensure results are trimmed to RESULT_MAX_SIZE — both for full range and for range-filtered queries.
-        let aggregate_capacity = 15_000_000;
+        let aggregate_capacity = 10_000_000;
         let start_idx = 1_000;
         assert!(
             aggregate_capacity > RESULT_MAX_SIZE.get() as usize,
@@ -366,8 +368,8 @@ mod tests {
 
         let mut s = LogMemoryStore::new_for_testing();
         s.set_byte_capacity(aggregate_capacity);
-        // 10 batches x 100 records x ~10 KB = ~10 MB total appended.
-        append_deltas(&mut s, start_idx, 10, 100, 10_000);
+        // Append 5 MB records in batches of 1 MB deltas of ~1KB record each.
+        append_deltas(&mut s, start_idx, 5_000_000, 1_000_000, 1_000);
 
         // With an explicit wide timestamp filter — response must also be capped.
         let result = s.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
@@ -398,9 +400,8 @@ mod tests {
         let mut store = LogMemoryStore::new_for_testing();
         store.set_byte_capacity(1_000_000); // 1 MB
 
-        // Append some records.
-        // 5 batches x 10 records x ~10 KB = ~500 KB total appended.
-        append_deltas(&mut store, 0, 5, 10, 10_000);
+        // Append 200 KB records in batches of 100 KB deltas of ~1KB record each.
+        append_deltas(&mut store, 0, 200_000, 100_000, 1_000);
 
         let records_before = store.records(None);
         let bytes_used_before = store.bytes_used();
@@ -421,9 +422,8 @@ mod tests {
         let mut store = LogMemoryStore::new_for_testing();
         store.set_byte_capacity(500_000); // 500 KB
 
-        // Append some records.
-        // 2 batches x 10 records x ~10 KB = ~200 KB total appended.
-        append_deltas(&mut store, 0, 2, 10, 10_000);
+        // Append 200 KB records in batches of 100 KB deltas of ~1KB record each.
+        append_deltas(&mut store, 0, 200_000, 100_000, 1_000);
 
         let records_before = store.records(None);
         let bytes_used_before = store.bytes_used();

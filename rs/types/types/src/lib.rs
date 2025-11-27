@@ -91,7 +91,7 @@ pub mod exhaustive;
 
 pub use crate::canister_log::{
     CanisterLog, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, MAX_AGGREGATE_LOG_MEMORY_LIMIT,
-    MAX_DELTA_LOG_MEMORY_LIMIT, MIN_AGGREGATE_LOG_MEMORY_LIMIT,
+    MIN_AGGREGATE_LOG_MEMORY_LIMIT,
 };
 pub use crate::replica_version::ReplicaVersion;
 pub use crate::time::Time;
