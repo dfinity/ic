@@ -932,6 +932,9 @@ fn utxos_selection(
     available_utxos: &mut BTreeSet<Utxo>,
     output_count: usize,
 ) -> Vec<Utxo> {
+    #[cfg(feature = "canbench-rs")]
+    let _scope = canbench_rs::bench_scope("utxos_selection");
+
     let mut input_utxos = greedy(target, available_utxos);
 
     if input_utxos.is_empty() {
@@ -961,6 +964,9 @@ fn utxos_selection(
 /// POSTCONDITION: !solution.is_empty() ⇒ sum(u.value for u in solution) ≥ target
 /// POSTCONDITION:  solution.is_empty() ⇒ available_utxos did not change.
 fn greedy(target: u64, available_utxos: &mut BTreeSet<Utxo>) -> Vec<Utxo> {
+    #[cfg(feature = "canbench-rs")]
+    let _scope = canbench_rs::bench_scope("greedy");
+
     let mut solution = vec![];
     let mut goal = target;
     while goal > 0 {
@@ -1141,6 +1147,9 @@ pub fn build_unsigned_transaction<F: FeeEstimator>(
     ),
     BuildTxError,
 > {
+    #[cfg(feature = "canbench-rs")]
+    let _scope = canbench_rs::bench_scope("build_unsigned_transaction");
+
     assert!(!outputs.is_empty());
     let amount = outputs.iter().map(|(_, amount)| amount).sum::<u64>();
     let inputs = utxos_selection(amount, available_utxos, outputs.len());
@@ -1169,6 +1178,9 @@ pub fn build_unsigned_transaction_from_inputs<F: FeeEstimator>(
     fee_per_vbyte: u64,
     fee_estimator: &F,
 ) -> Result<(tx::UnsignedTransaction, state::ChangeOutput, WithdrawalFee), BuildTxError> {
+    #[cfg(feature = "canbench-rs")]
+    let _scope = canbench_rs::bench_scope("build_unsigned_transaction_from_inputs");
+
     assert!(!outputs.is_empty());
     /// Having a sequence number lower than (0xffffffff - 1) signals the use of replacement by fee.
     /// It allows us to increase the fee of a transaction already sent to the mempool.

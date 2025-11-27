@@ -264,15 +264,8 @@ mod benches {
 
         canbench_rs::bench_fn(|| {
             state::mutate_state(|s| {
-                let _scope = canbench_rs::bench_scope("clone");
-                let utxos = s.available_utxos.clone();
-
-                let _scope = canbench_rs::bench_scope("utxos_selection");
-                let selected_utxos = crate::utxos_selection(withdrawal_amount, &mut s.available_utxos, 1);
-
-                let _scope = canbench_rs::bench_scope("build_unsigned_transaction_from_inputs");
-                crate::build_unsigned_transaction_from_inputs(
-                    &selected_utxos,
+                crate::build_unsigned_transaction(
+                    &mut s.available_utxos,
                     vec![(dummy_recipient_address, withdrawal_amount)],
                     dummy_minter_address,
                     median_fee_millisatoshi_per_vbyte,
