@@ -627,7 +627,7 @@ fn utxos_state_addresses_to_tla(state: &CkBtcMinterState) -> TlaValue {
         .utxos_state_addresses
         .iter()
         .map(|(account, utxos)| {
-            let address = account_to_p2wpkh_address_from_state(state, account);
+            let address = account_address_from_state_or_empty(state, account);
             (
                 account_to_tla(account),
                 TlaValue::Set(utxos.iter().map(|u| utxo_to_tla(u, &address)).collect()),
@@ -645,7 +645,7 @@ fn available_utxos_to_tla(state: &CkBtcMinterState) -> TlaValue {
             let address = state
                 .outpoint_account
                 .get(&u.outpoint)
-                .map(|account| account_to_p2wpkh_address_from_state(state, account))
+                .map(|account| account_address_from_state_or_empty(state, account))
                 .unwrap_or_default();
             utxo_to_tla(u, &address)
         })
@@ -658,7 +658,7 @@ fn finalized_utxos_to_tla(state: &CkBtcMinterState) -> TlaValue {
         .finalized_utxos
         .iter()
         .map(|(account, utxos)| {
-            let address = account_to_p2wpkh_address_from_state(state, account);
+            let address = account_address_from_state_or_empty(state, account);
             (
                 account.owner.to_tla_value(),
                 TlaValue::Set(utxos.iter().map(|u| utxo_to_tla(u, &address)).collect()),
@@ -666,6 +666,14 @@ fn finalized_utxos_to_tla(state: &CkBtcMinterState) -> TlaValue {
         })
         .collect();
     TlaValue::Function(map)
+}
+
+fn account_address_from_state_or_empty(state: &CkBtcMinterState, account: &Account) -> String {
+    state
+        .ecdsa_public_key
+        .as_ref()
+        .map(|_| account_to_p2wpkh_address_from_state(state, account))
+        .unwrap_or_default()
 }
 
 fn outpoint_to_id(outpoint: &OutPoint) -> TlaValue {
