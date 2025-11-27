@@ -70,16 +70,6 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
             ProxyDecodeError::MissingField("block_proposal_without_ingress_payload")
         })?;
 
-        if block_proposal_without_ingresses_proto
-            .value
-            .as_ref()
-            .is_some_and(|block| block.ingress_payload.is_some())
-        {
-            return Err(ProxyDecodeError::Other(String::from(
-                "The ingress payload is NOT empty",
-            )));
-        }
-
         if let Some(block) = block_proposal_without_ingresses_proto.value.as_ref() {
             if block.ingress_payload.is_some() {
                 return Err(ProxyDecodeError::Other(String::from(
