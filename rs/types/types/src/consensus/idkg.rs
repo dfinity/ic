@@ -65,7 +65,7 @@ pub mod schnorr;
 /// This means they will be immediately purged from the blockchain once delivered.
 /// If disabled, pre-signatures remain on the blockchain, until they are consumed by a signature
 /// request.
-pub const STORE_PRE_SIGNATURES_IN_STATE: bool = true;
+pub const STORE_PRE_SIGNATURES_IN_STATE: bool = false;
 
 /// For completed signature requests, we differentiate between those
 /// that have already been reported and those that have not. This is
