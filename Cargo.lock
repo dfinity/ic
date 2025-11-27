@@ -11810,7 +11810,7 @@ dependencies = [
  "canister-test",
  "clap 4.5.27",
  "hex",
- "ic-agent",
+ "ic-agent 0.40.1",
  "ic-certification 3.0.3",
  "lazy_static",
  "pocket-ic",
