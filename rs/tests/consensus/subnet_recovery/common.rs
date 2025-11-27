@@ -438,8 +438,8 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     if check_pre_signature_stash_is_purged {
         let idkg_keys = key_ids
             .iter()
-            .cloned()
             .filter(|k| k.is_idkg_key())
+            .cloned()
             .collect::<Vec<_>>();
         // The stash size should be 5 initially
         await_pre_signature_stash_size(
@@ -727,8 +727,8 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         info!(logger, "Checking that the pre-signature stash is purged");
         let idkg_keys = key_ids
             .iter()
-            .cloned()
             .filter(|k| k.is_idkg_key())
+            .cloned()
             .collect::<Vec<_>>();
         // After recovery the stash should be purged
         await_pre_signature_stash_size(&app_subnet, 0, idkg_keys.as_slice(), &logger);
