@@ -58,7 +58,7 @@ const NODE_ID_LABEL: &str = "node_id";
 const SUBNET_ID_LABEL: &str = "subnet_id";
 const SUBNET_ID_UNKNOWN: &str = "unknown";
 
-pub(crate) const MAX_METHOD_NAME_LENGTH: usize = 50;
+pub(crate) const MAX_LOGGING_METHOD_NAME_LENGTH: usize = 50;
 
 pub struct MetricsCache {
     buffer: Vec<u8>,
@@ -623,8 +623,8 @@ pub async fn metrics_middleware(
         let sender_hashed = hash_fn(&sender);
 
         let method_name = ctx.method_name.as_ref().map(|name| {
-            if name.len() > MAX_METHOD_NAME_LENGTH {
-                name[..MAX_METHOD_NAME_LENGTH].to_string()
+            if name.len() > MAX_LOGGING_METHOD_NAME_LENGTH {
+                name[..MAX_LOGGING_METHOD_NAME_LENGTH].to_string()
             } else {
                 name.clone()
             }

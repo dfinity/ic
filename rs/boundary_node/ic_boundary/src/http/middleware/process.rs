@@ -7,13 +7,14 @@ use http::header::{CONTENT_TYPE, HeaderValue, X_CONTENT_TYPE_OPTIONS, X_FRAME_OP
 use ic_bn_lib::http::{body::buffer_body, cache::CacheStatus, headers::*};
 use ic_bn_lib_common::types::http::Error as HttpError;
 use ic_types::messages::Blob;
+use serde::de::Error as SerdeDeError;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{
     core::{MAX_REQUEST_BODY_SIZE, decoder_config},
     errors::{ApiError, ErrorCause},
     http::{RequestType, middleware::retry::RetryResult},
-    metrics::MAX_METHOD_NAME_LENGTH,
+    metrics::MAX_LOGGING_METHOD_NAME_LENGTH,
     routes::{HttpRequest, RequestContext},
     snapshot::{Node, Subnet},
 };
@@ -28,7 +29,7 @@ const HEADERS_HIDE_HTTP_REQUEST: [&str; 4] =
 struct ICRequestContent {
     sender: Principal,
     canister_id: Option<Principal>,
-    #[serde(default, deserialize_with = "truncate_method_name")]
+    #[serde(default, deserialize_with = "check_method_name_length")]
     method_name: Option<String>,
     nonce: Option<Blob>,
     ingress_expiry: Option<u64>,
@@ -41,15 +42,23 @@ pub struct ICRequestEnvelope {
 }
 
 // Restrict the method name to its max length
-fn truncate_method_name<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+pub const MAX_METHOD_NAME_LENGTH: usize = 20_000;
+
+fn check_method_name_length<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
 where
     D: Deserializer<'de>,
 {
     let s: Option<String> = Option::<String>::deserialize(deserializer)?;
-    Ok(s.map(|mut val| {
-        val.truncate(20_000);
-        val
-    }))
+    if let Some(val) = &s
+        && val.len() > MAX_METHOD_NAME_LENGTH
+    {
+        return Err(D::Error::custom(format!(
+            "Method name exceeds maximum allowed length of {}",
+            MAX_METHOD_NAME_LENGTH
+        )));
+    }
+
+    Ok(s)
 }
 
 // Middleware: preprocess the request before handing it over to handlers
@@ -215,7 +224,7 @@ pub async fn postprocess_response(request: Request, next: Next) -> impl IntoResp
         });
 
         ctx.method_name.as_ref().and_then(|v| {
-            let truncated = &v[..v.len().min(MAX_METHOD_NAME_LENGTH)];
+            let truncated = &v[..v.len().min(MAX_LOGGING_METHOD_NAME_LENGTH)];
             response.headers_mut().insert(
                 X_IC_METHOD_NAME,
                 HeaderValue::from_maybe_shared(Bytes::from(truncated.to_string())).unwrap(),
@@ -264,8 +273,7 @@ mod tests {
 
     #[test]
     fn deserialize_long_method_name_truncated() {
-        // 25_000 characters, will be truncated to 20_000
-        let long_name = "x".repeat(25_000);
+        let long_name = "x".repeat(15_000);
 
         let content = ICRequestContent {
             sender: Principal::anonymous(),
@@ -281,8 +289,28 @@ mod tests {
         let deserialized: ICRequestEnvelope = serde_cbor::from_slice(&serialized).unwrap();
 
         let method_name = deserialized.content.method_name.unwrap();
-        assert_eq!(method_name.len(), 20_000);
+        assert_eq!(method_name.len(), 15_000);
         assert!(method_name.chars().all(|c| c == 'x'));
+    }
+
+    #[test]
+    fn deserialize_too_long_method_name_truncated() {
+        let long_name = "x".repeat(25_000);
+
+        let content = ICRequestContent {
+            sender: Principal::anonymous(),
+            canister_id: None,
+            method_name: Some(long_name.clone()),
+            nonce: None,
+            ingress_expiry: None,
+            arg: None,
+        };
+        let envelope = ICRequestEnvelope { content };
+
+        let serialized = serde_cbor::to_vec(&envelope).unwrap();
+        let result = serde_cbor::from_slice::<ICRequestEnvelope>(&serialized);
+
+        assert!(result.is_err());
     }
 
     #[test]
