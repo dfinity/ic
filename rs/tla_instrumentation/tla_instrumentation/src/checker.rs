@@ -176,7 +176,6 @@ fn run_apalache(
                 Err(ApalacheError::CheckFailed(
                     e.status.code(),
                     format!("When checking file\n{tla_module:?}\nApalache returned the error: {}\nApalache stdout:\n{}\nApalache stderr:\n{}", e.status, String::from_utf8_lossy(&e.stdout), String::from_utf8_lossy(&e.stderr)
-                        .to_string(),
                 )))
             }
         })
