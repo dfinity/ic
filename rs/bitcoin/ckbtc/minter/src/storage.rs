@@ -111,7 +111,7 @@ pub fn decode_event(buf: &[u8]) -> Event {
 }
 
 /// Returns an iterator over all minter events.
-pub fn events() -> impl Iterator<Item=Event> {
+pub fn events() -> impl Iterator<Item = Event> {
     EventIterator {
         buf: vec![],
         pos: 0,
@@ -201,19 +201,11 @@ pub fn record_event_v0<R: CanisterRuntime>(payload: EventType, runtime: &R) {
 #[cfg(feature = "canbench-rs")]
 mod benches {
     use super::*;
-    use canbench_rs::bench;
-    use crate::{state, IC_CANISTER_RUNTIME};
-    use crate::state::{CkBtcMinterState, invariants::CheckInvariants};
     use crate::state::eventlog::replay;
     use crate::state::replace_state;
-
-    pub enum DoNotCheckInvariants {}
-
-    impl CheckInvariants for DoNotCheckInvariants {
-        fn check_invariants(_state: &CkBtcMinterState) -> Result<(), String> {
-            Ok(())
-        }
-    }
+    use crate::state::{CkBtcMinterState, invariants::CheckInvariants};
+    use crate::{IC_CANISTER_RUNTIME, state};
+    use canbench_rs::bench;
 
     #[bench(raw)]
     fn build_unsigned_transaction_1_50k_sats() -> canbench_rs::BenchResult {
@@ -270,7 +262,8 @@ mod benches {
                     dummy_minter_address,
                     median_fee_millisatoshi_per_vbyte,
                     &fee_estimator,
-                ).unwrap()
+                )
+                .unwrap()
             });
         })
     }
@@ -286,7 +279,7 @@ mod benches {
                     m.borrow().get(V1_LOG_INDEX_MEMORY_ID),
                     m.borrow().get(V1_LOG_DATA_MEMORY_ID),
                 )
-                    .expect("failed to initialize stable log")
+                .expect("failed to initialize stable log")
             })
         });
         assert_eq!(count_events(), 768_723);
@@ -296,5 +289,13 @@ mod benches {
         });
         state.validate_config();
         replace_state(state);
+    }
+
+    pub enum DoNotCheckInvariants {}
+
+    impl CheckInvariants for DoNotCheckInvariants {
+        fn check_invariants(_state: &CkBtcMinterState) -> Result<(), String> {
+            Ok(())
+        }
     }
 }
