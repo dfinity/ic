@@ -6557,6 +6557,7 @@ dependencies = [
 name = "ic-artifact-downloader"
 version = "0.9.0"
 dependencies = [
+ "assert_matches",
  "axum 0.8.4",
  "backoff",
  "bytes",
@@ -6566,6 +6567,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-client-sender",
  "ic-consensus-manager",
+ "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-interfaces",
  "ic-logger",
  "ic-metrics",
