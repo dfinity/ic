@@ -182,7 +182,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
         isolated = True,
         cargo_lockfile = cargo_lockfile,
         lockfile = lockfile,
-        cargo_config = "//:bazel/cargo.config",
         annotations = CRATE_ANNOTATIONS,
         packages = {
             "actix-rt": crate.spec(
