@@ -63,7 +63,7 @@ runs:
         BUILDBUDDY_LINKS: '[CI Job](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})'
         BAZEL_UUIDS_FILE: ${{ steps.uuids.outputs.path }}
       run: |
-        set -euo pipefail
+        set -xeuo pipefail
 
         # Here we overwrite the PATH with our custom bazel wrapper to ensure
         # the specified commands are run with the CI-specific options included
