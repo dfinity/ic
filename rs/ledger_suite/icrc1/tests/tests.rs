@@ -185,9 +185,10 @@ where
         proptest::option::of(arb_account()),
         proptest::option::of(proptest::collection::vec(any::<u8>(), 28)),
         any::<Option<u64>>(),
+        prop_oneof![Just(None), Just(Some("107set_fee_collector".to_string()))],
     )
         .prop_map(
-            |(block_id, block_ts, parent_hash, fee_collector, caller, tx_ts)| {
+            |(block_id, block_ts, parent_hash, fee_collector, caller, tx_ts, op_name)| {
                 let caller = caller.map(|mut c| {
                     c.push(0x00);
                     Principal::try_from_slice(&c[..]).unwrap()
@@ -198,7 +199,9 @@ where
                     Some(parent_hash) => builder.with_parent_hash(parent_hash.to_vec()),
                     None => builder,
                 };
-                builder.fee_collector(fee_collector, caller, tx_ts).build()
+                builder
+                    .fee_collector(fee_collector, caller, tx_ts, op_name)
+                    .build()
             },
         )
 }
@@ -283,6 +286,7 @@ mod block_encoding_stability {
                 Some(account),
                 Some(PrincipalId::new_user_test_id(2).0),
                 Some(22334455u64),
+                Some("107set_fee_collector".to_string()),
             );
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
     }
