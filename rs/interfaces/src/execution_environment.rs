@@ -1529,6 +1529,9 @@ pub trait Scheduler: Send {
 
     /// Code to be executed in a checkpoint round, iff `execute_round()` was not
     /// called (e.g. during a subnet split).
+    ///
+    /// This aborts all paused executions and resets transient state (such as heap
+    /// delta estimate and compiled Wasms).
     fn checkpoint_round_with_no_execution(&self, state: &mut Self::State);
 }
 

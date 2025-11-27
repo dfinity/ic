@@ -1483,8 +1483,8 @@ impl ReplicatedState {
         *epoch_query_stats = RawQueryStats::default();
     }
 
-    /// Splits the replicated state in a special checkpoint round, retaining only
-    /// the canisters of `subnet_id` (as determined by the provided routing table).
+    /// Splits the replicated state during a special DSM round, retaining only the
+    /// canisters mapped to `subnet_id` in the loaded routing table.
     ///
     /// A subnet split starts with a subnet A and results in two subnets, A' and B.
     /// For the sake of clarity, comments refer to the two resulting subnets as
@@ -1497,27 +1497,25 @@ impl ReplicatedState {
     ///
     ///  * Retaining only the canisters that are to be hosted by `subnet_id`, as
     ///    determined by the routing table (*hosted canisters*).
-    ///  * Retaining the snapshots of *hosted canisters* only.
-    ///  * Updating canisters' input schedules, based on `self.canister_states`.
-    ///  * Retaining all subnet messages (ingress and canister) and all refunds on
-    ///    *subnet A'* only.
-    ///
-    ///  *** Producing a new, empty `MetadataState` for subnet B, but preserving
-    ///    the ingress history unchanged.
-    ///
+    ///  * Retaining only the snapshots of *hosted canisters*.
     ///  * Pruning the ingress history, retaining only messages addressed to this
     ///    subnet and messages in terminal states (which will eventually time out).
+    ///  * Updating canisters' input schedules, based on `self.canister_states`.
+    ///  * Retaining all streams, subnet messages (ingress and canister) and refunds
+    ///    on *subnet A'* only.
     ///
     /// As opposed to the legacy `split()` + `after_split()` approach, because this
     /// is executed directly by the DSM, there is no requirement to make it possible
     /// to verify that the state has not been tampered with.
-    pub fn full_split(
+    pub fn online_split(
         self,
         subnet_id: SubnetId,
         other_subnet_id: SubnetId,
     ) -> Result<Self, String> {
         // Destructure `self` and put it back together, in order for the compiler to
         // enforce an explicit decision whenever new fields are added.
+        //
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS A `match`!
         let Self {
             mut canister_states,
             mut metadata,
@@ -1575,10 +1573,10 @@ impl ReplicatedState {
         }
 
         // On *subnet B*:
-        if metadata.own_subnet_id != subnet_id {
+        if subnet_id != metadata.own_subnet_id {
             // Start with empty subnet queues.
             //
-            // All subnet messages (ingress and canister) all remain on subnet A' because:
+            // All subnet messages (ingress and canister) stay on subnet A' because:
             //
             //  * Message Routing would drop a response from subnet B to a request it had
             //    routed to subnet A.
@@ -1586,7 +1584,7 @@ impl ReplicatedState {
             //    is not ideal, but a proper split would require understanding the payloads
             //    of arbitrary management canister methods (to identify the target).
             //  * Message Routing will take care of routing the responses to the originator,
-            //    regardless of hosting subnet.
+            //    regardless of host subnet.
             subnet_queues = CanisterQueues::default();
 
             // Drop one copy of the refund pool.
@@ -1607,7 +1605,7 @@ impl ReplicatedState {
         //
         // Prunes the ingress history. And, on *subnet A'* rejects in-progress management
         // calls targeting canisters migrated to *subnet B*.
-        metadata = metadata.full_split(
+        metadata = metadata.online_split(
             subnet_id,
             |canister_id| lookup_subnet(&canister_id) == Some(subnet_id),
             &mut subnet_queues,

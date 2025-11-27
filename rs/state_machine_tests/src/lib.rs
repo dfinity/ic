@@ -2681,8 +2681,8 @@ impl StateMachine {
         }
     }
 
-    /// Advances time by 1ns (to make sure time is strictly monotone)
-    /// and triggers a single round of execution with block payload as an input.
+    /// Advances time by 1ns (to make sure that time is strictly monotonic)
+    /// and triggers a single round of execution with the given payload as input.
     pub fn execute_payload(&self, payload: PayloadBuilder) -> Height {
         let content = BatchContent::Data {
             batch_messages: BatchMessages {
@@ -2708,6 +2708,7 @@ impl StateMachine {
         self.execute_payload_impl(content, blockmaker_metrics)
     }
 
+    /// Executes a `BatchContent::Splitting` (i.e. an online subnet split) round.
     pub fn execute_split(&self, other_subnet_id: SubnetId) -> Height {
         let content = BatchContent::Splitting {
             new_subnet_id: self.subnet_id,
@@ -2717,9 +2718,10 @@ impl StateMachine {
         self.execute_payload_impl(content, blockmaker_metrics)
     }
 
-    /// Advances time by 1ns (to make sure time is strictly monotone)
-    /// and triggers a single round of execution with block payload as an input.
-    pub fn execute_payload_impl(
+    /// Advances time by 1ns (to make sure that time is strictly monotonic)
+    /// and triggers a single round of execution with the given batch content and
+    /// blockmaker metrics as input.
+    fn execute_payload_impl(
         &self,
         content: BatchContent,
         blockmaker_metrics: BlockmakerMetrics,
@@ -3082,7 +3084,7 @@ impl StateMachine {
         );
     }
 
-    // Enable checkpoints and make a tick to write a checkpoint.
+    /// Enables checkpoints and make a tick to write a checkpoint.
     pub fn checkpointed_tick(&self) {
         let checkpoint_interval_length = self.checkpoint_interval_length.load(Ordering::Relaxed);
         self.set_checkpoints_enabled(true);
@@ -3090,6 +3092,7 @@ impl StateMachine {
         self.set_checkpoint_interval_length(checkpoint_interval_length);
     }
 
+    /// Executes an online subnet split round with checkpointing enabled.
     pub fn split_tick(&self, other_subnet_id: SubnetId) {
         let checkpoint_interval_length = self.checkpoint_interval_length.load(Ordering::Relaxed);
         self.set_checkpoints_enabled(true);
@@ -3376,24 +3379,25 @@ impl StateMachine {
         Ok(env)
     }
 
-    /// Triggers an online subnet split where the corresponding registry entries are
-    /// assumed to be done beforehand, i.e. `make_registry_entries_for_subnet_split`
-    /// should be called first using the same `seed`.
+    /// Triggers an online subnet split, with the corresponding registry entries
+    /// assumed to have been done beforehand, i.e. `make_registry_entries_for_subnet_split`
+    /// should have been called first using the same `seed`.
     ///
     /// The process has the following steps:
-    /// - (*) Write a checkpoint on `self`.
-    /// - (*) Clone its enire state directory into a new `state_dir`.
-    /// - (*) Create a new `StateMachine` using this `state_dir` and the provided `seed`.
-    /// - Reload the registry and update it to the latest version.
-    /// - Call `full_split` on both `self` and the new `StateMachine`.
+    ///  1. Write a checkpoint on `self`.
+    ///  2. Clone its enire state directory into a new `state_dir`.
+    ///  3. Create a new `StateMachine` using this `state_dir` and the provided
+    ///    `seed`.
+    ///  4. Reload the registry and update it to the latest version.
+    ///  5. Call `online_split` on both `self` and the new `StateMachine`.
     ///
-    /// The steps marked with (*) do not happen in actual online subnet splits, but
-    /// are required here because cloning the state machine (the equivalent of
-    /// having had multiple replicas that now branch off) is not trivial.
+    /// Step (1) (the checkpoint) does not happen in an actual online subnet split,
+    /// but is done here because cloning the state machine (the equivalent of having
+    /// had two sets of replicas, each branching off here) is not trivial.
     ///
-    /// Returns an error if the routing table does not contain the subnet Id of the new `env` that
-    /// was just created or if the split itself fails.
-    pub fn full_split(&self, seed: [u8; 32]) -> Result<Arc<StateMachine>, String> {
+    /// Returns an error if the routing table does not contain the subnet ID of the
+    /// new `env` that was just created or if the split itself fails.
+    pub fn online_split(&self, seed: [u8; 32]) -> Result<Arc<StateMachine>, String> {
         use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
 
         // Write a checkpoint.
@@ -3437,15 +3441,13 @@ impl StateMachine {
         self.reload_registry();
         self.registry_client.update_to_latest_version();
 
-        // Get the routing table.
+        // Check that the new subnet is in the routing table.
         let last_version = self.registry_client.get_latest_version();
         let routing_table = self
             .registry_client
             .get_routing_table(last_version)
             .expect("malformed routing table")
             .expect("missing routing table");
-
-        // Check that the new subnet is in this routing table.
         if routing_table.ranges(env.get_subnet_id()).is_empty() {
             return Err("Routing table does not contain the new subnet".to_string());
         }

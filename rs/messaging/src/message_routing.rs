@@ -1293,7 +1293,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
 
         // If the subnet is starting up after a split, execute splitting phase 2.
         //
-        // TODO: Repurpose `split_from` as a `subnet_split_height` signal only.
+        // TODO(DSM-51): Repurpose `split_from` as a `subnet_split_height` signal only.
         if let Some(split_from) = state.metadata.split_from {
             info!(
                 self.log,

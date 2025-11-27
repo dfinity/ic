@@ -532,10 +532,10 @@ fn subnet_splitting_smoke_test(
 /// These two random indices produce all the cases relevant for subnet
 /// splitting:
 ///  - `subnet1` splits before `subnet2` observes the changes in the registry.
-///  - `subnet2` observed the changes on the registry before `subnet1` splits,
+///  - `subnet2` observes the changes on the registry before `subnet1` splits,
 ///    i.e. before the new `subnet3` even exists (but is referred to in the
 ///    routing table).
-///  - The two events happen in the same round.
+///  - The two events happen concurrently.
 ///
 /// After both these events have occurred, a few more calls are made. If after
 /// some more rounds all calls conclude (without any canister trapping, which
@@ -602,7 +602,7 @@ fn test_subnet_split(
     let mut subnet3: Option<TestSubnet> = None;
     for round_index in 0..=15 {
         if round_index == subnet1_split_index {
-            subnet3 = Some(subnet1.full_split(SEED).unwrap());
+            subnet3 = Some(subnet1.online_split(SEED).unwrap());
             assert_matches!(subnet1.canisters()[..], [c] if c == canister1);
             assert_matches!(subnet3.as_ref().unwrap().canisters()[..], [c] if c == canister2);
         } else {
@@ -619,13 +619,19 @@ fn test_subnet_split(
         }
     }
 
-    // Inject the rest of the calls; note `canister2` is now on `subnet3`.
+    // Inject the rest of the calls; note that `canister2` is now on `subnet3`.
     let subnet3 = subnet3.unwrap();
     msg_ids1.append(&mut inject_calls(&mut calls1, 0, &subnet1));
     msg_ids2.append(&mut inject_calls(&mut calls2, 0, &subnet3));
     msg_ids3.append(&mut inject_calls(&mut calls3, 0, &subnet2));
 
-    while !msg_ids1.is_empty() || !msg_ids2.is_empty() || !msg_ids3.is_empty() {
+    while !msg_ids1.is_empty()
+        || !msg_ids2.is_empty()
+        || !msg_ids3.is_empty()
+        || subnet1.has_inflight_messages()
+        || subnet2.has_inflight_messages()
+        || subnet3.has_inflight_messages()
+    {
         subnet1.execute_round();
         subnet2.execute_round();
         subnet3.execute_round();

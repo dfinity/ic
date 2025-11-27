@@ -696,7 +696,7 @@ impl SystemMetadata {
         );
     }
 
-    /// Splits the `MetadataState` in a special checkpoint round.
+    /// Splits the `MetadataState` in a special DSM round.
     ///
     /// A subnet split starts with a subnet A and results in two subnets, A' and B.
     /// For the sake of clarity, comments refer to the two resulting subnets as
@@ -705,8 +705,11 @@ impl SystemMetadata {
     /// having `new_subnet_id == self.own_subnet_id`. Conversely, subnet B has
     /// `new_subnet_id != self.own_subnet_id`.
     ///
-    /// On subnet A', rejects management canister calls that are no longer local;
-    /// and prunes the ingress history.
+    /// On subnet A':
+    ///  * Prunes the ingress history.
+    ///  * Rejects management canister calls targeting canisters that have migrated
+    ///    (subnet B will silently drop the corresponding executions from its
+    ///    canisters).
     ///
     /// On subnet B:
     ///  * Updates `own_subnet_id` to `subnet_id`.
@@ -725,7 +728,10 @@ impl SystemMetadata {
     ///    `commit_and_certify()` at the end of the round; and not used before.
     ///  * `heap_delta_estimate` and `expected_compiled_wasms` are expected to be
     ///    empty/zero.
-    pub fn full_split<F>(
+    ///  * `unflushed_checkpoint_ops` contains both arbitrary pending operations;
+    ///    and delete operations for the snapshots of non-local canisters. It is
+    ///    therefore preserved untouched.
+    pub fn online_split<F>(
         self,
         subnet_id: SubnetId,
         is_local_canister: F,
@@ -863,12 +869,14 @@ impl SystemMetadata {
         })
     }
 
-    /// Creates rejects for all in-progress management messages that cannot or
-    /// should not be handled on *subnet A'* following a subnet split.
+    /// Creates rejects for all in-progress management messages that can no longer
+    /// be handled on *subnet A'* following a subnet split.
     ///
     /// Enqueues reject responses into the provided `subnet_queues` for canister
     /// calls; and records a `Failed` state in `ingress_history` for calls
-    /// originating from ingress messages. Rejects are created for:
+    /// originating from ingress messages.
+    ///
+    /// Rejects are created for:
     ///
     ///  * All in-progress subnet messages whose target canisters are no longer
     ///    on this subnet (e.g. install, stop).
@@ -880,7 +888,7 @@ impl SystemMetadata {
     ///    only a response from *subnet A'* could be inducted.
     ///
     ///  * Specific requests that must be entirely handled by the local subnet where
-    ///    the originator canister exists.
+    ///    the originator canister exists (e.g. `raw_rand`).
     fn reject_in_progress_management_calls_after_split<F>(
         subnet_call_context_manager: &mut SubnetCallContextManager,
         is_local_canister: F,

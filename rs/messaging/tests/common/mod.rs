@@ -193,9 +193,10 @@ impl TestSubnet {
         self.env.split(seed).map(|env| Self { env })
     }
 
-    /// Attempts to split `self` and returns the split off `Self`.
-    pub fn full_split(&self, seed: [u8; 32]) -> Result<Self, String> {
-        self.env.full_split(seed).map(|env| Self { env })
+    /// Splits `self` according to the routing table in the latest registry version,
+    /// in a special checkpoint round, and returns the split off `TestSubnet`.
+    pub fn online_split(&self, seed: [u8; 32]) -> Result<Self, String> {
+        self.env.online_split(seed).map(|env| Self { env })
     }
 }
 

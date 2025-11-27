@@ -76,15 +76,16 @@ impl StateMachineImpl {
             .observe(since.elapsed().as_secs_f64());
     }
 
-    /// Runs a special checkpoint round during which the state is split.
+    /// Runs a special round during which the state is split (and no messages are
+    /// inducted, executed or routed).
     ///
-    /// Retains the canisters mapped to `new_subnet_id` in the new routing table.
-    /// Assumes that all other canisters are mapped to and will be retained by
+    /// Retains the canisters mapped to `new_subnet_id` in the routing table.
+    /// Validates that all other canisters are mapped to and will be retained by
     /// `other_subnet_id`.
     ///
     /// Shapshots and ingress messages are split accordingly. Streams, refunds and
-    /// subnet queues are retained on *subnet A* only (i.e., the one retaining its
-    /// `own_subnet_id`).
+    /// subnet queues are preserved on *subnet A* only (i.e., the one retaining the
+    /// original `own_subnet_id`).
     fn split(
         &self,
         mut state: ReplicatedState,
@@ -97,7 +98,7 @@ impl StateMachineImpl {
 
         let old_subnet_id = state.metadata.own_subnet_id;
         state
-            .full_split(new_subnet_id, other_subnet_id)
+            .online_split(new_subnet_id, other_subnet_id)
             .unwrap_or_else(|err| {
                 fatal!(
                     self.log,
@@ -142,12 +143,14 @@ impl StateMachine for StateMachineImpl {
         }
 
         let (batch_messages, mut consensus_responses, chain_key_data) = match batch.content {
+            // Regular batch, proceed with round execution.
             BatchContent::Data {
                 batch_messages,
                 consensus_responses,
                 chain_key_data,
             } => (batch_messages, consensus_responses, chain_key_data),
 
+            // Consensus is telling us to split, do so and return the new state.
             BatchContent::Splitting {
                 new_subnet_id,
                 other_subnet_id,
