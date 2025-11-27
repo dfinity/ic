@@ -7,10 +7,12 @@ mod tests;
 use crate::canister_state::execution_state::WasmExecutionMode;
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{ExecutionTask, SystemState};
-use crate::{InputQueueType, MessageMemoryUsage, StateError};
+use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_config::embedders::Config as HypervisorConfig;
-use ic_interfaces::execution_environment::SubnetAvailableExecutionMemoryChange;
+use ic_interfaces::execution_environment::{
+    MessageMemoryUsage, SubnetAvailableExecutionMemoryChange,
+};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType, LogVisibilityV2,
 };
@@ -28,7 +30,7 @@ use ic_types::{LongExecutionMode, NumInstructions};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use phantom_newtype::AmountOf;
-pub use queues::{CanisterQueues, DEFAULT_QUEUE_CAPACITY};
+pub use queues::{CanisterQueues, DEFAULT_QUEUE_CAPACITY, refunds::RefundPool};
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::Duration;
@@ -348,29 +350,6 @@ impl CanisterState {
     /// Checks the constraints that a canister should always respect.
     /// These invariants will be verified at the end of each execution round.
     pub fn check_invariants(&self, config: &HypervisorConfig) -> Result<(), String> {
-        match self.memory_allocation() {
-            MemoryAllocation::Reserved(reserved_bytes) => {
-                let memory_used = self.memory_usage();
-                let canister_history_memory_usage = self.canister_history_memory_usage();
-
-                // We check if the memory usage exceeds the memory allocation while ignoring the canister history memory usage
-                // (whose growth is not validated against the memory allocation), i.e., we want to log an error if
-                // `memory_used - canister_history_memory_usage > memory_allocation`.
-                // To avoid subtraction, we check for
-                // `memory_used > memory_allocation + canister_history_memory_usage` instead.
-                if memory_used > reserved_bytes + canister_history_memory_usage {
-                    return Err(format!(
-                        "Invariant broken: Memory of canister {} exceeds the memory allocation: used {}, memory allocation {}, canister history memory usage {}",
-                        self.canister_id(),
-                        memory_used,
-                        reserved_bytes,
-                        canister_history_memory_usage,
-                    ));
-                }
-            }
-            MemoryAllocation::BestEffort => (),
-        }
-
         if let Some(execution_state) = &self.execution_state {
             let wasm_memory_usage = execution_state.wasm_memory_usage();
             let wasm_memory_limit = match execution_state.wasm_execution_mode() {
@@ -629,16 +608,13 @@ impl CanisterState {
     /// Updates status of `OnLowWasmMemory` hook.
     pub fn update_on_low_wasm_memory_hook_condition(&mut self) {
         self.system_state
-            .update_on_low_wasm_memory_hook_status(self.memory_usage(), self.wasm_memory_usage());
+            .update_on_low_wasm_memory_hook_status(self.wasm_memory_usage());
     }
 
     /// Returns the `OnLowWasmMemory` hook status without updating the `task_queue`.
     pub fn is_low_wasm_memory_hook_condition_satisfied(&self) -> bool {
         self.system_state
-            .is_low_wasm_memory_hook_condition_satisfied(
-                self.memory_usage(),
-                self.wasm_memory_usage(),
-            )
+            .is_low_wasm_memory_hook_condition_satisfied(self.wasm_memory_usage())
     }
 
     /// Adds a canister change to canister history and returns the change

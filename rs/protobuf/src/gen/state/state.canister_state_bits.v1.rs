@@ -13,7 +13,7 @@ pub struct CallContext {
     pub instructions_executed: u64,
     #[prost(message, optional, tag = "11")]
     pub metadata: ::core::option::Option<super::super::queues::v1::RequestMetadata>,
-    #[prost(oneof = "call_context::CallOrigin", tags = "1, 2, 3, 4, 7, 12")]
+    #[prost(oneof = "call_context::CallOrigin", tags = "1, 2, 4, 7, 12")]
     pub call_origin: ::core::option::Option<call_context::CallOrigin>,
 }
 /// Nested message and enum types in `CallContext`.
@@ -55,8 +55,6 @@ pub mod call_context {
         Ingress(Ingress),
         #[prost(message, tag = "2")]
         CanisterUpdate(CanisterUpdateOrQuery),
-        #[prost(message, tag = "3")]
-        Query(super::super::super::super::types::v1::UserId),
         #[prost(message, tag = "4")]
         CanisterQuery(CanisterUpdateOrQuery),
         #[prost(message, tag = "7")]
@@ -475,6 +473,8 @@ pub struct CanisterRename {
     pub total_num_changes: u64,
     #[prost(message, optional, tag = "3")]
     pub rename_to: ::core::option::Option<RenameTo>,
+    #[prost(message, optional, tag = "4")]
+    pub requested_by: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RenameTo {

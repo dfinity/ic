@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//rs/interfaces/registry",
     "//rs/nervous_system/canisters",
     "//rs/nervous_system/common",
@@ -107,6 +108,16 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
+rust_library(
+    name = "nrc-test",
+    srcs = LIB_SRCS,
+    crate_features = ["test"],
+    crate_name = "ic_node_rewards_canister",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
 rust_canister(
     name = "node-rewards-canister",
     srcs = ["src/main.rs"],
@@ -124,7 +135,7 @@ rust_canister(
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":node-rewards-canister.did",
     deps = DEPENDENCIES + [
-        ":nrc",
+        ":nrc-test",
     ],
 )
 

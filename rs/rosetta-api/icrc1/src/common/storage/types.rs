@@ -204,7 +204,9 @@ impl TryFrom<Value> for IcrcBlock {
 
     fn try_from(value: Value) -> anyhow::Result<Self> {
         // The base of all fields is a BTreeMap that holds all the other fields from the ICRC-3 standard
-        let map = value.as_map().map_err(|err| anyhow!("{:?}", err))?;
+        let map = value
+            .as_map()
+            .map_err(|err| anyhow!("The block top level element should be map: {:?}", err))?;
 
         // Now we can try to extract every field that corresponds to a Block object from the map
         let parent_hash = get_opt_field::<Vec<u8>>(&map, &[], "phash")?
@@ -606,6 +608,9 @@ where
                 amount: amount.into(),
                 fee: fee.map(Into::into),
             },
+            Op::FeeCollector { .. } => {
+                panic!("FeeCollector107 not implemented")
+            }
         }
     }
 }

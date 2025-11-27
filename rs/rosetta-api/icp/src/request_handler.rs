@@ -36,6 +36,7 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance_api::manage_neuron::NeuronIdOrSubaccount;
 use ic_types::{CanisterId, crypto::DOMAIN_IC_REQUEST, messages::MessageId};
 use icp_ledger::{Block, BlockIndex};
+use rosetta_core::metrics::RosettaMetrics;
 use rosetta_core::{
     objects::ObjectMap,
     response_types::{MempoolResponse, MempoolTransactionResponse, NetworkListResponse},
@@ -46,8 +47,7 @@ use std::{
     sync::Arc,
 };
 use strum::IntoEnumIterator;
-
-use rosetta_core::metrics::RosettaMetrics;
+use tracing::log::debug;
 
 /// The maximum amount of blocks to retrieve in a single search.
 const MAX_SEARCH_LIMIT: usize = 10_000;
@@ -920,22 +920,31 @@ impl RosettaRequestHandler {
 
 fn verify_network_id(canister_id: &CanisterId, net_id: &NetworkIdentifier) -> Result<(), ApiError> {
     verify_network_blockchain(net_id)?;
-    let id: CanisterId = net_id
-        .try_into()
-        .map_err(|err| ApiError::InvalidNetworkId(false, format!("{err:?}").into()))?;
+    let id = CanisterId::try_from(net_id).map_err(|err| {
+        let err_msg = format!("Invalid network ID ('{net_id:?}'): {err:?}");
+        debug!("{err_msg}");
+        ApiError::InvalidNetworkId(false, Details::from(err_msg))
+    })?;
     if *canister_id != id {
-        return Err(ApiError::InvalidNetworkId(false, "unknown network".into()));
+        let err_msg = format!("Invalid canister ID (expected '{canister_id}', received '{id}')");
+        debug!("{err_msg}");
+        return Err(ApiError::InvalidNetworkId(false, Details::from(err_msg)));
     }
     Ok(())
 }
 
 fn verify_network_blockchain(net_id: &NetworkIdentifier) -> Result<(), ApiError> {
+    const EXPECTED_BLOCKCHAIN: &str = "Internet Computer";
     match net_id.blockchain.as_str() {
-        "Internet Computer" => Ok(()),
-        _ => Err(ApiError::InvalidNetworkId(
-            false,
-            "unknown blockchain".into(),
-        )),
+        EXPECTED_BLOCKCHAIN => Ok(()),
+        _ => {
+            let err_msg = format!(
+                "Unknown blockchain (expected '{EXPECTED_BLOCKCHAIN}', received '{}')",
+                net_id.blockchain
+            );
+            debug!("{err_msg}");
+            Err(ApiError::InvalidNetworkId(false, Details::from(err_msg)))
+        }
     }
 }
 

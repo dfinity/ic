@@ -17,8 +17,8 @@ use std::{
     time::Duration,
 };
 
-use crate::metrics::OngoingStateSyncMetrics;
 use crate::routes::{build_chunk_handler_request, parse_chunk_handler_response};
+use crate::{metrics::OngoingStateSyncMetrics, ongoing::chunks_to_download::ChunksToDownload};
 
 use ic_base_types::NodeId;
 use ic_http_endpoints_async_utils::JoinMap;
@@ -38,6 +38,8 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
+mod chunks_to_download;
+
 // TODO: NET-1461 find appropriate value for the parallelism
 const PARALLEL_CHUNK_DOWNLOADS: usize = 10;
 const ONGOING_STATE_SYNC_CHANNEL_SIZE: usize = 200;
@@ -55,7 +57,7 @@ struct OngoingStateSync {
     active_downloads: HashMap<NodeId, u64>,
     // Download management
     allowed_downloads: usize,
-    chunks_to_download: Box<dyn Iterator<Item = ChunkId> + Send>,
+    chunks_to_download: ChunksToDownload,
     // Event tasks
     downloading_chunks: JoinMap<ChunkId, DownloadResult>,
 }
@@ -89,7 +91,7 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
         new_peers_rx,
         active_downloads: HashMap::new(),
         allowed_downloads: 0,
-        chunks_to_download: Box::new(std::iter::empty()),
+        chunks_to_download: ChunksToDownload::new(),
         downloading_chunks: JoinMap::new(),
     };
 
@@ -118,7 +120,7 @@ impl OngoingStateSync {
                 },
                 Some(download_result) = self.downloading_chunks.join_next() => {
                     match download_result {
-                        Ok((result, _)) => {
+                        Ok((result, chunk_id)) => {
                             // We do a saturating sub here because it can happen (in rare cases) that a peer that just
                             // joined this sync was previously removed from the sync and still had outstanding downloads.
                             // As a consequence there is the possibiliy of an underflow. In the case where we close old
@@ -128,7 +130,7 @@ impl OngoingStateSync {
                             self.active_downloads
                                 .entry(result.peer_id)
                                 .and_modify(|v| *v = v.saturating_sub(1));
-                            self.handle_downloaded_chunk_result(result);
+                            self.handle_downloaded_chunk_result(chunk_id, result);
                             self.spawn_chunk_downloads(cancellation.clone(), tracker.clone());
                         }
                         Err(err) => {
@@ -174,14 +176,15 @@ impl OngoingStateSync {
             }
         }
         // All tracker objects must be dropped before closing the channel.
-        while let Some(Ok((finished, _))) = self.downloading_chunks.join_next().await {
-            self.handle_downloaded_chunk_result(finished);
+        while let Some(Ok((finished, chunk_id))) = self.downloading_chunks.join_next().await {
+            self.handle_downloaded_chunk_result(chunk_id, finished);
         }
         self.new_peers_rx.close();
     }
 
     fn handle_downloaded_chunk_result(
         &mut self,
+        chunk_id: ChunkId,
         DownloadResult { peer_id, result }: DownloadResult,
     ) {
         self.metrics.record_chunk_download_result(&result);
@@ -192,6 +195,8 @@ impl OngoingStateSync {
                 if self.active_downloads.remove(&peer_id).is_some() {
                     self.allowed_downloads -= PARALLEL_CHUNK_DOWNLOADS;
                 }
+
+                self.chunks_to_download.download_failed(chunk_id);
             }
             Err(DownloadChunkError::RequestError { chunk_id, err }) => {
                 info!(
@@ -201,10 +206,20 @@ impl OngoingStateSync {
                 if self.active_downloads.remove(&peer_id).is_some() {
                     self.allowed_downloads -= PARALLEL_CHUNK_DOWNLOADS;
                 }
+                self.chunks_to_download.download_failed(chunk_id);
             }
-            Err(DownloadChunkError::Overloaded) => {}
-            Err(DownloadChunkError::Timeout) => {}
-            Err(DownloadChunkError::Cancelled) => {}
+            Err(
+                err @ (DownloadChunkError::Overloaded
+                | DownloadChunkError::Timeout
+                | DownloadChunkError::Cancelled),
+            ) => {
+                info!(
+                    every_n_seconds => 15,
+                    self.log,
+                    "Failed to download chunk from {}: {} ", peer_id, err
+                );
+                self.chunks_to_download.download_failed(chunk_id);
+            }
         }
     }
 
@@ -213,13 +228,17 @@ impl OngoingStateSync {
         cancellation: CancellationToken,
         tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>,
     ) {
-        let available_download_capacity = self
-            .allowed_downloads
-            .saturating_sub(self.downloading_chunks.len());
-
         if self.active_downloads.is_empty() {
             return;
         }
+
+        if self.chunks_to_download.is_empty() {
+            self.update_chunks_to_download(&tracker);
+        }
+
+        let available_download_capacity = self
+            .allowed_downloads
+            .saturating_sub(self.downloading_chunks.len());
 
         let mut small_rng = SmallRng::from_entropy();
         let max_active_downloads = self
@@ -235,9 +254,10 @@ impl OngoingStateSync {
             weights.push(max_active_downloads - active_downloads + 1);
         }
         let dist = WeightedIndex::new(weights).expect("weights>=0, sum(weights)>0, len(weigths)>0");
+
         for _ in 0..available_download_capacity {
-            match self.chunks_to_download.next() {
-                Some(chunk) if !self.downloading_chunks.contains(&chunk) => {
+            match self.chunks_to_download.next_chunk_to_download() {
+                Some(chunk) => {
                     // Select random peer weighted proportional to active downloads.
                     // Peers with less active downloads are more likely to be selected.
                     let peer_id = *peers.get(dist.sample(&mut small_rng)).expect("Is present");
@@ -259,24 +279,38 @@ impl OngoingStateSync {
                         &self.rt,
                     );
                 }
-                Some(_) => {}
-                None => {
-                    // If we store chunks in self.chunks_to_download we will eventually initiate  and
-                    // by filtering with the current in flight request we avoid double download.
-                    // TODO: Evaluate performance impact of this since on mainnet it is possible
-                    // that `chunks_to_download` returns 1Million elements.
-                    let mut v = Vec::new();
-                    for c in tracker.lock().unwrap().chunks_to_download() {
-                        if !self.downloading_chunks.contains(&c) {
-                            v.push(c);
-                        }
-                    }
-                    self.metrics.chunks_to_download_calls_total.inc();
-                    self.metrics.chunks_to_download_total.inc_by(v.len() as u64);
-                    self.chunks_to_download = Box::new(v.into_iter());
-                }
+                None => break,
             }
         }
+    }
+
+    fn update_chunks_to_download<T: 'static + Send>(
+        &mut self,
+        tracker: &Mutex<Box<dyn Chunkable<T> + Send>>,
+    ) {
+        // If we store chunks in self.chunks_to_download we will eventually initiate a download and
+        // by filtering with the current in flight request we avoid double download.
+        let chunks_to_download = tracker
+            .lock()
+            .unwrap()
+            .chunks_to_download()
+            .filter(|chunk| !self.downloading_chunks.contains(chunk));
+        let added = self.chunks_to_download.add_chunks(chunks_to_download);
+
+        if added != 0 {
+            info!(
+                self.log,
+                "Requesting new chunks, added {} chunks to download list", added
+            );
+        } else {
+            info!(
+                self.log,
+                "Requesting new chunks, no more chunks to be added"
+            );
+        }
+
+        self.metrics.chunks_to_download_calls_total.inc();
+        self.metrics.chunks_to_download_total.inc_by(added as u64);
     }
 
     async fn download_chunk_task<T: 'static + Send>(
@@ -336,7 +370,7 @@ impl OngoingStateSync {
             chunk_id,
             err: err.to_string(),
         })
-        .and_then(std::convert::identity);
+        .flatten();
 
         DownloadResult { peer_id, result }
     }

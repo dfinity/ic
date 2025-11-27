@@ -119,10 +119,8 @@ system_test_nns(
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     tags = [
-        # TODO(NET-1710): enable on CI again when the problematic firewall rule in the IC node has been removed.
-        #"long_test",
-        #"system_test_large",
-        "manual",
+        "dynamic_testnet",
+        "long_test",
     ],
     runtime_deps =
         UNIVERSAL_VM_RUNTIME_DEPS +
@@ -130,6 +128,7 @@ system_test_nns(
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
     ],
 )
 
@@ -256,6 +255,7 @@ rust_binary(
         "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:ic-agent",
+        "@crate_index//:ic-utils",
         "@crate_index//:leb128",
         "@crate_index//:reqwest",
         "@crate_index//:serde",
@@ -263,12 +263,12 @@ rust_binary(
         "@crate_index//:slog",
         "@crate_index//:time",
         "@crate_index//:tokio",
+        "@crate_index//:wat",
     ],
 )
 
 system_test_nns(
     name = "nns_delegation_mainnet_nns_version_test",
-    env = UNIVERSAL_CANISTER_ENV,
     tags = [
         "long_test",
     ],
@@ -279,12 +279,10 @@ system_test_nns(
     uses_guestos_img = False,
     uses_guestos_mainnet_nns_img = True,
     uses_guestos_update = True,
-    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
 )
 
 system_test_nns(
     name = "nns_delegation_branch_nns_version_test",
-    env = UNIVERSAL_CANISTER_ENV,
     tags = [
         "long_test",
     ],
@@ -294,7 +292,6 @@ system_test_nns(
     uses_guestos_img = True,
     uses_guestos_mainnet_nns_img = False,
     uses_guestos_update = True,
-    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
 )
 
 system_test_nns(

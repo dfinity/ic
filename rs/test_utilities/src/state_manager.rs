@@ -283,6 +283,11 @@ impl StateReader for FakeStateManager {
             .map_or_else(initial_state, |snap| snap.make_labeled_state())
     }
 
+    // No certification support in FakeStateManager
+    fn get_latest_certified_state(&self) -> Option<Labeled<Arc<Self::State>>> {
+        None
+    }
+
     fn get_state_at(&self, height: Height) -> StateManagerResult<Labeled<Arc<Self::State>>> {
         if height == Height::new(0) {
             return Ok(initial_state());
@@ -335,7 +340,7 @@ impl From<&StreamMessage> for SerializableStreamMessage {
         match msg {
             StreamMessage::Request(req) => SerializableStreamMessage::Request((**req).clone()),
             StreamMessage::Response(rep) => SerializableStreamMessage::Response((**rep).clone()),
-            StreamMessage::Refund(refund) => SerializableStreamMessage::Refund((**refund).clone()),
+            StreamMessage::Refund(refund) => SerializableStreamMessage::Refund(**refund),
         }
     }
 }
@@ -740,6 +745,10 @@ impl StateReader for RefMockStateManager {
 
     fn get_latest_state(&self) -> Labeled<Arc<Self::State>> {
         self.mock.read().unwrap().get_latest_state()
+    }
+
+    fn get_latest_certified_state(&self) -> Option<Labeled<Arc<Self::State>>> {
+        self.mock.read().unwrap().get_latest_certified_state()
     }
 
     fn get_state_at(&self, height: Height) -> StateManagerResult<Labeled<Arc<Self::State>>> {

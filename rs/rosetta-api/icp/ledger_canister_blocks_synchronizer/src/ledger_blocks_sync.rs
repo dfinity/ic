@@ -374,8 +374,10 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                     .await
                     .map_err(Error::InternalError);
                 if batch.is_ok() || retry == MAX_RETRY {
-                    self.rosetta_metrics
-                        .add_blocks_fetched(batch.as_ref().unwrap().len() as u64);
+                    if let Ok(encoded_blocks) = &batch {
+                        self.rosetta_metrics
+                            .add_blocks_fetched(encoded_blocks.len() as u64);
+                    }
                     break batch;
                 }
                 self.rosetta_metrics.inc_fetch_retries();

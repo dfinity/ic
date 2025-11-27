@@ -383,12 +383,12 @@ def icos_build(
             name = "vuln-scan",
             srcs = ["//ic-os:vuln-scan/vuln-scan.sh"],
             data = [
-                "@trivy//:trivy",
+                "//:trivy",
                 ":rootfs-tree.tar",
                 "//ic-os:vuln-scan/vuln-scan.html",
             ],
             env = {
-                "trivy_path": "$(rootpath @trivy//:trivy)",
+                "trivy_path": "$(rootpath //:trivy)",
                 "CONTAINER_TAR": "$(rootpaths :rootfs-tree.tar)",
                 "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan/vuln-scan.html)",
             },

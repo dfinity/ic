@@ -1,4 +1,6 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
+
+use ic_base_types::{NodeId, PrincipalId};
 
 use super::{
     common::{
@@ -7,8 +9,6 @@ use super::{
     },
     subnet::get_subnet_records_map,
 };
-use ic_base_types::{NodeId, PrincipalId};
-use ic_protobuf::registry::node::v1::NodeRecord;
 
 /// Checks node assignment invariants:
 ///    * A node can only have one of the following three assignments:
@@ -30,17 +30,11 @@ pub(crate) fn check_node_assignment_invariants(
         .into_keys()
         .collect();
 
-    let mut unassigned_nodes: BTreeMap<NodeId, NodeRecord> = BTreeMap::new();
-
-    let mut errors: Vec<String> = get_node_records_from_snapshot(snapshot).into_iter().map(|(node_id, node)| {
+    let errors: Vec<String> = get_node_records_from_snapshot(snapshot).keys().map(|node_id| {
             let (is_replica, is_api_boundary_node) = (
-                replicas.contains(&node_id),
-                api_boundary_nodes.contains(&node_id),
+                replicas.contains(node_id),
+                api_boundary_nodes.contains(node_id),
             );
-
-            if !is_replica && !is_api_boundary_node {
-                unassigned_nodes.insert(node_id, node);
-            }
 
             match (is_replica, is_api_boundary_node) {
                 // replica
@@ -56,17 +50,6 @@ pub(crate) fn check_node_assignment_invariants(
                 _ => Err(format!("invalid assignment for node {node_id}: is_replica = {is_replica}, is_api_boundary_node = {is_api_boundary_node}")),
             }
         }).filter_map(Result::err).collect();
-
-    // Unassigned nodes check
-    for (node_id, node) in unassigned_nodes {
-        if !node.ssh_node_state_write_access.is_empty() {
-            errors.push(format!(
-                "node {node_id} is unassigned but has \
-                ssh_node_state_write_access is set.  This value can only be set on nodes currently \
-                in assigned subnets."
-            ));
-        }
-    }
 
     if !errors.is_empty() {
         return Err(InvariantCheckError {
@@ -167,93 +150,5 @@ mod tests {
         );
 
         assert!(check_node_assignment_invariants(&snapshot).is_err());
-    }
-
-    #[test]
-    fn test_unassigned_node_with_ssh_access_fails() {
-        let mut snapshot = RegistrySnapshot::new();
-
-        // Create an unassigned node with ssh_node_state_write_access set
-        let node_id: NodeId = PrincipalId::from_str(TEST_PRINCIPAL_ID)
-            .expect("failed to parse principal id")
-            .into();
-
-        let node_with_ssh_access = NodeRecord {
-            ssh_node_state_write_access: vec![
-                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFoobar".to_string(),
-            ],
-            ..Default::default()
-        };
-
-        snapshot.insert(
-            make_node_record_key(node_id).into_bytes(),
-            node_with_ssh_access.encode_to_vec(),
-        );
-
-        // The invariant check should fail because the node is unassigned but has ssh access
-        let result = check_node_assignment_invariants(&snapshot);
-        assert!(result.is_err());
-
-        let err = result.unwrap_err();
-        assert!(err.msg.contains("is unassigned but has"));
-        assert!(err.msg.contains("ssh_node_state_write_access"));
-    }
-
-    #[test]
-    fn test_unassigned_node_without_ssh_access_succeeds() {
-        let mut snapshot = RegistrySnapshot::new();
-
-        // Create an unassigned node without ssh_node_state_write_access
-        let node_id: NodeId = PrincipalId::from_str(TEST_PRINCIPAL_ID)
-            .expect("failed to parse principal id")
-            .into();
-
-        snapshot.insert(
-            make_node_record_key(node_id).into_bytes(),
-            NodeRecord::default().encode_to_vec(),
-        );
-
-        // The invariant check should succeed because the node has no ssh access set
-        assert!(check_node_assignment_invariants(&snapshot).is_ok());
-    }
-
-    #[test]
-    fn test_assigned_node_with_ssh_access_succeeds() {
-        let mut snapshot = RegistrySnapshot::new();
-
-        // Create a node assigned to a subnet with ssh_node_state_write_access set
-        let node_id: NodeId = PrincipalId::from_str(TEST_PRINCIPAL_ID)
-            .expect("failed to parse principal id")
-            .into();
-
-        let node_with_ssh_access = NodeRecord {
-            ssh_node_state_write_access: vec![
-                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFoobar".to_string(),
-            ],
-            ..Default::default()
-        };
-
-        snapshot.insert(
-            make_node_record_key(node_id).into_bytes(),
-            node_with_ssh_access.encode_to_vec(),
-        );
-
-        // Create a subnet and assign the node to it
-        let subnet_id: SubnetId = PrincipalId::from_str(TEST_PRINCIPAL_ID)
-            .expect("failed to parse principal id")
-            .into();
-
-        let subnet = SubnetRecord {
-            membership: vec![node_id.get().into_vec()],
-            ..Default::default()
-        };
-
-        snapshot.insert(
-            make_subnet_record_key(subnet_id).into_bytes(),
-            subnet.encode_to_vec(),
-        );
-
-        // The invariant check should succeed because the node is assigned to a subnet
-        assert!(check_node_assignment_invariants(&snapshot).is_ok());
     }
 }

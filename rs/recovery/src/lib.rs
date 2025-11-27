@@ -25,7 +25,6 @@ use ic_types::{Height, ReplicaVersion, SubnetId, messages::HttpStatusResponse};
 use registry_helper::RegistryPollingStrategy;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info, warn};
-use ssh_helper::SshHelper;
 use std::{env, io::ErrorKind};
 use std::{
     net::IpAddr,
@@ -272,22 +271,6 @@ impl Recovery {
                 .admin_helper
                 .get_halt_subnet_command(subnet_id, is_halted, keys),
         }
-    }
-
-    /// Executes the given SSH command.
-    pub fn execute_admin_ssh_command(
-        &self,
-        node_ip: IpAddr,
-        commands: &str,
-    ) -> RecoveryResult<Option<String>> {
-        let ssh_helper = SshHelper::new(
-            self.logger.clone(),
-            SshUser::Admin.to_string(),
-            node_ip,
-            self.ssh_confirmation,
-            self.admin_key_file.clone(),
-        );
-        ssh_helper.ssh(commands.to_string())
     }
 
     // Execute an `ic-admin` command, log the output.

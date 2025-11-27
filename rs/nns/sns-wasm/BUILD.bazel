@@ -149,7 +149,7 @@ rust_ic_test_suite_with_extra_srcs(
         "//rs/sns/root:sns-root-canister",
         "//rs/sns/swap:sns-swap-canister",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
-        "@mainnet_nns_sns-wasm-canister//file",
+        "@mainnet_canisters//:sns-wasm.wasm.gz",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/nns/sns-wasm",
@@ -159,7 +159,7 @@ rust_ic_test_suite_with_extra_srcs(
         "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
         "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
         "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath :sns-wasm-canister)",
-        "MAINNET_SNS_WASM_CANISTER_WASM_PATH": "$(rootpath @mainnet_nns_sns-wasm-canister//file)",
+        "MAINNET_SNS_WASM_CANISTER_WASM_PATH": "$(rootpath @mainnet_canisters//:sns-wasm.wasm.gz)",
         "NODE_REWARDS_CANISTER_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister)",
         "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
         "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",

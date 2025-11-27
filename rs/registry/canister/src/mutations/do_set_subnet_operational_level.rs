@@ -1,11 +1,12 @@
 use crate::{common::LOG_PREFIX, registry::Registry};
 
-use candid::{CandidType, Deserialize};
+use candid::CandidType;
 use ic_base_types::{NodeId, SubnetId};
 use ic_protobuf::registry::{node::v1::NodeRecord, subnet::v1::SubnetRecord};
 use ic_registry_keys::{make_node_record_key, make_subnet_record_key};
 use ic_registry_transport::{pb::v1::RegistryMutation, update};
 use prost::Message;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 pub mod operational_level {
@@ -247,18 +248,18 @@ fn modify_node_record_for_set_subnet_operational_level(
 }
 
 /// Argument to the set_subnet_operational_level Registry canister method.
-#[derive(Debug, Clone, Eq, PartialEq, CandidType, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, CandidType, Serialize, Deserialize)]
 pub struct SetSubnetOperationalLevelPayload {
-    subnet_id: Option<SubnetId>,
-    operational_level: Option<i32>,
-    ssh_readonly_access: Option<Vec<String>>,
-    ssh_node_state_write_access: Option<Vec<NodeSshAccess>>,
+    pub subnet_id: Option<SubnetId>,
+    pub operational_level: Option<i32>,
+    pub ssh_readonly_access: Option<Vec<String>>,
+    pub ssh_node_state_write_access: Option<Vec<NodeSshAccess>>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize, Deserialize)]
 pub struct NodeSshAccess {
-    node_id: Option<NodeId>,
-    public_keys: Option<Vec<String>>,
+    pub node_id: Option<NodeId>,
+    pub public_keys: Option<Vec<String>>,
 }
 
 #[cfg(test)]

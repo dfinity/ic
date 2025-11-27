@@ -11,6 +11,8 @@ use std::cmp::Ordering;
 use std::{path::Path, sync::Mutex};
 use tracing::warn;
 
+const BALANCE_SYNC_BATCH_SIZE_DEFAULT: u64 = 100_000;
+
 #[derive(Debug, Clone)]
 pub struct TokenInfo {
     pub symbol: String,
@@ -55,20 +57,43 @@ impl TokenInfo {
 pub struct StorageClient {
     storage_connection: Mutex<Connection>,
     token_info: Option<TokenInfo>,
+    flush_cache_and_shrink_memory: bool,
+    balance_sync_batch_size: u64,
 }
 
 impl StorageClient {
     /// Constructs a new SQLite in-persistent store.
     pub fn new_persistent(db_file_path: &Path) -> anyhow::Result<Self> {
+        Self::new_persistent_with_cache_and_batch_size(
+            db_file_path,
+            None,
+            false,
+            Some(BALANCE_SYNC_BATCH_SIZE_DEFAULT),
+        )
+    }
+
+    /// Constructs a new SQLite in-persistent store with custom cache size and batch size.
+    pub fn new_persistent_with_cache_and_batch_size(
+        db_file_path: &Path,
+        cache_size_kb: Option<i64>,
+        flush_cache_shrink_mem: bool,
+        balance_sync_batch_size: Option<u64>,
+    ) -> anyhow::Result<Self> {
         std::fs::create_dir_all(db_file_path.parent().unwrap())?;
         let connection = rusqlite::Connection::open(db_file_path)?;
-        Self::new(connection)
+        let batch_size = balance_sync_batch_size.unwrap_or(BALANCE_SYNC_BATCH_SIZE_DEFAULT);
+        Self::new(
+            connection,
+            cache_size_kb,
+            flush_cache_shrink_mem,
+            batch_size,
+        )
     }
 
     /// Constructs a new SQLite in-memory store.
     pub fn new_in_memory() -> anyhow::Result<Self> {
         let connection = rusqlite::Connection::open_in_memory()?;
-        Self::new(connection)
+        Self::new(connection, None, false, BALANCE_SYNC_BATCH_SIZE_DEFAULT)
     }
 
     /// Constructs a new SQLite in-memory store with a named DB that can be shared across instances.
@@ -77,14 +102,14 @@ impl StorageClient {
             format!("'file:{name}?mode=memory&cache=shared', uri=True"),
             OpenFlags::default(),
         )?;
-        Self::new(connection)
+        Self::new(connection, None, false, BALANCE_SYNC_BATCH_SIZE_DEFAULT)
     }
 
     pub fn get_token_display_name(&self) -> String {
         if let Some(token_info) = &self.token_info {
             token_info.display_name()
         } else {
-            "unkown".to_string()
+            "unknown".to_string()
         }
     }
 
@@ -96,16 +121,46 @@ impl StorageClient {
         }
     }
 
-    fn new(connection: rusqlite::Connection) -> anyhow::Result<Self> {
+    fn new(
+        connection: rusqlite::Connection,
+        cache_size_kb: Option<i64>,
+        flush_cache_and_shrink_memory: bool,
+        balance_sync_batch_size: u64,
+    ) -> anyhow::Result<Self> {
         let storage_client = Self {
             storage_connection: Mutex::new(connection),
             token_info: None,
+            flush_cache_and_shrink_memory,
+            balance_sync_batch_size,
         };
-        storage_client
-            .storage_connection
-            .lock()
-            .unwrap()
-            .execute("PRAGMA foreign_keys = 1", [])?;
+        let conn = storage_client.storage_connection.lock().unwrap();
+
+        conn.pragma_update(None, "foreign_keys", 1)?;
+
+        match cache_size_kb {
+            None => {
+                tracing::info!("No cache size configured");
+            }
+            Some(cache_kb) => {
+                let cache_size = -cache_kb; // Negative to specify KB
+                conn.pragma_update(None, "cache_size", cache_size)?;
+                tracing::info!("SQLite cache_size set to {} KB", cache_kb);
+            }
+        }
+
+        match flush_cache_and_shrink_memory {
+            true => {
+                tracing::info!("Flushing cache and shrinking memory after updating balances.")
+            }
+            false => {
+                tracing::info!("Not flushing cache and shrinking memory after updating balances.")
+            }
+        }
+
+        tracing::info!("Using balance sync batch size {}", balance_sync_batch_size);
+
+        drop(conn);
+
         storage_client.create_tables()?;
 
         // Run the fee collector balances repair if needed
@@ -273,7 +328,11 @@ impl StorageClient {
             bail!("Tried to update account balances but there exist gaps in the database.",);
         }
         let mut open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::update_account_balances(&mut open_connection)
+        storage_operations::update_account_balances(
+            &mut open_connection,
+            self.flush_cache_and_shrink_memory,
+            self.balance_sync_batch_size,
+        )
     }
 
     /// Retrieves the highest block index in the account balance table.
@@ -331,7 +390,10 @@ impl StorageClient {
     /// Returns `Ok(())` if the repair was successful, or an error if the repair failed.
     pub fn repair_fee_collector_balances(&self) -> anyhow::Result<()> {
         let mut open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::repair_fee_collector_balances(&mut open_connection)
+        storage_operations::repair_fee_collector_balances(
+            &mut open_connection,
+            self.balance_sync_batch_size,
+        )
     }
 }
 

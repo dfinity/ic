@@ -5,6 +5,7 @@ use criterion::{BatchSize, Criterion};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::execution_environment::{
     CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, SUBNET_CALLBACK_SOFT_LIMIT,
+    SUBNET_MEMORY_RESERVATION,
 };
 use ic_config::subnet_config::SubnetConfig;
 use ic_cycles_account_manager::ResourceSaturation;
@@ -70,6 +71,7 @@ pub struct BenchmarkArgs {
     pub network_topology: Arc<NetworkTopology>,
     pub execution_parameters: ExecutionParameters,
     pub subnet_available_memory: SubnetAvailableMemory,
+    pub subnet_memory_reservation: NumBytes,
     pub subnet_available_callbacks: i64,
     pub call_origin: CallOrigin,
     pub callback: Callback,
@@ -96,6 +98,7 @@ where
         subnet_available_memory: *MAX_SUBNET_AVAILABLE_MEMORY,
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: 0,
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
     let execution_state = hypervisor
         .create_execution_state(
@@ -182,6 +185,7 @@ where
         network_topology,
         execution_parameters,
         subnet_available_memory: *MAX_SUBNET_AVAILABLE_MEMORY,
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         call_origin,
         callback,

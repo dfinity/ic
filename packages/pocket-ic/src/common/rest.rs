@@ -576,35 +576,50 @@ pub enum IcpFeaturesConfig {
 /// Specifies ICP features enabled by deploying their corresponding system canisters
 /// when creating a PocketIC instance and keeping them up to date
 /// during the PocketIC instance lifetime.
-/// The subnets to which the corresponding system canisters are deployed must be empty.
+/// The subnets to which the corresponding system canisters are deployed must be empty,
+/// i.e., their corresponding field in `ExtendedSubnetConfigSet` must be `None`
+/// or `Some(config)` with `config.state_config = SubnetStateConfig::New`.
 /// An ICP feature is enabled if its `IcpFeaturesConfig` is provided, i.e.,
 /// if the corresponding field is not `None`.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct IcpFeatures {
     /// Deploys the NNS registry canister and keeps its content in sync with registry used internally by PocketIC.
-    /// Note. The registry used internally by PocketIC is not updated after changing the registry stored in the registry canister
-    /// (e.g., after executing an NNS proposal mutating the registry).
+    /// Subnets: NNS.
     pub registry: Option<IcpFeaturesConfig>,
     /// Deploys the NNS cycles minting canister, sets ICP/XDR conversion rate, and keeps its subnet lists in sync with PocketIC topology.
     /// If the `cycles_minting` feature is enabled, then the default timestamp of a PocketIC instance is set to 10 May 2021 10:00:01 AM CEST (the smallest value that is strictly larger than the default timestamp hard-coded in the CMC state).
+    /// Subnets: NNS.
     pub cycles_minting: Option<IcpFeaturesConfig>,
     /// Deploys the ICP ledger and index canisters and initializes the ICP account of the anonymous principal with 1,000,000,000 ICP.
+    /// Subnets: NNS.
     pub icp_token: Option<IcpFeaturesConfig>,
     /// Deploys the cycles ledger and index canisters and initializes the cycles account of the anonymous principal with 2^127 cycles.
+    /// Subnets: II.
     pub cycles_token: Option<IcpFeaturesConfig>,
     /// Deploys the NNS governance and root canisters and sets up an initial NNS neuron with 1 ICP stake.
     /// The initial NNS neuron is controlled by the anonymous principal.
+    /// Subnets: NNS.
     pub nns_governance: Option<IcpFeaturesConfig>,
     /// Deploys the SNS-W and aggregator canisters, sets up the SNS subnet list in the SNS-W canister according to PocketIC topology,
     /// and uploads the SNS canister WASMs to the SNS-W canister.
+    /// Subnets: NNS, SNS.
     pub sns: Option<IcpFeaturesConfig>,
     /// Deploys the Internet Identity canister.
+    /// Subnets: II.
     pub ii: Option<IcpFeaturesConfig>,
     /// Deploys the NNS frontend dapp. The HTTP gateway must be specified via `http_gateway_config` in `InstanceConfig`
     /// and the ICP features `cycles_minting`, `icp_token`, `nns_governance`, `sns`, `ii` must all be enabled.
+    /// Subnets: NNS.
     pub nns_ui: Option<IcpFeaturesConfig>,
-    /// Deploys the bitcoin canister under the testnet canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai` and configured for the regtest network.
+    /// Deploys the Bitcoin canister under the testnet canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai` and configured for the regtest network.
+    /// Subnets: Bitcoin.
     pub bitcoin: Option<IcpFeaturesConfig>,
+    /// Deploys the Dogecoin canister under the mainnet canister ID `gordg-fyaaa-aaaan-aaadq-cai` and configured for the regtest network.
+    /// Subnets: Bitcoin.
+    pub dogecoin: Option<IcpFeaturesConfig>,
+    /// Deploys the canister migration orchestrator canister.
+    /// Subnets: NNS.
+    pub canister_migration: Option<IcpFeaturesConfig>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -634,6 +649,7 @@ pub struct InstanceConfig {
     pub icp_config: Option<IcpConfig>,
     pub log_level: Option<String>,
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
+    pub dogecoind_addr: Option<Vec<SocketAddr>>,
     pub icp_features: Option<IcpFeatures>,
     pub incomplete_state: Option<IncompleteStateFlag>,
     pub initial_time: Option<InitialTime>,
@@ -789,6 +805,8 @@ impl ExtendedSubnetConfigSet {
             ii,
             nns_ui,
             bitcoin,
+            dogecoin,
+            canister_migration,
         } = icp_features;
         // NNS canisters
         for (flag, icp_feature_str) in [
@@ -798,6 +816,7 @@ impl ExtendedSubnetConfigSet {
             (nns_governance, "nns_governance"),
             (sns, "sns"),
             (nns_ui, "nns_ui"),
+            (canister_migration, "canister_migration"),
         ] {
             if flag.is_some() {
                 check_empty_subnet(&self.nns, "NNS", icp_feature_str)?;
@@ -819,7 +838,7 @@ impl ExtendedSubnetConfigSet {
             }
         }
         // canisters on the Bitcoin subnet
-        for (flag, icp_feature_str) in [(bitcoin, "bitcoin")] {
+        for (flag, icp_feature_str) in [(bitcoin, "bitcoin"), (dogecoin, "dogecoin")] {
             if flag.is_some() {
                 check_empty_subnet(&self.bitcoin, "Bitcoin", icp_feature_str)?;
                 self.bitcoin = Some(self.bitcoin.unwrap_or_default());
@@ -1078,4 +1097,29 @@ impl From<MockCanisterHttpResponse> for RawMockCanisterHttpResponse {
             additional_responses: mock_canister_http_response.additional_responses,
         }
     }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawCanisterSnapshotDownload {
+    pub sender: RawPrincipalId,
+    pub canister_id: RawCanisterId,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub snapshot_id: Vec<u8>,
+    pub snapshot_dir: PathBuf,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawCanisterSnapshotUpload {
+    pub sender: RawPrincipalId,
+    pub canister_id: RawCanisterId,
+    pub replace_snapshot: Option<RawCanisterSnapshotId>,
+    pub snapshot_dir: PathBuf,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawCanisterSnapshotId {
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub snapshot_id: Vec<u8>,
 }

@@ -9,6 +9,7 @@ LIB_DEPS = [
     # Keep sorted.
     "//packages/canlog",
     "//packages/ic-dummy-getrandom-for-wasm",
+    "//packages/ic-http-types",
     "//packages/ic-secp256k1",
     "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
     "//packages/icrc-ledger-types:icrc_ledger_types",
@@ -37,6 +38,7 @@ LIB_DEPS = [
     "@crate_index//:scopeguard",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
+    "@crate_index//:serde_json",
 ]
 
 LIB_PROC_MACRO_DEPS = [
@@ -95,7 +97,6 @@ alias(
         deps = [
             # Keep sorted.
             ":ckbtc_minter_lib",
-            "//packages/canlog",
             "//packages/ic-dummy-getrandom-for-wasm",
             "//packages/ic-http-types",
             "//packages/icrc-ledger-types:icrc_ledger_types",
@@ -126,7 +127,7 @@ rust_test(
     deps = [
         # Keep sorted.
         "@crate_index//:assert_matches",
-        "@crate_index//:bitcoin_0_28",
+        "@crate_index//:bitcoin-0.28.2",
         "@crate_index//:maplit",
         "@crate_index//:mockall",
         "@crate_index//:proptest",
@@ -184,7 +185,7 @@ rust_test(
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/bitcoin/checker:btc_checker_lib",
         "//rs/types/management_canister_types",
-        "@crate_index//:bitcoin_0_28",
+        "@crate_index//:bitcoin-0.28.2",
         "@crate_index//:candid",
         "@crate_index//:flate2",
         "@crate_index//:ic-agent",
@@ -232,7 +233,7 @@ rust_ic_test(
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:assert_matches",
-        "@crate_index//:bitcoin_0_28",
+        "@crate_index//:bitcoin-0.28.2",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",
@@ -305,7 +306,6 @@ rust_canbench(
     deps = [
         # Keep sorted.
         ":ckbtc_minter_lib-canbench",
-        "//packages/canlog",
         "//packages/ic-dummy-getrandom-for-wasm",
         "//packages/ic-http-types",
         "//packages/icrc-ledger-types:icrc_ledger_types",

@@ -3,7 +3,10 @@
 
 use std::time::Duration;
 
-use crate::{execution_environment::SUBNET_HEAP_DELTA_CAPACITY, flag_status::FlagStatus};
+use crate::{
+    execution_environment::{NUMBER_OF_EXECUTION_THREADS, SUBNET_HEAP_DELTA_CAPACITY},
+    flag_status::FlagStatus,
+};
 use ic_base_types::NumBytes;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
@@ -92,18 +95,6 @@ const HEAP_DELTA_INITIAL_RESERVE: NumBytes = NumBytes::new(32 * GIB);
 
 // Log all messages that took more than this value to execute.
 pub const MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS: f64 = 5.0;
-
-// The gen 1 production machines should have 64 cores.
-// We could in theory use 32 threads, leaving other threads for query handling,
-// Wasm compilation, and other replica components. We currently use only four
-// threads for two reasons:
-// 1) Due to poor scaling of syscalls and signals with the number of threads
-//    in a process, four threads yield the maximum overall execution throughput.
-// 2) The memory capacity of a subnet is divided between the number of threads.
-//    We needs to ensure:
-//    `SUBNET_MEMORY_CAPACITY / number_of_threads >= max_canister_memory`
-//    If you change this number please adjust other constants as well.
-const NUMBER_OF_EXECUTION_THREADS: usize = 4;
 
 /// Maximum number of concurrent long-running executions.
 /// In the worst case there will be no more than 11 running canisters during the round:

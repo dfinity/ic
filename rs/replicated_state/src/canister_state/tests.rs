@@ -680,7 +680,7 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
     let input_queue_type = InputQueueType::RemoteSubnet;
 
     // Tiny explicit allocation, not enough for a request.
-    canister_state.system_state.memory_allocation = MemoryAllocation::Reserved(NumBytes::new(13));
+    canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::new(13));
     // And an execution state with non-zero size.
     canister_state.execution_state = Some(ExecutionState::new(
         Default::default(),

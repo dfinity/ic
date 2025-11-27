@@ -112,6 +112,7 @@ fn induct_message_with_successful_history_update() {
                         state: IngressState::Received,
                     },
                     NumBytes::from(u64::MAX),
+                    |_| {},
                 );
                 IngressStatus::Unknown.into()
             });
@@ -178,7 +179,7 @@ fn induct_message_fails_for_stopping_canister() {
             )
             .times(1)
             .returning(move |state, _, status| {
-                state.set_ingress_status(msg_id.clone(), status, NumBytes::from(u64::MAX));
+                state.set_ingress_status(msg_id.clone(), status, NumBytes::from(u64::MAX), |_| {});
                 IngressStatus::Unknown.into()
             });
         let ingress_history_writer = Arc::new(ingress_history_writer);
@@ -234,7 +235,7 @@ fn induct_message_fails_for_stopped_canister() {
             )
             .times(1)
             .returning(move |state, _, status| {
-                state.set_ingress_status(msg_id.clone(), status, NumBytes::from(u64::MAX));
+                state.set_ingress_status(msg_id.clone(), status, NumBytes::from(u64::MAX), |_| {});
                 IngressStatus::Unknown.into()
             });
 
@@ -295,7 +296,7 @@ fn try_to_induct_a_message_marked_as_already_inducted() {
             time: UNIX_EPOCH,
             state: IngressState::Received,
         };
-        state.set_ingress_status(msg.id(), status, NumBytes::from(u64::MAX));
+        state.set_ingress_status(msg.id(), status, NumBytes::from(u64::MAX), |_| {});
         valid_set_rule.induct_message(&mut state, signed_ingress, SMALL_APP_SUBNET_MAX_SIZE);
     });
 }
@@ -325,7 +326,12 @@ fn update_history_if_induction_failed() {
             .with(always(), eq(msg.id()), always())
             .times(1)
             .returning(move |state, _, _| {
-                state.set_ingress_status(msg_id.clone(), status.clone(), NumBytes::from(u64::MAX));
+                state.set_ingress_status(
+                    msg_id.clone(),
+                    status.clone(),
+                    NumBytes::from(u64::MAX),
+                    |_| {},
+                );
                 IngressStatus::Unknown.into()
             });
 
@@ -398,6 +404,7 @@ fn dont_induct_duplicate_messages() {
                         state: IngressState::Received,
                     },
                     NumBytes::from(u64::MAX),
+                    |_| {},
                 );
                 IngressStatus::Unknown.into()
             });
@@ -420,6 +427,7 @@ fn dont_induct_duplicate_messages() {
                 state: IngressState::Received,
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
         state.set_ingress_status(
             msg1.id(),
@@ -430,6 +438,7 @@ fn dont_induct_duplicate_messages() {
                 state: IngressState::Received,
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
 
         insert_canister(&mut state, canister_id1);
@@ -855,7 +864,7 @@ fn ingress_history_max_messages_impl(subnet_type: SubnetType) {
             .with(always(), always(), always())
             .times(4)
             .returning(move |state, msg_id, status| {
-                state.set_ingress_status(msg_id, status, NumBytes::from(u64::MAX));
+                state.set_ingress_status(msg_id, status, NumBytes::from(u64::MAX), |_| {});
                 IngressStatus::Unknown.into()
             });
 

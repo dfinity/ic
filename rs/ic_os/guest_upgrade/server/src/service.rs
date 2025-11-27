@@ -13,6 +13,7 @@ use guest_upgrade_shared::api::{
 use guest_upgrade_shared::attestation::GetDiskEncryptionKeyTokenCustomData;
 use ic_sev::guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use sev::firmware::guest::AttestationReport;
+use sev::parser::ByteParser;
 use std::ops::Deref;
 use std::path::Path;
 use tokio::sync::watch::Sender;

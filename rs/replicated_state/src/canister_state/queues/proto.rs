@@ -1,7 +1,10 @@
+use super::refunds::RefundPool;
 use super::*;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
+use ic_protobuf::state::queues::v1::Refunds;
 use ic_protobuf::state::queues::v1::canister_queues::CanisterQueuePair;
 use ic_protobuf::types::v1 as pb_types;
+use ic_types::messages::Refund;
 
 impl From<&CanisterQueues> for pb_queues::CanisterQueues {
     fn from(item: &CanisterQueues) -> Self {
@@ -148,5 +151,38 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
         queues.test_invariants().map_err(ProxyDecodeError::Other)?;
 
         Ok(queues)
+    }
+}
+
+impl From<&RefundPool> for pb_queues::Refunds {
+    fn from(item: &RefundPool) -> Self {
+        Refunds {
+            refunds: item.iter().map(|refund| refund.into()).collect(),
+        }
+    }
+}
+
+impl TryFrom<(pb_queues::Refunds, &dyn CheckpointLoadingMetrics)> for RefundPool {
+    type Error = ProxyDecodeError;
+
+    fn try_from(
+        (item, metrics): (pb_queues::Refunds, &dyn CheckpointLoadingMetrics),
+    ) -> Result<Self, Self::Error> {
+        let mut pool = RefundPool::new();
+        for refund in item.refunds {
+            let pool_size_before = pool.len();
+
+            let refund = Refund::try_from(refund)?;
+            pool.add(refund.recipient(), refund.amount());
+
+            if pool.len() <= pool_size_before {
+                metrics.observe_broken_soft_invariant(format!(
+                    "RefundPool: Duplicate recipient ({}) or zero amount ({})",
+                    refund.recipient(),
+                    refund.amount()
+                ));
+            }
+        }
+        Ok(pool)
     }
 }

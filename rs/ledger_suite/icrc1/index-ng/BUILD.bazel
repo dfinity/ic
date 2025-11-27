@@ -24,7 +24,6 @@ DEPENDENCIES = [
     "@crate_index//:num-traits",
     "@crate_index//:scopeguard",
     "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
     "@crate_index//:serde_json",
 ]
 
@@ -137,7 +136,6 @@ rust_test(
             "@crate_index//:num-traits",
             "@crate_index//:proptest",
             "@crate_index//:serde",
-            "@crate_index//:serde_bytes",
             "@crate_index//:serde_json",
         ],
     )
@@ -215,6 +213,7 @@ rust_ic_test_suite_with_extra_srcs(
         "//rs/ledger_suite/common/ledger_canister_core",
         "//rs/ledger_suite/icrc1/ledger",
         "//rs/ledger_suite/icrc1/test_utils",
+        "//rs/ledger_suite/test_utils/state_machine_helpers:ic-ledger-suite-state-machine-helpers",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
@@ -223,7 +222,6 @@ rust_ic_test_suite_with_extra_srcs(
         "@crate_index//:ic-agent",
         "@crate_index//:num-traits",
         "@crate_index//:serde",
-        "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
     ],
 )

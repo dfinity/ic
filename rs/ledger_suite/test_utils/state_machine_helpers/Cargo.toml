@@ -20,3 +20,5 @@ ic-universal-canister = { path = "../../../universal_canister/lib" }
 icp-ledger = { path = "../../icp" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }

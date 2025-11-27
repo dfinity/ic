@@ -1,14 +1,15 @@
 [Unit]
-Description=Initialize IC node configuration
+Description=Initialize configuration in /run/config from bootstrap package
 DefaultDependencies=no
-After=mount-config.service
-Wants=mount-config.service
-RequiresMountsFor=/mnt/config /tmp
+After=systemd-udev-settle.service
+Before=local-fs.target
+RequiresMountsFor=/run
 
 [Service]
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/init-config.sh
+TimeoutSec=60
 Restart=on-failure
 RestartSec=10
 
@@ -18,4 +19,4 @@ StandardOutput=journal+console
 StandardError=journal+console
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=local-fs.target

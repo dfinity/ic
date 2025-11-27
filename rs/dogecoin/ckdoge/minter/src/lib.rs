@@ -3,26 +3,37 @@ mod tests;
 
 pub mod address;
 pub mod candid_api;
+pub mod fees;
 pub mod lifecycle;
 pub mod updates;
 
 use crate::address::DogecoinAddress;
+use crate::dogecoin_canister::MillikoinuPerByte;
+use crate::fees::DogecoinFeeEstimator;
 use crate::lifecycle::init::Network;
 use async_trait::async_trait;
 use candid::Principal;
+pub use dogecoin_canister::get_dogecoin_canister_id;
+use ic_cdk::management_canister::SignWithEcdsaArgs;
 use ic_ckbtc_minter::{
-    CanisterRuntime, CheckTransactionResponse, GetUtxosRequest, GetUtxosResponse,
-    address::BitcoinAddress, management::CallError, state::CkBtcMinterState, tx,
+    CanisterRuntime, CheckTransactionResponse, GetCurrentFeePercentilesRequest, GetUtxosRequest,
+    GetUtxosResponse, management::CallError, state::CkBtcMinterState, tx,
     updates::retrieve_btc::BtcAddressCheckStatus,
 };
-use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};
-
-pub use dogecoin_canister::get_dogecoin_canister_id;
 pub use ic_ckbtc_minter::{
-    OutPoint, Page, Txid, Utxo,
+    MAX_NUM_INPUTS_IN_TRANSACTION, MIN_RESUBMISSION_DELAY, OutPoint, Page, Txid,
+    UTXOS_COUNT_THRESHOLD, Utxo,
+    address::BitcoinAddress,
+    logs::Priority,
     memo::{BurnMemo, MintMemo, encode as memo_encode},
+    queries::WithdrawalFee,
+    reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason},
+    state::eventlog::{Event, EventType, GetEventsArg},
+    state::{ChangeOutput, RetrieveBtcRequest},
     updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
+use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};
+use std::time::Duration;
 
 pub const DOGECOIN_CANISTER_RUNTIME: DogeCanisterRuntime = DogeCanisterRuntime {};
 
@@ -31,6 +42,26 @@ pub struct DogeCanisterRuntime {}
 
 #[async_trait]
 impl CanisterRuntime for DogeCanisterRuntime {
+    type Estimator = DogecoinFeeEstimator;
+
+    fn fee_estimator(&self, state: &CkBtcMinterState) -> DogecoinFeeEstimator {
+        DogecoinFeeEstimator::from_state(state)
+    }
+
+    fn refresh_fee_percentiles_frequency(&self) -> Duration {
+        const SIX_MINUTES: Duration = Duration::from_secs(360);
+        SIX_MINUTES
+    }
+
+    async fn get_current_fee_percentiles(
+        &self,
+        request: &GetCurrentFeePercentilesRequest,
+    ) -> Result<Vec<MillikoinuPerByte>, CallError> {
+        dogecoin_canister::dogecoin_get_fee_percentiles(request)
+            .await
+            .map_err(|err| CallError::from_cdk_call_error("dogecoin_get_fee_percentiles", err))
+    }
+
     async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
         dogecoin_canister::dogecoin_get_utxos(request)
             .await
@@ -59,19 +90,51 @@ impl CanisterRuntime for DogeCanisterRuntime {
 
     async fn sign_with_ecdsa(
         &self,
-        _key_name: String,
-        _derivation_path: Vec<Vec<u8>>,
-        _message_hash: [u8; 32],
+        key_name: String,
+        derivation_path: Vec<Vec<u8>>,
+        message_hash: [u8; 32],
     ) -> Result<Vec<u8>, CallError> {
-        todo!()
+        ic_cdk::management_canister::sign_with_ecdsa(&SignWithEcdsaArgs {
+            message_hash: message_hash.to_vec(),
+            derivation_path,
+            key_id: ic_cdk::management_canister::EcdsaKeyId {
+                curve: ic_cdk::management_canister::EcdsaCurve::Secp256k1,
+                name: key_name.clone(),
+            },
+        })
+        .await
+        .map(|result| result.signature)
+        .map_err(CallError::from_sign_error)
     }
 
     async fn send_transaction(
         &self,
-        _transaction: &tx::SignedTransaction,
-        _network: ic_ckbtc_minter::Network,
+        transaction: &tx::SignedTransaction,
+        network: ic_ckbtc_minter::Network,
     ) -> Result<(), CallError> {
-        todo!()
+        dogecoin_canister::dogecoin_send_transaction(&dogecoin_canister::SendTransactionRequest {
+            transaction: transaction.serialize(),
+            network: network.into(),
+        })
+        .await
+        .map_err(|err| CallError::from_cdk_call_error("dogecoin_send_transaction", err))
+    }
+
+    fn block_time(&self, network: ic_ckbtc_minter::Network) -> Duration {
+        match network {
+            ic_ckbtc_minter::Network::Mainnet => {
+                //https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/chainparams.cpp#L90
+                Duration::from_secs(60)
+            }
+            ic_ckbtc_minter::Network::Testnet => {
+                //https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/chainparams.cpp#L250
+                Duration::from_secs(60)
+            }
+            ic_ckbtc_minter::Network::Regtest => {
+                //https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/chainparams.cpp#L394
+                Duration::from_secs(1)
+            }
+        }
     }
 
     fn validate_config(&self, state: &CkBtcMinterState) {
@@ -110,6 +173,30 @@ impl CanisterRuntime for DogeCanisterRuntime {
 
     fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String {
         updates::account_to_p2pkh_address_from_state(state, account)
+            .display(&Network::from(state.btc_network))
+    }
+
+    fn derive_minter_address(&self, state: &CkBtcMinterState) -> BitcoinAddress {
+        let main_account = Account {
+            owner: ic_cdk::api::canister_self(),
+            subaccount: None,
+        };
+        let minter_address = updates::account_to_p2pkh_address_from_state(state, &main_account);
+
+        // This conversion is a hack to use the same type of address as in TxOut,
+        match minter_address {
+            DogecoinAddress::P2pkh(p2pkh) => BitcoinAddress::P2pkh(p2pkh),
+            DogecoinAddress::P2sh(p2sh) => BitcoinAddress::P2sh(p2sh),
+        }
+    }
+
+    fn derive_minter_address_str(&self, state: &CkBtcMinterState) -> String {
+        let main_account = Account {
+            owner: ic_cdk::api::canister_self(),
+            subaccount: None,
+        };
+        let minter_address = updates::account_to_p2pkh_address_from_state(state, &main_account);
+        minter_address.display(&Network::from(state.btc_network))
     }
 
     async fn check_address(
@@ -126,15 +213,20 @@ impl CanisterRuntime for DogeCanisterRuntime {
 mod dogecoin_canister {
     use crate::Network;
     use candid::Principal;
-    use ic_cdk::bitcoin_canister::{GetUtxosRequest, GetUtxosResponse};
+    use ic_cdk::bitcoin_canister::{
+        GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
+    };
     use ic_cdk::call::{Call, CallResult};
 
+    pub use ic_cdk::bitcoin_canister::SendTransactionRequest;
+
+    /// Unit of Dogecoin transaction fee.
+    ///
+    /// This is the element in the [`dogecoin_get_fee_percentiles`] response.
+    pub type MillikoinuPerByte = u64;
+
     pub async fn dogecoin_get_utxos(arg: &GetUtxosRequest) -> CallResult<GetUtxosResponse> {
-        let canister_id = get_dogecoin_canister_id(&match arg.network {
-            ic_cdk::bitcoin_canister::Network::Mainnet => Network::Mainnet,
-            ic_cdk::bitcoin_canister::Network::Testnet => Network::Testnet,
-            ic_cdk::bitcoin_canister::Network::Regtest => Network::Regtest,
-        });
+        let canister_id = get_dogecoin_canister_id(&into_dogecoin_network(arg.network));
         // same cycles cost as for the Bitcoin canister
         let cycles = ic_cdk::bitcoin_canister::cost_get_utxos(arg);
         Ok(Call::bounded_wait(canister_id, "dogecoin_get_utxos")
@@ -142,6 +234,40 @@ mod dogecoin_canister {
             .with_cycles(cycles)
             .await?
             .candid()?)
+    }
+
+    pub async fn dogecoin_get_fee_percentiles(
+        arg: &GetCurrentFeePercentilesRequest,
+    ) -> CallResult<Vec<MillikoinuPerByte>> {
+        let canister_id = get_dogecoin_canister_id(&into_dogecoin_network(arg.network));
+        // same cycles cost as for the Bitcoin canister
+        let cycles = ic_cdk::bitcoin_canister::cost_get_current_fee_percentiles(arg);
+        Ok(
+            Call::bounded_wait(canister_id, "dogecoin_get_current_fee_percentiles")
+                .with_arg(arg)
+                .with_cycles(cycles)
+                .await?
+                .candid()?,
+        )
+    }
+
+    /// Sends a Dogecoin transaction to the Dogecoin network.
+    ///
+    /// **Unbounded-wait call**
+    ///
+    /// Check the [Dogecoin Canisters Interface Specification](https://github.com/dfinity/dogecoin-canister/blob/master/INTERFACE_SPECIFICATION.md#dogecoin_send_transaction) for more details.
+    pub async fn dogecoin_send_transaction(arg: &SendTransactionRequest) -> CallResult<()> {
+        let canister_id = get_dogecoin_canister_id(&into_dogecoin_network(arg.network));
+        // same cycles cost as for the Bitcoin canister
+        let cycles = ic_cdk::bitcoin_canister::cost_send_transaction(arg);
+
+        Ok(
+            Call::unbounded_wait(canister_id, "dogecoin_send_transaction")
+                .with_arg(arg)
+                .with_cycles(cycles)
+                .await?
+                .candid()?,
+        )
     }
 
     /// Gets the canister ID of the Dogecoin canister for the specified network.
@@ -154,6 +280,14 @@ mod dogecoin_canister {
             Network::Mainnet => MAINNET_ID,
             Network::Testnet => TESTNET_ID,
             Network::Regtest => REGTEST_ID,
+        }
+    }
+
+    fn into_dogecoin_network(network: ic_cdk::bitcoin_canister::Network) -> Network {
+        match network {
+            ic_cdk::bitcoin_canister::Network::Mainnet => Network::Mainnet,
+            ic_cdk::bitcoin_canister::Network::Testnet => Network::Testnet,
+            ic_cdk::bitcoin_canister::Network::Regtest => Network::Regtest,
         }
     }
 }

@@ -20,7 +20,7 @@ use crate::api::ni_dkg_errors::{
     SizeError,
 };
 
-use crate::types::public_coefficients::conversions::pub_key_bytes_from_pub_coeff_bytes;
+use crate::types::public_coefficients::pub_key_bytes_from_pub_coeff_bytes;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 
 /// Creates an NiDKG transcript.
@@ -182,9 +182,7 @@ fn compute_transcript(
         .iter()
         .map(|(dealer_index, dealing)| {
             // Type conversion from crypto internal type.
-            // The dealings have already been verified,
-            // so we can trust the serialized coefficients.
-            threshold_types::PublicCoefficients::from_trusted_bytes(&dealing.public_coefficients)
+            threshold_types::PublicCoefficients::deserialize_cached(&dealing.public_coefficients)
                 .map(|public_coefficients| (*dealer_index, public_coefficients))
                 .map_err(|crypto_error| {
                     let error = InvalidArgumentError {

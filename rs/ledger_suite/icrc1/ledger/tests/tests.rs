@@ -602,8 +602,18 @@ fn test_get_blocks_returns_multiple_archive_callbacks() {
 }
 
 #[test]
-fn test_archiving_fails_if_ledger_does_not_have_enough_cycles_to_attach() {
-    ic_ledger_suite_state_machine_tests::archiving::test_archiving_fails_if_ledger_does_not_have_enough_cycles_to_attach(
+fn test_archiving_fails_on_app_subnet_if_ledger_does_not_have_enough_cycles() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_fails_on_app_subnet_if_ledger_does_not_have_enough_cycles(
+        ledger_wasm(),
+        encode_init_args,
+        icrc_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+    );
+}
+
+#[test]
+fn test_archiving_succeeds_on_system_subnet_if_ledger_does_not_have_any_cycles() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_succeeds_on_system_subnet_if_ledger_does_not_have_any_cycles(
         ledger_wasm(),
         encode_init_args,
         icrc_archives,
@@ -1206,6 +1216,7 @@ fn test_icrc3_get_archives() {
         timestamp: 0,
         fee_collector: None,
         fee_collector_block_index: None,
+        btype: None,
     }
     .encode()
     .size_bytes();

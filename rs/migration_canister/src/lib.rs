@@ -1,8 +1,7 @@
 //! This module contains types and internal methods.
 //!
 //!
-use candid::{CandidType, Principal};
-use ic_cdk::futures::spawn;
+use candid::{CandidType, Principal, Reserved};
 use ic_cdk_timers::set_timer_interval;
 use ic_stable_structures::{Storable, storable::Bound};
 use serde::{Deserialize, Serialize};
@@ -11,13 +10,15 @@ use std::{borrow::Cow, fmt::Display, time::Duration};
 use strum_macros::Display;
 
 use crate::{
-    canister_state::{max_active_requests, num_active_requests},
+    canister_state::{events::num_successes_in_past_24_h, num_active_requests},
     processing::{
         process_accepted, process_all_by_predicate, process_all_failed, process_all_succeeded,
         process_controllers_changed, process_renamed, process_routing_table,
         process_source_deleted, process_stopped, process_updated,
     },
 };
+
+pub use crate::migration_canister::{MigrateCanisterArgs, MigrationStatus};
 
 mod canister_state;
 mod external_interfaces;
@@ -28,14 +29,26 @@ mod processing;
 mod tests;
 mod validation;
 
-const DEFAULT_MAX_ACTIVE_REQUESTS: u64 = 50;
+/// The max number of requests in a 24 hour sliding window. Requests are either
+/// - active (in REQUESTS)
+/// - succeeded (in HISTORY) and not older than 24 hours.
+///
+/// Note that RATE_LIMIT + MAX_ONGOING_VALIDATIONS < 500, which is the
+/// subnet queue capacity.
+const RATE_LIMIT: u64 = 50;
+/// Validations cause xnet calls, so we limit them.
+const MAX_ONGOING_VALIDATIONS: u64 = 200;
 /// 10 Trillion Cycles
 const CYCLES_COST_PER_MIGRATION: u64 = 10_000_000_000_000;
 
 #[derive(Clone, Display, Debug, CandidType, Deserialize)]
 pub enum ValidationError {
-    MigrationsDisabled,
-    RateLimited,
+    MigrationsDisabled(Reserved),
+    RateLimited(Reserved),
+    #[strum(to_string = "ValidationError::ValidationInProgress {{ canister: {canister} }}")]
+    ValidationInProgress {
+        canister: Principal,
+    },
     #[strum(to_string = "ValidationError::MigrationInProgress {{ canister: {canister} }}")]
     MigrationInProgress {
         canister: Principal,
@@ -44,7 +57,7 @@ pub enum ValidationError {
     CanisterNotFound {
         canister: Principal,
     },
-    SameSubnet,
+    SameSubnet(Reserved),
     #[strum(to_string = "ValidationError::CallerNotController {{ canister: {canister} }}")]
     CallerNotController {
         canister: Principal,
@@ -53,11 +66,11 @@ pub enum ValidationError {
     NotController {
         canister: Principal,
     },
-    SourceNotStopped,
-    SourceNotReady,
-    TargetNotStopped,
-    TargetHasSnapshots,
-    SourceInsufficientCycles,
+    SourceNotStopped(Reserved),
+    SourceNotReady(Reserved),
+    TargetNotStopped(Reserved),
+    TargetHasSnapshots(Reserved),
+    SourceInsufficientCycles(Reserved),
     #[strum(to_string = "ValidationError::CallFailed {{ reason: {reason} }}")]
     CallFailed {
         reason: String,
@@ -103,6 +116,19 @@ impl Request {
             return Some(tgt_id);
         }
         None
+    }
+
+    /// Dummy value to serve as a bound in composite bounds.
+    pub fn low_bound() -> Self {
+        Self {
+            source: Principal::management_canister(),
+            source_subnet: Principal::management_canister(),
+            source_original_controllers: vec![],
+            target: Principal::management_canister(),
+            target_subnet: Principal::management_canister(),
+            target_original_controllers: vec![],
+            caller: Principal::management_canister(),
+        }
     }
 }
 
@@ -280,6 +306,7 @@ impl EventType {
 
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 struct Event {
+    // This field MUST be the first in the struct so that Ord works as intended.
     /// IC time in nanos since epoch.
     pub time: u64,
     pub event: EventType,
@@ -361,64 +388,74 @@ impl Storable for Event {
 #[allow(clippy::disallowed_methods)]
 pub fn start_timers() {
     let interval = Duration::from_secs(1);
-    set_timer_interval(interval, || {
-        spawn(process_all_by_predicate(
+    set_timer_interval(interval, async || {
+        process_all_by_predicate(
             "accepted",
             |r| matches!(r, RequestState::Accepted { .. }),
             process_accepted,
-        ))
+        )
+        .await
     });
-    set_timer_interval(interval, || {
-        spawn(process_all_by_predicate(
+    set_timer_interval(interval, async || {
+        process_all_by_predicate(
             "controllers_changed",
             |r| matches!(r, RequestState::ControllersChanged { .. }),
             process_controllers_changed,
-        ))
+        )
+        .await
     });
-    set_timer_interval(interval, || {
-        spawn(process_all_by_predicate(
+    set_timer_interval(interval, async || {
+        process_all_by_predicate(
             "stopped",
             |r| matches!(r, RequestState::StoppedAndReady { .. }),
             process_stopped,
-        ))
+        )
+        .await
     });
-    set_timer_interval(interval, || {
-        spawn(process_all_by_predicate(
+    set_timer_interval(interval, async || {
+        process_all_by_predicate(
             "renamed_target",
             |r| matches!(r, RequestState::RenamedTarget { .. }),
             process_renamed,
-        ))
+        )
+        .await
     });
-    set_timer_interval(interval, || {
-        spawn(process_all_by_predicate(
+    set_timer_interval(interval, async || {
+        process_all_by_predicate(
             "updated_routing_table",
             |r| matches!(r, RequestState::UpdatedRoutingTable { .. }),
             process_updated,
-        ))
+        )
+        .await
     });
-    set_timer_interval(interval, || {
-        spawn(process_all_by_predicate(
+    set_timer_interval(interval, async || {
+        process_all_by_predicate(
             "routing_table_change_accepted",
             |r| matches!(r, RequestState::RoutingTableChangeAccepted { .. }),
             process_routing_table,
-        ))
+        )
+        .await
     });
-    set_timer_interval(interval, || {
-        spawn(process_all_by_predicate(
+    set_timer_interval(interval, async || {
+        process_all_by_predicate(
             "source_deleted",
             |r| matches!(r, RequestState::SourceDeleted { .. }),
             process_source_deleted,
-        ))
+        )
+        .await
     });
 
-    set_timer_interval(interval, || spawn(process_all_succeeded()));
+    set_timer_interval(interval, async || process_all_succeeded().await);
 
     // This one has a different type from the generic ones above.
-    set_timer_interval(interval, || spawn(process_all_failed()));
+    set_timer_interval(interval, async || process_all_failed().await);
 }
 
+/// Rate limit active requests:
+/// Within a sliding 24h window, we don't want to exceed some maximum of migrations.
+/// Therefore, we add currently active requests and successes in the past 24 hours.
 pub fn rate_limited() -> bool {
-    num_active_requests() >= max_active_requests()
+    num_active_requests() + num_successes_in_past_24_h() >= RATE_LIMIT
 }
 
 #[allow(dead_code)]

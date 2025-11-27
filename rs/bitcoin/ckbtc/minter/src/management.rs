@@ -5,6 +5,7 @@ use candid::Principal;
 use ic_btc_checker::{CheckTransactionArgs, CheckTransactionResponse};
 use ic_btc_interface::{Address, MillisatoshiPerByte, Utxo};
 use ic_cdk::bitcoin_canister;
+use ic_cdk::bitcoin_canister::GetCurrentFeePercentilesRequest;
 use ic_cdk::management_canister::SignCallError;
 use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
 use ic_management_canister_types_private::DerivationPath;
@@ -190,14 +191,12 @@ pub async fn bitcoin_get_utxos(request: &GetUtxosRequest) -> Result<GetUtxosResp
 }
 
 /// Returns the current fee percentiles on the Bitcoin network.
-pub async fn get_current_fees(network: Network) -> Result<Vec<MillisatoshiPerByte>, CallError> {
-    bitcoin_canister::bitcoin_get_current_fee_percentiles(
-        &bitcoin_canister::GetCurrentFeePercentilesRequest {
-            network: network.into(),
-        },
-    )
-    .await
-    .map_err(|err| CallError::from_cdk_call_error("bitcoin_get_current_fee_percentiles", err))
+pub async fn bitcoin_get_current_fee_percentiles(
+    request: &GetCurrentFeePercentilesRequest,
+) -> Result<Vec<MillisatoshiPerByte>, CallError> {
+    bitcoin_canister::bitcoin_get_current_fee_percentiles(request)
+        .await
+        .map_err(|err| CallError::from_cdk_call_error("bitcoin_get_current_fee_percentiles", err))
 }
 
 /// Sends the transaction to the network the management canister interacts with.

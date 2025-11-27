@@ -144,11 +144,11 @@ rust_test_suite_with_extra_srcs(
         "tests/*.json",
         "tests/*.ros",
     ]) + [
-        "@rosetta-cli//:rosetta-cli",
+        "//:rosetta-cli",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/",
-        "ROSETTA_CLI": "$(rootpath @rosetta-cli//:rosetta-cli)",
+        "ROSETTA_CLI": "$(rootpath //:rosetta-cli)",
     },
     extra_srcs = ["tests/test_utils/mod.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
@@ -175,7 +175,7 @@ rust_test_suite_with_extra_srcs(
         "//rs/replica",
         "//rs/rosetta-api/icp:ic-rosetta-api-rosetta-blocks",
         "//rs/rosetta-api/icp:rosetta-api",
-        "@mainnet_icp_ledger_canister//file",
+        "@mainnet_canisters//:ledger.wasm.gz",
     ],
     env = {
         "RUST_TEST_THREADS": "4",
@@ -185,7 +185,7 @@ rust_test_suite_with_extra_srcs(
         "REPLICA_BIN": "$(rootpath //rs/replica)",
         "ROSETTA_BIN_PATH": "$(rootpath //rs/rosetta-api/icp:ic-rosetta-api-rosetta-blocks)",
         "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
-        "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
+        "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ledger.wasm.gz)",
         "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
         "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",

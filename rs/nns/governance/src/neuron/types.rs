@@ -868,6 +868,7 @@ impl Neuron {
         };
 
         NeuronInfo {
+            id: Some(self.id()),
             retrieved_at_timestamp_seconds: now_seconds,
             state: self.state(now_seconds) as i32,
             age_seconds: self.age_seconds(now_seconds),
