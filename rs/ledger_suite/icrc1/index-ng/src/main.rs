@@ -725,10 +725,8 @@ async fn fetch_blocks_via_icrc3() -> Result<u64, SyncError> {
 }
 
 fn set_build_index_timer(after: Duration) {
-    let timer_id = ic_cdk_timers::set_timer_interval(after, || {
-        ic_cdk::spawn(async {
-            let _ = build_index().await;
-        })
+    let timer_id = ic_cdk_timers::set_timer_interval(after, async || {
+        let _ = build_index().await;
     });
     TIMER_ID.with(|tid| *tid.borrow_mut() = timer_id);
 }
