@@ -39,12 +39,9 @@ impl Argv {
         } = self;
 
         let mut agent = Agent::builder().with_url(agent_url);
-        match &subcommand {
-            Subcommand::LoadFromFile(_) => {
-                let a_very_long_time = Duration::from_secs(365_250 * 1000 * 24 * 60 * 60);
-                agent = agent.with_ingress_expiry(a_very_long_time);
-            }
-            _ => (),
+        if let Subcommand::LoadFromFile(_) = &subcommand {
+            let a_very_long_time = Duration::from_secs(365_250 * 1000 * 24 * 60 * 60);
+            agent = agent.with_ingress_expiry(a_very_long_time);
         }
         let agent = agent.build().unwrap();
 
