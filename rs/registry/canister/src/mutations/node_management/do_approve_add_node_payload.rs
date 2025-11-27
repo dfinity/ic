@@ -45,7 +45,7 @@ impl ApproveAddNodePayload {
             .as_ref()
             .ok_or(ApprovePayloadError::InvalidPayloadLength { received_length: 0 })?;
 
-        let received_bytes_len = hex::decode(&received_hex)
+        let received_bytes_len = hex::decode(received_hex)
             .map(|bytes| bytes.len())
             .map_err(ApprovePayloadError::InvalidPayloadHex)?;
 
