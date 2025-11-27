@@ -16,22 +16,19 @@ pub const MAX_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 pub const DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 
 /// The maximum size of a delta (per message) canister log buffer.
-pub const MAX_DELTA_LOG_MEMORY_LIMIT: usize = 4 * KiB;
+pub const MAX_DELTA_LOG_MEMORY_LIMIT: usize = 100 * KiB;
 
 /// Upper bound on stored delta-log sizes used for metrics.
 /// Limits memory growth, 10k covers expected per-round
 /// number of messages per canister (and so delta log appends).
 const DELTA_LOG_SIZES_CAP: usize = 10_000;
 
-/// Maximum number of response bytes for a canister http request.
+/// Maximum number of response bytes for a fetch canister logs request.
 pub const MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES: usize = 2_000_000;
 
 // Compile-time assertions to ensure the constants are within valid ranges.
 const _: () = assert!(MIN_AGGREGATE_LOG_MEMORY_LIMIT <= DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
 const _: () = assert!(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT <= MAX_AGGREGATE_LOG_MEMORY_LIMIT);
-
-const _: () = assert!(MIN_AGGREGATE_LOG_MEMORY_LIMIT <= MAX_DELTA_LOG_MEMORY_LIMIT);
-const _: () = assert!(MAX_DELTA_LOG_MEMORY_LIMIT <= MAX_AGGREGATE_LOG_MEMORY_LIMIT);
 
 const _: () = assert!(std::mem::size_of::<CanisterLogRecord>() <= MIN_AGGREGATE_LOG_MEMORY_LIMIT);
 
@@ -55,13 +52,13 @@ struct Records {
 impl Records {
     /// Creates a new `Records` from the given records and byte capacity.
     fn from(records: Vec<CanisterLogRecord>, byte_capacity: usize) -> Self {
-        let records: Vec<_> = records
+        let records: VecDeque<_> = records
             .into_iter()
             .map(|r| truncate_content(byte_capacity, r)) // Apply size limit to each record's content.
             .collect();
         let bytes_used = records.iter().map(|r| r.data_size()).sum();
         let mut result = Self {
-            records: records.into(),
+            records,
             byte_capacity,
             bytes_used,
         };
@@ -79,6 +76,11 @@ impl Records {
     /// Returns the canister log records.
     fn get(&self) -> &VecDeque<CanisterLogRecord> {
         &self.records
+    }
+
+    /// Returns mutable reference to the canister log records.
+    fn get_mut(&mut self) -> &mut VecDeque<CanisterLogRecord> {
+        &mut self.records
     }
 
     /// Pushes a new record to the back, updating the used bytes.
@@ -195,6 +197,13 @@ impl CanisterLog {
         self.records.get()
     }
 
+    // TODO(DSM-11): remove allow(dead_code) when log memory store is used in production.
+    /// Returns mutable reference to the canister log records.
+    #[allow(dead_code)]
+    pub fn records_mut(&mut self) -> &mut VecDeque<CanisterLogRecord> {
+        self.records.get_mut()
+    }
+
     /// Clears the canister log records.
     pub fn clear(&mut self) {
         self.records.clear();
@@ -262,7 +271,7 @@ mod tests {
     use super::*;
     use ic_management_canister_types_private::CanisterLogRecord;
 
-    const TEST_MAX_ALLOWED_SIZE: usize = 4 * 1024;
+    const TEST_MAX_ALLOWED_SIZE: usize = 4 * KiB;
     const BIGGER_THAN_LIMIT_MESSAGE: &[u8] = &[b'a'; 2 * TEST_MAX_ALLOWED_SIZE];
 
     fn canister_log_records(data: &[(u64, u64, &[u8])]) -> Vec<CanisterLogRecord> {
