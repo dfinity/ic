@@ -363,7 +363,7 @@ impl BlockProposalAssembler {
         }
     }
 
-    /// Returns the list of ingress messages which have been stripped from the block.
+    /// Returns the list of messages which have been stripped from the block.
     pub(crate) fn missing_stripped_messages(&self) -> Vec<StrippedMessageId> {
         self.ingress_messages
             .iter()
