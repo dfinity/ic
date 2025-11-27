@@ -78,3 +78,6 @@ path = "ckbtc_minter_update_balance.rs"
 [[bin]]
 name = "ic-systest-adapter-basics-test"
 path = "adapter_basics_test.rs"
+
+[features]
+tla = []

@@ -126,55 +126,45 @@ alias(
     actual = ":ckbtc_minter_lib",
 )
 
-rust_canister(
-    name = "ckbtc_minter",
-    srcs = ["src/main.rs"],
-    compile_data = [":ckbtc_minter.did"],
-    crate_features = [],
-    crate_name = "ic_ckbtc_minter_canister",
-    proc_macro_deps = LIB_PROC_MACRO_DEPS,
-    rustc_env = {
-        "CKBTC_MINTER_DID_PATH": "$(execpath :ckbtc_minter.did)",
-    },
-    service_file = ":ckbtc_minter.did",
-    deps = [
-        # Keep sorted.
-        ":ckbtc_minter_lib",
-        "//packages/ic-dummy-getrandom-for-wasm",
-        "//packages/ic-http-types",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
-        "@crate_index//:candid",
-        "@crate_index//:ic-btc-interface",
-        "@crate_index//:ic-cdk",
-        "@crate_index//:ic-metrics-encoder",
-        "@crate_index//:serde_json",
-    ],
-)
-
-rust_canister(
-    name = "ckbtc_minter_debug",
-    srcs = ["src/main.rs"],
-    compile_data = [":ckbtc_minter.did"],
-    crate_features = ["self_check"] + test_with_tla(),
-    crate_name = "ic_ckbtc_minter_canister",
-    proc_macro_deps = TLA_PROC_MACRO_DEPS,
-    rustc_env = {
-        "CKBTC_MINTER_DID_PATH": "$(execpath :ckbtc_minter.did)",
-    },
-    service_file = ":ckbtc_minter.did",
-    deps = [
-        # Keep sorted.
-        ":ckbtc_minter_lib-tla",
-        "//packages/ic-dummy-getrandom-for-wasm",
-        "//packages/ic-http-types",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
-        "@crate_index//:candid",
-        "@crate_index//:ic-btc-interface",
-        "@crate_index//:ic-cdk",
-        "@crate_index//:ic-metrics-encoder",
-        "@crate_index//:serde_json",
-    ] + TLA_DEPS,
-)
+[
+    rust_canister(
+        name = name,
+        srcs = ["src/main.rs"],
+        compile_data = [":ckbtc_minter.did"],
+        crate_features = crate_features,
+        crate_name = "ic_ckbtc_minter_canister",
+        proc_macro_deps = proc_macro_deps,
+        rustc_env = {
+            "CKBTC_MINTER_DID_PATH": "$(execpath :ckbtc_minter.did)",
+        },
+        service_file = ":ckbtc_minter.did",
+        deps = library_dep + [
+            # Keep sorted.
+            "//packages/ic-dummy-getrandom-for-wasm",
+            "//packages/ic-http-types",
+            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "@crate_index//:candid",
+            "@crate_index//:ic-btc-interface",
+            "@crate_index//:ic-cdk",
+            "@crate_index//:ic-metrics-encoder",
+            "@crate_index//:serde_json",
+        ],
+    )
+    for (name, crate_features, proc_macro_deps, library_dep) in [
+        (
+            "ckbtc_minter",
+            [],
+            LIB_PROC_MACRO_DEPS,
+            [":ckbtc_minter_lib"],
+        ),
+        (
+            "ckbtc_minter_debug",
+            ["self_check"] + test_with_tla(),
+            TLA_PROC_MACRO_DEPS + TLA_PROC_MACRO_DEPS,
+            LIB_DEP_WITH_CONDITIONAL_TLA + TLA_DEPS,
+        ),
+    ]
+]
 
 rust_test(
     name = "ckbtc_minter_lib_unit_tests",
