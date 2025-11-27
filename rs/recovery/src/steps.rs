@@ -839,7 +839,7 @@ impl Step for StopReplicaStep {
             self.require_confirmation,
             self.key_file.clone(),
         );
-        ssh_helper.ssh("sudo systemctl stop ic-replica".to_string())?;
+        ssh_helper.ssh("systemctl stop ic-replica".to_string())?;
         Ok(())
     }
 }
@@ -976,20 +976,20 @@ impl UploadCUPAndTarStep {
         format!(
             r#"
 cd {};
-OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/ic_registry_local_store);
-GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/ic_registry_local_store);
+OWNER_UID=$(stat -c '%u' /var/lib/ic/data/ic_registry_local_store);
+GROUP_UID=$(stat -c '%g' /var/lib/ic/data/ic_registry_local_store);
 mkdir ic_registry_local_store;
 tar -xf ic_registry_local_store.tar.zst -C ic_registry_local_store;
-sudo chown -R "$OWNER_UID:$GROUP_UID" ic_registry_local_store;
-OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/cups);
-GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/cups);
-sudo chown -R "$OWNER_UID:$GROUP_UID" cup.proto;
-sudo systemctl stop ic-replica;
-sudo rsync -a --delete ic_registry_local_store/ /var/lib/ic/data/ic_registry_local_store/;
-sudo cp cup.proto /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb;
-sudo systemctl restart setup-permissions || true ;
-sudo systemctl start ic-replica;
-sudo systemctl status ic-replica;
+chown -R "$OWNER_UID:$GROUP_UID" ic_registry_local_store;
+OWNER_UID=$(stat -c '%u' /var/lib/ic/data/cups);
+GROUP_UID=$(stat -c '%g' /var/lib/ic/data/cups);
+chown -R "$OWNER_UID:$GROUP_UID" cup.proto;
+systemctl stop ic-replica;
+rsync -a --delete ic_registry_local_store/ /var/lib/ic/data/ic_registry_local_store/;
+cp cup.proto /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb;
+systemctl restart setup-permissions || true ;
+systemctl start ic-replica;
+systemctl status ic-replica;
 "#,
             UploadCUPAndTarStep::get_upload_dir_name(),
         )
@@ -1029,7 +1029,7 @@ impl Step for UploadCUPAndTarStep {
 
         info!(self.logger, "Uploading to {}", self.node_ip);
         let upload_dir = UploadCUPAndTarStep::get_upload_dir_name();
-        ssh_helper.ssh(format!("sudo rm -rf {upload_dir} && mkdir {upload_dir}"))?;
+        ssh_helper.ssh(format!("rm -rf {upload_dir} && mkdir {upload_dir}"))?;
 
         let target = format!("{}@[{}]:{}/", SshUser::Admin, self.node_ip, upload_dir);
 
