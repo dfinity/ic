@@ -10,7 +10,9 @@ use ic_artifact_pool::{
     ingress_pool::IngressPoolImpl,
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
-use ic_consensus::consensus::{ConsensusBouncer, ConsensusImpl};
+use ic_consensus::consensus::{
+    ConsensusBouncer, ConsensusImpl, MAX_CONSENSUS_THREADS, build_thread_pool,
+};
 use ic_consensus_certification::{CertificationCrypto, CertifierBouncer, CertifierImpl};
 use ic_consensus_dkg::DkgBouncer;
 use ic_consensus_idkg::{IDkgBouncer, IDkgStatsImpl};
@@ -24,7 +26,7 @@ use ic_https_outcalls_consensus::{
     gossip::CanisterHttpGossipImpl, payload_builder::CanisterHttpPayloadBuilderImpl,
     pool_manager::CanisterHttpPoolManagerImpl,
 };
-use ic_ingress_manager::{bouncer::IngressBouncer, IngressManager, RandomStateKind};
+use ic_ingress_manager::{IngressManager, RandomStateKind, bouncer::IngressBouncer};
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     consensus_pool::ConsensusPoolCache,
@@ -45,16 +47,16 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{
+    Height, NodeId, SubnetId,
     artifact::UnvalidatedArtifactMutation,
-    canister_http::{CanisterHttpRequest, CanisterHttpResponse, CanisterHttpResponseShare},
+    canister_http::{CanisterHttpRequest, CanisterHttpResponse, CanisterHttpResponseArtifact},
     consensus::{
-        certification::CertificationMessage, dkg, idkg::IDkgMessage, CatchUpPackage,
-        ConsensusMessage, HasHeight,
+        CatchUpPackage, ConsensusMessage, HasHeight, certification::CertificationMessage, dkg,
+        idkg::IDkgMessage,
     },
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
     replica_config::ReplicaConfig,
-    Height, NodeId, SubnetId,
 };
 use std::{
     net::{IpAddr, SocketAddr},
@@ -189,7 +191,7 @@ struct AbortableBroadcastChannels {
     certifier: AbortableBroadcastChannel<CertificationMessage>,
     dkg: AbortableBroadcastChannel<dkg::Message>,
     idkg: AbortableBroadcastChannel<IDkgMessage>,
-    https_outcalls: AbortableBroadcastChannel<CanisterHttpResponseShare>,
+    https_outcalls: AbortableBroadcastChannel<CanisterHttpResponseArtifact>,
 }
 
 impl AbortableBroadcastChannels {
@@ -337,7 +339,7 @@ pub fn setup_consensus_and_p2p(
     node_id: NodeId,
     subnet_id: SubnetId,
     subnet_type: SubnetType,
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_sync_client: Arc<dyn StateSyncClient<Message = StateSyncMessage>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -349,7 +351,7 @@ pub fn setup_consensus_and_p2p(
     message_router: Arc<dyn MessageRouting>,
     consensus_crypto: Arc<dyn ConsensusCrypto + Send + Sync>,
     certifier_crypto: Arc<dyn CertificationCrypto + Send + Sync>,
-    ingress_sig_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
+    ingress_sig_crypto: Arc<dyn IngressSigVerifier>,
     registry_client: Arc<dyn RegistryClient>,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     cycles_account_manager: Arc<CyclesAccountManager>,
@@ -479,7 +481,7 @@ fn start_consensus(
     // not downcast traits.
     consensus_crypto: Arc<dyn ConsensusCrypto>,
     certifier_crypto: Arc<dyn CertificationCrypto>,
-    ingress_sig_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
+    ingress_sig_crypto: Arc<dyn IngressSigVerifier>,
     registry_client: Arc<dyn RegistryClient>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -502,6 +504,7 @@ fn start_consensus(
 ) {
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
     let consensus_time = consensus_pool.read().unwrap().get_consensus_time();
+    let consensus_thread_pool = build_thread_pool(MAX_CONSENSUS_THREADS);
     // --------------- PAYLOAD BUILDERS WITH ARTIFACT POOLS FOLLOW ---------------------------------
     let ingress_manager = Arc::new(IngressManager::new(
         time_source.clone(),
@@ -536,6 +539,7 @@ fn start_consensus(
         consensus_pool_cache.clone(),
         consensus_crypto.clone(),
         state_reader.clone(),
+        consensus_thread_pool.clone(),
         subnet_id,
         registry_client.clone(),
         metrics_registry,
@@ -569,6 +573,7 @@ fn start_consensus(
         Arc::clone(&dkg_key_manager) as Arc<_>,
         message_router.clone(),
         Arc::clone(&state_manager) as Arc<_>,
+        consensus_thread_pool,
         Arc::clone(&time_source) as Arc<_>,
         registry_poll_delay_duration_ms,
         malicious_flags.clone(),

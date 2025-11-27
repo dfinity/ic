@@ -2,14 +2,14 @@
 mod tests;
 
 use candid::{
-    types::number::{Int, Nat},
     CandidType, Principal,
+    types::number::{Int, Nat},
 };
 use ic_base_types::PrincipalId;
-use ic_canister_log::{log, Sink};
+use ic_canister_log::{Sink, log};
 use ic_certification::{
-    hash_tree::{empty, fork, label, leaf, Label},
     HashTree,
+    hash_tree::{Label, empty, fork, label, leaf},
 };
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{Block, LedgerAllowances, LedgerBalances, Transaction};
@@ -19,7 +19,7 @@ use ic_ledger_canister_core::{archive::Archive, blockchain::BlockDataContainer};
 use ic_ledger_canister_core::{
     archive::ArchiveCanisterWasm,
     blockchain::Blockchain,
-    ledger::{apply_transaction, block_locations, LedgerContext, LedgerData, TransactionInfo},
+    ledger::{LedgerContext, LedgerData, TransactionInfo, apply_transaction, block_locations},
     range_utils,
 };
 use ic_ledger_core::balances::BalancesStore;
@@ -31,8 +31,8 @@ use ic_ledger_core::{
 };
 use ic_ledger_hash_of::HashOf;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::{storable::Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
+use ic_stable_structures::{Storable, storable::Bound};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc3::archive::{ArchivedRange, QueryBlockArchiveFn, QueryTxArchiveFn},
@@ -46,17 +46,17 @@ use icrc_ledger_types::{
     },
 };
 use icrc_ledger_types::{
-    icrc103::get_allowances::Allowance as Allowance103,
-    icrc3::{blocks::GetBlocksResponse, transactions::GetTransactionsResponse},
+    icrc3::transactions::Transaction as Tx, icrc103::get_allowances::Allowances,
 };
 use icrc_ledger_types::{
-    icrc103::get_allowances::Allowances, icrc3::transactions::Transaction as Tx,
+    icrc3::{blocks::GetBlocksResponse, transactions::GetTransactionsResponse},
+    icrc103::get_allowances::Allowance as Allowance103,
 };
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, VecDeque};
 use std::ops::DerefMut;
 use std::time::Duration;
@@ -122,11 +122,11 @@ impl From<StoredValue> for Value {
         match v {
             StoredValue::NatBytes(num_bytes) => Self::Nat(
                 Nat::decode(&mut &num_bytes[..])
-                    .unwrap_or_else(|e| panic!("bug: invalid Nat encoding {:?}: {}", num_bytes, e)),
+                    .unwrap_or_else(|e| panic!("bug: invalid Nat encoding {num_bytes:?}: {e}")),
             ),
             StoredValue::IntBytes(int_bytes) => Self::Int(
                 Int::decode(&mut &int_bytes[..])
-                    .unwrap_or_else(|e| panic!("bug: invalid Int encoding {:?}: {}", int_bytes, e)),
+                    .unwrap_or_else(|e| panic!("bug: invalid Int encoding {int_bytes:?}: {e}")),
             ),
             StoredValue::Text(text) => Self::Text(text),
             StoredValue::Blob(bytes) => Self::Blob(bytes),
@@ -382,7 +382,7 @@ impl std::cmp::Ord for AccountSpender {
 }
 
 impl Storable for AccountSpender {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         minicbor::encode(self, &mut buf).expect("AccountSpender encoding should always succeed");
         Cow::Owned(buf)
@@ -438,7 +438,7 @@ impl std::cmp::Ord for Expiration {
 }
 
 impl Storable for Expiration {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         minicbor::encode(self, &mut buf).expect("Expiration encoding should always succeed");
         Cow::Owned(buf)
@@ -465,7 +465,7 @@ struct StorableAllowance {
 }
 
 impl Storable for StorableAllowance {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         minicbor::encode(self, &mut buf).expect("StorableAllowance encoding should always succeed");
         Cow::Owned(buf)
@@ -544,6 +544,8 @@ thread_local! {
     // block_index -> block
     pub static BLOCKS_MEMORY: RefCell<StableBTreeMap<u64, Vec<u8>, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BLOCKS_MEMORY_ID))));
+
+    static ARCHIVING_FAILURES: Cell<u64> = Cell::default();
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
@@ -659,10 +661,7 @@ fn map_metadata_or_trap(arg_metadata: Vec<(String, Value)>) -> Vec<(String, Stor
         .into_iter()
         .map(|(k, v)| {
             if DISALLOWED_METADATA_FIELDS.contains(&k.as_str()) {
-                ic_cdk::trap(format!(
-                    "Metadata field {} is reserved and cannot be set",
-                    k
-                ));
+                ic_cdk::trap(format!("Metadata field {k} is reserved and cannot be set"));
             }
             (k, StoredValue::from(v))
         })
@@ -705,10 +704,7 @@ impl Ledger {
             minting_account,
             fee_collector: fee_collector_account.map(FeeCollector::from),
             transfer_fee: Tokens::try_from(transfer_fee.clone()).unwrap_or_else(|e| {
-                panic!(
-                    "failed to convert transfer fee {} to tokens: {}",
-                    transfer_fee, e
-                )
+                panic!("failed to convert transfer fee {transfer_fee} to tokens: {e}")
             }),
             token_symbol,
             token_name,
@@ -730,17 +726,11 @@ impl Ledger {
 
         for (account, balance) in initial_balances.into_iter() {
             let amount = Tokens::try_from(balance.clone()).unwrap_or_else(|e| {
-                panic!(
-                    "failed to convert initial balance {} to tokens: {}",
-                    balance, e
-                )
+                panic!("failed to convert initial balance {balance} to tokens: {e}")
             });
             let mint = Transaction::mint(account, amount, Some(now), None);
             apply_transaction(&mut ledger, mint, now, Tokens::ZERO).unwrap_or_else(|err| {
-                panic!(
-                    "failed to mint {} tokens to {}: {:?}",
-                    balance, account, err
-                )
+                panic!("failed to mint {balance} tokens to {account}: {err:?}")
             });
         }
 
@@ -885,6 +875,14 @@ impl LedgerData for Ledger {
     fn fee_collector_mut(&mut self) -> Option<&mut FeeCollector<Self::AccountId>> {
         self.fee_collector.as_mut()
     }
+
+    fn increment_archiving_failure_metric(&mut self) {
+        ARCHIVING_FAILURES.with(|cell| cell.set(cell.get() + 1));
+    }
+
+    fn get_archiving_failure_metric(&self) -> u64 {
+        ARCHIVING_FAILURES.get()
+    }
 }
 
 impl Ledger {
@@ -962,14 +960,16 @@ impl Ledger {
         if let Some(transfer_fee) = args.transfer_fee {
             self.transfer_fee = Tokens::try_from(transfer_fee.clone()).unwrap_or_else(|e| {
                 ic_cdk::trap(format!(
-                    "failed to convert transfer fee {} to tokens: {}",
-                    transfer_fee, e
+                    "failed to convert transfer fee {transfer_fee} to tokens: {e}"
                 ))
             });
         }
         if let Some(max_memo_length) = args.max_memo_length {
             if self.max_memo_length > max_memo_length {
-                ic_cdk::trap(format!("The max len of the memo can be changed only to be bigger or equal than the current size. Current size: {}", self.max_memo_length));
+                ic_cdk::trap(format!(
+                    "The max len of the memo can be changed only to be bigger or equal than the current size. Current size: {}",
+                    self.max_memo_length
+                ));
             }
             self.max_memo_length = max_memo_length;
         }
@@ -1121,10 +1121,10 @@ impl Ledger {
                     .into_iter()
                     .filter_map(|((start, end), canister_id)| {
                         let canister_id = Principal::from(canister_id);
-                        if let Some(from) = args.from {
-                            if canister_id <= from {
-                                return None;
-                            }
+                        if let Some(from) = args.from
+                            && canister_id <= from
+                        {
+                            return None;
                         }
                         Some(ICRC3ArchiveInfo {
                             canister_id,
@@ -1276,10 +1276,10 @@ pub fn get_allowances(
             if account_spender.account.owner != from.owner {
                 break;
             }
-            if let Some(expires_at) = storable_allowance.expires_at {
-                if expires_at.as_nanos_since_unix_epoch() <= now {
-                    continue;
-                }
+            if let Some(expires_at) = storable_allowance.expires_at
+                && expires_at.as_nanos_since_unix_epoch() <= now
+            {
+                continue;
             }
             result.push(Allowance103 {
                 from_account: account_spender.account,

@@ -1,10 +1,10 @@
 //! Threshold Schnorr transcripts and references related definitions.
-use crate::crypto::canister_threshold_sig::SchnorrPreSignatureTranscript;
 use crate::Height;
+use crate::crypto::canister_threshold_sig::SchnorrPreSignatureTranscript;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::SchnorrKeyId;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
 use std::convert::{AsMut, AsRef, TryFrom, TryInto};

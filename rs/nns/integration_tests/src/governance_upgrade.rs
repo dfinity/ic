@@ -19,8 +19,8 @@ use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
 };
 use ic_nns_governance_api::{
-    manage_neuron::{configure, Command, Configure, NeuronIdOrSubaccount, RemoveHotKey},
-    ManageNeuron, ManageNeuronResponse,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
+    manage_neuron::{Configure, NeuronIdOrSubaccount, RemoveHotKey, configure},
 };
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_test_utils::{
@@ -68,12 +68,12 @@ fn test_upgrade_after_state_shrink() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuron {
+                ManageNeuronRequest {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronIdProto {
                         id: TEST_NEURON_1_ID,
                     })),
                     id: None,
-                    command: Some(Command::Configure(Configure {
+                    command: Some(ManageNeuronCommandRequest::Configure(Configure {
                         operation: Some(configure::Operation::RemoveHotKey(RemoveHotKey {
                             hot_key_to_remove: Some(hot_key),
                         })),

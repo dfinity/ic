@@ -26,8 +26,8 @@ end::catalog[] */
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_system_test_utils::subnet::enable_chain_key_on_subnet;
@@ -42,10 +42,10 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{block_on, get_nns_node, MessageCanister};
-use ic_types::crypto::KeyPurpose;
+use ic_system_test_driver::util::{MessageCanister, block_on, get_nns_node};
 use ic_types::Height;
-use slog::{info, warn, Logger};
+use ic_types::crypto::KeyPurpose;
+use slog::{Logger, info, warn};
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 3;
@@ -240,9 +240,11 @@ fn test(env: TestEnv) {
         .max()
         .unwrap();
 
-    assert!(last_rotation
-        .duration_since(first_rotation)
-        .is_ok_and(|d| d + gamma <= delta));
+    assert!(
+        last_rotation
+            .duration_since(first_rotation)
+            .is_ok_and(|d| d + gamma <= delta)
+    );
 
     // Ensure signing still works
     for (key_id, public_key) in public_keys {

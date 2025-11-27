@@ -1,10 +1,10 @@
 use std::time::Duration;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 use canister_test::Canister;
-use ic_agent::agent::{RejectCode, RejectResponse};
 use ic_agent::AgentError;
+use ic_agent::agent::{RejectCode, RejectResponse};
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_consensus_threshold_sig_system_test_utils::{
     create_new_subnet_with_keys, empty_subnet_update, enable_chain_key_signing,
@@ -27,7 +27,7 @@ use ic_system_test_driver::{
     },
     nns::{self, get_subnet_list_from_registry},
     systest,
-    util::{block_on, runtime_from_url, MessageCanister, MetricsFetcher},
+    util::{MessageCanister, MetricsFetcher, block_on, runtime_from_url},
 };
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::info;
@@ -83,7 +83,7 @@ fn test(env: TestEnv) {
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
         // Keys that are deployed to the subnet from the start
         let initial_key_ids = vec![key_id1.clone(), key_id2.clone(), key_id4.clone()];
-        let initial_key_ids_as_string = format!("[{}, {}, {}]", key_id1, key_id2, key_id4);
+        let initial_key_ids_as_string = format!("[{key_id1}, {key_id2}, {key_id4}]");
         // Keys that will be added later
         let later_key_ids = vec![key_id3.clone(), key_id5.clone()];
         // All key IDs
@@ -127,15 +127,14 @@ fn test(env: TestEnv) {
             let expected_reject = RejectResponse {
                 reject_code: RejectCode::CanisterReject,
                 reject_message: format!(
-                    "Unable to route management canister request {}: \
-                        ChainKeyError(\"Requested unknown threshold key: {}, existing keys: {}\")",
-                    method_name, key_id, initial_key_ids_as_string,
+                    "Unable to route management canister request {method_name}: \
+                        ChainKeyError(\"Requested unknown threshold key: {key_id}, existing keys: {initial_key_ids_as_string}\")",
                 ),
                 error_code: Some("IC0406".to_string()),
             };
             match err {
                 AgentError::CertifiedReject { reject, .. } => assert_eq!(reject, expected_reject),
-                _ => panic!("Unexpected error: {:?}", err),
+                _ => panic!("Unexpected error: {err:?}"),
             };
             let method_name = protocol_method_name(key_id);
             let err = get_signature_with_logger(
@@ -150,16 +149,15 @@ fn test(env: TestEnv) {
             let expected_reject = RejectResponse {
                 reject_code: RejectCode::CanisterReject,
                 reject_message: format!(
-                    "Unable to route management canister request {}: \
-                        ChainKeyError(\"Requested unknown or disabled threshold key: {}, \
-                        existing enabled keys: {}\")",
-                    method_name, key_id, initial_key_ids_as_string,
+                    "Unable to route management canister request {method_name}: \
+                        ChainKeyError(\"Requested unknown or disabled threshold key: {key_id}, \
+                        existing enabled keys: {initial_key_ids_as_string}\")",
                 ),
                 error_code: Some("IC0406".to_string()),
             };
             match err {
                 AgentError::CertifiedReject { reject, .. } => assert_eq!(reject, expected_reject),
-                _ => panic!("Unexpected error: {:?}", err),
+                _ => panic!("Unexpected error: {err:?}"),
             };
         }
 
@@ -256,10 +254,9 @@ fn test(env: TestEnv) {
                     let expected_reject = RejectResponse {
                         reject_code: RejectCode::CanisterReject,
                         reject_message: format!(
-                            "Unable to route management canister request {}: \
-                                ChainKeyError(\"Requested unknown or disabled threshold key: {}, \
+                            "Unable to route management canister request {method_name}: \
+                                ChainKeyError(\"Requested unknown or disabled threshold key: {key_id}, \
                                 existing enabled keys: []\")",
-                            method_name, key_id,
                         ),
                         error_code: Some("IC0406".to_string()),
                     };
@@ -267,7 +264,7 @@ fn test(env: TestEnv) {
                         AgentError::CertifiedReject { reject, .. } => {
                             assert_eq!(reject, expected_reject)
                         }
-                        _ => panic!("Unexpected error: {:?}", sig_err),
+                        _ => panic!("Unexpected error: {sig_err:?}"),
                     };
 
                     break;
@@ -333,8 +330,7 @@ fn test(env: TestEnv) {
 
             // IDKG Reshare agreement on original App subnet should be purged
             let metric_with_label = format!(
-                "{}{{key_id=\"{}\",type=\"{}\"}}",
-                IDKG_PAYLOAD_METRICS, key_id, XNET_RESHARE_AGREEMENTS,
+                "{IDKG_PAYLOAD_METRICS}{{key_id=\"{key_id}\",type=\"{XNET_RESHARE_AGREEMENTS}\"}}",
             );
             let metrics = MetricsFetcher::new(app_subnet.nodes(), vec![metric_with_label.clone()]);
             ic_system_test_driver::retry_with_msg_async!(
@@ -351,7 +347,7 @@ fn test(env: TestEnv) {
                             info!(log, "metrics: {:?}", val);
                             for agreements in &val[&metric_with_label] {
                                 if *agreements != 0 {
-                                    panic!("Number of reshare agreements is {}", agreements)
+                                    panic!("Number of reshare agreements is {agreements}")
                                 }
                             }
                             Ok(())

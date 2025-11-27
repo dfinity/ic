@@ -4,7 +4,7 @@ use crate::models::{
     ConstructionCombineResponse, EnvelopePair, SignatureType, SignedTransaction,
     UnsignedTransaction,
 };
-use crate::request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler};
+use crate::request_handler::{RosettaRequestHandler, make_sig_data, verify_network_id};
 use crate::{convert, models};
 use ic_types::messages::{
     Blob, HttpCallContent, HttpReadStateContent, HttpRequestEnvelope, MessageId,
@@ -33,8 +33,7 @@ impl RosettaRequestHandler {
         let unsigned_transaction = UnsignedTransaction::from_str(&msg.unsigned_transaction)
             .map_err(|e| {
                 ApiError::invalid_request(format!(
-                    "Cannot deserialize signed transaction in /construction/combine response: {}",
-                    e
+                    "Cannot deserialize signed transaction in /construction/combine response: {e}"
                 ))
             })?;
         let mut requests = vec![];
@@ -75,15 +74,12 @@ impl RosettaRequestHandler {
                                 .map_err(|err| {
                                     ApiError::InvalidPublicKey(
                                         false,
-                                        Details::from(format!("{:?}", err)),
+                                        Details::from(format!("{err:?}")),
                                     )
                                 })?,
                             )
                             .map_err(|err| {
-                                ApiError::InvalidPublicKey(
-                                    false,
-                                    Details::from(format!("{:?}", err)),
-                                )
+                                ApiError::InvalidPublicKey(false, Details::from(format!("{err:?}")))
                             })?,
                         )),
                         sender_sig: Some(Blob(from_hex(&transaction_signature.hex_bytes)?)),
@@ -99,15 +95,12 @@ impl RosettaRequestHandler {
                                 .map_err(|err| {
                                     ApiError::InvalidPublicKey(
                                         false,
-                                        Details::from(format!("{:?}", err)),
+                                        Details::from(format!("{err:?}")),
                                     )
                                 })?,
                             )
                             .map_err(|err| {
-                                ApiError::InvalidPublicKey(
-                                    false,
-                                    Details::from(format!("{:?}", err)),
-                                )
+                                ApiError::InvalidPublicKey(false, Details::from(format!("{err:?}")))
                             })?,
                         )),
                         sender_sig: Some(Blob(from_hex(&transaction_signature.hex_bytes)?)),
@@ -115,7 +108,7 @@ impl RosettaRequestHandler {
                     }),
                     sig_type => Err(ApiError::InvalidRequest(
                         false,
-                        format!("Sginature Type {} not supported byt rosetta", sig_type).into(),
+                        format!("Sginature Type {sig_type} not supported byt rosetta").into(),
                     )),
                 }?;
 
@@ -130,15 +123,12 @@ impl RosettaRequestHandler {
                                 .map_err(|err| {
                                     ApiError::InvalidPublicKey(
                                         false,
-                                        Details::from(format!("{:?}", err)),
+                                        Details::from(format!("{err:?}")),
                                     )
                                 })?,
                             )
                             .map_err(|err| {
-                                ApiError::InvalidPublicKey(
-                                    false,
-                                    Details::from(format!("{:?}", err)),
-                                )
+                                ApiError::InvalidPublicKey(false, Details::from(format!("{err:?}")))
                             })?,
                         )),
                         sender_sig: Some(Blob(from_hex(&read_state_signature.hex_bytes)?)),
@@ -154,15 +144,12 @@ impl RosettaRequestHandler {
                                 .map_err(|err| {
                                     ApiError::InvalidPublicKey(
                                         false,
-                                        Details::from(format!("{:?}", err)),
+                                        Details::from(format!("{err:?}")),
                                     )
                                 })?,
                             )
                             .map_err(|err| {
-                                ApiError::InvalidPublicKey(
-                                    false,
-                                    Details::from(format!("{:?}", err)),
-                                )
+                                ApiError::InvalidPublicKey(false, Details::from(format!("{err:?}")))
                             })?,
                         )),
 
@@ -171,7 +158,7 @@ impl RosettaRequestHandler {
                     }),
                     sig_type => Err(ApiError::InvalidRequest(
                         false,
-                        format!("Sginature Type {} not supported byt rosetta", sig_type).into(),
+                        format!("Sginature Type {sig_type} not supported byt rosetta").into(),
                     )),
                 }?;
                 request_envelopes.push(EnvelopePair {
@@ -190,8 +177,7 @@ impl RosettaRequestHandler {
                     ApiError::InternalError(
                         false,
                         format!(
-                            "Serialization of signed transaction {:?} failed: {:?}",
-                            signed_transaction, err
+                            "Serialization of signed transaction {signed_transaction:?} failed: {err:?}"
                         )
                         .into(),
                     )

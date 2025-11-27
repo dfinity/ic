@@ -6,14 +6,14 @@ use ic_error_types::RejectCode;
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload};
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
+    Height, NumBytes, RegistryVersion, ReplicaVersion,
     canister_http::{
         CanisterHttpReject, CanisterHttpResponse, CanisterHttpResponseContent,
         CanisterHttpResponseMetadata, CanisterHttpResponseShare,
     },
-    crypto::{crypto_hash, CryptoHash, CryptoHashOf},
+    crypto::{CryptoHash, CryptoHashOf, crypto_hash},
     messages::CallbackId,
     time::UNIX_EPOCH,
-    Height, NumBytes, RegistryVersion, ReplicaVersion,
 };
 use proptest::{arbitrary::any, prelude::*};
 use std::{ops::DerefMut, time::Duration};

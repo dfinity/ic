@@ -4,6 +4,10 @@ tmpfs    /tmp    tmpfs   defaults 0   2
 /dev/vda2   /boot/grub  vfat    defaults    0   2
 /dev/vda3   /boot/config    ext4    defaults,sync    0   2
 /dev/mapper/var_crypt   /var  ext4    defaults    0   2
-/dev/mapper/store-shared--backup   /var/lib/ic/backup    ext4 defaults,context=system_u:object_r:ic_data_t:s0   0   2
+# If you add a new mount that depends on /dev/mapper/store, don't forget to add it to maybe-disable-store-mounts.service
+/dev/mapper/store-shared--backup   /var/lib/ic/backup    ext4 defaults,context=system_u:object_r:ic_data_t:s0  0   2
 /dev/mapper/store-shared--crypto   /var/lib/ic/crypto    ext4 defaults   0   2
 /dev/mapper/store-shared--data   /var/lib/ic/data    xfs defaults   0   2
+# Swap units are generated automatically and managed by systemd
+# https://www.freedesktop.org/software/systemd/man/latest/systemd.swap.html#fstab
+/dev/mapper/store-shared--swap   none    swap defaults   0   2

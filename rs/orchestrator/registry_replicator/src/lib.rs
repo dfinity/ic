@@ -28,28 +28,32 @@
 //! registry, the switch-over is *not* atomic. This is the reason why the
 //! switch-over is handled in this component.
 
-use crate::internal_state::InternalState;
+use crate::internal_state::{InternalState, write_certified_changes_to_local_store};
 use ic_config::{
-    metrics::{Config as MetricsConfig, Exporter},
     Config,
+    metrics::{Config as MetricsConfig, Exporter},
 };
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
-use ic_interfaces_registry::{RegistryClient, RegistryDataProvider, ZERO_REGISTRY_VERSION};
-use ic_logger::{debug, info, warn, ReplicaLogger};
+use ic_interfaces_registry::{RegistryClient, ZERO_REGISTRY_VERSION};
+use ic_logger::{ReplicaLogger, debug, error, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore, LocalStoreImpl};
+use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, NodeId, RegistryVersion};
-use metrics::RegistryreplicatorMetrics;
+use ic_types::{
+    NodeId, RegistryVersion, crypto::threshold_sig::ThresholdSigPublicKey,
+    registry::RegistryClientError,
+};
+use metrics::RegistryReplicatorMetrics;
 use std::{
     future::Future,
     io::{Error, ErrorKind},
     net::SocketAddr,
+    path::Path,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
     time::Duration,
 };
@@ -60,61 +64,76 @@ pub mod args;
 mod internal_state;
 pub mod metrics;
 
+trait PollableRegistryClient: RegistryClient {
+    /// Polls the registry once, updating its cache by polling the latest local store changes.
+    fn poll_once(&self) -> Result<(), RegistryClientError>;
+}
+
+impl PollableRegistryClient for RegistryClientImpl {
+    fn poll_once(&self) -> Result<(), RegistryClientError> {
+        self.poll_once()
+    }
+}
+
 pub struct RegistryReplicator {
     logger: ReplicaLogger,
     node_id: Option<NodeId>,
-    registry_client: Arc<dyn RegistryClient>,
+    config_nns_urls: Vec<Url>,
+    config_nns_pub_key: Option<ThresholdSigPublicKey>,
+    registry_client: Arc<dyn PollableRegistryClient>,
     local_store: Arc<dyn LocalStore>,
     started: Arc<AtomicBool>,
     cancelled: Arc<AtomicBool>,
     poll_delay: Duration,
-    metrics: Arc<RegistryreplicatorMetrics>,
+    metrics: Arc<RegistryReplicatorMetrics>,
 }
 
 impl RegistryReplicator {
-    pub fn new_with_clients(
-        logger: ReplicaLogger,
-        local_store: Arc<dyn LocalStore>,
-        registry_client: Arc<dyn RegistryClient>,
-        poll_delay: Duration,
-    ) -> Self {
-        let metrics = Arc::new(RegistryreplicatorMetrics::new(&MetricsRegistry::new()));
-
-        Self {
-            logger,
-            node_id: None,
-            registry_client,
-            local_store,
-            started: Arc::new(AtomicBool::new(false)),
-            cancelled: Arc::new(AtomicBool::new(false)),
-            poll_delay,
-            metrics,
-        }
-    }
-
-    pub fn new_from_config(
+    /// Creates a new instance of the registry replicator.
+    /// This function will not return until the local store is initialized.
+    async fn new_impl<P: AsRef<Path>>(
         logger: ReplicaLogger,
         node_id: Option<NodeId>,
-        config: &Config,
+        local_store_path: P,
+        poll_delay: Duration,
+        metrics_registry: MetricsRegistry,
+        config_nns_urls: Vec<Url>,
+        config_nns_pub_key: Option<ThresholdSigPublicKey>,
     ) -> Self {
-        // We only support the local store data provider
-        let local_store_path = &config.registry_client.local_store;
-        let local_store = Arc::new(LocalStoreImpl::new(local_store_path.clone()));
+        let local_store = Arc::new(LocalStoreImpl::new(&local_store_path));
         std::fs::create_dir_all(local_store_path)
             .expect("Could not create directory for registry local store.");
 
-        let poll_delay =
-            std::time::Duration::from_millis(config.nns_registry_replicator.poll_delay_duration_ms);
+        // Initialize the registry local store. Will not return if the nns is not
+        // reachable.
+        Self::initialize_local_store(
+            &logger,
+            local_store.clone(),
+            config_nns_urls.clone(),
+            config_nns_pub_key,
+        )
+        .await;
 
-        // Initialize registry client and start polling/caching *local* store for
-        // updates
-        let registry_client = Self::initialize_registry_client(local_store.clone());
+        let registry_client = Arc::new(RegistryClientImpl::new(
+            local_store.clone(),
+            Some(&metrics_registry),
+        ));
 
-        let metrics = Arc::new(RegistryreplicatorMetrics::new(&MetricsRegistry::global()));
+        // Initialize the registry client with the latest version from the local store.
+        if let Err(err) = registry_client.poll_once() {
+            error!(
+                logger,
+                "Failed to poll the registry once after initialization: {}", err
+            )
+        }
+
+        let metrics = Arc::new(RegistryReplicatorMetrics::new(&metrics_registry));
 
         Self {
             logger,
             node_id,
+            config_nns_urls,
+            config_nns_pub_key,
             registry_client,
             local_store,
             started: Arc::new(AtomicBool::new(false)),
@@ -124,14 +143,59 @@ impl RegistryReplicator {
         }
     }
 
-    pub fn new_with_metrics_runtime(
+    /// Creates a new instance of the registry replicator from the local store path, NNS URLs and
+    /// root public key.
+    /// This function will not return until the local store is initialized.
+    pub async fn new<P: AsRef<Path>>(
+        logger: ReplicaLogger,
+        local_store_path: P,
+        poll_delay: Duration,
+        config_nns_urls: Vec<Url>,
+        config_nns_pub_key: Option<ThresholdSigPublicKey>,
+    ) -> Self {
+        Self::new_impl(
+            logger,
+            None,
+            local_store_path,
+            poll_delay,
+            MetricsRegistry::new(),
+            config_nns_urls,
+            config_nns_pub_key,
+        )
+        .await
+    }
+
+    /// Creates a new instance of the registry replicator from the node configuration.
+    /// This function will not return until the local store is initialized.
+    pub async fn new_from_config(
+        logger: ReplicaLogger,
+        node_id: Option<NodeId>,
+        config: &Config,
+    ) -> Self {
+        let (config_nns_urls, config_nns_pub_key) =
+            Self::parse_registry_access_info_from_config(&logger, config);
+
+        Self::new_impl(
+            logger,
+            node_id,
+            &config.registry_client.local_store,
+            Duration::from_millis(config.nns_registry_replicator.poll_delay_duration_ms),
+            MetricsRegistry::global(),
+            config_nns_urls,
+            config_nns_pub_key,
+        )
+        .await
+    }
+
+    /// Creates a new instance of the registry replicator from the node configuration and a custom
+    /// metrics address.
+    /// This function will not return until the local store is initialized.
+    pub async fn new_with_metrics_runtime(
         logger: ReplicaLogger,
         node_id: Option<NodeId>,
         config: &Config,
         metrics_addr: SocketAddr,
     ) -> (Self, MetricsHttpEndpoint) {
-        let replicator = RegistryReplicator::new_from_config(logger.clone(), node_id, config);
-
         let metrics_config = MetricsConfig {
             exporter: Exporter::Http(metrics_addr),
             ..Default::default()
@@ -143,44 +207,28 @@ impl RegistryReplicator {
             &logger.inner_logger.root,
         );
 
+        let replicator = RegistryReplicator::new_from_config(logger, node_id, config).await;
+
         (replicator, metrics_endpoint)
     }
 
-    /// initialize a new registry client and start polling the given data
-    /// provider for registry updates
-    fn initialize_registry_client(
-        data_provider: Arc<dyn RegistryDataProvider>,
-    ) -> Arc<dyn RegistryClient> {
-        let metrics_registry = MetricsRegistry::global();
-        let registry_client = Arc::new(RegistryClientImpl::new(
-            data_provider,
-            Some(&metrics_registry),
-        ));
-
-        if let Err(e) = registry_client.fetch_and_start_polling() {
-            panic!("fetch_and_start_polling failed: {}", e);
-        };
-
-        registry_client
-    }
-
     /// Return NNS [`Url`]s and [`ThresholdSigPublicKey`] if configured
-    pub fn parse_registry_access_info_from_config(
-        &self,
+    fn parse_registry_access_info_from_config(
+        logger: &ReplicaLogger,
         config: &Config,
     ) -> (Vec<Url>, Option<ThresholdSigPublicKey>) {
-        let nns_urls = match config.registration.nns_url.clone() {
+        let nns_urls = match &config.registration.nns_url {
             None => {
-                info!(self.logger, "No NNS Url is configured.");
+                info!(logger, "No NNS Url is configured.");
                 vec![]
             }
             Some(string) => string
                 .split(',')
                 .flat_map(|s| match Url::parse(s) {
-                    Err(_) => {
+                    Err(e) => {
                         info!(
-                            self.logger,
-                            "Could not parse registration NNS url from config."
+                            logger,
+                            "Could not parse registration NNS url from config: {}", e
                         );
                         None
                     }
@@ -189,15 +237,15 @@ impl RegistryReplicator {
                 .collect::<Vec<Url>>(),
         };
 
-        let nns_pub_key = match config.registration.nns_pub_key_pem.clone() {
+        let nns_pub_key = match &config.registration.nns_pub_key_pem {
             None => {
-                info!(self.logger, "No NNS public key is configured.");
+                info!(logger, "No NNS public key is configured.");
                 None
             }
-            Some(path) => match parse_threshold_sig_key(&path) {
+            Some(path) => match parse_threshold_sig_key(path) {
                 Err(e) => {
                     info!(
-                        self.logger,
+                        logger,
                         "Could not parse configured NNS Public Key file: {}", e
                     );
                     None
@@ -209,20 +257,20 @@ impl RegistryReplicator {
         (nns_urls, nns_pub_key)
     }
 
-    pub async fn initialize_local_store(
-        &self,
+    async fn initialize_local_store(
+        logger: &ReplicaLogger,
+        local_store: Arc<dyn LocalStore>,
         nns_urls: Vec<Url>,
         nns_pub_key: Option<ThresholdSigPublicKey>,
     ) {
         // If the local registry store is not empty, exit.
-        if !self
-            .local_store
+        if !local_store
             .get_changelog_since_version(ZERO_REGISTRY_VERSION)
             .expect("Could not read registry local store.")
             .is_empty()
         {
             info!(
-                self.logger,
+                logger,
                 "Local registry store is not empty, skipping initialization."
             );
             return;
@@ -238,53 +286,31 @@ impl RegistryReplicator {
         // Fill the local registry store by polling the registry canister until we get no
         // more changes.
         loop {
-            // Note, code duplicate in internal_state.rs poll()
-            match registry_canister
-                .get_certified_changes_since(registry_version.get(), &nns_pub_key)
-                .await
+            match write_certified_changes_to_local_store(
+                &registry_canister,
+                &nns_pub_key,
+                local_store.as_ref(),
+                registry_version,
+            )
+            .await
             {
-                Ok((mut records, _, _t)) => {
-                    // We fetched the latest version.
-                    if records.is_empty() {
+                Ok(last_stored_version) => {
+                    if last_stored_version == registry_version {
+                        // The last stored version is the same as the requested version, which
+                        // means we fetched the latest version.
                         break;
                     }
-                    records.sort_by_key(|tr| tr.version);
-                    let changelog = records.iter().fold(Changelog::default(), |mut cl, r| {
-                        let rel_version = (r.version - registry_version).get();
-                        if cl.len() < rel_version as usize {
-                            cl.push(ChangelogEntry::default());
-                        }
-                        cl.last_mut().unwrap().push(KeyMutation {
-                            key: r.key.clone(),
-                            value: r.value.clone(),
-                        });
-                        cl
-                    });
 
-                    let entries = changelog.len();
-
-                    changelog
-                        .into_iter()
-                        .enumerate()
-                        .try_for_each(|(i, cle)| {
-                            let v = registry_version + RegistryVersion::from(i as u64 + 1);
-                            self.local_store.store(v, cle)
-                        })
-                        .expect("Could not write to local store.");
-
-                    registry_version += RegistryVersion::from(entries as u64);
+                    info!(
+                        logger,
+                        "Stored registry versions up to: {}", last_stored_version
+                    );
+                    registry_version = last_stored_version;
                     timeout = 1;
-
-                    if entries > 0 {
-                        info!(
-                            self.logger,
-                            "Stored registry versions up to: {}", registry_version
-                        );
-                    }
                 }
                 Err(e) => {
                     warn!(
-                        self.logger,
+                        logger,
                         "Couldn't fetch registry updates (retry in {}s): {:?}", timeout, e
                     );
                     tokio::time::sleep(Duration::from_secs(timeout)).await;
@@ -295,19 +321,17 @@ impl RegistryReplicator {
         }
 
         info!(
-            self.logger,
+            logger,
             "Finished local store initialization at registry version: {}", registry_version
         );
     }
 
     /// Initializes the registry local store asynchronously and returns a future that
     /// continuously polls for registry updates.
-    pub async fn start_polling(
+    pub fn start_polling(
         &self,
-        nns_urls: Vec<Url>,
-        nns_pub_key: Option<ThresholdSigPublicKey>,
         cancellation_token: CancellationToken,
-    ) -> Result<impl Future<Output = ()>, Error> {
+    ) -> Result<impl Future<Output = ()> + use<>, Error> {
         if self.started.swap(true, Ordering::Relaxed) {
             return Err(Error::new(
                 ErrorKind::AlreadyExists,
@@ -315,24 +339,21 @@ impl RegistryReplicator {
             ));
         }
 
-        // Initialize the registry local store. Will not return if the nns is not
-        // reachable.
-        self.initialize_local_store(nns_urls.clone(), nns_pub_key)
-            .await;
-
         let mut internal_state = InternalState::new(
             self.logger.clone(),
             self.node_id,
             self.registry_client.clone(),
             self.local_store.clone(),
-            nns_urls,
+            self.config_nns_urls.clone(),
+            self.config_nns_pub_key,
             self.poll_delay,
         );
 
         let logger = self.logger.clone();
-        let metrics = self.metrics.clone();
-        let registry_client = self.registry_client.clone();
+        let metrics = Arc::clone(&self.metrics);
+        let registry_client = Arc::clone(&self.registry_client);
         let cancelled = Arc::clone(&self.cancelled);
+        let started = Arc::clone(&self.started);
         let poll_delay = self.poll_delay;
 
         let future = async move {
@@ -353,6 +374,12 @@ impl RegistryReplicator {
                     metrics.poll_count.with_label_values(&["success"]).inc();
                 }
                 timer.observe_duration();
+
+                // Update the registry client with the latest changes.
+                if let Err(msg) = registry_client.poll_once() {
+                    warn!(logger, "Registry client failed to poll: {}", msg);
+                }
+
                 metrics
                     .registry_version
                     .set(registry_client.get_latest_version().get() as i64);
@@ -362,33 +389,55 @@ impl RegistryReplicator {
                    _ = cancellation_token.cancelled() => break
                 };
             }
+
+            started.store(false, Ordering::Relaxed);
         };
 
         Ok(future)
     }
 
-    /// Requests latest version and certified changes from the
-    /// [`RegistryCanister`] and applies changes to [`LocalStore`] accordingly.
+    /// Requests latest version and certified changes from the [`RegistryCanister`] and applies
+    /// changes to [`LocalStore`] and [`RegistryClient`] accordingly.
     ///
     /// Note that we will poll at most 1000 oldest registry versions (see the implementation of
     /// `get_certified_changes_since` of `RegistryCanister`), so multiple polls might be necessary
     /// to get the most recent version of the registry.
-    pub async fn poll(&self, nns_urls: Vec<Url>) -> Result<(), String> {
-        InternalState::new(
+    pub async fn poll(&self) -> Result<(), String> {
+        let poll_result = InternalState::new(
             self.logger.clone(),
             self.node_id,
             self.registry_client.clone(),
             self.local_store.clone(),
-            nns_urls,
+            self.config_nns_urls.clone(),
+            self.config_nns_pub_key,
             self.poll_delay,
         )
         .poll()
-        .await
+        .await;
+
+        // Update the registry client with the latest changes, regardless of whether
+        // the polling succeeded or failed. Return any error from either operation.
+        poll_result.and(self.registry_client.poll_once().map_err(|e| e.to_string()))
     }
 
-    /// Set the local registry data to what is contained in the provided local
-    /// store.
-    fn set_local_registry_data(&self, source_registry: &dyn LocalStore) {
+    /// Set the local registry data to what is contained in the provided local store.
+    ///
+    /// IMPORTANT: This function does not update the registry client cache (i.e. does not call
+    /// `poll_once` on it). This means that the latter will continue to serve data from the old
+    /// local store after this function returns.
+    /// It is not sufficient to call `poll_once` on the registry client here, because the latter
+    /// only fetches changes since the latest known version, which would work only if the current
+    /// local store is a prefix of the new one.
+    /// Because this might not be the case (e.g. during NNS recovery on failover nodes), the caller
+    /// is responsible for polling the registry client (if the current local store is a prefix of
+    /// the new one) or for creating a new registry client, if needed.
+    pub async fn stop_polling_and_set_local_registry_data(&self, source_registry: &dyn LocalStore) {
+        self.stop_polling();
+        // Wait until polling has actually stopped.
+        while self.is_polling() {
+            tokio::time::sleep(self.poll_delay).await;
+        }
+
         // Read the registry data.
         let changelog = source_registry
             .get_changelog_since_version(RegistryVersion::from(0))
@@ -405,13 +454,17 @@ impl RegistryReplicator {
         }
     }
 
-    pub fn stop_polling_and_set_local_registry_data(&self, source_registry: &dyn LocalStore) {
-        self.stop_polling();
-        self.set_local_registry_data(source_registry);
-    }
-
+    /// Instruct the replicator to stop polling for registry updates.
+    /// This does not wait for the polling to actually stop: An ongoing poll might still be in
+    /// progress, potentially modifying the local store after this function returns. Though, it is
+    /// guaranteed that new polls will not be started some time after this function returns, and
+    /// that the Future returned by `start_polling` will eventually complete.
     pub fn stop_polling(&self) {
         self.cancelled.fetch_or(true, Ordering::Relaxed);
+    }
+
+    pub fn is_polling(&self) -> bool {
+        self.started.load(Ordering::Relaxed)
     }
 
     pub fn get_registry_client(&self) -> Arc<dyn RegistryClient> {
@@ -421,10 +474,127 @@ impl RegistryReplicator {
     pub fn get_local_store(&self) -> Arc<dyn LocalStore> {
         self.local_store.clone()
     }
+
+    pub fn get_poll_delay(&self) -> Duration {
+        self.poll_delay
+    }
 }
 
 impl Drop for RegistryReplicator {
     fn drop(&mut self) {
         self.stop_polling();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
+    use ic_registry_local_store::{Changelog, KeyMutation, LocalStoreWriter};
+    use ic_test_utilities_logger::with_test_replica_logger;
+    use rand::{Rng, RngCore};
+    use tempfile::TempDir;
+
+    const INIT_NUM_VERSIONS: usize = 5;
+    const TEST_POLL_DELAY: Duration = Duration::from_secs(1);
+
+    // Function duplicate in registry_replicator/tests/test.rs
+    fn random_init(local_store_path: &Path, n: usize, rng: &mut ReproducibleRng) {
+        fn key_mutation(k: usize, rng: &mut ReproducibleRng) -> KeyMutation {
+            let s = rng.next_u64() & 64;
+            let set: bool = rng.r#gen();
+            KeyMutation {
+                key: k.to_string(),
+                value: if set {
+                    Some((0..s as u8).collect())
+                } else {
+                    None
+                },
+            }
+        }
+
+        let random_changelog = (0..n)
+            .map(|_i| {
+                let k = rng.r#gen::<usize>() % 64 + 1;
+                (0..k).map(|k| key_mutation(k, rng)).collect()
+            })
+            .collect::<Changelog>();
+
+        let store = LocalStoreImpl::new(local_store_path);
+        for (i, c) in random_changelog.iter().enumerate() {
+            store
+                .store(RegistryVersion::from((i + 1) as u64), c.clone())
+                .unwrap()
+        }
+    }
+
+    async fn new_locally_initialized_replicator(num_versions_to_init: usize) -> RegistryReplicator {
+        let local_store_path = TempDir::new().unwrap().keep();
+
+        random_init(
+            &local_store_path,
+            num_versions_to_init,
+            &mut reproducible_rng(),
+        );
+
+        with_test_replica_logger(|logger| {
+            RegistryReplicator::new(logger, local_store_path, TEST_POLL_DELAY, vec![], None)
+        })
+        .await
+    }
+
+    #[tokio::test]
+    async fn test_new_replicator_works_on_initialized_store_and_client_sees_it() {
+        let replicator = new_locally_initialized_replicator(INIT_NUM_VERSIONS).await;
+        assert_eq!(
+            replicator.registry_client.get_latest_version(),
+            RegistryVersion::from(INIT_NUM_VERSIONS as u64)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_set_stop_polling_and_set_local_registry_data_works() {
+        let source = new_locally_initialized_replicator(2 * INIT_NUM_VERSIONS).await;
+        let target = new_locally_initialized_replicator(INIT_NUM_VERSIONS).await;
+
+        target
+            .stop_polling_and_set_local_registry_data(source.get_local_store().as_ref())
+            .await;
+        assert_eq!(
+            target
+                .get_local_store()
+                .get_changelog_since_version(ZERO_REGISTRY_VERSION)
+                .unwrap(),
+            source
+                .get_local_store()
+                .get_changelog_since_version(ZERO_REGISTRY_VERSION)
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_start_polling_twice_fails() {
+        let replicator = new_locally_initialized_replicator(INIT_NUM_VERSIONS).await;
+        let token = CancellationToken::new();
+
+        assert!(!replicator.started.load(Ordering::Relaxed));
+
+        let fut = replicator.start_polling(token.clone());
+        assert!(fut.is_ok());
+        assert!(replicator.started.load(Ordering::Relaxed));
+
+        let fut = replicator.start_polling(token);
+        assert!(fut.is_err_and(|e| e.kind() == ErrorKind::AlreadyExists));
+        assert!(replicator.started.load(Ordering::Relaxed));
+    }
+
+    #[tokio::test]
+    async fn test_stop_polling_idempotent() {
+        let replicator = new_locally_initialized_replicator(INIT_NUM_VERSIONS).await;
+        assert!(!replicator.cancelled.load(Ordering::Relaxed));
+        replicator.stop_polling();
+        assert!(replicator.cancelled.load(Ordering::Relaxed));
+        replicator.stop_polling();
+        assert!(replicator.cancelled.load(Ordering::Relaxed));
     }
 }

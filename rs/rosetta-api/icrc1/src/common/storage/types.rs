@@ -13,8 +13,8 @@ use icrc_ledger_types::{
     icrc1::{account::Account, transfer::Memo},
 };
 use rosetta_core::identifiers::BlockIdentifier;
-use rusqlite::types::{FromSql, FromSqlError, FromSqlResult};
 use rusqlite::ToSql;
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult};
 use serde::ser::StdError;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
@@ -134,10 +134,10 @@ impl RosettaBlock {
         Ok(self
             .get_effective_fee()
             .or(match self.get_transaction().operation {
-                IcrcOperation::Mint { .. } => None,
+                IcrcOperation::Mint { fee, .. } => fee,
                 IcrcOperation::Transfer { fee, .. } => fee,
                 IcrcOperation::Approve { fee, .. } => fee,
-                IcrcOperation::Burn { .. } => None,
+                IcrcOperation::Burn { fee, .. } => fee,
             }))
     }
 
@@ -204,7 +204,9 @@ impl TryFrom<Value> for IcrcBlock {
 
     fn try_from(value: Value) -> anyhow::Result<Self> {
         // The base of all fields is a BTreeMap that holds all the other fields from the ICRC-3 standard
-        let map = value.as_map().map_err(|err| anyhow!("{:?}", err))?;
+        let map = value
+            .as_map()
+            .map_err(|err| anyhow!("The block top level element should be map: {:?}", err))?;
 
         // Now we can try to extract every field that corresponds to a Block object from the map
         let parent_hash = get_opt_field::<Vec<u8>>(&map, &[], "phash")?
@@ -338,6 +340,7 @@ pub enum IcrcOperation {
     Mint {
         to: Account,
         amount: Nat,
+        fee: Option<Nat>,
     },
     Transfer {
         from: Account,
@@ -350,6 +353,7 @@ pub enum IcrcOperation {
         from: Account,
         spender: Option<Account>,
         amount: Nat,
+        fee: Option<Nat>,
     },
     Approve {
         from: Account,
@@ -376,11 +380,12 @@ impl TryFrom<BTreeMap<String, Value>> for IcrcOperation {
                     from,
                     spender,
                     amount,
+                    fee,
                 })
             }
             "mint" => {
                 let to: Account = get_field(&map, FIELD_PREFIX, "to")?;
-                Ok(Self::Mint { to, amount })
+                Ok(Self::Mint { to, amount, fee })
             }
             "xfer" => {
                 let from: Account = get_field(&map, FIELD_PREFIX, "from")?;
@@ -410,7 +415,9 @@ impl TryFrom<BTreeMap<String, Value>> for IcrcOperation {
                 })
             }
             found => {
-                bail!("Expected field 'op' to be 'burn', 'mint', 'xfer' or 'approve' but found {found}")
+                bail!(
+                    "Expected field 'op' to be 'burn', 'mint', 'xfer' or 'approve' but found {found}"
+                )
             }
         }
     }
@@ -450,6 +457,7 @@ impl From<IcrcOperation> for BTreeMap<String, Value> {
                 from,
                 spender,
                 amount,
+                fee,
             } => {
                 map.insert("op".to_string(), Value::text("burn"));
                 map.insert("from".to_string(), Value::from(from));
@@ -457,11 +465,17 @@ impl From<IcrcOperation> for BTreeMap<String, Value> {
                     map.insert("spender".to_string(), Value::from(spender));
                 }
                 map.insert("amt".to_string(), Value::Nat(amount));
+                if let Some(fee) = fee {
+                    map.insert("fee".to_string(), Value::Nat(fee));
+                }
             }
-            Op::Mint { to, amount } => {
+            Op::Mint { to, amount, fee } => {
                 map.insert("op".to_string(), Value::text("mint"));
                 map.insert("to".to_string(), Value::from(to));
                 map.insert("amt".to_string(), Value::Nat(amount));
+                if let Some(fee) = fee {
+                    map.insert("fee".to_string(), Value::Nat(fee));
+                }
             }
             Op::Transfer {
                 from,
@@ -569,14 +583,17 @@ where
                 from,
                 spender,
                 amount,
+                fee,
             } => Self::Burn {
                 from,
                 spender,
                 amount: amount.into(),
+                fee: fee.map(Into::into),
             },
-            Op::Mint { to, amount } => Self::Mint {
+            Op::Mint { to, amount, fee } => Self::Mint {
                 to,
                 amount: amount.into(),
+                fee: fee.map(Into::into),
             },
             Op::Transfer {
                 from,
@@ -591,6 +608,9 @@ where
                 amount: amount.into(),
                 fee: fee.map(Into::into),
             },
+            Op::FeeCollector { .. } => {
+                panic!("FeeCollector107 not implemented")
+            }
         }
     }
 }
@@ -617,8 +637,8 @@ mod tests {
         generic_transaction_from_generic_block,
     };
     use ic_icrc1_test_utils::blocks_strategy;
-    use ic_icrc1_tokens_u256::U256;
     use ic_icrc1_tokens_u64::U64;
+    use ic_icrc1_tokens_u256::U256;
     use ic_ledger_canister_core::ledger::LedgerTransaction;
     use ic_ledger_core::block::BlockType;
     use ic_ledger_core::tokens::TokensType;
@@ -675,20 +695,23 @@ mod tests {
             arb_account(),             // from
             option::of(arb_account()), // spender
             arb_nat(),                 // amount
+            option::of(arb_nat()),     // fee
         )
-            .prop_map(|(from, spender, amount)| IcrcOperation::Burn {
+            .prop_map(|(from, spender, amount, fee)| IcrcOperation::Burn {
                 from,
                 spender,
                 amount,
+                fee,
             })
     }
 
     fn arb_mint() -> impl Strategy<Value = IcrcOperation> {
         (
-            arb_account(), // to
-            arb_nat(),     // amount
+            arb_account(),         // to
+            arb_nat(),             // amount
+            option::of(arb_nat()), // fee
         )
-            .prop_map(|(to, amount)| IcrcOperation::Mint { to, amount })
+            .prop_map(|(to, amount, fee)| IcrcOperation::Mint { to, amount, fee })
     }
 
     fn arb_transfer() -> impl Strategy<Value = IcrcOperation> {
@@ -901,26 +924,31 @@ mod tests {
                     from,
                     spender,
                     amount,
+                    fee,
                 },
                 IcrcOperation::Burn {
                     from: rosetta_from,
                     spender: rosetta_spender,
                     amount: rosetta_amount,
+                    fee: rosetta_fee,
                 },
             ) => {
                 assert_eq!(from, rosetta_from, "from");
                 assert_eq!(spender, rosetta_spender, "spender");
                 assert_eq!(amount.into(), rosetta_amount, "amount");
+                assert_eq!(fee.map(|t| t.into()), rosetta_fee, "fee");
             }
             (
-                ic_icrc1::Operation::Mint { to, amount },
+                ic_icrc1::Operation::Mint { to, amount, fee },
                 IcrcOperation::Mint {
                     to: rosetta_to,
                     amount: rosetta_amount,
+                    fee: rosetta_fee,
                 },
             ) => {
                 assert_eq!(to, rosetta_to, "to");
                 assert_eq!(amount.into(), rosetta_amount, "amount");
+                assert_eq!(fee.map(|t| t.into()), rosetta_fee, "fee");
             }
             (
                 ic_icrc1::Operation::Transfer {

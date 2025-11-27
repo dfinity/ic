@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use lazy_static::lazy_static;
-use pprof::{protos::Message, ProfilerGuard, Report};
+use pprof::{ProfilerGuard, Report, protos::Message};
 use regex::Regex;
 use std::time::Duration;
 use thiserror::Error;

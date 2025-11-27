@@ -1,4 +1,4 @@
-use ic_types::{batch::XNetPayload, xnet::CertifiedStreamSlice, SubnetId};
+use ic_types::{SubnetId, batch::XNetPayload, xnet::CertifiedStreamSlice};
 use std::collections::BTreeMap;
 
 #[derive(Clone)]

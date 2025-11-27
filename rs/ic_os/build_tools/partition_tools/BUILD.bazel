@@ -38,6 +38,7 @@ rust_binary(
     name = "extract-guestos",
     srcs = ["src/bin/extract_guestos.rs"],
     version = "0.1.0",
+    visibility = ["//visibility:public"],
     deps = [
         ":partition_tools",
         "@crate_index//:anyhow",

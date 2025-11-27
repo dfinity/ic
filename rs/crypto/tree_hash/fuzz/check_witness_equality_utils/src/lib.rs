@@ -2,7 +2,7 @@ use ic_canonical_state_tree_hash::hash_tree::hash_lazy_tree;
 use ic_canonical_state_tree_hash_test_utils::{
     as_lazy, assert_same_witness, build_witness_gen, crypto_hash_lazy_tree,
 };
-use ic_crypto_tree_hash::{flatmap, FlatMap, Label, LabeledTree};
+use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree, flatmap};
 use ic_crypto_tree_hash_test_utils::{
     merge_path_into_labeled_tree, partial_trees_to_leaves_and_empty_subtrees,
 };
@@ -45,8 +45,11 @@ pub fn test_absence_witness<R: Rng + CryptoRng>(full_tree: &LabeledTree<Vec<u8>>
         let num_absent_paths = rng.gen_range(1..=num_paths.min(paths_to_absent_ranges.len()));
         let num_existing_paths = num_paths - num_absent_paths;
 
-        assert!(num_existing_paths <= existing_paths.len(),
-        "amount={num_existing_paths} length={}, num_absent_paths={num_absent_paths}, num_paths=num_paths", existing_paths.len());
+        assert!(
+            num_existing_paths <= existing_paths.len(),
+            "amount={num_existing_paths} length={}, num_absent_paths={num_absent_paths}, num_paths=num_paths",
+            existing_paths.len()
+        );
 
         let indices =
             rand::seq::index::sample(rng, existing_paths.len(), num_existing_paths).into_vec();
@@ -140,7 +143,7 @@ pub enum AbsentLabelRange<'a> {
     Between(&'a Label, &'a Label),
 }
 
-fn paths_to_absent_ranges(tree: &LabeledTree<Vec<u8>>) -> Vec<(Vec<&Label>, AbsentLabelRange)> {
+fn paths_to_absent_ranges(tree: &LabeledTree<Vec<u8>>) -> Vec<(Vec<&Label>, AbsentLabelRange<'_>)> {
     fn paths_to_ranges_impl<'a>(
         tree: &'a LabeledTree<Vec<u8>>,
         path: &mut Vec<&'a Label>,
@@ -276,7 +279,7 @@ fn random_label_in_range<R: Rng + CryptoRng>(range: &AbsentLabelRange, rng: &mut
                 if s <= l {
                     result.push(rng.gen_range(s..=l));
                 } else {
-                    result.push(rng.gen::<u8>());
+                    result.push(rng.r#gen::<u8>());
                 }
             }
             // if we accidentally generated out of bounds, create a label
@@ -314,7 +317,7 @@ fn append_bytes<Range: rand::distributions::uniform::SampleRange<usize>, R: Rng 
 ) {
     let num_bytes = rng.gen_range(range);
     for _ in 0..num_bytes {
-        vec.push(rng.gen::<u8>());
+        vec.push(rng.r#gen::<u8>());
     }
 }
 
@@ -345,9 +348,11 @@ pub fn try_remove_leaf<R: Rng + CryptoRng>(tree: &mut LabeledTree<Vec<u8>>, rng:
 fn remove_leaf(tree: &mut LabeledTree<Vec<u8>>, leaf_index: usize) {
     let mut num_traversed_leaves = 0;
     remove_leaf_impl(tree, leaf_index, &mut num_traversed_leaves);
-    assert!(num_traversed_leaves <= leaf_index + 1,
+    assert!(
+        num_traversed_leaves <= leaf_index + 1,
         "num_traversed_leaves should be at most leaf_index + 1 = {}, but got {num_traversed_leaves}",
-        leaf_index + 1);
+        leaf_index + 1
+    );
 }
 
 fn remove_leaf_impl(
@@ -498,7 +503,7 @@ fn add_subtree_in_path(
     subtree: LabeledTree<Vec<u8>>,
 ) {
     match tree {
-        LabeledTree::SubTree(ref mut children) => {
+        LabeledTree::SubTree(children) => {
             if path.is_empty() {
                 let mut label = label;
                 while children.contains_key(&label) {
@@ -638,7 +643,7 @@ fn modify_leaf_impl<F: Fn(&mut Vec<u8>)>(
             }
             false
         }
-        LabeledTree::Leaf(ref mut value) => {
+        LabeledTree::Leaf(value) => {
             if *num_traversed_leaves == leaf_index {
                 modify_bytes_fn(value);
                 true

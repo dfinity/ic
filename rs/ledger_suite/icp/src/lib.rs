@@ -11,9 +11,8 @@ use ic_ledger_core::{
     block::{BlockType, EncodedBlock, FeeCollector},
     tokens::CheckedAdd,
 };
-use ic_ledger_hash_of::HashOf;
 use ic_ledger_hash_of::HASH_LENGTH;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_ledger_hash_of::HashOf;
 use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire};
 use prost::Message;
@@ -29,7 +28,7 @@ use strum_macros::IntoStaticStr;
 pub use ic_ledger_core::{
     block::BlockIndex,
     timestamp::TimeStamp,
-    tokens::{Tokens, TOKEN_SUBDIVIDABLE_BY},
+    tokens::{TOKEN_SUBDIVIDABLE_BY, Tokens},
 };
 
 pub mod account_identifier;
@@ -52,6 +51,23 @@ pub const MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST: usize = 50;
 pub const MEMO_SIZE_BYTES: usize = 32;
 
 pub const MAX_TAKE_ALLOWANCES: u64 = 500;
+
+pub const GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 1;
+pub const LEDGER_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 2;
+pub const ROOT_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 3;
+pub const LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 11;
+
+/// 1: rrkah-fqaaa-aaaaa-aaaaq-cai
+pub const GOVERNANCE_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET);
+/// 2: ryjl3-tyaaa-aaaaa-aaaba-cai
+pub const LEDGER_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(LEDGER_CANISTER_INDEX_IN_NNS_SUBNET);
+/// 3: r7inp-6aaaa-aaaaa-aaabq-cai
+pub const ROOT_CANISTER_ID: CanisterId = CanisterId::from_u64(ROOT_CANISTER_INDEX_IN_NNS_SUBNET);
+/// 11: qhbym-qaaaa-aaaaa-aaafq-cai
+pub const LEDGER_INDEX_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET);
 
 pub type LedgerBalances = Balances<BTreeMap<AccountIdentifier, Tokens>>;
 pub type LedgerAllowances = AllowanceTable<HeapAllowancesData<AccountIdentifier, Tokens>>;
@@ -379,7 +395,7 @@ impl Block {
         Self::from_transaction(parent_hash, transaction, timestamp, effective_fee, None)
     }
 
-    pub fn transaction(&self) -> Cow<Transaction> {
+    pub fn transaction(&self) -> Cow<'_, Transaction> {
         Cow::Borrowed(&self.transaction)
     }
 }
@@ -728,13 +744,12 @@ impl fmt::Display for TransferError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::BadFee { expected_fee } => {
-                write!(f, "transfer fee should be {}", expected_fee)
+                write!(f, "transfer fee should be {expected_fee}")
             }
             Self::InsufficientFunds { balance } => {
                 write!(
                     f,
-                    "the debit account doesn't have enough funds to complete the transaction, current balance: {}",
-                    balance
+                    "the debit account doesn't have enough funds to complete the transaction, current balance: {balance}"
                 )
             }
             Self::TxTooOld {
@@ -747,8 +762,7 @@ impl fmt::Display for TransferError {
             Self::TxCreatedInFuture => write!(f, "transaction's created_at_time is in future"),
             Self::TxDuplicate { duplicate_of } => write!(
                 f,
-                "transaction is a duplicate of another transaction in block {}",
-                duplicate_of
+                "transaction is a duplicate of another transaction in block {duplicate_of}"
             ),
         }
     }
@@ -1175,8 +1189,9 @@ pub fn get_blocks(
     // [100 .. 109] then requesting blocks at BlockIndex < 100 or BlockIndex
     // > 109 is an error
     if range_from < range_from_offset || requested_range_to > range_to {
-        return GetBlocksRes(Err(format!("Requested blocks outside the range stored in the archive node. Requested [{} .. {}]. Available [{} .. {}].",
-            range_from, requested_range_to, range_from_offset, range_to)));
+        return GetBlocksRes(Err(format!(
+            "Requested blocks outside the range stored in the archive node. Requested [{range_from} .. {requested_range_to}]. Available [{range_from_offset} .. {range_to}]."
+        )));
     }
     // Example: If the node stores blocks [100 .. 109] then BLOCK_HEIGHT_OFFSET
     // is 100 and the Block with BlockIndex 100 is at index 0

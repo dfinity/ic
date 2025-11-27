@@ -74,10 +74,10 @@ pub fn ensure_file_exists(file: &Path) -> io::Result<()> {
 }
 
 pub fn ensure_file_extension(file: &Path, ext: &str) -> io::Result<()> {
-    if let Some(fext) = file.extension() {
-        if fext.to_str().eq(&Some(ext)) {
-            return Ok(());
-        }
+    if let Some(fext) = file.extension()
+        && fext.to_str().eq(&Some(ext))
+    {
+        return Ok(());
     }
     Err(io::Error::new(
         io::ErrorKind::InvalidInput,
@@ -103,7 +103,7 @@ fn run_self_signed(fname: Option<PathBuf>, pod: Option<PemOrDer>) -> io::Result<
                 None => {
                     return Err(io::Error::other(
                         "Must specify '--type' option when reading from stdin",
-                    ))
+                    ));
                 }
             }
             io::stdin().read_to_end(&mut buffer)?;
@@ -192,7 +192,7 @@ fn run_raw(fname: Option<PathBuf>) -> io::Result<()> {
     let mut arr: [u8; PrincipalId::MAX_LENGTH_IN_BYTES] = Default::default();
     arr.copy_from_slice(&buffer[0..PrincipalId::MAX_LENGTH_IN_BYTES]);
     let pid = PrincipalId::new(num_bytes, arr);
-    println!("{:?}", pid);
+    println!("{pid:?}");
     Ok(())
 }
 
@@ -200,7 +200,7 @@ fn main() -> io::Result<()> {
     let args = match CliArgs::try_parse_from(env::args()) {
         Ok(args) => args,
         Err(e) => {
-            eprintln!("{}", e);
+            eprintln!("{e}");
             std::process::exit(1);
         }
     };

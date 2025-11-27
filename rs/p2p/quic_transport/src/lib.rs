@@ -39,16 +39,17 @@ use std::{
 
 use async_trait::async_trait;
 use axum::{
-    http::{Request, Response},
     Router,
+    http::{Request, Response},
 };
 use bytes::Bytes;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use ic_metrics::MetricsRegistry;
 use phantom_newtype::AmountOf;
+use prometheus::IntGauge;
 use quinn::{
     AsyncUdpSocket, ClosedStream, ConnectError, ConnectionError, ReadToEndError, SendStream,
     StoppedError, VarInt, WriteError,
@@ -143,7 +144,7 @@ impl QuicTransport {
         log: &ReplicaLogger,
         metrics_registry: &MetricsRegistry,
         rt: &tokio::runtime::Handle,
-        tls_config: Arc<dyn TlsConfig + Send + Sync>,
+        tls_config: Arc<dyn TlsConfig>,
         registry_client: Arc<dyn RegistryClient>,
         node_id: NodeId,
         // The receiver is passed here mainly to be consistent with other managers that also
@@ -196,18 +197,27 @@ const QUIC_STREAM_CANCELLED: VarInt = VarInt::from_u32(0x80000006);
 /// This struct overrides that behavior by sending a reset frame instead, signaling
 /// that the message transmission was canceled. This approach helps optimize bandwidth
 /// usage in scenarios involving message cancellation.
+/// Additionally, keep track of the number of ongoing streams in the given metric.
 struct ResetStreamOnDrop {
     send_stream: SendStream,
+    ongoing_streams: IntGauge,
 }
 
 impl ResetStreamOnDrop {
-    fn new(send_stream: SendStream) -> Self {
-        Self { send_stream }
+    fn new(send_stream: SendStream, ongoing_streams: IntGauge) -> Self {
+        // Increment the metric when a new stream is created.
+        ongoing_streams.inc();
+        Self {
+            send_stream,
+            ongoing_streams,
+        }
     }
 }
 
 impl Drop for ResetStreamOnDrop {
     fn drop(&mut self) {
+        // Decrement the metric when the stream is dropped.
+        self.ongoing_streams.dec();
         // fails silently if the stream is already closed.
         let _ = self.send_stream.reset(QUIC_STREAM_CANCELLED);
     }

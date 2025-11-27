@@ -20,10 +20,10 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use ic_replicated_state::{
-    canister_state::execution_state::WasmExecutionMode, num_bytes_try_from, CallContextAction,
-    CallOrigin, CanisterState,
+    CallContextAction, CallOrigin, CanisterState,
+    canister_state::execution_state::WasmExecutionMode, num_bytes_try_from,
 };
 use ic_types::messages::{
     CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
@@ -160,7 +160,7 @@ pub fn execute_call_or_task(
                 err,
                 original,
                 round,
-            )
+            );
         }
     };
 
@@ -498,11 +498,31 @@ impl CallOrTaskHelper {
         let requested = canister_state_changes
             .system_state_modifications
             .removed_cycles();
+        let new_memory_usage = output
+            .new_memory_usage
+            .unwrap_or_else(|| clean_canister.memory_usage());
+        let new_message_memory_usage = output
+            .new_message_memory_usage
+            .unwrap_or_else(|| clean_canister.message_memory_usage());
+        let new_reserved_balance = clean_canister.system_state.reserved_balance()
+            + canister_state_changes
+                .system_state_modifications
+                .reserved_cycles();
+        let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
+            clean_canister.system_state.freeze_threshold,
+            clean_canister.system_state.memory_allocation,
+            new_memory_usage,
+            new_message_memory_usage,
+            clean_canister.compute_allocation(),
+            original.subnet_size,
+            round.cost_schedule,
+            new_reserved_balance,
+        );
         let reveal_top_up = self
             .canister
             .controllers()
             .contains(&original.call_origin.get_principal());
-        if old_balance < requested + original.freezing_threshold {
+        if old_balance < requested + freezing_threshold {
             let err = CanisterOutOfCyclesError {
                 canister_id: self.canister.canister_id(),
                 available: old_balance,
@@ -529,6 +549,7 @@ impl CallOrTaskHelper {
             );
         }
 
+        let is_composite_query = matches!(original.method, WasmMethod::CompositeQuery(_));
         let heap_delta = match original.call_or_task {
             // Update methods and tasks can persist changes to the canister's state.
             CanisterCallOrTask::Update(_) | CanisterCallOrTask::Task(_) => {
@@ -545,6 +566,7 @@ impl CallOrTaskHelper {
                     round.counters.state_changes_error,
                     call_tree_metrics,
                     original.time,
+                    is_composite_query,
                     &|system_state| self.deallocation_sender.send(Box::new(system_state)),
                 );
 
@@ -563,6 +585,7 @@ impl CallOrTaskHelper {
                         &mut self.canister.system_state,
                         round.network_topology,
                         round.hypervisor.subnet_id(),
+                        is_composite_query,
                         round.log,
                     )
                 {

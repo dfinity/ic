@@ -8,7 +8,6 @@ version.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-hex = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
@@ -18,9 +17,9 @@ ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-crypto-utils-canister-threshold-sig = { path = "../crypto/utils/canister_threshold_sig" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
-ic-heap-bytes = { path = "../../packages/ic-heap-bytes" }
 ic-embedders = { path = "../embedders" }
 ic-error-types = { path = "../../packages/ic-error-types" }
+ic-heap-bytes = { path = "../../packages/ic-heap-bytes" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-limits = { path = "../limits" }
@@ -68,9 +67,9 @@ assert_matches = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { workspace = true }
 execution-environment-bench = { path = "benches/lib" }
+flate2 = { workspace = true }
 ic-crypto-test-utils-vetkd = { path = "../crypto/test_utils/vetkd" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
-ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
@@ -81,15 +80,16 @@ ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
-ic-wasm-types = { path = "../types/wasm_types" }
 itertools = { workspace = true }
 libflate = { workspace = true }
+lazy_static = { workspace = true }
 maplit = "1.0.2"
 proptest = { workspace = true }
 regex = { workspace = true }
 rstest = { workspace = true }
 test-strategy = "0.3.1"
 wat = { workspace = true }
+wirm = { workspace = true }
 
 [build-dependencies]
 escargot = "0.5"

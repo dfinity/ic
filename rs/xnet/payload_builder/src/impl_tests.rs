@@ -11,7 +11,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::ReplicatedStateTesting;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_42, SUBNET_5};
+use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5, SUBNET_42};
 use ic_types::xnet::RejectReason;
 use maplit::btreemap;
 

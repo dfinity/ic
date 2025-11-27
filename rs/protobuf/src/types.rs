@@ -14,8 +14,8 @@ pub mod v1 {
         pub fn read_from_file<P: AsRef<Path> + std::fmt::Debug>(
             filepath: P,
         ) -> Result<Self, String> {
-            let cup_file = File::open(&filepath)
-                .map_err(|e| format!("open failed: {:?}: {:?}", filepath, e))?;
+            let cup_file =
+                File::open(&filepath).map_err(|e| format!("open failed: {filepath:?}: {e:?}"))?;
             Self::read_from_reader(cup_file)
         }
 
@@ -24,8 +24,8 @@ pub mod v1 {
             let mut buf = Vec::new();
             reader
                 .read_to_end(&mut buf)
-                .map_err(|e| format!("read failed: {:?}", e))?;
-            Self::decode(&buf[..]).map_err(|e| format!("protobuf decode failed: {:?}", e))
+                .map_err(|e| format!("read failed: {e:?}"))?;
+            Self::decode(&buf[..]).map_err(|e| format!("protobuf decode failed: {e:?}"))
         }
     }
 
@@ -58,7 +58,7 @@ pub mod v1 {
             match value {
                 RejectCode::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                     typ: "RejectCode",
-                    err: format!("Unexpected value for reject code {:?}", value),
+                    err: format!("Unexpected value for reject code {value:?}"),
                 }),
                 RejectCode::SysFatal => Ok(RejectCodePublic::SysFatal),
                 RejectCode::SysTransient => Ok(RejectCodePublic::SysTransient),

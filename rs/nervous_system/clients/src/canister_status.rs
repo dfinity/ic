@@ -11,7 +11,7 @@ impl TryFrom<PrincipalId> for CanisterIdRecord {
     fn try_from(principal_id: PrincipalId) -> Result<Self, Self::Error> {
         let canister_id = match CanisterId::try_from(principal_id) {
             Ok(canister_id) => canister_id,
-            Err(err) => return Err(format!("{}", err)),
+            Err(err) => return Err(format!("{err}")),
         };
 
         Ok(canister_id.into())

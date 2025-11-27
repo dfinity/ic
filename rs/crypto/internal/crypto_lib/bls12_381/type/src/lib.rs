@@ -19,6 +19,7 @@
 #![warn(future_incompatible)]
 #![allow(clippy::needless_range_loop)]
 
+mod cache;
 mod interpolation;
 mod poly;
 
@@ -33,16 +34,15 @@ mod tests;
 
 use ic_bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve, HashToField};
 use itertools::multiunzip;
-use pairing::group::{ff::Field, Group};
+use pairing::group::{Group, ff::Field};
 use paste::paste;
 use rand::{CryptoRng, Rng, RngCore};
-use std::sync::Arc;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 use std::{collections::HashMap, fmt};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 macro_rules! ctoption_ok_or {
-    ($val:expr, $err:expr) => {
+    ($val:expr_2021, $err:expr_2021) => {
         if bool::from($val.is_some()) {
             Ok(Self::new($val.unwrap()))
         } else {
@@ -199,7 +199,7 @@ impl Scalar {
 
         // We can't use fill_bytes here because that results in incompatible output.
         for i in 0..64 {
-            bytes[i] = rng.gen::<u8>();
+            bytes[i] = rng.r#gen::<u8>();
         }
 
         let mut rbuf = [0u8; 64];
@@ -264,6 +264,53 @@ impl Scalar {
         let inv = self.value.invert();
         if bool::from(inv.is_some()) {
             Some(Self::new(inv.unwrap()))
+        } else {
+            None
+        }
+    }
+
+    /// Return the multiplicative inverse of the various scalar if each inverse exists
+    pub fn batch_inverse_vartime(values: &[Self]) -> Option<Vec<Self>> {
+        if values.is_empty() {
+            return Some(vec![]);
+        }
+
+        let n = values.len();
+        let mut accum = Scalar::one();
+        let mut products = Vec::with_capacity(n);
+
+        /*
+         * This uses Montgomery's Trick to compute many inversions using just a
+         * single field inversion. This is worthwhile because field inversions
+         * are quite expensive (for BLS12-381, an inversion costs approximately 52
+         * field multiplications plus 255 field squarings)
+         *
+         * The basic idea here (for n=2) is taking advantage of the fact that if
+         * x and y both have inverses then so does x*y, and (x*y)^-1 * x = y^-1
+         * and (x*y)^-1 * y = x^-1
+         *
+         * This is described in more detail in various texts such as
+         *  - <https://eprint.iacr.org/2008/199.pdf> section 2
+         *  - "Guide to Elliptic Curve Cryptography" Algorithm 2.26
+         */
+
+        for v in values {
+            accum *= v;
+            products.push(accum.clone());
+        }
+
+        if let Some(mut inv) = accum.inverse() {
+            let mut result = Vec::with_capacity(n);
+
+            for i in (1..n).rev() {
+                result.push(&inv * &products[i - 1]);
+                inv *= &values[i];
+            }
+
+            result.push(inv);
+            result.reverse();
+
+            Some(result)
         } else {
             None
         }
@@ -385,7 +432,7 @@ impl Scalar {
         let t_bits = std::mem::size_of::<u64>() * 8;
         let n_bits = std::cmp::min(255, t_bits - n.leading_zeros() as usize);
         let n_bytes = n_bits.div_ceil(8);
-        let n_mask = if n_bits % 8 == 0 {
+        let n_mask = if n_bits.is_multiple_of(8) {
             0xFF
         } else {
             0xFF >> (8 - n_bits % 8)
@@ -793,7 +840,7 @@ declare_addsub_ops_for!(Scalar);
 declare_mul_scalar_ops_for!(Scalar);
 
 macro_rules! define_affine_and_projective_types {
-    ( $affine:ident, $projective:ident, $size:expr ) => {
+    ( $affine:ident, $projective:ident, $size:expr_2021 ) => {
         paste! {
             static [<$affine:upper _GENERATOR>] : LazyLock<$affine> = LazyLock::new(|| $affine::new_with_precomputation(ic_bls12_381::$affine::generator()));
         }
@@ -1442,7 +1489,7 @@ macro_rules! define_affine_and_projective_types {
 
 // declare the impl for the mul2 table struct
 macro_rules! declare_mul2_table_impl {
-    ($projective:ty, $tbl_typ:ident, $window:expr) => {
+    ($projective:ty, $tbl_typ:ident, $window:expr_2021) => {
         /// Table for storing linear combinations of two points.
         /// It is stored as a vector to reduce the amount of indirection for accessing cells.
         /// A table can be computed by calling the `compute_mul2_tbl` function of the corresponding
@@ -1503,6 +1550,51 @@ macro_rules! declare_mul2_table_impl {
                 accum
             }
 
+            /// Multiscalar multiplication (aka sum-of-products)
+            ///
+            /// This table contains linear combinations of points x and y
+            /// that allow for fast multiplication with scalars.
+            /// The result of the computation is equivalent to x*a + y*b.
+            /// It is intended and beneficial to call this function on multiple
+            /// scalar pairs without recomputing this table.
+            /// If `mul2` is called only once, consider using the associated
+            /// `mul2` function of the respective projective struct, which
+            /// computes a smaller mul2 table on the fly and might thus be more efficient.
+            ///
+            /// Uses the Simultaneous 2w-Ary Method following Section 2.1 of
+            /// <https://www.bmoeller.de/pdf/multiexp-sac2001.pdf>
+            ///
+            /// Warning: this function leaks information about the scalars via
+            /// memory-based side channels. Do not use this function with secret
+            /// scalars.
+            pub fn mul2_vartime(&self, a: &Scalar, b: &Scalar) -> $projective {
+                // Configurable window size: can be in 1..=8
+                type Window = WindowInfo<$window>;
+
+                let s1 = a.serialize();
+                let s2 = b.serialize();
+
+                let mut accum = <$projective>::identity();
+
+                for i in 0..Window::WINDOWS {
+                    // skip on first iteration: doesn't leak secrets as index is public
+                    if i > 0 {
+                        for _ in 0..Window::SIZE {
+                            accum = accum.double();
+                        }
+                    }
+
+                    let w1 = Window::extract(&s1, i);
+                    let w2 = Window::extract(&s2, i);
+                    let window = $tbl_typ::col(w1 as usize) + $tbl_typ::row(w2 as usize);
+
+                    // This is the only difference from the constant time version:
+                    accum += &self.0[window];
+                }
+
+                accum
+            }
+
             #[allow(dead_code)]
             /// Perform a sequence of sum-of-2-products operations and return the results
             pub fn mul2_array<const N: usize>(
@@ -1518,7 +1610,7 @@ macro_rules! declare_mul2_table_impl {
 }
 
 macro_rules! declare_compute_mul2_table_inline {
-    ($projective:ty, $tbl_typ:ident, $window_size:expr, $x:expr, $y:expr) => {{
+    ($projective:ty, $tbl_typ:ident, $window_size:expr_2021, $x:expr_2021, $y:expr_2021) => {{
         // Configurable window size: can be in 1..=8
         type Window = WindowInfo<$window_size>;
 
@@ -1563,7 +1655,7 @@ macro_rules! declare_compute_mul2_table_inline {
 }
 
 macro_rules! declare_mul2_impl_for {
-    ( $projective:ty, $tbl_typ:ident, $small_window_size:expr, $big_window_size:expr ) => {
+    ( $projective:ty, $tbl_typ:ident, $small_window_size:expr_2021, $big_window_size:expr_2021 ) => {
         paste! {
             /// Contains a small precomputed table with linear combinations of two points that
             /// can be used for faster mul2 computation. This table is called small because its
@@ -1593,6 +1685,21 @@ macro_rules! declare_mul2_impl_for {
                 pub fn mul2(x: &Self, a: &Scalar, y: &Self, b: &Scalar) -> Self {
                     let tbl = Self::compute_small_mul2_tbl(x, y);
                     tbl.mul2(a, b)
+                }
+
+                /// Multiscalar multiplication (aka sum-of-products)
+                ///
+                /// Equivalent to x*a + y*b
+                ///
+                /// Uses the Simultaneous 2w-Ary Method following Section 2.1 of
+                /// <https://www.bmoeller.de/pdf/multiexp-sac2001.pdf>
+                ///
+                /// Warning: this function leaks information about the scalars via
+                /// memory-based side channels. Do not use this function with secret
+                /// scalars.
+                pub fn mul2_vartime(x: &Self, a: &Scalar, y: &Self, b: &Scalar) -> Self {
+                    let tbl = Self::compute_small_mul2_tbl(x, y);
+                    tbl.mul2_vartime(a, b)
                 }
 
                 /// Compute a small mul2 table for computing mul2 on the fly, i.e.,
@@ -1634,7 +1741,7 @@ macro_rules! declare_mul2_impl_for {
 * of additions for w=4 is typically smaller than for w=3.
 */
 macro_rules! declare_muln_vartime_dispatch_for {
-    ( $typ:ty, $naive_cutoff:expr, $w3_cutoff:expr ) => {
+    ( $typ:ty, $naive_cutoff:expr_2021, $w3_cutoff:expr_2021 ) => {
         impl $typ {
             /// Multiscalar multiplication using Pippenger's algorithm
             ///
@@ -1650,7 +1757,7 @@ macro_rules! declare_muln_vartime_dispatch_for {
                 if points.len() == 1 {
                     return &points[0] * &scalars[0];
                 } else if points.len() == 2 {
-                    return Self::mul2(&points[0], &scalars[0], &points[1], &scalars[1]);
+                    return Self::mul2_vartime(&points[0], &scalars[0], &points[1], &scalars[1]);
                 } else if points.len() < $naive_cutoff {
                     Self::muln_vartime_naive(points, scalars)
                 } else if points.len() < $w3_cutoff {
@@ -1670,7 +1777,7 @@ macro_rules! declare_muln_vartime_dispatch_for {
                     .chunks(2)
                     .zip(scalars.chunks(2))
                     .fold(accum, |accum, (c_p, c_s)| {
-                        accum + Self::mul2(&c_p[0], &c_s[0], &c_p[1], &c_s[1])
+                        accum + Self::mul2_vartime(&c_p[0], &c_s[0], &c_p[1], &c_s[1])
                     })
             }
         }
@@ -1678,7 +1785,7 @@ macro_rules! declare_muln_vartime_dispatch_for {
 }
 
 macro_rules! declare_muln_vartime_impls_for {
-    ( $typ:ty, $window:expr ) => {
+    ( $typ:ty, $window:expr_2021 ) => {
         impl $typ {
             paste! {
                 fn [< muln_vartime_window_ $window >] (points: &[Self], scalars: &[Scalar]) -> Self {
@@ -1732,7 +1839,7 @@ macro_rules! declare_muln_vartime_impls_for {
             }
         }
     };
-    ( $typ:ty, $window:expr, $($windows:expr),+ ) => {
+    ( $typ:ty, $window:expr_2021, $($windows:expr_2021),+ ) => {
         declare_muln_vartime_impls_for!($typ, $window);
         declare_muln_vartime_impls_for!($typ, $($windows),+ );
     }
@@ -1804,7 +1911,7 @@ macro_rules! declare_muln_vartime_affine_impl_for {
 }
 
 macro_rules! declare_windowed_scalar_mul_ops_for {
-    ( $typ:ty, $window:expr ) => {
+    ( $typ:ty, $window:expr_2021 ) => {
         impl $typ {
             pub(crate) fn windowed_mul(&self, scalar: &Scalar) -> Self {
                 // Configurable window size: can be in 1..=8
@@ -1894,9 +2001,9 @@ macro_rules! declare_windowed_scalar_mul_ops_for {
 /// These values were derived from benchmarks on a single machine,
 /// but seem to match fairly closely with simulated estimates of
 /// the cost of Pippenger's
-const G1_PROJECTIVE_USE_W3_IF_EQ_OR_GT: usize = 13;
+const G1_PROJECTIVE_USE_W3_IF_EQ_OR_GT: usize = 16;
 const G1_PROJECTIVE_USE_W4_IF_EQ_OR_GT: usize = 64;
-const G2_PROJECTIVE_USE_W3_IF_EQ_OR_GT: usize = 15;
+const G2_PROJECTIVE_USE_W3_IF_EQ_OR_GT: usize = 17;
 const G2_PROJECTIVE_USE_W4_IF_EQ_OR_GT: usize = 64;
 
 define_affine_and_projective_types!(G1Affine, G1Projective, 48);
@@ -1940,6 +2047,40 @@ declare_muln_vartime_impls_for!(G2Projective, 3, 4);
 declare_muln_vartime_affine_impl_for!(G2Projective, G2Affine);
 impl_debug_using_serialize_for!(G2Affine);
 impl_debug_using_serialize_for!(G2Projective);
+
+impl G2Affine {
+    /// Deserialize a G2 element using a cache
+    ///
+    /// This function verifies that the decoded point is within the prime order
+    /// subgroup, and is safe to call on untrusted inputs.
+    ///
+    /// This function is equivalent to `deserialize` but additionally caches
+    /// that it has seen the key before; repeated deserializations will be much
+    /// faster. This is mostly useful when deserializing public keys, which are
+    /// potentially seen many times over the process lifetime.
+    pub fn deserialize_cached<B: AsRef<[u8]>>(bytes: &B) -> Result<Self, PairingInvalidPoint> {
+        let bytes: &[u8; Self::BYTES] = bytes
+            .as_ref()
+            .try_into()
+            .map_err(|_| PairingInvalidPoint::InvalidPoint)?;
+        if let Some(pk) = crate::cache::G2PublicKeyCache::global().get(bytes) {
+            return Ok(pk);
+        }
+
+        if let Some(pt) = ic_bls12_381::G2Affine::from_compressed(bytes).into_option() {
+            let pt = Self::new(pt);
+            crate::cache::G2PublicKeyCache::global().insert(*bytes, pt.clone());
+            Ok(pt)
+        } else {
+            Err(PairingInvalidPoint::InvalidPoint)
+        }
+    }
+
+    /// Return statistics related to the deserialize_cached cache
+    pub fn deserialize_cached_statistics() -> crate::cache::G2PublicKeyCacheStatistics {
+        crate::cache::G2PublicKeyCache::global().cache_statistics()
+    }
+}
 
 /// An element of the group Gt
 #[derive(Clone, Eq, PartialEq, Debug, Zeroize, ZeroizeOnDrop)]
@@ -2295,7 +2436,7 @@ pub fn verify_bls_signature_batch_distinct<R: RngCore + CryptoRng>(
 /// and thus reduces the number of required pairings 2n to 2.
 ///
 /// For details, see Section 5.2 in "Short Signatures from the Weil Pairing"
-/// by Dan Boneh, Ben Lynn, and Hovav Shacham. In Jounal of Cryptology'04.
+/// by Dan Boneh, Ben Lynn, and Hovav Shacham. In Journal of Cryptology'04.
 /// https://link.springer.com/content/pdf/10.1007/s00145-004-0314-9.pdf.
 pub fn verify_bls_signature_batch_same_pk<R: RngCore + CryptoRng>(
     sigs_msgs: &[(&G1Affine, &G1Affine)],
@@ -2327,7 +2468,7 @@ pub fn verify_bls_signature_batch_same_pk<R: RngCore + CryptoRng>(
 /// and thus reduces the number of required pairings 2n to 2.
 ///
 /// For details, see Section 5.2 in "Short Signatures from the Weil Pairing"
-/// by Dan Boneh, Ben Lynn, and Hovav Shacham. In Jounal of Cryptology'04.
+/// by Dan Boneh, Ben Lynn, and Hovav Shacham. In Journal of Cryptology'04.
 /// https://link.springer.com/content/pdf/10.1007/s00145-004-0314-9.pdf.
 pub fn verify_bls_signature_batch_same_msg<R: RngCore + CryptoRng>(
     sigs_pks: &[(&G1Affine, &G2Affine)],

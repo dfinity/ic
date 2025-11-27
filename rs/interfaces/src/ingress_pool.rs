@@ -1,9 +1,9 @@
 //! The ingress pool public interface.
 use crate::{consensus_pool::ValidatedArtifact, p2p::consensus::UnvalidatedArtifact};
 use ic_types::{
+    CountBytes, NodeId, Time,
     artifact::IngressMessageId,
     messages::{MessageId, SignedIngress},
-    CountBytes, NodeId, Time,
 };
 
 // tag::interface[]

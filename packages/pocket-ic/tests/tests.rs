@@ -1,67 +1,42 @@
-use candid::{decode_one, encode_one, CandidType, Decode, Deserialize, Encode, Principal};
-#[cfg(not(windows))]
-use ic_base_types::{PrincipalId, SubnetId};
+use crate::common::frontend_canister;
+use candid::{CandidType, Decode, Deserialize, Encode, Principal, decode_one, encode_one};
 use ic_certification::Label;
 use ic_management_canister_types::{
     Bip341, CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
     HttpRequestResult, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrAux,
     SchnorrKeyId as SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult,
 };
-#[cfg(not(windows))]
-use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
-#[cfg(not(windows))]
-use ic_registry_client::client::RegistryClientImpl;
-#[cfg(not(windows))]
-use ic_registry_client_helpers::subnet::SubnetRegistry;
-#[cfg(not(windows))]
-use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
-#[cfg(not(windows))]
-use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
-#[cfg(not(windows))]
-use pocket_ic::{common::rest::ExtendedSubnetConfigSet, nonblocking::PocketIc as PocketIcAsync};
 use pocket_ic::{
+    DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult, PocketIc, PocketIcBuilder,
+    PocketIcState, RejectCode, StartServerParams, Time,
     common::rest::{
         AutoProgressConfig, BlobCompression, CanisterHttpReply, CanisterHttpResponse,
-        CreateInstanceResponse, EmptyConfig, HttpGatewayDetails, IcpFeatures, InitialTime,
-        InstanceConfig, InstanceHttpGatewayConfig, MockCanisterHttpResponse, RawEffectivePrincipal,
-        RawMessageId, SubnetConfigSet, SubnetKind,
+        CanisterIdRange, CreateInstanceResponse, HttpGatewayDetails, HttpsConfig, IcpFeatures,
+        IcpFeaturesConfig, InitialTime, InstanceConfig, InstanceHttpGatewayConfig,
+        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetConfigSet, SubnetKind,
     },
-    query_candid, start_server, update_candid, DefaultEffectiveCanisterIdError, ErrorCode,
-    IngressStatusResult, PocketIc, PocketIcBuilder, PocketIcState, RejectCode, StartServerParams,
-    Time,
+    nonblocking::PocketIc as PocketIcAsync,
+    query_candid, start_server, update_candid,
 };
-use reqwest::blocking::Client;
 use reqwest::header::CONTENT_LENGTH;
 use reqwest::{Method, StatusCode, Url};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-#[cfg(windows)]
-use std::net::{IpAddr, Ipv4Addr};
 use std::{
     io::Read,
-    net::SocketAddr,
     sync::OnceLock,
     time::{Duration, SystemTime},
-};
-#[cfg(not(windows))]
-use std::{
-    io::Write,
-    net::{TcpListener, TcpStream},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    thread::JoinHandle,
-    time::Instant,
 };
 use tempfile::{NamedTempFile, TempDir};
 #[cfg(windows)]
 use wslpath::windows_to_wsl;
 
-// 2T cycles
-const INIT_CYCLES: u128 = 2_000_000_000_000;
+mod common;
+
+// 3T cycles
+const INIT_CYCLES: u128 = 3_000_000_000_000;
 
 #[derive(CandidType, Deserialize, Debug)]
 enum RejectionCode {
@@ -74,7 +49,7 @@ enum RejectionCode {
     Unknown,
 }
 
-// Create a counter canister and charge it with 2T cycles.
+// Create a counter canister and charge it with initial cycles.
 fn deploy_counter_canister(pic: &PocketIc) -> Principal {
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
@@ -131,10 +106,7 @@ fn counter_wasm() -> Vec<u8> {
 
 #[test]
 fn test_create_canister_with_id() {
-    let pic = PocketIcBuilder::new()
-        .with_nns_subnet()
-        .with_ii_subnet()
-        .build();
+    let pic = PocketIcBuilder::new().with_nns_subnet().build();
     // goes on NNS
     let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
     let actual_canister_id = pic
@@ -145,16 +117,26 @@ fn test_create_canister_with_id() {
         pic.get_subnet(canister_id).unwrap(),
         pic.topology().get_nns().unwrap()
     );
-    // goes on II
+    // goes on II which is created dynamically with its ICP mainnet canister ranges
     let canister_id = Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap();
     let actual_canister_id = pic
         .create_canister_with_id(None, None, canister_id)
         .unwrap();
     assert_eq!(actual_canister_id, canister_id);
-    assert_eq!(
-        pic.get_subnet(canister_id).unwrap(),
-        pic.topology().get_ii().unwrap()
-    );
+    let topology = pic.topology();
+    let ii_subnet_id = topology.get_ii().unwrap();
+    assert_eq!(pic.get_subnet(canister_id).unwrap(), ii_subnet_id);
+    // The II canister ID is a singleton range.
+    let ii_canister_ranges = &topology
+        .subnet_configs
+        .get(&ii_subnet_id)
+        .unwrap()
+        .canister_ranges;
+    let ii_canister_range = CanisterIdRange {
+        start: canister_id.into(),
+        end: canister_id.into(),
+    };
+    assert!(ii_canister_ranges.contains(&ii_canister_range));
 }
 
 #[test]
@@ -204,7 +186,7 @@ fn test_create_canister_with_used_id_fails() {
 
 #[test]
 #[should_panic(
-    expected = "The binary representation 04 of effective canister ID 2vxsx-fae should consist of 10 bytes."
+    expected = "The effective canister ID 2vxsx-fae does not belong to an existing subnet and it is not a mainnet canister ID."
 )]
 fn test_create_canister_with_not_contained_id_panics() {
     let pic = PocketIc::new();
@@ -213,7 +195,7 @@ fn test_create_canister_with_not_contained_id_panics() {
 
 #[test]
 #[should_panic(
-    expected = "The effective canister ID rwlgt-iiaaa-aaaaa-aaaaa-cai belongs to the NNS or II subnet on the IC mainnet for which PocketIC provides a `SubnetKind`: please set up your PocketIC instance with a subnet of that `SubnetKind`."
+    expected = "The effective canister ID rwlgt-iiaaa-aaaaa-aaaaa-cai belongs to the NNS subnet on the IC mainnet for which PocketIC provides a `SubnetKind`: please set up your PocketIC instance with a subnet of that `SubnetKind`."
 )]
 fn test_create_canister_with_special_mainnet_id_panics() {
     let pic = PocketIc::new();
@@ -373,7 +355,7 @@ fn test_multiple_large_xnet_payloads() {
                             let blob_len = Decode!(&reply, usize).unwrap();
                             assert_eq!(blob_len, size);
                         }
-                        _ => panic!("Unexpected update call result: {:?}", xnet_result),
+                        _ => panic!("Unexpected update call result: {xnet_result:?}"),
                     };
                 } else {
                     // An inter-canister call to a different subnet with 10M argument traps.
@@ -381,7 +363,7 @@ fn test_multiple_large_xnet_payloads() {
                         Err(reject_response) => {
                             assert_eq!(reject_response.error_code, ErrorCode::CanisterCalledTrap);
                         }
-                        _ => panic!("Unexpected update call result: {:?}", xnet_result),
+                        _ => panic!("Unexpected update call result: {xnet_result:?}"),
                     };
                 }
             }
@@ -394,7 +376,7 @@ fn test_initial_timestamp() {
     let initial_timestamp = 1_620_328_630_000_000_000; // 06 May 2021 21:17:10 CEST
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
-        .with_initial_timestamp(initial_timestamp)
+        .with_initial_time(Time::from_nanos_since_unix_epoch(initial_timestamp))
         .build();
 
     // Initial time is bumped by 1ns during instance creation to ensure strict monotonicity.
@@ -411,7 +393,7 @@ fn test_initial_timestamp() {
 fn test_invalid_initial_timestamp() {
     let _pic = PocketIcBuilder::new()
         .with_application_subnet()
-        .with_initial_timestamp(0)
+        .with_initial_time(Time::from_nanos_since_unix_epoch(0))
         .build();
 }
 
@@ -419,14 +401,14 @@ fn test_invalid_initial_timestamp() {
 fn test_initial_timestamp_with_cycles_minting() {
     let initial_timestamp = 1_620_633_601_000_000_000; // 10 May 2021 10:00:01
     let icp_features = IcpFeatures {
-        cycles_minting: Some(EmptyConfig {}),
+        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
         ..Default::default()
     };
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_application_subnet()
         .with_icp_features(icp_features)
-        .with_initial_timestamp(initial_timestamp)
+        .with_initial_time(Time::from_nanos_since_unix_epoch(initial_timestamp))
         .build();
 
     // Initial time is bumped during each subnet creation and when executing rounds to deploy the CMC.
@@ -443,14 +425,14 @@ fn test_initial_timestamp_with_cycles_minting() {
 fn test_invalid_initial_timestamp_with_cycles_minting() {
     let initial_timestamp = 1_620_328_630_000_000_000; // 06 May 2021 21:17:10 CEST
     let icp_features = IcpFeatures {
-        cycles_minting: Some(EmptyConfig {}),
+        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
         ..Default::default()
     };
     let _pic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_application_subnet()
         .with_icp_features(icp_features)
-        .with_initial_timestamp(initial_timestamp)
+        .with_initial_time(Time::from_nanos_since_unix_epoch(initial_timestamp))
         .build();
 }
 
@@ -458,7 +440,7 @@ fn test_invalid_initial_timestamp_with_cycles_minting() {
 fn test_auto_progress() {
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
-        .with_auto_progress(None)
+        .with_auto_progress()
         .build();
 
     assert!(pic.auto_progress_enabled());
@@ -554,125 +536,6 @@ fn time_on_resumed_instance() {
     // - 1ns due to bumping time when creating a new instance to ensure strict time monotonicity.
     let resumed_time = pic.get_time();
     assert_eq!(resumed_time, time + Duration::from_nanos(2));
-}
-
-// Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
-#[cfg(not(windows))]
-async fn resume_killed_instance_impl(
-    allow_incomplete_state: Option<EmptyConfig>,
-) -> Result<(), String> {
-    let (mut server, server_url) = start_server(StartServerParams::default()).await;
-    let temp_dir = TempDir::new().unwrap();
-
-    let state = PocketIcState::new_from_path(temp_dir.path().to_path_buf());
-    let pic = PocketIcBuilder::new()
-        .with_application_subnet()
-        .with_server_url(server_url)
-        .with_state(state)
-        .build_async()
-        .await;
-
-    let canister_id = pic.create_canister().await;
-
-    // Execute sufficiently many rounds to trigger a checkpoint.
-    let expected_checkpoint_height = 500;
-    for _ in 0..expected_checkpoint_height {
-        pic.tick().await;
-    }
-
-    // Wait until the checkpoint is written to disk.
-    let topology = pic.topology().await;
-    let subnet_id = topology.get_app_subnets()[0];
-    let subnet_seed = hex::encode(topology.subnet_configs.get(&subnet_id).unwrap().subnet_seed);
-    let expected_checkpoint_dir = temp_dir
-        .path()
-        .join(subnet_seed)
-        .join("checkpoints")
-        .join(format!("{:016x}", expected_checkpoint_height));
-    let start = Instant::now();
-    loop {
-        if start.elapsed() > Duration::from_secs(300) {
-            panic!("Timed out waiting for a checkpoint to be written to disk.");
-        }
-        // Check if the expected checkpoint dir exists and does not contain the "unverified checkpoint marker".
-        if std::fs::read_dir(&expected_checkpoint_dir).is_ok() {
-            let unverified_checkpoint_marker =
-                expected_checkpoint_dir.join("unverified_checkpoint_marker");
-            if !unverified_checkpoint_marker.is_file() {
-                break;
-            }
-        }
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-
-    // The following (most recent) changes will be lost after killing the instance.
-    let now = SystemTime::now();
-    pic.set_certified_time(now.into()).await;
-    let another_canister_id = pic.create_canister().await;
-
-    assert!(pic.canister_exists(canister_id).await);
-    assert!(pic.canister_exists(another_canister_id).await);
-    let time = pic.get_time().await;
-    assert!(time >= now.into());
-
-    server.kill().unwrap();
-
-    let (_, server_url) = start_server(StartServerParams::default()).await;
-    let client = reqwest::Client::new();
-    let instance_config = InstanceConfig {
-        subnet_config_set: ExtendedSubnetConfigSet::default(),
-        http_gateway_config: None,
-        state_dir: Some(temp_dir.path().to_path_buf()),
-        nonmainnet_features: None,
-        log_level: None,
-        bitcoind_addr: None,
-        icp_features: None,
-        allow_incomplete_state,
-        initial_time: None,
-    };
-    let response = client
-        .post(server_url.join("instances").unwrap())
-        .json(&instance_config)
-        .send()
-        .await
-        .unwrap();
-    if !response.status().is_success() {
-        return Err(response.text().await.unwrap());
-    }
-    let instance_id = match response.json::<CreateInstanceResponse>().await.unwrap() {
-        CreateInstanceResponse::Created { instance_id, .. } => instance_id,
-        CreateInstanceResponse::Error { message } => panic!("Unexpected error: {}", message),
-    };
-    let pic = PocketIcAsync::new_from_existing_instance(server_url, instance_id, None);
-
-    // Only the first canister (created before the last checkpoint) is preserved,
-    // the other canister and time change are lost.
-    assert!(pic.canister_exists(canister_id).await);
-    assert!(!pic.canister_exists(another_canister_id).await);
-    let resumed_time = pic.get_time().await;
-    assert!(resumed_time < now.into());
-
-    // Drop instance explicitly to prevent data races in the StateManager.
-    pic.drop().await;
-
-    Ok(())
-}
-
-// Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
-#[cfg(not(windows))]
-#[tokio::test]
-async fn resume_killed_instance_strict() {
-    let err = resume_killed_instance_impl(None).await.unwrap_err();
-    assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is incomplete."));
-}
-
-// Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
-#[cfg(not(windows))]
-#[tokio::test]
-async fn resume_killed_instance() {
-    resume_killed_instance_impl(Some(EmptyConfig {}))
-        .await
-        .unwrap();
 }
 
 #[test]
@@ -938,7 +801,7 @@ async fn test_create_and_drop_instances_async() {
 async fn test_counter_canister_async() {
     let pic = pocket_ic::nonblocking::PocketIc::new().await;
 
-    // Create a counter canister and charge it with 2T cycles.
+    // Create a counter canister and charge it with initial cycles.
     let canister_id = pic.create_canister().await;
     pic.add_cycles(canister_id, INIT_CYCLES).await;
     pic.install_canister(canister_id, counter_wasm(), vec![], None)
@@ -990,7 +853,7 @@ fn install_very_large_wasm() {
     // Create a canister.
     let canister_id = pic.create_canister();
 
-    // Charge the canister with 2T cycles.
+    // Charge the canister with cycles.
     pic.add_cycles(canister_id, 100 * INIT_CYCLES);
 
     // Install the very large canister wasm on the canister.
@@ -1124,7 +987,7 @@ fn test_xnet_call_and_create_canister_with_specified_id() {
                         let identity = Decode!(&reply, String).unwrap();
                         assert_eq!(identity, canister_b.to_string());
                     }
-                    _ => panic!("Unexpected update call result: {:?}", xnet_result),
+                    _ => panic!("Unexpected update call result: {xnet_result:?}"),
                 };
             }
         }
@@ -1254,8 +1117,7 @@ fn test_schnorr() {
                         });
                         assert!(
                             verification_result.is_ok() == aux.is_none(),
-                            "{:?}",
-                            verification_result
+                            "{verification_result:?}"
                         );
                     }
                 };
@@ -1459,88 +1321,7 @@ fn test_vetkd() {
     }
 }
 
-#[cfg(not(windows))]
-struct HttpServer {
-    addr: SocketAddr,
-    flag: Arc<AtomicBool>,
-    handle: Option<JoinHandle<()>>,
-}
-
-#[cfg(not(windows))]
-impl HttpServer {
-    fn new(bind_addr: &str) -> Self {
-        fn handle_connection(mut stream: TcpStream) {
-            let mut buffer = [0; 1024];
-            let _ = stream.read(&mut buffer).unwrap();
-
-            let status_line = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n";
-            let body = "Hello from dynamic-port Rust server!";
-            let response = format!("{status_line}{body}");
-
-            stream.write_all(response.as_bytes()).unwrap();
-            stream.flush().unwrap();
-        }
-
-        let flag = Arc::new(AtomicBool::new(true));
-
-        // Bind to port 0 (OS assigns a free port)
-        let listener = TcpListener::bind(format!("{}:0", bind_addr)).expect("Failed to bind");
-
-        listener.set_nonblocking(true).unwrap();
-
-        // Extract the assigned bind address
-        let addr = listener.local_addr().unwrap();
-
-        let flag_in_thread = flag.clone();
-        let handle = std::thread::spawn(move || {
-            while flag_in_thread.load(Ordering::Relaxed) {
-                match listener.accept() {
-                    Ok((stream, _)) => {
-                        handle_connection(stream);
-                    }
-                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        // No incoming connection; sleep briefly and retry
-                        std::thread::sleep(Duration::from_millis(10));
-                    }
-                    Err(e) => {
-                        panic!("Unexpected error: {}", e);
-                    }
-                }
-            }
-        });
-
-        Self {
-            addr,
-            flag,
-            handle: Some(handle),
-        }
-    }
-
-    fn addr(&self) -> String {
-        format!("http://{}", self.addr)
-    }
-}
-
-#[cfg(not(windows))]
-impl Drop for HttpServer {
-    fn drop(&mut self) {
-        self.flag.store(false, Ordering::Relaxed);
-        self.handle.take().unwrap().join().unwrap();
-    }
-}
-
-#[test]
-fn test_canister_http() {
-    let pic = PocketIc::new();
-
-    // Create a canister and charge it with 2T cycles.
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, INIT_CYCLES);
-
-    // Install the test canister wasm file on the canister.
-    let test_wasm = test_canister_wasm();
-    pic.install_canister(canister_id, test_wasm, vec![], None);
-
+fn test_canister_http(pic: &PocketIc, canister_id: Principal) {
     // Submit an update call to the test canister making a canister http outcall
     // and mock a canister http outcall response.
     let call_id = pic
@@ -1585,54 +1366,53 @@ fn test_canister_http() {
     assert_eq!(http_response.unwrap().body, body);
 }
 
-// This test does not work on Windows since the test HTTP webserver is spawned by the test driver
-// on the Windows host while the PocketIC server (making the canister HTTP outcall) runs in WSL.
-#[cfg(not(windows))]
 #[test]
-fn test_canister_http_in_live_mode() {
-    // We create a PocketIC instance with an NNS subnet
-    // (the "live" mode requires the NNS subnet).
-    let mut pic = PocketIcBuilder::new()
-        .with_nns_subnet()
+fn test_canister_http_on_fresh_and_resumed_instance() {
+    // create an empty PocketIC state to be used:
+    // - initially by a fresh PocketIC instance;
+    // - later by a PocketIC instance resumed from that state.
+    let state = PocketIcState::new();
+
+    // create a fresh PocketIC instance with two application subnets
+    // so that the latest registry version is different
+    // from the registry version at which one of the subnets was created
+    // (this scenario led to a bug in PocketIC canister http outcalls)
+    let pic = PocketIcBuilder::new()
         .with_application_subnet()
+        .with_application_subnet()
+        .with_state(state)
         .build();
 
-    // Enable the "live" mode.
-    let _ = pic.make_live(None);
+    // create a test canister on every subnet
+    let topology = pic.topology();
+    let mut canisters = vec![];
+    for app_subnet in topology.get_app_subnets() {
+        let canister_id = pic.create_canister_on_subnet(None, None, app_subnet);
+        pic.add_cycles(canister_id, INIT_CYCLES);
+        pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+        canisters.push(canister_id);
+    }
+    // ensure that canister http outcalls work on every subnet
+    for canister_id in &canisters {
+        test_canister_http(&pic, *canister_id);
+    }
 
-    let http_server = HttpServer::new("127.0.0.1");
+    // drop the first PocketIC instance and serialize its state
+    let state = pic.drop_and_take_state().unwrap();
 
-    // Create a canister and charge it with 2T cycles.
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, INIT_CYCLES);
-
-    // Install the test canister wasm file on the canister.
-    let test_wasm = test_canister_wasm();
-    pic.install_canister(canister_id, test_wasm, vec![], None);
-
-    // Submit an update call to the test canister making a canister http outcall.
-    let call_id = pic
-        .submit_call(
-            canister_id,
-            Principal::anonymous(),
-            "canister_http",
-            encode_one(http_server.addr()).unwrap(),
-        )
-        .unwrap();
-
-    // Await the update call without making additional progress (the PocketIC instance
-    // is already in the "live" mode making progress automatically).
-    let reply = pic.await_call_no_ticks(call_id).unwrap();
-    let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
-        decode_one(&reply).unwrap();
-    http_response.unwrap();
+    // create the second PocketIC instance resuming from the existing state
+    let pic = PocketIcBuilder::new().with_state(state).build();
+    // ensure that canister http outcalls still work on every subnet
+    for canister_id in &canisters {
+        test_canister_http(&pic, *canister_id);
+    }
 }
 
 #[test]
 fn test_canister_http_with_transform() {
     let pic = PocketIc::new();
 
-    // Create a canister and charge it with 2T cycles.
+    // Create a canister and charge it with initial cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
 
@@ -1692,7 +1472,7 @@ fn test_canister_http_with_transform() {
 fn test_canister_http_with_diverging_responses() {
     let pic = PocketIc::new();
 
-    // Create a canister and charge it with 2T cycles.
+    // Create a canister and charge it with initial cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
 
@@ -1755,7 +1535,7 @@ fn test_canister_http_with_diverging_responses() {
 fn test_canister_http_with_one_additional_response() {
     let pic = PocketIc::new();
 
-    // Create a canister and charge it with 2T cycles.
+    // Create a canister and charge it with initial cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
 
@@ -1803,7 +1583,7 @@ fn test_canister_http_with_one_additional_response() {
 fn test_canister_http_timeout() {
     let pic = PocketIc::new();
 
-    // Create a canister and charge it with 2T cycles.
+    // Create a canister and charge it with initial cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
 
@@ -1845,7 +1625,7 @@ fn test_canister_http_timeout() {
     let (reject_code, err) = http_response.unwrap_err();
     match reject_code {
         RejectionCode::SysTransient => (),
-        _ => panic!("Unexpected reject code {:?}", reject_code),
+        _ => panic!("Unexpected reject code {reject_code:?}"),
     };
     assert_eq!(err, "Canister http request timed out");
 }
@@ -1857,9 +1637,10 @@ fn subnet_metrics() {
     let topology = pic.topology();
     let app_subnet = topology.get_app_subnets()[0];
 
-    assert!(pic
-        .get_subnet_metrics(Principal::management_canister())
-        .is_none());
+    assert!(
+        pic.get_subnet_metrics(Principal::management_canister())
+            .is_none()
+    );
 
     deploy_counter_canister(&pic);
 
@@ -1885,53 +1666,6 @@ fn subnet_metrics() {
     let metrics = pic.get_subnet_metrics(app_subnet).unwrap();
     assert_eq!(metrics.num_canisters, 1);
     assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
-}
-
-#[cfg(unix)]
-#[test]
-fn test_raw_gateway() {
-    // We create a PocketIC instance consisting of the NNS and one application subnet.
-    let mut pic = PocketIcBuilder::new()
-        .with_nns_subnet()
-        .with_application_subnet()
-        .build();
-
-    // We retrieve the app subnet ID from the topology.
-    let topology = pic.topology();
-    let app_subnet = topology.get_app_subnets()[0];
-
-    // We create a canister on the app subnet.
-    let canister = pic.create_canister_on_subnet(None, None, app_subnet);
-    assert_eq!(pic.get_subnet(canister), Some(app_subnet));
-
-    // We top up the canister with cycles and install the test canister WASM to them.
-    pic.add_cycles(canister, INIT_CYCLES);
-    pic.install_canister(canister, test_canister_wasm(), vec![], None);
-
-    // We start the HTTP gateway
-    let endpoint = pic.make_live(None);
-
-    // We make two requests: the non-raw request fails because the test canister does not certify its response,
-    // the raw request succeeds.
-    let client = Client::new();
-    let gateway_host = endpoint.host().unwrap();
-    for (host, expected) in [
-        (
-            format!("{}.{}", canister, gateway_host),
-            "The response from the canister failed verification and cannot be trusted.",
-        ),
-        (
-            format!("{}.raw.{}", canister, gateway_host),
-            "My sample asset.",
-        ),
-    ] {
-        let mut url = endpoint.clone();
-        url.set_host(Some(&host)).unwrap();
-        url.set_path("/asset.txt");
-        let res = client.get(url).send().unwrap();
-        let page = String::from_utf8(res.bytes().unwrap().to_vec()).unwrap();
-        assert!(page.contains(expected));
-    }
 }
 
 fn create_canister_with_effective_canister_id(
@@ -2130,13 +1864,13 @@ fn test_get_default_effective_canister_id_invalid_url() {
         .build();
 
     let test_driver_pid = std::process::id();
-    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", test_driver_pid));
+    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{test_driver_pid}.port"));
     let port = std::fs::read_to_string(port_file_path).unwrap();
 
-    let server_url = format!("http://localhost:{}", port);
+    let server_url = format!("http://localhost:{port}");
     match pocket_ic::get_default_effective_canister_id(server_url).unwrap_err() {
         DefaultEffectiveCanisterIdError::ReqwestError(_) => (),
-        err => panic!("Unexpected error: {}", err),
+        err => panic!("Unexpected error: {err}"),
     };
 }
 
@@ -2459,7 +2193,7 @@ fn ingress_status() {
     // since the ingress status is not available, any caller can attempt to retrieve it
     match pic.ingress_status_as(msg_id.clone(), Principal::anonymous()) {
         IngressStatusResult::NotAvailable => (),
-        status => panic!("Unexpected ingress status: {:?}", status),
+        status => panic!("Unexpected ingress status: {status:?}"),
     }
 
     pic.tick();
@@ -2472,7 +2206,7 @@ fn ingress_status() {
     let expected_err = "The user tries to access Request ID not signed by the caller.";
     match pic.ingress_status_as(msg_id.clone(), Principal::anonymous()) {
         IngressStatusResult::Forbidden(msg) => assert_eq!(msg, expected_err,),
-        status => panic!("Unexpected ingress status: {:?}", status),
+        status => panic!("Unexpected ingress status: {status:?}"),
     }
 
     // confirm the behavior of read state requests
@@ -2537,7 +2271,7 @@ fn call_ingress_expiry() {
     let time = Time::from_nanos_since_unix_epoch(unix_time_nanos);
     pic.set_certified_time(time);
     let ingress_expiry = pic.get_time().as_nanos_since_unix_epoch() + 240_000_000_000;
-    let (resp, msg_id) = call_request(&pic, ingress_expiry, canister_id);
+    let (resp, msg_id) = call_request(&pic, ingress_expiry, canister_id, "v2");
     assert_eq!(resp.status(), reqwest::StatusCode::ACCEPTED);
 
     // execute a round on the PocketIC instance to process that update call
@@ -2558,7 +2292,7 @@ fn call_ingress_expiry() {
         .unwrap()
         .as_nanos() as u64
         + 240_000_000_000;
-    let (resp, _msg_id) = call_request(&pic, ingress_expiry, canister_id);
+    let (resp, _msg_id) = call_request(&pic, ingress_expiry, canister_id, "v2");
     assert_eq!(resp.status(), reqwest::StatusCode::BAD_REQUEST);
     let err = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
     assert!(
@@ -2570,6 +2304,7 @@ fn call_request(
     pic: &PocketIc,
     ingress_expiry: u64,
     canister_id: Principal,
+    version: &str,
 ) -> (reqwest::blocking::Response, [u8; 32]) {
     let content = Call {
         nonce: None,
@@ -2592,8 +2327,9 @@ fn call_request(
     envelope.serialize(&mut serializer).unwrap();
 
     let endpoint = format!(
-        "instances/{}/api/v2/canister/{}/call",
+        "instances/{}/api/{}/canister/{}/call",
         pic.instance_id(),
+        version,
         canister_id.to_text()
     );
     let client = reqwest::blocking::Client::new();
@@ -2604,6 +2340,30 @@ fn call_request(
         .send()
         .unwrap();
     (resp, *content.to_request_id())
+}
+
+#[test]
+fn call_request_versions() {
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .with_auto_progress()
+        .build();
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+
+    // submit an update call via /api/<version>/canister/.../call
+    for version in ["v2", "v3", "v4"] {
+        let ingress_expiry = pic.get_time().as_nanos_since_unix_epoch() + 240_000_000_000;
+        let (resp, _msg_id) = call_request(&pic, ingress_expiry, canister_id, version);
+        let status = resp.status();
+        if version == "v2" {
+            assert_eq!(status, reqwest::StatusCode::ACCEPTED);
+        } else {
+            assert_eq!(status, reqwest::StatusCode::OK);
+        }
+    }
 }
 
 #[test]
@@ -2680,7 +2440,7 @@ fn test_reject_response_type() {
                 if !certified && method == "update" {
                     continue;
                 }
-                let method_name = format!("{}_{}", action, method);
+                let method_name = format!("{action}_{method}");
                 let (err, msg_id) = if certified {
                     let msg_id = pic
                         .submit_call(
@@ -2715,9 +2475,10 @@ fn test_reject_response_type() {
                     assert_eq!(err.reject_code, RejectCode::CanisterError);
                     assert_eq!(err.error_code, ErrorCode::CanisterCalledTrap);
                 }
-                assert!(err
-                    .reject_message
-                    .contains(&format!("{} in {} method", action, method)));
+                assert!(
+                    err.reject_message
+                        .contains(&format!("{action} in {method} method"))
+                );
                 assert_eq!(err.certified, certified);
             }
         }
@@ -2747,103 +2508,6 @@ fn test_reject_response_type() {
     }
 }
 
-#[cfg(not(windows))]
-#[test]
-fn test_custom_blockmaker_metrics() {
-    const HOURS_IN_SECONDS: u64 = 60 * 60;
-
-    // Create a temporary state directory from which the test can retrieve the registry.
-    let state_dir = TempDir::new().unwrap();
-    let state_dir_path_buf = state_dir.path().to_path_buf();
-
-    let pocket_ic = PocketIcBuilder::new()
-        .with_state_dir(state_dir_path_buf.clone())
-        .with_application_subnet()
-        .build();
-    let topology = pocket_ic.topology();
-    let application_subnet = topology.get_app_subnets()[0];
-
-    // Create and install test canister.
-    let canister = pocket_ic.create_canister_on_subnet(None, None, application_subnet);
-    pocket_ic.add_cycles(canister, INIT_CYCLES);
-    pocket_ic.install_canister(canister, test_canister_wasm(), vec![], None);
-
-    // Retrieve node ids from the registry
-    let registry_proto_path = state_dir_path_buf.join("registry.proto");
-    let registry_data_provider = Arc::new(ProtoRegistryDataProvider::load_from_file(
-        registry_proto_path,
-    ));
-    let latest_version = registry_data_provider.latest_version();
-    let registry_client = RegistryClientImpl::new(registry_data_provider.clone(), None);
-    registry_client.poll_once().unwrap();
-    let node_ids = registry_client
-        .get_node_ids_on_subnet(
-            SubnetId::new(PrincipalId(application_subnet)),
-            latest_version,
-        )
-        .unwrap()
-        .unwrap();
-
-    let blockmaker_1 = node_ids[0].get().0;
-    let blockmaker_2 = node_ids[1].get().0;
-
-    let subnets_blockmakers = vec![RawSubnetBlockmaker {
-        subnet: application_subnet.into(),
-        blockmaker: blockmaker_1.into(),
-        failed_blockmakers: vec![blockmaker_2.into()],
-    }];
-
-    let tick_configs = TickConfigs {
-        blockmakers: Some(BlockmakerConfigs {
-            blockmakers_per_subnet: subnets_blockmakers,
-        }),
-    };
-    let daily_blocks = 5;
-
-    // Blockmaker metrics are recorded in the management canister
-    for _ in 0..daily_blocks {
-        pocket_ic.tick_with_configs(tick_configs.clone());
-    }
-    // Advance time until next day so that management canister can record blockmaker metrics
-    pocket_ic.advance_time(std::time::Duration::from_secs(HOURS_IN_SECONDS * 24));
-    pocket_ic.tick();
-
-    let response = pocket_ic
-        .update_call(
-            canister,
-            Principal::anonymous(),
-            // Calls the node_metrics_history method on the management canister
-            "node_metrics_history_proxy",
-            Encode!(&NodeMetricsHistoryArgs {
-                subnet_id: application_subnet,
-                start_at_timestamp_nanos: 0,
-            })
-            .unwrap(),
-        )
-        .unwrap();
-
-    let first_node_metrics = Decode!(&response, Vec<NodeMetricsHistoryRecord>)
-        .unwrap()
-        .remove(0)
-        .node_metrics;
-
-    let blockmaker_1_metrics = first_node_metrics
-        .iter()
-        .find(|x| x.node_id == blockmaker_1)
-        .unwrap()
-        .clone();
-    let blockmaker_2_metrics = first_node_metrics
-        .into_iter()
-        .find(|x| x.node_id == blockmaker_2)
-        .unwrap();
-
-    assert_eq!(blockmaker_1_metrics.num_blocks_proposed_total, daily_blocks);
-    assert_eq!(blockmaker_1_metrics.num_block_failures_total, 0);
-
-    assert_eq!(blockmaker_2_metrics.num_blocks_proposed_total, 0);
-    assert_eq!(blockmaker_2_metrics.num_block_failures_total, daily_blocks);
-}
-
 #[test]
 fn test_http_methods() {
     // We create a PocketIC instance consisting of the NNS and one application subnet.
@@ -2865,15 +2529,10 @@ fn test_http_methods() {
     pic.install_canister(canister, test_canister_wasm(), vec![], None);
 
     // We start the HTTP gateway
-    let endpoint = pic.make_live(None);
+    pic.make_live(None);
 
     // We request the path `/` with various HTTP methods.
     // We use raw endpoints as the test canister does not support certification.
-    let gateway_host = endpoint.host().unwrap();
-    let host = format!("{}.raw.{}", canister, gateway_host);
-    let mut url = endpoint;
-    url.set_host(Some(&host)).unwrap();
-    url.set_path("/");
     for method in [
         Method::GET,
         Method::POST,
@@ -2882,20 +2541,7 @@ fn test_http_methods() {
         Method::HEAD,
         Method::PATCH,
     ] {
-        // Windows doesn't automatically resolve localhost subdomains.
-        #[cfg(windows)]
-        let client = Client::builder()
-            .resolve(
-                &host,
-                SocketAddr::new(
-                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                    pic.get_server_url().port().unwrap(),
-                ),
-            )
-            .build()
-            .unwrap();
-        #[cfg(not(windows))]
-        let client = Client::new();
+        let (client, url) = frontend_canister(&pic, canister, true, "/");
         let res = client.request(method.clone(), url.clone()).send().unwrap();
         // The test canister rejects all request to the path `/` with `StatusCode::BAD_REQUEST`
         // and the error message "The request is not supported by the test canister.".
@@ -3081,9 +2727,10 @@ fn stack_overflow() {
             encode_one(()).unwrap(),
         )
         .unwrap_err();
-    assert!(err
-        .reject_message
-        .contains("Canister trapped: stack overflow"));
+    assert!(
+        err.reject_message
+            .contains("Canister trapped: stack overflow")
+    );
 }
 
 fn test_specified_id(pic: &PocketIc) {
@@ -3170,14 +2817,13 @@ fn test_invalid_specified_id() {
     let err = pic
         .create_canister_with_id(None, None, specified_id)
         .unwrap_err();
-    let expected_err = format!("The `specified_id` {} is invalid because it belongs to the canister allocation ranges of the test environment.\\nUse a `specified_id` that matches a canister ID on the ICP mainnet and a test environment that supports canister creation with `specified_id` (e.g., PocketIC).", specified_id);
+    let expected_err = format!(
+        "The `specified_id` {specified_id} is invalid because it belongs to the canister allocation ranges of the test environment.\\nUse a `specified_id` that matches a canister ID on the ICP mainnet and a test environment that supports canister creation with `specified_id` (e.g., PocketIC)."
+    );
     assert!(err.contains(&expected_err));
 }
 
 #[test]
-#[should_panic(
-    expected = "Creating an HTTP gateway requires `AutoProgress` to be enabled via `initial_time`."
-)]
 fn with_http_gateway_config_but_no_auto_progress() {
     let http_gateway_config = InstanceHttpGatewayConfig {
         ip_addr: None,
@@ -3185,10 +2831,22 @@ fn with_http_gateway_config_but_no_auto_progress() {
         domains: None,
         https_config: None,
     };
-    let _pic = PocketIcBuilder::new()
+    let pic = PocketIcBuilder::new()
         .with_application_subnet()
         .with_http_gateway(http_gateway_config)
         .build();
+
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+
+    let (client, url) = frontend_canister(&pic, canister_id, true, "/asset.txt");
+    let resp = client.get(url).send().unwrap();
+    assert!(resp.status().is_success());
+    let msg = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+    assert_eq!(msg, "My sample asset.");
+
+    assert!(!pic.auto_progress_enabled());
 }
 
 // We already have a function `PocketIc::list_instances`,
@@ -3220,12 +2878,26 @@ async fn list_http_gateways(server_url: &Url) -> Vec<HttpGatewayDetails> {
 
 #[tokio::test]
 async fn with_http_gateway_config_and_cleanup_works() {
+    // We start a fresh server so that we can easily list instances and HTTP gateways
+    // created by this test (without filtering those created by other tests).
     let server_params = StartServerParams {
         server_binary: None,
         reuse: false,
+        ttl: None,
     };
     let (_child, server_url) = start_server(server_params).await;
 
+    // Assert that
+    // - an instance exists on the server iff `instance_exists` is set to `true`;
+    // - the number of HTTP gateways on the server matches `gateway_count`.
+    let assert_server_state = |server_url: Url, instance_exists: bool, gateway_count: usize| async move {
+        let instances = list_instances(&server_url).await;
+        assert_eq!(instances.len(), 1);
+        assert!(instances[0].contains("Deleted") != instance_exists);
+        assert_eq!(list_http_gateways(&server_url).await.len(), gateway_count);
+    };
+
+    // We create a PocketIC instance and its HTTP gateway.
     let http_gateway_config = InstanceHttpGatewayConfig {
         ip_addr: None,
         port: None,
@@ -3236,21 +2908,37 @@ async fn with_http_gateway_config_and_cleanup_works() {
         .with_server_url(server_url.clone())
         .with_application_subnet()
         .with_http_gateway(http_gateway_config)
-        .with_auto_progress(None)
+        .with_auto_progress()
         .build_async()
         .await;
+    assert_server_state(server_url.clone(), true, 1).await;
 
-    let instances = list_instances(&server_url).await;
-    assert_eq!(instances.len(), 1);
-    assert!(!instances[0].contains("Deleted"));
-    assert_eq!(list_http_gateways(&server_url).await.len(), 1);
+    // We create an additional handle for the existing PocketIC instance and start an additional HTTP gateway.
+    let mut pic_handle =
+        PocketIcAsync::new_from_existing_instance(server_url.clone(), pic.instance_id, None);
+    pic_handle.make_live(None).await;
+    assert_server_state(server_url.clone(), true, 2).await;
 
+    // We create yet another handle for the existing PocketIC instance and start an additional HTTP gateway.
+    let mut yet_another_pic_handle =
+        PocketIcAsync::new_from_existing_instance(server_url.clone(), pic.instance_id, None);
+    yet_another_pic_handle.make_live(None).await;
+    assert_server_state(server_url.clone(), true, 3).await;
+
+    // Dropping one of the extra handles for the existing PocketIC instance only stops its new HTTP gateway.
+    pic_handle.drop().await;
+    assert_server_state(server_url.clone(), true, 2).await;
+
+    // The instance is still in auto progress mode.
+    assert!(pic.auto_progress_enabled().await);
+
+    // Dropping the original handle deletes the PocketIC instance and stops all its HTTP gateways.
     pic.drop().await;
+    assert_server_state(server_url.clone(), false, 0).await;
 
-    let instances = list_instances(&server_url).await;
-    assert_eq!(instances.len(), 1);
-    assert_eq!(instances[0], "Deleted");
-    assert!(list_http_gateways(&server_url).await.is_empty());
+    // Dropping the other extra handle for the existing PocketIC instance succeeds, but is a no-op.
+    yet_another_pic_handle.drop().await;
+    assert_server_state(server_url.clone(), false, 0).await;
 }
 
 async fn assert_create_instance_failure(
@@ -3272,7 +2960,7 @@ async fn assert_create_instance_failure(
         CreateInstanceResponse::Error { message } => {
             assert!(message.contains(expected_msg));
         }
-        _ => panic!("Unexpected result: {:?}", res),
+        _ => panic!("Unexpected result: {res:?}"),
     };
 }
 
@@ -3281,6 +2969,7 @@ async fn with_http_gateway_config_invalid_instance_config() {
     let server_params = StartServerParams {
         server_binary: None,
         reuse: false,
+        ttl: None,
     };
     let (_child, server_url) = start_server(server_params).await;
 
@@ -3302,11 +2991,12 @@ async fn with_http_gateway_config_invalid_instance_config() {
         subnet_config_set: subnet_config_set.into(),
         http_gateway_config: Some(http_gateway_config),
         state_dir: None,
-        nonmainnet_features: None,
+        icp_config: None,
         log_level: Some("invalid".to_string()),
         bitcoind_addr: None,
+        dogecoind_addr: None,
         icp_features: None,
-        allow_incomplete_state: None,
+        incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
     };
     assert_create_instance_failure(&server_url, instance_config, "Failed to parse log level").await;
@@ -3320,10 +3010,11 @@ async fn with_http_gateway_config_invalid_instance_config() {
 }
 
 #[tokio::test]
-async fn with_http_gateway_config_invalid_gateway_config() {
+async fn with_http_gateway_config_invalid_gateway_port() {
     let server_params = StartServerParams {
         server_binary: None,
         reuse: false,
+        ttl: None,
     };
     let (_child, server_url) = start_server(server_params).await;
 
@@ -3340,7 +3031,7 @@ async fn with_http_gateway_config_invalid_gateway_config() {
         .with_server_url(server_url.clone())
         .with_application_subnet()
         .with_http_gateway(http_gateway_config.clone())
-        .with_auto_progress(None)
+        .with_auto_progress()
         .build_async()
         .await;
 
@@ -3364,11 +3055,12 @@ async fn with_http_gateway_config_invalid_gateway_config() {
         subnet_config_set: subnet_config_set.into(),
         http_gateway_config: Some(http_gateway_config),
         state_dir: None,
-        nonmainnet_features: None,
+        icp_config: None,
         log_level: None,
         bitcoind_addr: None,
+        dogecoind_addr: None,
         icp_features: None,
-        allow_incomplete_state: None,
+        incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
     };
     assert_create_instance_failure(&server_url, instance_config, "Failed to bind to address").await;
@@ -3376,20 +3068,167 @@ async fn with_http_gateway_config_invalid_gateway_config() {
     // We confirm that there are no new instances and HTTP gateways
     // after the failure, i.e., cleanup works.
     let instances = list_instances(&server_url).await;
-    assert_eq!(instances.len(), 2);
+    assert_eq!(instances.len(), 1);
     assert!(!instances[0].contains("Deleted"));
-    assert_eq!(instances[1], "Deleted"); // an instance was temporarily created, but deleted before returning an error
     let http_gateways = list_http_gateways(&server_url).await;
     assert_eq!(http_gateways.len(), 1);
 
     pic.drop().await;
 }
 
+#[tokio::test]
+async fn with_http_gateway_config_invalid_gateway_https_config() {
+    let server_params = StartServerParams {
+        server_binary: None,
+        reuse: false,
+        ttl: None,
+    };
+    let (_child, server_url) = start_server(server_params).await;
+
+    // We provide invalid paths in `HttpsConfig` which makes HTTP gateway creation fail.
+    let http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: Some(HttpsConfig {
+            cert_path: "".to_string(),
+            key_path: "".to_string(),
+        }),
+    };
+    let subnet_config_set = SubnetConfigSet {
+        application: 1,
+        ..Default::default()
+    };
+    let auto_progress_config = AutoProgressConfig {
+        artificial_delay_ms: None,
+    };
+    let instance_config = InstanceConfig {
+        subnet_config_set: subnet_config_set.into(),
+        http_gateway_config: Some(http_gateway_config),
+        state_dir: None,
+        icp_config: None,
+        log_level: None,
+        bitcoind_addr: None,
+        dogecoind_addr: None,
+        icp_features: None,
+        incomplete_state: None,
+        initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
+    };
+    assert_create_instance_failure(
+        &server_url,
+        instance_config,
+        "TLS config could not be created",
+    )
+    .await;
+
+    // We confirm that there are no new instances and HTTP gateways
+    // after the failure, i.e., cleanup works.
+    let instances = list_instances(&server_url).await;
+    assert_eq!(instances.len(), 1);
+    assert_eq!(instances[0], "Deleted"); // an instance was temporarily created, but deleted before returning an error
+    let http_gateways = list_http_gateways(&server_url).await;
+    assert!(http_gateways.is_empty());
+}
+
 #[test]
 fn make_live_after_auto_progress() {
     let mut pic = PocketIcBuilder::new()
         .with_application_subnet()
-        .with_auto_progress(None)
+        .with_auto_progress()
         .build();
     pic.make_live(None);
+}
+
+#[test]
+fn canister_not_found() {
+    let http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: None,
+    };
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_http_gateway(http_gateway_config)
+        .build();
+
+    // Canister ID that cannot exist on the ICP mainnet.
+    let canister_id_not_found =
+        Principal::from_slice(&[0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x01]);
+    // Subnet ID that cannot exist in PocketIC (because it is not a self-authenticating principal).
+    let subnet_id_not_found = Principal::from_slice(&[42; 29]);
+
+    // API requests for canister via /instances API and proxied through HTTP gateway.
+    let instances_url = format!(
+        "{}instances/{}/api/v2/canister/{}/read_state",
+        pic.get_server_url(),
+        pic.instance_id(),
+        canister_id_not_found,
+    );
+    let gateway_url = format!(
+        "{}api/v2/canister/{}/read_state",
+        pic.url().unwrap(),
+        canister_id_not_found,
+    );
+    for url in [instances_url, gateway_url] {
+        let client = reqwest::blocking::Client::new();
+        let resp = client
+            .post(url)
+            .header(reqwest::header::CONTENT_TYPE, "application/cbor")
+            .send()
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // API requests for subnet via /instances API and proxied through HTTP gateway.
+    let instances_url = format!(
+        "{}instances/{}/api/v2/subnet/{}/read_state",
+        pic.get_server_url(),
+        pic.instance_id(),
+        subnet_id_not_found,
+    );
+    let gateway_url = format!(
+        "{}api/v2/subnet/{}/read_state",
+        pic.url().unwrap(),
+        subnet_id_not_found,
+    );
+    for url in [instances_url, gateway_url] {
+        let client = reqwest::blocking::Client::new();
+        let resp = client
+            .post(url)
+            .header(reqwest::header::CONTENT_TYPE, "application/cbor")
+            .send()
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // Frontend request for canister via HTTP gateway.
+    let (client, url) = frontend_canister(&pic, canister_id_not_found, false, "/index.html");
+    let resp = client.get(url).send().unwrap();
+
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[test]
+fn deterministic_registry() {
+    let registry_bytes = || {
+        // Create a temporary state directory from which the test can retrieve PocketIC registry.
+        let state_dir = TempDir::new().unwrap();
+        let state_dir_path_buf = state_dir.path().to_path_buf();
+
+        let _pocket_ic = PocketIcBuilder::new()
+            .with_state_dir(state_dir_path_buf.clone())
+            .with_nns_subnet()
+            .with_ii_subnet()
+            .with_fiduciary_subnet()
+            .with_application_subnet()
+            .build();
+
+        let registry_proto_path = state_dir_path_buf.join("registry.proto");
+        std::fs::read(registry_proto_path).unwrap()
+    };
+
+    assert_eq!(registry_bytes(), registry_bytes());
 }

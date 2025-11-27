@@ -14,14 +14,14 @@ use ic_management_canister_types::{
 // changing them would propagate to changes to state machine tests
 // which would be a bit more involved.
 pub use ic_management_canister_types_private::{
-    self as ic00, CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, IC_00,
+    self as ic00, CanisterIdRecord, CanisterInstallMode, IC_00, InstallCodeArgs,
 };
 use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, CanisterStatusResultV2};
 use ic_registry_transport::pb::v1::RegistryMutation;
-use ic_replica_tests::{canister_test_async, LocalTestRuntime};
+use ic_replica_tests::{LocalTestRuntime, canister_test_async};
 pub use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use ic_state_machine_tests::StateMachine;
-pub use ic_types::{ingress::WasmResult, CanisterId, Cycles, PrincipalId};
+pub use ic_types::{CanisterId, Cycles, PrincipalId, ingress::WasmResult};
 use on_wire::{FromWire, IntoWire, NewType};
 use std::{
     convert::{AsRef, TryFrom},
@@ -66,7 +66,7 @@ impl Wasm {
         } else {
             format!("_{}", features.join("_"))
         };
-        format!("{}{}_WASM_PATH", bin_name, features_part)
+        format!("{bin_name}{features_part}_WASM_PATH")
             .replace('-', "_")
             .to_uppercase()
     }
@@ -76,7 +76,7 @@ impl Wasm {
     /// reads it.
     pub fn from_location_specified_by_env_var(bin_name: &str, features: &[&str]) -> Option<Wasm> {
         let var_name = Wasm::env_var_name(bin_name, features);
-        eprintln!("looking up {} at {}", bin_name, var_name);
+        eprintln!("looking up {bin_name} at {var_name}");
         match env::var(&var_name) {
             Ok(path) => {
                 let path = Path::new(&path);
@@ -103,25 +103,23 @@ impl Wasm {
             }
             Err(env::VarError::NotPresent) => {
                 println!(
-                    "Environment variable {} is not present; variables with name \
-                    containing \"CANISTER\":",
-                    var_name
+                    "Environment variable {var_name} is not present; variables with name \
+                    containing \"CANISTER\":"
                 );
                 for (k, v) in env::vars() {
                     if k.contains("CANISTER") {
-                        println!("  {}: {}", k, v);
+                        println!("  {k}: {v}");
                     }
                 }
                 if env::var("CI").is_ok() {
                     panic!(
-                        "Running on CI and expected canister env var {0}\n\
-                        Please add {1} as a data dependency in the test's BUILD.bazel target:\n",
-                        var_name, bin_name
+                        "Running on CI and expected canister env var {var_name}\n\
+                        Please add {bin_name} as a data dependency in the test's BUILD.bazel target:\n"
                     );
                 }
                 None
             }
-            Err(e) => panic!("When trying to access var {}, got error {}.", var_name, e),
+            Err(e) => panic!("When trying to access var {var_name}, got error {e}."),
         }
     }
 
@@ -235,16 +233,12 @@ impl Wasm {
                 .await;
             match install_result {
                 Ok(()) => {
-                    println!(
-                        "Successfully installed wasm into canister with ID: {}",
-                        canister_id
-                    );
+                    println!("Successfully installed wasm into canister with ID: {canister_id}");
                     return Ok(());
                 }
                 Err(e) => {
                     eprintln!(
-                        "Installation of wasm into canister with ID: {} failed with: {}",
-                        canister_id, e
+                        "Installation of wasm into canister with ID: {canister_id} failed with: {e}"
                     );
                     match backoff.next_backoff() {
                         Some(interval) => {
@@ -252,8 +246,7 @@ impl Wasm {
                         }
                         None => {
                             return Err(format!(
-                                "Canister installation timed out. Last error was: {}",
-                                e
+                                "Canister installation timed out. Last error was: {e}"
                             ));
                         }
                     }
@@ -417,7 +410,7 @@ impl<'a> Runtime {
     pub async fn create_canister_max_cycles_with_retries(&'a self) -> Result<Canister<'a>, String> {
         execute_with_retries(|| self.create_canister_with_max_cycles())
             .await
-            .map_err(|e| format!("Creation of a canister timed out. Last error was: {}", e))
+            .map_err(|e| format!("Creation of a canister timed out. Last error was: {e}"))
     }
 
     pub async fn create_canister_at_id(
@@ -434,7 +427,7 @@ impl<'a> Runtime {
     ) -> Result<Canister<'a>, String> {
         execute_with_retries(|| self.create_canister_at_id(specified_id))
             .await
-            .map_err(|e| format!("Creation of a canister timed out. Last error was: {}", e))
+            .map_err(|e| format!("Creation of a canister timed out. Last error was: {e}"))
     }
 
     pub async fn tick(&'a self) {
@@ -464,7 +457,7 @@ impl RemoteTestRuntime {
     fn get_nonce_vec(&self) -> Vec<u8> {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        (0..8).map(move |_| rng.gen::<u8>()).collect()
+        (0..8).map(move |_| rng.r#gen::<u8>()).collect()
     }
 }
 
@@ -789,6 +782,7 @@ impl<'a> Canister<'a> {
                         log_visibility: None,
                         wasm_memory_limit: None,
                         wasm_memory_threshold: None,
+                        environment_variables: None,
                     },
                     sender_canister_version: None,
                 },),
@@ -941,7 +935,7 @@ impl Query<'_> {
                     .map_err(|e| e.to_string())?;
                 match result {
                     WasmResult::Reply(v) => Ok(v),
-                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {}", s)),
+                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {s}")),
                 }
             }
             Runtime::StateMachine(state_machine) => {
@@ -952,7 +946,7 @@ impl Query<'_> {
                 state_machine.tick();
                 match result {
                     WasmResult::Reply(v) => Ok(v),
-                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {}", s)),
+                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {s}")),
                 }
             }
             Runtime::Remote(c) => {
@@ -978,7 +972,7 @@ impl Query<'_> {
                     .map_err(|e| e.to_string())?;
                 match result {
                     WasmResult::Reply(v) => Ok(v),
-                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {}", s)),
+                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {s}")),
                 }
             }
             Runtime::StateMachine(state_machine) => {
@@ -994,7 +988,7 @@ impl Query<'_> {
                 state_machine.tick();
                 match result {
                     WasmResult::Reply(v) => Ok(v),
-                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {}", s)),
+                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {s}")),
                 }
             }
             Runtime::Remote(r) => {
@@ -1021,7 +1015,7 @@ impl Update<'_> {
                     .map_err(|e| e.to_string())?;
                 match result {
                     WasmResult::Reply(v) => Ok(v),
-                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {}", s)),
+                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {s}")),
                 }
             }
             Runtime::StateMachine(state_machine) => {
@@ -1032,7 +1026,7 @@ impl Update<'_> {
                 state_machine.tick();
                 match result {
                     WasmResult::Reply(v) => Ok(v),
-                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {}", s)),
+                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {s}")),
                 }
             }
             Runtime::Remote(c) => {
@@ -1064,7 +1058,7 @@ impl Update<'_> {
                     .map_err(|e| e.to_string())?;
                 match result {
                     WasmResult::Reply(v) => Ok(v),
-                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {}", s)),
+                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {s}")),
                 }
             }
             Runtime::StateMachine(state_machine) => {
@@ -1080,7 +1074,7 @@ impl Update<'_> {
                 state_machine.tick();
                 match result {
                     WasmResult::Reply(v) => Ok(v),
-                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {}", s)),
+                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {s}")),
                 }
             }
             Runtime::Remote(r) => {

@@ -1,8 +1,8 @@
 use super::get_log_id;
-use crate::sign::lazily_calculated_public_key_from_store;
 use crate::sign::BasicSigVerifierInternal;
 use crate::sign::BasicSignerInternal;
 use crate::sign::ThresholdSigDataStore;
+use crate::sign::lazily_calculated_public_key_from_store;
 use crate::{CryptoComponentImpl, LockableThresholdSigDataStore};
 use ic_crypto_internal_bls12_381_vetkd::{
     DerivationContext, EncryptedKeyCombinationError, EncryptedKeyShare,
@@ -13,14 +13,15 @@ use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::api::ThresholdSignatureCspClient;
 use ic_crypto_internal_csp::key_id::KeyIdInstantiationError;
 use ic_crypto_internal_csp::vault::api::VetKdEncryptedKeyShareCreationVaultError;
-use ic_crypto_internal_csp::{key_id::KeyId, vault::api::CspVault, CryptoServiceProvider};
+use ic_crypto_internal_csp::{CryptoServiceProvider, key_id::KeyId, vault::api::CspVault};
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::PublicCoefficients;
-use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
 use ic_interfaces::crypto::VetKdProtocol;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{debug, info, new_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, info, new_logger};
+use ic_types::NodeId;
 use ic_types::crypto::threshold_sig::errors::threshold_sig_data_not_found_error::ThresholdSigDataNotFoundError;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::vetkd::{
@@ -28,7 +29,6 @@ use ic_types::crypto::vetkd::{
     VetKdKeyShareCreationError, VetKdKeyShareVerificationError, VetKdKeyVerificationError,
 };
 use ic_types::crypto::{BasicSig, BasicSigOf};
-use ic_types::NodeId;
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -416,7 +416,7 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
                     })?;
                     let node_public_key_g2affine = match node_public_key {
                         CspThresholdSigPublicKey::ThresBls12_381(public_key_bytes) => {
-                            G2Affine::deserialize(&public_key_bytes.0)
+                            G2Affine::deserialize_cached(&public_key_bytes.0)
                             .map_err(|_: PairingInvalidPoint| VetKdKeyShareCombinationError::InternalError(
                                 format!("individual public key of node with ID {node_id} in threshold sig data store")
                             ))
@@ -549,7 +549,7 @@ fn master_pubkey_from_coeffs(
         ))
     })?;
     let first_coeff_g2 =
-        G2Affine::deserialize(&first_coeff).map_err(|_: PairingInvalidPoint| {
+        G2Affine::deserialize_cached(&first_coeff).map_err(|_: PairingInvalidPoint| {
             MasterPubkeyFromCoeffsError::InvalidArgumentMasterPublicKey
         })?;
     Ok(first_coeff_g2)
@@ -562,14 +562,14 @@ enum MasterPubkeyFromCoeffsError {
 
 fn log_err<T: fmt::Display>(error_option: Option<&T>) -> String {
     if let Some(error) = error_option {
-        return format!("{}", error);
+        return format!("{error}");
     }
     "none".to_string()
 }
 
 pub fn log_ok_content<T: fmt::Display, E>(result: &Result<T, E>) -> String {
     if let Ok(content) = result {
-        return format!("{}", content);
+        return format!("{content}");
     }
     "none".to_string()
 }

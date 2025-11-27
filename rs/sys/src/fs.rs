@@ -177,15 +177,17 @@ pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
         len: libc::size_t,
         flags: libc::c_uint,
     ) -> libc::c_long {
-        libc::syscall(
-            libc::SYS_copy_file_range,
-            fd_in,
-            off_in,
-            fd_out,
-            off_out,
-            len,
-            flags,
-        )
+        unsafe {
+            libc::syscall(
+                libc::SYS_copy_file_range,
+                fd_in,
+                off_in,
+                fd_out,
+                off_out,
+                len,
+                flags,
+            )
+        }
     }
 
     let mut reader = std::fs::File::open(from)?;
@@ -224,11 +226,7 @@ pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
 
     let (mut can_handle_sparse, mut next_beg) = {
         let ret = unsafe { lseek64(fd_in, srcpos, libc::SEEK_DATA) };
-        if ret == -1 {
-            (false, 0)
-        } else {
-            (true, ret)
-        }
+        if ret == -1 { (false, 0) } else { (true, ret) }
     };
 
     let mut next_end: libc::loff_t = bytes_to_copy;
@@ -593,7 +591,7 @@ fn tmp_name() -> String {
     /// The character length of the random string used for temporary file names.
     const TMP_NAME_LEN: usize = 7;
 
-    use rand::{distributions::Alphanumeric, Rng};
+    use rand::{Rng, distributions::Alphanumeric};
 
     let mut rng = rand::thread_rng();
     std::iter::repeat(())
@@ -661,7 +659,7 @@ impl std::fmt::Display for FileCloneError {
         match self {
             Self::OperationNotSupported => write!(f, "filesystem doesn't support reflinks"),
             Self::DifferentFileSystems => write!(f, "src and dst aren't on the same filesystem"),
-            Self::IoError(err) => write!(f, "IO error: {}", err),
+            Self::IoError(err) => write!(f, "IO error: {err}"),
         }
     }
 }
@@ -756,7 +754,7 @@ fn clone_file_impl(src: &Path, dst: &Path) -> Result<(), FileCloneError> {
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
 
-    extern "C" {
+    unsafe extern "C" {
         fn clonefile(src: *const c_char, dst: *const c_char, flags: c_int) -> c_int;
     }
 
@@ -780,7 +778,7 @@ fn clone_file_impl(_src: &Path, _dst: &Path) -> Result<(), FileCloneError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{write_atomically_using_tmp_file, Clobber};
+    use super::{Clobber, write_atomically_using_tmp_file};
     use std::fs;
     use std::io::{ErrorKind, Write};
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -894,8 +892,7 @@ mod tests {
         assert!(!tmp.exists());
         assert!(
             result.is_err(),
-            "expected action result to be an error, got {:?}",
-            result
+            "expected action result to be an error, got {result:?}"
         );
         assert_eq!(
             fs::read(&dst).expect("failed to read destination file"),
@@ -1123,8 +1120,10 @@ mod tests {
             let test_sym_link = temp_dir.as_ref().join("test_sym_link");
             std::os::unix::fs::symlink(&test_file, &test_sym_link)
                 .expect("error creating symbolic link");
-            assert!(!is_regular_file(&test_sym_link)
-                .expect("error determining if file is a regular file"));
+            assert!(
+                !is_regular_file(&test_sym_link)
+                    .expect("error determining if file is a regular file")
+            );
         }
 
         #[test]
@@ -1139,8 +1138,10 @@ mod tests {
             let test_hard_link = temp_dir.as_ref().join("test_hard_link");
             create_hard_link_to_existing_file(&test_sym_link, &test_hard_link)
                 .expect("error creating hard link");
-            assert!(!is_regular_file(&test_hard_link)
-                .expect("error determining if file is a regular file"));
+            assert!(
+                !is_regular_file(&test_hard_link)
+                    .expect("error determining if file is a regular file")
+            );
         }
 
         #[test]
@@ -1159,8 +1160,8 @@ mod tests {
     mod open_existing_file_for_write {
         use crate::fs::{open_existing_file_for_write, write_string_using_tmp_file};
         use assert_matches::assert_matches;
-        use std::fs::create_dir;
         use std::fs::Permissions;
+        use std::fs::create_dir;
         use std::io::ErrorKind::{NotFound, PermissionDenied};
         use std::os::unix::fs::PermissionsExt;
 
@@ -1192,7 +1193,7 @@ mod tests {
             create_dir(&test_file).expect("error creating directory");
             assert_matches!(
                 open_existing_file_for_write(test_file),
-                Err(err) if format!("{:?}", err).contains("Is a directory")  // ErrorKind::IsADirectory is unstable
+                Err(err) if format!("{err:?}").contains("Is a directory")  // ErrorKind::IsADirectory is unstable
             );
         }
 
@@ -1219,8 +1220,8 @@ mod tests {
     mod remove_file {
         use crate::fs::{remove_file, write_string_using_tmp_file};
         use assert_matches::assert_matches;
-        use std::fs::create_dir;
         use std::fs::Permissions;
+        use std::fs::create_dir;
         use std::io::ErrorKind::{NotFound, PermissionDenied};
         use std::os::unix::fs::PermissionsExt;
 
@@ -1253,7 +1254,7 @@ mod tests {
             #[cfg(target_os = "linux")]
             assert_matches!(
                 remove_file(test_file),
-                Err(err) if format!("{:?}", err).contains("Is a directory")
+                Err(err) if format!("{err:?}").contains("Is a directory")
             );
             #[cfg(target_os = "macos")]
             assert_matches!(

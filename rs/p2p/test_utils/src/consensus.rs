@@ -10,8 +10,8 @@ use ic_interfaces::p2p::consensus::{
     MutablePool, PoolMutationsProducer, UnvalidatedArtifact, ValidatedPoolReader,
 };
 use ic_logger::ReplicaLogger;
-use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
 use ic_types::NodeId;
+use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -217,7 +217,7 @@ impl TestConsensus<U64Artifact> {
         inner
             .peer_pool
             .iter()
-            .filter(|(&n, _)| n != self.node_id)
+            .filter(|&(&n, _)| n != self.node_id)
             .map(|(_, x)| x.num_inserts(id))
             .sum::<usize>()
             == 1
@@ -228,7 +228,7 @@ impl TestConsensus<U64Artifact> {
         inner
             .peer_pool
             .iter()
-            .filter(|(&n, _)| n != self.node_id)
+            .filter(|&(&n, _)| n != self.node_id)
             .map(|(_, x)| x.num_inserts(id))
             .sum()
     }
@@ -238,7 +238,7 @@ impl TestConsensus<U64Artifact> {
         inner
             .peer_pool
             .iter()
-            .filter(|(&n, _)| n != self.node_id)
+            .filter(|&(&n, _)| n != self.node_id)
             .map(|(_, x)| x.num_removes(id))
             .sum()
     }
@@ -248,7 +248,7 @@ impl TestConsensus<U64Artifact> {
         inner
             .peer_pool
             .iter()
-            .filter(|(&n, _)| n != self.node_id)
+            .filter(|&(&n, _)| n != self.node_id)
             .map(|(_, x)| x.num_removes(id))
             .sum::<usize>()
             == 1

@@ -1,15 +1,16 @@
 #![allow(deprecated)]
-use candid::{define_function, CandidType, Nat, Principal};
-use ic_cdk::api::call::{accept_message, arg_data_raw, reject, RejectionCode};
+use candid::{CandidType, Nat, Principal, define_function};
+use ic_cdk::api::call::{RejectionCode, accept_message, arg_data_raw, reject};
 use ic_cdk::api::instruction_counter;
 use ic_cdk::api::management_canister::ecdsa::{
-    ecdsa_public_key as ic_cdk_ecdsa_public_key, sign_with_ecdsa as ic_cdk_sign_with_ecdsa,
     EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument, EcdsaPublicKeyResponse, SignWithEcdsaArgument,
+    ecdsa_public_key as ic_cdk_ecdsa_public_key, sign_with_ecdsa as ic_cdk_sign_with_ecdsa,
 };
 use ic_cdk::api::management_canister::http_request::{
-    http_request as canister_http_outcall, CanisterHttpRequestArgument, HttpMethod, HttpResponse,
-    TransformArgs, TransformContext, TransformFunc,
+    CanisterHttpRequestArgument, HttpMethod, HttpResponse, TransformArgs, TransformContext,
+    TransformFunc, http_request as canister_http_outcall,
 };
+use ic_cdk::api::stable::{stable_grow, stable_size as raw_stable_size, stable_write};
 use ic_cdk::{inspect_message, query, trap, update};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -198,7 +199,7 @@ async fn ecdsa_public_key(
     };
     Ok(ic_cdk_ecdsa_public_key(arg)
         .await
-        .map_err(|(code, msg)| format!("Reject code: {:?}; Reject message: {}", code, msg))?
+        .map_err(|(code, msg)| format!("Reject code: {code:?}; Reject message: {msg}"))?
         .0)
 }
 
@@ -218,7 +219,7 @@ async fn sign_with_ecdsa(
     };
     Ok(ic_cdk_sign_with_ecdsa(arg)
         .await
-        .map_err(|(code, msg)| format!("Reject code: {:?}; Reject message: {}", code, msg))?
+        .map_err(|(code, msg)| format!("Reject code: {code:?}; Reject message: {msg}"))?
         .0
         .signature)
 }
@@ -510,6 +511,24 @@ async fn deposit_cycles_to_cycles_ledger(beneficiary: Principal, cycles: u128) {
     )
     .await
     .unwrap();
+}
+
+#[query]
+fn stable_size() -> u64 {
+    raw_stable_size()
+}
+
+#[update]
+fn stable_grow_and_fill(pages: u64) {
+    let offset = stable_size();
+    stable_grow(pages).unwrap();
+    let mut content = vec![0_u8; 1 << 16];
+    for (i, elem) in content.iter_mut().enumerate() {
+        *elem = (i % 256) as u8;
+    }
+    for i in 0..pages {
+        stable_write((offset + i) << 16, &content);
+    }
 }
 
 fn main() {}

@@ -206,7 +206,7 @@ pub fn setup(env: TestEnv) {
 
 and then spin up the dynamic testnet with a generous lifetime
 ```shell
-./ci/tools/docker-run
+./ci/container/container-run.sh
 ict testnet create small --lifetime-mins=880 --output-dir=./small -- --test_tmpdir=./small
 ```
 

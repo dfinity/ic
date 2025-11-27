@@ -6,15 +6,15 @@ use crate::{
 use backoff::backoff::Backoff;
 use ic_canister_client_sender::Sender;
 use ic_crypto_tree_hash::Path;
-use ic_management_canister_types_private::{InstallCodeArgs, Method, Payload, IC_00};
+use ic_management_canister_types_private::{IC_00, InstallCodeArgs, Method, Payload};
 use ic_protobuf::types::v1 as pb;
-use ic_read_state_response_parser::{parse_read_state_response, RequestStatus};
+use ic_read_state_response_parser::{RequestStatus, parse_read_state_response};
 use ic_types::{
+    CanisterId,
     consensus::catchup::CatchUpPackageParam,
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{Blob, HttpStatusResponse, MessageId, ReplicaHealthStatus},
     time::expiry_time_from_now,
-    CanisterId,
 };
 use prost::Message;
 use serde_cbor::value::Value as CBOR;
@@ -39,16 +39,16 @@ const POLL_INTERVAL_MULTIPLIER: f64 = 1.2;
 /// The HTTP path for query calls on the replica.
 // TODO is this how v1 api works can we just change the URL?
 pub fn query_path(cid: CanisterId) -> String {
-    format!("api/v2/canister/{}/query", cid)
+    format!("api/v2/canister/{cid}/query")
 }
 
 pub fn read_state_path(cid: CanisterId) -> String {
-    format!("api/v2/canister/{}/read_state", cid)
+    format!("api/v2/canister/{cid}/read_state")
 }
 
 /// The HTTP path for update calls on the replica.
 pub fn update_path(cid: CanisterId) -> String {
-    format!("api/v2/canister/{}/call", cid)
+    format!("api/v2/canister/{cid}/call")
 }
 
 const NODE_STATUS_PATH: &str = "api/v2/status";
@@ -198,10 +198,7 @@ impl Agent {
             None
         } else {
             Some(pb::CatchUpPackage::decode(&bytes[..]).map_err(|e| {
-                format!(
-                    "Failed to deserialize CUP from protobuf, got: {:?} - error {:?}",
-                    bytes, e
-                )
+                format!("Failed to deserialize CUP from protobuf, got: {bytes:?} - error {e:?}")
             })?)
         };
 
@@ -223,7 +220,7 @@ impl Agent {
             arg,
             self.sender_field.clone(),
         )
-        .map_err(|e| format!("Failed to prepare query: {}", e))?;
+        .map_err(|e| format!("Failed to prepare query: {e}"))?;
         let bytes = self
             .http_client
             .post_with_response(
@@ -267,7 +264,7 @@ impl Agent {
             expiry_time_from_now(),
             self.sender_field.clone(),
         )
-        .map_err(|err| format!("{}", err))?;
+        .map_err(|err| format!("{err}"))?;
         self.http_client
             .post_with_response(
                 &self.url,
@@ -304,15 +301,14 @@ impl Agent {
                         return Err(format!(
                             "unexpected result: {:?} - {:?}",
                             request_status.status, request_status.reject_message
-                        ))
+                        ));
                     }
                 },
-                Err(e) => return Err(format!("Unexpected error: {:?}", e)),
+                Err(e) => return Err(format!("Unexpected error: {e:?}")),
             }
         }
         Err(format!(
-            "Request took longer than the deadline {:?} to complete.",
-            deadline
+            "Request took longer than the deadline {deadline:?} to complete."
         ))
     }
 
@@ -331,7 +327,7 @@ impl Agent {
         let path = Path::new(vec!["request_status".into(), request_id.into()]);
         let signed_request_bytes =
             prepare_read_state(&self.sender, &[path], self.sender_field.clone())
-                .map_err(|e| format!("Failed to prepare read state: {:?}", e))?;
+                .map_err(|e| format!("Failed to prepare read state: {e:?}"))?;
 
         let bytes = self
             .http_client
@@ -378,7 +374,7 @@ impl Agent {
             .await?;
         let resp = bytes_to_cbor(bytes)?;
         serde_cbor::value::from_value::<HttpStatusResponse>(resp)
-            .map_err(|source| format!("decoding to HttpStatusResponse failed: {}", source))
+            .map_err(|source| format!("decoding to HttpStatusResponse failed: {source}"))
     }
 
     /// Requests the root key of this node by querying /api/v2/status

@@ -1,12 +1,13 @@
-use anyhow::{anyhow, Result};
-use futures::{stream, StreamExt};
+use anyhow::{Result, anyhow};
+use futures::{StreamExt, stream};
 use ic_agent::Agent;
 use ic_base_types::CanisterId;
 use ic_nervous_system_agent::nns::sns_wasm;
 use ic_nns_constants::{
-    CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID, CYCLES_MINTING_CANISTER_ID,
-    GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
-    LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID,
+    BITCOIN_TESTNET_CANISTER_ID, CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, DOGECOIN_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
+    MIGRATION_CANISTER_ID, NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use reqwest::Client;
@@ -17,7 +18,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
-pub const NNS_CANISTER_NAME_TO_ID: [(&str, CanisterId); 11] = [
+pub const NNS_CANISTER_NAME_TO_ID: [(&str, CanisterId); 12] = [
     ("registry", REGISTRY_CANISTER_ID),
     ("governance", GOVERNANCE_CANISTER_ID),
     ("governance-canister_test", GOVERNANCE_CANISTER_ID),
@@ -29,20 +30,23 @@ pub const NNS_CANISTER_NAME_TO_ID: [(&str, CanisterId); 11] = [
     ("sns-wasm", SNS_WASM_CANISTER_ID),
     ("node-rewards", NODE_REWARDS_CANISTER_ID),
     ("cycles_ledger_index", CYCLES_LEDGER_INDEX_CANISTER_ID),
+    ("migration", MIGRATION_CANISTER_ID),
 ];
 
 struct ExternalCanisterInfo<'a> {
     repository: &'a str,
+    tag_name_prefix: Option<&'a str>,
     canister_id: CanisterId,
     filename: &'a str,
     test_filename: Option<&'a str>,
 }
 
-const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 4] = [
+const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 6] = [
     (
         "cycles_ledger",
         ExternalCanisterInfo {
             repository: "dfinity/cycles-ledger",
+            tag_name_prefix: None,
             filename: "cycles-ledger.wasm.gz",
             test_filename: None,
             canister_id: CYCLES_LEDGER_CANISTER_ID,
@@ -52,6 +56,7 @@ const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 4] = [
         "internet_identity_test",
         ExternalCanisterInfo {
             repository: "dfinity/internet-identity",
+            tag_name_prefix: None,
             filename: "internet_identity_production.wasm.gz",
             test_filename: Some("internet_identity_dev.wasm.gz"),
             canister_id: IDENTITY_CANISTER_ID,
@@ -61,6 +66,7 @@ const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 4] = [
         "nns_dapp_test",
         ExternalCanisterInfo {
             repository: "dfinity/nns-dapp",
+            tag_name_prefix: Some("proposal-"),
             filename: "nns-dapp_production.wasm.gz",
             test_filename: Some("nns-dapp_test.wasm.gz"),
             canister_id: NNS_UI_CANISTER_ID,
@@ -70,9 +76,30 @@ const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 4] = [
         "sns_aggregator_test",
         ExternalCanisterInfo {
             repository: "dfinity/nns-dapp",
+            tag_name_prefix: Some("proposal-"),
             filename: "sns_aggregator.wasm.gz",
             test_filename: Some("sns_aggregator_dev.wasm.gz"),
             canister_id: SNS_AGGREGATOR_CANISTER_ID,
+        },
+    ),
+    (
+        "bitcoin_testnet",
+        ExternalCanisterInfo {
+            repository: "dfinity/bitcoin-canister",
+            tag_name_prefix: Some("release/"),
+            filename: "ic-btc-canister.wasm.gz",
+            test_filename: None,
+            canister_id: BITCOIN_TESTNET_CANISTER_ID,
+        },
+    ),
+    (
+        "dogecoin",
+        ExternalCanisterInfo {
+            repository: "dfinity/dogecoin-canister",
+            tag_name_prefix: Some("release/"),
+            filename: "ic-doge-canister.wasm.gz",
+            test_filename: None,
+            canister_id: DOGECOIN_CANISTER_ID,
         },
     ),
 ];
@@ -81,7 +108,7 @@ fn module_hash_hex(module_hash: Vec<u8>) -> String {
     use std::fmt::Write;
 
     module_hash.iter().fold(String::new(), |mut output, x| {
-        let _ = write!(output, "{:02x}", x);
+        let _ = write!(output, "{x:02x}");
         output
     })
 }
@@ -192,10 +219,10 @@ impl Tag {
             {
                 return Ok(Some(release));
             }
-        } else if let Some(prod_canister) = release.asset(&canister_filename) {
-            if prod_canister.sha256().await? == expected_module_hash_str {
-                return Ok(Some(release));
-            }
+        } else if let Some(prod_canister) = release.asset(&canister_filename)
+            && prod_canister.sha256().await? == expected_module_hash_str
+        {
+            return Ok(Some(release));
         }
 
         Ok(None)
@@ -259,6 +286,7 @@ impl Release {
 /// which contains a release asset for the given canister with the expected sha256 hash.
 /// To find the release, this function proceeds as follows:
 ///   - it crawls all git tags of the given `canister_repository`;
+///   - git tags whose name does not start with an optionally provided tag name prefix are skipped;
 ///   - for every git tag, it checks if there is an associated release and then
 ///     - looks for a release asset whose name has the form `{canister_name}.sha256`:
 ///       if that release asset starts with `expected_module_hash_str`, then the corresponding release is returned;
@@ -267,6 +295,7 @@ impl Release {
 async fn get_mainnet_canister_release(
     canister_name: String,
     canister_repository: String,
+    canister_tag_name_prefix: Option<String>,
     canister_filename: String,
     expected_module_hash_str: String,
 ) -> Result<Release> {
@@ -276,8 +305,7 @@ async fn get_mainnet_canister_release(
     let mut page = 1;
     loop {
         let tags_url = format!(
-            "{}/repos/{}/tags?per_page={}&page={}",
-            GITHUB_API, canister_repository, tags_per_page, page
+            "{GITHUB_API}/repos/{canister_repository}/tags?per_page={tags_per_page}&page={page}"
         );
         let tags: Vec<Tag> = client
             .get(&tags_url)
@@ -288,6 +316,11 @@ async fn get_mainnet_canister_release(
             .await?;
 
         for tag in &tags {
+            if let Some(ref tag_name_prefix) = canister_tag_name_prefix
+                && !tag.name.starts_with(tag_name_prefix)
+            {
+                continue;
+            }
             match tag
                 .release_for_canister(
                     canister_repository.clone(),
@@ -325,6 +358,7 @@ async fn get_mainnet_canister_release(
 /// This function fetches the given canister's module hash deployed on the ICP mainnet (based on `canister_id`)
 /// and then finds a git tag in the given `canister_repository` (e.g., `dfinity/cycles-ledger`)
 /// which contains a release asset with the given canister's module hash deployed on the ICP mainnet.
+/// The git tag name starts with an optionally provided tag name prefix.
 /// This function then returns the git tag and the canister's module hash.
 /// If a test canister name is provided, then the returned module hash is that of the test canister in the release for the same git tag.
 async fn get_mainnet_canister_git_tag_and_module_hash(
@@ -332,6 +366,7 @@ async fn get_mainnet_canister_git_tag_and_module_hash(
     canister_name: String,
     canister_id: CanisterId,
     canister_repository: String,
+    canister_tag_name_prefix: Option<String>,
     canister_filename: String,
     canister_test_filename: Option<String>,
 ) -> Result<(String, String)> {
@@ -352,6 +387,7 @@ async fn get_mainnet_canister_git_tag_and_module_hash(
     let release = get_mainnet_canister_release(
         canister_name.clone(),
         canister_repository.clone(),
+        canister_tag_name_prefix.clone(),
         canister_filename.clone(),
         prod_module_hash_str.clone(),
     )
@@ -473,6 +509,9 @@ async fn main() -> Result<()> {
         .then(|(canister_name, canister_info)| async {
             let canister_name = canister_name.to_string();
             let canister_repository = canister_info.repository.to_string();
+            let canister_tag_name_prefix = canister_info
+                .tag_name_prefix
+                .map(|tag_name_prefix| tag_name_prefix.to_string());
             let canister_filename = canister_info.filename.to_string();
             let canister_test_filename = canister_info
                 .test_filename
@@ -482,6 +521,7 @@ async fn main() -> Result<()> {
                 canister_name.clone(),
                 canister_info.canister_id,
                 canister_repository.clone(),
+                canister_tag_name_prefix.clone(),
                 canister_filename.clone(),
                 canister_test_filename.clone(),
             )

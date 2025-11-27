@@ -15,12 +15,12 @@ fn main() -> Result<()> {
     let json = serde_json::to_string_pretty(&icp_config_as_json(replica_version))?;
     match output {
         None => {
-            println!("{}", json);
+            println!("{json}");
         }
         Some(filename) => {
             let path = std::fs::canonicalize(filename)?;
             std::fs::write(path.clone(), json)?;
-            println!("Wrote ICP config to {:?}", path);
+            println!("Wrote ICP config to {path:?}");
         }
     }
     Ok(())

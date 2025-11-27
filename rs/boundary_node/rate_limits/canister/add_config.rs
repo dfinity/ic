@@ -2,7 +2,7 @@ use crate::{
     storage::StorableIncident,
     types::{self, AddConfigError, IncidentId, Timestamp},
 };
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use rate_limits_api as api;
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;

@@ -2,11 +2,11 @@ use crate::{
     error::{OrchestratorError, OrchestratorResult},
     registry_helper::RegistryHelper,
 };
-use backoff::{backoff::Backoff, ExponentialBackoff};
-use ic_logger::{info, warn, ReplicaLogger};
+use backoff::{ExponentialBackoff, backoff::Backoff};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::{hostos_version::HostosVersion, NodeId};
+use ic_types::{NodeId, hostos_version::HostosVersion};
 use std::{sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
 
@@ -72,21 +72,21 @@ impl HostosUpgrader {
             .registry
             .get_node_hostos_version(latest_registry_version)?;
 
-        if let Some(node_hostos_version) = node_hostos_version {
-            if self.hostos_version != node_hostos_version {
-                info!(
-                    self.logger,
-                    "Found HostOS version '{node_hostos_version}' set for this node '{node_id}'",
-                );
-                info!(
-                    self.logger,
-                    "Starting HostOS upgrade at registry version {}: {} -> {}",
-                    latest_registry_version,
-                    self.hostos_version,
-                    node_hostos_version
-                );
-                return self.execute_upgrade(&node_hostos_version).await;
-            }
+        if let Some(node_hostos_version) = node_hostos_version
+            && self.hostos_version != node_hostos_version
+        {
+            info!(
+                self.logger,
+                "Found HostOS version '{node_hostos_version}' set for this node '{node_id}'",
+            );
+            info!(
+                self.logger,
+                "Starting HostOS upgrade at registry version {}: {} -> {}",
+                latest_registry_version,
+                self.hostos_version,
+                node_hostos_version
+            );
+            return self.execute_upgrade(&node_hostos_version).await;
         }
 
         Ok(())
@@ -109,7 +109,7 @@ impl HostosUpgrader {
         let url_count = release_package_urls.len();
         release_package_urls.rotate_right(self.get_load_balance_number() % url_count);
 
-        let mut error = format!("No download URLs are provided for version {:?}", version);
+        let mut error = format!("No download URLs are provided for version {version:?}");
 
         for release_package_url in release_package_urls.iter() {
             // We only ever expect this command to exit in error. If the
@@ -130,6 +130,6 @@ impl HostosUpgrader {
     fn get_load_balance_number(&self) -> usize {
         // XOR all the u8 in node_id:
         let principal = self.node_id.get().0;
-        principal.as_slice().iter().fold(0, |acc, x| (acc ^ x)) as usize
+        principal.as_slice().iter().fold(0, |acc, x| acc ^ x) as usize
     }
 }

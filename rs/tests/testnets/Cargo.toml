@@ -10,19 +10,20 @@ version.workspace = true
 anyhow = { workspace = true }
 candid = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-limits = { path = "../../limits" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
 ic-xrc-types = "1.0.0"
+ic_consensus_system_test_subnet_recovery = { path = "../consensus/subnet_recovery" }
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
+ic_nested_nns_recovery_common = { path = "../nested/nns_recovery" }
+nested = { path = "../nested" }
 nns_dapp = { path = "../nns/nns_dapp" }
 os_qualification_utils = { path = "../dre/utils" }
-reqwest = { workspace = true }
-serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
-url = { workspace = true }
-xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }
+xrc-mock = { path = "../../rust_canisters/xrc_mock" }
 
 [[bin]]
 name = "large"
@@ -83,3 +84,7 @@ path = "single_app_large_node_with_nns.rs"
 [[bin]]
 name = "small_with_query_stats"
 path = "small_with_query_stats.rs"
+
+[[bin]]
+name = "nns_recovery"
+path = "nns_recovery.rs"

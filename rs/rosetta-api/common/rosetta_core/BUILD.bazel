@@ -38,15 +38,10 @@ MACRO_DEPENDENCIES = [
 ALIASES = {
 }
 
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:proptest",
-]
-
 rust_test(
     name = "rosetta_core_unit_tests",
     crate = ":rosetta-core",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = DEPENDENCIES,
 )
 
 rust_library(

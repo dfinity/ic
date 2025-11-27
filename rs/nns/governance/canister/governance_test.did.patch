@@ -1,0 +1,10 @@
+--- rs/nns/governance/canister/governance.did
++++ rs/nns/governance/canister/governance_test.did
+@@ -1379,4 +1379,7 @@
+   simulate_manage_neuron : (ManageNeuronRequest) -> (ManageNeuronResponse);
+   transfer_gtc_neuron : (NeuronId, NeuronId) -> (Result);
+   update_node_provider : (UpdateNodeProvider) -> (Result);
++
++  // The following are methods for feature = "test"
++  update_neuron : (Neuron) -> (opt GovernanceError);
+ }

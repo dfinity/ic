@@ -1,8 +1,8 @@
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use http::{Method, StatusCode};
 use reqwest::{Client, Request};
 use serde::{Deserialize, Serialize};
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::{
     fs,
     net::{Ipv4Addr, Ipv6Addr},
@@ -19,8 +19,8 @@ use crate::{
         resource::AllocatedVm,
         test_env::{TestEnv, TestEnvAttribute},
         test_env_api::{
-            get_dependency_path, AcquirePlaynetCertificate, CreatePlaynetDnsRecords,
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot, RetrieveIpv4Addr, SshSession,
+            AcquirePlaynetCertificate, CreatePlaynetDnsRecords, HasPublicApiUrl,
+            HasTopologySnapshot, IcNodeSnapshot, RetrieveIpv4Addr, SshSession, get_dependency_path,
         },
         test_setup::InfraProvider,
         universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
@@ -118,7 +118,7 @@ impl IcGatewayVm {
         emit_ic_gateway_records_event(&logger, &ic_gateway_fqdn, &playnet);
 
         // Save playnet configuration and start the gateway
-        let playnet_url = Url::parse(&format!("https://{}", ic_gateway_fqdn))?;
+        let playnet_url = Url::parse(&format!("https://{ic_gateway_fqdn}"))?;
         env.write_deployed_ic_gateway(&self.universal_vm.name, &playnet_url, &allocated_vm)?;
         let api_nodes: Vec<IcNodeSnapshot> = env.topology_snapshot().api_boundary_nodes().collect();
         info!(
@@ -130,7 +130,7 @@ impl IcGatewayVm {
             .map(|node| {
                 let url = node.get_public_url().to_string();
                 node.await_status_is_healthy()
-                    .unwrap_or_else(|_| panic!("Expect {} to be healthy!", url));
+                    .unwrap_or_else(|_| panic!("Expect {url} to be healthy!"));
                 url
             })
             .collect();
@@ -212,23 +212,6 @@ impl IcGatewayVm {
                     },
                 ]
             }
-            _ => vec![
-                DnsRecord {
-                    name: ic_gateway_fqdn.to_string(),
-                    record_type: DnsRecordType::AAAA,
-                    records: playnet.aaaa_records.iter().map(|r| r.to_string()).collect(),
-                },
-                DnsRecord {
-                    name: format!("{}.{}", "*", ic_gateway_fqdn),
-                    record_type: DnsRecordType::CNAME,
-                    records: vec![ic_gateway_fqdn.to_string()],
-                },
-                DnsRecord {
-                    name: format!("{}.{}", "*.raw", ic_gateway_fqdn),
-                    record_type: DnsRecordType::CNAME,
-                    records: vec![ic_gateway_fqdn.to_string()],
-                },
-            ],
         };
 
         if !playnet.a_records.is_empty() {
@@ -430,14 +413,14 @@ impl HasIcGatewayVm for TestEnv {
 /// Checks if DNS propagation is complete by testing resolution of a random subdomain.
 /// This leverages the wildcard DNS records to verify that the domain is properly propagated.
 async fn await_dns_propagation(logger: &Logger, base_domain: &str) -> Result<()> {
-    use rand::{distributions::Alphanumeric, Rng};
+    use rand::{Rng, distributions::Alphanumeric};
 
     info!(
         logger,
         "Waiting for DNS propagation of wildcard records for domain: {}", base_domain
     );
 
-    let msg = format!("DNS propagation check for domain {}", base_domain);
+    let msg = format!("DNS propagation check for domain {base_domain}");
     retry_with_msg_async!(&msg, logger, READY_TIMEOUT, RETRY_INTERVAL, || async {
         // Generate a random subdomain to test the wildcard record
         let random_subdomain: String = rand::thread_rng()
@@ -446,9 +429,9 @@ async fn await_dns_propagation(logger: &Logger, base_domain: &str) -> Result<()>
             .map(char::from)
             .collect();
 
-        let test_domain = format!("{}.{}", random_subdomain, base_domain);
+        let test_domain = format!("{random_subdomain}.{base_domain}");
 
-        match lookup_host(&format!("{}:443", test_domain)).await {
+        match lookup_host(&format!("{test_domain}:443")).await {
             Ok(mut addrs) => {
                 if addrs.next().is_some() {
                     info!(

@@ -11,7 +11,7 @@ use std::fmt;
 use std::marker::PhantomData;
 
 macro_rules! unsupported_type {
-    ($func:ident, $msg:expr) => {
+    ($func:ident, $msg:expr_2021) => {
         fn $func<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
         where
             V: Visitor<'de>,
@@ -44,21 +44,18 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::UnsupportedType(t) => write!(f, "unsupported type: {}", t),
-            Self::UnsupportedMethod(m) => write!(f, "method {} is not implemented", m),
+            Self::UnsupportedType(t) => write!(f, "unsupported type: {t}"),
+            Self::UnsupportedMethod(m) => write!(f, "method {m} is not implemented"),
             Self::BadTupleSize { expected, actual } => write!(
                 f,
-                "cannot decode sequence of {} elements into a tuple of size {}",
-                actual, expected
+                "cannot decode sequence of {actual} elements into a tuple of size {expected}"
             ),
-            Self::BadLabel(s) => write!(f, "failed to deserialize label: {}", s),
-            Self::BadString(s) => write!(f, "failed to convert byte sequence to a string: {}", s),
-            Self::BadState(s) => write!(
-                f,
-                "tree shape is incompatible with the data structure: {}",
-                s
-            ),
-            Self::Other(s) => write!(f, "{}", s),
+            Self::BadLabel(s) => write!(f, "failed to deserialize label: {s}"),
+            Self::BadString(s) => write!(f, "failed to convert byte sequence to a string: {s}"),
+            Self::BadState(s) => {
+                write!(f, "tree shape is incompatible with the data structure: {s}")
+            }
+            Self::Other(s) => write!(f, "{s}"),
         }
     }
 }
@@ -261,8 +258,7 @@ impl<'de> Deserializer<'de> for LabeledTreeDeserializer<'de> {
             Leaf(b) => match String::from_utf8(b.clone()) {
                 Ok(s) => visitor.visit_string(s),
                 Err(err) => Err(Error::BadString(format!(
-                    "failed to decode a string from a byte array: {}",
-                    err
+                    "failed to decode a string from a byte array: {err}"
                 ))),
             },
             SubTree(_) => Err(Error::BadState(
@@ -489,8 +485,7 @@ impl<'de> Deserializer<'de> for LabelDeserializer<'de> {
         match String::from_utf8(self.0.to_vec()) {
             Ok(s) => visitor.visit_string(s),
             Err(err) => Err(Error::BadLabel(format!(
-                "failed to decode a string from a byte array: {}",
-                err
+                "failed to decode a string from a byte array: {err}"
             ))),
         }
     }

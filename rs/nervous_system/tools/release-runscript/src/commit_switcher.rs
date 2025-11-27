@@ -45,7 +45,7 @@ impl CommitSwitcher {
         // switch to the new commit
         println!(
             "{}",
-            format!("Switching to commit: {}", to_commit).bright_blue()
+            format!("Switching to commit: {to_commit}").bright_blue()
         );
         let output = Command::new("git")
             .current_dir(&ic)

@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use candid::Decode;
 use ic_btc_adapter_test_utils::{
     bitcoin,
@@ -8,8 +8,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SshSession,
-    READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    SshSession, get_dependency_path,
 };
 use ic_system_test_driver::{
     driver::{
@@ -17,7 +17,7 @@ use ic_system_test_driver::{
         universal_vm::{UniversalVm, UniversalVms},
     },
     systest,
-    util::{block_on, runtime_from_url, UniversalCanister},
+    util::{UniversalCanister, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::install_bitcoin_canister;
 use ic_types::Height;

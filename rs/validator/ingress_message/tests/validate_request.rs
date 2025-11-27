@@ -1,18 +1,18 @@
 use assert_matches::assert_matches;
-use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
 use ic_registry_client_helpers::node_operator::PrincipalId;
+use ic_types::CanisterId;
 use ic_types::messages::Blob;
 use ic_types::messages::HttpRequestContent;
-use ic_types::CanisterId;
 use ic_types::{Time, UserId};
 use ic_validator_http_request_test_utils::DirectAuthenticationScheme::{
     CanisterSignature, UserKeyPair,
 };
 use ic_validator_http_request_test_utils::{
-    all_authentication_schemes, all_authentication_schemes_except, canister_signature,
-    hard_coded_root_of_trust, random_user_key_pair, AuthenticationScheme, CanisterSigner,
-    DirectAuthenticationScheme, HttpRequestBuilder, HttpRequestEnvelopeContent, RootOfTrust,
-    CANISTER_ID_SIGNER, CANISTER_SIGNATURE_SEED, CURRENT_TIME,
+    AuthenticationScheme, CANISTER_ID_SIGNER, CANISTER_SIGNATURE_SEED, CURRENT_TIME,
+    CanisterSigner, DirectAuthenticationScheme, HttpRequestBuilder, HttpRequestEnvelopeContent,
+    RootOfTrust, all_authentication_schemes, all_authentication_schemes_except, canister_signature,
+    hard_coded_root_of_trust, random_user_key_pair,
 };
 use ic_validator_ingress_message::AuthenticationError;
 use ic_validator_ingress_message::AuthenticationError::DelegationContainsCyclesError;
@@ -48,7 +48,7 @@ mod request_nonce {
             .with_root_of_trust(hard_coded_root_of_trust().public_key)
             .build();
         let reasonable_nonce = {
-            let random_bytes = rng.gen::<[u8; 32]>();
+            let random_bytes = rng.r#gen::<[u8; 32]>();
             let nonce_size = rng.gen_range(0..=32);
             random_bytes[..nonce_size].to_vec()
         };
@@ -119,7 +119,7 @@ mod request_nonce {
             EnvContent: EnvelopeContent<ReqContent>,
             Verifier: HttpRequestVerifier<ReqContent>,
         {
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
             let request = builder
                 .with_authentication(scheme)
                 .with_ingress_expiry_at(max_ingress_expiry_at(CURRENT_TIME))
@@ -165,7 +165,7 @@ mod ingress_expiry {
             EnvContent: EnvelopeContent<ReqContent>,
             Verifier: HttpRequestVerifier<ReqContent>,
         {
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
             let request = builder
                 .with_authentication(scheme)
                 .with_ingress_expiry_at(CURRENT_TIME.saturating_sub(Duration::from_nanos(1)))
@@ -206,7 +206,7 @@ mod ingress_expiry {
             EnvContent: EnvelopeContent<ReqContent>,
             Verifier: HttpRequestVerifier<ReqContent>,
         {
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
             let request = builder
                 .with_authentication(scheme)
                 .with_ingress_expiry_at(
@@ -266,7 +266,7 @@ mod ingress_expiry {
             EnvContent: EnvelopeContent<ReqContent>,
             Verifier: HttpRequestVerifier<ReqContent>,
         {
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
             let request = builder
                 .with_authentication(scheme)
                 .with_ingress_expiry_at(acceptable_expiry)
@@ -501,7 +501,7 @@ mod anonymous_request {
             EnvContent: EnvelopeContent<ReqContent>,
             Verifier: HttpRequestVerifier<ReqContent>,
         {
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
             let request = builder
                 .with_authentication(Anonymous)
                 .with_ingress_expiry_at(CURRENT_TIME)
@@ -509,7 +509,7 @@ mod anonymous_request {
 
             let result = verifier.validate_request(&request);
 
-            assert_eq!(result, Ok(()), "Test with {} failed", builder_info);
+            assert_eq!(result, Ok(()), "Test with {builder_info} failed");
         }
     }
 
@@ -531,7 +531,7 @@ mod anonymous_request {
         {
             let non_anonymous_user_id =
                 UserId::from(PrincipalId::from_str("bfozs-kwa73-7nadi").expect("invalid user id"));
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
             let request = builder
                 .with_authentication(Anonymous)
                 .with_ingress_expiry_at(CURRENT_TIME)
@@ -566,7 +566,7 @@ mod anonymous_request {
             EnvContent: EnvelopeContent<ReqContent>,
             Verifier: HttpRequestVerifier<ReqContent>,
         {
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
             let request = builder
                 .with_ingress_expiry_at(CURRENT_TIME)
                 .with_authentication(Direct(UserKeyPair(Ed25519KeyPair::generate(rng))))
@@ -610,7 +610,7 @@ mod authenticated_requests_direct_ed25519 {
             EnvContent: EnvelopeContent<ReqContent>,
             Verifier: HttpRequestVerifier<ReqContent>,
         {
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
             let request = builder
                 .with_ingress_expiry_at(CURRENT_TIME)
                 .with_authentication(Direct(random_user_key_pair(rng)))
@@ -618,7 +618,7 @@ mod authenticated_requests_direct_ed25519 {
 
             let result = verifier.validate_request(&request);
 
-            assert_eq!(result, Ok(()), "Test with {} failed", builder_info);
+            assert_eq!(result, Ok(()), "Test with {builder_info} failed");
         }
     }
 
@@ -640,7 +640,7 @@ mod authenticated_requests_direct_ed25519 {
             EnvContent: EnvelopeContent<ReqContent>,
             Verifier: HttpRequestVerifier<ReqContent>,
         {
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
             let request = builder
                 .with_ingress_expiry_at(CURRENT_TIME)
                 .with_authentication(Direct(random_user_key_pair(rng)))
@@ -673,7 +673,7 @@ mod authenticated_requests_direct_ed25519 {
             EnvContent: EnvelopeContent<ReqContent>,
             Verifier: HttpRequestVerifier<ReqContent>,
         {
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
             let correct_key_pair = auth_with_random_user_key_pair(rng);
             let other_key_pair = auth_with_random_user_key_pair(rng);
             assert_ne!(correct_key_pair, other_key_pair);
@@ -714,7 +714,7 @@ mod authenticated_requests_direct_ed25519 {
             let correct_key_pair = auth_with_random_user_key_pair(rng);
             let other_key_pair = auth_with_random_user_key_pair(rng);
             assert_ne!(correct_key_pair, other_key_pair);
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
             let request = builder
                 .with_ingress_expiry_at(CURRENT_TIME)
                 .with_authentication(correct_key_pair)
@@ -737,10 +737,10 @@ mod authenticated_requests_direct_canister_signature {
     use crate::RequestValidationError::InvalidSignature;
     use crate::RequestValidationError::UserIdDoesNotMatchPublicKey;
     use ic_validator_http_request_test_utils::AuthenticationScheme::Direct;
-    use ic_validator_http_request_test_utils::{flip_a_bit_mut, HttpRequestEnvelopeFactory};
+    use ic_validator_http_request_test_utils::{HttpRequestEnvelopeFactory, flip_a_bit_mut};
 
     #[test]
-    fn should_validate_request_signed_by_canister() {
+    fn should_validate_request_signed_by_canister_with_nonempty_seed() {
         let rng = &mut reproducible_rng();
         let root_of_trust = RootOfTrust::new_random(rng);
         let verifier = default_verifier()
@@ -772,15 +772,73 @@ mod authenticated_requests_direct_canister_signature {
             EnvContent: EnvelopeContent<ReqContent>,
             Verifier: HttpRequestVerifier<ReqContent>,
         {
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
+
+            let signer_with_nonempty_seed = CanisterSigner {
+                seed: b"nonempty_seed".to_vec(),
+                canister_id: CANISTER_ID_SIGNER,
+                root_public_key: root_of_trust.public_key,
+                root_secret_key: root_of_trust.secret_key,
+            };
             let request = builder
                 .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(Direct(canister_signature(root_of_trust)))
+                .with_authentication(Direct(CanisterSignature(signer_with_nonempty_seed)))
                 .build();
 
             let result = verifier.validate_request(&request);
 
-            assert_eq!(result, Ok(()), "Test with {} failed", builder_info);
+            assert_eq!(result, Ok(()), "Test with {builder_info} failed");
+        }
+    }
+
+    #[test]
+    fn should_validate_request_signed_by_canister_with_empty_seed() {
+        let rng = &mut reproducible_rng();
+        let root_of_trust = RootOfTrust::new_random(rng);
+        let verifier = default_verifier()
+            .with_root_of_trust(root_of_trust.public_key)
+            .build();
+
+        test(
+            &verifier,
+            HttpRequestBuilder::new_update_call(),
+            root_of_trust.clone(),
+        );
+        test(
+            &verifier,
+            HttpRequestBuilder::new_query(),
+            root_of_trust.clone(),
+        );
+        test(
+            &verifier,
+            HttpRequestBuilder::new_read_state(),
+            root_of_trust,
+        );
+
+        fn test<ReqContent, EnvContent, Verifier>(
+            verifier: &Verifier,
+            builder: HttpRequestBuilder<EnvContent>,
+            root_of_trust: RootOfTrust,
+        ) where
+            ReqContent: HttpRequestContent,
+            EnvContent: EnvelopeContent<ReqContent>,
+            Verifier: HttpRequestVerifier<ReqContent>,
+        {
+            let builder_info = format!("{builder:?}");
+            let signer_with_empty_seed = CanisterSigner {
+                seed: vec![],
+                canister_id: CANISTER_ID_SIGNER,
+                root_public_key: root_of_trust.public_key,
+                root_secret_key: root_of_trust.secret_key,
+            };
+            let request = builder
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(Direct(CanisterSignature(signer_with_empty_seed)))
+                .build();
+
+            let result = verifier.validate_request(&request);
+
+            assert_eq!(result, Ok(()), "Test with {builder_info} failed");
         }
     }
 
@@ -822,7 +880,7 @@ mod authenticated_requests_direct_canister_signature {
             EnvContent: EnvelopeContent<ReqContent>,
             Verifier: HttpRequestVerifier<ReqContent>,
         {
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
             let request = builder
                 .with_ingress_expiry_at(CURRENT_TIME)
                 .with_authentication(Direct(canister_signature(root_of_trust)))
@@ -871,7 +929,7 @@ mod authenticated_requests_direct_canister_signature {
             EnvContent: EnvelopeContent<ReqContent>,
             Verifier: HttpRequestVerifier<ReqContent>,
         {
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
             let request = builder
                 .with_ingress_expiry_at(CURRENT_TIME)
                 .with_authentication(Direct(canister_signature(root_of_trust)))
@@ -933,7 +991,7 @@ mod authenticated_requests_direct_canister_signature {
                 other
             };
             assert_ne!(signer, signer_with_different_seed);
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
             let request = builder
                 .with_ingress_expiry_at(CURRENT_TIME)
                 .with_authentication(Direct(CanisterSignature(signer)))
@@ -997,7 +1055,7 @@ mod authenticated_requests_direct_canister_signature {
                 other
             };
             assert_ne!(signer, signer_with_different_canister_id);
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
             let request = builder
                 .with_ingress_expiry_at(CURRENT_TIME)
                 .with_authentication(Direct(CanisterSignature(signer)))
@@ -1055,7 +1113,7 @@ mod authenticated_requests_delegations {
             EnvContent: EnvelopeContent<ReqContent>,
             Verifier: HttpRequestVerifier<ReqContent>,
         {
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
             let request = builder
                 .with_ingress_expiry_at(CURRENT_TIME)
                 .with_authentication(auth_with_random_user_key_pair(rng))
@@ -1064,7 +1122,7 @@ mod authenticated_requests_delegations {
 
             let result = verifier.validate_request(&request);
 
-            assert_eq!(result, Ok(()), "Test with {} failed", builder_info);
+            assert_eq!(result, Ok(()), "Test with {builder_info} failed");
         }
     }
 
@@ -1073,7 +1131,7 @@ mod authenticated_requests_delegations {
         let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
         let mut chain_builder = DelegationChain::rooted_at(random_user_key_pair(rng));
-        for number_of_delegations in 1..=20 {
+        for number_of_delegations in 1..=MAXIMUM_NUMBER_OF_DELEGATIONS {
             chain_builder = chain_builder.delegate_to(random_user_key_pair(rng), CURRENT_TIME);
             let chain = chain_builder.clone().build();
             assert_eq!(chain.len(), number_of_delegations);
@@ -1085,9 +1143,7 @@ mod authenticated_requests_delegations {
                     assert_eq!(
                         result,
                         Ok(()),
-                        "verification of delegation chain {:?} for request builder {} failed",
-                        chain,
-                        builder_info
+                        "verification of delegation chain {chain:?} for request builder {builder_info} failed"
                     );
                 },
             );
@@ -1101,27 +1157,54 @@ mod authenticated_requests_delegations {
         let verifier = default_verifier()
             .with_root_of_trust(root_of_trust.public_key)
             .build();
-        let delegation_chain = delegation_chain_with_a_canister_signature(
-            MAXIMUM_NUMBER_OF_DELEGATIONS,
-            CURRENT_TIME,
-            root_of_trust,
-            rng,
-        )
-        .build();
+        for number_of_delegations in 1..=MAXIMUM_NUMBER_OF_DELEGATIONS {
+            let delegation_chain = delegation_chain_with_a_canister_signature(
+                number_of_delegations,
+                CURRENT_TIME,
+                &root_of_trust,
+                rng,
+            )
+            .build();
 
-        test_all_request_types_with_delegation_chain(
-            &verifier,
-            delegation_chain.clone(),
-            |result, builder_info| {
-                assert_eq!(
-                    result,
-                    Ok(()),
-                    "verification of delegation chain {:?} for request builder {} failed",
-                    delegation_chain,
-                    builder_info
-                );
-            },
-        );
+            test_all_request_types_with_delegation_chain(
+                &verifier,
+                delegation_chain.clone(),
+                |result, builder_info| {
+                    assert_eq!(
+                        result,
+                        Ok(()),
+                        "verification of delegation chain {delegation_chain:?} for request builder {builder_info} failed"
+                    );
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn should_validate_delegation_chains_of_length_up_to_20_rooted_at_a_canister_signature() {
+        let rng = &mut reproducible_rng();
+        let root_of_trust = RootOfTrust::new_random(rng);
+        let verifier = default_verifier()
+            .with_root_of_trust(root_of_trust.public_key)
+            .build();
+        let mut chain_builder = DelegationChain::rooted_at(canister_signature(root_of_trust));
+        for number_of_delegations in 1..=MAXIMUM_NUMBER_OF_DELEGATIONS {
+            chain_builder = chain_builder.delegate_to(random_user_key_pair(rng), CURRENT_TIME);
+            let chain = chain_builder.clone().build();
+            assert_eq!(chain.len(), number_of_delegations);
+
+            test_all_request_types_with_delegation_chain(
+                &verifier,
+                chain.clone(),
+                |result, builder_info| {
+                    assert_eq!(
+                        result,
+                        Ok(()),
+                        "verification of delegation chain {chain:?} for request builder {builder_info} failed"
+                    );
+                },
+            );
+        }
     }
 
     #[test]
@@ -1309,8 +1392,8 @@ mod authenticated_requests_delegations {
     }
 
     #[test]
-    fn should_fail_with_invalid_delegation_when_intermediate_delegation_is_an_unverifiable_canister_signature(
-    ) {
+    fn should_fail_with_invalid_delegation_when_intermediate_delegation_is_an_unverifiable_canister_signature()
+     {
         let rng = &mut reproducible_rng();
         let root_of_trust = RootOfTrust::new_random(rng);
         let other_root_of_trust = RootOfTrust::new_random(rng);
@@ -1321,7 +1404,7 @@ mod authenticated_requests_delegations {
         let delegation_chain = delegation_chain_with_a_canister_signature(
             MAXIMUM_NUMBER_OF_DELEGATIONS - 1,
             CURRENT_TIME,
-            root_of_trust,
+            &root_of_trust,
             rng,
         )
         .delegate_to(random_user_key_pair(rng), CURRENT_TIME)
@@ -1343,8 +1426,8 @@ mod authenticated_requests_delegations {
     }
 
     #[test]
-    fn should_fail_with_invalid_signature_when_last_delegation_is_an_unverifiable_canister_signature(
-    ) {
+    fn should_fail_with_invalid_signature_when_last_delegation_is_an_unverifiable_canister_signature()
+     {
         let rng = &mut reproducible_rng();
         let root_of_trust = RootOfTrust::new_random(rng);
         let other_root_of_trust = RootOfTrust::new_random(rng);
@@ -1418,7 +1501,7 @@ mod authenticated_requests_delegations {
             EnvContent: EnvelopeContent<ReqContent> + HttpRequestEnvelopeContentWithCanisterId,
             Verifier: HttpRequestVerifier<ReqContent>,
         {
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
             let request = builder
                 .with_ingress_expiry_at(CURRENT_TIME)
                 .with_canister_id(Blob(requested_canister_id.get().to_vec()))
@@ -1427,7 +1510,7 @@ mod authenticated_requests_delegations {
 
             let result = verifier.validate_request(&request);
 
-            assert_eq!(result, Ok(()), "Test with {} failed", builder_info);
+            assert_eq!(result, Ok(()), "Test with {builder_info} failed");
         }
     }
 
@@ -1477,7 +1560,7 @@ mod authenticated_requests_delegations {
             EnvContent: EnvelopeContent<ReqContent> + HttpRequestEnvelopeContentWithCanisterId,
             Verifier: HttpRequestVerifier<ReqContent>,
         {
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
             let request = builder
                 .with_ingress_expiry_at(CURRENT_TIME)
                 .with_canister_id(Blob(requested_canister_id.get().to_vec()))
@@ -1526,7 +1609,7 @@ mod authenticated_requests_delegations {
             EnvContent: EnvelopeContent<ReqContent> + HttpRequestEnvelopeContentWithCanisterId,
             Verifier: HttpRequestVerifier<ReqContent>,
         {
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
             let request = builder
                 .with_ingress_expiry_at(CURRENT_TIME)
                 .with_canister_id(Blob(requested_canister_id.get().to_vec()))
@@ -1586,7 +1669,7 @@ mod authenticated_requests_delegations {
             EnvContent: EnvelopeContent<ReqContent> + HttpRequestEnvelopeContentWithCanisterId,
             Verifier: HttpRequestVerifier<ReqContent>,
         {
-            let builder_info = format!("{:?}", builder);
+            let builder_info = format!("{builder:?}");
             let request = builder
                 .with_ingress_expiry_at(CURRENT_TIME)
                 .with_canister_id(Blob(requested_canister_id.get().to_vec()))
@@ -1595,7 +1678,7 @@ mod authenticated_requests_delegations {
 
             let result = verifier.validate_request(&request);
 
-            assert_eq!(result, Ok(()), "Test with {} failed", builder_info);
+            assert_eq!(result, Ok(()), "Test with {builder_info} failed");
         }
     }
 
@@ -1795,7 +1878,7 @@ mod authenticated_requests_delegations {
     fn delegation_chain_with_a_canister_signature<R: Rng + CryptoRng>(
         number_of_delegations: usize,
         delegation_expiration: Time,
-        root_of_trust: RootOfTrust,
+        root_of_trust: &RootOfTrust,
         rng: &mut R,
     ) -> DelegationChainBuilder {
         let canister_delegation_index = rng.gen_range(1..=number_of_delegations);
@@ -1858,7 +1941,7 @@ mod authenticated_requests_delegations {
         mut expect: F,
     ) {
         let builder = HttpRequestBuilder::new_update_call();
-        let builder_info = format!("{:?}", builder);
+        let builder_info = format!("{builder:?}");
         let request = builder
             .with_ingress_expiry_at(CURRENT_TIME)
             .with_authentication(AuthenticationScheme::Delegation(delegation_chain.clone()))
@@ -1867,7 +1950,7 @@ mod authenticated_requests_delegations {
         expect(result, builder_info);
 
         let builder = HttpRequestBuilder::new_query();
-        let builder_info = format!("{:?}", builder);
+        let builder_info = format!("{builder:?}");
         let request = builder
             .with_ingress_expiry_at(CURRENT_TIME)
             .with_authentication(AuthenticationScheme::Delegation(delegation_chain.clone()))
@@ -1876,7 +1959,7 @@ mod authenticated_requests_delegations {
         expect(result, builder_info);
 
         let builder = HttpRequestBuilder::new_read_state();
-        let builder_info = format!("{:?}", builder);
+        let builder_info = format!("{builder:?}");
         let request = builder
             .with_ingress_expiry_at(CURRENT_TIME)
             .with_authentication(AuthenticationScheme::Delegation(delegation_chain))

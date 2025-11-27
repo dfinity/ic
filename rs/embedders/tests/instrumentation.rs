@@ -2,27 +2,27 @@ use ic_config::embedders::{Config as EmbeddersConfig, MeteringType};
 use ic_config::subnet_config::SchedulerConfig;
 use ic_embedders::wasm_utils;
 use ic_embedders::{
-    wasm_utils::{validate_and_instrument_for_testing, validation::RESERVED_SYMBOLS, Segments},
     WasmtimeEmbedder,
+    wasm_utils::{Segments, validate_and_instrument_for_testing, validation::RESERVED_SYMBOLS},
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::Global;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
-use ic_sys::{PageIndex, PAGE_SIZE};
-use ic_wasm_transform::Module;
+use ic_sys::{PAGE_SIZE, PageIndex};
 use ic_wasm_types::BinaryEncodedWasm;
 use insta::assert_snapshot;
 use pretty_assertions::assert_eq;
+use wirm::{Module, wasmparser};
 
-use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
 use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
-use ic_embedders::wasmtime_embedder::{system_api_complexity, WasmtimeInstance};
+use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
+use ic_embedders::wasmtime_embedder::{WasmtimeInstance, system_api_complexity};
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_interfaces::execution_environment::SystemApi;
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::{
-    methods::{FuncRef, WasmMethod},
     NumBytes, NumInstructions,
+    methods::{FuncRef, WasmMethod},
 };
 
 const GB: u64 = 1024 * 1024 * 1024;
@@ -267,8 +267,8 @@ fn test_exports_only_reserved_symbols() {
     .unwrap();
     let module = Module::parse(instrumentation_details.binary.as_slice(), true).unwrap();
 
-    for export in module.exports {
-        assert!(RESERVED_SYMBOLS.contains(&export.name))
+    for export in module.exports.iter() {
+        assert!(RESERVED_SYMBOLS.contains(&&export.name[..]))
     }
 }
 
@@ -743,15 +743,13 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
         (module
             (global $g1 (export "g1") (mut i64) (i64.const 0))
             (func $test (export "canister_update test")
-                (i64.store ({ADDRESS} 0) (i64.const 17))
-                (i64.store ({ADDRESS} 4096) (i64.const 117))
-                (i64.load ({ADDRESS} 0))
+                (i64.store ({address} 0) (i64.const 17))
+                (i64.store ({address} 4096) (i64.const 117))
+                (i64.load ({address} 0))
                 global.set $g1
             )
-            {MEMORY}
-        )"#,
-        ADDRESS = address,
-        MEMORY = memory
+            {memory}
+        )"#
     );
     let mut instance = new_instance(&wat, 10000);
     let res = instance.run(func_ref("test")).unwrap();
@@ -1075,8 +1073,8 @@ fn table_modifications_are_unsupported_for_wasm_version(is_wasm64: bool) {
 
     let err = test_table_validation(
         &format!(
-        "(table.copy ({address_type}.const 0) ({address_type}.const 0) ({address_type}.const 0))"
-    ),
+            "(table.copy ({address_type}.const 0) ({address_type}.const 0) ({address_type}.const 0))"
+        ),
         is_wasm64,
     );
     assert!(err.contains("unsupported instruction table.copy"));
@@ -1356,39 +1354,52 @@ fn assert_memories_have_max_limit(wat: &str) {
     {
         let wasm = BinaryEncodedWasm::new(wat::parse_str(wat).unwrap());
 
+        let config = EmbeddersConfig {
+            max_wasm_memory_size: NumBytes::new(heap_limit),
+            max_wasm64_memory_size: NumBytes::new(heap64_limit),
+            max_stable_memory_size: NumBytes::new(stable_limit),
+            ..EmbeddersConfig::default()
+        };
+
         let (_, instrumentation_details) = validate_and_instrument_for_testing(
-            &WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger()),
+            &WasmtimeEmbedder::new(config, no_op_logger()),
             &wasm,
         )
         .unwrap();
         let module = Module::parse(instrumentation_details.binary.as_slice(), true).unwrap();
         assert!(
-            module.memories.len() >= 2,
+            module.memories.iter().count() >= 2,
             "Module should have at least a heap and stable memory"
         );
 
-        let heap_memory = module.memories[0];
-        if heap_memory.memory64 {
+        let mut memories = module.memories.iter();
+        let heap_memory = memories.next().unwrap();
+        let stable_memory = memories.next().unwrap();
+
+        let heap_memory_bytes = heap_memory.ty.maximum.unwrap() * WASM_PAGE_SIZE_IN_BYTES as u64;
+        let stable_memory_bytes =
+            stable_memory.ty.maximum.unwrap() * WASM_PAGE_SIZE_IN_BYTES as u64;
+
+        if heap_memory.ty.memory64 {
             assert!(
-                heap_memory.maximum.unwrap() < heap64_limit,
+                heap_memory_bytes <= heap64_limit,
                 "memory limit {} exceeds expected {}",
-                heap_memory.maximum.unwrap(),
+                heap_memory_bytes,
                 heap64_limit
             );
         } else {
             assert!(
-                heap_memory.maximum.unwrap() < heap_limit,
+                heap_memory_bytes <= heap_limit,
                 "memory limit {} exceeds expected {}",
-                heap_memory.maximum.unwrap(),
+                heap_memory_bytes,
                 heap_limit
             );
         }
 
-        let stable_memory = module.memories[1];
         assert!(
-            stable_memory.maximum.unwrap() < stable_limit,
+            stable_memory_bytes <= stable_limit,
             "memory limit {} exceeds expected {}",
-            stable_memory.maximum.unwrap(),
+            stable_memory_bytes,
             stable_limit
         );
     }

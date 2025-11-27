@@ -9,7 +9,7 @@ use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_test_utils_ni_dkg::{
-    dummy_initial_dkg_transcript, initial_dkg_transcript, InitialNiDkgConfig,
+    InitialNiDkgConfig, dummy_initial_dkg_transcript, initial_dkg_transcript,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_crypto_utils_ni_dkg::extract_threshold_sig_public_key;
@@ -17,6 +17,8 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL, TEST_USER4_PRINCIPAL,
     TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
 };
+use ic_protobuf::registry::node::v1::NodeRewardType;
+use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use ic_protobuf::registry::replica_version::v1::{
     GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
 };
@@ -43,20 +45,20 @@ use ic_registry_keys::{
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
-    dechunkify_get_value_response_content, deserialize_get_value_response, insert,
+    Error, GetChunk, dechunkify_get_value_response_content, deserialize_get_value_response, insert,
     pb::v1::{
-        registry_mutation::Type, HighCapacityRegistryGetValueResponse, RegistryAtomicMutateRequest,
-        RegistryAtomicMutateResponse, RegistryMutation,
+        HighCapacityRegistryGetValueResponse, RegistryAtomicMutateRequest,
+        RegistryAtomicMutateResponse, RegistryMutation, registry_mutation::Type,
     },
-    serialize_get_value_request, Error, GetChunk,
+    serialize_get_value_request,
 };
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
-    crypto::{
-        threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript},
-        CurrentNodePublicKeys, KeyPurpose,
-    },
     NodeId, ReplicaVersion,
+    crypto::{
+        CurrentNodePublicKeys, KeyPurpose,
+        threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript},
+    },
 };
 use maplit::btreemap;
 use on_wire::bytes;
@@ -119,9 +121,8 @@ impl GetChunk for GetChunkImpl<'_> {
             .await
             .map_err(|err| {
                 format!(
-                    "Registry canister received our get_chunk request (key={:?}), \
-                     but found it lacking in some way: {}",
-                    content_sha256, err,
+                    "Registry canister received our get_chunk request (key={content_sha256:?}), \
+                     but found it lacking in some way: {err}",
                 )
             })?;
 
@@ -131,9 +132,8 @@ impl GetChunk for GetChunkImpl<'_> {
         } = chunk
         else {
             return Err(format!(
-                "Registry replied to our get_chunk request (key={:?}), \
+                "Registry replied to our get_chunk request (key={content_sha256:?}), \
                  but the reply did not have a populated `content` field.",
-                content_sha256,
             ));
         };
 
@@ -170,8 +170,7 @@ pub async fn get_value_result<T: Message + Default>(
     let Some(content) = result.content else {
         return Err(Error::MalformedMessage(format!(
             "Registry replied to get_value call, but no content field \
-             was populated. key={:?}",
-            key,
+             was populated. key={key:?}",
         )));
     };
 
@@ -197,7 +196,7 @@ pub async fn get_value<T: Message + Default>(registry: &Canister<'_>, key: &[u8]
 /// Panics if there is no T
 pub async fn get_value_or_panic<T: Message + Default>(registry: &Canister<'_>, key: &[u8]) -> T {
     get_value::<T>(registry, key).await.unwrap_or_else(|| {
-        panic!("Registry does not have a record under the key {:?}.", key);
+        panic!("Registry does not have a record under the key {key:?}.");
     })
 }
 
@@ -370,6 +369,9 @@ pub fn invariant_compliant_mutation_with_subnet_id(
         chain_key_config,
         ..Default::default()
     };
+    let rewards_table = NodeRewardsTable {
+        table: BTreeMap::new(),
+    };
 
     let mut mutations = vec![
         insert(
@@ -387,6 +389,10 @@ pub fn invariant_compliant_mutation_with_subnet_id(
         insert(
             make_blessed_replica_versions_key().as_bytes(),
             blessed_replica_version.encode_to_vec(),
+        ),
+        insert(
+            ic_registry_keys::NODE_REWARDS_TABLE_KEY.as_bytes(),
+            rewards_table.encode_to_vec(),
         ),
     ];
     mutations.append(&mut make_add_node_registry_mutations(
@@ -897,7 +903,10 @@ pub fn generate_nidkg_initial_transcript(
 }
 
 /// Prepares all the payloads to add a new node, for tests.
-pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePublicKeys) {
+pub fn prepare_add_node_payload(
+    mutation_id: u8,
+    node_reward_type: NodeRewardType,
+) -> (AddNodePayload, ValidNodePublicKeys) {
     // As the node canister checks for validity of keys, we need to generate them
     // first
     let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
@@ -929,7 +938,7 @@ pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePu
         // Unused section follows
         p2p_flow_endpoints: Default::default(),
         prometheus_metrics_endpoint: Default::default(),
-        node_reward_type: None,
+        node_reward_type: Some(node_reward_type.to_string()),
     };
 
     (payload, node_public_keys)

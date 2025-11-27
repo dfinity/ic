@@ -1,19 +1,30 @@
-use candid::{Decode, Encode, Nat};
+use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_cbor::CertificateToCbor;
+use ic_certification::{
+    Certificate, HashTree,
+    hash_tree::{HashTreeNode, Label, LookupResult, SubtreeLookupResult, empty},
+};
+use ic_icrc1::endpoints::StandardRecord;
+use ic_icrc1_index_ng::{IndexArg, InitArg};
 use ic_icrc1_ledger::Tokens;
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
-use ic_icrc3_test_ledger::AddBlockResult;
+use ic_ledger_suite_state_machine_helpers::{
+    add_block, archive_blocks, balance_of, icrc3_get_blocks as icrc3_get_blocks_helper,
+    set_icrc3_enabled,
+};
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
 use icrc_ledger_types::icrc3::blocks::{
     BlockWithId, GetBlocksRequest, GetBlocksResponse, GetBlocksResult,
 };
 use num_traits::cast::ToPrimitive;
 use serde_bytes::ByteBuf;
-use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::{collections::BTreeMap, time::Duration};
 
 const TEST_USER_1: PrincipalId = PrincipalId::new_user_test_id(1);
 const TEST_USER_2: PrincipalId = PrincipalId::new_user_test_id(2);
@@ -37,28 +48,16 @@ fn icrc3_test_ledger_wasm() -> Vec<u8> {
     )
 }
 
+pub fn index_ng_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("IC_ICRC1_INDEX_NG_WASM_PATH").unwrap()).unwrap()
+}
+
 fn setup_icrc3_test_ledger() -> (StateMachine, CanisterId) {
     let env = StateMachine::new();
     let canister_id = env
         .install_canister(icrc3_test_ledger_wasm(), vec![], None)
         .unwrap();
     (env, canister_id)
-}
-
-fn add_block(
-    env: &StateMachine,
-    canister_id: CanisterId,
-    block: &ICRC3Value,
-) -> Result<Nat, String> {
-    let result = Decode!(
-        &env.execute_ingress(canister_id, "add_block", Encode!(block).unwrap())
-            .expect("failed to add block")
-            .bytes(),
-        AddBlockResult
-    )
-    .expect("failed to decode add_block response");
-
-    result
 }
 
 fn icrc3_get_blocks(
@@ -402,8 +401,8 @@ fn production_ledger_wasm() -> Vec<u8> {
 
 #[test]
 fn test_icrc3_blocks_compatibility_with_production_ledger() {
-    use ic_ledger_suite_state_machine_tests::test_icrc3_blocks_compatibility_with_production_ledger;
     use ic_ledger_suite_state_machine_tests::InitArgs;
+    use ic_ledger_suite_state_machine_tests::test_icrc3_blocks_compatibility_with_production_ledger;
 
     fn encode_init_args(args: InitArgs) -> ic_icrc1_ledger::LedgerArgument {
         use ic_icrc1_ledger::{
@@ -431,4 +430,296 @@ fn test_icrc3_blocks_compatibility_with_production_ledger() {
         encode_init_args,
         icrc3_test_ledger_wasm(),
     );
+}
+
+fn get_icrc3_get_tip_certificate(
+    env: &StateMachine,
+    canister_id: CanisterId,
+) -> Option<ICRC3DataCertificate> {
+    Decode!(
+        &env.query(
+            canister_id,
+            "icrc3_get_tip_certificate",
+            Encode!(&()).unwrap()
+        )
+        .expect("failed to get tip certificate")
+        .bytes(),
+        Option<ICRC3DataCertificate>
+    )
+    .expect("failed to decode tip certificate response")
+}
+
+fn lookup_hashtree(hash_tree: &HashTree, leaf_name: &str) -> Result<Vec<u8>, String> {
+    match hash_tree.lookup_subtree([leaf_name.as_bytes()]) {
+        SubtreeLookupResult::Found(tree) => match tree.as_ref() {
+            HashTreeNode::Leaf(result) => Ok(result.clone()),
+            _ => Err("Expected a leaf node".to_string()),
+        },
+        _ => Err(format!(
+            "Expected to find a leaf node: Hash tree: {hash_tree:?}, leaf_name: {leaf_name}"
+        )
+        .to_string()),
+    }
+}
+
+fn check_tip_certificate(
+    cert: ICRC3DataCertificate,
+    canister_id: CanisterId,
+    block_index_and_hash: Option<(u64, Vec<u8>)>,
+) {
+    let certified_data_path: [Label<Vec<u8>>; 3] = [
+        "canister".into(),
+        canister_id.get().0.as_slice().into(),
+        "certified_data".into(),
+    ];
+    let certificate = Certificate::from_cbor(cert.certificate.as_slice()).unwrap();
+    let certified_data = match certificate.tree.lookup_path(&certified_data_path) {
+        LookupResult::Found(v) => v,
+        _ => panic!("could not find certified data in certificate"),
+    };
+
+    let hash_tree: HashTree = ciborium::de::from_reader(cert.hash_tree.as_slice()).unwrap();
+
+    assert_eq!(certified_data, hash_tree.digest());
+
+    match block_index_and_hash {
+        None => assert_eq!(hash_tree, empty()),
+        Some((block_index, block_hash)) => {
+            let tree_block_index = leb128::read::unsigned(&mut std::io::Cursor::new(
+                lookup_hashtree(&hash_tree, "last_block_index").unwrap(),
+            ))
+            .unwrap();
+            assert_eq!(tree_block_index, block_index);
+
+            let tree_block_hash = lookup_hashtree(&hash_tree, "last_block_hash").unwrap();
+            assert_eq!(tree_block_hash, block_hash);
+        }
+    }
+}
+
+#[test]
+fn test_icrc3_get_tip_certificate() {
+    let (env, canister_id) = setup_icrc3_test_ledger();
+    // Check the certificate for empty ledger.
+    let cert = get_icrc3_get_tip_certificate(&env, canister_id).unwrap();
+    check_tip_certificate(cert, canister_id, None);
+
+    // Create some test blocks, we only care that they are different.
+    let block0 = BlockBuilder::new(0, 1000)
+        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000u64))
+        .build();
+    let block1 = BlockBuilder::new(1, 2000)
+        .transfer(TEST_ACCOUNT_1, TEST_ACCOUNT_2, Tokens::from(100_000u64))
+        .build();
+    assert_ne!(block0.clone().hash(), block1.clone().hash());
+
+    // Add block and check if it is reflected in the certificate.
+    let result0 = add_block(&env, canister_id, &block0).expect("Failed to add block 0");
+    assert_eq!(result0, Nat::from(0u64));
+    let cert = get_icrc3_get_tip_certificate(&env, canister_id).unwrap();
+    check_tip_certificate(cert, canister_id, Some((0, block0.clone().hash().to_vec())));
+
+    // Add another block and check if it is reflected in the certificate.
+    let result1 = add_block(&env, canister_id, &block1).expect("Failed to add block 1");
+    assert_eq!(result1, Nat::from(1u64));
+    let cert = get_icrc3_get_tip_certificate(&env, canister_id).unwrap();
+    check_tip_certificate(cert, canister_id, Some((1, block1.clone().hash().to_vec())));
+}
+
+fn get_supported_standards(env: &StateMachine, canister_id: CanisterId) -> Vec<StandardRecord> {
+    Decode!(
+        &env.query(
+            canister_id,
+            "icrc1_supported_standards",
+            Encode!(&()).unwrap()
+        )
+        .expect("failed to get supported standards")
+        .bytes(),
+        Vec<StandardRecord>
+    )
+    .expect("failed to decode icrc1_supported_standards response")
+}
+
+#[test]
+fn test_supported_standards() {
+    let (env, canister_id) = setup_icrc3_test_ledger();
+
+    // By default icrc3 should be enabled
+    let standards = get_supported_standards(&env, canister_id);
+    assert_eq!(standards.len(), 2);
+    assert_eq!(standards[0].name, "ICRC-3");
+    assert_eq!(standards[1].name, "ICRC-10");
+
+    set_icrc3_enabled(&env, canister_id, false);
+    let standards = get_supported_standards(&env, canister_id);
+    assert_eq!(standards.len(), 1);
+    assert_eq!(standards[0].name, "ICRC-10");
+
+    set_icrc3_enabled(&env, canister_id, true);
+    let standards = get_supported_standards(&env, canister_id);
+    assert_eq!(standards.len(), 2);
+    assert_eq!(standards[0].name, "ICRC-3");
+    assert_eq!(standards[1].name, "ICRC-10");
+}
+
+fn verify_blocks_in_ledger(env: &StateMachine, canister_id: CanisterId, start: u64, length: u64) {
+    let result = icrc3_get_blocks_helper(env, canister_id, 0, usize::MAX);
+    if length == 0 {
+        assert!(result.blocks.is_empty());
+    } else {
+        assert_eq!(result.blocks.first().unwrap().id, start);
+        assert_eq!(result.blocks.last().unwrap().id, start + length - 1);
+    }
+}
+
+#[test]
+fn test_archiving() {
+    let (env, ledger_id) = setup_icrc3_test_ledger();
+
+    const NUM_BLOCKS: u32 = 20;
+
+    for block_id in 0..NUM_BLOCKS {
+        let block = BlockBuilder::new(block_id as u64, block_id as u64)
+            .mint(TEST_ACCOUNT_1, Tokens::from(2u64.pow(block_id)))
+            .build();
+        let result = add_block(&env, ledger_id, &block).expect("Failed to add block");
+        assert_eq!(result, Nat::from(block_id));
+    }
+
+    verify_blocks_in_ledger(&env, ledger_id, 0, 20);
+
+    let archive1 = env
+        .install_canister(icrc3_test_ledger_wasm(), vec![], None)
+        .unwrap();
+
+    let archived_count = archive_blocks(&env, ledger_id, archive1, 2);
+    assert_eq!(archived_count, 2);
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+
+    verify_blocks_in_ledger(&env, archive1, 0, 2);
+    verify_blocks_in_ledger(&env, ledger_id, 2, 18);
+
+    let archive2 = env
+        .install_canister(icrc3_test_ledger_wasm(), vec![], None)
+        .unwrap();
+
+    let archived_count = archive_blocks(&env, ledger_id, archive2, 2);
+    assert_eq!(archived_count, 2);
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+
+    verify_blocks_in_ledger(&env, archive1, 0, 2);
+    verify_blocks_in_ledger(&env, archive2, 2, 2);
+    verify_blocks_in_ledger(&env, ledger_id, 4, 16);
+
+    let archived_count = archive_blocks(&env, ledger_id, archive2, 2);
+    assert_eq!(archived_count, 2);
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+
+    verify_blocks_in_ledger(&env, archive1, 0, 2);
+    verify_blocks_in_ledger(&env, archive2, 2, 4);
+    verify_blocks_in_ledger(&env, ledger_id, 6, 14);
+
+    let archive3 = env
+        .install_canister(icrc3_test_ledger_wasm(), vec![], None)
+        .unwrap();
+
+    let archived_count = archive_blocks(&env, ledger_id, archive3, 10);
+    assert_eq!(archived_count, 10);
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+
+    verify_blocks_in_ledger(&env, archive1, 0, 2);
+    verify_blocks_in_ledger(&env, archive2, 2, 4);
+    verify_blocks_in_ledger(&env, archive3, 6, 10);
+    verify_blocks_in_ledger(&env, ledger_id, 16, 4);
+
+    let test_blocks_with_index = || {
+        let index_init_arg = IndexArg::Init(InitArg {
+            ledger_id: Principal::from(ledger_id),
+            retrieve_blocks_from_ledger_interval_seconds: None,
+        });
+        let index = env
+            .install_canister(index_ng_wasm(), Encode!(&index_init_arg).unwrap(), None)
+            .unwrap();
+        env.advance_time(Duration::from_secs(60));
+        env.tick();
+        let balance = balance_of(&env, index, TEST_ACCOUNT_1);
+        assert_eq!(balance, 2u64.pow(NUM_BLOCKS) - 1);
+    };
+
+    test_blocks_with_index();
+
+    set_icrc3_enabled(&env, ledger_id, false);
+
+    test_blocks_with_index();
+}
+
+#[test]
+fn test_archiving_all_blocks() {
+    let (env, ledger_id) = setup_icrc3_test_ledger();
+
+    const NUM_BLOCKS: u64 = 5;
+
+    for block_id in 0..NUM_BLOCKS {
+        let block = BlockBuilder::new(block_id, block_id)
+            .mint(TEST_ACCOUNT_1, Tokens::from(2u64.pow(block_id as u32)))
+            .build();
+        let result = add_block(&env, ledger_id, &block).expect("Failed to add block");
+        assert_eq!(result, Nat::from(block_id));
+    }
+
+    verify_blocks_in_ledger(&env, ledger_id, 0, NUM_BLOCKS);
+
+    let archive1 = env
+        .install_canister(icrc3_test_ledger_wasm(), vec![], None)
+        .unwrap();
+
+    let archived_count = archive_blocks(&env, ledger_id, archive1, u64::MAX);
+    assert_eq!(archived_count, NUM_BLOCKS);
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+
+    verify_blocks_in_ledger(&env, archive1, 0, NUM_BLOCKS);
+    verify_blocks_in_ledger(&env, ledger_id, 0, 0);
+
+    let blocks_req = GetBlocksRequest {
+        start: Nat::from(0u64),
+        length: Nat::from(u64::MAX),
+    };
+
+    let blocks = get_blocks(&env, ledger_id, &blocks_req);
+    assert_eq!(blocks.first_index, NUM_BLOCKS);
+    assert_eq!(blocks.chain_length, NUM_BLOCKS);
+    assert!(blocks.blocks.is_empty());
+
+    let index_init_arg = IndexArg::Init(InitArg {
+        ledger_id: Principal::from(ledger_id),
+        retrieve_blocks_from_ledger_interval_seconds: None,
+    });
+    let index = env
+        .install_canister(index_ng_wasm(), Encode!(&index_init_arg).unwrap(), None)
+        .unwrap();
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+    let balance = balance_of(&env, index, TEST_ACCOUNT_1);
+    assert_eq!(balance, 2u64.pow(NUM_BLOCKS as u32) - 1);
+
+    let block = BlockBuilder::new(NUM_BLOCKS, NUM_BLOCKS)
+        .mint(TEST_ACCOUNT_1, Tokens::from(2u64.pow(NUM_BLOCKS as u32)))
+        .build();
+    let result = add_block(&env, ledger_id, &block).expect("Failed to add block");
+    assert_eq!(result, Nat::from(NUM_BLOCKS));
+
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+    let balance = balance_of(&env, index, TEST_ACCOUNT_1);
+    assert_eq!(balance, 2u64.pow((NUM_BLOCKS + 1) as u32) - 1);
+
+    let blocks = get_blocks(&env, ledger_id, &blocks_req);
+    assert_eq!(blocks.first_index, NUM_BLOCKS);
+    assert_eq!(blocks.chain_length, NUM_BLOCKS + 1);
+    assert_eq!(blocks.blocks.len(), 1);
 }

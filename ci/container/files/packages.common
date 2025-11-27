@@ -46,11 +46,6 @@ llvm
 liblmdb-dev
 liblzma-dev
 
-# Haskell
-libtinfo-dev
-libffi-dev
-libgmp-dev
-
 # IC-OS
 fdisk
 cryptsetup-bin

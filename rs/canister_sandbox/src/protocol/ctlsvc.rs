@@ -67,11 +67,11 @@ mod tests {
         wasmtime_embedder::system_api::sandbox_safe_system_state::SystemStateModifications,
     };
     use ic_interfaces::execution_environment::{
-        InstanceStats, SystemApiCallCounters, WasmExecutionOutput,
+        InstanceStats, MessageMemoryUsage, SystemApiCallCounters, WasmExecutionOutput,
     };
     use ic_management_canister_types_private::Global;
     use ic_replicated_state::{NumWasmPages, PageMap};
-    use ic_types::{ingress::WasmResult, NumBytes, NumInstructions};
+    use ic_types::{NumBytes, NumInstructions, ingress::WasmResult};
 
     use crate::protocol::{
         ctlsvc::{ExecutionFinishedReply, ExecutionPausedReply, ExecutionPausedRequest, Reply},
@@ -97,6 +97,10 @@ mod tests {
     #[test]
     fn round_trip_execution_finished_request() {
         let wasm_result = WasmResult::Reply(vec![123]);
+        let new_message_memory_usage = MessageMemoryUsage {
+            guaranteed_response: NumBytes::new(2000),
+            best_effort: NumBytes::new(1000),
+        };
         let exec_output = SandboxExecOutput {
             slice: SliceExecutionOutput {
                 executed_instructions: NumInstructions::new(123),
@@ -106,6 +110,8 @@ mod tests {
                 num_instructions_left: NumInstructions::new(1),
                 allocated_bytes: NumBytes::new(1000),
                 allocated_guaranteed_response_message_bytes: NumBytes::new(2000),
+                new_memory_usage: Some(NumBytes::new(2000)),
+                new_message_memory_usage: Some(new_message_memory_usage),
                 instance_stats: InstanceStats::default(),
                 system_api_call_counters: SystemApiCallCounters::default(),
             },

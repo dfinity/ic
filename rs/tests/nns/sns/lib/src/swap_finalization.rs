@@ -38,7 +38,10 @@ pub async fn finalize_committed_swap(
 
     info!(log, "Checking that the swap finalized successfully");
 
-    info!(log, "Swap finalization check 1: Call swap's `get_state` and assert it contains the correct information");
+    info!(
+        log,
+        "Swap finalization check 1: Call swap's `get_state` and assert it contains the correct information"
+    );
     let derived_swap_state = {
         let request = sns_request_provider.get_derived_swap_state(CallMode::Query);
         canister_agent
@@ -123,7 +126,10 @@ pub async fn finalize_aborted_swap_and_check_success(
 
     info!(log, "Checking that the swap finalized successfully");
 
-    info!(log, "Swap finalization check 1: Call swap's `get_state` and assert it contains the correct information");
+    info!(
+        log,
+        "Swap finalization check 1: Call swap's `get_state` and assert it contains the correct information"
+    );
     let derived_swap_state = {
         let request = sns_request_provider.get_derived_swap_state(CallMode::Query);
         canister_agent
@@ -206,8 +212,7 @@ async fn wait_for_swap_to_finalize(env: &TestEnv, max_duration: Duration) {
                 .unwrap()
         };
         panic!(
-            "The swap must be in a terminal state to finalize, was {:?}. Swap state: {:?}",
-            lifecycle, derived_swap_state
+            "The swap must be in a terminal state to finalize, was {lifecycle:?}. Swap state: {derived_swap_state:?}"
         );
     }
 
@@ -216,7 +221,7 @@ async fn wait_for_swap_to_finalize(env: &TestEnv, max_duration: Duration) {
             .duration_since(start_time)
             .unwrap();
         if time_spend_waiting > max_duration {
-            panic!("The swap did not finalize within {:?}!", max_duration);
+            panic!("The swap did not finalize within {max_duration:?}!");
         }
 
         let auto_finalization_status = {
@@ -280,7 +285,9 @@ async fn get_all_neurons(env: &TestEnv) -> Vec<ic_sns_governance::pb::v1::Neuron
             }
             neurons.extend(neurons_page);
         }
-        panic!("Too many neurons created in SNS governance, unable to read all of them! (Tried calling list_neurons {max_pages} times.)");
+        panic!(
+            "Too many neurons created in SNS governance, unable to read all of them! (Tried calling list_neurons {max_pages} times.)"
+        );
     }
     neurons
 }

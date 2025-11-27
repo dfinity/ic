@@ -9,7 +9,7 @@ use ic_management_canister_types_private::{
 };
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
-    canister_status::{canister_status, CanisterStatusResultV2, CanisterStatusType},
+    canister_status::{CanisterStatusResultV2, CanisterStatusType, canister_status},
 };
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -19,17 +19,17 @@ use ic_sns_wasm::{
     canister_stable_memory::CanisterStableMemory,
     init::SnsWasmCanisterInitPayload,
     pb::v1::{
-        update_allowed_principals_response::UpdateAllowedPrincipalsResult, AddWasmRequest,
-        AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse, GetAllowedPrincipalsRequest,
-        GetAllowedPrincipalsResponse, GetDeployedSnsByProposalIdRequest,
-        GetDeployedSnsByProposalIdResponse, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
-        GetProposalIdThatAddedWasmRequest, GetProposalIdThatAddedWasmResponse,
-        GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, GetWasmMetadataRequest,
-        GetWasmMetadataResponse, GetWasmRequest, GetWasmResponse, InsertUpgradePathEntriesRequest,
-        InsertUpgradePathEntriesResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
-        ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsWasmError,
-        UpdateAllowedPrincipalsRequest, UpdateAllowedPrincipalsResponse,
-        UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
+        AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
+        GetAllowedPrincipalsRequest, GetAllowedPrincipalsResponse,
+        GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse,
+        GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetProposalIdThatAddedWasmRequest,
+        GetProposalIdThatAddedWasmResponse, GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse,
+        GetWasmMetadataRequest, GetWasmMetadataResponse, GetWasmRequest, GetWasmResponse,
+        InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
+        ListDeployedSnsesRequest, ListDeployedSnsesResponse, ListUpgradeStepsRequest,
+        ListUpgradeStepsResponse, SnsWasmError, UpdateAllowedPrincipalsRequest,
+        UpdateAllowedPrincipalsResponse, UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
+        update_allowed_principals_response::UpdateAllowedPrincipalsResult,
     },
     sns_wasm::SnsWasmCanister,
 };
@@ -85,8 +85,7 @@ impl CanisterApi for CanisterApiImpl {
 
         result
             .map_err(handle_call_error(format!(
-                "Creating canister in subnet {} failed",
-                target_subnet
+                "Creating canister in subnet {target_subnet} failed"
             )))
             .map(|record| record.0.get_canister_id())
     }
@@ -105,8 +104,7 @@ impl CanisterApi for CanisterApiImpl {
         .await;
 
         response.map_err(handle_call_error(format!(
-            "Failed to delete canister {}",
-            canister
+            "Failed to delete canister {canister}"
         )))
     }
 
@@ -128,8 +126,7 @@ impl CanisterApi for CanisterApiImpl {
             ic_cdk::call(CanisterId::ic_00().get().0, "install_code", (install_args,)).await;
 
         install_res.map_err(handle_call_error(format!(
-            "Failed to install WASM on canister {}",
-            target_canister
+            "Failed to install WASM on canister {target_canister}"
         )))
     }
 
@@ -151,8 +148,7 @@ impl CanisterApi for CanisterApiImpl {
             ic_cdk::call(CanisterId::ic_00().get().0, "update_settings", (args,)).await;
 
         result.map_err(handle_call_error(format!(
-            "Failed to update controllers for canister {}",
-            canister
+            "Failed to update controllers for canister {canister}"
         )))
     }
 
@@ -161,8 +157,7 @@ impl CanisterApi for CanisterApiImpl {
 
         if available < required_cycles {
             return Err(format!(
-                "Message execution requires at least {} cycles, but canister only has {} cycles.",
-                required_cycles, available,
+                "Message execution requires at least {required_cycles} cycles, but canister only has {available} cycles.",
             ));
         }
         Ok(available)
@@ -173,8 +168,7 @@ impl CanisterApi for CanisterApiImpl {
 
         if available < required_cycles {
             return Err(format!(
-                "Message execution requires at least {} cycles, but only {} cycles were sent.",
-                required_cycles, available,
+                "Message execution requires at least {required_cycles} cycles, but only {available} cycles were sent.",
             ));
         }
         Ok(available)
@@ -198,8 +192,7 @@ impl CanisterApi for CanisterApiImpl {
         .await;
 
         response.map_err(handle_call_error(format!(
-            "Failed to send cycles to canister {}",
-            target
+            "Failed to send cycles to canister {target}"
         )))
     }
 }
@@ -236,10 +229,7 @@ impl CanisterApiImpl {
                     .await
                     .map(CanisterStatusResultV2::from)
                     .map_err(|(code, msg)| {
-                        format!(
-                            "Unable to get target canister status: error code {}: {}",
-                            code, msg
-                        )
+                        format!("Unable to get target canister status: error code {code}: {msg}")
                     })?;
 
             if status.status() == CanisterStatusType::Stopped {
@@ -249,8 +239,7 @@ impl CanisterApiImpl {
             count += 1;
             if count > 100 {
                 return Err(format!(
-                    "Canister {} never stopped.  Waited 100 iterations",
-                    canister
+                    "Canister {canister} never stopped.  Waited 100 iterations"
                 ));
             }
 
@@ -477,6 +466,15 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     Ok(())
 }
 
+fn serve_metrics_service_discovery() -> HttpResponse {
+    let service_discovery = SNS_WASM.with_borrow(SnsWasmCanister::get_metrics_service_discovery);
+    HttpResponseBuilder::ok()
+        .header("Content-Type", "application/json")
+        .header("Cache-Control", "no-store")
+        .with_body_and_content_length(service_discovery.as_bytes())
+        .build()
+}
+
 #[query(
     hidden = true,
     decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
@@ -484,6 +482,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),
+        "/sns_canisters" => serve_metrics_service_discovery(),
         _ => HttpResponseBuilder::not_found().build(),
     }
 }

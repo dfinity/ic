@@ -1,5 +1,5 @@
 use criterion::measurement::Measurement;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
+use criterion::{BenchmarkGroup, Criterion, criterion_group, criterion_main};
 
 use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
@@ -11,7 +11,7 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::{
-    AlgorithmId, BasicSig, BasicSigOf, KeyPurpose, SignableMock, UserPublicKey, DOMAIN_IC_REQUEST,
+    AlgorithmId, BasicSig, BasicSigOf, DOMAIN_IC_REQUEST, KeyPurpose, SignableMock, UserPublicKey,
 };
 use ic_types::{NodeId, RegistryVersion};
 use ic_types_test_utils::ids::{NODE_1, NODE_2};
@@ -24,6 +24,8 @@ use strum::IntoEnumIterator;
 const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(3);
 // \[small, medium, large\]
 const MSG_SIZES: [usize; 3] = [32, 10_000, 1_000_000];
+
+const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(300);
 
 #[derive(Copy, Clone, PartialEq, Default, strum_macros::EnumIter)]
 enum VaultType {
@@ -50,6 +52,8 @@ fn crypto_basicsig_ed25519(criterion: &mut Criterion) {
             let group =
                 &mut criterion.benchmark_group(group_name(algorithm_id, msg_size, vault_type));
 
+            group.warm_up_time(WARMUP_TIME);
+
             if vault_type == VaultType::default() {
                 crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng, vault_type);
                 crypto_ed25519_basicsig_verify(group, msg_size, rng, vault_type);
@@ -67,6 +71,7 @@ fn crypto_basicsig_p256(criterion: &mut Criterion) {
 
     for msg_size in MSG_SIZES {
         let group = &mut criterion.benchmark_group(group_name(algorithm_id, msg_size, vault_type));
+        group.warm_up_time(WARMUP_TIME);
         crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng, vault_type);
     }
 }
@@ -78,6 +83,7 @@ fn crypto_basicsig_secp256k1(criterion: &mut Criterion) {
 
     for msg_size in MSG_SIZES {
         let group = &mut criterion.benchmark_group(group_name(algorithm_id, msg_size, vault_type));
+        group.warm_up_time(WARMUP_TIME);
         crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng, vault_type);
     }
 }
@@ -89,6 +95,7 @@ fn crypto_basicsig_rsasha256(criterion: &mut Criterion) {
 
     for msg_size in MSG_SIZES {
         let group = &mut criterion.benchmark_group(group_name(algorithm_id, msg_size, vault_type));
+        group.warm_up_time(WARMUP_TIME);
         crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng, vault_type);
     }
 }
@@ -110,9 +117,11 @@ fn crypto_ed25519_basicsig_verify<M: Measurement, R: Rng + CryptoRng>(
 
     group.bench_function("verify", |bench| {
         bench.iter(|| {
-            assert!(temp_crypto
-                .verify_basic_sig(&signature, &msg, NODE_2, REGISTRY_VERSION,)
-                .is_ok());
+            assert!(
+                temp_crypto
+                    .verify_basic_sig(&signature, &msg, NODE_2, REGISTRY_VERSION,)
+                    .is_ok()
+            );
         })
     });
 }
@@ -132,9 +141,11 @@ fn crypto_ed25519_basicsig_sign<M: Measurement, R: Rng + CryptoRng>(
 
     group.bench_function("sign", |bench| {
         bench.iter(|| {
-            assert!(temp_crypto
-                .sign_basic(&message, NODE_1, REGISTRY_VERSION)
-                .is_ok());
+            assert!(
+                temp_crypto
+                    .sign_basic(&message, NODE_1, REGISTRY_VERSION)
+                    .is_ok()
+            );
         })
     });
 }
@@ -153,20 +164,18 @@ fn crypto_basicsig_verifybypubkey<M: Measurement, R: Rng + CryptoRng>(
 
     group.bench_function("verifybypubkey", |bench| {
         bench.iter(|| {
-            assert!(temp_crypto
-                .verify_basic_sig_by_public_key(&signature, &msg, &public_key,)
-                .is_ok());
+            assert!(
+                temp_crypto
+                    .verify_basic_sig_by_public_key(&signature, &msg, &public_key,)
+                    .is_ok()
+            );
         })
     });
 }
 
-fn criterion_only_once() -> Criterion {
-    Criterion::default().sample_size(20)
-}
-
 criterion_group! {
     name = benches;
-    config = criterion_only_once();
+    config = Criterion::default().sample_size(20).warm_up_time(WARMUP_TIME);
     targets = crypto_basicsig_ed25519, crypto_basicsig_p256, crypto_basicsig_secp256k1, crypto_basicsig_rsasha256
 }
 
@@ -188,7 +197,7 @@ fn temp_crypto<R: Rng + CryptoRng>(
         .with_registry(Arc::clone(&registry) as Arc<_>)
         .with_node_id(node_id)
         .with_keys(NodeKeysToGenerate::only_node_signing_key())
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()));
+        .with_rng(ChaCha20Rng::from_seed(rng.r#gen()));
     if vault_type == VaultType::Remote {
         crypto_builder = crypto_builder.with_remote_vault();
     }

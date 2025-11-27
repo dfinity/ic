@@ -4,17 +4,17 @@ use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_protobuf::{messaging::xnet::v1 as pb, proxy::ProtoProxy};
-use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState, Stream};
+use ic_replicated_state::{ReplicatedState, Stream, testing::ReplicatedStateTesting};
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    fetch_histogram_stats, fetch_histogram_vec_count, metric_vec, HistogramStats, MetricVec,
+    HistogramStats, MetricVec, fetch_histogram_stats, fetch_histogram_vec_count, metric_vec,
 };
 use ic_test_utilities_types::{
-    ids::{canister_test_id, SUBNET_6, SUBNET_7},
+    ids::{SUBNET_6, SUBNET_7, canister_test_id},
     messages::RequestBuilder,
 };
-use ic_types::{messages::CallbackId, xnet::StreamIndexedQueue, Height, SubnetId};
+use ic_types::{Height, SubnetId, messages::CallbackId, xnet::StreamIndexedQueue};
 use maplit::btreemap;
 use std::sync::Barrier;
 use url::Url;
@@ -108,7 +108,7 @@ fn query_streams() {
         let resp = rt
             .block_on(async move { http_get(&http_url("/api/v1/streams", &xnet_endpoint)).await });
 
-        assert_eq!(format!("[\"{}\"]", DST_SUBNET), resp);
+        assert_eq!(format!("[\"{DST_SUBNET}\"]"), resp);
         assert_eq!(
             metric_vec(&[(&[("resource", "streams"), ("status", "200")], 1)]),
             fixture.request_counts()
@@ -260,7 +260,7 @@ async fn handle_streams() {
     let (parsed_status, body) = parse_response(response).await;
 
     assert_eq!(
-        (200, format!("[\"{}\"]", DST_SUBNET).as_bytes()),
+        (200, format!("[\"{DST_SUBNET}\"]").as_bytes()),
         (parsed_status, body.as_slice())
     );
     assert_eq!(
@@ -283,8 +283,7 @@ async fn handle_existing_stream_impl(
     let fixture = EndpointTestFixture::with_replicated_state();
 
     let url = Url::parse(&format!(
-        "http://localhost/api/v1/stream/{}?msg_begin={}&msg_limit={}",
-        DST_SUBNET, msg_begin, msg_limit
+        "http://localhost/api/v1/stream/{DST_SUBNET}?msg_begin={msg_begin}&msg_limit={msg_limit}"
     ))
     .unwrap();
 
@@ -434,8 +433,7 @@ async fn handle_stream_with_witness_begin() {
     let msg_begin = witness_begin.increment();
     let msg_limit = usize::MAX;
     let url = Url::parse(&format!(
-        "http://localhost/api/v1/stream/{}?witness_begin={}&msg_begin={}",
-        DST_SUBNET, witness_begin, msg_begin
+        "http://localhost/api/v1/stream/{DST_SUBNET}?witness_begin={witness_begin}&msg_begin={msg_begin}"
     ))
     .unwrap();
 
@@ -464,8 +462,7 @@ async fn handle_stream_no_index() {
 
     let msg_limit = 1;
     let url = Url::parse(&format!(
-        "http://localhost/api/v1/stream/{}?msg_limit={}",
-        DST_SUBNET, msg_limit
+        "http://localhost/api/v1/stream/{DST_SUBNET}?msg_limit={msg_limit}"
     ))
     .unwrap();
 
@@ -501,8 +498,7 @@ async fn handle_stream_with_byte_limit() {
 
     let msg_limit = 20;
     let url = Url::parse(&format!(
-        "http://localhost/api/v1/stream/{}?msg_begin={}&msg_limit={}&byte_limit=0",
-        DST_SUBNET, STREAM_BEGIN, msg_limit
+        "http://localhost/api/v1/stream/{DST_SUBNET}?msg_begin={STREAM_BEGIN}&msg_limit={msg_limit}&byte_limit=0"
     ))
     .unwrap();
 
@@ -536,11 +532,7 @@ async fn handle_stream_with_byte_limit() {
 async fn handle_stream_nonexistent() {
     let fixture = EndpointTestFixture::with_replicated_state();
 
-    let url = Url::parse(&format!(
-        "http://localhost/api/v1/stream/{}",
-        UNKNOWN_SUBNET
-    ))
-    .unwrap();
+    let url = Url::parse(&format!("http://localhost/api/v1/stream/{UNKNOWN_SUBNET}")).unwrap();
 
     let response = route_request(
         url,
@@ -615,7 +607,7 @@ fn get_stream_for_testing() -> Stream {
 fn http_url(path: &str, xnet_endpoint: &XNetEndpoint) -> String {
     let url = format!("http://localhost:{}{}", xnet_endpoint.server_port(), path);
     reqwest::Url::parse(&url)
-        .unwrap_or_else(|_| panic!("Could not parse URL: {}", url))
+        .unwrap_or_else(|_| panic!("Could not parse URL: {url}"))
         .to_string()
 }
 

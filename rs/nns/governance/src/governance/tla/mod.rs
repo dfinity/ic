@@ -12,7 +12,7 @@ pub use tla_instrumentation::{
 };
 pub use tla_instrumentation_proc_macros::{tla_function, tla_update_method};
 
-pub use tla_instrumentation::checker::{check_tla_code_link, PredicateDescription};
+pub use tla_instrumentation::checker::{PredicateDescription, check_tla_code_link};
 
 use std::path::PathBuf;
 
@@ -174,7 +174,7 @@ pub fn get_tla_globals(p: &UnsafeSendPtr<Governance>) -> GlobalState {
 fn extract_common_constants(pid: &str, trace: &[ResolvedStatePair]) -> Vec<(String, TlaValue)> {
     vec![
         (
-            format!("{}_Process_Ids", pid),
+            format!("{pid}_Process_Ids"),
             BTreeSet::from([pid]).to_tla_value(),
         ),
         (
@@ -214,36 +214,31 @@ fn extract_common_constants(pid: &str, trace: &[ResolvedStatePair]) -> Vec<(Stri
 }
 
 fn post_process_trace(trace: &mut Vec<ResolvedStatePair>) {
-    for ResolvedStatePair {
-        ref mut start,
-        ref mut end,
-        ..
-    } in trace
-    {
+    for ResolvedStatePair { start, end, .. } in trace {
         for state in &mut [start, end] {
             state
                 .0
-                 .0
+                .0
                 .remove("transaction_fee")
                 .expect("Didn't record the transaction fee");
             state
                 .0
-                 .0
+                .0
                 .remove("min_stake")
                 .expect("Didn't record the min stake");
             state
                 .0
-                 .0
+                .0
                 .remove("cached_maturity_basis_points")
                 .expect("Didn't record the cached maturity basis points");
-            if !state.0 .0.contains_key("governance_to_ledger") {
-                state.0 .0.insert(
+            if !state.0.0.contains_key("governance_to_ledger") {
+                state.0.0.insert(
                     "governance_to_ledger".to_string(),
                     TlaValue::Seq(Vec::new()),
                 );
             }
-            if !state.0 .0.contains_key("ledger_to_governance") {
-                state.0 .0.insert(
+            if !state.0.0.contains_key("ledger_to_governance") {
+                state.0.0.insert(
                     "ledger_to_governance".to_string(),
                     TlaValue::Set(BTreeSet::new()),
                 );
@@ -257,7 +252,8 @@ fn set_java_path() {
     let current_path = std::env::var("PATH").expect("PATH is not set");
     let bazel_java = std::env::var("JAVABASE")
         .expect("JAVABASE is not set; have you added the bazel tools toolchain?");
-    std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin"));
+    // TODO: Audit that the environment access only happens in single-threaded code.
+    unsafe { std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin")) };
 }
 
 /// Returns the path to the TLA module (e.g. `Foo.tla` -> `/home/me/tla/Foo.tla`)
@@ -361,7 +357,7 @@ pub fn perform_trace_check(traces: Vec<UpdateTrace>) {
     let apalache = PathBuf::from(apalache);
 
     if !apalache.as_path().is_file() {
-        panic!("bad apalache bin from 'TLA_APALACHE_BIN': '{:?}'", apalache);
+        panic!("bad apalache bin from 'TLA_APALACHE_BIN': '{apalache:?}'");
     }
 
     // A poor man's parallel_map; process up to MAX_THREADS state pairs in parallel. Use mpsc channels
@@ -387,7 +383,7 @@ pub fn perform_trace_check(traces: Vec<UpdateTrace>) {
         let constants = constants.clone();
         let pair = pair.clone();
         // NOTE: We adopt the convention to reuse the 'process_id" as the tla module name
-        let tla_module = format!("{}_Apalache.tla", model_name);
+        let tla_module = format!("{model_name}_Apalache.tla");
         let tla_module = get_tla_module_path(&tla_module);
 
         running_threads += 1;

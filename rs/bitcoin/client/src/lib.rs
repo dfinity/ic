@@ -1,7 +1,7 @@
 mod metrics;
 
 use crate::metrics::{
-    Metrics, LABEL_GET_SUCCESSORS, LABEL_REQUEST_TYPE, LABEL_SEND_TRANSACTION, LABEL_STATUS,
+    LABEL_GET_SUCCESSORS, LABEL_REQUEST_TYPE, LABEL_SEND_TRANSACTION, LABEL_STATUS, Metrics,
     OK_LABEL, REQUESTS_LABEL_NAMES, UNKNOWN_LABEL,
 };
 use ic_adapter_metrics_client::AdapterMetrics;
@@ -11,14 +11,14 @@ use ic_btc_replica_types::{
     SendTransactionResponse,
 };
 use ic_btc_service::{
-    btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,
-    BtcServiceSendTransactionRequest,
+    BtcServiceGetSuccessorsRequest, BtcServiceSendTransactionRequest,
+    btc_service_client::BtcServiceClient,
 };
 use ic_config::adapters::AdaptersConfig;
 use ic_http_endpoints_async_utils::ExecuteOnTokioRuntime;
 use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError, RpcResult};
-use ic_logger::{error, ReplicaLogger};
-use ic_metrics::{histogram_vec_timer::HistogramVecTimer, MetricsRegistry};
+use ic_logger::{ReplicaLogger, error};
+use ic_metrics::{MetricsRegistry, histogram_vec_timer::HistogramVecTimer};
 use std::{convert::TryFrom, path::PathBuf};
 use tokio::net::UnixStream;
 use tonic::transport::{Channel, Endpoint, Uri};

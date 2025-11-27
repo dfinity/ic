@@ -1,9 +1,9 @@
 use crate::{
     extensions,
-    extensions::{get_extension_operation_spec_from_cache, ExtensionOperationSpec},
+    extensions::{ExtensionOperationSpec, get_extension_operation_spec_from_cache},
     governance::Governance,
     logs::ERROR,
-    pb::v1::{self as pb, nervous_system_function::FunctionType, NervousSystemFunction},
+    pb::v1::{self as pb, NervousSystemFunction, nervous_system_function::FunctionType},
     storage::list_registered_extensions_from_cache,
     types::native_action_ids::{self, SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION},
 };
@@ -442,10 +442,9 @@ impl pb::Topic {
                 }),
             ..
         }) = action
+            && let Ok(extension_spec) = extensions::validate_extension_wasm(wasm_module_hash)
         {
-            if let Ok(extension_spec) = extensions::validate_extension_wasm(wasm_module_hash) {
-                return Some(extension_spec.topic);
-            }
+            return Some(extension_spec.topic);
         }
 
         let action_code = u64::from(action);
@@ -475,7 +474,7 @@ impl fmt::Display for pb::Topic {
             Self::TreasuryAssetManagement => "TreasuryAssetManagement",
             Self::CriticalDappOperations => "CriticalDappOperations",
         };
-        write!(f, "{}", topic_str)
+        write!(f, "{topic_str}")
     }
 }
 
@@ -509,16 +508,14 @@ mod test {
             let function_id_found = native_functions_with_topic.remove(&native_function_id);
             assert!(
                 function_id_found,
-                "Topic not defined for native proposal '{}' with ID {}.",
-                native_function_name, native_function_id,
+                "Topic not defined for native proposal '{native_function_name}' with ID {native_function_id}.",
             )
         }
 
         assert_eq!(
             native_functions_with_topic,
             BTreeSet::new(),
-            "Some native proposal topics were defined for non-native proposals: {:?}",
-            native_functions_with_topic,
+            "Some native proposal topics were defined for non-native proposals: {native_functions_with_topic:?}",
         )
     }
 }

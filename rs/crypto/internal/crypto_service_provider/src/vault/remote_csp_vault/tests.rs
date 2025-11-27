@@ -2,14 +2,14 @@
 // TODO(CRP-1255): add tests with multiple clients.
 // TODO(CRP-1259): add tests with timeouts.
 
+use crate::LocalCspVault;
+use crate::RemoteCspVault;
 use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::vault::api::BasicSignatureCspVault;
 use crate::vault::api::CspVault;
 use crate::vault::remote_csp_vault::TarpcCspVaultServerImpl;
 use crate::vault::test_utils;
-use crate::LocalCspVault;
-use crate::RemoteCspVault;
 use assert_matches::assert_matches;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::setup_listener;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::start_new_remote_csp_vault_server_for_test;
@@ -87,8 +87,8 @@ mod timeout {
 
 mod ni_dkg {
     use super::*;
-    use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
     use crate::public_key_store::PublicKeySetOnceError;
+    use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
     use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
     use crate::vault::local_csp_vault::LocalCspVault;
     use crate::vault::test_utils;
@@ -198,9 +198,11 @@ mod ni_dkg {
         let remote_vault =
             new_remote_csp_vault_with_local_csp_vault(tokio_rt.handle(), local_vault);
 
-        assert!(remote_vault
-            .gen_dealing_encryption_key_pair(NODE_42)
-            .is_ok());
+        assert!(
+            remote_vault
+                .gen_dealing_encryption_key_pair(NODE_42)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -318,8 +320,8 @@ mod logging {
     use super::*;
     use crate::CryptoMetrics;
     use ic_logger::ReplicaLogger;
-    use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
     use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
+    use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
     use slog::Level;
 
     #[test]

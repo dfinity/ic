@@ -2,22 +2,21 @@ use async_trait::async_trait;
 use candid::{Encode, Principal};
 use ic_error_types::UserError;
 use ic_interfaces_registry::RegistryRecord;
-use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, CallCanisters};
-use ic_nervous_system_chunks::test_data::{MegaBlob, MEGA_BLOB_CONTENT};
+use ic_nervous_system_agent::{CallCanisters, pocketic_impl::PocketIcAgent};
+use ic_nervous_system_chunks::test_data::{MEGA_BLOB_CONTENT, MegaBlob};
 use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
-use ic_nns_test_utils::common::{build_test_registry_wasm, NnsInitPayloadsBuilder};
+use ic_nns_test_utils::common::{NnsInitPayloadsBuilder, build_test_registry_wasm};
 use ic_registry_canister_api::mutate_test_high_capacity_records;
 use ic_registry_transport::pb::v1::RegistryGetLatestVersionResponse;
 use ic_replay::player::{
-    public_only_for_test_get_changes_since as get_changes_since,
-    public_only_for_test_registry_get_value as registry_get_value, PerformQuery,
-    PerformQueryResult,
+    PerformQuery, PerformQueryResult, public_only_for_test_get_changes_since as get_changes_since,
+    public_only_for_test_registry_get_value as registry_get_value,
 };
 use ic_types::{
-    ingress::WasmResult, messages::Query, time::expiry_time_from_now, RegistryVersion, Time,
+    RegistryVersion, Time, ingress::WasmResult, messages::Query, time::expiry_time_from_now,
 };
-use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
+use pocket_ic::{PocketIcBuilder, nonblocking::PocketIc};
 use prost::Message;
 use std::{convert::Infallible, time::SystemTime};
 use strum::IntoEnumIterator;
@@ -66,7 +65,7 @@ impl PerformQuery for PerformQueryImpl<'_> {
                     }
                 }
 
-                Err(UserError::new(code, format!("{:?}", err)))
+                Err(UserError::new(code, format!("{err:?}")))
             }
         };
 
@@ -177,8 +176,7 @@ async fn test_registry_get_value_and_changes_since() {
                 == MegaBlob {
                     content: MEGA_BLOB_CONTENT.clone()
                 },
-            "len={}",
-            len,
+            "len={len}",
         );
     };
 }

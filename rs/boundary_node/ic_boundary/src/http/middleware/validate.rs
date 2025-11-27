@@ -9,14 +9,16 @@ use bytes::Bytes;
 use candid::Principal;
 use http::header::HeaderValue;
 use ic_bn_lib::http::headers::*;
-pub use ic_bn_lib::types::RequestType;
 use ic_types::{CanisterId, PrincipalId, SubnetId};
 use lazy_static::lazy_static;
 use regex::Regex;
 
 use crate::{
     errors::{ApiError, ErrorCause},
-    http::{PATH_CALL, PATH_CALL_V3, PATH_QUERY, PATH_READ_STATE, PATH_SUBNET_READ_STATE},
+    http::{
+        PATH_CALL_V2, PATH_CALL_V3, PATH_CALL_V4, PATH_QUERY_V2, PATH_QUERY_V3, PATH_READ_STATE_V2,
+        PATH_READ_STATE_V3, PATH_SUBNET_READ_STATE_V2, PATH_SUBNET_READ_STATE_V3, RequestType,
+    },
 };
 
 lazy_static! {
@@ -31,10 +33,13 @@ pub async fn validate_canister_request(
     next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
     let request_type = match matched_path.as_str() {
-        PATH_QUERY => RequestType::Query,
-        PATH_CALL => RequestType::Call,
-        PATH_CALL_V3 => RequestType::SyncCall,
-        PATH_READ_STATE => RequestType::ReadState,
+        PATH_QUERY_V2 => RequestType::QueryV2,
+        PATH_QUERY_V3 => RequestType::QueryV3,
+        PATH_CALL_V2 => RequestType::CallV2,
+        PATH_CALL_V3 => RequestType::CallV3,
+        PATH_CALL_V4 => RequestType::CallV4,
+        PATH_READ_STATE_V2 => RequestType::ReadStateV2,
+        PATH_READ_STATE_V3 => RequestType::ReadStateV3,
         _ => panic!("unknown path, should never happen"),
     };
 
@@ -63,7 +68,8 @@ pub async fn validate_subnet_request(
     next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
     let request_type = match matched_path.as_str() {
-        PATH_SUBNET_READ_STATE => RequestType::ReadStateSubnet,
+        PATH_SUBNET_READ_STATE_V2 => RequestType::ReadStateSubnetV2,
+        PATH_SUBNET_READ_STATE_V3 => RequestType::ReadStateSubnetV3,
         _ => panic!("unknown path, should never happen"),
     };
 
@@ -107,14 +113,14 @@ pub async fn validate_request(request: Request, next: Next) -> Result<impl IntoR
 mod test {
     use super::*;
     use anyhow::Error;
-    use axum::{body::Body, middleware, routing::method_routing::get, Router};
+    use axum::{Router, body::Body, middleware, routing::method_routing::get};
     use http::StatusCode;
     use tower::{Service, ServiceBuilder};
-    use tower_http::{request_id::MakeRequestUuid, ServiceBuilderExt};
+    use tower_http::{ServiceBuilderExt, request_id::MakeRequestUuid};
 
     #[tokio::test]
     async fn test_middleware_validate_canister_request() -> Result<(), Error> {
-        let mut app = Router::new().route(PATH_QUERY, get(|| async {})).layer(
+        let mut app = Router::new().route(PATH_QUERY_V2, get(|| async {})).layer(
             ServiceBuilder::new()
                 .layer(middleware::from_fn(validate_request))
                 .layer(middleware::from_fn(validate_canister_request))
@@ -161,8 +167,9 @@ mod test {
 
         // case 3: 'x-request-id' header contains an invalid uuid
         #[allow(clippy::borrow_interior_mutable_const)]
-    let expected_failure =
-        format!("error: malformed_request\ndetails: Unable to parse the request ID in the '{X_REQUEST_ID}': the value is not in UUID format");
+        let expected_failure = format!(
+            "error: malformed_request\ndetails: Unable to parse the request ID in the '{X_REQUEST_ID}': the value is not in UUID format"
+        );
 
         let request = Request::builder()
             .method("GET")
@@ -220,7 +227,7 @@ mod test {
     #[tokio::test]
     async fn test_middleware_validate_subnet_request() -> Result<(), Error> {
         let mut app = Router::new()
-            .route(PATH_SUBNET_READ_STATE, get(|| async {}))
+            .route(PATH_SUBNET_READ_STATE_V2, get(|| async {}))
             .layer(
                 ServiceBuilder::new()
                     .layer(middleware::from_fn(validate_request))
@@ -258,8 +265,9 @@ mod test {
 
         // case 3: 'x-request-id' header contains an invalid uuid
         #[allow(clippy::borrow_interior_mutable_const)]
-    let expected_failure =
-        format!("error: malformed_request\ndetails: Unable to parse the request ID in the '{X_REQUEST_ID}': the value is not in UUID format");
+        let expected_failure = format!(
+            "error: malformed_request\ndetails: Unable to parse the request ID in the '{X_REQUEST_ID}': the value is not in UUID format"
+        );
 
         let request = Request::builder()
             .method("GET")

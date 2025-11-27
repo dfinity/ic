@@ -1,16 +1,16 @@
-use crate::{null_request::NullRequest, CallCanisters};
+use crate::{CallCanisters, null_request::NullRequest};
 use ic_base_types::PrincipalId;
 use ic_sns_governance_api::pb::v1::{
-    governance::Version,
-    manage_neuron::{self, RegisterVote},
-    manage_neuron_response,
-    topics::{ListTopicsRequest, ListTopicsResponse},
     AdvanceTargetVersionRequest, AdvanceTargetVersionResponse, GetMetadataRequest,
     GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal,
     GetProposalResponse, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
     GetUpgradeJournalRequest, GetUpgradeJournalResponse, GovernanceError, ListNeurons,
     ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters, NeuronId,
     Proposal, ProposalId,
+    governance::Version,
+    manage_neuron::{self, RegisterVote},
+    manage_neuron_response,
+    topics::{ListTopicsRequest, ListTopicsResponse},
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

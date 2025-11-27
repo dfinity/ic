@@ -2,10 +2,10 @@ use assert_matches::assert_matches;
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::blocklist::SAMPLE_BLOCKED_ADDRESS;
+use ic_cketh_minter::endpoints::CandidBlockTag::Finalized;
 use ic_cketh_minter::endpoints::events::{
     EventPayload, EventSource, TransactionReceipt, TransactionStatus, UnsignedTransaction,
 };
-use ic_cketh_minter::endpoints::CandidBlockTag::Finalized;
 use ic_cketh_minter::endpoints::{
     CandidBlockTag, EthTransaction, GasFeeEstimate, MinterInfo, RetrieveEthStatus,
     TxFinalizedStatus, WithdrawalError, WithdrawalStatus,
@@ -15,8 +15,8 @@ use ic_cketh_minter::memo::{BurnMemo, MintMemo};
 use ic_cketh_minter::numeric::BlockNumber;
 use ic_cketh_minter::{PROCESS_REIMBURSEMENT, SCRAPING_ETH_LOGS_INTERVAL};
 use ic_cketh_test_utils::flow::{
-    double_and_increment_base_fee_per_gas, DepositCkEthParams, DepositCkEthWithSubaccountParams,
-    DepositParams, ProcessWithdrawalParams,
+    DepositCkEthParams, DepositCkEthWithSubaccountParams, DepositParams, ProcessWithdrawalParams,
+    double_and_increment_base_fee_per_gas,
 };
 use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders};
 use ic_cketh_test_utils::response::{
@@ -24,12 +24,13 @@ use ic_cketh_test_utils::response::{
     hash_transaction, multi_logs_for_single_transaction,
 };
 use ic_cketh_test_utils::{
-    CkEthSetup, JsonRpcProvider, CKETH_MINIMUM_WITHDRAWAL_AMOUNT, CKETH_TRANSFER_FEE,
-    CKETH_WITHDRAWAL_AMOUNT, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
-    DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH,
-    DEFAULT_PRINCIPAL_ID, DEFAULT_USER_SUBACCOUNT, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
+    CKETH_MINIMUM_WITHDRAWAL_AMOUNT, CKETH_TRANSFER_FEE, CKETH_WITHDRAWAL_AMOUNT, CkEthSetup,
+    DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS,
+    DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
+    DEFAULT_USER_SUBACCOUNT, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
     DEFAULT_WITHDRAWAL_TRANSACTION_HASH, EFFECTIVE_GAS_PRICE, ETH_HELPER_CONTRACT_ADDRESS,
-    EXPECTED_BALANCE, GAS_USED, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
+    EXPECTED_BALANCE, GAS_USED, JsonRpcProvider, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL,
+    MINTER_ADDRESS,
 };
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
@@ -92,6 +93,7 @@ fn should_deposit_and_withdraw() {
                     log_index: DEFAULT_DEPOSIT_LOG_INDEX.into(),
                 })),
                 created_at_time: None,
+                fee: None,
             })
             .call_ledger_approve_minter(account.owner, EXPECTED_BALANCE, account.subaccount)
             .expect_ok(1)
@@ -123,6 +125,7 @@ fn should_deposit_and_withdraw() {
                     to_address: destination.parse().unwrap(),
                 })),
                 created_at_time: None,
+                fee: None,
             });
         assert_eq!(cketh.balance_of(account), Nat::from(0_u8));
 
@@ -453,6 +456,7 @@ fn should_reimburse() {
                 log_index: DEFAULT_DEPOSIT_LOG_INDEX.into(),
             })),
             created_at_time: None,
+            fee: None,
         })
         .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
         .expect_ok(1);
@@ -492,6 +496,7 @@ fn should_reimburse() {
                 to_address: destination.parse().unwrap(),
             })),
             created_at_time: None,
+            fee: None,
         });
 
     assert_eq!(cketh.balance_of(caller), Nat::from(0_u8));
@@ -542,6 +547,7 @@ fn should_reimburse() {
                 tx_hash: failed_tx_hash.parse().unwrap(),
             })),
             created_at_time: None,
+            fee: None,
         })
         .assert_has_unique_events_in_order(&vec![
             EventPayload::AcceptedEthWithdrawalRequest {
@@ -686,7 +692,7 @@ fn should_resubmit_new_transaction_when_price_increased() {
                     effective_gas_price: Nat::from(4277923390u64),
                     gas_used: Nat::from(21_000_u32),
                     status: TransactionStatus::Success,
-                    transaction_hash: format!("{:?}", resubmitted_tx_hash),
+                    transaction_hash: format!("{resubmitted_tx_hash:?}"),
                 },
             },
         ]);

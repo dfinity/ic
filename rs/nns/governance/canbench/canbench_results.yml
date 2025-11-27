@@ -1,201 +1,208 @@
 benches:
-  add_neuron_active_maximum_stable:
+  add_neuron_active_maximum:
     total:
       calls: 1
-      instructions: 64864804
+      instructions: 64926577
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
-  add_neuron_active_typical_stable:
+  add_neuron_active_typical:
     total:
       calls: 1
-      instructions: 4558061
+      instructions: 4566523
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   add_neuron_inactive_maximum:
     total:
       calls: 1
-      instructions: 64864934
+      instructions: 64926707
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   add_neuron_inactive_typical:
     total:
       calls: 1
-      instructions: 4558191
+      instructions: 4566653
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   cascading_vote_stable_everything:
     total:
       calls: 1
-      instructions: 105629133
+      instructions: 106571320
       heap_increase: 0
       stable_memory_increase: 128
     scopes: {}
-  centralized_following_all_stable:
+  centralized_following_all:
     total:
       calls: 1
-      instructions: 41716567
+      instructions: 42342132
       heap_increase: 0
       stable_memory_increase: 128
     scopes: {}
   compute_ballots_for_new_proposal_with_stable_neurons:
     total:
       calls: 1
-      instructions: 1796867
+      instructions: 1791136
       heap_increase: 0
       stable_memory_increase: 256
     scopes: {}
   distribute_rewards_with_stable_neurons:
     total:
       calls: 1
-      instructions: 2780559
+      instructions: 2794392
       heap_increase: 0
       stable_memory_increase: 256
     scopes: {}
-  draw_maturity_from_neurons_fund_stable:
+  draw_maturity_from_neurons_fund:
     total:
       calls: 1
-      instructions: 7476971
+      instructions: 7561235
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
-  list_active_neurons_fund_neurons_stable:
+  list_active_neurons_fund_neurons:
     total:
       calls: 1
-      instructions: 2173617
+      instructions: 2213806
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
-  list_neurons_by_subaccount_stable:
+  list_neurons:
     total:
       calls: 1
-      instructions: 62121572
-      heap_increase: 5
-      stable_memory_increase: 0
-    scopes: {}
-  list_neurons_stable:
-    total:
-      calls: 1
-      instructions: 63040420
+      instructions: 64199904
       heap_increase: 9
+      stable_memory_increase: 0
+    scopes: {}
+  list_neurons_by_subaccount:
+    total:
+      calls: 1
+      instructions: 63282904
+      heap_increase: 5
       stable_memory_increase: 0
     scopes: {}
   list_proposals:
     total:
       calls: 1
-      instructions: 78250
+      instructions: 79622
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
-  list_ready_to_spawn_neuron_ids_stable:
+  list_ready_to_spawn_neuron_ids:
     total:
       calls: 1
-      instructions: 35915801
+      instructions: 37234947
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
-  neuron_data_validation_stable:
+  neuron_data_validation:
     total:
       calls: 1
-      instructions: 205505866
+      instructions: 206594321
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
-  neuron_metrics_calculation_stable:
+  neuron_metrics_calculation:
     total:
       calls: 1
-      instructions: 2640309
+      instructions: 2697183
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   range_neurons_performance:
     total:
       calls: 1
-      instructions: 51559016
+      instructions: 51742372
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
-  single_vote_all_stable:
+  record_known_neuron_vote:
     total:
       calls: 1
-      instructions: 277193
+      instructions: 183593
       heap_increase: 0
       stable_memory_increase: 128
     scopes: {}
-  unstake_maturity_of_dissolved_neurons_stable:
+  record_neuron_vote_known_neuron_voting_history:
     total:
       calls: 1
-      instructions: 62896555
+      instructions: 143448
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+  single_vote_all:
+    total:
+      calls: 1
+      instructions: 280008
+      heap_increase: 0
+      stable_memory_increase: 128
+    scopes: {}
+  unstake_maturity_of_dissolved_neurons:
+    total:
+      calls: 1
+      instructions: 64177808
       heap_increase: 0
       stable_memory_increase: 0
     scopes:
       list_neuron_ids:
         calls: 1
-        instructions: 37240443
+        instructions: 38604614
         heap_increase: 0
         stable_memory_increase: 0
       unstake_maturity:
         calls: 1
-        instructions: 25653919
+        instructions: 25571035
         heap_increase: 0
         stable_memory_increase: 0
-  update_recent_ballots_stable_memory:
-    total:
-      calls: 1
-      instructions: 143389
-      heap_increase: 0
-      stable_memory_increase: 0
-    scopes: {}
   voting_power_snapshots_is_latest_snapshot_a_spike_false:
     total:
       calls: 1
-      instructions: 30332
+      instructions: 30254
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   voting_power_snapshots_is_latest_snapshot_a_spike_true:
     total:
       calls: 1
-      instructions: 30343
+      instructions: 30265
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   voting_power_snapshots_latest_snapshot_timestamp_seconds:
     total:
       calls: 1
-      instructions: 7626
+      instructions: 7632
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
-  with_neuron_mut_all_sections_maximum_stable:
+  with_neuron_mut_all_sections_maximum:
     total:
       calls: 1
-      instructions: 4247543
+      instructions: 4243196
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
-  with_neuron_mut_all_sections_typical_stable:
+  with_neuron_mut_all_sections_typical:
     total:
       calls: 1
-      instructions: 847980
+      instructions: 851936
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
-  with_neuron_mut_main_section_maximum_stable:
+  with_neuron_mut_main_section_maximum:
     total:
       calls: 1
-      instructions: 2344650
+      instructions: 2331130
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
-  with_neuron_mut_main_section_typical_stable:
+  with_neuron_mut_main_section_typical:
     total:
       calls: 1
-      instructions: 395381
+      instructions: 392843
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
-version: 0.1.15
+version: 0.4.0

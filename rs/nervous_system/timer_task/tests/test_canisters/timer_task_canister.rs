@@ -55,7 +55,7 @@ fn schedule(name: &str) {
         PanicPeriodicAsyncTask::NAME => {
             PanicPeriodicAsyncTask::default().schedule(&METRICS_REGISTRY);
         }
-        _ => panic!("Unknown task: {}", name),
+        _ => panic!("Unknown task: {name}"),
     }
 }
 

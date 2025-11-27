@@ -1,28 +1,28 @@
-use super::{parse_principal_id, verify_principal_ids};
+use super::{
+    DeprecatedCanisterRangesFilter, get_certificate_and_create_response,
+    make_service_unavailable_response, parse_principal_id, verify_principal_ids,
+};
 use crate::{
-    common::{into_cbor, Cbor, WithTimeout},
     HttpError, ReplicaHealthStatus,
+    common::{Cbor, WithTimeout},
 };
 
 use axum::{
+    Router,
     body::Body,
     extract::State,
     response::{IntoResponse, Response},
-    Router,
 };
 use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::StatusCode;
-use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
+use ic_crypto_tree_hash::Path;
 use ic_interfaces_state_manager::StateReader;
 use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    messages::{
-        Blob, Certificate, HttpReadStateContent, HttpReadStateResponse, HttpRequest,
-        HttpRequestEnvelope, ReadState,
-    },
-    CanisterId, PrincipalId,
+    CanisterId, PrincipalId, SubnetId,
+    messages::{HttpReadStateContent, HttpRequest, HttpRequestEnvelope, ReadState},
 };
 use std::{
     convert::{Infallible, TryFrom},
@@ -30,11 +30,16 @@ use std::{
 };
 use tower::util::BoxCloneService;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Version {
-    // Endpoint with the NNS delegation using the flat format of the canister ranges.
+    /// Endpoint with the NNS delegation using the flat format of the canister ranges.
+    /// `/subnet/<subnet_id>/canister_ranges` path is allowed
     V2,
-    // Endpoint with the NNS delegation will all canister ranges pruned out.
+    /// Endpoint with the NNS delegation will all canister ranges pruned out.
+    /// Explicitly requesting `/subnet/<subnet_id>/canister_ranges` path is NOT allowed
+    /// except when `subnet_id == nns_subnet_id`. Moreover, all paths of the form
+    /// `/subnet/<subnet_id>/canister_ranges`, where `subnet_id != nns_subnet_id`, are
+    /// pruned from the returned certificate.
     V3,
 }
 
@@ -43,6 +48,7 @@ pub(crate) struct SubnetReadStateService {
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    nns_subnet_id: SubnetId,
     version: Version,
 }
 
@@ -50,6 +56,7 @@ pub struct SubnetReadStateServiceBuilder {
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    nns_subnet_id: SubnetId,
     version: Version,
 }
 
@@ -66,12 +73,14 @@ impl SubnetReadStateServiceBuilder {
     pub fn builder(
         nns_delegation_reader: NNSDelegationReader,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+        nns_subnet_id: SubnetId,
         version: Version,
     ) -> Self {
         Self {
             health_status: None,
             nns_delegation_reader,
             state_reader,
+            nns_subnet_id,
             version,
         }
     }
@@ -91,6 +100,7 @@ impl SubnetReadStateServiceBuilder {
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
             nns_delegation_reader: self.nns_delegation_reader,
             state_reader: self.state_reader,
+            nns_subnet_id: self.nns_subnet_id,
             version: self.version,
         };
         Router::new().route_service(
@@ -111,6 +121,7 @@ pub(crate) async fn read_state_subnet(
         health_status,
         nns_delegation_reader,
         state_reader,
+        nns_subnet_id,
         version,
     }): State<SubnetReadStateService>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpReadStateContent>>>,
@@ -124,78 +135,63 @@ pub(crate) async fn read_state_subnet(
         return (status, text).into_response();
     }
 
-    let make_service_unavailable_response = || {
-        let status = StatusCode::SERVICE_UNAVAILABLE;
-        let text = "Certified state is not available yet. Please try again...".to_string();
-        (status, text).into_response()
-    };
-
     // Convert the message to a strongly-typed struct.
     let request = match HttpRequest::<ReadState>::try_from(request) {
         Ok(request) => request,
         Err(e) => {
             let status = StatusCode::BAD_REQUEST;
-            let text = format!("Malformed request: {:?}", e);
+            let text = format!("Malformed request: {e:?}");
             return (status, text).into_response();
         }
     };
     let read_state = request.content().clone();
+
     let response = tokio::task::spawn_blocking(move || {
-        let certified_state_reader = match state_reader.get_certified_state_snapshot() {
-            Some(reader) => reader,
-            None => return make_service_unavailable_response(),
+        let Some(certified_state_reader) = state_reader.get_certified_state_snapshot() else {
+            return make_service_unavailable_response();
         };
 
         // Verify authorization for requested paths.
-        if let Err(HttpError { status, message }) =
-            verify_paths(&read_state.paths, effective_canister_id.into())
-        {
+        if let Err(HttpError { status, message }) = verify_paths(
+            version,
+            &read_state.paths,
+            effective_canister_id.into(),
+            nns_subnet_id,
+        ) {
             return (status, message).into_response();
         }
 
-        // Create labeled tree. This may be an expensive operation and by
-        // creating the labeled tree after verifying the paths we know that
-        // the depth is max 4.
-        // Always add "time" to the paths even if not explicitly requested.
-        let mut paths: Vec<Path> = read_state.paths;
-        paths.push(Path::from(Label::from("time")));
-        let labeled_tree = match sparse_labeled_tree_from_paths(&paths) {
-            Ok(tree) => tree,
-            Err(TooLongPathError) => {
-                let status = StatusCode::BAD_REQUEST;
-                let text = "Failed to parse requested paths: path is too long.".to_string();
-                return (status, text).into_response();
-            }
-        };
-
-        let (tree, certification) = match certified_state_reader.read_certified_state(&labeled_tree)
-        {
-            Some(r) => r,
-            None => return make_service_unavailable_response(),
-        };
-
-        let signature = certification.signed.signature.signature.get().0;
         let delegation_from_nns = match version {
             Version::V2 => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
             Version::V3 => nns_delegation_reader.get_delegation(CanisterRangesFilter::None),
         };
-        Cbor(HttpReadStateResponse {
-            certificate: Blob(into_cbor(&Certificate {
-                tree,
-                signature: Blob(signature),
-                delegation: delegation_from_nns,
-            })),
-        })
-        .into_response()
+
+        let maybe_nns_subnet_filter = match version {
+            Version::V2 => DeprecatedCanisterRangesFilter::KeepAll,
+            Version::V3 => DeprecatedCanisterRangesFilter::KeepOnlyNNS(nns_subnet_id),
+        };
+
+        get_certificate_and_create_response(
+            read_state.paths,
+            delegation_from_nns,
+            certified_state_reader.as_ref(),
+            maybe_nns_subnet_filter,
+        )
     })
     .await;
+
     match response {
         Ok(res) => res,
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 
-fn verify_paths(paths: &[Path], effective_principal_id: PrincipalId) -> Result<(), HttpError> {
+fn verify_paths(
+    version: Version,
+    paths: &[Path],
+    effective_principal_id: PrincipalId,
+    nns_subnet_id: SubnetId,
+) -> Result<(), HttpError> {
     // Convert the paths to slices to make it easier to match below.
     let paths: Vec<Vec<&[u8]>> = paths
         .iter()
@@ -207,10 +203,20 @@ fn verify_paths(paths: &[Path], effective_principal_id: PrincipalId) -> Result<(
             [b"time"] => {}
             [b"api_boundary_nodes"] => {}
             [b"api_boundary_nodes", _node_id]
-            | [b"api_boundary_nodes", _node_id, b"domain" | b"ipv4_address" | b"ipv6_address"] => {}
+            | [
+                b"api_boundary_nodes",
+                _node_id,
+                b"domain" | b"ipv4_address" | b"ipv6_address",
+            ] => {}
             [b"subnet"] => {}
-            [b"subnet", _subnet_id]
-            | [b"subnet", _subnet_id, b"public_key" | b"canister_ranges" | b"node"] => {}
+            [b"subnet", _subnet_id] | [b"subnet", _subnet_id, b"public_key" | b"node"] => {}
+            // `/subnet/<subnet_id>/canister_ranges` is always allowed on the `/api/v2` endpoint
+            [b"subnet", _subnet_id, b"canister_ranges"] if version == Version::V2 => {}
+            // `/subnet/<subnet_id>/canister_ranges` is allowed on the `/api/v3` endpoint
+            // only when `subnet_id == nns_subnet_id`.
+            [b"subnet", subnet_id, b"canister_ranges"]
+                if version == Version::V3
+                    && parse_principal_id(subnet_id)? == nns_subnet_id.get() => {}
             [b"subnet", _subnet_id, b"node", _node_id]
             | [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {}
             [b"canister_ranges", _subnet_id] => {}
@@ -235,39 +241,46 @@ fn verify_paths(paths: &[Path], effective_principal_id: PrincipalId) -> Result<(
 mod test {
     use super::*;
     use ic_crypto_tree_hash::{Label, Path};
-    use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, canister_test_id, subnet_test_id};
+    use rstest::rstest;
     use serde_bytes::ByteBuf;
 
-    #[test]
-    fn test_verify_path() {
+    const NNS_SUBNET_ID: SubnetId = SUBNET_0;
+    const APP_SUBNET_ID: SubnetId = SUBNET_1;
+
+    #[rstest]
+    fn test_verify_path(#[values(Version::V2, Version::V3)] version: Version) {
         assert_eq!(
-            verify_paths(&[Path::from(Label::from("time"))], subnet_test_id(1).get(),),
+            verify_paths(
+                version,
+                &[Path::from(Label::from("time"))],
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
+            ),
             Ok(())
         );
         assert_eq!(
             verify_paths(
+                version,
                 &[Path::from(Label::from("subnet"))],
-                subnet_test_id(1).get(),
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
             ),
             Ok(())
         );
 
         assert_eq!(
             verify_paths(
+                version,
                 &[
                     Path::new(vec![
                         Label::from("subnet"),
-                        ByteBuf::from(subnet_test_id(1).get().to_vec()).into(),
+                        APP_SUBNET_ID.get().to_vec().into(),
                         Label::from("public_key")
                     ]),
                     Path::new(vec![
                         Label::from("subnet"),
-                        ByteBuf::from(subnet_test_id(1).get().to_vec()).into(),
-                        Label::from("canister_ranges")
-                    ]),
-                    Path::new(vec![
-                        Label::from("subnet"),
-                        ByteBuf::from(subnet_test_id(1).get().to_vec()).into(),
+                        APP_SUBNET_ID.get().to_vec().into(),
                         Label::from("metrics")
                     ]),
                     Path::new(vec![
@@ -275,49 +288,121 @@ mod test {
                         ByteBuf::from(subnet_test_id(1).get().to_vec()).into(),
                     ]),
                 ],
-                subnet_test_id(1).get(),
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
             ),
             Ok(())
         );
 
-        assert!(verify_paths(
+        let err = verify_paths(
+            version,
             &[
                 Path::new(vec![
                     Label::from("request_status"),
                     [0; 32].into(),
-                    Label::from("status")
+                    Label::from("status"),
                 ]),
                 Path::new(vec![
                     Label::from("request_status"),
                     [0; 32].into(),
-                    Label::from("reply")
-                ])
+                    Label::from("reply"),
+                ]),
             ],
-            subnet_test_id(1).get(),
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
         )
-        .is_err());
+        .expect_err("Should fail the validation");
+        assert_eq!(err.status, StatusCode::NOT_FOUND);
 
-        assert!(verify_paths(
+        let err = verify_paths(
+            version,
             &[
                 Path::new(vec![
                     Label::from("canister"),
                     ByteBuf::from(canister_test_id(1).get().to_vec()).into(),
-                    Label::from("controllers")
+                    Label::from("controllers"),
                 ]),
                 Path::new(vec![
                     Label::from("request_status"),
                     ByteBuf::from(canister_test_id(1).get().to_vec()).into(),
-                    Label::from("module_hash")
-                ])
+                    Label::from("module_hash"),
+                ]),
             ],
-            subnet_test_id(1).get(),
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
         )
-        .is_err());
+        .expect_err("Should fail the validation");
+        assert_eq!(err.status, StatusCode::NOT_FOUND);
 
-        assert!(verify_paths(
-            &[Path::new(vec![Label::from("canister_ranges"),]),],
-            subnet_test_id(1).get(),
+        let err = verify_paths(
+            version,
+            &[Path::new(vec![Label::from("canister_ranges")])],
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
         )
-        .is_err());
+        .expect_err("Should fail the validation");
+        assert_eq!(err.status, StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn deprecated_canister_ranges_path_is_not_allowed_on_the_v3_endpoint_except_for_the_nns_subnet()
+    {
+        let err = verify_paths(
+            Version::V3,
+            &[Path::new(vec![
+                Label::from("subnet"),
+                APP_SUBNET_ID.get().to_vec().into(),
+                Label::from("canister_ranges"),
+            ])],
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
+        )
+        .expect_err("Should fail the validation");
+        assert_eq!(err.status, StatusCode::NOT_FOUND);
+
+        assert!(
+            verify_paths(
+                Version::V3,
+                &[Path::new(vec![
+                    Label::from("subnet"),
+                    NNS_SUBNET_ID.get().to_vec().into(),
+                    Label::from("canister_ranges"),
+                ])],
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn deprecated_canister_ranges_path_is_allowed_on_the_v2_endpoint() {
+        assert!(
+            verify_paths(
+                Version::V2,
+                &[Path::new(vec![
+                    Label::from("subnet"),
+                    APP_SUBNET_ID.get().to_vec().into(),
+                    Label::from("canister_ranges"),
+                ])],
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
+            )
+            .is_ok()
+        );
+
+        assert!(
+            verify_paths(
+                Version::V2,
+                &[Path::new(vec![
+                    Label::from("subnet"),
+                    NNS_SUBNET_ID.get().to_vec().into(),
+                    Label::from("canister_ranges"),
+                ])],
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
+            )
+            .is_ok()
+        );
     }
 }

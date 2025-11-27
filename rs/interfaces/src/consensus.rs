@@ -19,10 +19,10 @@ use crate::{
 };
 use ic_base_types::{NumBytes, SubnetId};
 use ic_types::{
-    batch::{BatchPayload, ValidationContext},
-    consensus::{block_maker::SubnetRecords, Payload},
-    registry::RegistryClientError,
     Height, Time,
+    batch::{BatchPayload, ValidationContext},
+    consensus::{Payload, block_maker::SubnetRecords},
+    registry::RegistryClientError,
 };
 
 pub mod errors;

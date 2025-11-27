@@ -3,8 +3,7 @@
 /// been called.
 use ic_cdk::{query, update};
 use lazy_static::lazy_static;
-use rand::{Rng, SeedableRng};
-use rand_pcg::Pcg64Mcg;
+use rand::{Rng, SeedableRng, rngs::SmallRng};
 use std::sync::Mutex;
 
 /// Size of data vector in canister, 128 MB
@@ -30,17 +29,16 @@ lazy_static! {
 async fn change_state(seed: u32) -> Result<u64, String> {
     let mut state = V_DATA.lock().unwrap();
     let mut num_changed = NUM_CHANGED.lock().unwrap();
-    let mut rng = Pcg64Mcg::seed_from_u64(seed as u64);
+    let mut rng = SmallRng::seed_from_u64(seed as u64);
 
     for index in (0..VECTOR_LENGTH).step_by(1023) {
-        state[index] = rng.gen();
+        state[index] = rng.r#gen();
     }
     *num_changed += 1;
     Ok(*num_changed)
 }
 
-/// Expands state by access the indexed V_DATA and changes every 1024th
-/// byte (1 KiB) to a random value.
+/// Expands state by access the indexed V_DATA and overwrites it with random data.
 ///
 /// Returns the number of times it has been called.
 #[update]
@@ -48,7 +46,7 @@ async fn expand_state(index: u32, seed: u32) -> Result<u64, String> {
     let mut num_changed = NUM_CHANGED
         .lock()
         .expect("Could not lock NUM_CHANGED mutex");
-    let mut rng = Pcg64Mcg::seed_from_u64(seed as u64);
+    let mut rng = SmallRng::seed_from_u64(seed as u64);
     let mut state = match index % 8 {
         1 => V_DATA_1.lock().expect("Could not lock V_DATA_1 mutex"),
         2 => V_DATA_2.lock().expect("Could not lock V_DATA_2 mutex"),
@@ -59,10 +57,7 @@ async fn expand_state(index: u32, seed: u32) -> Result<u64, String> {
         7 => V_DATA_7.lock().expect("Could not lock V_DATA_7 mutex"),
         _ => V_DATA_8.lock().expect("Could not lock V_DATA_8 mutex"),
     };
-    let offset = rng.gen::<u16>();
-    for ind in (offset as usize..VECTOR_LENGTH).step_by(1024) {
-        state[ind] = rng.gen();
-    }
+    rng.fill(&mut state[..]);
     *num_changed += 1;
     Ok(*num_changed)
 }

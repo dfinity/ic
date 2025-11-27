@@ -6,8 +6,8 @@ use rand::{CryptoRng, Rng};
 
 use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
-use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 use ic_types::{NumberOfNodes, Randomness};
 use rand::seq::IteratorRandom;
 use std::collections::BTreeMap;
@@ -37,10 +37,9 @@ pub fn verify_bip340_signature_using_third_party(sec1_pk: &[u8], sig: &[u8], msg
     };
 
     // from_bytes takes just the x coordinate encoding:
-    if let Ok(bip340) = k256::schnorr::VerifyingKey::from_bytes(&sec1_pk[1..]) {
-        bip340.verify_raw(msg, &signature).is_ok()
-    } else {
-        false
+    match k256::schnorr::VerifyingKey::from_bytes(&sec1_pk[1..]) {
+        Ok(bip340) => bip340.verify_raw(msg, &signature).is_ok(),
+        _ => false,
     }
 }
 
@@ -58,7 +57,7 @@ pub fn verify_taproot_signature_using_third_party(
         return true;
     }
     use bitcoin::schnorr::TapTweak;
-    use bitcoin::secp256k1::{schnorr::Signature, Message, Secp256k1, XOnlyPublicKey};
+    use bitcoin::secp256k1::{Message, Secp256k1, XOnlyPublicKey, schnorr::Signature};
     use bitcoin::util::taproot::TapBranchHash;
 
     let secp256k1 = Secp256k1::new();
@@ -163,7 +162,7 @@ impl ProtocolSetup {
         let alg = cfg.signature_alg().to_algorithm_id();
 
         let rng = &mut seed.into_rng();
-        let ad = rng.gen::<[u8; 32]>().to_vec();
+        let ad = rng.r#gen::<[u8; 32]>().to_vec();
 
         let mut sk = Vec::with_capacity(receivers);
         let mut pk = Vec::with_capacity(receivers);
@@ -200,9 +199,7 @@ impl ProtocolSetup {
     pub fn next_dealing_seed(&self) -> Seed {
         let round = self.protocol_round.get();
 
-        let seed = self
-            .seed
-            .derive(&format!("ic-crypto-tecdsa-round-{}", round));
+        let seed = self.seed.derive(&format!("ic-crypto-tecdsa-round-{round}"));
 
         self.protocol_round.set(round + 1);
 
@@ -552,7 +549,7 @@ impl ProtocolRound {
                     receiver as NodeIndex,
                     &setup.sk[receiver],
                     &setup.pk[receiver],
-                    seed.derive(&format!("complaint-{}", receiver)),
+                    seed.derive(&format!("complaint-{receiver}")),
                 )
                 .expect("Unable to generate complaints");
 
@@ -563,16 +560,18 @@ impl ProtocolRound {
                 for (dealer_index, complaint) in &complaints {
                     let dealing = dealings.get(dealer_index).unwrap();
                     // the complaints must be valid
-                    assert!(complaint
-                        .verify(
-                            ctsa,
-                            dealing,
-                            *dealer_index,
-                            receiver as NodeIndex, /* complainer index */
-                            &setup.pk[receiver],
-                            &setup.ad
-                        )
-                        .is_ok());
+                    assert!(
+                        complaint
+                            .verify(
+                                ctsa,
+                                dealing,
+                                *dealer_index,
+                                receiver as NodeIndex, /* complainer index */
+                                &setup.pk[receiver],
+                                &setup.ad
+                            )
+                            .is_ok()
+                    );
 
                     let mut openings_for_this_dealing = BTreeMap::new();
 
@@ -888,7 +887,7 @@ pub fn compute_public_key(
         &master_public_key,
         path,
     )
-    .map_err(|e| CanisterThresholdError::InvalidArguments(format!("{:?}", e)))
+    .map_err(|e| CanisterThresholdError::InvalidArguments(format!("{e:?}")))
 }
 
 #[derive(Clone, Debug)]

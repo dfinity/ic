@@ -10,7 +10,7 @@ use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl,
     consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl},
 };
-use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, Config};
+use ic_config::{Config, artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig};
 use ic_consensus::consensus::batch_delivery::deliver_batches;
 use ic_consensus_certification::VerifierImpl;
 use ic_consensus_utils::{
@@ -18,7 +18,6 @@ use ic_consensus_utils::{
     pool_reader::PoolReader,
 };
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
-use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::UserError;
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::{
@@ -33,7 +32,7 @@ use ic_interfaces_registry::{RegistryClient, RegistryRecord, RegistryValue};
 use ic_interfaces_state_manager::{
     PermanentStateHashError, StateHashError, StateManager, StateReader,
 };
-use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, new_replica_logger_from_config, warn};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
@@ -51,29 +50,29 @@ use ic_registry_local_store::{
 use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_records;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
-    dechunkify_delta, dechunkify_get_value_response_content,
+    GetChunk, dechunkify_delta, dechunkify_get_value_response_content,
     deserialize_get_changes_since_response, deserialize_get_latest_version_response,
     deserialize_get_value_response, serialize_get_changes_since_request,
-    serialize_get_value_request, GetChunk,
+    serialize_get_value_request,
 };
 use ic_state_manager::StateManagerImpl;
 use ic_types::{
-    batch::{Batch, BatchMessages, BlockmakerMetrics},
+    CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
+    RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
+    batch::{Batch, BatchContent, BatchMessages, BlockmakerMetrics},
     consensus::{
-        certification::{Certification, CertificationContent, CertificationShare},
         CatchUpContentProtobufBytes, CatchUpPackage, HasHeight, HasVersion,
+        certification::{Certification, CertificationContent, CertificationShare},
     },
     crypto::{
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         CombinedThresholdSig, CombinedThresholdSigOf, Signed,
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
     },
     ingress::{IngressState, IngressStatus, WasmResult},
     malicious_flags::MaliciousFlags,
     messages::{Query, QuerySource},
     signature::ThresholdSignature,
     time::{current_time, expiry_time_from_now},
-    CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
-    RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
 };
 use mockall::automock;
 use serde::{Deserialize, Serialize};
@@ -274,7 +273,7 @@ impl Player {
         log: ReplicaLogger,
         _async_log_guard: AsyncGuard,
     ) -> Self {
-        println!("Setting default replica version {}", replica_version);
+        println!("Setting default replica version {replica_version}");
         if ReplicaVersion::set_default_version(replica_version.clone()).is_err() {
             println!("Failed to set default replica version");
         }
@@ -284,21 +283,12 @@ impl Player {
             Ok(Some(record)) => {
                 SubnetType::try_from(record.subnet_type).expect("Failed to decode subnet type")
             }
-            err => panic!(
-                "Failed to extract subnet type of {:?} from registry: {:?}",
-                subnet_id, err
-            ),
+            err => panic!("Failed to extract subnet type of {subnet_id:?} from registry: {err:?}"),
         };
 
         let metrics_registry = MetricsRegistry::new();
         let subnet_config = SubnetConfig::new(subnet_type);
 
-        let cycles_account_manager = Arc::new(CyclesAccountManager::new(
-            subnet_config.scheduler_config.max_instructions_per_message,
-            subnet_type,
-            subnet_id,
-            subnet_config.cycles_account_manager_config,
-        ));
         let crypto = ic_crypto_for_verification_only::new(registry.clone());
         let crypto = Arc::new(crypto);
 
@@ -319,9 +309,8 @@ impl Player {
             &metrics_registry,
             subnet_id,
             subnet_type,
-            subnet_config.scheduler_config,
             cfg.hypervisor.clone(),
-            Arc::clone(&cycles_account_manager),
+            subnet_config,
             Arc::clone(&state_manager) as Arc<_>,
             state_manager.get_fd_factory(),
             completed_execution_messages_tx,
@@ -333,7 +322,7 @@ impl Player {
             execution_service.ingress_history_writer.clone(),
             execution_service.scheduler,
             cfg.hypervisor.clone(),
-            cycles_account_manager,
+            Arc::clone(&execution_service.cycles_account_manager),
             subnet_id,
             &metrics_registry,
             log.clone(),
@@ -503,7 +492,7 @@ impl Player {
         )?);
         if !invalid_artifacts.is_empty() {
             println!("Invalid artifacts:");
-            invalid_artifacts.iter().for_each(|a| println!("{:?}", a));
+            invalid_artifacts.iter().for_each(|a| println!("{a:?}"));
         }
 
         let last_batch_height = self.deliver_batches(
@@ -549,7 +538,7 @@ impl Player {
             }
             let certification = certification_pool
                 .certification_at_height(h)
-                .unwrap_or_else(|| panic!("Missing certification at height {:?}", h));
+                .unwrap_or_else(|| panic!("Missing certification at height {h:?}"));
             validator
                 .verify_certification(&certification)
                 .map_err(|e| {
@@ -563,7 +552,7 @@ impl Player {
                 .ok();
             self.state_manager
                 .deliver_state_certification(certification);
-            print!(" {}", h);
+            print!(" {h}");
         }
         println!();
 
@@ -695,13 +684,13 @@ impl Player {
     pub fn update_registry_local_store(&self) {
         println!("RegistryLocalStore path: {:?}", &self.local_store_path);
         let latest_version = self.registry.get_latest_version();
-        println!("RegistryLocalStore latest version: {}", latest_version);
+        println!("RegistryLocalStore latest version: {latest_version}");
         let records = self
             .get_changes_since(
                 latest_version.get(),
                 current_time() + Duration::from_secs(60),
             )
-            .unwrap_or_else(|err| panic!("Error in get_certified_changes_since: {}", err));
+            .unwrap_or_else(|err| panic!("Error in get_certified_changes_since: {err}"));
         write_records_to_local_store(&self.local_store_path, latest_version, records)
     }
 
@@ -723,7 +712,6 @@ impl Player {
                 self.subnet_id,
                 &self.log,
                 replay_target_height,
-                None,
             ) {
                 Ok(h) => break h,
                 Err(MessageRoutingError::QueueIsFull) => std::thread::sleep(WAIT_DURATION),
@@ -765,7 +753,7 @@ impl Player {
                         .unwrap_or_else(|| finalized_height),
                 );
                 let last_block = pool.get_finalized_block(target_height).unwrap_or_else(|| {
-                    panic!("Finalized block is not found at height {}", target_height)
+                    panic!("Finalized block is not found at height {target_height}")
                 });
 
                 (
@@ -776,32 +764,39 @@ impl Player {
                 )
             }
         };
+
+        let extra_msgs = extra(self, time);
+        if extra_msgs.is_empty() {
+            return (time, None);
+        }
+
+        let extra_ingresses = extra_msgs
+            .iter()
+            .map(|fm| fm.ingress.clone())
+            .collect::<Vec<_>>();
+
         let mut extra_batch = Batch {
             batch_number: message_routing.expected_batch_height(),
             batch_summary: None,
             requires_full_state_hash: false,
-            messages: BatchMessages::default(),
+            content: BatchContent::Data {
+                batch_messages: BatchMessages {
+                    signed_ingress_msgs: extra_ingresses,
+                    ..BatchMessages::default()
+                },
+                chain_key_data: Default::default(),
+                consensus_responses: Vec::new(),
+            },
             // Use a fake randomness here since we don't have random tape for extra messages
             randomness,
-            chain_key_data: Default::default(),
             registry_version,
             time,
-            consensus_responses: Vec::new(),
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
             replica_version,
         };
-        let context_time = extra_batch.time;
-        let extra_msgs = extra(self, context_time);
-        if extra_msgs.is_empty() {
-            return (context_time, None);
-        }
-        if !extra_msgs.is_empty() {
-            extra_batch.messages.signed_ingress_msgs = extra_msgs
-                .iter()
-                .map(|fm| fm.ingress.clone())
-                .collect::<Vec<_>>();
-            println!("extra_batch created with new ingress");
-        }
+
+        println!("extra_batch created with new ingress");
+
         loop {
             match message_routing.deliver_batch(extra_batch.clone()) {
                 Ok(()) => {
@@ -826,7 +821,11 @@ impl Player {
                             });
 
                     extra_batch = extra_batch.clone();
-                    extra_batch.messages.signed_ingress_msgs = Default::default();
+                    extra_batch.content = BatchContent::Data {
+                        batch_messages: BatchMessages::default(),
+                        chain_key_data: Default::default(),
+                        consensus_responses: Vec::new(),
+                    };
                     extra_batch.batch_number = message_routing.expected_batch_height();
                     extra_batch.time += Duration::from_nanos(1);
 
@@ -843,7 +842,7 @@ impl Player {
                 }
             }
         }
-        (context_time, Some((extra_batch.batch_number, extra_msgs)))
+        (time, Some((extra_batch.batch_number, extra_msgs)))
     }
 
     fn certify_state_with_dummy_certification(&self) {
@@ -923,10 +922,10 @@ impl Player {
             Ok((Ok(wasm_result), _)) => match wasm_result {
                 WasmResult::Reply(v) => deserialize_get_latest_version_response(v)
                     .map(RegistryVersion::from)
-                    .map_err(|err| format!("{}", err)),
-                WasmResult::Reject(e) => Err(format!("Query rejected: {}", e)),
+                    .map_err(|err| format!("{err}")),
+                WasmResult::Reject(e) => Err(format!("Query rejected: {e}")),
             },
-            Ok((Err(err), _)) => Err(format!("Query failed: {:?}", err)),
+            Ok((Err(err), _)) => Err(format!("Query failed: {err:?}")),
             Err(QueryExecutionError::CertifiedStateUnavailable) => {
                 panic!("Certified state unavailable for query call.")
             }
@@ -974,17 +973,16 @@ impl Player {
         let start_height = Height::from(start_height);
         let mut height_to_batches =
             backup::heights_to_artifacts_metadata(&backup_dir, start_height)
-                .unwrap_or_else(|err| panic!("File scanning failed: {:?}", err));
+                .unwrap_or_else(|err| panic!("File scanning failed: {err:?}"));
         println!(
-            "Restoring the replica state of subnet {:?} starting from the height {:?}",
-            backup_dir, start_height
+            "Restoring the replica state of subnet {backup_dir:?} starting from the height {start_height:?}"
         );
 
         // Assert consistent initial state
         if let Err(err) = self.verify_latest_cup() {
             if let ReplayError::CUPVerificationFailed(height) = err {
                 let file = cup_file_name(&backup_dir, height);
-                println!("Invalid CUP detected: {:?}", file);
+                println!("Invalid CUP detected: {file:?}");
                 rename_file(&file);
             }
             return Err(err);
@@ -1025,11 +1023,11 @@ impl Player {
                 replay_target_height,
             );
             self.wait_for_state(last_batch_height);
-            if let Some(height) = target_height {
-                if last_batch_height >= height {
-                    println!("Target height {} reached.", height);
-                    return Ok(self.get_latest_state_params(None, invalid_artifacts));
-                }
+            if let Some(height) = target_height
+                && last_batch_height >= height
+            {
+                println!("Target height {height} reached.");
+                return Ok(self.get_latest_state_params(None, invalid_artifacts));
             }
 
             match result {
@@ -1065,14 +1063,14 @@ impl Player {
                     assert!(
                         self.registry.get_latest_version() >= new_version,
                         "The registry client couldn't be updated to version {:?} (highest available version is {:?})",
-                        new_version, self.registry.get_latest_version()
+                        new_version,
+                        self.registry.get_latest_version()
                     );
                     println!("Updated the registry.");
                 }
                 Err(backup::ExitPoint::ValidationIncomplete(last_validated_height)) => {
                     println!(
-                        "Validation of artifacts at height {:?} is not complete",
-                        last_validated_height
+                        "Validation of artifacts at height {last_validated_height:?} is not complete"
                     );
                     return Err(ReplayError::ValidationIncomplete(
                         last_validated_height,
@@ -1188,7 +1186,8 @@ impl Player {
             Some(replica_version) if replica_version != self.replica_version => {
                 println!(
                     "⚠️  Please use the replay tool of version {} to continue backup recovery from height {:?}",
-                    replica_version, last_cup.height()
+                    replica_version,
+                    last_cup.height()
                 );
                 return Err(ReplayError::UpgradeDetected(
                     self.get_latest_state_params(None, Vec::new()),
@@ -1257,8 +1256,8 @@ async fn get_changes_since(
     match perform_query.perform_query(query).await.unwrap() {
         Ok((Ok(wasm_result), _time)) => match wasm_result {
             WasmResult::Reply(v) => {
-                let (high_capacity_deltas, _version) = deserialize_get_changes_since_response(v)
-                    .map_err(|err| format!("{:?}", err))?;
+                let (high_capacity_deltas, _version) =
+                    deserialize_get_changes_since_response(v).map_err(|err| format!("{err:?}"))?;
 
                 // Dechunkify deltas.
                 let mut inlined_deltas = vec![];
@@ -1267,18 +1266,18 @@ async fn get_changes_since(
 
                     let delta = dechunkify_delta(delta, &get_chunk)
                         .await
-                        .map_err(|err| format!("{:?}", err))?;
+                        .map_err(|err| format!("{err:?}"))?;
 
                     inlined_deltas.push(delta);
                 }
 
                 registry_deltas_to_registry_records(inlined_deltas)
-                    .map_err(|err| format!("{:?}", err))
+                    .map_err(|err| format!("{err:?}"))
             }
 
-            WasmResult::Reject(e) => Err(format!("Query rejected: {}", e)),
+            WasmResult::Reject(e) => Err(format!("Query rejected: {e}")),
         },
-        Ok((Err(err), _)) => Err(format!("Query failed: {:?}", err)),
+        Ok((Err(err), _)) => Err(format!("Query failed: {err:?}")),
         Err(QueryExecutionError::CertifiedStateUnavailable) => {
             Err("Certified state unavailable for query call.".to_string())
         }
@@ -1300,10 +1299,7 @@ impl<PerformQueryImpl: PerformQuery + Sync> GetChunk for GetChunkImpl<'_, Perfor
             content_sha256: Some(chunk_content_sha256.to_vec()),
         };
         let request = Encode!(&request).map_err(|err| {
-            format!(
-                "Unable to call get_chunk, because unable to encode request: {}",
-                err
-            )
+            format!("Unable to call get_chunk, because unable to encode request: {err}")
         })?;
         let request = Query {
             source: QuerySource::User {
@@ -1332,25 +1328,22 @@ impl<PerformQueryImpl: PerformQuery + Sync> GetChunk for GetChunkImpl<'_, Perfor
         };
 
         // Handle more problems...
-        let result: WasmResult = result.map_err(|err| format!("Query failed: {:?}", err))?;
+        let result: WasmResult = result.map_err(|err| format!("Query failed: {err:?}"))?;
 
         // Handle canister replied vs. rejected.
         let result: Vec<u8> = match result {
             WasmResult::Reply(ok) => ok,
             WasmResult::Reject(err) => {
-                return Err(format!("Query rejected: {}", err));
+                return Err(format!("Query rejected: {err}"));
             }
         };
 
         // Unpack reply.
         let result = Decode!(&result, Result<Chunk, String>).map_err(|err| {
-            format!(
-                "Unable to decode get_chunk response from the Registry canister: {}",
-                err
-            )
+            format!("Unable to decode get_chunk response from the Registry canister: {err}")
         })?;
         let Chunk { content } = result
-            .map_err(|err| format!("The Registry canister replied, but with an Err: {}", err))?;
+            .map_err(|err| format!("The Registry canister replied, but with an Err: {err}"))?;
         let content = content.ok_or_else(|| {
             "The Registry canister replied Ok, but did not include chunk content.".to_string()
         })?;
@@ -1384,12 +1377,7 @@ where
         key.as_bytes().to_vec(),
         None, // latest version
     )
-    .map_err(|err| {
-        format!(
-            "Failed to serialize get_value request where key={}: {}",
-            key, err,
-        )
-    })?;
+    .map_err(|err| format!("Failed to serialize get_value request where key={key}: {err}",))?;
     let query = Query {
         source: QuerySource::User {
             user_id: UserId::from(PrincipalId::new_anonymous()),
@@ -1409,8 +1397,7 @@ where
         Ok((Ok(WasmResult::Reply(reply)), _)) => reply,
         garbage => {
             return Err(format!(
-                "Did not get reply from Registry get_value call where key={}: {:?}",
-                key, garbage,
+                "Did not get reply from Registry get_value call where key={key}: {garbage:?}",
             ));
         }
     };
@@ -1419,34 +1406,26 @@ where
     let reply = deserialize_get_value_response(reply).map_err(|err| {
         format!(
             "Unable to deserialize the reply from a Registry canister get_value \
-             method call where key={}: {:?}",
-            key, err,
+             method call where key={key}: {err:?}",
         )
     })?;
     let Some(content) = reply.content else {
         return Err(format!(
             "Got a reply from Registry to get_value call, and was able to \
-             deserialize it, but no content field was populated. key={}",
-            key,
+             deserialize it, but no content field was populated. key={key}",
         ));
     };
     let get_chunk = GetChunkImpl { perform_query };
     let record: Vec<u8> = dechunkify_get_value_response_content(content, &get_chunk)
         .await
         .map_err(|err| {
-            format!(
-                "Unable to dechunkify get_value response where key={}: {:?}",
-                key, err,
-            )
+            format!("Unable to dechunkify get_value response where key={key}: {err:?}",)
         })?;
     let record: Record = deserialize_registry_value::<Record>(Ok(Some(record)))
         .map_err(|err| {
-            format!(
-                "Failed to deserialize content of Registry record with key={}: {}",
-                key, err,
-            )
+            format!("Failed to deserialize content of Registry record with key={key}: {err}",)
         })?
-        .ok_or_else(|| format!("Registry key {} does not exist", key))?;
+        .ok_or_else(|| format!("Registry key {key} does not exist"))?;
 
     // Nice reply!
     Ok(record)
@@ -1537,7 +1516,10 @@ fn is_manual_share_investigation_required(
         }
         [] => false,
         other => {
-            println!("Found {} different hashes with enough shares to produce valid certifications, investigate manually!", other.len());
+            println!(
+                "Found {} different hashes with enough shares to produce valid certifications, investigate manually!",
+                other.len()
+            );
             true
         }
     }
@@ -1604,7 +1586,7 @@ fn write_records_to_local_store(
         .enumerate()
         .try_for_each(|(i, cle)| {
             let v = latest_version + RegistryVersion::from(i as u64 + 1);
-            println!("Writing data of registry version {}", v);
+            println!("Writing data of registry version {v}");
             local_store.store(v, cle)
         })
         .expect("Writing to the file system failed: Stop.");
@@ -1618,7 +1600,7 @@ fn setup_registry(
 
     let registry = Arc::new(RegistryClientImpl::new(data_provider, metrics_registry));
     if let Err(e) = registry.fetch_and_start_polling() {
-        panic!("fetch_and_start_polling failed: {}", e);
+        panic!("fetch_and_start_polling failed: {e}");
     }
     registry
 }
@@ -1657,7 +1639,7 @@ fn get_state_hash<T>(
                 return None;
             }
             Err(err) => {
-                panic!("State hash computation failed: {}", err)
+                panic!("State hash computation failed: {err}")
             }
         }
 
@@ -1673,9 +1655,8 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_registry_canister_api::{Chunk, GetChunkRequest};
     use ic_registry_transport::pb::v1::{
-        high_capacity_registry_value, HighCapacityRegistryDelta,
-        HighCapacityRegistryGetChangesSinceResponse, HighCapacityRegistryValue,
-        LargeValueChunkKeys,
+        HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
+        HighCapacityRegistryValue, LargeValueChunkKeys, high_capacity_registry_value,
     };
     use ic_test_utilities_consensus::fake::FakeSigner;
     use ic_test_utilities_types::ids::node_test_id;
@@ -1780,10 +1761,12 @@ mod tests {
         let hashes = get_share_certified_hashes(Height::from(3), f, &pool, &malicious);
         assert_eq!(hashes.len(), 2);
         assert_ne!(hashes[0], hashes[1]);
-        assert!(hashes
-            .into_iter()
-            .map(|h| h.get().0)
-            .all(|h| h == vec![1] || h == vec![2]));
+        assert!(
+            hashes
+                .into_iter()
+                .map(|h| h.get().0)
+                .all(|h| h == vec![1] || h == vec![2])
+        );
         assert!(is_manual_share_investigation_required(
             &pool,
             &malicious,
@@ -1986,7 +1969,7 @@ mod tests {
                         ..
                     } = &observed_query.source
                     else {
-                        println!("{}th query NOT a User QuerySource.", i);
+                        println!("{i}th query NOT a User QuerySource.");
                         return false;
                     };
                     // ingress_expiry is a number of nanoseconds since the UNIX Epoch.
@@ -2000,8 +1983,7 @@ mod tests {
                         && observed_ingress_expiry < now + 5 * 60 * 1_000_000_000;
                     if !ok {
                         println!(
-                            "Bad ingress expiry in {}th call to {}: {}",
-                            i, method_name, observed_ingress_expiry,
+                            "Bad ingress expiry in {i}th call to {method_name}: {observed_ingress_expiry}",
                         );
                         return false;
                     }

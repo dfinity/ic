@@ -1,29 +1,29 @@
 use canister_test::CanisterInstallMode;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_chunks::{
-    test_data::{MEGA_BLOB, MEGA_BLOB_CHUNK_KEYS},
     Chunks,
+    test_data::{MEGA_BLOB, MEGA_BLOB_CHUNK_KEYS},
 };
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_test_utils::{
-    common::{build_test_registry_wasm, NnsInitPayloadsBuilder},
+    common::{NnsInitPayloadsBuilder, build_test_registry_wasm},
     state_test_helpers::{
         registry_get_chunk, registry_get_value, registry_high_capacity_get_changes_since,
         registry_latest_version, registry_mutate_test_high_capacity_records, setup_nns_canisters,
         state_machine_builder_for_nns_tests,
     },
 };
-use ic_registry_canister_api::{mutate_test_high_capacity_records, Chunk};
+use ic_registry_canister_api::{Chunk, mutate_test_high_capacity_records};
 use ic_registry_transport::pb::v1::{
-    high_capacity_registry_get_value_response, high_capacity_registry_value, registry_error,
     HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
     HighCapacityRegistryGetValueResponse, HighCapacityRegistryValue, LargeValueChunkKeys,
-    RegistryError,
+    RegistryError, high_capacity_registry_get_value_response, high_capacity_registry_value,
+    registry_error,
 };
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
 use ic_state_machine_tests::StateMachine;
 use pretty_assertions::assert_eq;
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::{cell::RefCell, rc::Rc, time::SystemTime};
 
 fn get_state_machine_time_nanoseconds(machine: &StateMachine) -> u64 {
@@ -37,7 +37,7 @@ fn get_state_machine_time_nanoseconds(machine: &StateMachine) -> u64 {
 }
 
 macro_rules! assert_timestamp {
-    ($lower:expr, $timestamp:expr, $upper:expr) => {
+    ($lower:expr_2021, $timestamp:expr_2021, $upper:expr_2021) => {
         if !($lower <= $timestamp && $timestamp <= $upper) {
             panic!(
                 "Timestamp assertion doesn't hold. Expected {} to be within range: [{}, {}]",
@@ -112,7 +112,7 @@ fn test_large_records() {
         )) => chunk_content_sha256s,
         // Because of the assert_eq directly before, this is unreachable (but
         // rustc doesn't know that).
-        _ => panic!("{:#?}", get_value_response),
+        _ => panic!("{get_value_response:#?}"),
     };
     let reconstructed_big_monolithic_blob = chunk_content_sha256s
         .iter()
@@ -424,9 +424,9 @@ fn test_get_chunk() {
 
     let err: String = match garbage_response {
         Err(ok) => ok,
-        _ => panic!("{:#?}", garbage_response),
+        _ => panic!("{garbage_response:#?}"),
     };
     for key_word in ["no chunk", "sha256"] {
-        assert!(err.to_lowercase().contains(key_word), "{:?}", err);
+        assert!(err.to_lowercase().contains(key_word), "{err:?}");
     }
 }

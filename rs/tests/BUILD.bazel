@@ -1,5 +1,4 @@
 load("@aspect_bazel_lib//lib:tar.bzl", "tar")
-load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 load("@rules_distroless//apt:defs.bzl", "dpkg_status")
 load("@rules_distroless//distroless:defs.bzl", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image")
@@ -12,11 +11,6 @@ exports_files([
     "counter.wat",
 ])
 
-bool_flag(
-    name = "k8s",
-    build_setting_default = False,
-)
-
 # Packages we install into the image; see base image definition and its
 # 'manifest = ...' field for more information
 PACKAGES = [
@@ -26,6 +20,7 @@ PACKAGES = [
     "@noble//libcryptsetup-dev/amd64",
     "@noble//dmsetup/amd64",
     "@noble//dosfstools/amd64",
+    "@noble//e2fsprogs/amd64",
     "@noble//gawk/amd64",
     "@noble//gzip/amd64",
     "@noble//libssl3t64/amd64",

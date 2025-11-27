@@ -1,6 +1,6 @@
 use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
-    pb::v1::{stop_or_start_canister::CanisterAction, GovernanceError, StopOrStartCanister, Topic},
+    pb::v1::{GovernanceError, StopOrStartCanister, Topic, stop_or_start_canister::CanisterAction},
     proposals::call_canister::CallCanister,
 };
 
@@ -84,7 +84,7 @@ impl CallCanister for StopOrStartCanister {
             canister_id,
             action,
         })
-        .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {}", e)))
+        .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {e}")))
     }
 }
 
@@ -114,9 +114,7 @@ mod tests {
                     let error_message = error.error_message.to_lowercase();
                     assert!(
                         error_message.contains(keyword),
-                        "{} not found in {:#?}",
-                        keyword,
-                        error_message
+                        "{keyword} not found in {error_message:#?}"
                     );
                 }
             };
@@ -256,7 +254,7 @@ mod tests {
             (SNS_WASM_CANISTER_ID, Topic::ServiceNervousSystemManagement),
             (
                 CanisterId::from_u64(123_456_789),
-                Topic::NetworkCanisterManagement,
+                Topic::ApplicationCanisterManagement,
             ),
         ];
 

@@ -24,7 +24,6 @@ system_test(
     name = "catch_up_loop_prevention_test",
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
-        "k8s",
         "long_test",
     ],
     test_timeout = "eternal",
@@ -45,9 +44,9 @@ system_test(
     name = "catch_up_possible_test",
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
-        "k8s",
         "long_test",
     ],
+    test_timeout = "eternal",
     uses_guestos_img = False,
     uses_guestos_malicious_img = True,
     runtime_deps = GRAFANA_RUNTIME_DEPS,
@@ -66,7 +65,6 @@ system_test(
     env = UNIVERSAL_CANISTER_ENV,
     tags = [
         "colocate",
-        "k8s",
         "long_test",
     ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
@@ -105,9 +103,6 @@ rust_library(
 system_test(
     name = "liveness_with_equivocation_test",
     env = UNIVERSAL_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
     uses_guestos_img = False,
     uses_guestos_malicious_img = True,
     uses_guestos_test_update = True,
@@ -125,9 +120,6 @@ system_test(
 system_test_nns(
     name = "max_ingress_payload_size_test",
     env = UNIVERSAL_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -150,9 +142,6 @@ system_test_nns(
 system_test(
     name = "max_xnet_payload_size_test",
     env = UNIVERSAL_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -171,9 +160,6 @@ system_test(
 system_test_nns(
     name = "node_graceful_leaving_test",
     env = UNIVERSAL_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -191,7 +177,6 @@ system_test_nns(
 system_test_nns(
     name = "cup_explorer_test",
     tags = [
-        "k8s",
         "long_test",  # The P90 duration was over 6 minutes for the week starting on 2025-08-25.
     ],
     deps = [
@@ -222,7 +207,6 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     tags = [
         "colocate",
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_splitting",
     ],
@@ -280,9 +264,6 @@ system_test(
 system_test(
     name = "replica_determinism_test",
     env = UNIVERSAL_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
     uses_guestos_img = False,
     uses_guestos_malicious_img = True,
     uses_guestos_test_update = True,
@@ -302,9 +283,6 @@ system_test(
 system_test(
     name = "request_auth_malicious_replica_test",
     env = UNIVERSAL_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
     uses_guestos_img = False,
     uses_guestos_malicious_img = True,
     uses_guestos_test_update = True,
@@ -331,9 +309,6 @@ system_test(
 system_test(
     name = "safety_test",
     env = UNIVERSAL_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
     uses_guestos_img = False,
     uses_guestos_malicious_img = True,
     uses_guestos_test_update = True,
@@ -392,7 +367,6 @@ system_test_nns(
     name = "adding_nodes_to_subnet_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,

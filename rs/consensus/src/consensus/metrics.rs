@@ -1,17 +1,17 @@
 use ic_consensus_idkg::{
-    metrics::{key_id_label, CounterPerMasterPublicKeyId, IDkgPayloadStats, KEY_ID_LABEL},
+    metrics::{CounterPerMasterPublicKeyId, IDkgPayloadStats, KEY_ID_LABEL, key_id_label},
     utils::CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
 };
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
 use ic_metrics::{
-    buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,
+    buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
 };
 use ic_types::{
+    CountBytes, Height, Time,
     batch::BatchPayload,
     consensus::{Block, BlockPayload, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank},
-    CountBytes, Height, Time,
 };
 use prometheus::{
     GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
@@ -63,7 +63,7 @@ impl BlockMakerMetrics {
     }
 }
 
-pub struct ConsensusMetrics {
+pub(crate) struct ConsensusMetrics {
     pub on_state_change_duration: HistogramVec,
     pub on_state_change_invocations: IntCounterVec,
     pub on_state_change_change_set_size: HistogramVec,
@@ -109,7 +109,7 @@ impl ConsensusMetrics {
 }
 
 // Block related stats
-pub struct BlockStats {
+pub(crate) struct BlockStats {
     pub block_hash: String,
     pub block_height: u64,
     pub block_time: Time,
@@ -131,7 +131,7 @@ impl From<&Block> for BlockStats {
 
 // Batch payload stats
 #[derive(Debug, Default)]
-pub struct BatchStats {
+pub(crate) struct BatchStats {
     pub batch_height: u64,
     pub ingress_messages_delivered: usize,
     pub ingress_message_bytes_delivered: usize,
@@ -158,7 +158,7 @@ impl BatchStats {
     }
 }
 
-pub struct FinalizerMetrics {
+pub(crate) struct FinalizerMetrics {
     pub batches_delivered: IntCounterVec,
     pub batch_height: IntGauge,
     pub batch_delivery_interval: Histogram,
@@ -276,9 +276,9 @@ impl FinalizerMetrics {
                 "Total number of canister http messages delivered as divergences",
             ),
             canister_http_payload_bytes_delivered: metrics_registry.histogram(
-                "canister_http_payload_bytes_delivered", 
+                "canister_http_payload_bytes_delivered",
                 "Total number of bytes in the canister http payload",
-                // This will create 16 buckets starting from 0, 100, 200, 500, 1000  
+                // This will create 16 buckets starting from 0, 100, 200, 500, 1000
                 // up to 5 * 10^6 ~= 5MB
                 decimal_buckets_with_zero(2, 6),
             ),
@@ -355,7 +355,7 @@ impl FinalizerMetrics {
     }
 }
 
-pub struct NotaryMetrics {
+pub(crate) struct NotaryMetrics {
     pub time_to_notary_sign: HistogramVec,
 }
 
@@ -382,7 +382,7 @@ impl NotaryMetrics {
     }
 }
 
-pub struct PayloadBuilderMetrics {
+pub(crate) struct PayloadBuilderMetrics {
     pub get_payload_duration: Histogram,
     pub validate_payload_duration: Histogram,
     pub past_payloads_length: Histogram,
@@ -443,7 +443,7 @@ impl PayloadBuilderMetrics {
 }
 
 /// Metrics for a consensus validator.
-pub struct ValidatorMetrics {
+pub(crate) struct ValidatorMetrics {
     pub(crate) time_to_receive_block: HistogramVec,
     pub(crate) duplicate_artifact: IntCounterVec,
     pub(crate) validation_duration: HistogramVec,
@@ -460,7 +460,7 @@ pub struct ValidatorMetrics {
 
 impl ValidatorMetrics {
     /// The constructor creates a [`ValidatorMetrics`] instance.
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
             time_to_receive_block: metrics_registry.histogram_vec(
                 "consensus_time_to_receive_block",
@@ -533,22 +533,17 @@ impl ValidatorMetrics {
 
     pub(crate) fn observe_block(&self, pool_reader: &PoolReader, proposal: &BlockProposal) {
         let rank = proposal.rank().0 as usize;
-        if rank < RANKS_TO_RECORD.len() {
-            if let Some(start_time) = pool_reader.get_round_start_time(proposal.height()) {
-                if let Some(timestamp) = pool_reader
-                    .pool()
-                    .unvalidated()
-                    .get_timestamp(&proposal.get_id())
-                {
-                    if timestamp >= start_time {
-                        self.time_to_receive_block
-                            .with_label_values(&[RANKS_TO_RECORD[rank]])
-                            .observe(
-                                (timestamp.saturating_duration_since(start_time)).as_secs_f64(),
-                            );
-                    }
-                }
-            }
+        if rank < RANKS_TO_RECORD.len()
+            && let Some(start_time) = pool_reader.get_round_start_time(proposal.height())
+            && let Some(timestamp) = pool_reader
+                .pool()
+                .unvalidated()
+                .get_timestamp(&proposal.get_id())
+            && timestamp >= start_time
+        {
+            self.time_to_receive_block
+                .with_label_values(&[RANKS_TO_RECORD[rank]])
+                .observe((timestamp.saturating_duration_since(start_time)).as_secs_f64());
         }
     }
 
@@ -566,7 +561,7 @@ impl ValidatorMetrics {
     }
 }
 
-pub struct PurgerMetrics {
+pub(crate) struct PurgerMetrics {
     pub unvalidated_pool_purge_height: IntGauge,
     pub validated_pool_purge_height: IntGauge,
     pub replicated_state_purge_height: IntGauge,

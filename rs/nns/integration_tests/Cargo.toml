@@ -112,7 +112,7 @@ serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 tokio = { workspace = true }
 wat = { workspace = true }
-xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }
+xrc-mock = { path = "../../rust_canisters/xrc_mock" }
 
 [dev-dependencies]
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
@@ -120,3 +120,5 @@ ic-nervous-system-integration-tests = { path = "../../nervous_system/integration
 ic-nns-test-utils-golden-nns-state = { path = "../test_utils/golden_nns_state" }
 ic-registry-canister-api = { path = "../../registry/canister/api" }
 pretty_assertions = { workspace = true }
+rewards-calculation = { path = "../../node_rewards/rewards_calculation" }
+chrono = { workspace = true }

@@ -3,10 +3,10 @@
 //! background is not required.
 
 use ic_interfaces_registry::{
-    empty_zero_registry_record, RegistryClient, RegistryClientVersionedResult,
-    RegistryDataProvider, RegistryRecord, ZERO_REGISTRY_VERSION,
+    RegistryClient, RegistryClientVersionedResult, RegistryDataProvider, RegistryRecord,
+    ZERO_REGISTRY_VERSION, empty_zero_registry_record,
 };
-use ic_types::{registry::RegistryClientError, time::current_time, RegistryVersion, Time};
+use ic_types::{RegistryVersion, Time, registry::RegistryClientError, time::current_time};
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
 
@@ -42,7 +42,7 @@ impl FakeRegistryClient {
         {
             Ok(records) if !records.is_empty() => records,
             Ok(_) /*if version == cache_state.latest_version*/ => return,
-            Err(e) => panic!("Failed to query data provider: {}", e),
+            Err(e) => panic!("Failed to query data provider: {e}"),
         };
 
         // perform update
@@ -83,7 +83,7 @@ impl FakeRegistryClient {
     fn check_version(
         &self,
         version: RegistryVersion,
-    ) -> Result<RwLockReadGuard<CacheState>, RegistryClientError> {
+    ) -> Result<RwLockReadGuard<'_, CacheState>, RegistryClientError> {
         let cache_state = self.cache.read().unwrap();
         let (latest_version, _, _) = &*cache_state;
         if &version > latest_version {

@@ -1,7 +1,7 @@
 use core::future::Future;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_canister_client_sender::Sender as CanisterClientSender;
-use ic_config::{crypto::CryptoConfig, transport::TransportConfig, Config};
+use ic_config::{Config, crypto::CryptoConfig, transport::TransportConfig};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_interfaces::execution_environment::{
@@ -10,8 +10,8 @@ use ic_interfaces::execution_environment::{
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, IC_00,
+    CanisterIdRecord, CanisterInstallMode, IC_00, InstallCodeArgs, Method, Payload,
+    ProvisionalCreateCanisterWithCyclesArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_prep_lib::{
@@ -34,12 +34,12 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
+    CanisterId, Height, NodeId, ReplicaVersion, Time,
     artifact::UnvalidatedArtifactMutation,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{Query, QuerySource, SignedIngress},
     replica_config::NODE_INDEX_DEFAULT,
     time::expiry_time_from_now,
-    CanisterId, Height, NodeId, ReplicaVersion, Time,
 };
 use prost::Message;
 use slog_scope::info;
@@ -200,8 +200,8 @@ pub fn get_ic_config() -> IcConfig {
 
     // Choose a temporary directory as the working directory for ic-prep.
     use rand::Rng;
-    let random_suffix = rand::thread_rng().gen::<usize>();
-    let prep_dir = std::env::temp_dir().join(format!("ic_prep_{}", random_suffix));
+    let random_suffix = rand::thread_rng().r#gen::<usize>();
+    let prep_dir = std::env::temp_dir().join(format!("ic_prep_{random_suffix}"));
 
     // Create the secret key store in a node a sub-directory of the ic-prep.
     let node_sks = prep_dir.join("node_sks");
@@ -447,7 +447,7 @@ impl LocalTestRuntime {
                 .unwrap()
                 .get_canister_id(),
             // Got an unexpected result.
-            unexpected => panic!("Got unexpected val {:?}", unexpected),
+            unexpected => panic!("Got unexpected val {unexpected:?}"),
         };
 
         Ok(canister_id)

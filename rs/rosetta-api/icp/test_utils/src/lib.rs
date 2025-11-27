@@ -1,5 +1,3 @@
-use candid::{Decode, Encode};
-use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_rosetta_api::convert::{
     from_hex, from_model_account_identifier, operations_to_requests, to_hex,
@@ -13,19 +11,18 @@ use ic_rosetta_api::models::{
     SignedTransaction,
 };
 use ic_rosetta_api::models::{ConstructionSubmitResponse, Error as RosettaError};
+use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::transaction_operation_results::TransactionOperationResults;
 use ic_rosetta_api::request::transaction_results::TransactionResults;
-use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{
     AddHotKey, ChangeAutoStakeMaturity, Disburse, DisburseMaturity, Follow, ListNeurons,
     NeuronInfo, RefreshVotingPower, RegisterVote, RemoveHotKey, SetDissolveTimestamp, Spawn, Stake,
     StakeMaturity, StartDissolve, StopDissolve,
 };
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
-use ic_rosetta_api::{convert, errors, errors::ApiError, DEFAULT_TOKEN_SYMBOL};
-use ic_state_machine_tests::{StateMachine, WasmResult};
-use ic_types::{messages::Blob, time, CanisterId, PrincipalId};
+use ic_rosetta_api::{DEFAULT_TOKEN_SYMBOL, convert, errors, errors::ApiError};
+use ic_types::{PrincipalId, messages::Blob, time};
 use icp_ledger::{AccountIdentifier, BlockIndex, Operation, Tokens};
 use rand::{seq::SliceRandom, thread_rng};
 use rosetta_api_serv::RosettaApiHandle;
@@ -33,7 +30,6 @@ use rosetta_core::convert::principal_id_from_public_key;
 pub use rosetta_core::models::Ed25519KeyPair as EdKeypair;
 use rosetta_core::models::RosettaSupportedKeyPair;
 use rosetta_core::models::Secp256k1KeyPair;
-use serde_bytes::ByteBuf;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -42,7 +38,7 @@ use std::sync::Arc;
 pub mod rosetta_api_serv;
 
 pub fn path_from_env(var: &str) -> PathBuf {
-    std::fs::canonicalize(std::env::var(var).unwrap_or_else(|_| panic!("Unable to find {}", var)))
+    std::fs::canonicalize(std::env::var(var).unwrap_or_else(|_| panic!("Unable to find {var}")))
         .unwrap()
 }
 
@@ -96,7 +92,9 @@ where
     for request in requests {
         // first ask for the fee
         let mut fee_found = false;
-        for o in Request::requests_to_operations(&[request.request.clone()], token_name).unwrap() {
+        for o in Request::requests_to_operations(std::slice::from_ref(&request.request), token_name)
+            .unwrap()
+        {
             if o.type_.parse::<OperationType>().unwrap() == OperationType::Fee {
                 fee_found = true;
             } else {
@@ -302,7 +300,7 @@ where
                     CurveType::Secp256K1 => Ok(SignatureType::Ecdsa),
                     sig_type => Err(ApiError::InvalidRequest(
                         false,
-                        format!("Sginature Type {} not supported byt rosetta", sig_type).into(),
+                        format!("Sginature Type {sig_type} not supported byt rosetta").into(),
                     )),
                 }
                 .unwrap(),
@@ -483,7 +481,7 @@ where
         let rs1: Vec<_> = requests.iter().map(|r| r.request.clone()).collect();
         let rs2 = operations_to_requests(&parse_response.operations, false, DEFAULT_TOKEN_SYMBOL)
             .unwrap();
-        assert_eq!(rs1, rs2, "Requests differs: {:?} vs {:?}", rs1, rs2);
+        assert_eq!(rs1, rs2, "Requests differs: {rs1:?} vs {rs2:?}");
     }
 
     if !accept_suggested_fee {
@@ -665,8 +663,7 @@ pub fn assert_canister_error(err: &RosettaError, code: u32, text: &str) {
 
     assert_eq!(
         err.0.code, code,
-        "rosetta error {:?} does not have code: {}",
-        err, code
+        "rosetta error {err:?} does not have code: {code}"
     );
     let details = err.0.details.as_ref().unwrap();
     assert!(
@@ -676,9 +673,7 @@ pub fn assert_canister_error(err: &RosettaError, code: u32, text: &str) {
             .as_str()
             .unwrap()
             .contains(text),
-        "rosetta error {:?} does not contain '{}'",
-        err,
-        text
+        "rosetta error {err:?} does not contain '{text}'"
     );
 }
 
@@ -703,41 +698,6 @@ fn compare_accounts(
     let xx = (&x.address, x.sub_account.as_ref().map(|s| &s.address));
     let yy = (&y.address, y.sub_account.as_ref().map(|s| &s.address));
     xx.cmp(&yy)
-}
-
-/// Tests that `http_request` endpoint of a given canister rejects overly large HTTP requests
-/// (exceeding the candid decoding quota of 10,000, corresponding to roughly 10 KB of decoded data).
-pub fn test_http_request_decoding_quota(env: &StateMachine, canister_id: CanisterId) {
-    // The anonymous end-user sends a small HTTP request. This should succeed.
-    let http_request = HttpRequest {
-        method: "GET".to_string(),
-        url: "/metrics".to_string(),
-        headers: vec![],
-        body: ByteBuf::from(vec![42; 1_000]),
-    };
-    let http_request_bytes = Encode!(&http_request).unwrap();
-    let response = match env
-        .execute_ingress(canister_id, "http_request", http_request_bytes)
-        .unwrap()
-    {
-        WasmResult::Reply(bytes) => Decode!(&bytes, HttpResponse).unwrap(),
-        WasmResult::Reject(reason) => panic!("Unexpected reject: {}", reason),
-    };
-    assert_eq!(response.status_code, 200);
-
-    // The anonymous end-user sends a large HTTP request. This should be rejected.
-    let mut large_http_request = http_request;
-    large_http_request.body = ByteBuf::from(vec![42; 1_000_000]);
-    let large_http_request_bytes = Encode!(&large_http_request).unwrap();
-    let err = env
-        .execute_ingress(canister_id, "http_request", large_http_request_bytes)
-        .unwrap_err();
-    assert!(
-        err.description().contains("Deserialization Failed")
-            || err
-                .description()
-                .contains("Decoding cost exceeds the limit")
-    );
 }
 
 #[test]

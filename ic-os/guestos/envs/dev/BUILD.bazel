@@ -13,7 +13,6 @@ icos_images = icos_build(
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
-        "//testnet/tools:icos_deploy-pkg",
     ],
 )
 
@@ -35,18 +34,6 @@ file_size_check(
     max_file_size = 600 * 1000 * 1000,  # 578 MB on 2025-06-26
 )
 
-# The icos_deploy testnet script needs this
-artifact_bundle(
-    name = "bundle-disk",
-    testonly = True,
-    inputs = [
-        icos_images.disk_image,
-        icos_images.launch_measurements,
-    ],
-    prefix = "guest-os/disk-img-dev",
-    visibility = ["//visibility:public"],
-)
-
 # Export checksums & build artifacts for update images
 artifact_bundle(
     name = "bundle-update",
@@ -54,6 +41,7 @@ artifact_bundle(
     inputs = [
         icos_images.update_image,
         icos_images.update_image_test,
+        icos_images.launch_measurements,
     ],
     prefix = "guest-os/update-img-dev",
     visibility = ["//visibility:public"],

@@ -109,10 +109,10 @@ impl From<BlockStoreError> for ApiError {
     fn from(e: BlockStoreError) -> Self {
         match e {
             BlockStoreError::NotFound(idx) => {
-                ApiError::invalid_block_id(format!("Block not found: {}", idx))
+                ApiError::invalid_block_id(format!("Block not found: {idx}"))
             }
             BlockStoreError::NotAvailable(idx) => {
-                ApiError::invalid_block_id(format!("Block not available for query: {}", idx))
+                ApiError::invalid_block_id(format!("Block not available for query: {idx}"))
             }
             BlockStoreError::Other(msg) => ApiError::internal_error(msg),
         }
@@ -134,7 +134,7 @@ impl From<strum::ParseError> for ApiError {
     fn from(value: strum::ParseError) -> Self {
         ApiError::InternalError(
             false,
-            Details::from(format!("Failed to parse string: {:?}", value)),
+            Details::from(format!("Failed to parse string: {value:?}")),
         )
     }
 }
@@ -143,7 +143,7 @@ impl From<TryFromIntError> for ApiError {
     fn from(value: TryFromIntError) -> Self {
         ApiError::InternalError(
             false,
-            Details::from(format!("Failed conversion: {:?}", value)),
+            Details::from(format!("Failed conversion: {value:?}")),
         )
     }
 }
@@ -291,8 +291,7 @@ pub fn convert_to_api_error(err: Error, token_name: &str) -> ApiError {
             None => ApiError::internal_error("OperationsErrors missing details object"),
         },
         e => ApiError::internal_error(format!(
-            "Unknown error code encountered when converting RosettaError to ApiError: {:?}",
-            e
+            "Unknown error code encountered when converting RosettaError to ApiError: {e:?}"
         )),
     }
 }
@@ -332,8 +331,7 @@ impl TryFrom<Option<ObjectMap>> for ICError {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse ICError from details JSON object: {}",
-                e
+                "Could not parse ICError from details JSON object: {e}"
             ))
         })
     }
@@ -356,7 +354,7 @@ pub struct Details {
 
 impl From<anyhow::Error> for Details {
     fn from(value: anyhow::Error) -> Self {
-        Details::from(format!("{:?}", value))
+        Details::from(format!("{value:?}"))
     }
 }
 #[test]

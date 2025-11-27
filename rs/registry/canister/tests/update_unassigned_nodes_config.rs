@@ -42,12 +42,14 @@ fn test_the_anonymous_user_cannot_update_unassigned_nodes_config() {
         assert_matches!(response,
                 Err(s) if s.contains("is not authorized to call this method: \
                 update_unassigned_nodes_config"));
-        assert!(get_value::<UnassignedNodesConfigRecord>(
-            &registry,
-            make_unassigned_nodes_config_record_key().as_bytes()
-        )
-        .await
-        .is_none(),);
+        assert!(
+            get_value::<UnassignedNodesConfigRecord>(
+                &registry,
+                make_unassigned_nodes_config_record_key().as_bytes()
+            )
+            .await
+            .is_none(),
+        );
 
         Ok(())
     });

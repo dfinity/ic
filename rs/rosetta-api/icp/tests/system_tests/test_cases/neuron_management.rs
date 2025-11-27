@@ -5,7 +5,7 @@ use crate::common::{
     utils::{account_balance, get_custom_agent, get_test_agent, list_neurons, test_identity},
 };
 use core::convert::TryFrom;
-use ic_agent::{identity::BasicIdentity, Identity};
+use ic_agent::{Identity, identity::BasicIdentity};
 use ic_icp_rosetta_client::RosettaChangeAutoStakeMaturityArgs;
 use ic_icp_rosetta_client::RosettaDisburseMaturityArgs;
 use ic_icp_rosetta_client::RosettaHotKeyArgs;
@@ -17,7 +17,7 @@ use ic_icp_rosetta_client::{
     RosettaStakeMaturityArgs,
 };
 use ic_icrc1_test_utils::basic_identity_strategy;
-use ic_nns_governance_api::{neuron::DissolveState, KnownNeuronData};
+use ic_nns_governance_api::{KnownNeuronData, neuron::DissolveState};
 use ic_rosetta_api::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
 use ic_rosetta_api::ledger_client::list_neurons_response::ListNeuronsResponse;
 use ic_rosetta_api::ledger_client::neuron_response::NeuronResponse;
@@ -38,6 +38,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::runtime::Runtime;
+use tokio::time::sleep;
 
 lazy_static! {
     pub static ref TEST_IDENTITY: Arc<BasicIdentity> = Arc::new(test_identity());
@@ -144,8 +145,8 @@ fn test_increase_neuron_stake() {
                 if e.to_string().contains(
                     "the debit account doesn't have enough funds to complete the transaction",
                 ) => {}
-            Err(e) => panic!("Unexpected error: {}", e),
-            Ok(ok) => panic!("Expected an errorm but got: {:?}", ok),
+            Err(e) => panic!("Unexpected error: {e}"),
+            Ok(ok) => panic!("Expected an errorm but got: {ok:?}"),
         }
 
         // Now we try with a valid amount
@@ -245,8 +246,7 @@ fn test_set_neuron_dissolve_delay_timestamp() {
                 dissolve_delay_timestamp
             }
             k => panic!(
-                "Neuron should be in WhenDissolvedTimestampSeconds state, but is instead: {:?}",
-                k
+                "Neuron should be in WhenDissolvedTimestampSeconds state, but is instead: {k:?}"
             ),
         };
 
@@ -279,10 +279,7 @@ fn test_set_neuron_dissolve_delay_timestamp() {
             DissolveState::DissolveDelaySeconds(dissolve_delay_timestamp) => {
                 dissolve_delay_timestamp
             }
-            k => panic!(
-                "Neuron should be in DissolveDelaySeconds state, but is instead: {:?}",
-                k
-            ),
+            k => panic!("Neuron should be in DissolveDelaySeconds state, but is instead: {k:?}"),
         };
         // The Dissolve Delay Timestamp should be updated
         // Since the state machine is live we do not know exactly how much time will be left at the time of calling the governance canister.
@@ -337,10 +334,7 @@ fn test_start_and_stop_neuron_dissolve() {
             DissolveState::DissolveDelaySeconds(dissolve_delay_timestamp) => {
                 dissolve_delay_timestamp
             }
-            k => panic!(
-                "Neuron should be in DissolveDelaySeconds state, but is instead: {:?}",
-                k
-            ),
+            k => panic!("Neuron should be in DissolveDelaySeconds state, but is instead: {k:?}"),
         };
         let start_dissolving_response = TransactionOperationResults::try_from(
             env.rosetta_client
@@ -359,18 +353,14 @@ fn test_start_and_stop_neuron_dissolve() {
         assert_eq!(
             start_dissolving_response.operations.first().unwrap().status,
             Some("COMPLETED".to_owned()),
-            "Expected the operation to be completed but got: {:?}",
-            start_dissolving_response
+            "Expected the operation to be completed but got: {start_dissolving_response:?}"
         );
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
         match neuron.dissolve_state.unwrap() {
             DissolveState::WhenDissolvedTimestampSeconds(d) => {
                 assert!(dissolve_delay_timestamp <= d);
             }
-            k => panic!(
-                "Neuron should be in DissolveDelaySeconds state, but is instead: {:?}",
-                k
-            ),
+            k => panic!("Neuron should be in DissolveDelaySeconds state, but is instead: {k:?}"),
         };
 
         // When we try to dissolve an already dissolving neuron the response should succeed with no change to the neuron
@@ -587,7 +577,7 @@ fn test_disburse_neuron() {
             .await
         {
             Err(e) if e.to_string().contains(&format!("Could not disburse: PreconditionFailed: Neuron {} has NOT been dissolved. It is in state Dissolving",neuron.id.unwrap().id)) => (),
-            Err(e) => panic!("Unexpected error: {}", e),
+            Err(e) => panic!("Unexpected error: {e}"),
             Ok(_) => panic!("Expected an error but got success"),
         }
         // Let rosetta catch up with the transfer that happended when creating the neuron
@@ -625,8 +615,7 @@ fn test_disburse_neuron() {
                 assert!(d<now);
             }
             k => panic!(
-                "Neuron should be in DissolveDelaySeconds state, but is instead: {:?}",
-                k
+                "Neuron should be in DissolveDelaySeconds state, but is instead: {k:?}"
             ),
         }
 
@@ -708,6 +697,8 @@ fn test_list_known_neurons() {
         neuron.known_neuron_data = Some(KnownNeuronData {
             name: "KnownNeuron 0".to_owned(),
             description: Some("This is a known neuron".to_owned()),
+            links: Some(vec![]),
+            committed_topics: Some(vec![]),
         });
         update_neuron(&agent, neuron).await;
 
@@ -732,7 +723,9 @@ fn test_list_known_neurons() {
                 .unwrap(),
             KnownNeuronData {
                 name: "KnownNeuron 0".to_owned(),
-                description: Some("This is a known neuron".to_owned())
+                description: Some("This is a known neuron".to_owned()),
+                links: Some(vec![]),
+                committed_topics: Some(vec![]),
             }
         );
     });
@@ -829,18 +822,19 @@ fn test_get_neuron_info() {
         assert_eq!(neuron_info.neuron_id, neuron.id.unwrap().id);
         assert_eq!(neuron_info.controller.0, TEST_IDENTITY.sender().unwrap());
 
-        assert!(env
-            .rosetta_client
-            .get_neuron_info(
-                env.network_identifier.clone(),
-                // Ask for a neuron that does not exist
-                RosettaNeuronInfoArgs::builder(neuron_index + 1)
-                    .with_public_key((&Arc::new(test_identity())).into())
-                    .build(),
-                &(*TEST_IDENTITY).clone(),
-            )
-            .await
-            .is_err());
+        assert!(
+            env.rosetta_client
+                .get_neuron_info(
+                    env.network_identifier.clone(),
+                    // Ask for a neuron that does not exist
+                    RosettaNeuronInfoArgs::builder(neuron_index + 1)
+                        .with_public_key((&Arc::new(test_identity())).into())
+                        .build(),
+                    &(*TEST_IDENTITY).clone(),
+                )
+                .await
+                .is_err()
+        );
     });
 }
 
@@ -1002,7 +996,7 @@ fn test_hotkey_management() {
                         Err(e)
                             if e.to_string()
                                 .contains("Either public key or principal id has to be set") => {}
-                        Err(e) => panic!("Unexpected error: {}", e),
+                        Err(e) => panic!("Unexpected error: {e}"),
                         Ok(_) => panic!("Expected an error but got success"),
                     }
                 });
@@ -1058,17 +1052,18 @@ fn test_stake_maturity() {
 
         // First we try an invalid amount to be staked
         let stake_percentage_invalid = 101;
-        assert!(env
-            .rosetta_client
-            .stake_maturity(
-                env.network_identifier.clone(),
-                &(*TEST_IDENTITY).clone(),
-                RosettaStakeMaturityArgs::builder(neuron_index)
-                    .with_percentage_to_stake(stake_percentage_invalid)
-                    .build()
-            )
-            .await
-            .is_err());
+        assert!(
+            env.rosetta_client
+                .stake_maturity(
+                    env.network_identifier.clone(),
+                    &(*TEST_IDENTITY).clone(),
+                    RosettaStakeMaturityArgs::builder(neuron_index)
+                        .with_percentage_to_stake(stake_percentage_invalid)
+                        .build()
+                )
+                .await
+                .is_err()
+        );
 
         // Now we try a valid amount
         let stake_percentage = 50;
@@ -1440,7 +1435,7 @@ fn test_refresh_voting_power() {
                         neuron.voting_power_refreshed_timestamp_seconds.unwrap();
 
                     // Wait for a second before updating the voting power. This is done so the timestamp is sure to have a different value when refreshed
-                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    sleep(std::time::Duration::from_secs(1)).await;
 
                     let hotkey_caller_identity = Arc::new(hot_key_identity);
                     TransactionOperationResults::try_from(
@@ -1469,7 +1464,7 @@ fn test_refresh_voting_power() {
                         neuron.voting_power_refreshed_timestamp_seconds.unwrap();
 
                     // Wait for a second before updating the voting power. This is done so the timestamp is sure to have a different value when refreshed
-                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    sleep(std::time::Duration::from_secs(1)).await;
                     TransactionOperationResults::try_from(
                         env.rosetta_client
                             .refresh_voting_power(

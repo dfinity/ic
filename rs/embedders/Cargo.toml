@@ -9,26 +9,26 @@ version.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 bincode = { workspace = true }
+candid = { workspace = true }
 clap = { workspace = true }
+ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-config = { path = "../config" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
-ic-heap-bytes = { path = "../../packages/ic-heap-bytes" }
 ic-error-types = { path = "../../packages/ic-error-types" }
+ic-heap-bytes = { path = "../../packages/ic-heap-bytes" }
 ic-interfaces = { path = "../interfaces" }
+ic-limits = { path = "../limits" }
 ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
+ic-nns-constants = { path = "../nns/constants" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
-ic-base-types = { path = "../types/base_types" }
-ic-limits = { path = "../limits" }
-ic-nns-constants = { path = "../nns/constants" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-utils-lru-cache = { path = "../utils/lru_cache" }
-ic-wasm-transform = { path = "../wasm_transform" }
 ic-wasm-types = { path = "../types/wasm_types" }
 itertools = { workspace = true }
 libc = { workspace = true }
@@ -47,14 +47,15 @@ slog-term = { workspace = true }
 tempfile = { workspace = true }
 wasm-encoder = { workspace = true }
 wasmparser = { workspace = true }
-wasmtime = { version = "35.0.0", default-features = false, features = [
+wasmtime = { version = "38.0.3", default-features = false, features = [
     'cranelift',
     'gc',
     'gc-null',
     'parallel-compilation',
     'runtime',
 ] }
-wasmtime-environ = "35.0.0"
+wasmtime-environ = "38.0.3"
+wirm = { workspace = true }
 
 # Wasmtime depends on 0.4.2 but specifies 0.4.1 in the toml file.
 # Enforce 0.4.2 using a dummy dependency until the upstream issue
@@ -64,18 +65,15 @@ mach2 = "0.4.2"
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-candid = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { workspace = true }
 embedders_bench = { path = "benches/embedders_bench" }
-ic-base-types = { path = "../types/base_types" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-embedders = { path = "../test_utilities/embedders" }
 ic-test-utilities-execution-environment = { path = "../test_utilities/execution_environment" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-state = { path = "../test_utilities/state" }
-ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 insta = "1.8.0"
 lazy_static = { workspace = true }
@@ -83,7 +81,6 @@ maplit = "1.0.2"
 more-asserts = "0.3.1"
 pretty_assertions = { workspace = true }
 proptest = { workspace = true }
-slog = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 wasmprinter = { workspace = true }

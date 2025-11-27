@@ -6,12 +6,13 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//rs/interfaces/registry",
     "//rs/nervous_system/canisters",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/timer_task",
     "//rs/nns/constants",
     "//rs/node_rewards/canister/api",
-    "//rs/node_rewards/canister/protobuf",
     "//rs/node_rewards/rewards_calculation",
     "//rs/protobuf",
     "//rs/registry/canister-client",
@@ -20,6 +21,7 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/types",
     "@crate_index//:candid",
+    "@crate_index//:chrono_canisters",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
@@ -40,7 +42,6 @@ DEV_DEPENDENCIES = [
     "//rs/registry/transport",
     "//rs/state_machine_tests",
     "@crate_index//:candid_parser",
-    "@crate_index//:chrono_canisters",
     "@crate_index//:futures-util",
     "@crate_index//:maplit",
     "@crate_index//:mockall",
@@ -62,7 +63,7 @@ DEV_DATA = [
     # Keep sorted.
     ":node-rewards-canister",
     ":node-rewards-canister-test",
-    "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
+    "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
     "//rs/nns/cmc:cycles-minting-canister",
     "//rs/nns/governance:governance-canister",
     "//rs/nns/governance:governance-canister-test",
@@ -83,7 +84,7 @@ DEV_ENV = {
     "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
     "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
     "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
-    "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
+    "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     "LIFELINE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
@@ -107,6 +108,16 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
+rust_library(
+    name = "nrc-test",
+    srcs = LIB_SRCS,
+    crate_features = ["test"],
+    crate_name = "ic_node_rewards_canister",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
 rust_canister(
     name = "node-rewards-canister",
     srcs = ["src/main.rs"],
@@ -124,7 +135,7 @@ rust_canister(
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":node-rewards-canister.did",
     deps = DEPENDENCIES + [
-        ":nrc",
+        ":nrc-test",
     ],
 )
 

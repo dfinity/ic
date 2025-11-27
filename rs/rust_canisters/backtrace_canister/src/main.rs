@@ -7,7 +7,7 @@ use ic_cdk::update;
 /// This just allows us to make a non-trivial backtrace without needed to write
 /// out several functions each time.
 macro_rules! make_call_chain {
-    ( $name:ident, $x:expr ) => {
+    ( $name:ident, $x:expr_2021 ) => {
         mod $name {
             #[inline(never)]
             pub(super) fn outer() {

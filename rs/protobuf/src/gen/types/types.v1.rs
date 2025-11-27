@@ -630,6 +630,13 @@ pub mod canister_http_response_message {
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpArtifact {
+    #[prost(message, optional, tag = "1")]
+    pub share: ::core::option::Option<CanisterHttpShare>,
+    #[prost(message, optional, tag = "2")]
+    pub response: ::core::option::Option<CanisterHttpResponse>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgPayload {
     #[prost(message, repeated, tag = "1")]
     pub signature_agreements: ::prost::alloc::vec::Vec<CompletedSignature>,

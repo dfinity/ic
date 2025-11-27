@@ -29,7 +29,7 @@ pub fn secret_key_from_components(
     let sk = ic_secp256k1::PrivateKey::deserialize_sec1(sk_raw_bytes).map_err(|e| {
         CryptoError::MalformedSecretKey {
             algorithm: AlgorithmId::EcdsaSecp256k1,
-            internal_error: format!("{:?}", e),
+            internal_error: format!("{e:?}"),
         }
     })?;
 
@@ -61,7 +61,7 @@ pub fn public_key_from_der(pk_der: &[u8]) -> CryptoResult<types::PublicKeyBytes>
         CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::EcdsaSecp256k1,
             key_bytes: Some(pk_der.to_vec()),
-            internal_error: format!("{:?}", e),
+            internal_error: format!("{e:?}"),
         }
     })?;
 
@@ -92,7 +92,7 @@ pub fn public_key_to_der(pk: &types::PublicKeyBytes) -> CryptoResult<Vec<u8>> {
         CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::EcdsaSecp256k1,
             key_bytes: Some(pk.0.to_vec()),
-            internal_error: format!("{:?}", e),
+            internal_error: format!("{e:?}"),
         }
     })?;
 
@@ -142,7 +142,7 @@ pub fn verify(
         CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::EcdsaSecp256k1,
             key_bytes: Some(pk.0.to_vec()),
-            internal_error: format!("{:?}", e),
+            internal_error: format!("{e:?}"),
         }
     })?;
 

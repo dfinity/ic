@@ -6,16 +6,16 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    SubnetId,
     batch::ValidationContext,
     consensus::{
-        dkg::{DkgDataPayload, DkgPayloadValidationFailure, DkgSummary, InvalidDkgPayloadReason},
         Block, BlockPayload,
+        dkg::{DkgDataPayload, DkgPayloadValidationFailure, DkgSummary, InvalidDkgPayloadReason},
     },
-    SubnetId,
 };
 use prometheus::IntCounterVec;
 use std::collections::HashSet;
@@ -111,8 +111,7 @@ pub fn validate_payload(
                 .map_err(DkgPayloadValidationFailure::FailedToGetMaxDealingsPerBlock)?
                 .unwrap_or_else(|| {
                     panic!(
-                        "No subnet record found for registry version={} and subnet_id={}",
-                        registry_version, subnet_id
+                        "No subnet record found for registry version={registry_version} and subnet_id={subnet_id}"
                     )
                 });
 
@@ -202,7 +201,7 @@ mod tests {
     use super::*;
     use crate::{DkgImpl, DkgKeyManager};
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
-    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
     use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
     use ic_interfaces::{
         consensus_pool::ConsensusPool,
@@ -215,17 +214,18 @@ mod tests {
     use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{
-        node_test_id, subnet_test_id, NODE_1, NODE_2, NODE_3, SUBNET_1, SUBNET_2,
+        NODE_1, NODE_2, NODE_3, SUBNET_1, SUBNET_2, node_test_id, subnet_test_id,
     };
     use ic_types::{
+        Height, NodeId, RegistryVersion,
         batch::BatchPayload,
         consensus::{
+            DataPayload, Payload,
             dkg::{DealingContent, Message},
-            idkg, DataPayload, Payload,
+            idkg,
         },
         crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         time::UNIX_EPOCH,
-        Height, NodeId, RegistryVersion,
     };
     use std::{
         ops::Deref,
@@ -272,20 +272,22 @@ mod tests {
             let block = Block::from(pool.make_next_block());
             let block_payload = block.payload.as_ref();
 
-            assert!(validate_payload(
-                subnet_test_id(0),
-                registry.as_ref(),
-                crypto.as_ref(),
-                &PoolReader::new(&pool),
-                dkg_pool.read().unwrap().deref(),
-                parent_block,
-                block_payload,
-                state_manager.as_ref(),
-                &context,
-                &mock_metrics(),
-                &no_op_logger(),
-            )
-            .is_ok());
+            assert!(
+                validate_payload(
+                    subnet_test_id(0),
+                    registry.as_ref(),
+                    crypto.as_ref(),
+                    &PoolReader::new(&pool),
+                    dkg_pool.read().unwrap().deref(),
+                    parent_block,
+                    block_payload,
+                    state_manager.as_ref(),
+                    &context,
+                    &mock_metrics(),
+                    &no_op_logger(),
+                )
+                .is_ok()
+            );
 
             // Advance the blockchain by one block to height `dkg_interval_length`
             pool.advance_round_normal_operation();
@@ -294,20 +296,22 @@ mod tests {
             let block = Block::from(pool.make_next_block());
             let summary = block.payload.as_ref();
 
-            assert!(validate_payload(
-                subnet_test_id(0),
-                registry.as_ref(),
-                crypto.as_ref(),
-                &PoolReader::new(&pool),
-                dkg_pool.read().unwrap().deref(),
-                parent_block,
-                summary,
-                state_manager.as_ref(),
-                &context,
-                &mock_metrics(),
-                &no_op_logger(),
-            )
-            .is_ok());
+            assert!(
+                validate_payload(
+                    subnet_test_id(0),
+                    registry.as_ref(),
+                    crypto.as_ref(),
+                    &PoolReader::new(&pool),
+                    dkg_pool.read().unwrap().deref(),
+                    parent_block,
+                    summary,
+                    state_manager.as_ref(),
+                    &context,
+                    &mock_metrics(),
+                    &no_op_logger(),
+                )
+                .is_ok()
+            );
         })
     }
 
@@ -491,7 +495,7 @@ mod tests {
                 idkg: idkg::Payload::default(),
             });
 
-            let result = validate_payload(
+            validate_payload(
                 subnet_id,
                 registry.as_ref(),
                 crypto.as_ref(),
@@ -503,9 +507,7 @@ mod tests {
                 &context,
                 &mock_metrics(),
                 &no_op_logger(),
-            );
-
-            result
+            )
         })
     }
 
@@ -636,7 +638,7 @@ mod tests {
             // It should be possible to create a dealing
             let result = dkg_impl.on_state_change(&dkg_pool);
             let first = result.first().unwrap();
-            let ChangeAction::AddToValidated(ref dealing) = first else {
+            let ChangeAction::AddToValidated(dealing) = first else {
                 panic!("Unexpected change action: {first:?}")
             };
 
@@ -648,7 +650,7 @@ mod tests {
                 vec![dealing],
             );
             let first = result.first().unwrap();
-            let ChangeAction::MoveToValidated(ref dealing_validated) = first else {
+            let ChangeAction::MoveToValidated(dealing_validated) = first else {
                 panic!("Unexpected change action: {first:?}")
             };
             assert_eq!(dealing, dealing_validated);

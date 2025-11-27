@@ -1,7 +1,7 @@
 #![allow(clippy::disallowed_types)]
 use std::ops::Range;
-use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
 use core::ops::Deref;
 use std::time::Instant;
@@ -16,7 +16,7 @@ use tracing::{debug, error, info, trace};
 use crate::blocks::BlockStoreError;
 use crate::blocks::{Blocks, HashedBlock, RosettaDbConfig};
 use crate::blocks_access::BlocksAccess;
-use crate::certification::{verify_block_hash, VerificationInfo};
+use crate::certification::{VerificationInfo, verify_block_hash};
 use crate::errors::Error;
 use rosetta_core::metrics::RosettaMetrics;
 
@@ -140,7 +140,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 }
             }
             Err(e) => {
-                let msg = format!("Error loading genesis block: {:?}", e);
+                let msg = format!("Error loading genesis block: {e:?}");
                 error!("{}", msg);
                 return Err(Error::InternalError(msg));
             }
@@ -229,8 +229,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             }
             if retry == MAX_RETRIES_QUERY_TIP_BLOCK {
                 break Err(format!(
-                    "Failed to retrieve tip block after {} retries",
-                    MAX_RETRIES_QUERY_TIP_BLOCK
+                    "Failed to retrieve tip block after {MAX_RETRIES_QUERY_TIP_BLOCK} retries"
                 ));
             }
             retry += 1;
@@ -375,8 +374,10 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                     .await
                     .map_err(Error::InternalError);
                 if batch.is_ok() || retry == MAX_RETRY {
-                    self.rosetta_metrics
-                        .add_blocks_fetched(batch.as_ref().unwrap().len() as u64);
+                    if let Ok(encoded_blocks) = &batch {
+                        self.rosetta_metrics
+                            .add_blocks_fetched(encoded_blocks.len() as u64);
+                    }
                     break batch;
                 }
                 self.rosetta_metrics.inc_fetch_retries();
@@ -399,7 +400,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             }
             for raw_block in batch {
                 let block = Block::decode(raw_block.clone())
-                    .map_err(|err| Error::InternalError(format!("Cannot decode block: {}", err)))?;
+                    .map_err(|err| Error::InternalError(format!("Cannot decode block: {err}")))?;
                 if block.parent_hash != last_block_hash {
                     let err_msg = format!(
                         "Block at {}: parent hash mismatch. Expected: {:?}, got: {:?}",
@@ -417,7 +418,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 i += 1;
             }
             self.rosetta_metrics.set_synced_height(i - 1);
-            if (i - range.start) % DATABASE_WRITE_BLOCKS_BATCH_SIZE == 0 {
+            if (i - range.start).is_multiple_of(DATABASE_WRITE_BLOCKS_BATCH_SIZE) {
                 blockchain.push_batch(block_batch)?;
                 if print_progress {
                     info!("Synced up to {}", i - 1);
@@ -437,17 +438,17 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
 mod test {
 
     use std::ops::Range;
-    use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
 
     use async_trait::async_trait;
+    use ic_ledger_core::Tokens;
     use ic_ledger_core::block::{BlockType, EncodedBlock};
     use ic_ledger_core::timestamp::TimeStamp;
-    use ic_ledger_core::Tokens;
     use ic_ledger_hash_of::HashOf;
     use ic_types::PrincipalId;
     use icp_ledger::{
-        AccountIdentifier, Block, BlockIndex, Memo, TipOfChainRes, DEFAULT_TRANSFER_FEE,
+        AccountIdentifier, Block, BlockIndex, DEFAULT_TRANSFER_FEE, Memo, TipOfChainRes,
     };
 
     use crate::blocks::RosettaDbConfig;

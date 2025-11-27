@@ -1,7 +1,7 @@
 use crate::host::agent::dispatch;
-use crate::protocol::{parse_request, Request, Response};
+use crate::protocol::{Request, Response, parse_request};
 use std::io::{Error, ErrorKind, Read, Result, Write};
-use vsock::{VsockAddr, VsockListener, VsockStream, VMADDR_CID_ANY};
+use vsock::{VMADDR_CID_ANY, VsockAddr, VsockListener, VsockStream};
 
 const DEFAULT_PORT: u32 = 19090;
 
@@ -35,7 +35,7 @@ fn process_connection(stream: &mut VsockStream) -> Result<()> {
             return Err(err);
         }
     };
-    println!("Received vsock request: {}", request);
+    println!("Received vsock request: {request}");
 
     if let Err(err) = verify_sender_cid(stream, request.guest_cid) {
         send_response(stream, &Err(err.to_string()))?;
@@ -53,7 +53,7 @@ fn get_request(stream: &mut VsockStream) -> Result<Request> {
     let json_request: String = match std::str::from_utf8(&buffer[..bytes_read]) {
         Ok(json_str_request) => json_str_request.to_string(),
         Err(error) => {
-            println!("Error converting bytes to string: {}", error);
+            println!("Error converting bytes to string: {error}");
             return Err(Error::new(ErrorKind::InvalidData, error));
         }
     };
@@ -66,7 +66,7 @@ fn verify_sender_cid(stream: &mut VsockStream, guest_cid: u32) -> Result<()> {
     let peer_address = match stream.peer_addr() {
         Ok(peer_address) => peer_address,
         Err(err) => {
-            let error = format!("Error: could not verify the sender_cid. {}", err);
+            let error = format!("Error: could not verify the sender_cid. {err}");
             return Err(Error::new(ErrorKind::InvalidData, error));
         }
     };

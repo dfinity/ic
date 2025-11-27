@@ -10,24 +10,23 @@ use ic_nervous_system_clients::{
 };
 use ic_nervous_system_common::serve_metrics;
 use ic_nervous_system_root::{
-    change_canister::{
-        change_canister, AddCanisterRequest, CanisterAction, ChangeCanisterRequest,
-        StopOrStartCanisterRequest,
-    },
     LOG_PREFIX,
+    change_canister::{
+        AddCanisterRequest, CanisterAction, ChangeCanisterRequest, StopOrStartCanisterRequest,
+        change_canister,
+    },
 };
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_common::{
     access_control::{check_caller_is_governance, check_caller_is_sns_w},
-    types::CallCanisterProposal,
+    types::CallCanisterRequest,
 };
 use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID,
 };
 use ic_nns_handler_root::{
-    canister_management, encode_metrics,
+    PROXIED_CANISTER_CALLS_TRACKER, canister_management, encode_metrics,
     root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot},
-    PROXIED_CANISTER_CALLS_TRACKER,
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
@@ -36,9 +35,8 @@ use ic_nns_handler_root_interface::{
 use std::cell::RefCell;
 
 use ic_cdk::futures::spawn_017_compat;
-#[cfg(target_arch = "wasm32")]
 use ic_cdk::println;
-use ic_cdk::{post_upgrade, query, update};
+use ic_cdk::{init, post_upgrade, query, update};
 
 fn caller() -> PrincipalId {
     PrincipalId::from(ic_cdk::api::msg_caller())
@@ -66,17 +64,14 @@ fn new_management_canister_client() -> impl ManagementCanisterClient {
     )
 }
 
-// canister_init and canister_post_upgrade are needed here
-// to ensure that printer hook is set up, otherwise error
-// messages are quite obscure.
-#[export_name = "canister_init"]
+#[init]
 fn canister_init() {
-    println!("{}canister_init", LOG_PREFIX);
+    println!("{LOG_PREFIX}canister_init");
 }
 
 #[post_upgrade]
 fn canister_post_upgrade() {
-    println!("{}canister_post_upgrade", LOG_PREFIX);
+    println!("{LOG_PREFIX}canister_post_upgrade");
 }
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}
@@ -196,8 +191,8 @@ async fn stop_or_start_nns_canister(request: StopOrStartCanisterRequest) {
         .unwrap() // For compatibility.
 }
 
-#[update(hidden = true)]
-fn call_canister(proposal: CallCanisterProposal) {
+#[update]
+fn call_canister(proposal: CallCanisterRequest) {
     check_caller_is_governance();
     // Starts the proposal execution, which will continue after this function has returned.
     let future = canister_management::call_canister(proposal);

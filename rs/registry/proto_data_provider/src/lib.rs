@@ -4,8 +4,8 @@ use ic_registry_common_proto::pb::proto_registry::v1::{ProtoRegistry, ProtoRegis
 use ic_registry_transport::pb::v1::registry_mutation::Type;
 use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
 use ic_registry_transport::upsert;
-use ic_sys::fs::{write_atomically, Clobber};
-use ic_types::{registry::RegistryDataProviderError, RegistryVersion};
+use ic_sys::fs::{Clobber, write_atomically};
+use ic_types::{RegistryVersion, registry::RegistryDataProviderError};
 use std::collections::HashMap;
 use std::{
     io::Write,
@@ -95,7 +95,7 @@ impl ProtoRegistryDataProvider {
                     return Err(ProtoRegistryDataProviderError::KeyAlreadyExists {
                         key: key.to_string(),
                         version,
-                    })
+                    });
                 }
                 Err(idx) => {
                     let record = ProtoRegistryRecord {
@@ -112,11 +112,16 @@ impl ProtoRegistryDataProvider {
     }
 
     pub fn decode<B: Buf>(buf: B) -> Self {
-        let registry = ProtoRegistry::decode(buf).expect("Could not decode protobuf registry.");
+        Self::try_decode(buf).unwrap()
+    }
 
-        Self {
+    pub fn try_decode<B: Buf>(buf: B) -> Result<Self, String> {
+        let registry = ProtoRegistry::decode(buf)
+            .map_err(|err| format!("Could not decode protobuf registry: {}", err))?;
+
+        Ok(Self {
             records: Arc::new(RwLock::new(registry.records)),
-        }
+        })
     }
 
     pub fn encode<B: BufMut>(&self, buf: &mut B) {
@@ -188,6 +193,33 @@ impl ProtoRegistryDataProvider {
                         key: key.to_string(),
                         version: version.get(),
                         value: Some(mutation.value),
+                    };
+                    records.insert(idx, record);
+                }
+            }
+        }
+    }
+
+    pub fn add_registry_records(&self, mut new_records: Vec<RegistryRecord>) {
+        let mut records = self.records.write().unwrap();
+
+        new_records.sort_by(|l, r| l.key.cmp(&r.key));
+
+        for record in new_records {
+            let search_key = &(&record.version.get(), &record.key);
+
+            match records.binary_search_by_key(search_key, |r| (&r.version, &r.key)) {
+                Ok(_) => {
+                    panic!(
+                        "A record for the same key {} already exists at the same version {}.",
+                        record.key, record.version
+                    );
+                }
+                Err(idx) => {
+                    let record = ProtoRegistryRecord {
+                        key: record.key,
+                        version: record.version.get(),
+                        value: record.value,
                     };
                     records.insert(idx, record);
                 }

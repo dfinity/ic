@@ -5,7 +5,7 @@ use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
 };
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
-use ic_crypto_sha2::{Context, DomainSeparationContext, Sha256};
+use ic_crypto_sha2::{DomainSeparationContext, Sha256};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::AlgorithmId;
 use std::fmt;
@@ -53,7 +53,7 @@ impl fmt::Debug for KeyId {
 
 impl fmt::Display for KeyId {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -106,7 +106,7 @@ impl<B: AsRef<[u8]>> From<(AlgorithmId, &B)> for KeyId {
 
 impl From<&CspPublicKey> for KeyId {
     fn from(public_key: &CspPublicKey) -> Self {
-        KeyId::from((public_key.algorithm_id(), &public_key.pk_bytes()))
+        KeyId::from((AlgorithmId::from(public_key), public_key))
     }
 }
 
@@ -119,7 +119,7 @@ impl TryFrom<&MEGaPublicKey> for KeyId {
                 AlgorithmId::ThresholdEcdsaSecp256k1,
                 &public_key.serialize(),
             ))),
-            c => Err(format!("unsupported curve: {:?}", c)),
+            c => Err(format!("unsupported curve: {c:?}")),
         }
     }
 }
@@ -165,10 +165,7 @@ impl TryFrom<&CspPublicCoefficients> for KeyId {
             THRESHOLD_PUBLIC_COEFFICIENTS_KEY_ID_DOMAIN,
         ));
         hash.write(&serde_cbor::to_vec(&coefficients).map_err(|err| {
-            Self::Error::InvalidArguments(format!(
-                "Failed to serialize public coefficients: {}",
-                err
-            ))
+            Self::Error::InvalidArguments(format!("Failed to serialize public coefficients: {err}"))
         })?);
         Ok(KeyId::from(hash.finish()))
     }
@@ -179,7 +176,7 @@ impl FromHex for KeyId {
 
     fn from_hex<T: AsRef<[u8]>>(data: T) -> Result<Self, Self::Error> {
         let bytes: [u8; 32] = hex::decode(data)
-            .map_err(|err| format!("Error decoding hex: {}", err))?
+            .map_err(|err| format!("Error decoding hex: {err}"))?
             .try_into()
             .map_err(|_err| "wrong size of array: expected 32 bytes")?;
         Ok(KeyId::from(bytes))

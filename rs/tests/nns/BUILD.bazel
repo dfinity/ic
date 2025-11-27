@@ -42,7 +42,6 @@ system_test(
     name = "create_subnet_test",
     env = NNS_CANISTER_ENV | UNIVERSAL_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",
     ],
     runtime_deps = NNS_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
@@ -64,9 +63,6 @@ system_test(
 system_test(
     name = "nns_token_balance_test",
     env = NNS_CANISTER_ENV | UNIVERSAL_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
     runtime_deps = NNS_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -92,7 +88,6 @@ system_test(
     name = "nns_cycles_minting_test",
     env = NNS_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps = NNS_CANISTER_RUNTIME_DEPS,
@@ -135,9 +130,6 @@ system_test(
 system_test(
     name = "nns_cycles_minting_multi_app_subnets_test",
     env = NNS_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
     runtime_deps = NNS_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -164,9 +156,6 @@ system_test(
 system_test(
     name = "node_removal_from_registry_test",
     env = NNS_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
     runtime_deps = NNS_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -188,9 +177,6 @@ system_test(
     env = dict(NNS_CANISTER_ENV.items() + {
         "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
     }.items()),
-    tags = [
-        "k8s",
-    ],
     runtime_deps = NNS_CANISTER_RUNTIME_DEPS + ["@btc_canister//file"],
     deps = [
         # Keep sorted.
@@ -217,9 +203,6 @@ system_test(
 system_test(
     name = "certified_registry_test",
     env = NNS_CANISTER_ENV | UNIVERSAL_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
     runtime_deps = NNS_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/crypto/utils/threshold_sig_der",
@@ -239,5 +222,79 @@ system_test(
         "@crate_index//:slog",
         "@crate_index//:tokio",
         "@crate_index//:url",
+    ],
+)
+
+system_test(
+    name = "rent_subnet_test",
+    env = NNS_CANISTER_ENV | UNIVERSAL_CANISTER_ENV | {
+        # Keep sorted.
+        "SUBNET_RENTAL_CANISTER_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+        "XRC_MOCK_WASM_PATH": "$(rootpath //rs/rust_canisters/xrc_mock:xrc_mock_canister)",
+    },
+    tags = [
+        "long_test",  # The test takes over 10 minutes so let's not run it on PRs by default.
+    ],
+    runtime_deps = NNS_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS + [
+        # Keep sorted.
+        "//rs/rust_canisters/xrc_mock:xrc_mock_canister",
+        "@subnet_rental_canister//file",
+    ],
+    deps = [
+        # Keep sorted.
+        "//packages/icrc-ledger-types",
+        "//rs/canister_client",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nervous_system/common",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nns/cmc",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
+        "//rs/registry/canister",
+        "//rs/registry/nns_data_provider",
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-utils",
+        "@crate_index//:lazy_static",
+        "@crate_index//:slog",
+        "@crate_index//:url",
+    ],
+)
+
+system_test(
+    name = "node_swap_test",
+    env = NNS_CANISTER_ENV | UNIVERSAL_CANISTER_ENV | {
+        "IC_ADMIN_PATH": "$(rootpath //rs/registry/admin:ic-admin)",
+    },
+    tags = [],
+    runtime_deps = NNS_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS + [
+        "//rs/registry/admin:ic-admin",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/nervous_system/common",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
+        "//rs/registry/canister",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:reqwest",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
     ],
 )

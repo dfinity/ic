@@ -34,11 +34,11 @@ impl RoseHashTree {
 impl fmt::Debug for RoseHashTree {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RoseHashTree::Leaf(digest) => write!(f, "{}", digest),
+            RoseHashTree::Leaf(digest) => write!(f, "{digest}"),
             RoseHashTree::Fork { digest, children } => {
-                let mut s = f.debug_struct(&format!("fork@{}", digest));
+                let mut s = f.debug_struct(&format!("fork@{digest}"));
                 for (label, child) in children {
-                    s.field(&format!("{}", label), child);
+                    s.field(&format!("{label}"), child);
                 }
                 s.finish()
             }
@@ -103,7 +103,7 @@ pub type Changes = BTreeMap<Path, Change>;
 impl std::fmt::Display for Change {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InsertLeaf(h) => write!(f, "→ {}", h),
+            Self::InsertLeaf(h) => write!(f, "→ {h}"),
             Self::InsertEmptyFork => write!(f, "→ ∅"),
             Self::DeleteSubtree => write!(f, "✗"),
         }
@@ -116,7 +116,7 @@ struct PathDisplay<'a>(&'a Path);
 impl fmt::Display for PathDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for label in self.0.iter() {
-            write!(f, "/{}", label)?;
+            write!(f, "/{label}")?;
         }
         Ok(())
     }
@@ -285,10 +285,7 @@ mod tests {
     fn rehash(t: &mut RoseHashTree) {
         match t {
             RoseHashTree::Leaf(_) => (),
-            RoseHashTree::Fork {
-                children,
-                ref mut digest,
-            } => {
+            RoseHashTree::Fork { children, digest } => {
                 let mut hasher = Sha256::new();
                 for (label, child) in children.iter_mut() {
                     rehash(child);
@@ -331,7 +328,7 @@ mod tests {
             path: &mut Path,
         ) -> Result<(Path, Digest), usize> {
             match t {
-                RoseHashTree::Leaf(ref mut hash) if idx == 0 => {
+                RoseHashTree::Leaf(hash) if idx == 0 => {
                     let old_hash = std::mem::replace(hash, new_hash);
                     Ok((path.clone(), old_hash))
                 }

@@ -7,7 +7,7 @@ use ic_registry_client_helpers::node::NodeRecord;
 use ic_registry_keys::{make_node_record_key, make_subnet_record_key};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{
-    registry::RegistryClientError, NodeId, PrincipalId, RegistryVersion, SubnetId, Time,
+    NodeId, PrincipalId, RegistryVersion, SubnetId, Time, registry::RegistryClientError,
 };
 use prost::Message;
 use std::{io::Write, path::PathBuf, sync::Arc, thread};
@@ -31,7 +31,7 @@ impl RegistryCanisterClient {
         });
 
         let content = std::fs::read_to_string(nns_pem_path.as_path()).unwrap();
-        println!("NNS public key being used: \n{}", content);
+        println!("NNS public key being used: \n{content}");
 
         let nns_public_key = parse_threshold_sig_key(nns_pem_path.as_path()).unwrap();
 
@@ -48,10 +48,7 @@ impl RegistryClient for RegistryCanisterClient {
         key: &str,
         version: RegistryVersion,
     ) -> RegistryClientVersionedResult<Vec<u8>> {
-        println!(
-            "Getting registry value of key {} at version {}...",
-            key, version
-        );
+        println!("Getting registry value of key {key} at version {version}...");
 
         let canister = self.0.clone();
         let key_bytes = key.as_bytes().to_vec();
@@ -121,10 +118,9 @@ pub(crate) async fn get_nodes(
                         Some(version),
                     )
                     .await
-                    .unwrap_or_else(|e| panic!("failed to get node record {}: {}", node_id, e));
-                let record = NodeRecord::decode(&node_record_bytes[..]).unwrap_or_else(|e| {
-                    panic!("failed to deserialize node record {}: {}", node_id, e)
-                });
+                    .unwrap_or_else(|e| panic!("failed to get node record {node_id}: {e}"));
+                let record = NodeRecord::decode(&node_record_bytes[..])
+                    .unwrap_or_else(|e| panic!("failed to deserialize node record {node_id}: {e}"));
                 (node_id, record)
             })
         })

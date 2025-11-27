@@ -1,15 +1,15 @@
 //! Threshold signature implementation for the CSP
+use crate::Csp;
 use crate::api::{CspThresholdSignError, ThresholdSignatureCspClient};
 use crate::key_id::{KeyId, KeyIdInstantiationError};
 use crate::types::{CspPublicCoefficients, CspSignature, ThresBls12_381_Signature};
-use crate::Csp;
 use ic_crypto_internal_threshold_sig_bls12381 as clib;
-use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::conversions::try_number_of_nodes_from_pub_coeff_bytes;
+use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::try_number_of_nodes_from_pub_coeff_bytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
-use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
+use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::NodeIndex;
+use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult};
 use std::convert::TryFrom;
@@ -76,7 +76,7 @@ impl ThresholdSignatureCspClient for Csp {
                 ))
             }
             _ => Err(CryptoError::InvalidArgument {
-                message: format!("Unsupported algorithm: {:?}", algorithm_id),
+                message: format!("Unsupported algorithm: {algorithm_id:?}"),
             }),
         }
     }
@@ -91,14 +91,12 @@ impl ThresholdSignatureCspClient for Csp {
             AlgorithmId::ThresBls12_381 => {
                 let clib_public_coefficients_bytes =
                     PublicCoefficientsBytes::from(public_coefficients);
-                let public_key_bytes = clib::api::individual_public_key_from_trusted_bytes(
-                    &clib_public_coefficients_bytes,
-                    node_index,
-                )?;
+                let public_key_bytes =
+                    clib::api::individual_public_key(&clib_public_coefficients_bytes, node_index)?;
                 Ok(CspThresholdSigPublicKey::ThresBls12_381(public_key_bytes))
             }
             _ => Err(CryptoError::InvalidArgument {
-                message: format!("Unsupported algorithm: {:?}", algorithm_id),
+                message: format!("Unsupported algorithm: {algorithm_id:?}"),
             }),
         }
     }
@@ -117,7 +115,7 @@ impl ThresholdSignatureCspClient for Csp {
                 clib::api::verify_individual_signature(message, clib_signature, clib_public_key)
             }
             _ => Err(CryptoError::InvalidArgument {
-                message: format!("Unsupported algorithm: {:?}", algorithm_id),
+                message: format!("Unsupported algorithm: {algorithm_id:?}"),
             }),
         }
     }
@@ -137,7 +135,7 @@ impl ThresholdSignatureCspClient for Csp {
                 clib::api::verify_combined_signature(message, clib_signature, clib_public_key)
             }
             _ => Err(CryptoError::InvalidArgument {
-                message: format!("Unsupported algorithm: {:?}", algorithm_id),
+                message: format!("Unsupported algorithm: {algorithm_id:?}"),
             }),
         }
     }

@@ -2,9 +2,14 @@
 
 set -e
 
-readonly EXPECTED_RECOVERY_HASH_FILE="/opt/ic/share/expected_recovery_hash"
+source /opt/ic/bin/config.sh
+
 readonly MAX_ATTEMPTS=10
 readonly RETRY_DELAY=5
+
+function read_config_variables() {
+    expected_recovery_hash=$(get_config_value '.recovery_config.recovery_hash')
+}
 
 # Completes the recovery process by downloading and applying the recovery artifacts
 
@@ -18,7 +23,6 @@ perform_recovery() {
     verify_file_hash() {
         local file="$1"
         local expected_hash="$2"
-        local actual_hash
 
         echo "Verifying hash for $file..."
         actual_hash=$(sha256sum "$file" | cut -d' ' -f1)
@@ -28,19 +32,20 @@ perform_recovery() {
             return 0
         else
             echo "✗ Hash verification failed for $file"
-            echo "  Expected: $expected_hash"
-            echo "  Actual:   $actual_hash"
+            echo "  Expected hash: $expected_hash"
+            echo "  Actual hash:   $actual_hash"
             return 1
         fi
     }
 
     download_recovery_artifact() {
         local base_url="$1"
-        local recovery_url="${base_url}/recovery/${EXPECTED_RECOVERY_HASH}/recovery.tar.zst"
+        local expected_recovery_hash="$2"
+        local recovery_url="${base_url}/recovery/${expected_recovery_hash}/recovery.tar.zst"
 
         echo "Attempting to download recovery artifact from $recovery_url"
 
-        if curl -L --fail -o "recovery.tar.zst" "$recovery_url"; then
+        if curl --proto '=https' --location --proto-redir '=https' --tlsv1.2 --silent --show-error --fail -o "recovery.tar.zst" "$recovery_url"; then
             echo "Successfully downloaded recovery artifact from $base_url"
             return 0
         else
@@ -50,19 +55,14 @@ perform_recovery() {
         fi
     }
 
-    if [ ! -f "$EXPECTED_RECOVERY_HASH_FILE" ]; then
-        echo "ERROR: Expected recovery hash file not found: $EXPECTED_RECOVERY_HASH_FILE"
+    read_config_variables
+
+    if [ -z "$expected_recovery_hash" ]; then
+        echo "ERROR: recovery-hash boot parameter is required"
         return 1
     fi
 
-    EXPECTED_RECOVERY_HASH="$(cat "$EXPECTED_RECOVERY_HASH_FILE" | tr -d '\n\r')"
-
-    if [ -z "$EXPECTED_RECOVERY_HASH" ]; then
-        echo "ERROR: Expected recovery hash file is empty"
-        return 1
-    fi
-
-    echo "Using expected recovery hash: $EXPECTED_RECOVERY_HASH"
+    echo "Using expected recovery hash: $expected_recovery_hash"
 
     echo "Downloading recovery artifact..."
     base_urls=(
@@ -72,7 +72,7 @@ perform_recovery() {
 
     download_successful=false
     for base_url in "${base_urls[@]}"; do
-        if download_recovery_artifact "$base_url"; then
+        if download_recovery_artifact "$base_url" "$expected_recovery_hash"; then
             download_successful=true
             break
         fi
@@ -84,7 +84,7 @@ perform_recovery() {
     fi
 
     echo "Verifying recovery artifact..."
-    if ! verify_file_hash "recovery.tar.zst" "$EXPECTED_RECOVERY_HASH"; then
+    if ! verify_file_hash "recovery.tar.zst" "$expected_recovery_hash"; then
         echo "ERROR: Recovery artifact hash verification failed"
         return 1
     fi
@@ -123,6 +123,7 @@ while [ $attempt -le $MAX_ATTEMPTS ]; do
 
     if perform_recovery; then
         echo "✓ Recovery completed successfully on attempt $attempt"
+        /opt/ic/bin/vsock_guest --notify "Manual recovery completed successfully" --count 10
         exit 0
     else
         echo "✗ Recovery failed on attempt $attempt"
@@ -137,4 +138,5 @@ while [ $attempt -le $MAX_ATTEMPTS ]; do
 done
 
 echo "ERROR: Recovery failed after $MAX_ATTEMPTS attempts"
+/opt/ic/bin/vsock_guest --notify "Manual recovery failed after $MAX_ATTEMPTS attempts" --count 10
 exit 1

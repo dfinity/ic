@@ -12,7 +12,7 @@ SetupOS constructs its config struct from the following user-facing configuratio
   ssh_authorized_keys             # SSH private keys
   node_operator_private_key.pem   # Node Operator private key created in the Node Provider onboarding
   deployment.json                 # Deployment-specific configurations
-  nns_public_key.pem              # NNS public key
+  nns_public_key_override.pem     # NNS public key override (only for dev variant)
 
 Refer to link:../../rs/ic_os/config/README.md[rs/ic_os/config] and link:../components/setupos/setup-hostos-config.sh[setup-hostos-config.sh] for more details.
 
@@ -20,13 +20,13 @@ Refer to link:../../rs/ic_os/config/README.md[rs/ic_os/config] and link:../compo
 
 HostOS creates a bootstrap config image containing a tar file with the GuestOS configuration files.
 
-Refer to link:../../rs/ic_os/config/src/guest_vm_config.rs[guest_vm_config.rs] and link:../../rs/ic_os/config/src/guestos_bootstrap_image.rs[guestos_bootstrap_image.rs] for more details.
+Refer to link:../../rs/ic_os/os_tools/guest_vm_runner/src/guest_vm_config.rs[guest_vm_config.rs] and link:../../rs/ic_os/config/src/hostos/guestos_bootstrap_image.rs[guestos_bootstrap_image.rs] for more details.
 
-When the HostOS launches the GuestOS, the bootstrap config image is attached to the GuestOS as a virtual USB. Refer to link:../../rs/ic_os/config/templates/guestos_vm_template.xml[guestos_vm_template.xml]
+When the HostOS launches the GuestOS, the bootstrap config image is attached to the GuestOS as a virtual USB. Refer to link:../../rs/ic_os/os_tools/guest_vm_runner/templates/guestos_vm_template.xml[guestos_vm_template.xml]
 
 When the GuestOS boots, it checks for available removable media devices (i.e. the bootstrap config image). If such a device is found, the media must contain a VFAT filesystem and a single file called `ic-bootstrap.tar`.
 
-GuestOS then reads from `ic-bootstrap.tar` (link:../components/init/init-config/init-config.sh[see init-config.sh]) and only `config.json` is unpacked and copied into `/run/config`.
+GuestOS then reads from `ic-bootstrap.tar` (link:../components/guestos/init/init-config/init-config.sh[see init-config.sh]) and only `config.json` is unpacked and copied into `/run/config`.
 
 On first boot, GuestOS then bootstraps the node by copying other config files from ic-bootstrap.tar. See
 link:../../rs/ic_os/config/README.md[rs/ic_os/config].
@@ -34,7 +34,7 @@ link:../../rs/ic_os/config/README.md[rs/ic_os/config].
 * *System state:* Node initialization material (initial registry & keys) is copied directly into target directories for replica use.
 * *Config partition:* Only the SSH authorized keys (`accounts_ssh_authorized_keys`) from the injected config are copied into the `/boot/config` directory. These keys need to be available on subsequent boots (not just the first boot of the system), and need to be preserved across upgrades.
 
-`generate-ic-config.sh` uses `ic.json5.template` to produce the ic configuration (also cf. service file definition). Template placeholders are populated with information from `/run/config`.
+The config tool uses `ic.json5.template` to produce the ic configuration (also cf. service file definition). Template placeholders are populated with information from `/run/config`.
 
 [NOTE]
 GuestOS only reads a predefined set of files from the bootstrap config image (i.e., it "sanitizes" the bootstrap config image).
@@ -76,7 +76,7 @@ To add a new configuration file/directory:
 3. Add interpretation of configuration file/directory to suitable place, e.g. generate-ic-config.sh
 
 4. Adapt testnet and/or prod deployment config as needed
-** E.g. for testnets, you may need to update link:../../testnet/tools/icos_deploy.sh[icos_deploy.sh]. If you are adding a production deployment config file, you may need to add a file to the SetupOS config partition to be piped through to HostOS.
+** E.g. if you are adding a production deployment config file, you may need to add a file to the SetupOS config partition to be piped through to HostOS.
 
 *Values and defaults*: Please ensure that the system is operational even in the absence of specific configuration bits, and fall back to sane production defaults. Already deployed nodes will by definition lack new configuration variables and need to behave properly. And defaults unsuitable for tests need to be overridden in tests (not the other way around).
 

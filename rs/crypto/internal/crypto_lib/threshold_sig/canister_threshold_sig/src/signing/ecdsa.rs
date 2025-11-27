@@ -89,8 +89,7 @@ impl ThresholdEcdsaSigShareInternal {
     ) -> CanisterThresholdResult<Self> {
         if !curve_type.valid_for_ecdsa() {
             return Err(CanisterThresholdError::InvalidArguments(format!(
-                "Curve {} not valid for ECDSA",
-                curve_type
+                "Curve {curve_type} not valid for ECDSA"
             )));
         }
 
@@ -165,8 +164,7 @@ impl ThresholdEcdsaSigShareInternal {
     ) -> CanisterThresholdResult<()> {
         if !curve_type.valid_for_ecdsa() {
             return Err(CanisterThresholdError::InvalidArguments(format!(
-                "Curve {} not valid for ECDSA",
-                curve_type
+                "Curve {curve_type} not valid for ECDSA"
             )));
         }
 
@@ -220,12 +218,12 @@ impl ThresholdEcdsaSigShareInternal {
     }
 
     pub fn serialize(&self) -> CanisterThresholdSerializationResult<Vec<u8>> {
-        serde_cbor::to_vec(self).map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
+        serde_cbor::to_vec(self).map_err(|e| CanisterThresholdSerializationError(format!("{e}")))
     }
 
     pub fn deserialize(raw: &[u8]) -> CanisterThresholdSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(raw)
-            .map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
+            .map_err(|e| CanisterThresholdSerializationError(format!("{e}")))
     }
 }
 
@@ -253,8 +251,7 @@ impl ThresholdEcdsaCombinedSigInternal {
     ) -> CanisterThresholdSerializationResult<Self> {
         let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id).ok_or_else(|| {
             CanisterThresholdSerializationError(format!(
-                "Invalid algorithm {:?} for threshold ECDSA",
-                algorithm_id
+                "Invalid algorithm {algorithm_id:?} for threshold ECDSA"
             ))
         })?;
 
@@ -262,8 +259,7 @@ impl ThresholdEcdsaCombinedSigInternal {
 
         if !curve_type.valid_for_ecdsa() {
             return Err(CanisterThresholdSerializationError(format!(
-                "Curve {} not valid for ECDSA",
-                curve_type
+                "Curve {curve_type} not valid for ECDSA"
             )));
         }
 
@@ -276,10 +272,10 @@ impl ThresholdEcdsaCombinedSigInternal {
         }
 
         let r = EccScalar::deserialize(curve_type, &bytes[..slen])
-            .map_err(|e| CanisterThresholdSerializationError(format!("Invalid r: {:?}", e)))?;
+            .map_err(|e| CanisterThresholdSerializationError(format!("Invalid r: {e:?}")))?;
 
         let s = EccScalar::deserialize(curve_type, &bytes[slen..])
-            .map_err(|e| CanisterThresholdSerializationError(format!("Invalid s: {:?}", e)))?;
+            .map_err(|e| CanisterThresholdSerializationError(format!("Invalid s: {e:?}")))?;
 
         Ok(Self { r, s })
     }
@@ -337,7 +333,7 @@ impl ThresholdEcdsaCombinedSigInternal {
         let numerator = coefficients.interpolate_scalar(&numerator_samples)?;
         let denominator = coefficients.interpolate_scalar(&denominator_samples)?;
 
-        let denominator_inv = match denominator.invert() {
+        let denominator_inv = match denominator.invert_vartime() {
             Some(s) => s,
             None => return Err(CanisterThresholdError::InterpolationError),
         };
@@ -408,7 +404,7 @@ impl ThresholdEcdsaCombinedSigInternal {
         let public_key = tweak_g.add_points(&master_public_key)?;
 
         // This return shouldn't happen because we already checked that s != 0 above
-        let s_inv = match self.s.invert() {
+        let s_inv = match self.s.invert_vartime() {
             Some(si) => si,
             None => return Err(CanisterThresholdError::InvalidSignature),
         };

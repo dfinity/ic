@@ -1,12 +1,15 @@
-use anyhow::{bail, ensure, Result};
+use anyhow::{Result, bail, ensure};
 use config_types::{
-    DeterministicIpv6Config, FixedIpv6Config, GuestOSConfig, GuestOSUpgradeConfig, GuestVMType,
-    HostOSConfig, Ipv6Config, TrustedExecutionEnvironmentConfig,
+    CONFIG_VERSION, DeterministicIpv6Config, FixedIpv6Config, GuestOSConfig, GuestOSUpgradeConfig,
+    GuestVMType, HostOSConfig, Ipv6Config, RecoveryConfig, TrustedExecutionEnvironmentConfig,
 };
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
+use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
 use std::net::Ipv6Addr;
+use std::path::Path;
 use utils::to_cidr;
+
+const DEFAULT_GUESTOS_RECOVERY_FILE_PATH: &str = "/run/config/guestos_recovery_hash";
 
 /// Generate the GuestOS configuration based on the provided HostOS configuration.
 /// If hostos_config.icos_settings.enable_trusted_execution_environment is true,
@@ -70,14 +73,17 @@ pub fn generate_guestos_config(
             sev_cert_chain_pem: certificate_chain,
         });
 
+    let recovery_config = guestos_recovery_hash(DEFAULT_GUESTOS_RECOVERY_FILE_PATH.as_ref())?;
+
     let guestos_config = GuestOSConfig {
-        config_version: hostos_config.config_version.clone(),
+        config_version: CONFIG_VERSION.to_string(),
         network_settings: guestos_network_settings,
         icos_settings: hostos_config.icos_settings.clone(),
         guestos_settings: hostos_config.guestos_settings.clone(),
         guest_vm_type,
         upgrade_config,
         trusted_execution_environment_config,
+        recovery_config,
     };
 
     Ok(guestos_config)
@@ -98,6 +104,28 @@ fn node_ipv6_address(
     mac.calculate_slaac(&deterministic_config.prefix)
 }
 
+/// Retrieves the recovery-hash from the recovery file, if present.
+/// The file is read once and then deleted to ensure one-time use.
+fn guestos_recovery_hash(recovery_file_path: &Path) -> Result<Option<RecoveryConfig>> {
+    if !recovery_file_path.exists() {
+        return Ok(None);
+    }
+
+    let recovery_hash_value = std::fs::read_to_string(recovery_file_path)?
+        .trim()
+        .to_string();
+
+    std::fs::remove_file(recovery_file_path)?;
+
+    if recovery_hash_value.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(RecoveryConfig {
+            recovery_hash: recovery_hash_value,
+        }))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -106,6 +134,7 @@ mod tests {
         NetworkSettings,
     };
     use std::net::Ipv6Addr;
+    use tempfile::tempdir;
 
     fn hostos_config_for_test() -> HostOSConfig {
         HostOSConfig {
@@ -123,7 +152,6 @@ mod tests {
                 node_reward_type: None,
                 mgmt_mac: Default::default(),
                 deployment_environment: DeploymentEnvironment::Testnet,
-                logging: Default::default(),
                 use_nns_public_key: false,
                 nns_urls: vec![],
                 use_node_operator_private_key: false,
@@ -142,7 +170,7 @@ mod tests {
         let guestos_config =
             generate_guestos_config(&hostos_config, GuestVMType::Default, None).unwrap();
 
-        assert_eq!(guestos_config.config_version, hostos_config.config_version);
+        assert_eq!(guestos_config.config_version, CONFIG_VERSION.to_string());
         assert_eq!(
             guestos_config.network_settings.domain_name,
             hostos_config.network_settings.domain_name
@@ -229,5 +257,53 @@ mod tests {
                 .sev_cert_chain_pem,
             "abc"
         );
+    }
+
+    #[test]
+    fn test_recovery_hash() {
+        let temp_dir = tempdir().unwrap();
+        let recovery_file_path = temp_dir.path().join("guestos_recovery_hash");
+
+        // Test case 1: Recovery file does not exist
+        let recovery_config = guestos_recovery_hash(&recovery_file_path).unwrap();
+        assert_eq!(recovery_config, None);
+        assert!(!recovery_file_path.exists());
+
+        // Test case 2: Recovery file exists but is empty
+        std::fs::write(&recovery_file_path, "").unwrap();
+        let recovery_config = guestos_recovery_hash(&recovery_file_path).unwrap();
+        assert_eq!(recovery_config, None);
+        // File should be deleted after reading
+        assert!(!recovery_file_path.exists());
+
+        // Test case 3: Recovery file exists with whitespace-only content
+        std::fs::write(&recovery_file_path, "   \n\t  ").unwrap();
+        let recovery_config = guestos_recovery_hash(&recovery_file_path).unwrap();
+        assert_eq!(recovery_config, None);
+        assert!(!recovery_file_path.exists());
+
+        // Test case 4: Recovery file exists with valid hash
+        // The function should return the recovery hash and delete the file
+        std::fs::write(&recovery_file_path, "test123").unwrap();
+        let recovery_config = guestos_recovery_hash(&recovery_file_path).unwrap();
+        assert_eq!(
+            recovery_config,
+            Some(RecoveryConfig {
+                recovery_hash: "test123".to_string(),
+            })
+        );
+        // File should be deleted after reading (one-time use)
+        assert!(!recovery_file_path.exists());
+
+        // Test case 5: Recovery file with hash and trailing whitespace
+        std::fs::write(&recovery_file_path, "  test456  \n").unwrap();
+        let recovery_config = guestos_recovery_hash(&recovery_file_path).unwrap();
+        assert_eq!(
+            recovery_config,
+            Some(RecoveryConfig {
+                recovery_hash: "test456".to_string(),
+            })
+        );
+        assert!(!recovery_file_path.exists());
     }
 }

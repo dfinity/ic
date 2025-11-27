@@ -35,9 +35,9 @@
 /// └──────┘                           └──────┘
 use async_trait::async_trait;
 use axum::{
+    Router,
     body::Body,
     http::{Request, Response},
-    Router,
 };
 use bytes::Bytes;
 use ic_quic_transport::{ConnId, P2PError, Transport};
@@ -50,8 +50,9 @@ use std::{
 use tokio::{
     select,
     sync::{
-        mpsc::{unbounded_channel, UnboundedSender},
-        oneshot, Semaphore,
+        Semaphore,
+        mpsc::{UnboundedSender, unbounded_channel},
+        oneshot,
     },
 };
 use tower::ServiceExt;
@@ -305,7 +306,7 @@ impl Transport for PeerTransport {
             .read()
             .unwrap()
             .iter()
-            .filter(|(&n, _)| n != self.node_id)
+            .filter(|&(&n, _)| n != self.node_id)
             .map(|(k, _)| (*k, ConnId::from(u64::MAX)))
             .collect()
     }

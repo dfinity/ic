@@ -1,10 +1,10 @@
 use crate::candid::{AddErc20Arg, InitArg, UpgradeArg};
 use crate::logs::INFO;
 use crate::scheduler::{
-    schedule_now, InstallLedgerSuiteArgs, Task, UpgradeOrchestratorArgs, IC_CANISTER_RUNTIME,
+    IC_CANISTER_RUNTIME, InstallLedgerSuiteArgs, Task, UpgradeOrchestratorArgs, schedule_now,
 };
 use crate::state::{
-    init_state, mutate_state, read_state, GitCommitHash, InstalledLedgerSuite, State,
+    GitCommitHash, InstalledLedgerSuite, State, init_state, mutate_state, read_state,
 };
 use crate::storage::{mutate_wasm_store, read_wasm_store, record_icrc1_ledger_suite_wasms};
 use ic_canister_log::log;
@@ -73,8 +73,7 @@ pub fn post_upgrade(upgrade_arg: Option<UpgradeArg>) {
             }
             Err(e) => {
                 ic_cdk::trap(format!(
-                    "[post_upgrade]: ERROR: invalid arguments to upgrade {:?}: {:?}",
-                    arg, e
+                    "[post_upgrade]: ERROR: invalid arguments to upgrade {arg:?}: {e:?}"
                 ));
             }
         }
@@ -95,8 +94,7 @@ pub fn add_erc20(token: AddErc20Arg) {
         }
         Err(e) => {
             ic_cdk::trap(format!(
-                "[add_erc20]: ERROR: invalid arguments to add erc20 token {:?}: {:?}",
-                token, e
+                "[add_erc20]: ERROR: invalid arguments to add erc20 token {token:?}: {e:?}"
             ));
         }
     }

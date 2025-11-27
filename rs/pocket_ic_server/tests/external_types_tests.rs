@@ -1,8 +1,12 @@
-use candid::types::subtype::equal;
 use candid::CandidType;
-use candid_parser::utils::{instantiate_candid, CandidSource};
+use candid::types::subtype::equal;
+use candid_parser::utils::{CandidSource, instantiate_candid};
 use flate2::read::GzDecoder;
-use pocket_ic_server::external_canister_types::InternetIdentityInit;
+use ic_btc_interface::InitConfig as BitcoinInitConfig;
+use ic_doge_interface::InitConfig as DogecoinInitConfig;
+use pocket_ic_server::external_canister_types::{
+    /*CyclesLedgerArgs, */ InternetIdentityInit, NnsDappCanisterArguments, SnsAggregatorConfig,
+};
 use std::io::Read;
 use walrus::{IdsToIndices, Module};
 
@@ -32,9 +36,50 @@ fn check_init_arg<T: CandidType>(gzipped_canister_wasm: &[u8]) {
 }
 
 #[test]
+fn nns_dapp_candid_equality() {
+    const NNS_DAPP_TEST_CANISTER_WASM: &[u8] =
+        include_bytes!(env!("NNS_DAPP_TEST_CANISTER_WASM_PATH"));
+
+    check_init_arg::<Option<NnsDappCanisterArguments>>(NNS_DAPP_TEST_CANISTER_WASM);
+}
+
+#[test]
+fn sns_aggregator_candid_equality() {
+    const SNS_AGGREGATOR_TEST_CANISTER_WASM: &[u8] =
+        include_bytes!(env!("SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH"));
+
+    check_init_arg::<Option<SnsAggregatorConfig>>(SNS_AGGREGATOR_TEST_CANISTER_WASM);
+}
+
+/* The mainnet version of the cycles ledger does not specify the initial argument in its candid specification.
+#[test]
+fn cycles_ledger_candid_equality() {
+    const CYCLES_LEDGER_CANISTER_WASM: &[u8] =
+        include_bytes!(env!("CYCLES_LEDGER_CANISTER_WASM_PATH"));
+
+    check_init_arg::<CyclesLedgerArgs>(CYCLES_LEDGER_CANISTER_WASM);
+}
+*/
+
+#[test]
 fn internet_identity_candid_equality() {
     const INTERNET_IDENTITY_TEST_CANISTER_WASM: &[u8] =
         include_bytes!(env!("INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH"));
 
     check_init_arg::<Option<InternetIdentityInit>>(INTERNET_IDENTITY_TEST_CANISTER_WASM);
+}
+
+#[test]
+fn bitcoin_testnet_canister_candid_equality() {
+    const BITCOIN_TESTNET_CANISTER_WASM: &[u8] =
+        include_bytes!(env!("BITCOIN_TESTNET_CANISTER_WASM_PATH"));
+
+    check_init_arg::<BitcoinInitConfig>(BITCOIN_TESTNET_CANISTER_WASM);
+}
+
+#[test]
+fn dogecoin_canister_candid_equality() {
+    const DOGECOIN_CANISTER_WASM: &[u8] = include_bytes!(env!("DOGECOIN_CANISTER_WASM_PATH"));
+
+    check_init_arg::<DogecoinInitConfig>(DOGECOIN_CANISTER_WASM);
 }

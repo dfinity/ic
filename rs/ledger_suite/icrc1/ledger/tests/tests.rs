@@ -9,16 +9,17 @@ use ic_icrc1_ledger::{
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
-use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
+use ic_ledger_hash_of::{HASH_LENGTH, HashOf};
+use ic_ledger_suite_in_memory_ledger::{AllowancesRecentlyPurged, verify_ledger_state};
+use ic_ledger_suite_state_machine_helpers::{
+    AllowanceProvider, get_all_ledger_and_archive_blocks, send_approval, send_transfer_from,
+};
+use ic_ledger_suite_state_machine_tests::MINTER;
 use ic_ledger_suite_state_machine_tests::archiving::icrc_archives;
 use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
-use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
-    verify_ledger_state, AllowancesRecentlyPurged,
-};
-use ic_ledger_suite_state_machine_tests::{
-    get_all_ledger_and_archive_blocks, send_approval, send_transfer_from, AllowanceProvider,
+use ic_ledger_suite_state_machine_tests_constants::{
     ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
-    INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
+    INT_META_VALUE, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
     TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
 };
 use ic_state_machine_tests::StateMachine;
@@ -314,6 +315,14 @@ fn test_mint_burn() {
 }
 
 #[test]
+fn test_mint_burn_fee_rejected() {
+    ic_ledger_suite_state_machine_tests::test_mint_burn_fee_rejected(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_anonymous_transfers() {
     ic_ledger_suite_state_machine_tests::test_anonymous_transfers(ledger_wasm(), encode_init_args);
 }
@@ -585,6 +594,46 @@ fn test_archiving_respects_num_blocks_to_archive_upper_limit() {
 #[test]
 fn test_get_blocks_returns_multiple_archive_callbacks() {
     ic_ledger_suite_state_machine_tests::archiving::test_get_blocks_returns_multiple_archive_callbacks(
+        ledger_wasm(),
+        encode_init_args,
+        icrc_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+    );
+}
+
+#[test]
+fn test_archiving_fails_on_app_subnet_if_ledger_does_not_have_enough_cycles() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_fails_on_app_subnet_if_ledger_does_not_have_enough_cycles(
+        ledger_wasm(),
+        encode_init_args,
+        icrc_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+    );
+}
+
+#[test]
+fn test_archiving_succeeds_on_system_subnet_if_ledger_does_not_have_any_cycles() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_succeeds_on_system_subnet_if_ledger_does_not_have_any_cycles(
+        ledger_wasm(),
+        encode_init_args,
+        icrc_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+    );
+}
+
+#[test]
+fn test_archiving_succeeds_if_ledger_has_enough_cycles_to_attach() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_succeeds_if_ledger_has_enough_cycles_to_attach(
+        ledger_wasm(),
+        encode_init_args,
+        icrc_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_icrc3_get_blocks,
+    );
+}
+
+#[test]
+fn test_archiving_skipped_if_cycles_to_create_archive_less_than_cost() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_skipped_if_cycles_to_create_archive_less_than_cost(
         ledger_wasm(),
         encode_init_args,
         icrc_archives,
@@ -1158,6 +1207,7 @@ fn test_icrc3_get_archives() {
             operation: Operation::Mint {
                 to: minting_account,
                 amount: Tokens::from(1_000_000u64),
+                fee: None,
             },
             created_at_time: None,
             memo: None,
@@ -1166,6 +1216,7 @@ fn test_icrc3_get_archives() {
         timestamp: 0,
         fee_collector: None,
         fee_collector_block_index: None,
+        btype: None,
     }
     .encode()
     .size_bytes();
@@ -1324,10 +1375,7 @@ fn test_icrc3_get_blocks() {
         assert_eq!(
             expected_block.hash(),
             block.clone().hash(),
-            "Block {} is different.\nExpected Block: {}\nActual   Block: {}",
-            block_index,
-            expected_block,
-            block,
+            "Block {block_index} is different.\nExpected Block: {expected_block}\nActual   Block: {block}",
         )
     }
 
@@ -1505,7 +1553,7 @@ fn test_icrc3_get_blocks() {
                 None => panic!("Got block with id {id} at position {pos} which doesn't exist"),
                 Some(expected_block) => expected_block,
             };
-            assert_eq!(expected_block, &block, "id: {}, position: {}", id, pos);
+            assert_eq!(expected_block, &block, "id: {id}, position: {pos}");
         }
     };
 
@@ -1616,7 +1664,7 @@ fn test_icrc3_certificate_ledger_upgrade() {
     use ic_cbor::CertificateToCbor;
     use ic_certification::hash_tree::{HashTreeNode, SubtreeLookupResult};
     use ic_certification::{Certificate, HashTree};
-    use ic_ledger_suite_state_machine_tests::send_transfer;
+    use ic_ledger_suite_state_machine_helpers::send_transfer;
     use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
 
     const NUM_BLOCKS: u64 = 10;
@@ -1696,8 +1744,7 @@ fn test_icrc3_certificate_ledger_upgrade() {
                 _ => Err("Expected a leaf node".to_string()),
             },
             _ => Err(format!(
-                "Expected to find a leaf node: Hash tree: {:?}, leaf_name: {}",
-                hash_tree, leaf_name
+                "Expected to find a leaf node: Hash tree: {hash_tree:?}, leaf_name: {leaf_name}"
             )
             .to_string()),
         }
@@ -1866,10 +1913,7 @@ fn is_valid_root_hash(
     let cert_hash = match certificate.tree.lookup_path(&certified_data_path) {
         LookupResult::Found(v) => v,
         _ => {
-            panic!(
-                "could not find certified_data for canister: {}",
-                ledger_canister_id
-            )
+            panic!("could not find certified_data for canister: {ledger_canister_id}")
         }
     };
 
@@ -1879,7 +1923,7 @@ fn is_valid_root_hash(
 mod verify_written_blocks {
     use super::*;
     use ic_icrc1_ledger::FeatureFlags;
-    use ic_ledger_suite_state_machine_tests::{system_time_to_nanos, MINTER};
+    use ic_ledger_suite_state_machine_tests::{MINTER, system_time_to_nanos};
     use ic_state_machine_tests::{StateMachine, WasmResult};
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::{Memo, NumTokens, TransferArg};
@@ -1911,6 +1955,7 @@ mod verify_written_blocks {
             to: mint_args.to,
             memo: mint_args.memo,
             created_at_time: mint_args.created_at_time,
+            fee: None,
         });
     }
 
@@ -2025,6 +2070,7 @@ mod verify_written_blocks {
                 spender: Some(spender_account),
                 memo: burn_args.memo,
                 created_at_time: burn_args.created_at_time,
+                fee: None,
             });
     }
 
@@ -2172,7 +2218,7 @@ mod verify_written_blocks {
             {
                 WasmResult::Reply(bytes) => bytes,
                 WasmResult::Reject(reject) => {
-                    panic!("Expected a successful reply, got a reject: {}", reject)
+                    panic!("Expected a successful reply, got a reject: {reject}")
                 }
             };
             let mut response = Decode!(&wasm_result_bytes, GetTransactionsResponse).unwrap();

@@ -7,7 +7,7 @@ use ic_nns_governance_api::{GovernanceError, NodeProvider, UpdateNodeProvider};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::add_node_provider,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
 };
 use icp_ledger::AccountIdentifier;
 

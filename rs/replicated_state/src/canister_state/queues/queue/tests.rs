@@ -1,8 +1,8 @@
 use super::super::message_pool::tests::*;
 use super::super::message_pool::{Class, InboundReference};
 use super::*;
-use crate::canister_state::queues::pb_queues;
 use crate::canister_state::DEFAULT_QUEUE_CAPACITY;
+use crate::canister_state::queues::pb_queues;
 use assert_matches::assert_matches;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
@@ -220,10 +220,10 @@ fn canister_queue_push_without_reserved_slot_panics() {
 /// Generator for an arbitrary inbound message reference.
 fn arbitrary_message_reference() -> impl Strategy<Value = InboundReference> + Clone {
     prop_oneof![
-        any::<u64>().prop_map(|gen| new_request_reference(gen, Class::GuaranteedResponse)),
-        any::<u64>().prop_map(|gen| new_request_reference(gen, Class::BestEffort)),
-        any::<u64>().prop_map(|gen| new_response_reference(gen, Class::GuaranteedResponse)),
-        any::<u64>().prop_map(|gen| new_response_reference(gen, Class::BestEffort)),
+        any::<u64>().prop_map(|r#gen| new_request_reference(r#gen, Class::GuaranteedResponse)),
+        any::<u64>().prop_map(|r#gen| new_request_reference(r#gen, Class::BestEffort)),
+        any::<u64>().prop_map(|r#gen| new_response_reference(r#gen, Class::GuaranteedResponse)),
+        any::<u64>().prop_map(|r#gen| new_response_reference(r#gen, Class::BestEffort)),
     ]
 }
 

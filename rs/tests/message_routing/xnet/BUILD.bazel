@@ -10,8 +10,6 @@ system_test_nns(
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
     tags = [
-        #TODO: enable k8s when there's enough capacity
-        # "k8s",
         "system_test_large",
     ],
     test_timeout = "eternal",
@@ -30,7 +28,6 @@ system_test_nns(
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
     tags = [
-        "k8s",
         "system_test_large",
     ],
     runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
@@ -48,7 +45,6 @@ system_test_nns(
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
     tags = [
-        "k8s",
         "system_test_large",
     ],
     runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
@@ -66,8 +62,6 @@ system_test_nns(
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
     tags = [
-        #TODO: enable k8s when there's enough capacity
-        # "k8s",
         "system_test_large",
     ],
     test_timeout = "eternal",
@@ -109,7 +103,7 @@ system_test_nns(
         "long_test",
     ],
     uses_guestos_img = False,
-    uses_guestos_nns_mainnet_img = True,
+    uses_guestos_mainnet_nns_img = True,
     uses_guestos_update = True,
     runtime_deps =
         XNET_TEST_CANISTER_RUNTIME_DEPS +

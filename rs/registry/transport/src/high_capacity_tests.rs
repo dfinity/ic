@@ -1,5 +1,5 @@
 use super::*;
-use crate::pb::v1::{high_capacity_registry_mutation, registry_mutation, Precondition};
+use crate::pb::v1::{Precondition, high_capacity_registry_mutation, registry_mutation};
 use lazy_static::lazy_static;
 use pretty_assertions::assert_eq;
 

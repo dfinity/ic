@@ -21,6 +21,7 @@ ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
+ic-utils = { path = "../../utils" }
 prometheus = { workspace = true }
 rand = { workspace = true }
 slog = { workspace = true }

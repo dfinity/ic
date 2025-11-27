@@ -13,7 +13,7 @@ Coverage:: The certificate orchestrator interface works as expected.
 
 end::catalog[] */
 
-use anyhow::{anyhow, bail, Error, Result};
+use anyhow::{Error, Result, anyhow, bail};
 use candid::{Decode, Encode, Principal};
 use certificate_orchestrator_interface::{
     BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError,
@@ -25,7 +25,7 @@ use certificate_orchestrator_interface::{
     UpdateType, UploadCertificateError, UploadCertificateResponse,
 };
 use k256::elliptic_curve::SecretKey;
-use rand::{rngs::OsRng, SeedableRng};
+use rand::{SeedableRng, rngs::OsRng};
 use rand_chacha::ChaChaRng;
 use slog::info;
 use std::{
@@ -34,7 +34,7 @@ use std::{
 };
 use tokio::runtime::Runtime;
 
-use ic_agent::{identity::Secp256k1Identity, Agent, Identity};
+use ic_agent::{Agent, Identity, identity::Secp256k1Identity};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{

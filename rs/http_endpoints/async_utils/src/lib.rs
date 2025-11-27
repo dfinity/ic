@@ -2,7 +2,7 @@ mod hyper;
 mod join_map;
 mod unix;
 
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 
 pub use self::{
     hyper::ExecuteOnTokioRuntime,
@@ -23,7 +23,7 @@ pub fn abort_on_panic() {
 /// shutdown. Completion happens if either of `SIGINT` or `SIGTERM` are
 /// received.
 pub async fn shutdown_signal(log: ReplicaLogger) {
-    use tokio::signal::unix::{signal, SignalKind};
+    use tokio::signal::unix::{SignalKind, signal};
     let mut sig_int =
         signal(SignalKind::interrupt()).expect("failed to install SIGINT signal handler");
     let mut sig_term =
@@ -47,7 +47,7 @@ pub fn start_tcp_listener(
     runtime_handle: &tokio::runtime::Handle,
 ) -> tokio::net::TcpListener {
     let _enter = runtime_handle.enter();
-    let err_msg = format!("Could not start TCP listener at addr = {}", local_addr);
+    let err_msg = format!("Could not start TCP listener at addr = {local_addr}");
     let socket = if local_addr.is_ipv6() {
         tokio::net::TcpSocket::new_v6().expect(&err_msg)
     } else {

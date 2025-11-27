@@ -240,11 +240,11 @@ pub(crate) mod test {
     use arc_swap::ArcSwapOption;
     use candid::Principal;
     use ethnum::u256;
-    use ic_bn_lib::principal;
+    use ic_bn_lib_common::principal;
     use ic_registry_subnet_type::SubnetType;
 
     use crate::{
-        snapshot::{node_test_id, CanisterRange, Node, Subnet},
+        snapshot::{CanisterRange, Node, Subnet, node_test_id},
         test_utils::valid_tls_certificate_and_validation_time,
     };
 
@@ -533,12 +533,14 @@ pub(crate) mod test {
         }
 
         // Test failure
-        assert!(r
-            .lookup_by_canister_id(principal!("32fn4-qqaaa-aaaak-ad65a-cai"))
-            .is_none());
-        assert!(r
-            .lookup_by_canister_id(principal!("3we4s-lyaaa-aaaak-aegrq-cai"))
-            .is_none());
+        assert!(
+            r.lookup_by_canister_id(principal!("32fn4-qqaaa-aaaak-ad65a-cai"))
+                .is_none()
+        );
+        assert!(
+            r.lookup_by_canister_id(principal!("3we4s-lyaaa-aaaak-aegrq-cai"))
+                .is_none()
+        );
 
         Ok(())
     }

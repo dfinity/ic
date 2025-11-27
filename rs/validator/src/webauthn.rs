@@ -20,7 +20,7 @@ pub(crate) fn validate_webauthn_sig(
     let envelope = match WebAuthnEnvelope::try_from(webauthn_sig) {
         Ok(envelope) => envelope,
         Err(err) => {
-            return Err(format!("WebAuthn envelope creation failed: {}", err));
+            return Err(format!("WebAuthn envelope creation failed: {err}"));
         }
     };
 
@@ -55,16 +55,15 @@ fn basic_sig_from_webauthn_sig(
         AlgorithmId::EcdsaP256 => {
             // ECDSA signatures are DER wrapped, see https://www.w3.org/TR/webauthn-2/#sctn-signature-attestation-types
             ecdsa_p256_signature_from_der_bytes(&webauthn_sig.signature().0)
-                .map_err(|e| format!("Failed to parse EcdsaP256 signature: {}", e))
+                .map_err(|e| format!("Failed to parse EcdsaP256 signature: {e}"))
         }
         AlgorithmId::RsaSha256 => {
             // RSA signatures are not DER wrapped, see https://www.w3.org/TR/webauthn-2/#sctn-signature-attestation-types
             Ok(rsa_signature_from_bytes(&webauthn_sig.signature()))
         }
         _ => Err(format!(
-            "Only ECDSA on curve P-256 and RSA PKCS #1 v1.5 are supported for WebAuthn, given: {:?}",
-            algorithm_id
-        ))
+            "Only ECDSA on curve P-256 and RSA PKCS #1 v1.5 are supported for WebAuthn, given: {algorithm_id:?}"
+        )),
     }
 }
 
@@ -75,7 +74,7 @@ mod tests {
         ECDSA_P256_PK_COSE_DER_WRAPPED_HEX, ECDSA_WEBAUTHN_SIG_HELLO_HEX,
     };
     use ic_crypto_standalone_sig_verifier::user_public_key_from_bytes;
-    use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
+    use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
     use ic_test_utilities_types::ids::{message_test_id, node_test_id};
     use ic_types::{
         crypto::SignableMock,
@@ -151,10 +150,12 @@ mod tests {
 
             let result = validate_webauthn_sig(&verifier, &sig, &SignableMock::new(vec![]), &pk);
 
-            assert!(result
-                .err()
-                .unwrap()
-                .contains("Failed to parse EcdsaP256 signature"));
+            assert!(
+                result
+                    .err()
+                    .unwrap()
+                    .contains("Failed to parse EcdsaP256 signature")
+            );
         }
 
         #[test]
@@ -169,10 +170,12 @@ mod tests {
             let result =
                 validate_webauthn_sig(&verifier, &sig, &SignableMock::new(vec![]), &wrong_pk);
 
-            assert!(result
-                .err()
-                .unwrap()
-                .contains("Verifying signature failed."));
+            assert!(
+                result
+                    .err()
+                    .unwrap()
+                    .contains("Verifying signature failed.")
+            );
         }
     }
 
@@ -238,7 +241,7 @@ mod tests {
                 RSA_PK_COSE_DER_WRAPPED_HEX.as_ref(),
                 RSA_WEBAUTHN_SIG_HELLO_HEX.as_bytes(),
             );
-            println!("{}", pk);
+            println!("{pk}");
             // Replace the correct signature with a malformed one.
             let sig = WebAuthnSignature::new(
                 sig.authenticator_data(),
@@ -264,10 +267,12 @@ mod tests {
             let result =
                 validate_webauthn_sig(&verifier, &sig, &SignableMock::new(vec![]), &wrong_pk);
 
-            assert!(result
-                .err()
-                .unwrap()
-                .contains("Verifying signature failed."));
+            assert!(
+                result
+                    .err()
+                    .unwrap()
+                    .contains("Verifying signature failed.")
+            );
         }
     }
 

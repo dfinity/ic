@@ -1,6 +1,6 @@
 //! This module contains metric structs for components of the canister http feature
 
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use prometheus::{HistogramVec, IntCounter, IntGauge};
 
 pub struct CanisterHttpPoolManagerMetrics {

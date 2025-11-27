@@ -1,12 +1,12 @@
 use crate::{
+    CryptoHashOfPartialState, Height, PrincipalId, PrincipalIdBlobParseError, SubnetId,
     consensus::certification::{Certification, CertificationContent},
     crypto::{
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
     },
     signature::ThresholdSignature,
     xnet::CertifiedStreamSlice,
-    CryptoHashOfPartialState, Height, PrincipalId, PrincipalIdBlobParseError, SubnetId,
 };
 use assert_matches::assert_matches;
 use ic_protobuf::messaging::xnet::v1;
@@ -76,7 +76,7 @@ fn certified_stream_slice_roundtrip() {
 fn error_decode_error() {
     match <pb_types::NiDkgId as ProtoProxy<NiDkgId>>::proxy_decode(&b"garbage"[..]) {
         Err(ProxyDecodeError::DecodeError(_)) => {}
-        other => panic!("Expected Err(DecodeError(_)), got {:?}", other),
+        other => panic!("Expected Err(DecodeError(_)), got {other:?}"),
     }
 }
 

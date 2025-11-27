@@ -1,4 +1,4 @@
-use candid::{encode_args, Decode};
+use candid::{Decode, encode_args};
 use canister_test::Project;
 use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;
@@ -43,6 +43,6 @@ fn test_anonymous_http_request_validation() {
 fn is_http_request_valid(result: WasmResult) -> bool {
     match result {
         WasmResult::Reply(reply) => Decode!(&reply, bool).unwrap(),
-        WasmResult::Reject(reject) => panic!("Reject: {:?}", reject),
+        WasmResult::Reject(reject) => panic!("Reject: {reject:?}"),
     }
 }

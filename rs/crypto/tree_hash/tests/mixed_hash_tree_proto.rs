@@ -1,6 +1,6 @@
 use ic_crypto_tree_hash::MixedHashTree as T;
 use ic_crypto_tree_hash_test_utils::arbitrary::arbitrary_mixed_hash_tree;
-use ic_protobuf::messaging::xnet::v1::{mixed_hash_tree::TreeEnum, MixedHashTree as PbTree};
+use ic_protobuf::messaging::xnet::v1::{MixedHashTree as PbTree, mixed_hash_tree::TreeEnum};
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 
 use proptest::prelude::*;
@@ -17,7 +17,7 @@ fn encode(t: &PbTree) -> Vec<u8> {
     use prost::Message;
     let mut buf = Vec::new();
     t.encode(&mut buf)
-        .unwrap_or_else(|e| panic!("Failed to encode {:?} into protobuf: {}", t, e));
+        .unwrap_or_else(|e| panic!("Failed to encode {t:?} into protobuf: {e}"));
     buf
 }
 
@@ -35,8 +35,7 @@ fn decode_bad_digest_fails() {
             actual: 10,
         }) => (),
         other => panic!(
-            "Expected to get InvalidDigestLength {{ expected: 32, actual: 10 }} error, got {:?}",
-            other
+            "Expected to get InvalidDigestLength {{ expected: 32, actual: 10 }} error, got {other:?}"
         ),
     }
 }

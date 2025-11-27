@@ -41,14 +41,14 @@ pub fn do_split_manifest(
         &manifest,
         &CryptoHashOfState::from(CryptoHash(hash.to_vec())),
     )
-    .map_err(|e| format!("Invalid manifest: {}", e))?;
+    .map_err(|e| format!("Invalid manifest: {e}"))?;
 
     let mut routing_table = RoutingTable::new();
     // Assigns the given ranges in `routing_table` to the given subnet.
     let mut assign_ranges = |ranges: Vec<CanisterIdRange>, subnet_id: SubnetId| {
         CanisterIdRanges::try_from(ranges.clone())
             .and_then(|ranges| routing_table.assign_ranges(ranges, subnet_id))
-            .map_err(|e| format!("Failed to assign ranges {:?}: {:?}", ranges, e))
+            .map_err(|e| format!("Failed to assign ranges {ranges:?}: {e:?}"))
     };
     // Start off with everything assigned to `subnet_a`.
     assign_ranges(
@@ -69,7 +69,7 @@ pub fn do_split_manifest(
         batch_time,
         &routing_table,
     )
-    .map_err(|e| format!("Failed to split manifest: {}", e))?;
+    .map_err(|e| format!("Failed to split manifest: {e}"))?;
 
     print_manifest(subnet_a, &manifest_a);
     print_manifest(subnet_b, &manifest_b);
@@ -78,9 +78,9 @@ pub fn do_split_manifest(
 }
 
 fn print_manifest(subnet: SubnetId, manifest: &Manifest) {
-    println!("Subnet {}", subnet);
+    println!("Subnet {subnet}");
     println!("--------");
-    println!("{}", manifest);
+    println!("{manifest}");
     println!();
     println!("ROOT HASH: {}", hex::encode(manifest_hash(manifest)));
     println!("========");

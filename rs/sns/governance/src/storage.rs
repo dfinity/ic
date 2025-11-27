@@ -58,7 +58,7 @@ pub fn list_registered_extensions_from_cache() -> Vec<(CanisterId, ExtensionSpec
 }
 
 impl Storable for ExtensionSpec {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(crate::pb::v1::ExtensionSpec::from(self.clone()).encode_to_vec())
     }
 

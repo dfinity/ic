@@ -1,5 +1,5 @@
-use anyhow::{bail, ensure, Context, Result};
-use devicemapper::{Bytes, DevId, DmName, DmOptions, Sectors, DM};
+use anyhow::{Context, Result, bail, ensure};
+use devicemapper::{Bytes, DM, DevId, DmName, DmOptions, Sectors};
 use ic_device::device_mapping::{BaseDevice, LinearSegment, MappedDevice, TempDevice};
 use std::path::Path;
 use std::sync::Arc;
@@ -121,7 +121,7 @@ fn cleanup_devices(dev_mapper: &DM) {
     let devices = match dev_mapper.list_devices() {
         Ok(devices) => devices,
         Err(err) => {
-            eprintln!("Failed to list devices: {}", err);
+            eprintln!("Failed to list devices: {err}");
             return;
         }
     };
@@ -225,8 +225,7 @@ mod tests {
                 !mapped_devices
                     .iter()
                     .any(|p| p.file_name() == Some(device.as_ref())),
-                "Device {} should be cleaned up",
-                device
+                "Device {device} should be cleaned up"
             );
         }
     }

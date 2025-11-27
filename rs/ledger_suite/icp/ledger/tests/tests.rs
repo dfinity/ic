@@ -6,24 +6,28 @@ use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_core::block::BlockIndex;
-use ic_ledger_core::{block::BlockType, Tokens};
+use ic_ledger_core::{Tokens, block::BlockType};
+use ic_ledger_suite_state_machine_helpers::{
+    AllowanceProvider, balance_of, icrc21_consent_message, send_approval, send_transfer,
+    send_transfer_from, supported_standards, total_supply, transfer,
+};
 use ic_ledger_suite_state_machine_tests::archiving::icp_archives;
 use ic_ledger_suite_state_machine_tests::{
-    balance_of, convert_to_fields_args, default_approve_args, default_transfer_from_args,
+    MINTER, convert_to_fields_args, default_approve_args, default_transfer_from_args,
     expect_icrc2_disabled, extract_icrc21_fields_message, extract_icrc21_message_string,
-    icrc21_consent_message, modify_field, send_approval, send_transfer, send_transfer_from, setup,
-    supported_standards, total_supply, transfer, AllowanceProvider, FEE, MINTER,
+    modify_field, setup,
 };
+use ic_ledger_suite_state_machine_tests_constants::FEE;
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, Allowances, ArchiveOptions,
-    ArchivedBlocksRange, Block, CandidBlock, CandidOperation, CandidTransaction, FeatureFlags,
-    GetAllowancesArgs, GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult,
-    IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
-    LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, RemoveApprovalArgs, TimeStamp, TipOfChainRes, TransferArgs,
-    UpgradeArgs, DEFAULT_TRANSFER_FEE, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST,
-    MAX_BLOCKS_PER_REQUEST,
+    ArchivedBlocksRange, Block, CandidBlock, CandidOperation, CandidTransaction,
+    DEFAULT_TRANSFER_FEE, FeatureFlags, GetAllowancesArgs, GetBlocksArgs, GetBlocksRes,
+    GetBlocksResult, GetEncodedBlocksResult, IcpAllowanceArgs, InitArgs, IterBlocksArgs,
+    IterBlocksRes, LedgerCanisterInitPayload, LedgerCanisterPayload, LedgerCanisterUpgradePayload,
+    MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST, Operation,
+    QueryBlocksResponse, QueryEncodedBlocksResponse, RemoveApprovalArgs, TimeStamp, TipOfChainRes,
+    TransferArgs, UpgradeArgs,
 };
 use icrc_ledger_types::icrc1::{
     account::{Account, Subaccount},
@@ -68,14 +72,6 @@ fn ledger_wasm_prev_version() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
         "ledger-canister-prev-version",
-        &[],
-    )
-}
-
-fn ledger_wasm_notify_method() -> Vec<u8> {
-    ic_test_utilities_load_wasm::load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger-canister_notify-method",
         &[],
     )
 }
@@ -464,6 +460,14 @@ fn test_tx_deduplication() {
 #[test]
 fn test_mint_burn() {
     ic_ledger_suite_state_machine_tests::test_mint_burn(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_mint_burn_fee_rejected() {
+    ic_ledger_suite_state_machine_tests::test_mint_burn_fee_rejected(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]
@@ -1758,8 +1762,7 @@ Charged for processing the transfer.
     let message = extract_icrc21_message_string(&consent_info.consent_message);
     assert_eq!(
         message, expected_transfer_message,
-        "Expected: {}, got: {}",
-        expected_transfer_message, message
+        "Expected: {expected_transfer_message}, got: {message}"
     );
     let fields_consent_info = icrc21_consent_message(
         &env,
@@ -1771,8 +1774,7 @@ Charged for processing the transfer.
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
     assert_eq!(
         fields_message, expected_fields_message,
-        "Expected: {:?}, got: {:?}",
-        expected_fields_message, fields_message
+        "Expected: {expected_fields_message:?}, got: {fields_message:?}"
     );
 
     // If the caller is anonymous, the message should not include the From information.
@@ -1788,8 +1790,7 @@ Charged for processing the transfer.
     );
     assert_eq!(
         message, expected_message,
-        "Expected: {}, got: {}",
-        expected_message, message
+        "Expected: {expected_message}, got: {message}"
     );
     let fields_consent_info = icrc21_consent_message(
         &env,
@@ -1802,8 +1803,7 @@ Charged for processing the transfer.
     let new_exp_fields_message = modify_field(&expected_fields_message, "From".to_string(), None);
     assert_eq!(
         fields_message, new_exp_fields_message,
-        "Expected: {:?}, got: {:?}",
-        new_exp_fields_message, fields_message
+        "Expected: {new_exp_fields_message:?}, got: {fields_message:?}"
     );
 }
 
@@ -1920,11 +1920,7 @@ fn test_notify_caller_logging() {
         .build()
         .unwrap();
     let canister_id = env
-        .install_canister(
-            ledger_wasm_notify_method(),
-            Encode!(&payload).unwrap(),
-            None,
-        )
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
         .expect("Unable to install the Ledger canister");
 
     // Make a transfer that we can notify about
@@ -1960,13 +1956,15 @@ fn test_notify_caller_logging() {
         )
         .expect_err("notify call should panic");
     assert_eq!(user_error.code(), ErrorCode::CanisterCalledTrap);
-    assert!(user_error
-        .description()
-        .contains("Please migrate to the CMC notify"));
+    assert!(
+        user_error
+            .description()
+            .contains("Please migrate to the CMC notify")
+    );
 
     // Verify that the ledger logged the caller of the notify method.
     let log = env.canister_log(canister_id);
-    let expected_log_entry = format!("notify method called by [{}]", user1);
+    let expected_log_entry = format!("notify method called by [{user1}]");
     for record in log.records().iter() {
         let entry =
             String::from_utf8(record.content.clone()).expect("log entry should be a string");
@@ -2070,6 +2068,33 @@ fn test_archiving_respects_num_blocks_to_archive_upper_limit() {
         ic_ledger_suite_state_machine_tests::archiving::query_encoded_blocks,
         icp_archives,
         ic_ledger_suite_state_machine_tests::archiving::get_encoded_blocks,
+    );
+}
+
+#[test]
+fn test_archiving_fails_on_app_subnet_if_ledger_does_not_have_enough_cycles() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_fails_on_app_subnet_if_ledger_does_not_have_enough_cycles(
+        ledger_wasm(), encode_init_args,
+        icp_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_encoded_blocks,
+    );
+}
+
+#[test]
+fn test_archiving_succeeds_on_system_subnet_if_ledger_does_not_have_any_cycles() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_succeeds_on_system_subnet_if_ledger_does_not_have_any_cycles(
+        ledger_wasm(), encode_init_args,
+        icp_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_encoded_blocks,
+    );
+}
+
+#[test]
+fn test_archiving_succeeds_if_ledger_has_enough_cycles_to_attach() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_succeeds_if_ledger_has_enough_cycles_to_attach(
+        ledger_wasm(), encode_init_args,
+        icp_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_encoded_blocks,
     );
 }
 
@@ -2541,9 +2566,11 @@ fn test_burn_whole_balance() {
         let response = env.execute_ingress_as(p1, canister_id, "transfer", Encode!(&args).unwrap());
         if let Some(error_tokens) = error_tokens {
             assert!(response.is_err());
-            assert!(response.unwrap_err().description().contains(
-                &format!("Burns lower than {} are not allowed", error_tokens).to_string()
-            ));
+            assert!(
+                response.unwrap_err().description().contains(
+                    &format!("Burns lower than {error_tokens} are not allowed").to_string()
+                )
+            );
         } else {
             let result = Decode!(&response.expect("burn transfer failed").bytes(), Result<BlockIndex, icp_ledger::TransferError> )
         .expect("failed to decode transfer response");

@@ -58,9 +58,7 @@ pub fn remove_suffix(earlier_range: &mut Range<u64>, later_range: &Range<u64>) {
     if !earlier_range.is_empty() && !later_range.is_empty() {
         debug_assert!(
             earlier_range.start <= later_range.start,
-            "earlier_range: {:?}, later_range: {:?}",
-            earlier_range,
-            later_range
+            "earlier_range: {earlier_range:?}, later_range: {later_range:?}"
         );
         earlier_range.end = earlier_range.end.min(later_range.start);
     }

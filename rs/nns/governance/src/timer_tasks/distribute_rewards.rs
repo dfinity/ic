@@ -1,6 +1,6 @@
 use crate::governance::Governance;
 use ic_nervous_system_timer_task::{PeriodicSyncTask, TimerTaskMetricsRegistry};
-use ic_nervous_system_timers::{clear_timer, TimerId};
+use ic_nervous_system_timers::{TimerId, clear_timer};
 use std::cell::RefCell;
 use std::thread::LocalKey;
 use std::time::Duration;
@@ -57,7 +57,7 @@ impl PeriodicSyncTask for DistributeRewardsTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::canister_state::{governance_mut, set_governance_for_tests, GOVERNANCE};
+    use crate::canister_state::{GOVERNANCE, governance_mut, set_governance_for_tests};
     use crate::governance::Governance;
     use crate::reward::distribution::RewardsDistribution;
     use crate::test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger};
@@ -68,8 +68,8 @@ mod tests {
     use ic_nns_common::pb::v1::NeuronId;
     use std::sync::Arc;
 
-    #[test]
-    fn test_reward_scheduling_and_cancelling() {
+    #[tokio::test]
+    async fn test_reward_scheduling_and_cancelling() {
         thread_local! {
             static METRICS_REGISTRY: RefCell<TimerTaskMetricsRegistry> = RefCell::new(TimerTaskMetricsRegistry::default());
         }
@@ -107,7 +107,7 @@ mod tests {
 
         // We run this 10x b/c test version of is_over_instructions_limit returns true every
         // other time it's called.
-        run_pending_timers_every_interval_for_count(DistributeRewardsTask::INTERVAL, 10);
+        run_pending_timers_every_interval_for_count(DistributeRewardsTask::INTERVAL, 10).await;
 
         assert!(REWARDS_TIMER_ID.with(|id| id.borrow().is_none()));
         assert_eq!(existing_timer_ids().len(), 0);

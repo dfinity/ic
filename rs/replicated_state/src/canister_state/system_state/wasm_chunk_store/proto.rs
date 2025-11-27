@@ -29,7 +29,7 @@ impl TryFrom<pb::WasmChunkStoreMetadata> for WasmChunkStoreMetadata {
                     .try_into()
                     .map_err(|e| ProxyDecodeError::ValueOutOfRange {
                         typ: "[u8; 32]",
-                        err: format!("Failed to convert vector to fixed size arrary: {:?}", e),
+                        err: format!("Failed to convert vector to fixed size arrary: {e:?}"),
                     })?;
             chunks.insert(
                 hash,

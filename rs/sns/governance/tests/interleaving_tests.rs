@@ -1,18 +1,18 @@
 //! Tests that rely on interleaving two method calls on the governance canister
 //! (in particular, when one method is suspended when it calls out to the ledger
 //! canister).
-use crate::fixtures::{neuron_id, GovernanceCanisterFixtureBuilder, NeuronBuilder, TargetLedger};
-use futures::{channel::mpsc, FutureExt, StreamExt};
+use crate::fixtures::{GovernanceCanisterFixtureBuilder, NeuronBuilder, TargetLedger, neuron_id};
+use futures::{FutureExt, StreamExt, channel::mpsc};
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_utils::{
-    drain_receiver_channel, InterleavingTestLedger, LedgerControlMessage,
+    InterleavingTestLedger, LedgerControlMessage, drain_receiver_channel,
 };
 use ic_sns_governance::{
     governance::Governance as GovernanceCanister,
     pb::v1::{
-        manage_neuron, manage_neuron::Disburse, Account, ManageNeuron, ManageNeuronResponse,
-        NervousSystemParameters, NeuronId, NeuronPermission,
+        Account, ManageNeuron, ManageNeuronResponse, NervousSystemParameters, NeuronId,
+        NeuronPermission, manage_neuron, manage_neuron::Disburse,
     },
 };
 use std::{
@@ -89,8 +89,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
         let disburse_result = tokio_test::block_on(disburse_future);
         assert!(
             disburse_result.is_ok(),
-            "Got an unexpected error while disbursing: {:?}",
-            disburse_result
+            "Got an unexpected error while disbursing: {disburse_result:?}"
         );
     });
 
@@ -119,8 +118,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
     // This assert used to fail before fixing NNS-829
     assert!(
         increase_dissolve_result.is_err(),
-        "Shouldn't be able to increase the dissolve delay of a neuron while it's being disbursed, but got: {:?}",
-        increase_dissolve_result
+        "Shouldn't be able to increase the dissolve delay of a neuron while it's being disbursed, but got: {increase_dissolve_result:?}"
     );
 
     let set_dissolve_result = set_dissolve_delay(
@@ -134,8 +132,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
     // This assert used to fail before fixing NNS-829
     assert!(
         set_dissolve_result.is_err(),
-        "Shouldn't be able to increase the dissolve delay of a neuron while it's being disbursed, but got: {:?}",
-        set_dissolve_result
+        "Shouldn't be able to increase the dissolve delay of a neuron while it's being disbursed, but got: {set_dissolve_result:?}"
     );
 
     // Drain the channel to finish the test.

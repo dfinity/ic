@@ -35,7 +35,7 @@ use ic_system_test_driver::nns::{
 use ic_system_test_driver::nns::{get_subnet_list_from_registry, vote_on_proposal};
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    assert_create_agent, block_on, runtime_from_url, UniversalCanister,
+    UniversalCanister, assert_create_agent, block_on, runtime_from_url,
 };
 use ic_types::{Height, RegistryVersion};
 use registry_canister::mutations::do_create_subnet::CanisterCyclesCostSchedule;

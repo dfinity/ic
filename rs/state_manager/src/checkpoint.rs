@@ -1,5 +1,5 @@
-use crossbeam_channel::{unbounded, Sender};
-use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, SnapshotId};
+use crossbeam_channel::{Sender, unbounded};
+use ic_base_types::{CanisterId, SnapshotId, subnet_id_try_from_protobuf};
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::{
@@ -7,30 +7,30 @@ use ic_replicated_state::canister_snapshots::{
 };
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
 use ic_replicated_state::metadata_state::UnflushedCheckpointOp;
-use ic_replicated_state::page_map::{storage::validate, PageAllocatorFileDescriptor};
+use ic_replicated_state::page_map::{PageAllocatorFileDescriptor, storage::validate};
 use ic_replicated_state::{
+    CanisterMetrics, CanisterState, ExecutionState, ReplicatedState, SchedulerState, SystemState,
     canister_state::execution_state::{SandboxMemory, WasmBinary, WasmExecutionMode},
     page_map::PageMap,
-    CanisterMetrics, CanisterState, ExecutionState, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{
-    error::LayoutError, try_mmap_wasm_file, AccessPolicy, CanisterLayout, CanisterSnapshotBits,
-    CanisterStateBits, CheckpointLayout, PageMapLayout, ReadOnly, SnapshotLayout,
+    AccessPolicy, CanisterLayout, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout,
+    PageMapLayout, ReadOnly, SnapshotLayout, error::LayoutError, try_mmap_wasm_file,
 };
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
 use ic_utils::thread::maybe_parallel_map;
 use ic_validate_eq::ValidateEq;
 use std::collections::{BTreeMap, HashSet};
-use std::convert::{identity, TryFrom};
+use std::convert::{TryFrom, identity};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::{
-    CheckpointError, CheckpointMetrics, PageMapToFlush, TipRequest,
     CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN,
-    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT, NUMBER_OF_CHECKPOINT_THREADS,
+    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT, CheckpointError, CheckpointMetrics,
+    NUMBER_OF_CHECKPOINT_THREADS, PageMapToFlush, TipRequest,
 };
 
 #[cfg(test)]
@@ -488,6 +488,20 @@ impl CheckpointLoader {
         .map_err(|err| self.map_to_checkpoint_error("CanisterQueues".into(), err))
     }
 
+    fn load_refunds(&self) -> Result<ic_replicated_state::RefundPool, CheckpointError> {
+        let _timer = self
+            .metrics
+            .load_checkpoint_step_duration
+            .with_label_values(&["refunds"])
+            .start_timer();
+
+        ic_replicated_state::RefundPool::try_from((
+            self.checkpoint_layout.refunds().deserialize()?,
+            &self.metrics as &dyn CheckpointLoadingMetrics,
+        ))
+        .map_err(|err| self.map_to_checkpoint_error("RefundPool".into(), err))
+    }
+
     fn load_epoch_query_stats(&self) -> Result<RawQueryStats, CheckpointError> {
         let stats = self.checkpoint_layout.stats().deserialize()?;
         if let Some(query_stats) = stats.query_stats {
@@ -537,7 +551,7 @@ impl CheckpointLoader {
         let on_disk_canister_ids = self
             .checkpoint_layout
             .canister_ids()
-            .map_err(|err| format!("Canister Validation: failed to load canister ids: {}", err))?;
+            .map_err(|err| format!("Canister Validation: failed to load canister ids: {err}"))?;
         let ref_canister_ids: Vec<_> = ref_canister_states.keys().copied().collect();
         debug_assert!(on_disk_canister_ids.is_sorted());
         debug_assert!(ref_canister_ids.is_sorted());
@@ -553,8 +567,7 @@ impl CheckpointLoader {
             )
             .map_err(|err| {
                 format!(
-                    "Failed to load canister state for validation for key #{}: {}",
-                    canister_id, err
+                    "Failed to load canister state for validation for key #{canister_id}: {err}"
                 )
             })?
             .0
@@ -607,10 +620,7 @@ impl CheckpointLoader {
         ref_canister_snapshots: &CanisterSnapshots,
     ) -> Result<(), String> {
         let mut on_disk_snapshot_ids = self.checkpoint_layout.snapshot_ids().map_err(|err| {
-            format!(
-                "Snapshot validation: failed to load list of snapshot ids: {}",
-                err
-            )
+            format!("Snapshot validation: failed to load list of snapshot ids: {err}")
         })?;
         let mut ref_snapshot_ids: Vec<_> = ref_canister_snapshots.iter().map(|x| *x.0).collect();
         on_disk_snapshot_ids.sort();
@@ -625,10 +635,7 @@ impl CheckpointLoader {
                 Arc::clone(&self.fd_factory),
             )
             .map_err(|err| {
-                format!(
-                    "Failed to load canister snapshot {} for validation: {}",
-                    snapshot_id, err
-                )
+                format!("Failed to load canister snapshot {snapshot_id} for validation: {err}")
             })?
             .0
             .validate_eq(
@@ -661,6 +668,7 @@ pub fn load_checkpoint(
         checkpoint_loader.load_canister_states(&mut thread_pool)?,
         checkpoint_loader.load_system_metadata()?,
         checkpoint_loader.load_subnet_queues()?,
+        checkpoint_loader.load_refunds()?,
         checkpoint_loader.load_epoch_query_stats()?,
         checkpoint_loader.load_canister_snapshots(&mut thread_pool)?,
     ))
@@ -705,6 +713,7 @@ fn validate_eq_checkpoint_internal(
         canister_states,
         metadata,
         subnet_queues,
+        refunds,
         consensus_queue,
         epoch_query_stats,
         canister_snapshots,
@@ -720,7 +729,7 @@ fn validate_eq_checkpoint_internal(
     checkpoint_loader.validate_eq_canister_states(thread_pool, canister_states)?;
     checkpoint_loader
         .load_system_metadata()
-        .map_err(|err| format!("Failed to load system metadata: {}", err))?
+        .map_err(|err| format!("Failed to load system metadata: {err}"))?
         .validate_eq(metadata)?;
     if !metadata.unflushed_checkpoint_ops.is_empty() {
         return Err("Metadata has unflushed changes after checkpoint".to_string());
@@ -729,6 +738,10 @@ fn validate_eq_checkpoint_internal(
         .load_subnet_queues()
         .unwrap()
         .validate_eq(subnet_queues)?;
+    checkpoint_loader
+        .load_refunds()
+        .unwrap()
+        .validate_eq(refunds)?;
     if checkpoint_loader.load_epoch_query_stats().unwrap() != *epoch_query_stats {
         return Err("query_stats has diverged.".to_string());
     }
@@ -774,7 +787,7 @@ pub fn load_canister_state(
     let canister_state_bits: CanisterStateBits =
         CanisterStateBits::try_from(canister_layout.canister().deserialize()?).map_err(|err| {
             into_checkpoint_error(
-                format!("canister_states[{}]::canister_state_bits", canister_id),
+                format!("canister_states[{canister_id}]::canister_state_bits"),
                 err,
             )
         })?;
@@ -844,7 +857,7 @@ pub fn load_canister_state(
     ))
     .map_err(|err| {
         into_checkpoint_error(
-            format!("canister_states[{}]::system_state::queues", canister_id),
+            format!("canister_states[{canister_id}]::system_state::queues"),
             err,
         )
     })?;
@@ -889,6 +902,7 @@ pub fn load_canister_state(
         wasm_chunk_store_data,
         canister_state_bits.wasm_chunk_store_metadata,
         canister_state_bits.log_visibility,
+        canister_state_bits.log_memory_limit,
         canister_state_bits.canister_log,
         canister_state_bits.wasm_memory_limit,
         canister_state_bits.next_snapshot_id,
@@ -957,7 +971,7 @@ pub fn load_snapshot(
     )
     .map_err(|err| {
         into_checkpoint_error(
-            format!("canister_snapshot[{}]::canister_snapshot_bits", snapshot_id),
+            format!("canister_snapshot[{snapshot_id}]::canister_snapshot_bits"),
             err,
         )
     })?;

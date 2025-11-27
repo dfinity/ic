@@ -1,18 +1,18 @@
 use std::{sync::Arc, time::Duration};
 
-use axum::{body::Body, extract::Request, middleware::Next, response::IntoResponse, Extension};
+use axum::{Extension, body::Body, extract::Request, middleware::Next, response::IntoResponse};
 use bytes::Bytes;
 use candid::{Decode, Principal};
-use http::header::{HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
-use ic_bn_lib::http::{body::buffer_body, cache::CacheStatus, headers::*, Error as IcBnError};
-pub use ic_bn_lib::types::RequestType;
+use http::header::{CONTENT_TYPE, HeaderValue, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
+use ic_bn_lib::http::{body::buffer_body, cache::CacheStatus, headers::*};
+use ic_bn_lib_common::types::http::Error as HttpError;
 use ic_types::messages::Blob;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    core::{decoder_config, MAX_REQUEST_BODY_SIZE},
+    core::{MAX_REQUEST_BODY_SIZE, decoder_config},
     errors::{ApiError, ErrorCause},
-    http::middleware::retry::RetryResult,
+    http::{RequestType, middleware::retry::RetryResult},
     routes::{HttpRequest, RequestContext},
     snapshot::{Node, Subnet},
 };
@@ -49,9 +49,9 @@ pub async fn preprocess_request(
     let body = buffer_body(body, MAX_REQUEST_BODY_SIZE, Duration::from_secs(60))
         .await
         .map_err(|e| match e {
-            IcBnError::BodyReadingFailed(v) => ErrorCause::UnableToReadBody(v),
-            IcBnError::BodyTooBig => ErrorCause::PayloadTooLarge(MAX_REQUEST_BODY_SIZE),
-            IcBnError::BodyTimedOut => ErrorCause::BodyTimedOut,
+            HttpError::BodyReadingFailed(v) => ErrorCause::UnableToReadBody(v),
+            HttpError::BodyTooBig => ErrorCause::PayloadTooLarge(MAX_REQUEST_BODY_SIZE),
+            HttpError::BodyTimedOut => ErrorCause::BodyTimedOut,
             _ => ErrorCause::Other(e.to_string()),
         })?;
 
@@ -63,7 +63,7 @@ pub async fn preprocess_request(
     // Check if the request is HTTP and try to parse the arg
     let (arg, http_request) = match (&content.method_name, content.arg) {
         (Some(method), Some(arg)) => {
-            if request_type == RequestType::Query && method == METHOD_HTTP {
+            if request_type.is_query() && method == METHOD_HTTP {
                 let mut req: HttpRequest = Decode!([decoder_config()]; &arg.0, HttpRequest)
                     .map_err(|err| {
                         ErrorCause::UnableToParseHTTPArg(format!(

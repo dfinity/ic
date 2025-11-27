@@ -32,8 +32,8 @@ use ic_system_test_driver::driver::test_env_api::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
-use ic_types::malicious_behavior::MaliciousBehavior;
 use ic_types::Height;
+use ic_types::malicious_behavior::MaliciousBehavior;
 use rejoin_test_lib::fetch_metrics;
 use rejoin_test_lib::rejoin_test;
 use rejoin_test_lib::rejoin_test_large_state;

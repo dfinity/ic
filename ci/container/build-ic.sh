@@ -139,6 +139,7 @@ if "$BUILD_IMG"; then BAZEL_TARGETS+=(
     "//ic-os/guestos/envs/prod:bundle-update"
     "//ic-os/hostos/envs/prod:bundle-update"
     "//ic-os/setupos/envs/prod:bundle"
+    "//ic-os/guestos/envs/recovery:bundle-update"
 ); fi
 
 echo_blue "Bazel targets: ${BAZEL_TARGETS[*]}"
@@ -152,6 +153,9 @@ for artifact in $(bazel cquery "${BAZEL_COMMON_ARGS[@]}" --output=files "$query"
     case "$artifact" in
         *guestos*disk)
             target_dir="$DISK_DIR/guestos/disk"
+            ;;
+        *guestos*recovery*)
+            target_dir="$DISK_DIR/guestos/update-img-recovery"
             ;;
         *guestos*update)
             target_dir="$DISK_DIR/guestos/update"
@@ -209,6 +213,10 @@ if "$BUILD_IMG"; then
     popd >/dev/null
     echo_green "##### SETUPOS SHA256SUMS #####"
     pushd "$DISK_DIR_FULL/setupos" >/dev/null
+    cat SHA256SUMS
+    popd >/dev/null
+    echo_green "##### RECOVERY SHA256SUMS #####"
+    pushd "$DISK_DIR_FULL/guestos/update-img-recovery" >/dev/null
     cat SHA256SUMS
     popd >/dev/null
 fi

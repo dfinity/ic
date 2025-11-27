@@ -37,7 +37,7 @@ system_test_nns(
     ],
     test_timeout = "eternal",
     uses_guestos_img = False,
-    uses_guestos_nns_mainnet_img = True,
+    uses_guestos_mainnet_nns_img = True,
     uses_guestos_update = True,
     runtime_deps =
         MESSAGE_CANISTER_RUNTIME_DEPS +
@@ -66,7 +66,7 @@ system_test_nns(
     ],
     test_timeout = "eternal",
     uses_guestos_img = False,
-    uses_guestos_nns_mainnet_img = True,
+    uses_guestos_mainnet_nns_img = True,
     uses_guestos_update = True,
     runtime_deps =
         MESSAGE_CANISTER_RUNTIME_DEPS +
@@ -111,7 +111,7 @@ system_test_nns(
     test_driver_target = ":upgrade_test_bin",
     test_timeout = "eternal",  # the default 900 seconds (15 minutes) is not enough for this test, so we set it to 3600 seconds (1 hour).
     uses_guestos_img = False,
-    uses_guestos_nns_mainnet_img = True,
+    uses_guestos_mainnet_nns_img = True,
     uses_guestos_update = True,
     runtime_deps =
         MESSAGE_CANISTER_RUNTIME_DEPS +
@@ -128,7 +128,7 @@ system_test_nns(
     test_driver_target = ":upgrade_test_bin",
     test_timeout = "eternal",  # the default 900 seconds (15 minutes) is not enough for this test, so we set it to 3600 seconds (1 hour).
     uses_guestos_img = True,
-    uses_guestos_nns_mainnet_update = True,
+    uses_guestos_mainnet_nns_update = True,
     runtime_deps =
         MESSAGE_CANISTER_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS,
@@ -137,7 +137,6 @@ system_test_nns(
 system_test_nns(
     name = "upgrade_with_alternative_urls",
     tags = [
-        "k8s",
         "long_test",
     ],
     uses_guestos_img = True,
@@ -158,7 +157,6 @@ system_test_nns(
 system_test_nns(
     name = "unassigned_node_upgrade_test",
     tags = [
-        "k8s",
         "long_test",
     ],
     uses_guestos_img = True,

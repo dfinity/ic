@@ -2,14 +2,14 @@ use crate::sns::root::get_sns_canisters_summary;
 use assert_matches::assert_matches;
 use candid::{Nat, Principal};
 use canister_test::Wasm;
-use futures::{stream, StreamExt};
+use futures::{StreamExt, stream};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_agent::{
     helpers::sns::SnsProposalError, sns::governance::ProposalSubmissionError,
 };
 use ic_nervous_system_common::{
-    assert_is_ok, i2d, ledger::compute_distribution_subaccount_bytes, E8, ONE_DAY_SECONDS,
+    E8, ONE_DAY_SECONDS, assert_is_ok, i2d, ledger::compute_distribution_subaccount_bytes,
 };
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
@@ -24,9 +24,9 @@ use ic_nervous_system_proto::pb::v1::{Duration as DurationPb, Tokens as TokensPb
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys;
 use ic_nns_governance_api::{
+    CreateServiceNervousSystem, Neuron as NnsNeuron,
     create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution,
     get_neurons_fund_audit_info_response, neurons_fund_snapshot::NeuronsFundNeuronPortion,
-    CreateServiceNervousSystem, Neuron as NnsNeuron,
 };
 use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
 use ic_sns_governance_api::pb::v1::{self as sns_pb, NeuronPermissionType};
@@ -34,11 +34,11 @@ use ic_sns_init::distributions::MAX_DEVELOPER_DISTRIBUTION_COUNT;
 use ic_sns_root::CanisterSummary;
 use ic_sns_swap::{
     pb::v1::{
+        BuyerState, FinalizeSwapResponse, GetDerivedStateResponse, Lifecycle,
+        RefreshBuyerTokensResponse, SetDappControllersCallResult, SetDappControllersResponse,
+        SetModeCallResult, SettleNeuronsFundParticipationResult, SweepResult,
         new_sale_ticket_response, set_dapp_controllers_call_result, set_mode_call_result,
-        settle_neurons_fund_participation_result, BuyerState, FinalizeSwapResponse,
-        GetDerivedStateResponse, Lifecycle, RefreshBuyerTokensResponse,
-        SetDappControllersCallResult, SetDappControllersResponse, SetModeCallResult,
-        SettleNeuronsFundParticipationResult, SweepResult,
+        settle_neurons_fund_participation_result,
     },
     swap::principal_to_subaccount,
 };
@@ -48,8 +48,8 @@ use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use maplit::btreemap;
 use pocket_ic::PocketIcBuilder;
 use rust_decimal::{
-    prelude::{FromPrimitive, ToPrimitive},
     Decimal,
+    prelude::{FromPrimitive, ToPrimitive},
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -70,7 +70,7 @@ impl NeuronsFundConfig {
     fn new_with_20_hotkeys() -> Self {
         let hotkeys = (0..20)
             .map(|i: u64| {
-                if i % 2 == 0 {
+                if i.is_multiple_of(2) {
                     // Model some self-authenticating hotkeys.
                     PrincipalId::new_self_authenticating(&i.to_be_bytes())
                 } else {
@@ -415,12 +415,8 @@ async fn test_sns_lifecycle(
     assert_eq!(
         original_total_supply_sns_e8s,
         developer_neuron_stake_sns_e8s + treasury_distribution_sns_e8s + swap_distribution_sns_e8s,
-        "original_total_supply_sns_e8s ({}) should = developer_neuron_stake_sns_e8s ({}) + \
-        treasury_distribution_sns_e8s ({}) + swap_distribution_sns_e8s ({})",
-        original_total_supply_sns_e8s,
-        developer_neuron_stake_sns_e8s,
-        treasury_distribution_sns_e8s,
-        swap_distribution_sns_e8s,
+        "original_total_supply_sns_e8s ({original_total_supply_sns_e8s}) should = developer_neuron_stake_sns_e8s ({developer_neuron_stake_sns_e8s}) + \
+        treasury_distribution_sns_e8s ({treasury_distribution_sns_e8s}) + swap_distribution_sns_e8s ({swap_distribution_sns_e8s})",
     );
 
     let nervous_system_parameters = sns
@@ -507,16 +503,11 @@ async fn test_sns_lifecycle(
             assert_eq!(
                 ErrorType::try_from(*error_type).unwrap(),
                 ErrorType::PreconditionFailed,
-                "{:#?}",
-                err
+                "{err:#?}"
             );
-            assert!(
-                error_message.contains("PreInitializationSwap"),
-                "{:#?}",
-                err
-            );
+            assert!(error_message.contains("PreInitializationSwap"), "{err:#?}");
         } else {
-            panic!("Unexpected error: {:?}", err);
+            panic!("Unexpected error: {err:?}");
         }
     }
 
@@ -562,17 +553,15 @@ async fn test_sns_lifecycle(
                 assert_eq!(
                     ErrorType::try_from(*error_type).unwrap(),
                     ErrorType::PreconditionFailed,
-                    "{:#?}",
-                    error
+                    "{error:#?}"
                 );
                 assert!(
                     error_message.contains("PreInitializationSwap"),
-                    "{:#?}",
-                    error
+                    "{error:#?}"
                 );
             }
             response => {
-                panic!("{:#?}", response);
+                panic!("{response:#?}");
             }
         };
     }
@@ -819,10 +808,9 @@ async fn test_sns_lifecycle(
         )
         .await
         {
-            println!("{}", err);
+            println!("{err}");
             panic!(
-                "Awaiting Swap finalization status {:?} failed.",
-                expected_swap_finalization_status
+                "Awaiting Swap finalization status {expected_swap_finalization_status:?} failed."
             );
         }
         expected_swap_finalization_status
@@ -1256,16 +1244,11 @@ async fn test_sns_lifecycle(
                 assert_eq!(
                     ErrorType::try_from(*error_type).unwrap(),
                     ErrorType::PreconditionFailed,
-                    "{:#?}",
-                    err
+                    "{err:#?}"
                 );
-                assert!(
-                    error_message.contains("PreInitializationSwap"),
-                    "{:#?}",
-                    err
-                );
+                assert!(error_message.contains("PreInitializationSwap"), "{err:#?}");
             } else {
-                panic!("Unexpected error: {:?}", err);
+                panic!("Unexpected error: {err:?}");
             }
         } else {
             assert_is_ok!(proposal_result);
@@ -1293,23 +1276,21 @@ async fn test_sns_lifecycle(
                     assert_eq!(
                         ErrorType::try_from(*error_type).unwrap(),
                         ErrorType::PreconditionFailed,
-                        "{:#?}",
-                        error
+                        "{error:#?}"
                     );
                     assert!(
                         error_message.contains("PreInitializationSwap"),
-                        "{:#?}",
-                        error
+                        "{error:#?}"
                     );
                 }
                 response => {
-                    panic!("{:#?}", response);
+                    panic!("{response:#?}");
                 }
             };
         } else {
             match start_dissolving_response.command {
                 Some(sns_pb::manage_neuron_response::Command::Configure(_)) => (),
-                _ => panic!("{:#?}", start_dissolving_response),
+                _ => panic!("{start_dissolving_response:#?}"),
             };
         }
     }
@@ -1373,11 +1354,8 @@ async fn test_sns_lifecycle(
         assert_eq!(
             (original_total_supply_sns_e8s - total_supply_sns_e8s) % transaction_fee_sns_e8s,
             0,
-            "original_total_supply_sns_e8s ({}) - total_supply_sns_e8s ({}) should be a multiple \
-            of transaction_fee_sns_e8s ({})",
-            original_total_supply_sns_e8s,
-            total_supply_sns_e8s,
-            transaction_fee_sns_e8s,
+            "original_total_supply_sns_e8s ({original_total_supply_sns_e8s}) - total_supply_sns_e8s ({total_supply_sns_e8s}) should be a multiple \
+            of transaction_fee_sns_e8s ({transaction_fee_sns_e8s})",
         );
     }
 
@@ -1394,10 +1372,7 @@ async fn test_sns_lifecycle(
             .await
             .result
         else {
-            panic!(
-                "Proposal {:?} did not result in a successfully deployed SNS",
-                nns_proposal_id
-            );
+            panic!("Proposal {nns_proposal_id:?} did not result in a successfully deployed SNS");
         };
         neurons_fund_audit_info
             .final_neurons_fund_participation
@@ -1604,8 +1579,7 @@ async fn test_sns_lifecycle(
                         };
                         assert_eq!(
                             sns_neuron.auto_stake_maturity, expected_auto_stake_maturity,
-                            "{:#?}",
-                            sns_neuron
+                            "{sns_neuron:#?}"
                         );
                     }
                     // Validate `permissions`:
@@ -1635,7 +1609,7 @@ async fn test_sns_lifecycle(
                                     .unwrap_or_else(|| {
                                         panic!(
                                         "There should be an NNS neuron controlled by the Neurons' \
-                                        Fund user {}", principal_id,
+                                        Fund user {principal_id}",
                                     )
                                     })
                                     .iter()
@@ -1684,8 +1658,7 @@ async fn test_sns_lifecycle(
                         assert_eq!(
                             sorted_permissions(&sns_neuron.permissions),
                             expected_permissions,
-                            "{:#?}",
-                            sns_neuron
+                            "{sns_neuron:#?}"
                         );
                     }
                     // Validate the SNS neuron baskets' follow graph.
@@ -1693,22 +1666,21 @@ async fn test_sns_lifecycle(
                         if sns_neuron.id.as_ref().unwrap() == &longest_dissolve_delay_sns_neuron_id
                         {
                             for followees in sns_neuron.followees.values() {
-                                assert_eq!(followees.followees, vec![], "{:#?}", sns_neuron);
+                                assert_eq!(followees.followees, vec![], "{sns_neuron:#?}");
                             }
                         } else {
                             for followees in sns_neuron.followees.values() {
                                 assert_eq!(
                                     followees.followees,
                                     vec![longest_dissolve_delay_sns_neuron_id.clone()],
-                                    "{:#?}",
-                                    sns_neuron,
+                                    "{sns_neuron:#?}",
                                 );
                             }
                         }
                     }
                     // Miscellaneous checks:
-                    assert_eq!(sns_neuron.maturity_e8s_equivalent, 0, "{:#?}", sns_neuron);
-                    assert_eq!(sns_neuron.neuron_fees_e8s, 0, "{:#?}", sns_neuron);
+                    assert_eq!(sns_neuron.maturity_e8s_equivalent, 0, "{sns_neuron:#?}");
+                    assert_eq!(sns_neuron.neuron_fees_e8s, 0, "{sns_neuron:#?}");
 
                     // Finally, check that the SNS Ledger balances add up.
                     {
@@ -1862,10 +1834,7 @@ async fn test_sns_lifecycle(
             .await
             .result
         else {
-            panic!(
-                "Proposal {:?} did not result in a successfully deployed SNS",
-                nns_proposal_id
-            );
+            panic!("Proposal {nns_proposal_id:?} did not result in a successfully deployed SNS");
         };
         // Maps neuron IDs to maturity equivalent ICP e8s.
         let mut final_neurons_fund_participation: BTreeMap<PrincipalId, Vec<u64>> =
@@ -1934,10 +1903,7 @@ async fn test_sns_lifecycle(
                 assert_eq!(
                     current_maturity_icp_e8s + participated_amount_icp_e8s,
                     original_maturity_icp_e8s,
-                    "current_maturity_icp_e8s ({}) + participated_amount_icp_e8s ({}) should equal original_maturity_icp_e8s ({})",
-                    current_maturity_icp_e8s,
-                    participated_amount_icp_e8s,
-                    original_maturity_icp_e8s,
+                    "current_maturity_icp_e8s ({current_maturity_icp_e8s}) + participated_amount_icp_e8s ({participated_amount_icp_e8s}) should equal original_maturity_icp_e8s ({original_maturity_icp_e8s})",
                 );
             }
         }
@@ -1960,13 +1926,9 @@ async fn test_sns_lifecycle(
                     .collect()
             };
             assert_eq!(
-                nns_neuron_maturities_e8s,
-                original_nns_neuron_maturities_e8s,
-                "Unexpected mismatch in maturity ICP equivalent for controller {}. \
-                nns_neuron_maturities_e8s={:?} e8s, original_nns_neuron_maturities_e8s({:?}) e8s.",
-                controller_principal_id,
-                nns_neuron_maturities_e8s,
-                original_nns_neuron_maturities_e8s,
+                nns_neuron_maturities_e8s, original_nns_neuron_maturities_e8s,
+                "Unexpected mismatch in maturity ICP equivalent for controller {controller_principal_id}. \
+                nns_neuron_maturities_e8s={nns_neuron_maturities_e8s:?} e8s, original_nns_neuron_maturities_e8s({original_nns_neuron_maturities_e8s:?}) e8s.",
             );
         }
     }
@@ -2015,8 +1977,7 @@ async fn test_sns_lifecycle(
     let response = sns::root::get_sns_canisters_summary(&pocket_ic, sns.root.canister_id).await;
     assert!(
         !response.archives_canister_summaries().is_empty(),
-        "No archives found from get_sns_canisters_summary response: {:#?}",
-        response
+        "No archives found from get_sns_canisters_summary response: {response:#?}"
     );
 
     // Check that the SNS framework canister settings are as expected
@@ -2075,8 +2036,8 @@ async fn test_sns_lifecycle_happy_scenario_with_neurons_fund_participation() {
 }
 
 #[tokio::test]
-async fn test_sns_lifecycle_happy_scenario_direct_participation_with_and_without_ticketing_with_neurons_fund_participation(
-) {
+async fn test_sns_lifecycle_happy_scenario_direct_participation_with_and_without_ticketing_with_neurons_fund_participation()
+ {
     test_sns_lifecycle(
         false,
         CreateServiceNervousSystemBuilder::default()

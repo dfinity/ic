@@ -1,14 +1,14 @@
 use bitcoin::{
+    Amount, Block as BtcBlock, BlockHash, Network as BtcNetwork, Transaction, Txid,
     address::{Address as BtcAddress, NetworkUnchecked, ParseError as BtcAddressParseError},
     amount::ParseAmountError,
     block::Header,
-    consensus::{encode, Decodable},
+    consensus::{Decodable, encode},
     dogecoin::{
-        address::ParseError as DogeAddressParseError, Address as DogeAddress, Block as DogeBlock,
-        Network as DogeNetwork,
+        Address as DogeAddress, Block as DogeBlock, Network as DogeNetwork,
+        address::ParseError as DogeAddressParseError,
     },
     hex::DisplayHex,
-    Amount, Block as BtcBlock, BlockHash, Network as BtcNetwork, Transaction, Txid,
 };
 use ic_config::adapters::AdaptersConfig;
 use std::collections::HashMap;
@@ -238,8 +238,16 @@ impl<T: RpcClientType> RpcClient<T> {
     /// Create a RPC client using the given [Network], url and [Auth].
     pub fn new(network: T, url: &str, auth: Auth) -> Result<Self> {
         let (user, pass) = auth.get_user_pass()?;
-        let client = jsonrpc::client::Client::simple_http(url, user, pass)
+        let transport = jsonrpc::simple_http::Builder::new()
+            .timeout(std::time::Duration::from_secs(60))
+            .url(url)
             .map_err(|e| RpcError::JsonRpc(e.into()))?;
+        let transport = if let Some(user) = user {
+            transport.auth(user, pass)
+        } else {
+            transport
+        };
+        let client = jsonrpc::client::Client::with_transport(transport.build());
         let client = Arc::new(client);
         Ok(RpcClient {
             network,
@@ -275,7 +283,16 @@ impl<T: RpcClientType> RpcClient<T> {
                     .create_wallet("default", None, None, None, None)
                     .is_err()
                 {
-                    self.load_wallet("default")?;
+                    match self.load_wallet("default") {
+                        // Wait a second if it says "Wallet already loading."
+                        Err(RpcError::JsonRpc(jsonrpc::error::Error::Rpc(
+                            jsonrpc::error::RpcError { code, message, .. },
+                        ))) if code == -4 && message == "Wallet already loading." => {
+                            std::thread::sleep(std::time::Duration::from_secs(1));
+                        }
+                        Err(err) => return Err(err),
+                        Ok(_) => {}
+                    }
                 }
                 break;
             }
@@ -381,9 +398,7 @@ impl<T: RpcClientType> RpcClient<T> {
     ) -> Result<V> {
         let raw = serde_json::value::to_raw_value(args)?;
         let req = self.client.build_request(cmd, Some(&raw));
-        eprintln!("req = {:?}", req);
         let resp = self.client.send_request(req).map_err(RpcError::from);
-        eprintln!("resp = {:?}", resp);
         Ok(resp?.result()?)
     }
 

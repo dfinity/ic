@@ -28,8 +28,8 @@ Coverage::
 
 end::catalog[] */
 
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use ic_consensus_system_test_utils::node::{
     await_node_certified_height, get_node_certified_height,
 };
@@ -38,12 +38,12 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    GetFirstHealthyNodeSnapshot, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession,
-    READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    GetFirstHealthyNodeSnapshot, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+    READY_WAIT_TIMEOUT, RETRY_BACKOFF, SshSession,
 };
 use ic_system_test_driver::systest;
 use ic_types::Height;
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 const SHORT_DKG_INTERVAL: u64 = 3;
 
@@ -123,8 +123,7 @@ impl From<String> for SecretKeyStoreMetadata {
         let no_more_fields = field_iter.next();
         assert!(
             no_more_fields.is_none(),
-            "unexpected field: {:?}",
-            no_more_fields
+            "unexpected field: {no_more_fields:?}"
         );
 
         SecretKeyStoreMetadata {

@@ -12,9 +12,9 @@ use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
 use ethnum::u256;
-use ic_bn_lib::tasks::Run;
+use ic_bn_lib_common::traits::Run;
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
-use ic_registry_client::client::{RegistryClient, ThresholdSigPublicKey};
+use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_helpers::{
     api_boundary_node::ApiBoundaryNodeRegistry,
     crypto::CryptoRegistry,
@@ -35,9 +35,9 @@ use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 use crate::{
     errors::ErrorCause,
     firewall::{FirewallGenerator, SystemdReloader},
+    http::RequestType,
     metrics::{MetricParamsSnapshot, WithMetricsSnapshot},
     persist::principal_to_u256,
-    routes::RequestType,
 };
 
 #[derive(Clone, Debug)]
@@ -75,18 +75,35 @@ impl Node {
         let node_id = &self.id;
         let node_port = &self.port;
         match request_type {
-            RequestType::Unknown => {
-                panic!("can't construct url for unknown request type")
-            }
-            RequestType::SyncCall => Url::from_str(&format!(
+            RequestType::QueryV2 => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v2/canister/{principal}/query",
+            )),
+            RequestType::QueryV3 => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v3/canister/{principal}/query",
+            )),
+            RequestType::CallV2 => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v2/canister/{principal}/call",
+            )),
+            RequestType::CallV3 => Url::from_str(&format!(
                 "https://{node_id}:{node_port}/api/v3/canister/{principal}/call",
             )),
-            RequestType::ReadStateSubnet => Url::from_str(&format!(
+            RequestType::CallV4 => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v4/canister/{principal}/call",
+            )),
+            RequestType::ReadStateV2 => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v2/canister/{principal}/read_state",
+            )),
+            RequestType::ReadStateV3 => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v3/canister/{principal}/read_state",
+            )),
+            RequestType::ReadStateSubnetV2 => Url::from_str(&format!(
                 "https://{node_id}:{node_port}/api/v2/subnet/{principal}/read_state",
             )),
-            _ => Url::from_str(&format!(
-                "https://{node_id}:{node_port}/api/v2/canister/{principal}/{request_type}",
+            RequestType::ReadStateSubnetV3 => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v3/subnet/{principal}/read_state",
             )),
+            // Some generic error for the requests that shouldn't end up here
+            RequestType::Unknown | RequestType::Status => Err(ParseError::Overflow),
         }
     }
 }
@@ -548,14 +565,13 @@ impl<T: Snapshot> Run for WithMetricsSnapshot<T> {
 
 /// Wrapper for registry replicator to run it as Task
 #[derive(derive_new::new)]
-pub struct RegistryReplicatorRunner(RegistryReplicator, Vec<Url>, Option<ThresholdSigPublicKey>);
+pub struct RegistryReplicatorRunner(RegistryReplicator);
 
 #[async_trait]
 impl Run for RegistryReplicatorRunner {
     async fn run(&self, token: CancellationToken) -> Result<(), Error> {
         self.0
-            .start_polling(self.1.clone(), self.2, token)
-            .await
+            .start_polling(token)
             .context("unable to start polling Registry")?
             .await; // This terminates when `token` is cancelled
 

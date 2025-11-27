@@ -1,0 +1,39 @@
+--- rs/sns/governance/canister/governance.did
++++ rs/sns/governance/canister/governance_test.did
+@@ -1039,6 +1039,24 @@
+   uncategorized_functions: opt vec NervousSystemFunction
+ };
+ 
++// The following types are for feature = "test"
++type AddMaturityRequest = record {
++  id : opt NeuronId;
++  amount_e8s : opt nat64;
++};
++
++type AddMaturityResponse = record {
++  new_maturity_e8s : opt nat64;
++};
++
++type MintTokensRequest = record {
++  recipient : opt Account;
++  amount_e8s : opt nat64;
++};
++
++type AdvanceTargetVersionRequest = record { target_version : opt Version; };
++type AdvanceTargetVersionResponse = record {};
++
+ service : (Governance) -> {
+   claim_swap_neurons : (ClaimSwapNeuronsRequest) -> (ClaimSwapNeuronsResponse);
+   fail_stuck_upgrade_in_progress : (record {}) -> (record {});
+@@ -1064,4 +1082,11 @@
+   set_mode : (SetMode) -> (record {});
+   reset_timers : (record {}) -> (record {});
+   get_timers : (record {}) -> (GetTimersResponse) query;
++
++  // The following are methods for feature = "test"
++  add_maturity : (AddMaturityRequest) -> (AddMaturityResponse);
++  advance_target_version : (AdvanceTargetVersionRequest) -> (AdvanceTargetVersionResponse);
++  mint_tokens : (MintTokensRequest) -> (record {});
++  refresh_cached_upgrade_steps : (record {}) -> (record {});
++  update_neuron : (Neuron) -> (opt GovernanceError);
+ }

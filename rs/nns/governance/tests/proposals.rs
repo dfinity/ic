@@ -7,8 +7,8 @@ use ic_nns_governance::timer_tasks::schedule_tasks;
 use ic_nns_governance::{
     governance::{Governance, REWARD_DISTRIBUTION_PERIOD_SECONDS},
     pb::v1::{
-        proposal::Action, Ballot, Proposal, ProposalData, ProposalRewardStatus, Topic, Vote,
-        WaitForQuietState,
+        Ballot, Proposal, ProposalData, ProposalRewardStatus, Topic, Vote, WaitForQuietState,
+        proposal::Action,
     },
     proposals::sum_weighted_voting_power,
 };
@@ -234,7 +234,8 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
     run_pending_timers_every_interval_for_count(
         Duration::from_secs(REWARD_DISTRIBUTION_PERIOD_SECONDS),
         1,
-    );
+    )
+    .await;
 
     // Step 3: Inspect result(s).
     let get_neuron_rewards = |neuron_id| {
@@ -269,11 +270,7 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
 
         assert!(
             relative_error.abs() < epsilon,
-            "{}: {:?} vs. {:?} (relative error = {})",
-            msg,
-            observed,
-            expected,
-            relative_error,
+            "{msg}: {observed:?} vs. {expected:?} (relative error = {relative_error})",
         );
     }
 

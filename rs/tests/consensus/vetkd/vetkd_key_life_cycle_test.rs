@@ -40,7 +40,7 @@ Success::
 
 end::catalog[] */
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use canister_test::Canister;
 use futures::FutureExt;
 use ic_config::subnet_config::VETKD_FEE;
@@ -57,12 +57,12 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            NnsInstallationBuilder,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+            retry_async,
         },
     },
     systest,
-    util::{block_on, get_app_subnet_and_node, runtime_from_url, MessageCanister},
+    util::{MessageCanister, block_on, get_app_subnet_and_node, runtime_from_url},
 };
 use ic_types::{Cycles, Height};
 use ic_vetkeys::{
@@ -312,7 +312,7 @@ async fn derive_vetkey_with_canister<R: Rng>(
     log: &slog::Logger,
     rng: &mut R,
 ) -> VetKey {
-    let tsk = TransportSecretKey::from_seed(rng.gen::<[u8; 32]>().to_vec())
+    let tsk = TransportSecretKey::from_seed(rng.r#gen::<[u8; 32]>().to_vec())
         .expect("Failed to generate transport secret key");
 
     info!(log, "Deriving vetKey...");

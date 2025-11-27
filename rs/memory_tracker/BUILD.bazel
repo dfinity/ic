@@ -3,25 +3,22 @@ load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/monitoring/logger",
-    "//rs/replicated_state",
-    "//rs/sys",
-    "//rs/types/types",
-    "@crate_index//:bit-vec",
-    "@crate_index//:lazy_static",
-    "@crate_index//:libc",
-    "@crate_index//:nix",
-    "@crate_index//:slog",
-]
-
 rust_library(
     name = "memory_tracker",
     srcs = glob(["src/**"]),
     crate_name = "memory_tracker",
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/monitoring/logger",
+        "//rs/replicated_state",
+        "//rs/sys",
+        "//rs/types/types",
+        "@crate_index//:bit-vec",
+        "@crate_index//:libc",
+        "@crate_index//:nix",
+        "@crate_index//:slog",
+    ],
 )
 
 rust_test(
@@ -29,7 +26,6 @@ rust_test(
     crate = ":memory_tracker",
     deps = [
         # Keep sorted.
-        "//rs/types/types",
         "@crate_index//:proptest",
         "@crate_index//:tempfile",
     ],
@@ -42,8 +38,15 @@ rust_bench(
     deps = [
         # Keep sorted.
         ":memory_tracker",
+        "//rs/monitoring/logger",
+        "//rs/replicated_state",
+        "//rs/sys",
+        "//rs/types/types",
         "@crate_index//:criterion",
-    ] + DEPENDENCIES,
+        "@crate_index//:lazy_static",
+        "@crate_index//:libc",
+        "@crate_index//:nix",
+    ],
 )
 
 rust_bench(
@@ -56,17 +59,17 @@ rust_bench(
         "@crate_index//:criterion",
         "@crate_index//:memmap2",
         "@crate_index//:rayon",
-    ] + DEPENDENCIES,
+    ],
 )
 
 rust_bench(
-    name = "bit_vec",
+    name = "bit_vec_bench",
     testonly = True,
     srcs = ["benches/bit_vec.rs"],
     deps = [
         # Keep sorted.
+        "@crate_index//:bit-vec",
         "@crate_index//:criterion",
-        "@crate_index//:memmap2",
-        "@crate_index//:rayon",
-    ] + DEPENDENCIES,
+        "@crate_index//:nix",
+    ],
 )

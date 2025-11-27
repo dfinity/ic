@@ -4,13 +4,13 @@ use anyhow::bail;
 use axum::Router;
 use candid::Principal;
 use http::request::Request;
-use ic_bn_lib::http::ConnInfo;
+use ic_bn_lib_common::types::http::ConnInfo;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, time::Duration};
 use tower::ServiceBuilder;
 use tower_governor::{
-    errors::GovernorError, governor::GovernorConfigBuilder, key_extractor::KeyExtractor,
-    GovernorLayer,
+    GovernorLayer, errors::GovernorError, governor::GovernorConfigBuilder,
+    key_extractor::KeyExtractor,
 };
 
 use crate::snapshot::Subnet;
@@ -110,19 +110,19 @@ mod test {
 
     use anyhow::Error;
     use axum::{
+        Router,
         body::Body,
         extract::Request,
         middleware::Next,
         middleware::{self},
         response::IntoResponse,
         routing::method_routing::post,
-        Router,
     };
     use http::StatusCode;
-    use ic_bn_lib::{http::ConnInfo, principal};
+    use ic_bn_lib_common::{principal, types::http::ConnInfo};
     use ic_types::{
-        messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope},
         CanisterId,
+        messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope},
     };
     use tower::Service;
 

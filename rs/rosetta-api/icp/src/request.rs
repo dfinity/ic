@@ -3,7 +3,10 @@ use crate::{
     models::seconds::Seconds, request_types::*,
 };
 use candid::Decode;
-use ic_nns_governance_api::manage_neuron::{self, configure, Command, Configure};
+use ic_nns_governance_api::{
+    ManageNeuronCommandRequest,
+    manage_neuron::{self, Configure, configure},
+};
 use ic_types::PrincipalId;
 use icp_ledger::Tokens;
 use std::convert::{TryFrom, TryInto};
@@ -238,8 +241,7 @@ impl TryFrom<&models::Request> for Request {
         let pid =
             PrincipalId::try_from(payload.update_content().sender.clone().0).map_err(|e| {
                 ApiError::internal_error(format!(
-                    "Could not parse envelope sender's public key: {}",
-                    e
+                    "Could not parse envelope sender's public key: {e}"
                 ))
             })?;
 
@@ -249,10 +251,10 @@ impl TryFrom<&models::Request> for Request {
             {
                 Decode!(
                     &payload.update_content().arg.0,
-                    ic_nns_governance_api::ManageNeuron
+                    ic_nns_governance_api::ManageNeuronRequest
                 )
                 .map_err(|e| {
-                    ApiError::invalid_request(format!("Could not parse manage_neuron: {}", e))
+                    ApiError::invalid_request(format!("Could not parse manage_neuron: {e}"))
                 })
             }
             .map(|m| m.command)
@@ -277,7 +279,7 @@ impl TryFrom<&models::Request> for Request {
             })),
             RequestType::SetDissolveTimestamp { neuron_index } => {
                 let command = manage_neuron()?;
-                if let Some(Command::Configure(Configure {
+                if let Some(ManageNeuronCommandRequest::Configure(Configure {
                     operation:
                         Some(configure::Operation::SetDissolveTimestamp(
                             manage_neuron::SetDissolveTimestamp {
@@ -300,7 +302,7 @@ impl TryFrom<&models::Request> for Request {
             }
             RequestType::ChangeAutoStakeMaturity { neuron_index } => {
                 let command = manage_neuron()?;
-                if let Some(Command::Configure(Configure {
+                if let Some(ManageNeuronCommandRequest::Configure(Configure {
                     operation:
                         Some(configure::Operation::ChangeAutoStakeMaturity(
                             manage_neuron::ChangeAutoStakeMaturity {
@@ -333,14 +335,15 @@ impl TryFrom<&models::Request> for Request {
             })),
             RequestType::Disburse { neuron_index } => {
                 let command = manage_neuron()?;
-                if let Some(Command::Disburse(manage_neuron::Disburse { to_account, amount })) =
-                    command
+                if let Some(ManageNeuronCommandRequest::Disburse(manage_neuron::Disburse {
+                    to_account,
+                    amount,
+                })) = command
                 {
                     let recipient = if let Some(a) = to_account {
                         Some((&a).try_into().map_err(|e| {
                             ApiError::invalid_request(format!(
-                                "Could not parse recipient account identifier: {}",
-                                e
+                                "Could not parse recipient account identifier: {e}"
                             ))
                         })?)
                     } else {
@@ -359,11 +362,13 @@ impl TryFrom<&models::Request> for Request {
             }
             RequestType::DisburseMaturity { neuron_index } => {
                 let command = manage_neuron()?;
-                if let Some(Command::DisburseMaturity(manage_neuron::DisburseMaturity {
-                    to_account,
-                    percentage_to_disburse,
-                    to_account_identifier,
-                })) = command
+                if let Some(ManageNeuronCommandRequest::DisburseMaturity(
+                    manage_neuron::DisburseMaturity {
+                        to_account,
+                        percentage_to_disburse,
+                        to_account_identifier,
+                    },
+                )) = command
                 {
                     let recipient = convert::from_account_or_account_identifier(
                         to_account,
@@ -381,7 +386,7 @@ impl TryFrom<&models::Request> for Request {
                 }
             }
             RequestType::AddHotKey { neuron_index } => {
-                if let Some(Command::Configure(Configure {
+                if let Some(ManageNeuronCommandRequest::Configure(Configure {
                     operation:
                         Some(configure::Operation::AddHotKey(manage_neuron::AddHotKey {
                             new_hot_key: Some(pid),
@@ -399,7 +404,7 @@ impl TryFrom<&models::Request> for Request {
                 }
             }
             RequestType::RemoveHotKey { neuron_index } => {
-                if let Some(Command::Configure(Configure {
+                if let Some(ManageNeuronCommandRequest::Configure(Configure {
                     operation:
                         Some(configure::Operation::RemoveHotKey(manage_neuron::RemoveHotKey {
                             hot_key_to_remove: Some(pid),
@@ -419,7 +424,7 @@ impl TryFrom<&models::Request> for Request {
                 }
             }
             RequestType::Spawn { neuron_index } => {
-                if let Some(Command::Spawn(manage_neuron::Spawn {
+                if let Some(ManageNeuronCommandRequest::Spawn(manage_neuron::Spawn {
                     new_controller,
                     nonce,
                     percentage_to_spawn,
@@ -443,8 +448,9 @@ impl TryFrom<&models::Request> for Request {
                 }
             }
             RequestType::RegisterVote { neuron_index } => {
-                if let Some(Command::RegisterVote(manage_neuron::RegisterVote { proposal, vote })) =
-                    manage_neuron()?
+                if let Some(ManageNeuronCommandRequest::RegisterVote(
+                    manage_neuron::RegisterVote { proposal, vote },
+                )) = manage_neuron()?
                 {
                     Ok(Request::RegisterVote(RegisterVote {
                         account,
@@ -457,9 +463,11 @@ impl TryFrom<&models::Request> for Request {
                 }
             }
             RequestType::StakeMaturity { neuron_index } => {
-                if let Some(Command::StakeMaturity(manage_neuron::StakeMaturity {
-                    percentage_to_stake,
-                })) = manage_neuron()?
+                if let Some(ManageNeuronCommandRequest::StakeMaturity(
+                    manage_neuron::StakeMaturity {
+                        percentage_to_stake,
+                    },
+                )) = manage_neuron()?
                 {
                     Ok(Request::StakeMaturity(StakeMaturity {
                         account,
@@ -500,8 +508,10 @@ impl TryFrom<&models::Request> for Request {
                 neuron_index,
                 controller,
             } => {
-                if let Some(Command::Follow(manage_neuron::Follow { topic, followees })) =
-                    manage_neuron()?
+                if let Some(ManageNeuronCommandRequest::Follow(manage_neuron::Follow {
+                    topic,
+                    followees,
+                })) = manage_neuron()?
                 {
                     let ids = followees.iter().map(|n| n.id).collect();
                     match controller
@@ -532,8 +542,9 @@ impl TryFrom<&models::Request> for Request {
                 neuron_index,
                 controller,
             } => {
-                if let Some(Command::RefreshVotingPower(manage_neuron::RefreshVotingPower {})) =
-                    manage_neuron()?
+                if let Some(ManageNeuronCommandRequest::RefreshVotingPower(
+                    manage_neuron::RefreshVotingPower {},
+                )) = manage_neuron()?
                 {
                     let pid = match controller
                         .clone()

@@ -1,8 +1,8 @@
 use crate::page_map::{
     FileDescriptor, FileOffset, MemoryInstructions, MemoryMapOrData, PageIndex, PersistenceError,
 };
-use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
-use ic_sys::{page_bytes_from_ptr, PageBytes};
+use ic_sys::{PAGE_SIZE, mmap::ScopedMmap};
+use ic_sys::{PageBytes, page_bytes_from_ptr};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
@@ -81,7 +81,7 @@ impl Mapping {
             })?;
 
         let len = metadata.len() as usize;
-        if len % PAGE_SIZE != 0 {
+        if !len.is_multiple_of(PAGE_SIZE) {
             return Err(PersistenceError::InvalidHeapFile {
                 path: path.display().to_string(),
                 file_size: len,
@@ -129,7 +129,7 @@ impl Mapping {
     }
 
     /// See the comments of `PageMap::get_checkpoint_memory_instructions()`.
-    pub fn get_memory_instructions(&self) -> MemoryInstructions {
+    pub fn get_memory_instructions(&self) -> MemoryInstructions<'_> {
         let num_pages = (self.mmap.len() / PAGE_SIZE) as u64;
 
         MemoryInstructions {
@@ -190,7 +190,7 @@ impl Checkpoint {
     }
 
     /// See the comments of `PageMap::get_checkpoint_memory_instructions()`.
-    pub fn get_memory_instructions(&self) -> MemoryInstructions {
+    pub fn get_memory_instructions(&self) -> MemoryInstructions<'_> {
         self.mapping.as_ref().map_or(
             MemoryInstructions {
                 range: PageIndex::new(0)..PageIndex::new(u64::MAX),

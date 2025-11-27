@@ -3,30 +3,27 @@ use ic_config::execution_environment::{Config, MAX_COMPILATION_CACHE_SIZE};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
+    CompilationCache, CompilationCacheBuilder, CompilationResult, WasmExecutionInput,
+    WasmtimeEmbedder,
     wasm_executor::{WasmExecutionResult, WasmExecutor, WasmExecutorImpl},
     wasm_utils::decoding::decoded_wasm_size,
     wasmtime_embedder::system_api::{
-        sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
+        ApiType, ExecutionParameters, sandbox_safe_system_state::SandboxSafeSystemState,
     },
-    CompilationCache, CompilationCacheBuilder, CompilationResult, WasmExecutionInput,
-    WasmtimeEmbedder,
 };
 use ic_heap_bytes::HeapBytes;
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, WasmExecutionOutput,
+    HypervisorError, HypervisorResult, MessageMemoryUsage, WasmExecutionOutput,
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
-use ic_management_canister_types_private::LogVisibilityV2;
-use ic_metrics::buckets::{decimal_buckets_with_zero, linear_buckets};
 use ic_metrics::MetricsRegistry;
-use ic_replicated_state::{
-    ExecutionState, MessageMemoryUsage, NetworkTopology, ReplicatedState, SystemState,
-};
+use ic_metrics::buckets::{decimal_buckets_with_zero, linear_buckets};
+use ic_replicated_state::{ExecutionState, NetworkTopology, ReplicatedState, SystemState};
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
-    messages::RequestMetadata, methods::FuncRef, CanisterId, DiskBytes, NumBytes, NumInstructions,
-    SubnetId, Time,
+    CanisterId, DiskBytes, NumBytes, NumInstructions, SubnetId, Time, messages::RequestMetadata,
+    methods::FuncRef,
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounter, IntGaugeVec};
@@ -35,8 +32,9 @@ use std::{
     sync::Arc,
 };
 
+use crate::canister_logs::check_log_visibility_permission;
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
-use crate::execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
+use crate::execution_environment::{CompilationCostHandling, RoundLimits, as_round_instructions};
 use crate::metrics::CallTreeMetrics;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 
@@ -120,7 +118,6 @@ pub struct Hypervisor {
     log: ReplicaLogger,
     cycles_account_manager: Arc<CyclesAccountManager>,
     compilation_cache: Arc<CompilationCache>,
-    deterministic_time_slicing: FlagStatus,
     cost_to_compile_wasm_instruction: NumInstructions,
     dirty_page_overhead: NumInstructions,
     canister_guaranteed_callback_quota: usize,
@@ -183,7 +180,7 @@ impl Hypervisor {
         }
     }
 
-    pub fn new(
+    pub(crate) fn new(
         config: Config,
         metrics_registry: &MetricsRegistry,
         own_subnet_id: SubnetId,
@@ -232,7 +229,6 @@ impl Hypervisor {
                     .with_dir(tempfile::tempdir_in(temp_dir).unwrap())
                     .build(),
             ),
-            deterministic_time_slicing: config.deterministic_time_slicing,
             cost_to_compile_wasm_instruction: config
                 .embedders_config
                 .cost_to_compile_wasm_instruction,
@@ -241,14 +237,12 @@ impl Hypervisor {
         }
     }
 
-    #[doc(hidden)]
-    pub fn new_for_testing(
+    pub(crate) fn new_for_testing(
         metrics_registry: &MetricsRegistry,
         own_subnet_id: SubnetId,
         log: ReplicaLogger,
         cycles_account_manager: Arc<CyclesAccountManager>,
         wasm_executor: Arc<dyn WasmExecutor>,
-        deterministic_time_slicing: FlagStatus,
         cost_to_compile_wasm_instruction: NumInstructions,
         dirty_page_overhead: NumInstructions,
         canister_guaranteed_callback_quota: usize,
@@ -265,7 +259,6 @@ impl Hypervisor {
                     .with_dir(tempfile::tempdir().unwrap())
                     .build(),
             ),
-            deterministic_time_slicing,
             cost_to_compile_wasm_instruction,
             dirty_page_overhead,
             canister_guaranteed_callback_quota,
@@ -279,9 +272,8 @@ impl Hypervisor {
 
     /// Wrapper around the standalone `execute`.
     /// NOTE: this is public to enable integration testing.
-    #[doc(hidden)]
     #[allow(clippy::too_many_arguments)]
-    pub fn execute(
+    pub(crate) fn execute(
         &self,
         api_type: ApiType,
         time: Time,
@@ -302,6 +294,7 @@ impl Hypervisor {
             execution_parameters.instruction_limits.message(),
             execution_parameters.instruction_limits.slice()
         );
+        let is_composite_query = matches!(api_type, ApiType::CompositeQuery { .. });
         let execution_result = self.execute_dts(
             api_type,
             &execution_state,
@@ -337,6 +330,7 @@ impl Hypervisor {
             state_changes_error,
             call_tree_metrics,
             call_context_creation_time,
+            is_composite_query,
             &|system_state| std::mem::drop(system_state),
         );
         (output, execution_state, system_state)
@@ -344,7 +338,7 @@ impl Hypervisor {
 
     /// Executes the given WebAssembly function with deterministic time slicing.
     #[allow(clippy::too_many_arguments)]
-    pub fn execute_dts(
+    pub(crate) fn execute_dts(
         &self,
         api_type: ApiType,
         execution_state: &ExecutionState,
@@ -358,16 +352,10 @@ impl Hypervisor {
         network_topology: &NetworkTopology,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> WasmExecutionResult {
-        match self.deterministic_time_slicing {
-            FlagStatus::Enabled => assert!(
-                execution_parameters.instruction_limits.message()
-                    >= execution_parameters.instruction_limits.slice()
-            ),
-            FlagStatus::Disabled => assert_eq!(
-                execution_parameters.instruction_limits.message(),
-                execution_parameters.instruction_limits.slice()
-            ),
-        }
+        assert!(
+            execution_parameters.instruction_limits.message()
+                >= execution_parameters.instruction_limits.slice()
+        );
         let caller = api_type.caller();
         let subnet_available_callbacks = round_limits.subnet_available_callbacks.max(0) as u64;
         let remaining_canister_callback_quota = system_state.call_context_manager().map_or(
@@ -433,34 +421,29 @@ impl Hypervisor {
             }
         }
         if let WasmExecutionResult::Finished(_, result, _) = &mut execution_result {
-            if let Err(err) = &mut result.wasm_result {
-                let can_view = match &system_state.log_visibility {
-                    LogVisibilityV2::Controllers => {
-                        caller.is_some_and(|c| system_state.controllers.contains(&c))
-                    }
-                    LogVisibilityV2::Public => true,
-                    LogVisibilityV2::AllowedViewers(allowed) => {
-                        caller.is_some_and(|c| allowed.get().contains(&c))
-                    }
-                };
-                if !can_view {
-                    remove_backtrace(err);
-                }
+            // If execution fails, remove the backtrace when the caller is not allowed to see logs.
+            if let (Some(caller), Err(err)) = (caller, &mut result.wasm_result)
+                && check_log_visibility_permission(
+                    &caller,
+                    &system_state.log_visibility,
+                    &system_state.controllers,
+                )
+                .is_err()
+            {
+                remove_backtrace(err);
             }
         }
 
         execution_result
     }
 
-    #[doc(hidden)]
-    pub fn clear_compilation_cache_for_testing(&self) {
+    pub(crate) fn clear_compilation_cache_for_testing(&self) {
         self.compilation_cache.clear_for_testing()
     }
 
-    /// Insert a compiled module in the compilation cache speed up tests by
-    /// skipping the Wasmtime compilation step.
-    #[doc(hidden)]
-    pub fn compilation_cache_insert_for_testing(
+    // Insert a compiled module in the compilation cache speed up tests by
+    // skipping the Wasmtime compilation step.
+    pub(crate) fn compilation_cache_insert_for_testing(
         &self,
         bytes: Vec<u8>,
         compiled_module: ic_embedders::SerializedModule,

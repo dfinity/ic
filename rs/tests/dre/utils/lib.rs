@@ -14,7 +14,6 @@ use ic_types::ReplicaVersion;
 use serde::Deserialize;
 use std::fs;
 use std::path::PathBuf;
-use std::time::Duration;
 use url::Url;
 
 pub mod defs;
@@ -140,76 +139,53 @@ pub fn mock_env_variables(config: &IcConfig) {
                     GUESTOS_DISK_IMG_HASH,
                 ),
                 (
-                    format!("http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.zst", v),
+                    format!("http://download.proxy-global.dfinity.network:8080/ic/{v}/guest-os/update-img/update-img.tar.zst"),
                     GUESTOS_INITIAL_UPDATE_IMG_URL,
                 ),
                 (
                     block_on(fetch_update_file_sha256_with_retry(v)),
                     GUESTOS_INITIAL_UPDATE_IMG_HASH,
                 ),
-            ],
-        );
-
-        // TODO(NODE-1679): Simplify this check once the measurements are available in the repo.
-        match block_on(fetch_update_file_measurements_with_retry(v)) {
-            Ok(measurements) => {
-                update_env_variables(vec![(
-                    measurements.display().to_string(),
+                (
+                    block_on(fetch_update_file_measurements_with_retry(v)).display().to_string(),
                     GUESTOS_INITIAL_UPDATE_IMG_MEASUREMENTS_FILE,
-                )]);
-            }
-            _ => {
-                eprintln!(
-                    "Unable to set launch measurements, they may not be provided, yet. (NODE-1652)"
-                );
-            }
-        }
-    }
-
-    update_env_variables(
-            vec![
-                (
-                    config.target_version.to_string(),
-                    GUESTOS_UPDATE_IMG_VERSION,
-                ),
-                (
-                    format!("http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.zst", config.target_version),
-                    GUESTOS_UPDATE_IMG_URL,
-                ),
-                (
-                    block_on(fetch_update_file_sha256_with_retry(
-                        &config.target_version,
-                    )),
-                    GUESTOS_UPDATE_IMG_HASH,
                 ),
             ],
         );
-
-    // TODO(NODE-1679): Simplify this check once the measurements are available in the repo.
-    match block_on(fetch_update_file_measurements_with_retry(
-        &config.target_version,
-    )) {
-        Ok(measurements) => {
-            update_env_variables(vec![(
-                measurements.display().to_string(),
-                GUESTOS_UPDATE_IMG_MEASUREMENTS_FILE,
-            )]);
-        }
-        _ => {
-            eprintln!(
-                "Unable to set launch measurements, they may not be provided, yet. (NODE-1652)"
-            );
-        }
     }
+
+    update_env_variables(vec![
+        (
+            config.target_version.to_string(),
+            GUESTOS_UPDATE_IMG_VERSION,
+        ),
+        (
+            format!(
+                "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.zst",
+                config.target_version
+            ),
+            GUESTOS_UPDATE_IMG_URL,
+        ),
+        (
+            block_on(fetch_update_file_sha256_with_retry(&config.target_version)),
+            GUESTOS_UPDATE_IMG_HASH,
+        ),
+        (
+            block_on(fetch_update_file_measurements_with_retry(
+                &config.target_version,
+            ))
+            .display()
+            .to_string(),
+            GUESTOS_UPDATE_IMG_MEASUREMENTS_FILE,
+        ),
+    ]);
 }
 
 fn update_env_variables(pairs: Vec<(String, &str)>) {
     for (value, env_variable) in pairs {
-        std::env::set_var(env_variable, &value);
-        eprintln!(
-            "Overriden env variable `{}` to value: {}",
-            env_variable, value
-        )
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var(env_variable, &value) };
+        eprintln!("Overriden env variable `{env_variable}` to value: {value}")
     }
 }
 
@@ -217,15 +193,13 @@ fn update_env_variables(pairs: Vec<(String, &str)>) {
 
 fn get_public_update_image_sha_url(git_revision: &ReplicaVersion) -> String {
     format!(
-        "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/SHA256SUMS",
-        git_revision
+        "http://download.proxy-global.dfinity.network:8080/ic/{git_revision}/guest-os/update-img/SHA256SUMS"
     )
 }
 
 pub fn get_public_update_image_guest_launch_measurements(git_revision: &ReplicaVersion) -> String {
     format!(
-        "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/launch-measurements.json",
-        git_revision
+        "http://download.proxy-global.dfinity.network:8080/ic/{git_revision}/guest-os/update-img/launch-measurements.json"
     )
 }
 
@@ -252,14 +226,14 @@ async fn fetch_update_file_sha256_with_retry(version: &ReplicaVersion) -> String
 
 async fn fetch_update_file_sha256(version: &ReplicaVersion) -> Result<String, String> {
     let sha_url = get_public_update_image_sha_url(version);
-    let tmpfile = tempfile::NamedTempFile::new()
-        .map_err(|err| format!("Unable to create tmpfile: {}", err))?;
+    let tmpfile =
+        tempfile::NamedTempFile::new().map_err(|err| format!("Unable to create tmpfile: {err}"))?;
     FileDownloader::new(None)
         .download_file(&sha_url, tmpfile.path(), None)
         .await
-        .map_err(|err| format!("Download of SHA256SUMS file failed: {}", err))?;
+        .map_err(|err| format!("Download of SHA256SUMS file failed: {err}"))?;
     let contents = fs::read_to_string(tmpfile)
-        .map_err(|err| format!("Something went wrong reading the file: {}", err))?;
+        .map_err(|err| format!("Something went wrong reading the file: {err}"))?;
     for line in contents.lines() {
         let words: Vec<&str> = line.split(char::is_whitespace).collect();
         let suffix = "update-img.tar.zst";
@@ -268,12 +242,10 @@ async fn fetch_update_file_sha256(version: &ReplicaVersion) -> Result<String, St
         }
     }
 
-    Err(format!("SHA256 hash is not found in {}", sha_url))
+    Err(format!("SHA256 hash is not found in {sha_url}"))
 }
 
-async fn fetch_update_file_measurements_with_retry(
-    version: &ReplicaVersion,
-) -> Result<PathBuf, String> {
+async fn fetch_update_file_measurements_with_retry(version: &ReplicaVersion) -> PathBuf {
     // NOTE: Throw away internal logs here, as we don't yet have a logger and
     // don't bother making a new one.
     let log_null = slog::Logger::root(slog::Discard, slog::o!());
@@ -281,7 +253,7 @@ async fn fetch_update_file_measurements_with_retry(
     ic_system_test_driver::retry_with_msg_async!(
         format!("fetch update file measurements of version {}", version),
         &log_null,
-        Duration::from_secs(30), // Note: Lower the timeout from READY_WAIT_TIMEOUT until measurements are always published. TODO(NODE-1652)
+        READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || async {
             match fetch_update_file_measurements(version).await {
@@ -291,12 +263,12 @@ async fn fetch_update_file_measurements_with_retry(
         }
     )
     .await
-    .map_err(|err| format!("Failed to fetch measurements file: {}", err))
+    .expect("Failed to fetch measurements file.")
 }
 
 async fn fetch_update_file_measurements(version: &ReplicaVersion) -> Result<PathBuf, String> {
-    let tmpfile = tempfile::NamedTempFile::new()
-        .map_err(|err| format!("Unable to create tmpfile: {}", err))?;
+    let tmpfile =
+        tempfile::NamedTempFile::new().map_err(|err| format!("Unable to create tmpfile: {err}"))?;
     FileDownloader::new(None)
         .download_file(
             &get_public_update_image_guest_launch_measurements(version),
@@ -304,12 +276,12 @@ async fn fetch_update_file_measurements(version: &ReplicaVersion) -> Result<Path
             None,
         )
         .await
-        .map_err(|err| format!("Download of measurements file failed: {}", err))?;
+        .map_err(|err| format!("Download of measurements file failed: {err}"))?;
 
     // NOTE: We must keep the tmpfile, as the path sits in an env variable.
     let (_file, path) = tmpfile
         .keep()
-        .map_err(|err| format!("Unable to persist tmpfile: {}", err))?;
+        .map_err(|err| format!("Unable to persist tmpfile: {err}"))?;
 
     Ok(path)
 }

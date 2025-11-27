@@ -6,7 +6,7 @@ pub fn handle_list_neurons(
 ) -> Result<Result<Option<OperationOutput>, ApiError>, String> {
     // Check the response from governance call.
     let response: ListNeuronsResponse = candid::decode_one(bytes.as_ref())
-        .map_err(|err| format!("Could not decode LIST_NEURONS response: {}", err))?;
+        .map_err(|err| format!("Could not decode LIST_NEURONS response: {err}"))?;
     Ok(Ok(Some(OperationOutput::ListNeuronsResponse(
         response.into(),
     ))))

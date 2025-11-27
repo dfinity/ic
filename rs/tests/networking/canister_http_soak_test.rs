@@ -17,8 +17,8 @@ Success::
 end::catalog[] */
 #![allow(deprecated)]
 
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use canister_http::*;
 use canister_test::Canister;
 use dfn_candid::candid_one;
@@ -36,16 +36,9 @@ use ic_types::Cycles;
 use proxy_canister::RemoteHttpRequest;
 use proxy_canister::RemoteHttpResponse;
 use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
-use serde::{Deserialize, Serialize};
-use slog::{info, Logger};
+use slog::{Logger, info};
 
-#[derive(Serialize, Deserialize, Debug)]
-struct BenchmarkResult {
-    subnet_size: usize,
-    concurrent_requests: u64,
-    qps: f64,
-    average_latency_s: f64,
-}
+const INSTALLED_CANISTERS: usize = 6;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -70,16 +63,29 @@ pub fn test(env: TestEnv) {
             .expect("there is no node in this application subnet");
 
         let runtime = get_runtime_from_node(&node);
+        let webserver_ipv6 = get_universal_vm_address(&env);
+        let mut proxy_canisters = Vec::new();
         // Each requests costs ~6-7 billion cycles, and we make many thousands of requests.
         // The default 100T cycles may not be enough.
-        let proxy_canister =
-            create_proxy_canister_with_cycles(&env, &runtime, &node, Cycles::new(u128::MAX));
 
-        let webserver_ipv6 = get_universal_vm_address(&env);
+        // Install 6 proxy canisters and make them all send requests in paralel.
+        for i in 0..INSTALLED_CANISTERS {
+            let canister_name = format!("canister_name_{}", i);
+            let proxy_canister = create_proxy_canister_with_name_and_cycles(
+                &env,
+                &runtime,
+                &node,
+                &canister_name,
+                Cycles::new(u128::MAX),
+            );
+            proxy_canisters.push(proxy_canister);
+        }
 
         block_on(async {
-            let url = format!("https://[{webserver_ipv6}]:20443");
-            leave_proxy_canister_running(&proxy_canister, url.clone(), logger.clone()).await;
+            let url = format!("https://[{webserver_ipv6}]");
+            for canister in &proxy_canisters {
+                leave_proxy_canister_running(canister, url.clone(), logger.clone()).await;
+            }
         });
     }
 }
@@ -118,6 +124,7 @@ async fn leave_proxy_canister_running(proxy_canister: &Canister<'_>, url: String
                             method: HttpMethod::GET,
                             max_response_bytes: None,
                             is_replicated: Some(true),
+                            pricing_version: None,
                         },
                         cycles: 500_000_000_000,
                     },

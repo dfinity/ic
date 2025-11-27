@@ -1,6 +1,6 @@
 [package]
 name = "guest_vm_runner"
-edition = "2021"
+edition.workspace = true
 
 [[bin]]
 name = "guest_vm_runner"
@@ -14,13 +14,15 @@ ic_device = { path = "../../device" }
 grub = { path = "../../grub" }
 ic-metrics-tool = { path = "../../metrics_tool" }
 ic_sev = { path = "../../sev" }
+linux_kernel_command_line = { path = "../../linux_kernel_command_line" }
 
 anyhow = { workspace = true }
 askama = { workspace = true }
 clap = { workspace = true }
-devicemapper = "0.34"
+devicemapper = { workspace = true }
 gpt = { workspace = true }
 macaddr = { workspace = true }
+memchr = { workspace = true }
 nix = { workspace = true }
 regex = { workspace = true }
 thiserror = { workspace = true }

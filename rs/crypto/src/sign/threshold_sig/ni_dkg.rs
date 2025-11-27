@@ -11,7 +11,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRe
 use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgLoadTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::transcripts_to_retain::TranscriptsToRetain;
-use ic_types::crypto::threshold_sig::ni_dkg::{config::NiDkgConfig, NiDkgDealing, NiDkgTranscript};
+use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgTranscript, config::NiDkgConfig};
 use std::collections::HashSet;
 
 mod dealing;
@@ -168,6 +168,15 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentImpl<C> {
             transcript,
             &logger,
         );
+
+        // Processing of the cache statistics for metrics is deliberately
+        // part of the load transcript run time metric. It is expected to take
+        // very little time, but if something goes wrong, e.g., due to a mutex
+        // locking congestion or similar, we should be able to notice that.
+        let stats = ic_crypto_internal_bls12_381_type::G2Affine::deserialize_cached_statistics();
+        self.metrics
+            .observe_bls12_381_sig_cache_stats(stats.size, stats.hits, stats.misses);
+
         self.metrics.observe_parameter_size(
             MetricsDomain::NiDkgAlgorithm,
             "load_transcript",

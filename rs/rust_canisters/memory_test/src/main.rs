@@ -39,13 +39,6 @@ struct Operation {
     value: Option<u8>,
 }
 
-/// The result of `read` and `read_write` operations. Represents the sum
-/// of all 8 byte words in the given memory region.
-#[derive(Deserialize, Serialize)]
-struct Sum {
-    value: u64,
-}
-
 thread_local! {
     /// A random number generator used to perform writes/reads to/from
     /// memory at random offsets.
@@ -121,15 +114,15 @@ fn read() {
         for _ in 0..repeat {
             for i in (src..src + len).step_by(step) {
                 let value = memory[i];
-                if let Some(expected_value) = operation.value {
-                    if expected_value != value as u8 {
-                        trap_with(&format!(
-                            "Value mismatch at {}, expected {}, got {}",
-                            i * ELEMENT_SIZE,
-                            expected_value,
-                            value
-                        ));
-                    }
+                if let Some(expected_value) = operation.value
+                    && expected_value != value as u8
+                {
+                    trap_with(&format!(
+                        "Value mismatch at {}, expected {}, got {}",
+                        i * ELEMENT_SIZE,
+                        expected_value,
+                        value
+                    ));
                 }
                 sum += value;
             }
@@ -250,13 +243,12 @@ fn stable_read() {
                     // provided the rest of the bytes are zeros.
                     // So the sum should match the sum of normal `read()`
                     let value = buf[i as usize];
-                    if let Some(expected_value) = operation.value {
-                        if expected_value != value {
-                            trap_with(&format!(
-                                "Value mismatch at {}, expected {}, got {}",
-                                i, expected_value, value
-                            ));
-                        }
+                    if let Some(expected_value) = operation.value
+                        && expected_value != value
+                    {
+                        trap_with(&format!(
+                            "Value mismatch at {i}, expected {expected_value}, got {value}"
+                        ));
                     }
                     sum += value as u64;
                 }
@@ -269,13 +261,12 @@ fn stable_read() {
                 for i in (src..src + len).step_by(step) {
                     stable::stable64_read(buf, i, 1);
                     let value = buf[0];
-                    if let Some(expected_value) = operation.value {
-                        if expected_value != value {
-                            trap_with(&format!(
-                                "Value mismatch at {}, expected {}, got {}",
-                                i, expected_value, value
-                            ));
-                        }
+                    if let Some(expected_value) = operation.value
+                        && expected_value != value
+                    {
+                        trap_with(&format!(
+                            "Value mismatch at {i}, expected {expected_value}, got {value}"
+                        ));
                     }
                     sum += value as u64;
                 }
@@ -439,77 +430,77 @@ fn copy() {
     api::reply(&[]);
 }
 
-#[export_name = "canister_update update_copy"]
+#[unsafe(export_name = "canister_update update_copy")]
 fn update_copy() {
     copy();
 }
 
-#[export_name = "canister_update update_read"]
+#[unsafe(export_name = "canister_update update_read")]
 fn update_read() {
     read();
 }
 
-#[export_name = "canister_update update_read_write"]
+#[unsafe(export_name = "canister_update update_read_write")]
 fn update_read_write() {
     read_write();
 }
 
-#[export_name = "canister_update update_write"]
+#[unsafe(export_name = "canister_update update_write")]
 fn update_write() {
     write();
 }
 
-#[export_name = "canister_update update_stable_read"]
+#[unsafe(export_name = "canister_update update_stable_read")]
 fn update_stable_read() {
     stable_read();
 }
 
-#[export_name = "canister_update update_stable_write"]
+#[unsafe(export_name = "canister_update update_stable_write")]
 fn update_stable_write() {
     stable_write();
 }
 
-#[export_name = "canister_update update_stable_read_write"]
+#[unsafe(export_name = "canister_update update_stable_read_write")]
 fn update_stable_read_write() {
     stable_read_write();
 }
 
-#[export_name = "canister_query query_copy"]
+#[unsafe(export_name = "canister_query query_copy")]
 fn query_copy() {
     copy();
 }
 
-#[export_name = "canister_query query_read"]
+#[unsafe(export_name = "canister_query query_read")]
 fn query_read() {
     read();
 }
 
-#[export_name = "canister_query query_read_write"]
+#[unsafe(export_name = "canister_query query_read_write")]
 fn query_read_write() {
     read_write();
 }
 
-#[export_name = "canister_query query_write"]
+#[unsafe(export_name = "canister_query query_write")]
 fn query_write() {
     write();
 }
 
-#[export_name = "canister_query query_stable_read"]
+#[unsafe(export_name = "canister_query query_stable_read")]
 fn query_stable_read() {
     stable_read();
 }
 
-#[export_name = "canister_query query_stable_write"]
+#[unsafe(export_name = "canister_query query_stable_write")]
 fn query_stable_write() {
     stable_write();
 }
 
-#[export_name = "canister_query query_stable_read_write"]
+#[unsafe(export_name = "canister_query query_stable_read_write")]
 fn query_stable_read_write() {
     stable_read_write();
 }
 
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn main() {
     let mut memory = vec![0; MEMORY_LEN];
     // Ensure that all pages are different.
@@ -520,20 +511,17 @@ fn main() {
     }
     MEMORY.with(|s| s.replace(memory));
     api::print(format!(
-        "Successfully initialized canister with {} bytes",
-        MEMORY_SIZE,
+        "Successfully initialized canister with {MEMORY_SIZE} bytes",
     ));
 
     // Grow stable memory by `STABLE_MEMORY_SIZE`.
     if stable::stable64_grow(STABLE_MEMORY_SIZE / WASM_PAGE_SIZE_IN_BYTES as u64) == -1 {
         api::trap_with(&format!(
-            "Could not grow stable memory by {} bytes",
-            STABLE_MEMORY_SIZE,
+            "Could not grow stable memory by {STABLE_MEMORY_SIZE} bytes",
         ));
     }
 
     api::print(format!(
-        "Successfully initialized canister with {} bytes of stable memory",
-        STABLE_MEMORY_SIZE,
+        "Successfully initialized canister with {STABLE_MEMORY_SIZE} bytes of stable memory",
     ));
 }

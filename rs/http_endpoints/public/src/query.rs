@@ -1,15 +1,18 @@
 //! Module that deals with requests to /api/v2/canister/.../query
 
 use crate::{
-    common::{build_validator, validation_error_to_http_error, Cbor, WithTimeout},
     ReplicaHealthStatus,
+    common::{
+        Cbor, WithTimeout, build_validator, certified_state_unavailable_error,
+        validation_error_to_http_error,
+    },
 };
 
 use axum::{
+    Router,
     body::Body,
     extract::{DefaultBodyLimit, State},
     response::{IntoResponse, Response},
-    Router,
 };
 use crossbeam::atomic::AtomicCell;
 use http::Request;
@@ -22,10 +25,11 @@ use ic_interfaces::{
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error};
 use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_types::{
+    CanisterId, NodeId,
     ingress::WasmResult,
     malicious_flags::MaliciousFlags,
     messages::{
@@ -33,7 +37,6 @@ use ic_types::{
         HttpRequest, HttpRequestEnvelope, HttpSignedQueryResponse, NodeSignature, Query,
         QueryResponseHash,
     },
-    CanisterId, NodeId,
 };
 use ic_validator::HttpRequestVerifier;
 use std::sync::Arc;
@@ -41,9 +44,9 @@ use std::{
     convert::{Infallible, TryFrom},
     sync::Mutex,
 };
-use tower::{util::BoxCloneService, ServiceBuilder, ServiceExt};
+use tower::{ServiceBuilder, ServiceExt, util::BoxCloneService};
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum Version {
     // Endpoint with the NNS delegation using the flat format of the canister ranges.
     V2,
@@ -73,7 +76,7 @@ pub struct QueryServiceBuilder {
     malicious_flags: Option<MaliciousFlags>,
     nns_delegation_reader: NNSDelegationReader,
     time_source: Option<Arc<dyn TimeSource>>,
-    ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+    ingress_verifier: Arc<dyn IngressSigVerifier>,
     registry_client: Arc<dyn RegistryClient>,
     query_execution_service: QueryExecutionService,
     version: Version,
@@ -92,9 +95,9 @@ impl QueryServiceBuilder {
     pub fn builder(
         log: ReplicaLogger,
         node_id: NodeId,
-        signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
+        signer: Arc<dyn BasicSigner<QueryResponseHash>>,
         registry_client: Arc<dyn RegistryClient>,
-        ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+        ingress_verifier: Arc<dyn IngressSigVerifier>,
         nns_delegation_reader: NNSDelegationReader,
         query_execution_service: QueryExecutionService,
         version: Version,
@@ -195,7 +198,7 @@ pub(crate) async fn query(
         Ok(request) => request,
         Err(e) => {
             let status = StatusCode::BAD_REQUEST;
-            let text = format!("Malformed request: {:?}", e);
+            let text = format!("Malformed request: {e:?}");
             return (status, text).into_response();
         }
     };
@@ -203,8 +206,7 @@ pub(crate) async fn query(
     if canister_id != CanisterId::ic_00() && canister_id != effective_canister_id {
         let status = StatusCode::BAD_REQUEST;
         let text = format!(
-            "Specified CanisterId {} does not match effective canister id in URL {}",
-            canister_id, effective_canister_id
+            "Specified CanisterId {canister_id} does not match effective canister id in URL {effective_canister_id}"
         );
         return (status, text).into_response();
     }
@@ -254,9 +256,7 @@ pub(crate) async fn query(
 
     let (response, timestamp) = match query_execution_response {
         Err(QueryExecutionError::CertifiedStateUnavailable) => {
-            let status = StatusCode::SERVICE_UNAVAILABLE;
-            let text = "Certified state unavailable. Please try again.".to_string();
-            return (status, text).into_response();
+            return certified_state_unavailable_error().into_response();
         }
         Ok((response, time)) => (response, time),
     };

@@ -10,7 +10,7 @@ use core::convert::TryFrom;
 
 use anyhow::Result;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
-use ic_sns_governance_api::pb::v1::{governance::Version, GetRunningSnsVersionResponse};
+use ic_sns_governance_api::pb::v1::{GetRunningSnsVersionResponse, governance::Version};
 use ic_sns_wasm::pb::v1::{ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsVersion};
 use serde::{Deserialize, Serialize};
 

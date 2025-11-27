@@ -4,7 +4,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 /// Check the byte offset of a given partition from the GPT table. Index is 1-based.
-pub async fn get_partition_offset(disk_image: &Path, index: u32) -> Result<u64> {
+pub fn get_partition_offset(disk_image: &Path, index: u32) -> Result<u64> {
     let gpt = gpt::disk::read_disk(disk_image).context("Could not read GPT from device")?;
     let partition = gpt
         .partitions()
@@ -15,7 +15,7 @@ pub async fn get_partition_offset(disk_image: &Path, index: u32) -> Result<u64> 
 }
 
 /// Check the byte offset of a given partition from the GPT table. Index is 1-based.
-pub async fn get_partition_length(disk_image: &Path, index: u32) -> Result<u64> {
+pub fn get_partition_length(disk_image: &Path, index: u32) -> Result<u64> {
     let gpt = gpt::disk::read_disk(disk_image).context("Could not read GPT from device")?;
 
     let partition = gpt

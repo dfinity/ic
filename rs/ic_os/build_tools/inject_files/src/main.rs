@@ -1,13 +1,13 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::Parser;
 use tempfile::tempdir;
 use tokio::process::Command;
 
 use partition_tools::{
-    ext::{ExtPartition, FileContexts},
     Partition,
+    ext::{ExtPartition, FileContexts},
 };
 
 #[derive(Parser)]

@@ -14,6 +14,7 @@ rust_library(
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
     ],
 )
 
@@ -28,11 +29,16 @@ rust_canister(
         # Keep sorted.
         ":icrc3_test_ledger",
         "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ledger_suite/common/ledger_canister_core",
         "//rs/ledger_suite/icrc1",
         "@crate_index//:candid",
+        "@crate_index//:ciborium",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-certification",
+        "@crate_index//:leb128",
         "@crate_index//:num-traits",
         "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
     ],
 )
 
@@ -55,24 +61,33 @@ rust_ic_test_suite(
     srcs = ["tests/tests.rs"],
     data = [
         ":icrc3_test_ledger_canister.wasm.gz",
+        "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
         "//rs/ledger_suite/icrc1/ledger:ledger_canister.wasm.gz",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger",
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister.wasm.gz)",
         "ICRC3_TEST_LEDGER_CANISTER_WASM_PATH": "$(rootpath :icrc3_test_ledger_canister.wasm.gz)",
+        "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister)",
     },
     deps = [
         # Keep sorted.
         ":icrc3_test_ledger",
         "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ledger_suite/icrc1",
+        "//rs/ledger_suite/icrc1/index-ng",
         "//rs/ledger_suite/icrc1/ledger",
         "//rs/ledger_suite/icrc1/test_utils",
+        "//rs/ledger_suite/test_utils/state_machine_helpers:ic-ledger-suite-state-machine-helpers",
         "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
         "@crate_index//:candid",
+        "@crate_index//:ciborium",
+        "@crate_index//:ic-cbor",
+        "@crate_index//:ic-certification",
+        "@crate_index//:leb128",
         "@crate_index//:num-traits",
         "@crate_index//:serde_bytes",
     ],

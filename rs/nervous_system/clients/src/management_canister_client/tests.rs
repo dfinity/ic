@@ -5,7 +5,7 @@ use crate::canister_status::{
 };
 use candid::Nat;
 use ic_base_types::{CanisterId, PrincipalId};
-use rand::{thread_rng, Rng};
+use rand::{Rng, thread_rng};
 use std::time::Duration;
 
 /// Five canister_status calls are made via LimitedOutstandingCallsManagementCanisterClient with a
@@ -58,7 +58,30 @@ async fn test_limit_outstanding_calls() {
             ) -> Result<(), (i32, String)> {
                 unimplemented!();
             }
+
+            async fn canister_metadata(
+                &self,
+                _canister_id: PrincipalId,
+                _name: String,
+            ) -> Result<Vec<u8>, (i32, String)> {
+                unimplemented!();
+            }
+
             fn canister_version(&self) -> Option<u64> {
+                unimplemented!();
+            }
+
+            async fn stop_canister(
+                &self,
+                _canister_id_record: CanisterIdRecord,
+            ) -> Result<(), (i32, String)> {
+                unimplemented!();
+            }
+
+            async fn delete_canister(
+                &self,
+                _canister_id_record: CanisterIdRecord,
+            ) -> Result<(), (i32, String)> {
                 unimplemented!();
             }
         }
@@ -68,8 +91,7 @@ async fn test_limit_outstanding_calls() {
                 assert_eq!(
                     *self.observed_call_count.lock().unwrap(),
                     self.expected_call_count,
-                    "{:#?}",
-                    self
+                    "{self:#?}"
                 );
             }
         }
@@ -78,7 +100,7 @@ async fn test_limit_outstanding_calls() {
 
         // Generate a random CanisterIdRecord.
         let canister_id_record = {
-            let result = PrincipalId::new_user_test_id(thread_rng().gen());
+            let result = PrincipalId::new_user_test_id(thread_rng().r#gen());
             let result = CanisterId::try_from(result).unwrap();
             CanisterIdRecord::from(result)
         };
@@ -222,24 +244,24 @@ async fn test_limit_outstanding_calls() {
     assert_eq!(&results[5], &Ok(base_canister_status_result.clone()));
 
     match &results[6] {
-        Ok(ok) => panic!("{:#?}", ok),
+        Ok(ok) => panic!("{ok:#?}"),
         Err((reject_code, message)) => {
             assert_eq!(*reject_code, RejectCode::SysTransient as i32);
 
             let message = message.to_lowercase();
-            assert!(message.contains("unavailable"), "{:?}", message);
+            assert!(message.contains("unavailable"), "{message:?}");
         }
     }
 
     assert_eq!(&results[7], &Ok(base_canister_status_result.clone()));
 
     match &results[8] {
-        Ok(ok) => panic!("{:#?}", ok),
+        Ok(ok) => panic!("{ok:#?}"),
         Err((reject_code, message)) => {
             assert_eq!(*reject_code, RejectCode::SysTransient as i32);
 
             let message = message.to_lowercase();
-            assert!(message.contains("unavailable"), "{:?}", message);
+            assert!(message.contains("unavailable"), "{message:?}");
         }
     }
 }

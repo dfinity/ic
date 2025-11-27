@@ -1,7 +1,7 @@
 [package]
 name = "ic-nns-handler-lifeline-interface"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
 candid = { workspace = true }

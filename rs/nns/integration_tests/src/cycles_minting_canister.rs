@@ -2,20 +2,20 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Canister;
 use cycles_minting_canister::{
-    AuthorizedSubnetsResponse, CanisterSettingsArgs, ChangeSubnetTypeAssignmentArgs,
-    CreateCanister, CreateCanisterError, NotifyCreateCanister, NotifyError, NotifyErrorCode,
-    NotifyMintCyclesArg, NotifyMintCyclesSuccess, NotifyTopUp, SubnetListWithType,
-    SubnetTypesToSubnetsResponse, UpdateSubnetTypeArgs, BAD_REQUEST_CYCLES_PENALTY,
-    MEANINGFUL_MEMOS, MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES, MEMO_TOP_UP_CANISTER,
+    AuthorizedSubnetsResponse, BAD_REQUEST_CYCLES_PENALTY, ChangeSubnetTypeAssignmentArgs,
+    CreateCanister, CreateCanisterError, MEANINGFUL_MEMOS, MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES,
+    MEMO_TOP_UP_CANISTER, NotifyCreateCanister, NotifyError, NotifyErrorCode, NotifyMintCyclesArg,
+    NotifyMintCyclesSuccess, NotifyTopUp, SubnetListWithType, SubnetTypesToSubnetsResponse,
+    UpdateSubnetTypeArgs,
 };
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
 use ic_ledger_core::tokens::CheckedSub;
-// TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
+// TODO(NNS1-3249): remove temporary alias `Ic00CanisterSettingsArgs`.
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoResponse, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, CanisterStatusResultV2,
+    CanisterSettingsArgsBuilder, CanisterStatusResultV2, EnvironmentVariable,
 };
 use ic_nervous_system_clients::canister_status::CanisterStatusResult;
 use ic_nervous_system_common::{E8, ONE_MONTH_SECONDS, ONE_TRILLION};
@@ -34,7 +34,7 @@ use ic_nns_test_utils::state_test_helpers::cmc_set_authorized_subnetworks_for_pr
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{submit_external_update_proposal, wait_for_final_state},
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
     neuron_helpers::get_neuron_1,
     state_test_helpers::{
         cmc_set_default_authorized_subnetworks, icrc1_balance, icrc1_transfer,
@@ -48,8 +48,8 @@ use ic_test_utilities_metrics::fetch_int_gauge_vec;
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockIndex, Memo, SendArgs,
-    Subaccount, Tokens, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
+    AccountBalanceArgs, AccountIdentifier, BlockIndex, DEFAULT_TRANSFER_FEE, Memo, SendArgs,
+    Subaccount, Tokens, TransferArgs, TransferError, tokens_from_proto,
 };
 use icrc_ledger_types::icrc1::{self, account::Account};
 use maplit::btreemap;
@@ -296,6 +296,7 @@ fn test_cmc_notify_create_with_settings() {
     assert_eq!(status.compute_allocation(), 0);
     assert_eq!(status.memory_allocation(), 0);
     assert_eq!(status.freezing_threshold(), 2592000);
+    assert_eq!(status.environment_variables(), vec![]);
 
     //specify single controller
     let canister = notify_create_canister(
@@ -312,6 +313,7 @@ fn test_cmc_notify_create_with_settings() {
     assert_eq!(status.compute_allocation(), 0);
     assert_eq!(status.memory_allocation(), 0);
     assert_eq!(status.freezing_threshold(), 2592000);
+    assert_eq!(status.environment_variables(), vec![]);
 
     //specify multiple controllers
     let mut specified_controllers = vec![
@@ -335,6 +337,7 @@ fn test_cmc_notify_create_with_settings() {
     assert_eq!(status.compute_allocation(), 0);
     assert_eq!(status.memory_allocation(), 0);
     assert_eq!(status.freezing_threshold(), 2592000);
+    assert_eq!(status.environment_variables(), vec![]);
 
     //specify no controller
     let canister = notify_create_canister(
@@ -351,15 +354,18 @@ fn test_cmc_notify_create_with_settings() {
     //specify compute allocation
     let canister = notify_create_canister(
         &state_machine,
-        Some(dbg!(CanisterSettingsArgsBuilder::new()
-            .with_compute_allocation(7)
-            .build())),
+        Some(dbg!(
+            CanisterSettingsArgsBuilder::new()
+                .with_compute_allocation(7)
+                .build()
+        )),
     );
     let status = dbg!(canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister).unwrap());
     assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);
     assert_eq!(status.compute_allocation(), 7);
     assert_eq!(status.memory_allocation(), 0);
     assert_eq!(status.freezing_threshold(), 2592000);
+    assert_eq!(status.environment_variables(), vec![]);
 
     //specify freezing threshold
     let canister = notify_create_canister(
@@ -375,6 +381,7 @@ fn test_cmc_notify_create_with_settings() {
     assert_eq!(status.compute_allocation(), 0);
     assert_eq!(status.memory_allocation(), 0);
     assert_eq!(status.freezing_threshold(), 7);
+    assert_eq!(status.environment_variables(), vec![]);
 
     //specify memory allocation
     let canister = notify_create_canister(
@@ -390,6 +397,27 @@ fn test_cmc_notify_create_with_settings() {
     assert_eq!(status.compute_allocation(), 0);
     assert_eq!(status.memory_allocation(), 7);
     assert_eq!(status.freezing_threshold(), 2592000);
+    assert_eq!(status.environment_variables(), vec![]);
+
+    //specify environment variables
+    let env_vars = vec![EnvironmentVariable {
+        name: "TEST_ENV_VAR".to_string(),
+        value: "TEST_ENV_VAR_VALUE".to_string(),
+    }];
+    let canister = notify_create_canister(
+        &state_machine,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_environment_variables(env_vars.clone())
+                .build(),
+        ),
+    );
+    let status = canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister).unwrap();
+    assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);
+    assert_eq!(status.compute_allocation(), 0);
+    assert_eq!(status.memory_allocation(), 0);
+    assert_eq!(status.freezing_threshold(), 2592000);
+    assert_eq!(status.environment_variables(), env_vars);
 }
 
 fn canister_cycles_balance(
@@ -525,6 +553,7 @@ fn test_cmc_cycles_create_with_settings() {
     assert_eq!(status.compute_allocation(), 0);
     assert_eq!(status.memory_allocation(), 0);
     assert_eq!(status.freezing_threshold(), 2592000);
+    assert_eq!(status.environment_variables(), vec![]);
 
     //specify single controller
     let canister = cmc_create_canister_with_cycles(
@@ -544,6 +573,7 @@ fn test_cmc_cycles_create_with_settings() {
     assert_eq!(status.compute_allocation(), 0);
     assert_eq!(status.memory_allocation(), 0);
     assert_eq!(status.freezing_threshold(), 2592000);
+    assert_eq!(status.environment_variables(), vec![]);
 
     //specify multiple controllers
     let mut specified_controllers = vec![
@@ -571,6 +601,7 @@ fn test_cmc_cycles_create_with_settings() {
     assert_eq!(status.compute_allocation(), 0);
     assert_eq!(status.memory_allocation(), 0);
     assert_eq!(status.freezing_threshold(), 2592000);
+    assert_eq!(status.environment_variables(), vec![]);
 
     //specify no controller
     let canister = cmc_create_canister_with_cycles(
@@ -607,6 +638,7 @@ fn test_cmc_cycles_create_with_settings() {
     assert_eq!(status.compute_allocation(), 7);
     assert_eq!(status.memory_allocation(), 0);
     assert_eq!(status.freezing_threshold(), 2592000);
+    assert_eq!(status.environment_variables(), vec![]);
 
     //specify freezing threshold
     let canister = cmc_create_canister_with_cycles(
@@ -627,6 +659,7 @@ fn test_cmc_cycles_create_with_settings() {
     assert_eq!(status.compute_allocation(), 0);
     assert_eq!(status.memory_allocation(), 0);
     assert_eq!(status.freezing_threshold(), 7);
+    assert_eq!(status.environment_variables(), vec![]);
 
     //specify memory allocation
     let canister = cmc_create_canister_with_cycles(
@@ -647,6 +680,32 @@ fn test_cmc_cycles_create_with_settings() {
     assert_eq!(status.compute_allocation(), 0);
     assert_eq!(status.memory_allocation(), 7);
     assert_eq!(status.freezing_threshold(), 2592000);
+    assert_eq!(status.environment_variables(), vec![]);
+
+    //specify environment variables
+    let env_vars = vec![EnvironmentVariable {
+        name: "TEST_ENV_VAR".to_string(),
+        value: "TEST_ENV_VAR_VALUE".to_string(),
+    }];
+    let canister = cmc_create_canister_with_cycles(
+        &state_machine,
+        universal_canister,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![*TEST_USER1_PRINCIPAL])
+                .with_environment_variables(env_vars.clone())
+                .build(),
+        ),
+        None,
+        10_000_000_000_000,
+    )
+    .unwrap();
+    let status = canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister).unwrap();
+    assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);
+    assert_eq!(status.compute_allocation(), 0);
+    assert_eq!(status.memory_allocation(), 0);
+    assert_eq!(status.freezing_threshold(), 2592000);
+    assert_eq!(status.environment_variables(), env_vars);
 
     let universal_status = canister_status(
         &state_machine,
@@ -665,7 +724,7 @@ fn test_cmc_cycles_create_with_settings() {
         refund_amount: 100,
     } = error
     else {
-        panic!("Refund failed: {:?}", error)
+        panic!("Refund failed: {error:?}")
     };
     assert!(create_error.contains("Insufficient cycles attached"));
     assert_eq!(
@@ -736,8 +795,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
                 state_machine.metrics_registry(),
                 "replicated_state_registered_canisters"
             ),
-            "{}",
-            test_phase,
+            "{test_phase}",
         );
     };
     // This will be called again later to verify that no canisters were added.
@@ -760,7 +818,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
             .unwrap()
             .checked_sub(&total_fees)
             .unwrap();
-        assert_eq!(observed_balance, expected_balance, "{}", test_phase);
+        assert_eq!(observed_balance, expected_balance, "{test_phase}");
     };
     // This is more to gain confidence that assert_balance works; there is very
     // little risk that USER1's balance is not 100.
@@ -853,7 +911,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
 
             let result = match result {
                 WasmResult::Reply(ok) => ok,
-                _ => panic!("{:?}", result),
+                _ => panic!("{result:?}"),
             };
 
             Decode!(&result, Result<CanisterId, NotifyError>).unwrap()
@@ -879,7 +937,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
         .into_iter()
         .filter_map(|result| match result {
             Err(NotifyError::Processing) => None,
-            Ok(_) => panic!("{:?}", result),
+            Ok(_) => panic!("{result:?}"),
             Err(err) => Some(err),
         })
         .collect::<Vec<NotifyError>>();
@@ -888,9 +946,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
     let last_err = errs.pop().unwrap();
     assert!(
         errs.iter().all(|other_err| other_err == &last_err),
-        "{:?}\nvs.\n{:#?}",
-        last_err,
-        errs,
+        "{last_err:?}\nvs.\n{errs:#?}",
     );
     assert!(
         errs.len() >= 2, // If errs is empty, then the previous assert is trivial.
@@ -920,14 +976,12 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
             for key_word in ["memo", "0xdeadbeef", "does not correspond", "offer"] {
                 assert!(
                     lower_reason.contains(key_word),
-                    r#""{}" not in {:?}"#,
-                    key_word,
-                    last_err
+                    r#""{key_word}" not in {last_err:?}"#
                 );
             }
         }
 
-        _ => panic!("{:?}", last_err),
+        _ => panic!("{last_err:?}"),
     };
 }
 
@@ -975,7 +1029,7 @@ fn notify_create_canister(
         controller: *TEST_USER1_PRINCIPAL,
         subnet_type: None,
         subnet_selection: None,
-        settings: settings.map(CanisterSettingsArgs::from),
+        settings,
     };
 
     if let WasmResult::Reply(res) = state_machine
@@ -1062,7 +1116,7 @@ fn cmc_create_canister_with_cycles(
 ) -> Result<CanisterId, CreateCanisterError> {
     #[allow(deprecated)]
     let create_args = Encode!(&CreateCanister {
-        settings: settings.map(CanisterSettingsArgs::from),
+        settings,
         subnet_type,
         subnet_selection: None,
     })
@@ -1327,16 +1381,14 @@ fn cmc_notify_mint_cycles() {
             reason,
             block_index: _,
         }) => reason,
-        _ => panic!("{:?}", result),
+        _ => panic!("{result:?}"),
     };
 
     let reason = reason.to_lowercase();
     for key_word in ["memo", "transfer", "correspond", "offer"] {
         assert!(
             reason.contains(key_word),
-            "{} not in reason of {:?}",
-            key_word,
-            result
+            "{key_word} not in reason of {result:?}"
         );
     }
 
@@ -1453,7 +1505,7 @@ fn cmc_notify_mint_cycles_deposit_memo_too_long() {
             assert_eq!(error_code, NotifyErrorCode::DepositMemoTooLong as u64);
             assert!(error_message.contains("exceeds the maximum length"));
         }
-        _ => panic!("Unexpected response: {:?}", response),
+        _ => panic!("Unexpected response: {response:?}"),
     }
 }
 
@@ -1507,14 +1559,12 @@ fn notify_top_up(
     notify_top_up_as(state_machine, canister_id, amount, *TEST_USER1_PRINCIPAL)
 }
 
-fn total_cycles_minted(state_machine: &StateMachine) -> u64 {
-    use prost::Message;
-
+fn total_cycles_minted(state_machine: &StateMachine) -> Nat {
     if let WasmResult::Reply(res) = state_machine
         .query(CYCLES_MINTING_CANISTER_ID, "total_cycles_minted", vec![])
         .unwrap()
     {
-        u64::decode(&res[..]).unwrap()
+        Decode!(&res, Nat).unwrap()
     } else {
         panic!("total_cycles_minted rejected")
     }
@@ -1544,7 +1594,7 @@ fn cmc_notify_top_up_valid() {
     assert_eq!(cycles, Cycles::new(100_000_000_000_000u128));
     assert_eq!(
         total_minted_after - total_minted_before,
-        100_000_000_000_000
+        100_000_000_000_000u64
     );
 }
 
@@ -1572,7 +1622,7 @@ fn cmc_notify_top_up_invalid() {
     assert_matches!(error, NotifyError::Refunded { .. });
     assert_eq!(
         total_minted_after - total_minted_before,
-        100_000_000_000_000
+        100_000_000_000_000u64
     );
 
     let total_minted_before = total_cycles_minted(&state_machine);
@@ -1584,7 +1634,7 @@ fn cmc_notify_top_up_invalid() {
     .unwrap_err();
     let total_minted_after = total_cycles_minted(&state_machine);
     assert_matches!(error, NotifyError::Refunded { .. });
-    assert_eq!(total_minted_after - total_minted_before, 0);
+    assert_eq!(total_minted_after - total_minted_before, 0u64);
 }
 
 #[test]

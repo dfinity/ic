@@ -1,3 +1,5 @@
+load(":defs.bzl", "create_test_img")
+
 package(default_visibility = ["__subpackages__"])
 
 exports_files([
@@ -7,7 +9,7 @@ exports_files([
     "config/node_operator_private_key.pem",
     "config/ssh_authorized_keys/admin",
     "data/deployment.json.template",
-    "data/nns_public_key.pem",
+    "data/nns_public_key_override.pem",
 ])
 
 # All setup-os targets are named the same, just stay in different submodules.
@@ -19,74 +21,42 @@ exports_files([
 # check //ic-os/defs.bzl for the full list of targets.
 
 # Postprocess SetupOS dev into a "test" image for use in nested tests
-genrule(
+create_test_img(
     name = "test-img",
-    srcs = ["//ic-os/setupos/envs/dev:disk-img.tar.zst"],
-    outs = ["test-img.tar.zst"],
-    cmd = """
-        tar -xf $<
-        $(location //rs/ic_os/dev_test_tools/setupos-disable-checks) --image-path disk.img
-        tar --zstd -Scf $@ disk.img
-    """,
+    source = "//ic-os/setupos/envs/dev:disk-img.tar.zst",
     tags = [
         "manual",
         "no-cache",
     ],
-    target_compatible_with = ["@platforms//os:linux"],
-    tools = ["//rs/ic_os/dev_test_tools/setupos-disable-checks"],
-    visibility = [
-        "//rs:ic-os-pkg",
-        "//rs:system-tests-pkg",
-    ],
+    visibility =
+        [
+            "//rs:ic-os-pkg",
+            "//rs:system-tests-pkg",
+        ],
 )
 
 # Postprocess SetupOS mainnet into a "test" image for use in nested tests
-genrule(
-    name = "latest-release-mainnet-test-img",
-    srcs = ["@mainnet_latest_setupos_disk_image//file"],
-    outs = ["latest-release-mainnet-test-img.tar.zst"],
-    cmd = """
-        tar -xf $<
-        $(location //rs/ic_os/dev_test_tools/setupos-disable-checks) --image-path disk.img
-        tar --zstd -Scf $@ disk.img
-    """,
-    tags = ["manual"],
-    target_compatible_with = ["@platforms//os:linux"],
-    tools = ["//rs/ic_os/dev_test_tools/setupos-disable-checks"],
+create_test_img(
+    name = "mainnet-latest-test-img",
+    source = "@mainnet_latest_hostos_images//:disk-img.tar.zst",
+    tags = [
+        "manual",
+        "no-cache",
+    ],
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
     ],
 )
 
-# Extract the GuestOS NNS image from SetupOS
-genrule(
-    name = "nns-mainnet-guest-img",
-    srcs = ["@mainnet_nns_setupos_disk_image//file"],
-    outs = ["nns-mainnet-guest-img.tar.zst"],
-    cmd = """
-        $(location //rs/ic_os/build_tools/partition_tools:extract-guestos) --image $< $@
-    """,
-    tags = ["manual"],
-    target_compatible_with = ["@platforms//os:linux"],
-    tools = ["//rs/ic_os/build_tools/partition_tools:extract-guestos"],
-    visibility = [
-        "//rs:ic-os-pkg",
-        "//rs:system-tests-pkg",
+# Postprocess SetupOS mainnet dev into a "test" image for use in nested tests
+create_test_img(
+    name = "mainnet-latest-test-img-dev",
+    source = "@mainnet_latest_hostos_images_dev//:disk-img.tar.zst",
+    tags = [
+        "manual",
+        "no-cache",
     ],
-)
-
-# Extract the GuestOS latest release image from SetupOS
-genrule(
-    name = "latest-release-mainnet-guest-img",
-    srcs = ["@mainnet_latest_setupos_disk_image//file"],
-    outs = ["latest-release-mainnet-guest-img.tar.zst"],
-    cmd = """
-        $(location //rs/ic_os/build_tools/partition_tools:extract-guestos) --image $< $@
-    """,
-    tags = ["manual"],
-    target_compatible_with = ["@platforms//os:linux"],
-    tools = ["//rs/ic_os/build_tools/partition_tools:extract-guestos"],
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",

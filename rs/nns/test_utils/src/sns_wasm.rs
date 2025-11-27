@@ -10,10 +10,9 @@ use ic_nervous_system_common_test_utils::wasm_helpers;
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::{
-    manage_neuron::{Command, NeuronIdOrSubaccount},
-    manage_neuron_response::Command as CommandResponse,
-    proposal, ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal,
-    ProposalInfo, ProposalStatus,
+    ExecuteNnsFunction, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, NnsFunction, ProposalActionRequest, ProposalInfo, ProposalStatus,
+    manage_neuron::NeuronIdOrSubaccount, manage_neuron_response::Command as CommandResponse,
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{
@@ -77,7 +76,8 @@ pub fn add_wasm(
         "add_wasm",
         Encode!(&AddWasmRequest {
             hash: hash.to_vec(),
-            wasm: Some(wasm)
+            wasm: Some(wasm),
+            skip_update_latest_version: Some(false),
         })
         .unwrap(),
     )
@@ -141,14 +141,16 @@ pub fn insert_upgrade_path_entries_via_proposal(
         sns_governance_canister_id,
     };
 
-    let proposal = Proposal {
+    let proposal = MakeProposalRequest {
         title: Some("title".into()),
         summary: "summary".into(),
         url: "".to_string(),
-        action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: NnsFunction::InsertSnsWasmUpgradePathEntries as i32,
-            payload: Encode!(&payload).expect("Error encoding proposal payload"),
-        })),
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::InsertSnsWasmUpgradePathEntries as i32,
+                payload: Encode!(&payload).expect("Error encoding proposal payload"),
+            },
+        )),
     };
 
     make_proposal_with_test_neuron_1(env, proposal)
@@ -160,16 +162,19 @@ pub fn add_wasm_via_proposal_and_return_immediately(env: &StateMachine, wasm: Sn
     let payload = AddWasmRequest {
         hash: hash.to_vec(),
         wasm: Some(wasm.clone()),
+        skip_update_latest_version: Some(false),
     };
 
-    let proposal = Proposal {
+    let proposal = MakeProposalRequest {
         title: Some("title".into()),
         summary: "summary".into(),
         url: "".to_string(),
-        action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: NnsFunction::AddSnsWasm as i32,
-            payload: Encode!(&payload).expect("Error encoding proposal payload"),
-        })),
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::AddSnsWasm as i32,
+                payload: Encode!(&payload).expect("Error encoding proposal payload"),
+            },
+        )),
     };
 
     let proposal_id = make_proposal_with_test_neuron_1(env, proposal);
@@ -180,14 +185,17 @@ pub fn add_wasm_via_proposal_and_return_immediately(env: &StateMachine, wasm: Sn
 }
 
 /// Make a proposal with test_neuron_1
-fn make_proposal_with_test_neuron_1(env: &StateMachine, proposal: Proposal) -> ProposalId {
+fn make_proposal_with_test_neuron_1(
+    env: &StateMachine,
+    proposal: MakeProposalRequest,
+) -> ProposalId {
     let response: ManageNeuronResponse = update_with_sender(
         env,
         GOVERNANCE_CANISTER_ID,
         "manage_neuron",
-        ManageNeuron {
+        ManageNeuronRequest {
             id: None,
-            command: Some(Command::MakeProposal(Box::new(proposal))),
+            command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(proposal))),
             neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
                 id: TEST_NEURON_1_ID,
             })),
@@ -198,7 +206,7 @@ fn make_proposal_with_test_neuron_1(env: &StateMachine, proposal: Proposal) -> P
 
     match response.command.unwrap() {
         CommandResponse::MakeProposal(resp) => ProposalId::from(resp.proposal_id.unwrap()),
-        other => panic!("Unexpected response: {:?}", other),
+        other => panic!("Unexpected response: {other:?}"),
     }
 }
 
@@ -225,14 +233,16 @@ pub fn update_sns_subnet_list_via_proposal(
     env: &StateMachine,
     request: &UpdateSnsSubnetListRequest,
 ) {
-    let proposal = Proposal {
+    let proposal = MakeProposalRequest {
         title: Some("title".into()),
         summary: "summary".into(),
         url: "".to_string(),
-        action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: NnsFunction::UpdateSnsWasmSnsSubnetIds as i32,
-            payload: Encode!(request).expect("Error encoding proposal payload"),
-        })),
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::UpdateSnsWasmSnsSubnetIds as i32,
+                payload: Encode!(request).expect("Error encoding proposal payload"),
+            },
+        )),
     };
 
     let pid = make_proposal_with_test_neuron_1(env, proposal);
@@ -393,7 +403,7 @@ pub fn wait_for_proposal_status(
         machine.tick();
         machine.advance_time(Duration::from_secs(1));
     }
-    panic!("Proposal {} never exited the Open state.", proposal_id);
+    panic!("MakeProposalRequest {proposal_id} never exited the Open state.");
 }
 
 /// Makes a bunch of proposals, and waits for them to be no longer be open.

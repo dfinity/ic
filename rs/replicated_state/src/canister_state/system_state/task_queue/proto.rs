@@ -28,7 +28,7 @@ impl TryFrom<pb::TaskQueue> for TaskQueue {
                 item.on_low_wasm_memory_hook_status,
             )
             .map_err(|e| ProxyDecodeError::Other(
-                format!("Error while trying to decode pb::TaskQueue::on_low_wasm_memory_hook_status, {:?}", e)))?
+                format!("Error while trying to decode pb::TaskQueue::on_low_wasm_memory_hook_status, {e:?}")))?
             .try_into()?,
             queue: item
                 .queue

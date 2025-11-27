@@ -1,17 +1,19 @@
 [package]
 name = "ic-nervous-system-common-test-utils"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
 candid.workspace = true
 dfn_core = { path = "../../../rust_canisters/dfn_core" }
 futures = { workspace = true }
+ic-crypto-sha2 = { path = "../../../crypto/sha2" }
 ic-nervous-system-canisters = { path = "../../canisters" }
 ic-nervous-system-common = { path = "../../common" }
 ic-wasm = { workspace = true }
 icp-ledger = { path = "../../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+lazy_static = { workspace = true }
 libflate = { workspace = true }
 prometheus-parse = { workspace = true }

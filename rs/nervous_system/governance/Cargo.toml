@@ -2,7 +2,7 @@
 name = "ic-nervous-system-governance"
 version = "0.0.1"
 authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
 ic-base-types = { path = "../../types/base_types" }

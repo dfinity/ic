@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use axum::{
-    body::{to_bytes, Body},
+    Extension,
+    body::{Body, to_bytes},
     extract::{Request, State},
     middleware::Next,
     response::{IntoResponse, Response},
-    Extension,
 };
 use http::StatusCode;
 
@@ -130,17 +130,17 @@ mod test {
 
     use anyhow::Error;
     use axum::{
-        body::Body, extract::State, http::Request, middleware, response::IntoResponse,
-        routing::method_routing::post, Router,
+        Router, body::Body, extract::State, http::Request, middleware, response::IntoResponse,
+        routing::method_routing::post,
     };
     use http::StatusCode;
-    use ic_bn_lib::principal;
+    use ic_bn_lib_common::principal;
     use ic_types::CanisterId;
     use tower::Service;
 
     use crate::{
+        http::RequestType,
         persist::test::{generate_test_subnets, node},
-        routes::RequestType,
     };
 
     struct TestState {
@@ -215,7 +215,7 @@ mod test {
             ));
 
         // Check successful retry
-        let req = gen_request(RequestType::Query);
+        let req = gen_request(RequestType::QueryV2);
         let res = app.call(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
 
@@ -224,7 +224,7 @@ mod test {
             state.write().unwrap().failures = 4;
         }
 
-        let req = gen_request(RequestType::Query);
+        let req = gen_request(RequestType::QueryV2);
         let res = app.call(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::INTERNAL_SERVER_ERROR);
 
@@ -234,7 +234,7 @@ mod test {
             state.write().unwrap().fail_code = StatusCode::BAD_REQUEST;
         }
 
-        let req = gen_request(RequestType::Query);
+        let req = gen_request(RequestType::QueryV2);
         let res = app.call(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 
@@ -244,7 +244,7 @@ mod test {
             state.write().unwrap().fail_code = StatusCode::INTERNAL_SERVER_ERROR;
         }
 
-        let req = gen_request(RequestType::Call);
+        let req = gen_request(RequestType::CallV2);
         let res = app.call(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::INTERNAL_SERVER_ERROR);
 
@@ -254,7 +254,7 @@ mod test {
             state.write().unwrap().error_cause = Some(ErrorCause::ReplicaErrorConnect);
         }
 
-        let req = gen_request(RequestType::Query);
+        let req = gen_request(RequestType::QueryV2);
         let res = app.call(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
 
@@ -264,7 +264,7 @@ mod test {
             state.write().unwrap().error_cause = Some(ErrorCause::PayloadTooLarge(123));
         }
 
-        let req = gen_request(RequestType::Query);
+        let req = gen_request(RequestType::QueryV2);
         let res = app.call(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::INTERNAL_SERVER_ERROR);
 
@@ -285,7 +285,7 @@ mod test {
             state.write().unwrap().error_cause = None;
         }
 
-        let req = gen_request(RequestType::Call);
+        let req = gen_request(RequestType::CallV2);
         let res = app.call(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
 

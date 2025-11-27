@@ -16,7 +16,6 @@ fn test_generate_sns_init_payload() {
     assert_eq!(
         sns_init_payload.name,
         Some("Daniel".to_string()),
-        "{:#?}",
-        sns_init_payload
+        "{sns_init_payload:#?}"
     );
 }

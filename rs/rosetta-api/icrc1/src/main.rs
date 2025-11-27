@@ -1,25 +1,25 @@
 #![allow(clippy::disallowed_types)]
 mod config;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use axum::{
+    Router,
     body::Body,
     extract::Request,
     routing::{get, post},
-    Router,
 };
 use clap::Parser;
-use ic_agent::{identity::AnonymousIdentity, Agent};
+use ic_agent::{Agent, identity::AnonymousIdentity};
 use ic_base_types::PrincipalId;
 use ic_icrc_rosetta::common::storage::storage_client::TokenInfo;
 use ic_icrc_rosetta::{
+    AppState, Metadata, MultiTokenAppState,
     common::constants::{BLOCK_SYNC_WAIT_SECS, MAX_BLOCK_SYNC_WAIT_SECS},
     common::storage::{storage_client::StorageClient, types::MetadataEntry},
     construction_api::endpoints::*,
     data_api::endpoints::*,
     ledger_blocks_synchronization::blocks_synchronizer::{
-        start_synching_blocks, RecurrencyConfig, RecurrencyMode,
+        RecurrencyConfig, RecurrencyMode, start_synching_blocks,
     },
-    AppState, Metadata, MultiTokenAppState,
 };
 use ic_sys::fs::write_string_using_tmp_file;
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
@@ -34,8 +34,8 @@ use tokio::{net::TcpListener, sync::Mutex as AsyncMutex};
 use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
 use tower_http::trace::TraceLayer;
 use tower_request_id::{RequestId, RequestIdLayer};
-use tracing::{debug, error, error_span, info, warn, Level, Span};
-use tracing::{level_filters::LevelFilter, Instrument};
+use tracing::{Instrument, level_filters::LevelFilter};
+use tracing::{Level, Span, debug, error, error_span, info, warn};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -123,7 +123,9 @@ async fn load_metadata(
         let are_metadata_set = token_def.are_metadata_args_set();
         // If metadata is empty and the args are not set, bail out.
         if db_metadata_entries.is_empty() && !are_metadata_set {
-            bail!("Metadata must be initialized by starting Rosetta in online mode first or by providing ICRC-1 metadata arguments.");
+            bail!(
+                "Metadata must be initialized by starting Rosetta in online mode first or by providing ICRC-1 metadata arguments."
+            );
         }
 
         // If metadata is set in args and not entries are found in the database,
@@ -241,9 +243,13 @@ async fn main() -> Result<()> {
             Store::File { dir_path } => {
                 let mut path = dir_path.clone();
                 path.push(format!("{}.db", PrincipalId::from(token_def.ledger_id)));
-                StorageClient::new_persistent(&path).unwrap_or_else(|err| {
-                    panic!("error creating persistent storage '{:?}': {}", path, err)
-                })
+                StorageClient::new_persistent_with_cache_and_batch_size(
+                    &path,
+                    config.sqlite_max_cache_kb,
+                    config.flush_cache_shrink_mem,
+                    config.balance_sync_batch_size,
+                )
+                .unwrap_or_else(|err| panic!("error creating persistent storage '{path:?}': {err}"))
             }
         };
 
@@ -264,9 +270,10 @@ async fn main() -> Result<()> {
             && metadata.symbol != token_def.icrc1_symbol.clone().unwrap()
         {
             bail!(
-                    "Provided symbol does not match symbol retrieved in online mode. Expected: {}, Got: {}",
-                    metadata.symbol, token_def.icrc1_symbol.clone().unwrap()
-                );
+                "Provided symbol does not match symbol retrieved in online mode. Expected: {}, Got: {}",
+                metadata.symbol,
+                token_def.icrc1_symbol.clone().unwrap()
+            );
         }
 
         info!(

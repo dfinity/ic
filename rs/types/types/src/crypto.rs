@@ -5,13 +5,14 @@ pub mod vetkd;
 
 mod hash;
 
-pub use hash::crypto_hash;
 pub use hash::CryptoHashDomain;
 pub use hash::CryptoHashable;
 pub use hash::CryptoHashableTestDummy;
-pub use hash::DOMAIN_IC_REQUEST;
+pub use hash::crypto_hash;
 
 mod sign;
+
+pub use sign::DOMAIN_IC_REQUEST;
 
 use ic_management_canister_types_private::EcdsaCurve;
 use ic_management_canister_types_private::MasterPublicKeyId;
@@ -28,8 +29,8 @@ use crate::{CountBytes, NodeId, RegistryVersion, SubnetId};
 use core::fmt::Formatter;
 use ic_base_types::PrincipalId;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
-use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::ThresholdSigPublicKeyBytesConversionError;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::ThresholdSigPublicKeyBytesConversionError;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
@@ -137,7 +138,7 @@ impl FromStr for KeyPurpose {
             "dkg_dealing_encryption" => Ok(KeyPurpose::DkgDealingEncryption),
             "committee_signing" => Ok(KeyPurpose::CommitteeSigning),
             "idkg_mega_encryption" => Ok(KeyPurpose::IDkgMEGaEncryption),
-            _ => Err(format!("Invalid key purpose: {:?}", string)),
+            _ => Err(format!("Invalid key purpose: {string:?}")),
         }
     }
 }
@@ -508,7 +509,7 @@ impl fmt::Debug for CryptoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CryptoError::InvalidArgument { message } => {
-                write!(f, "Semantic error in argument: {}", message)
+                write!(f, "Semantic error in argument: {message}")
             }
             CryptoError::PublicKeyNotFound {
                 node_id,
@@ -517,21 +518,20 @@ impl fmt::Debug for CryptoError {
             } => write!(
                 f,
                 "Cannot find public key registry record for node with \
-                 ID {:?} with purpose {:?} at registry version {:?}",
-                node_id, key_purpose, registry_version
+                 ID {node_id:?} with purpose {key_purpose:?} at registry version {registry_version:?}"
             ),
 
-            CryptoError::TlsCertNotFound { node_id, registry_version } => write!(
+            CryptoError::TlsCertNotFound {
+                node_id,
+                registry_version,
+            } => write!(
                 f,
-                "Cannot find TLS public key certificate record for node with ID {:?} at registry version {:?} ",
-                node_id, registry_version
+                "Cannot find TLS public key certificate record for node with ID {node_id:?} at registry version {registry_version:?} "
             ),
 
-            CryptoError::SecretKeyNotFound { algorithm, key_id } => write!(
-                f,
-                "Cannot find {:?} secret key with ID {:?}",
-                algorithm, key_id
-            ),
+            CryptoError::SecretKeyNotFound { algorithm, key_id } => {
+                write!(f, "Cannot find {algorithm:?} secret key with ID {key_id:?}")
+            }
 
             CryptoError::TlsSecretKeyNotFound { certificate_der } => write!(
                 f,
@@ -540,7 +540,7 @@ impl fmt::Debug for CryptoError {
             ),
 
             CryptoError::MalformedSecretKey { algorithm, .. } => {
-                write!(f, "Malformed {:?} secret key", algorithm)
+                write!(f, "Malformed {algorithm:?} secret key")
             }
 
             CryptoError::MalformedPublicKey {
@@ -558,11 +558,7 @@ impl fmt::Debug for CryptoError {
                 algorithm,
                 internal_error,
                 ..
-            } => write!(
-                f,
-                "Malformed {:?} public key: {}",
-                algorithm, internal_error
-            ),
+            } => write!(f, "Malformed {algorithm:?} public key: {internal_error}"),
 
             CryptoError::MalformedSignature {
                 algorithm,
@@ -621,46 +617,44 @@ impl fmt::Debug for CryptoError {
             } => write!(
                 f,
                 "Expected the given nodes' public key registry records for key purpose \
-                 {:?} and registry version {:?} to all have the same algorithm but \
-                 instead found the following algorithms {:?}.",
-                key_purpose, registry_version, algorithms
+                 {key_purpose:?} and registry version {registry_version:?} to all have the same algorithm but \
+                 instead found the following algorithms {algorithms:?}."
             ),
 
             CryptoError::AlgorithmNotSupported { algorithm, reason } => {
-                write!(f, "Algorithm {:?} not supported: {}", algorithm, reason)
+                write!(f, "Algorithm {algorithm:?} not supported: {reason}")
             }
 
-            CryptoError::RegistryClient(e) => write!(f, "Cannot query registry: {}", e),
+            CryptoError::RegistryClient(e) => write!(f, "Cannot query registry: {e}"),
 
             CryptoError::ThresholdSigDataNotFound { dkg_id } => write!(
                 f,
-                "Cannot find transcript data for DKG ID {:?} in data store",
-                dkg_id
+                "Cannot find transcript data for DKG ID {dkg_id:?} in data store"
             ),
             CryptoError::DkgTranscriptNotFound {
                 subnet_id,
                 registry_version,
             } => write!(
                 f,
-                "Cannot find initial DKG transcript for subnet ID {:?} at registry version {:?}",
-                subnet_id, registry_version
+                "Cannot find initial DKG transcript for subnet ID {subnet_id:?} at registry version {registry_version:?}"
             ),
             CryptoError::RootSubnetPublicKeyNotFound { registry_version } => write!(
                 f,
-                "Cannot find root subnet public key at registry version {:?}",
-                registry_version
+                "Cannot find root subnet public key at registry version {registry_version:?}"
             ),
-            CryptoError::InternalError { internal_error } =>
-                write!(f, "Internal error: {}", internal_error),
-            CryptoError::TransientInternalError { internal_error: transient_internal_error } =>
-                write!(f, "Transient internal error: {}", transient_internal_error),
+            CryptoError::InternalError { internal_error } => {
+                write!(f, "Internal error: {internal_error}")
+            }
+            CryptoError::TransientInternalError {
+                internal_error: transient_internal_error,
+            } => write!(f, "Transient internal error: {transient_internal_error}"),
         }
     }
 }
 
 impl fmt::Display for CryptoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -673,7 +667,7 @@ pub struct BasicSig(#[serde(with = "serde_bytes")] pub Vec<u8>);
 
 impl fmt::Display for BasicSig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -718,7 +712,7 @@ impl<T: CountBytes> CountBytes for IndividualMultiSigOf<T> {
 
 impl fmt::Display for IndividualMultiSig {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -748,7 +742,7 @@ impl<T: CountBytes> CountBytes for CombinedMultiSigOf<T> {
 
 impl fmt::Display for CombinedMultiSig {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -766,7 +760,7 @@ pub type ThresholdSigShareOf<T> = Id<T, ThresholdSigShare>; // Use newtype inste
 
 impl fmt::Display for ThresholdSigShare {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -784,7 +778,7 @@ pub type CombinedThresholdSigOf<T> = Id<T, CombinedThresholdSig>; // Use newtype
 
 impl fmt::Display for CombinedThresholdSig {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -802,7 +796,7 @@ pub type CanisterSigOf<T> = Id<T, CanisterSig>;
 
 impl fmt::Display for CanisterSig {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 

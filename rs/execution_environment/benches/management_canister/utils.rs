@@ -60,9 +60,9 @@ where
     match result {
         Ok(wasm_result) => match wasm_result {
             WasmResult::Reply(bytes) => Decode!(&bytes, T).unwrap(),
-            WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+            WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
         },
-        Err(err) => panic!("Unexpected error: {}", err),
+        Err(err) => panic!("Unexpected error: {err}"),
     }
 }
 
@@ -74,7 +74,7 @@ pub fn expect_error(
     match result {
         Ok(wasm_result) => match wasm_result {
             WasmResult::Reply(bytes) => panic!("Unexpected reply: {bytes:?}"),
-            WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+            WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
         },
         Err(err) => {
             assert_eq!(err.code(), error_code);

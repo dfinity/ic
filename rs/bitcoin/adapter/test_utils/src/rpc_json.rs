@@ -3,7 +3,7 @@
 //! Code in this module is adapted from https://github.com/rust-bitcoin/rust-bitcoincore-rpc/.
 //! The original license is CC0.
 
-use bitcoin::{address::NetworkUnchecked, Address, Amount, BlockHash, Network, ScriptBuf, Txid};
+use bitcoin::{Address, Amount, BlockHash, Network, ScriptBuf, Txid, address::NetworkUnchecked};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;

@@ -8,10 +8,10 @@ use crate::vault::local_csp_vault::LocalCspVault;
 use crate::{CspPublicKey, ExternalPublicKeys, KeyId, SecretKeyStore};
 use parking_lot::RwLockReadGuard;
 
-use crate::keygen::utils::{mega_public_key_from_proto, MEGaPublicKeyFromProtoError};
+use crate::keygen::utils::{MEGaPublicKeyFromProtoError, mega_public_key_from_proto};
 use crate::public_key_store::PublicKeyStore;
-use crate::types::conversions::CspPopFromPublicKeyProtoError;
 use crate::types::CspPop;
+use crate::types::conversions::CspPopFromPublicKeyProtoError;
 use crate::vault::api::ValidatePksAndSksKeyPairError::{
     PublicKeyInvalid, PublicKeyNotFound, SecretKeyNotFound,
 };
@@ -25,8 +25,8 @@ use ic_crypto_node_key_validation::{
 };
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
-use ic_types::crypto::AlgorithmId;
 use ic_types::Time;
+use ic_types::crypto::AlgorithmId;
 use rand::{CryptoRng, Rng};
 
 #[cfg(test)]
@@ -149,7 +149,7 @@ fn compute_node_signing_key_id(
         ))));
     }
     let csp_key = CspPublicKey::try_from(external_node_signing_public_key)
-        .map_err(|err| ExternalPublicKeyError(Box::new(format!("{:?}", err))))?;
+        .map_err(|err| ExternalPublicKeyError(Box::new(format!("{err:?}"))))?;
     Ok(KeyId::from(&csp_key))
 }
 
@@ -166,7 +166,7 @@ fn compute_committee_signing_key_id(
     }
     ensure_committee_signing_key_pop_is_well_formed(external_committee_signing_public_key)?;
     let csp_key = CspPublicKey::try_from(external_committee_signing_public_key)
-        .map_err(|err| ExternalPublicKeyError(Box::new(format!("{:?}", err))))?;
+        .map_err(|err| ExternalPublicKeyError(Box::new(format!("{err:?}"))))?;
     Ok(KeyId::from(&csp_key))
 }
 
@@ -176,8 +176,7 @@ fn ensure_committee_signing_key_pop_is_well_formed(
     CspPop::try_from(pk_proto).map_err(|e| match e {
         CspPopFromPublicKeyProtoError::NoPopForAlgorithm { algorithm } => {
             ExternalPublicKeyError(Box::new(format!(
-                "Malformed public key (No POP for algorithm {:?})",
-                algorithm
+                "Malformed public key (No POP for algorithm {algorithm:?})"
             )))
         }
         CspPopFromPublicKeyProtoError::MissingProofData => ExternalPublicKeyError(Box::new(
@@ -203,7 +202,7 @@ fn compute_dkg_dealing_encryption_key_id(
         ))));
     }
     let _csp_pop = CspFsEncryptionPop::try_from(external_dkg_dealing_encryption_public_key)
-        .map_err(|e| ExternalPublicKeyError(Box::new(format!("Malformed public key {:?}", e))))?;
+        .map_err(|e| ExternalPublicKeyError(Box::new(format!("Malformed public key {e:?}"))))?;
     let csp_key = CspFsEncryptionPublicKey::try_from(external_dkg_dealing_encryption_public_key)
         .map_err(|e| {
             ExternalPublicKeyError(Box::new(format!(
@@ -222,8 +221,7 @@ fn compute_idkg_dealing_encryption_key_id(
     )
     .map_err(|e| match e {
         MEGaPublicKeyFromProtoError::UnsupportedAlgorithm { algorithm_id } => {
-            ExternalPublicKeyError(Box::new(format!("Malformed public key: unsupported algorithm ({:?}) of I-DKG dealing encryption key",
-                    algorithm_id,
+            ExternalPublicKeyError(Box::new(format!("Malformed public key: unsupported algorithm ({algorithm_id:?}) of I-DKG dealing encryption key",
                 ),
             ))
         }
@@ -234,8 +232,7 @@ fn compute_idkg_dealing_encryption_key_id(
 
     let key_id = KeyId::try_from(&idkg_dealing_encryption_pk).map_err(|error| {
         ExternalPublicKeyError(Box::new(format!(
-            "Malformed public key: failed to derive key ID from MEGa public key: {}",
-            error
+            "Malformed public key: failed to derive key ID from MEGa public key: {error}"
         )))
     })?;
     Ok(key_id)
@@ -247,7 +244,7 @@ fn compute_tls_certificate_key_id(
     let public_key_cert = TlsPublicKeyCert::new_from_der(
         external_tls_certificate.certificate_der.clone(),
     )
-    .map_err(|e| ExternalPublicKeyError(Box::new(format!("Malformed certificate: {:?}", e))))?;
+    .map_err(|e| ExternalPublicKeyError(Box::new(format!("Malformed certificate: {e:?}"))))?;
 
     Ok(KeyId::from(&public_key_cert))
 }

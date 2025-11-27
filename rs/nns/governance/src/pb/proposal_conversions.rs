@@ -1,8 +1,64 @@
 use crate::{governance::EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX, pb::v1 as pb};
 
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance_api as pb_api;
+use ic_nns_governance_api::{self as pb_api, SelfDescribingProposalAction};
 use std::collections::{BTreeSet, HashMap};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct ProposalDisplayOptions {
+    omit_large_fields_requested: bool,
+    show_self_describing_action: bool,
+    show_action: bool,
+    multi_query: bool,
+}
+
+impl ProposalDisplayOptions {
+    pub fn for_list_proposals(
+        omit_large_fields_requested: bool,
+        return_self_describing_action: bool,
+    ) -> Self {
+        Self {
+            omit_large_fields_requested,
+            show_self_describing_action: return_self_describing_action,
+            show_action: !return_self_describing_action,
+            multi_query: true,
+        }
+    }
+
+    pub fn for_get_pending_proposals(return_self_describing_action: bool) -> Self {
+        Self {
+            omit_large_fields_requested: false,
+            show_self_describing_action: return_self_describing_action,
+            show_action: !return_self_describing_action,
+            multi_query: true,
+        }
+    }
+
+    pub fn for_get_proposal_info() -> Self {
+        Self {
+            omit_large_fields_requested: false,
+            show_self_describing_action: true,
+            show_action: true,
+            multi_query: false,
+        }
+    }
+
+    pub fn show_self_describing_action(&self) -> bool {
+        self.show_self_describing_action
+    }
+
+    pub fn show_action(&self) -> bool {
+        self.show_action
+    }
+
+    pub fn omit_large_execute_nns_function_payload(&self) -> bool {
+        self.multi_query
+    }
+
+    pub fn omit_create_service_nervous_system_large_fields(&self) -> bool {
+        self.omit_large_fields_requested && self.multi_query
+    }
+}
 
 fn convert_execute_nns_function(
     item: &pb::ExecuteNnsFunction,
@@ -133,7 +189,7 @@ fn convert_create_service_nervous_system(
 
 fn convert_action(
     item: &pb::proposal::Action,
-    omit_large_fields: bool,
+    display_options: ProposalDisplayOptions,
 ) -> pb_api::proposal::Action {
     match item {
         // Trivial conversions
@@ -162,6 +218,9 @@ fn convert_action(
         pb::proposal::Action::RegisterKnownNeuron(v) => {
             pb_api::proposal::Action::RegisterKnownNeuron(v.clone().into())
         }
+        pb::proposal::Action::DeregisterKnownNeuron(v) => {
+            pb_api::proposal::Action::DeregisterKnownNeuron((*v).into())
+        }
         pb::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v) => {
             pb_api::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v.clone().into())
         }
@@ -186,23 +245,30 @@ fn convert_action(
         pb::proposal::Action::ExecuteNnsFunction(v) => {
             pb_api::proposal::Action::ExecuteNnsFunction(convert_execute_nns_function(
                 v,
-                omit_large_fields,
+                display_options.omit_large_execute_nns_function_payload(),
             ))
         }
         pb::proposal::Action::CreateServiceNervousSystem(v) => {
             pb_api::proposal::Action::CreateServiceNervousSystem(
-                convert_create_service_nervous_system(v, omit_large_fields),
+                convert_create_service_nervous_system(
+                    v,
+                    display_options.omit_create_service_nervous_system_large_fields(),
+                ),
             )
         }
     }
 }
 
-pub fn convert_proposal(item: &pb::Proposal, omit_large_fields: bool) -> pb_api::Proposal {
+pub(crate) fn convert_proposal(
+    item: &pb::Proposal,
+    display_options: ProposalDisplayOptions,
+) -> pb_api::Proposal {
     let pb::Proposal {
         title,
         summary,
         url,
         action,
+        self_describing_action,
     } = item;
 
     // Convert (relatively) small fields
@@ -210,16 +276,25 @@ pub fn convert_proposal(item: &pb::Proposal, omit_large_fields: bool) -> pb_api:
     let summary = summary.clone();
     let url = url.clone();
 
-    // Convert action which is potentially large.
-    let action = action
-        .as_ref()
-        .map(|x| convert_action(x, omit_large_fields));
+    let action = if display_options.show_action() {
+        action.as_ref().map(|x| convert_action(x, display_options))
+    } else {
+        None
+    };
+    let self_describing_action = if display_options.show_self_describing_action() {
+        self_describing_action
+            .clone()
+            .map(SelfDescribingProposalAction::from)
+    } else {
+        None
+    };
 
     pb_api::Proposal {
         title,
         summary,
         url,
         action,
+        self_describing_action,
     }
 }
 
@@ -236,10 +311,9 @@ fn convert_ballots(
     ballots
 }
 
-pub fn proposal_data_to_info(
+pub(crate) fn proposal_data_to_info(
     data: &pb::ProposalData,
-    multi_query: bool,
-    omit_large_fields_requested: bool,
+    display_options: ProposalDisplayOptions,
     caller_neurons: &BTreeSet<NeuronId>,
     now_seconds: u64,
     voting_period_seconds: impl Fn(pb::Topic) -> u64,
@@ -265,24 +339,10 @@ pub fn proposal_data_to_info(
     let derived_proposal_information = data.derived_proposal_information.clone().map(|x| x.into());
     let total_potential_voting_power = data.total_potential_voting_power;
 
-    // Convert proposal which is potentially large.
-    let proposal_action = data
-        .proposal
-        .as_ref()
-        .and_then(|proposal| proposal.action.as_ref());
-    let omit_large_fields = match (multi_query, proposal_action) {
-        // When not doing a multi-query (i.e. querying a single proposal), we never omit large
-        // fields.
-        (false, _) => false,
-        // Proposals which might contain WASM code are always omitted in multi-queries.
-        (true, Some(pb::proposal::Action::ExecuteNnsFunction(_))) => true,
-        // Otherwise, we respect the request for omitting large fields.
-        (true, _) => omit_large_fields_requested,
-    };
     let proposal = data
         .proposal
         .as_ref()
-        .map(|x| convert_proposal(x, omit_large_fields));
+        .map(|x| convert_proposal(x, display_options));
 
     // Convert ballots which are potentially large.
     let ballots = convert_ballots(&data.ballots, caller_neurons);

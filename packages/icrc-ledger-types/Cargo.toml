@@ -1,6 +1,6 @@
 [package]
 name = "icrc-ledger-types"
-version = "0.1.10"
+version = "0.1.12"
 description = "Types for interacting with DFINITY's implementation of the ICRC-1 fungible token standard."
 license = "Apache-2.0"
 readme = "README.md"

@@ -15,7 +15,7 @@ candid = { workspace = true }
 canlog_derive = { version = "=0.1.0", path = "../canlog_derive", optional = true }
 ic-canister-log = "0.2.0"
 ic0 = { workspace = true }
-regex = { workspace = true }
+regex-lite = "0.1.8"
 serde = { workspace = true }
 serde_json = { workspace = true }
 

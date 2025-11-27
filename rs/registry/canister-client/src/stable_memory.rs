@@ -40,7 +40,7 @@ impl StorableRegistryKey {
 const MAX_REGISTRY_KEY_SIZE: u32 = 200;
 
 impl Storable for StorableRegistryKey {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut storable_key = vec![];
         let key_b = self.key.as_bytes().to_vec();
         let version_b = self.version.to_be_bytes().to_vec();
@@ -107,7 +107,7 @@ pub trait RegistryDataStableMemory: Send + Sync {
 /// code.
 #[macro_export]
 macro_rules! test_registry_data_stable_memory_impl {
-    ($state_struct:ident, $local_key_btree_map:expr) => {
+    ($state_struct:ident, $local_key_btree_map:expr_2021) => {
 
         pub struct $state_struct;
 

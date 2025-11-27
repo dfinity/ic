@@ -1,4 +1,6 @@
-use crate::rw_message::{can_read_msg, can_store_msg, cert_state_makes_progress_with_retries};
+use crate::rw_message::{
+    can_read_msg, can_read_msg_with_retries, can_store_msg, cert_state_makes_progress_with_retries,
+};
 use crate::upgrade::assert_assigned_replica_version;
 use anyhow::bail;
 use candid::Principal;
@@ -15,22 +17,23 @@ use ic_system_test_driver::util::*;
 use ic_system_test_driver::{driver::test_env_api::*, util::runtime_from_url};
 use ic_types::ReplicaVersion;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-/// A subnet is considered to be healthy if all nodes in the given vector are healthy
-/// and running the given version, canisters can be installed and messages can be written and read.
+/// A subnet is considered to be healthy if all given nodes are healthy and running the given
+/// version, the certified time advances, and messages can be written and read.
 pub fn assert_subnet_is_healthy(
-    subnet: &Vec<IcNodeSnapshot>,
+    subnet: &[IcNodeSnapshot],
     target_version: &ReplicaVersion,
     can_id: Principal,
-    msg: &str,
+    old_msg: &str,
+    new_msg: &str,
     logger: &Logger,
 ) {
     info!(
         logger,
-        "Confirm that ALL nodes are now healthy and running on the new version {target_version}"
+        "Confirm that ALL nodes are healthy and running on version {target_version}"
     );
     for node in subnet {
         assert_assigned_replica_version(node, target_version, logger.clone());
@@ -53,25 +56,24 @@ pub fn assert_subnet_is_healthy(
 
     info!(logger, "Ensure the old message is still readable");
     assert!(
-        can_read_msg(logger, &node.get_public_url(), can_id, msg),
+        can_read_msg(logger, &node.get_public_url(), can_id, old_msg),
         "Failed to read old message on {}",
         node.get_ip_addr()
     );
-    let new_msg = "subnet recovery still works!";
-    info!(
-        logger,
-        "Ensure that the subnet is accepting updates after the recovery"
-    );
+    info!(logger, "Ensure that the subnet is accepting updates");
     assert!(
         can_store_msg(logger, &node.get_public_url(), can_id, new_msg),
         "Failed to store new message on {}",
         node.get_ip_addr()
     );
-    assert!(
-        can_read_msg(logger, &node.get_public_url(), can_id, new_msg),
-        "Failed to read new message on {}",
-        node.get_ip_addr()
-    );
+    // Wait until all nodes answer with the new message
+    for node in subnet {
+        assert!(
+            can_read_msg_with_retries(logger, &node.get_public_url(), can_id, new_msg, 5),
+            "Failed to read new message on {}",
+            node.get_ip_addr()
+        );
+    }
 }
 
 /// Enable Chain key and signing on the subnet using the given NNS node.

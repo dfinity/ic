@@ -2,7 +2,7 @@
 use crate::PROXIED_CANISTER_CALLS_TRACKER;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::{
-    api::call::{call_with_payment, RejectionCode},
+    api::call::{RejectionCode, call_with_payment},
     call, caller, print,
 };
 use ic_management_canister_types_private::{
@@ -15,12 +15,12 @@ use ic_nervous_system_clients::{
 };
 use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
 use ic_nervous_system_root::change_canister::{
-    start_canister, stop_canister, AddCanisterRequest, CanisterAction, StopOrStartCanisterRequest,
+    AddCanisterRequest, CanisterAction, StopOrStartCanisterRequest, start_canister, stop_canister,
 };
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_nns_common::{
     registry::{get_value, mutate_registry},
-    types::CallCanisterProposal,
+    types::CallCanisterRequest,
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
@@ -31,7 +31,7 @@ use ic_protobuf::{
     types::v1 as pb,
 };
 use ic_registry_keys::make_nns_canister_records_key;
-use ic_registry_transport::pb::v1::{registry_mutation::Type, Precondition, RegistryMutation};
+use ic_registry_transport::pb::v1::{Precondition, RegistryMutation, registry_mutation::Type};
 use prost::Message;
 
 pub async fn do_add_nns_canister(request: AddCanisterRequest) {
@@ -172,13 +172,13 @@ pub async fn stop_or_start_nns_canister(
     }
 }
 
-pub async fn call_canister(proposal: CallCanisterProposal) {
+pub async fn call_canister(proposal: CallCanisterRequest) {
     print(format!(
         "Calling {}::{}...",
         proposal.canister_id, proposal.method_name,
     ));
 
-    let CallCanisterProposal {
+    let CallCanisterRequest {
         canister_id,
         method_name,
         payload,
@@ -194,7 +194,7 @@ pub async fn call_canister(proposal: CallCanisterProposal) {
 
     let res = CdkRuntime::call_bytes_with_cleanup(*canister_id, method_name, payload)
         .await
-        .map_err(|(code, msg)| format!("Error: {}:{}", code, msg));
+        .map_err(|(code, msg)| format!("Error: {code}:{msg}"));
 
     print(format!(
         "Call {}::{} returned {:?}",

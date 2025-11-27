@@ -5,11 +5,6 @@ use crate::{
     logs::{ERROR, INFO},
     memory,
     pb::v1::{
-        get_open_ticket_response, new_sale_ticket_response, set_dapp_controllers_call_result,
-        set_mode_call_result,
-        set_mode_call_result::SetModeResult,
-        settle_neurons_fund_participation_request, settle_neurons_fund_participation_response,
-        sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
         BuyerState, CanisterCallError, CfInvestment, CfNeuron, CfParticipant, DerivedState,
         DirectInvestment, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse,
         GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse, GetBuyerStateRequest,
@@ -24,7 +19,11 @@ use crate::{
         RefreshBuyerTokensResponse, SetDappControllersCallResult, SetDappControllersRequest,
         SetDappControllersResponse, SetModeCallResult, SettleNeuronsFundParticipationRequest,
         SettleNeuronsFundParticipationResponse, SettleNeuronsFundParticipationResult,
-        SnsNeuronRecipe, Swap, SweepResult, Ticket, TransferableAmount,
+        SnsNeuronRecipe, Swap, SweepResult, Ticket, TransferableAmount, get_open_ticket_response,
+        new_sale_ticket_response, set_dapp_controllers_call_result, set_mode_call_result,
+        set_mode_call_result::SetModeResult,
+        settle_neurons_fund_participation_request, settle_neurons_fund_participation_response,
+        sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
     },
     types::{NeuronsFundNeuron, ScheduledVestingEvent, TransferResult},
 };
@@ -34,19 +33,20 @@ use ic_cdk::api::call::RejectionCode;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_common::{
-    i2d, ledger::compute_neuron_staking_subaccount_bytes, MAX_NEURONS_FOR_DIRECT_PARTICIPANTS,
+    MAX_NEURONS_FOR_DIRECT_PARTICIPANTS, i2d, ledger::compute_neuron_staking_subaccount_bytes,
 };
 use ic_nervous_system_proto::pb::v1::Principals;
 use ic_neurons_fund::{MatchedParticipationFunction, PolynomialNeuronsFundParticipation};
 use ic_sns_governance::pb::v1::{
-    claim_swap_neurons_request::{neuron_recipe, NeuronRecipe, NeuronRecipes},
+    ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus, NeuronId, NeuronIds,
+    SetMode, SetModeResponse,
+    claim_swap_neurons_request::{NeuronRecipe, NeuronRecipes, neuron_recipe},
     claim_swap_neurons_response::{ClaimSwapNeuronsResult, SwapNeuron},
-    governance, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus, NeuronId,
-    NeuronIds, SetMode, SetModeResponse,
+    governance,
 };
 use ic_stable_structures::{
-    storable::{Blob, Bound},
     GrowFailed, Storable,
+    storable::{Blob, Bound},
 };
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
@@ -59,7 +59,7 @@ use std::{
     cmp::Ordering,
     collections::BTreeMap,
     fmt,
-    num::{NonZeroU128, NonZeroU64},
+    num::{NonZeroU64, NonZeroU128},
     ops::{
         Bound::{Included, Unbounded},
         Div,
@@ -203,7 +203,7 @@ impl NeuronBasketConstructionParameters {
 pub fn apportion_approximately_equally(total: u64, len: u64) -> Result<Vec<u64>, String> {
     let quotient = total
         .checked_div(len)
-        .ok_or_else(|| format!("Unable to divide total={} by len={}", total, len))?;
+        .ok_or_else(|| format!("Unable to divide total={total} by len={len}"))?;
     let remainder = total % len; // For unsigned integers, % cannot overflow.
 
     // So far, we have only apportioned quotient * len. To reach the desired
@@ -229,20 +229,14 @@ pub fn apportion_approximately_equally(total: u64, len: u64) -> Result<Vec<u64>,
             // next_back only returns None after len calls.
             // Therefore, next_back does not return None here.
             // Therefore, this expect will never panic.
-            .ok_or_else(|| {
-                format!(
-                    "Ran out of elements to increment. total={}, len={}",
-                    total, len,
-                )
-            })?;
+            .ok_or_else(
+                || format!("Ran out of elements to increment. total={total}, len={len}",),
+            )?;
 
         // This cannot overflow because the result must be <= total. Thus, this
         // will not panic.
         *element = element.checked_add(1).ok_or_else(|| {
-            format!(
-                "Incrementing element by 1 resulted in overflow. total={}, len={}",
-                total, len,
-            )
+            format!("Incrementing element by 1 resulted in overflow. total={total}, len={len}",)
         })?;
     }
 
@@ -285,8 +279,7 @@ impl fmt::Display for IcpTargetError {
         if let Self::TargetExceededBy(excess_amount_e8s) = self {
             write!(
                 f,
-                "Total amount of ICP e8s committed exceeds the target by {} ICP e8s",
-                excess_amount_e8s
+                "Total amount of ICP e8s committed exceeds the target by {excess_amount_e8s} ICP e8s"
             )
         } else {
             write!(f, "ICP target undefined")
@@ -357,12 +350,9 @@ mod swap_participation {
             if lifecycle == Lifecycle::Open {
                 Ok(())
             } else {
-                Err(
-                    format!(
-                        "Participation is possible only when the Swap is in the OPEN state. Current state is {:?}.",
-                        lifecycle,
-                    ),
-                )
+                Err(format!(
+                    "Participation is possible only when the Swap is in the OPEN state. Current state is {lifecycle:?}.",
+                ))
             }
         }
 
@@ -1101,7 +1091,10 @@ impl Swap {
                         // The current time is now probably different than the time when
                         // auto-finalization began, due to the `await`.
                         let auto_finalization_finish_seconds = now_fn(true);
-                        log!(INFO, "Swap auto-finalization finished at timestamp {auto_finalization_finish_seconds} (started at timestamp {auto_finalization_start_seconds})");
+                        log!(
+                            INFO,
+                            "Swap auto-finalization finished at timestamp {auto_finalization_finish_seconds} (started at timestamp {auto_finalization_start_seconds})"
+                        );
                     }
                 }
             }
@@ -1195,14 +1188,11 @@ impl Swap {
                 > MAX_NEURONS_FOR_DIRECT_PARTICIPANTS
             {
                 return Err(format!(
-                    "The swap has reached the maximum number of direct participants ({}) and does \
+                    "The swap has reached the maximum number of direct participants ({num_direct_participants}) and does \
                      not accept new participants; existing participants may still increase their \
                      ICP participation amount. This constraint ensures that SNS neuron baskets can \
-                     be created for all existing participants (SNS neuron basket size: {}, \
-                     MAX_NEURONS_FOR_DIRECT_PARTICIPANTS: {}).",
-                    num_direct_participants,
-                    num_sns_neurons_per_basket,
-                    MAX_NEURONS_FOR_DIRECT_PARTICIPANTS,
+                     be created for all existing participants (SNS neuron basket size: {num_sns_neurons_per_basket}, \
+                     MAX_NEURONS_FOR_DIRECT_PARTICIPANTS: {MAX_NEURONS_FOR_DIRECT_PARTICIPANTS}).",
                 ));
             }
         }
@@ -1287,8 +1277,7 @@ impl Swap {
             insert_buyer_into_buyers_list_index(buyer)
                 .map_err(|grow_failed| {
                     format!(
-                        "Failed to add buyer {} to state, the canister's stable memory could not grow: {}",
-                        buyer, grow_failed
+                        "Failed to add buyer {buyer} to state, the canister's stable memory could not grow: {grow_failed}"
                     )
                 })?;
         }
@@ -1809,7 +1798,8 @@ impl Swap {
                     ERROR,
                     "ClaimSwapNeuronsResponse's count of claimed_neurons is different than the count provided in the request. \
                     Request count {}. Response count {}.",
-                    batch_count, claimed_neurons.len(),
+                    batch_count,
+                    claimed_neurons.len(),
                 );
                 sweep_result.global_failures += 1;
             }
@@ -1952,22 +1942,21 @@ impl Swap {
             } => source_principal_id,
             _ => {
                 return ErrorRefundIcpResponse::new_invalid_request_error(format!(
-                    "Invalid request. Must have source_principal_id. Request:\n{:#?}",
-                    request,
+                    "Invalid request. Must have source_principal_id. Request:\n{request:#?}",
                 ));
             }
         };
 
         if let Some(buyer_state) = self.buyers.get(&source_principal_id.to_string()) {
-            if let Some(transfer) = &buyer_state.icp {
-                if transfer.transfer_success_timestamp_seconds == 0 {
-                    // This buyer has ICP not yet disbursed using the normal mechanism.
-                    return ErrorRefundIcpResponse::new_precondition_error(format!(
-                        "ICP cannot be refunded as principal {} has {} ICP (e8s) in escrow",
-                        source_principal_id,
-                        buyer_state.amount_icp_e8s()
-                    ));
-                }
+            if let Some(transfer) = &buyer_state.icp
+                && transfer.transfer_success_timestamp_seconds == 0
+            {
+                // This buyer has ICP not yet disbursed using the normal mechanism.
+                return ErrorRefundIcpResponse::new_precondition_error(format!(
+                    "ICP cannot be refunded as principal {} has {} ICP (e8s) in escrow",
+                    source_principal_id,
+                    buyer_state.amount_icp_e8s()
+                ));
             }
             // This buyer has participated in the swap, but all ICP
             // has already been disbursed, either back to the buyer
@@ -1993,8 +1982,7 @@ impl Swap {
             Ok(balance) => balance.get_e8s(),
             Err(err) => {
                 return ErrorRefundIcpResponse::new_external_error(format!(
-                    "Unable to get the balance for the subaccount of {}: {:?}",
-                    source_principal_id, err,
+                    "Unable to get the balance for the subaccount of {source_principal_id}: {err:?}",
                 ));
             }
         };
@@ -2037,8 +2025,7 @@ impl Swap {
                     err,
                 );
                 ErrorRefundIcpResponse::new_external_error(format!(
-                    "Transfer request failed: {}",
-                    err,
+                    "Transfer request failed: {err}",
                 ))
             }
         }
@@ -2454,7 +2441,7 @@ impl Swap {
             let np = match NeuronsFundNeuron::try_from(np.clone()) {
                 Ok(np) => np,
                 Err(message) => {
-                    defects.push(format!("NNS governance returned an invalid NeuronsFundNeuron. Struct: {:?}, Reason: {}", np, message));
+                    defects.push(format!("NNS governance returned an invalid NeuronsFundNeuron. Struct: {np:?}, Reason: {message}"));
                     continue;
                 }
             };
@@ -2468,7 +2455,7 @@ impl Swap {
             ) {
                 Ok(cfn) => cfn,
                 Err(message) => {
-                    defects.push(format!("NNS governance returned an invalid NeuronsFundNeuron. It cannot be converted to CfNeuron. Struct: {:?}, Reason: {}", np, message));
+                    defects.push(format!("NNS governance returned an invalid NeuronsFundNeuron. It cannot be converted to CfNeuron. Struct: {np:?}, Reason: {message}"));
                     continue;
                 }
             };
@@ -2478,7 +2465,7 @@ impl Swap {
         // Collect all errors into an error
         if !defects.is_empty() {
             return SettleNeuronsFundParticipationResult::new_error(format!(
-                "NNS Governance returned invalid NeuronsFundNeurons. Could not settle_neurons_fund_participation. Defects: {:?}", defects
+                "NNS Governance returned invalid NeuronsFundNeurons. Could not settle_neurons_fund_participation. Defects: {defects:?}"
             ));
         }
 
@@ -2489,7 +2476,7 @@ impl Swap {
             .map(|(nf_neuron_nns_controller, cf_neurons)| CfParticipant {
                 controller: Some(nf_neuron_nns_controller),
                 // TODO(NNS1-3198): Remove once hotkey_principal is removed
-                hotkey_principal: format!("Field `hotkey_principal` is obsolete as a misnomer, as it used to hold the *controller* principal ID of the (Neurons' Fund-participating) NNS neuron, and not NNS neuron hotkeys. Please use field `controller` instead for the NNS neuron controller. If you must know now, the NNS neuron's controller of this neuron is `{}`.", nf_neuron_nns_controller),
+                hotkey_principal: format!("Field `hotkey_principal` is obsolete as a misnomer, as it used to hold the *controller* principal ID of the (Neurons' Fund-participating) NNS neuron, and not NNS neuron hotkeys. Please use field `controller` instead for the NNS neuron controller. If you must know now, the NNS neuron's controller of this neuron is `{nf_neuron_nns_controller}`."),
                 cf_neurons,
             })
             .collect();
@@ -2782,7 +2769,7 @@ impl Swap {
 
         for (k, b) in &self.buyers {
             if !is_valid_principal(k) {
-                return Err(format!("Invalid principal {}", k));
+                return Err(format!("Invalid principal {k}"));
             }
             b.validate()?;
         }
@@ -3181,8 +3168,7 @@ impl Swap {
                     // return to the caller to determine how to handle the error.
                     insert_buyer_into_buyers_list_index(buyer_principal).map_err(|grow_failed| {
                         format!(
-                            "Failed to add buyer {} to state, the canister's stable memory could not grow: {}",
-                            buyer_principal, grow_failed
+                            "Failed to add buyer {buyer_principal} to state, the canister's stable memory could not grow: {grow_failed}"
                         )
                     })?;
                 }
@@ -3212,6 +3198,14 @@ impl Swap {
         let sns_neuron_recipes = self.neuron_recipes[offset..end].to_vec();
 
         ListSnsNeuronRecipesResponse { sns_neuron_recipes }
+    }
+
+    /// Checks if the auto-finalization has been attempted and failed.
+    pub fn has_auto_finalization_failed(&self) -> bool {
+        self.auto_finalize_swap_response
+            .as_ref()
+            .map(|auto_finalize_swap_response| auto_finalize_swap_response.has_error_message())
+            .unwrap_or(false)
     }
 }
 
@@ -3456,7 +3450,7 @@ impl SnsNeuronRecipe {
         let investor = investor.as_ref().ok_or_else(|| {
             (
                 ConversionError::Invalid,
-                format!("Missing investor information for neuron recipe {:?}", self),
+                format!("Missing investor information for neuron recipe {self:?}"),
             )
         })?;
 
@@ -3465,10 +3459,7 @@ impl SnsNeuronRecipe {
         let neuron_attributes = neuron_attributes.as_ref().ok_or_else(|| {
             (
                 ConversionError::Invalid,
-                format!(
-                    "Missing neuron_attributes information for neuron recipe {:?}",
-                    self
-                ),
+                format!("Missing neuron_attributes information for neuron recipe {self:?}"),
             )
         })?;
         // SnsNeuronRecipe.sns should always be present as it is set in `commit`.
@@ -3476,10 +3467,7 @@ impl SnsNeuronRecipe {
         let transferable_amount = transferable_amount.as_ref().ok_or_else(|| {
             (
                 ConversionError::Invalid,
-                format!(
-                    "Missing transferable_amount (field `sns`) for neuron recipe {:?}",
-                    self
-                ),
+                format!("Missing transferable_amount (field `sns`) for neuron recipe {self:?}"),
             )
         })?;
 
@@ -3488,19 +3476,16 @@ impl SnsNeuronRecipe {
             let claimed_status = claimed_status.ok_or_else(|| {
                 (
                     ConversionError::Invalid,
-                    format!(
-                        "Missing claimed_status information for neuron recipe {:?}",
-                        self
-                    ),
+                    format!("Missing claimed_status information for neuron recipe {self:?}"),
                 )
             })?;
             let claimed_status = ClaimedStatus::try_from(claimed_status).map_err(|err| {
                 (
                     ConversionError::Invalid,
                     format!(
-                    "Error interpreting claimed_status `{}` as ClaimedStatus for neuron recipe \
-                    {:?}: {}", claimed_status, self, err
-                ),
+                        "Error interpreting claimed_status `{claimed_status}` as ClaimedStatus for neuron recipe \
+                    {self:?}: {err}"
+                    ),
                 )
             })?;
             match claimed_status {
@@ -3508,9 +3493,8 @@ impl SnsNeuronRecipe {
                     return Err((
                         ConversionError::AlreadyProcessed,
                         format!(
-                            "Recipe {:?} was claimed in previous invocation of \
+                            "Recipe {self:?} was claimed in previous invocation of \
                              claim_swap_neurons(). Skipping",
-                            self,
                         ),
                     ));
                 }
@@ -3521,9 +3505,9 @@ impl SnsNeuronRecipe {
                     return Err((
                         ConversionError::Invalid,
                         format!(
-                        "Recipe {:?} was invalid in a previous invocation of claim_swap_neurons(). \
-                        Skipping", self
-                    ),
+                            "Recipe {self:?} was invalid in a previous invocation of claim_swap_neurons(). \
+                        Skipping"
+                        ),
                     ));
                 }
                 // Remaining cases are tolerable:
@@ -3551,8 +3535,7 @@ impl SnsNeuronRecipe {
                         return Err((
                             ConversionError::Invalid,
                             format!(
-                                "Invalid principal: recipe={:?} principal={}",
-                                self, buyer_principal
+                                "Invalid principal: recipe={self:?} principal={buyer_principal}"
                             ),
                         ));
                     }
@@ -3566,10 +3549,7 @@ impl SnsNeuronRecipe {
                     Err(e) => {
                         return Err((
                             ConversionError::Invalid,
-                            format!(
-                                "Invalid Neurons' Fund neuron: recipe={:?} error={}",
-                                self, e
-                            ),
+                            format!("Invalid Neurons' Fund neuron: recipe={self:?} error={e}"),
                         ));
                     }
                 };
@@ -3616,7 +3596,7 @@ impl SnsNeuronRecipe {
 }
 
 impl Storable for Ticket {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         self.encode_to_vec().into()
     }
 
@@ -3866,8 +3846,8 @@ mod tests {
     use super::*;
     use crate::{
         pb::v1::{
-            new_sale_ticket_response::Ok, CfNeuron, CfParticipant,
-            NeuronBasketConstructionParameters, Params,
+            CfNeuron, CfParticipant, NeuronBasketConstructionParameters, Params,
+            new_sale_ticket_response::Ok,
         },
         swap_builder::SwapBuilder,
     };
@@ -4323,8 +4303,7 @@ mod tests {
                 assert!(
                     lower_bound_e8s <= scheduled_vesting_event.amount_e8s
                         && scheduled_vesting_event.amount_e8s <= upper_bound_e8s,
-                    "{:#?}",
-                    vesting_schedule,
+                    "{vesting_schedule:#?}",
                 );
             }
 
@@ -4539,7 +4518,7 @@ mod tests {
                 };
                 let ticket = match swap.new_sale_ticket(&request, principal, 0).result.unwrap() {
                     new_sale_ticket_response::Result::Ok(Ok { ticket }) => ticket.unwrap(),
-                    new_sale_ticket_response::Result::Err(e) => panic!("{:?}", e),
+                    new_sale_ticket_response::Result::Err(e) => panic!("{e:?}"),
                 };
                 assert_eq!(ticket_ids.replace(ticket.ticket_id), None);
             }
@@ -4777,8 +4756,8 @@ mod tests {
 
         // add the first batch of tickets at the beginning of time
         for principal in &principals1 {
-            assert!(swap
-                .new_sale_ticket(
+            assert!(
+                swap.new_sale_ticket(
                     &NewSaleTicketRequest {
                         amount_icp_e8s: min_participant_icp_e8s,
                         subaccount: None
@@ -4787,7 +4766,8 @@ mod tests {
                     0
                 )
                 .ticket()
-                .is_ok());
+                .is_ok()
+            );
         }
 
         // try to purge old tickets without advancing time. None of the tickets should be removed
@@ -4795,17 +4775,18 @@ mod tests {
 
         // not purged because 0 days old
         for principal in &principals1 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_some());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_some()
+            );
         }
 
         // add the second batch of tickets after one day
         for principal in &principals2 {
-            assert!(swap
-                .new_sale_ticket(
+            assert!(
+                swap.new_sale_ticket(
                     &NewSaleTicketRequest {
                         amount_icp_e8s: min_participant_icp_e8s,
                         subaccount: None
@@ -4814,7 +4795,8 @@ mod tests {
                     ONE_DAY
                 )
                 .ticket()
-                .is_ok());
+                .is_ok()
+            );
         }
 
         // try to purge old tickets after one day. None of the tickets should be removed
@@ -4822,20 +4804,22 @@ mod tests {
 
         // not purged because 1 day old
         for principal in &principals1 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_some());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_some()
+            );
         }
 
         // not purged because 0 days old
         for principal in &principals2 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_some());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_some()
+            );
         }
 
         // try to purge old tickets after two days minus 1 second.
@@ -4845,20 +4829,22 @@ mod tests {
 
         // not purged because 2 day - 1 second old
         for principal in &principals1 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_some());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_some()
+            );
         }
 
         // not purged because 1 days - 1 second old
         for principal in &principals2 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_some());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_some()
+            );
         }
 
         // try to purge old tickets after two days.
@@ -4868,26 +4854,28 @@ mod tests {
 
         // purged because 2 days old
         for principal in &principals1 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_none());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_none()
+            );
         }
 
         // not purged because 1 days old
         for principal in &principals2 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_some());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_some()
+            );
         }
 
         // add the third batch of tickets at two days
         for principal in &principals3 {
-            assert!(swap
-                .new_sale_ticket(
+            assert!(
+                swap.new_sale_ticket(
                     &NewSaleTicketRequest {
                         amount_icp_e8s: min_participant_icp_e8s,
                         subaccount: None
@@ -4896,7 +4884,8 @@ mod tests {
                     ONE_DAY * 2 + TEN_MINUTES
                 )
                 .ticket()
-                .is_ok());
+                .is_ok()
+            );
         }
 
         // try to purge old tickets after three days - 1 second.
@@ -4905,11 +4894,12 @@ mod tests {
 
         // not purged because 2 days old - 1 second
         for principal in &principals2 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_some());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_some()
+            );
         }
 
         // try to purge old tickets after three days.
@@ -4919,20 +4909,22 @@ mod tests {
 
         // purged because 2 days old
         for principal in &principals2 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_none());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_none()
+            );
         }
 
         // not purged because 1 days old
         for principal in &principals3 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_some());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_some()
+            );
         }
 
         // try to purge old tickets after 4 days but
@@ -4952,11 +4944,12 @@ mod tests {
 
         // not purged because threshold was not met
         for principal in &principals3 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_some());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_some()
+            );
         }
     }
 

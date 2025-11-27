@@ -18,8 +18,7 @@ pub fn from_system_time(timestamp: SystemTime) -> Result<Timestamp, ApiError> {
         .map(Timestamp::from)
         .ok_or_else(|| {
             ApiError::internal_error(format!(
-                "Could not create Timestamp from SystemTime: {:?}",
-                timestamp
+                "Could not create Timestamp from SystemTime: {timestamp:?}"
             ))
         })
 }

@@ -28,18 +28,6 @@ The GuestOS image (`disk.img`) can booted directly in QEMU using the following c
 
 * Note: Press `Ctrl-A` followed by `x` to exit the QEMU console.
 
-Alternatively, Bazel can be used to perform a testnet deployment. For documentation on this process, see ic/testnet/tools/README.md.
-
-==== Launch a GuestOS VM on farm
-
-Instead of running GuestOS locally in qemu, you can launch a GuestOS virtual machine on Farm:
-
-    bazel run --test_output=streamed //ic-os/guestos/envs/dev:launch-remote-vm
-
-The program will spin up a new GuestOS VM on Farm, and the machine can then be accessed via SSH.
-
-For more details about the program, refer to the `rs/ic_os/dev_test_tools/launch-single-vm` directory.
-
 == Developing the Ubuntu system
 
 The Ubuntu configuration and system logic is contained in the components/ subdirectory.

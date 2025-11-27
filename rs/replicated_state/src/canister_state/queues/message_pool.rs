@@ -5,10 +5,10 @@ use crate::{
     KIND_RESPONSE,
 };
 use ic_types::messages::{
-    CallbackId, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
+    CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Request, RequestOrResponse, Response,
 };
 use ic_types::time::CoarseTime;
-use ic_types::{CountBytes, Time};
+use ic_types::{CountBytes, Cycles, Time};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::BTreeSet;
@@ -173,7 +173,7 @@ impl AsInt for (CoarseTime, Id) {
 
     #[inline]
     fn as_int(&self) -> u128 {
-        ((self.0.as_secs_since_unix_epoch() as u128) << 64) | self.1 .0 as u128
+        ((self.0.as_secs_since_unix_epoch() as u128) << 64) | self.1.0 as u128
     }
 }
 
@@ -182,7 +182,7 @@ impl AsInt for (usize, Id) {
 
     #[inline]
     fn as_int(&self) -> u128 {
-        ((self.0 as u128) << 64) | self.1 .0 as u128
+        ((self.0 as u128) << 64) | self.1.0 as u128
     }
 }
 
@@ -881,6 +881,9 @@ pub(super) struct MessageStats {
 
     /// Count of messages in output queues.
     pub(super) outbound_message_count: usize,
+
+    /// Amount of cycles attached to all messages in the pool.
+    pub(super) cycles: Cycles,
 }
 
 impl MessageStats {
@@ -932,6 +935,7 @@ impl MessageStats {
                 inbound_guaranteed_request_count: 1,
                 inbound_guaranteed_response_count,
                 outbound_message_count: 0,
+                cycles: req.payment,
             },
             (Inbound, BestEffort) => MessageStats {
                 size_bytes,
@@ -944,6 +948,7 @@ impl MessageStats {
                 inbound_guaranteed_request_count: 0,
                 inbound_guaranteed_response_count,
                 outbound_message_count: 0,
+                cycles: req.payment,
             },
             (Outbound, GuaranteedResponse) => MessageStats {
                 size_bytes,
@@ -957,6 +962,7 @@ impl MessageStats {
                 inbound_guaranteed_request_count: 0,
                 inbound_guaranteed_response_count,
                 outbound_message_count: 1,
+                cycles: req.payment,
             },
             (Outbound, BestEffort) => MessageStats {
                 size_bytes,
@@ -969,6 +975,7 @@ impl MessageStats {
                 inbound_guaranteed_request_count: 0,
                 inbound_guaranteed_response_count,
                 outbound_message_count: 1,
+                cycles: req.payment,
             },
         }
     }
@@ -1002,6 +1009,7 @@ impl MessageStats {
                 inbound_guaranteed_request_count,
                 inbound_guaranteed_response_count: 1,
                 outbound_message_count: 0,
+                cycles: rep.refund,
             },
             (Inbound, BestEffort) => MessageStats {
                 size_bytes,
@@ -1014,6 +1022,7 @@ impl MessageStats {
                 inbound_guaranteed_request_count,
                 inbound_guaranteed_response_count: 0,
                 outbound_message_count: 0,
+                cycles: rep.refund,
             },
             (Outbound, GuaranteedResponse) => MessageStats {
                 size_bytes,
@@ -1026,6 +1035,7 @@ impl MessageStats {
                 inbound_guaranteed_request_count,
                 inbound_guaranteed_response_count: 0,
                 outbound_message_count: 1,
+                cycles: rep.refund,
             },
             (Outbound, BestEffort) => MessageStats {
                 size_bytes,
@@ -1038,6 +1048,7 @@ impl MessageStats {
                 inbound_guaranteed_request_count,
                 inbound_guaranteed_response_count: 0,
                 outbound_message_count: 1,
+                cycles: rep.refund,
             },
         }
     }
@@ -1056,6 +1067,7 @@ impl AddAssign<MessageStats> for MessageStats {
             inbound_guaranteed_request_count,
             inbound_guaranteed_response_count,
             outbound_message_count,
+            cycles,
         } = rhs;
         self.size_bytes += size_bytes;
         self.best_effort_message_bytes += best_effort_message_bytes;
@@ -1067,6 +1079,7 @@ impl AddAssign<MessageStats> for MessageStats {
         self.inbound_guaranteed_request_count += inbound_guaranteed_request_count;
         self.inbound_guaranteed_response_count += inbound_guaranteed_response_count;
         self.outbound_message_count += outbound_message_count;
+        self.cycles += cycles;
     }
 }
 
@@ -1083,6 +1096,7 @@ impl SubAssign<MessageStats> for MessageStats {
             inbound_guaranteed_request_count,
             inbound_guaranteed_response_count,
             outbound_message_count,
+            cycles,
         } = rhs;
         self.size_bytes -= size_bytes;
         self.best_effort_message_bytes -= best_effort_message_bytes;
@@ -1094,5 +1108,6 @@ impl SubAssign<MessageStats> for MessageStats {
         self.inbound_guaranteed_request_count -= inbound_guaranteed_request_count;
         self.inbound_guaranteed_response_count -= inbound_guaranteed_response_count;
         self.outbound_message_count -= outbound_message_count;
+        self.cycles -= cycles;
     }
 }

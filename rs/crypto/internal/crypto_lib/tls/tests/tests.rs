@@ -1,18 +1,16 @@
 use std::time::Duration;
 
 use assert_matches::assert_matches;
-use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes as Ed25519PublicKeyBytes;
-use ic_crypto_internal_basic_sig_ed25519::types::SignatureBytes as Ed25519SignatureBytes;
-use ic_crypto_internal_tls::generate_tls_key_pair_der;
 use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_internal_tls::TlsKeyPairAndCertGenerationError;
+use ic_crypto_internal_tls::generate_tls_key_pair_der;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_types::time::{Time, GENESIS};
+use ic_types::time::{GENESIS, Time};
 use ic_types::{NodeId, PrincipalId};
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
-use time::macros::datetime;
 use time::OffsetDateTime;
+use time::macros::datetime;
 use x509_parser::certificate::X509Certificate;
 use x509_parser::prelude::FromDer;
 use x509_parser::x509::{X509Name, X509Version};
@@ -44,7 +42,7 @@ fn should_generate_ed25519_secret_key_as_pkcs8_v1_format_in_der_encoding() {
     .expect("failed to generate TLS keys");
 
     assert_matches!(
-        ic_crypto_internal_basic_sig_ed25519::secret_key_from_pkcs8_v1_der(&secret_key.bytes),
+        ic_ed25519::PrivateKey::deserialize_pkcs8(secret_key.bytes.expose_secret()),
         Ok(_)
     );
 }
@@ -59,8 +57,10 @@ fn should_have_stable_representation_of_private_key() {
 
     let serialized_sk = serde_cbor::to_vec(&secret_key).unwrap();
 
-    assert_eq!(hex::encode(serialized_sk),
-               "a16562797465735830302e020100300506032b657004220420ff2fa8b8bea7a4d9aa95a41cffcd0fd54cb020cf83af28ea5ad80335ea48a959");
+    assert_eq!(
+        hex::encode(serialized_sk),
+        "a16562797465735830302e020100300506032b657004220420ff2fa8b8bea7a4d9aa95a41cffcd0fd54cb020cf83af28ea5ad80335ea48a959"
+    );
 }
 
 #[test]
@@ -75,21 +75,15 @@ fn should_generate_self_signed_certificate() {
 
     let (_remainder, x509) = X509Certificate::from_der(&cert.bytes).unwrap();
 
-    let public_key = Ed25519PublicKeyBytes::try_from(
-        x509.tbs_certificate
-            .subject_pki
-            .subject_public_key
-            .data
-            .to_vec(),
+    let sig = x509.signature_value.data.to_vec();
+    let msg = x509.tbs_certificate.as_ref();
+
+    let pk = ic_ed25519::PublicKey::deserialize_raw(
+        &x509.tbs_certificate.subject_pki.subject_public_key.data,
     )
     .expect("conversion to Ed25519 public key failed");
-    let sig = Ed25519SignatureBytes::try_from(x509.signature_value.data.to_vec())
-        .expect("failed to parse signature");
-    let msg = x509.tbs_certificate.as_ref();
-    assert_eq!(
-        ic_crypto_internal_basic_sig_ed25519::verify(&sig, msg, &public_key),
-        Ok(())
-    );
+
+    assert_eq!(pk.verify_signature(msg, &sig), Ok(()));
 }
 
 #[test]
@@ -120,17 +114,12 @@ fn should_generate_valid_public_key_with_correct_algorithm() {
     .expect("failed to generate TLS keys");
 
     let (_remainder, x509) = X509Certificate::from_der(&cert.bytes).unwrap();
-    let public_key = Ed25519PublicKeyBytes::try_from(
-        x509.tbs_certificate
-            .subject_pki
-            .subject_public_key
-            .data
-            .to_vec(),
+
+    // Parsing implicitly validates the key
+    let _pk = ic_ed25519::PublicKey::deserialize_raw(
+        &x509.tbs_certificate.subject_pki.subject_public_key.data,
     )
     .expect("conversion to Ed25519 public key failed");
-    assert!(ic_crypto_internal_basic_sig_ed25519::verify_public_key(
-        &public_key
-    ));
 
     let (_remainder, x509) = X509Certificate::from_der(&cert.bytes).unwrap();
     assert_eq!(
@@ -247,7 +236,7 @@ fn should_fail_if_notafter_date_is_not_after_notbefore_date() {
     );
 
     assert_matches!(result, Err(TlsKeyPairAndCertGenerationError::InvalidArguments(e))
-        if e.contains(&format!("notBefore date ({}) must be before notAfter date ({})", not_before_str, not_after_str))
+        if e.contains(&format!("notBefore date ({not_before_str}) must be before notAfter date ({not_after_str})"))
     );
 }
 
@@ -314,7 +303,7 @@ fn should_fail_if_notafter_date_is_invalid_offsetdatetime() {
 #[test]
 fn should_redact_tls_ed25519_secret_key_der_bytes_debug() {
     let sk = TlsEd25519SecretKeyDerBytes::new(vec![1u8; 5]);
-    assert_eq!(format!("{:?}", sk), "REDACTED");
+    assert_eq!(format!("{sk:?}"), "REDACTED");
 }
 
 #[test]

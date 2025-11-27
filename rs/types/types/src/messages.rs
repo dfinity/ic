@@ -19,23 +19,23 @@ pub use self::http::{
 };
 pub use crate::methods::SystemMethod;
 use crate::time::CoarseTime;
-use crate::{user_id_into_protobuf, user_id_try_from_protobuf, Cycles, Funds, NumBytes, UserId};
+use crate::{Cycles, Funds, NumBytes, UserId, user_id_into_protobuf, user_id_try_from_protobuf};
 pub use blob::Blob;
 use ic_base_types::{CanisterId, PrincipalId};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::CanisterChangeOrigin;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
 pub use ingress_messages::{
-    extract_effective_canister_id, Ingress, ParseIngressError, SignedIngress, SignedIngressContent,
+    Ingress, ParseIngressError, SignedIngress, SignedIngressContent, extract_effective_canister_id,
 };
 pub use inter_canister::{
-    CallContextId, CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse,
-    Response, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE,
+    CallContextId, CallbackId, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE, Payload, Refund,
+    RejectContext, Request, RequestMetadata, RequestOrResponse, Response, StreamMessage,
 };
-pub use message_id::{MessageId, MessageIdError, EXPECTED_MESSAGE_ID_LENGTH};
+pub use message_id::{EXPECTED_MESSAGE_ID_LENGTH, MessageId, MessageIdError};
 use phantom_newtype::Id;
 pub use query::{Query, QuerySource};
 pub use read_state::ReadState;
@@ -149,7 +149,11 @@ impl StopCanisterContext {
 impl From<(CanisterCall, StopCanisterCallId)> for StopCanisterContext {
     fn from(input: (CanisterCall, StopCanisterCallId)) -> Self {
         let (msg, call_id) = input;
-        assert_eq!(msg.method_name(), "stop_canister", "Converting a CanisterCall into StopCanisterContext should only happen with stop_canister calls.");
+        assert_eq!(
+            msg.method_name(),
+            "stop_canister",
+            "Converting a CanisterCall into StopCanisterContext should only happen with stop_canister calls."
+        );
         match msg {
             CanisterCall::Request(mut req) => StopCanisterContext::Canister {
                 sender: req.sender,
@@ -405,6 +409,14 @@ impl CanisterCall {
         }
     }
 
+    /// Deducts the specified fee from the payment of this message.
+    pub fn deduct_cycles(&mut self, fee: Cycles) {
+        match self {
+            CanisterCall::Request(request) => Arc::make_mut(request).payment -= fee,
+            CanisterCall::Ingress(_) => {} // Ingress messages don't have payments
+        }
+    }
+
     /// Extracts the cycles received with this message.
     pub fn take_cycles(&mut self) -> Cycles {
         match self {
@@ -491,7 +503,7 @@ impl TryFrom<pb::execution_task::CanisterTask> for CanisterTask {
             pb::execution_task::CanisterTask::Unspecified => {
                 Err(ProxyDecodeError::ValueOutOfRange {
                     typ: "CanisterTask",
-                    err: format!("Unknown value for canister task {:?}", task),
+                    err: format!("Unknown value for canister task {task:?}"),
                 })
             }
             pb::execution_task::CanisterTask::Heartbeat => Ok(CanisterTask::Heartbeat),
@@ -555,7 +567,7 @@ impl CanisterCallOrTask {
 mod tests {
     use super::*;
     use crate::exhaustive::ExhaustiveSet;
-    use crate::{time::expiry_time_from_now, Time};
+    use crate::{Time, time::expiry_time_from_now};
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use maplit::btreemap;
@@ -582,10 +594,9 @@ mod tests {
         );
         assert!(
             long_debug.starts_with("Blob{100 bytes;"),
-            "long_debug: {}",
-            long_debug
+            "long_debug: {long_debug}"
         );
-        assert!(long_debug.ends_with("63}"), "long_debug: {}", long_debug); // 99 = 16*6 + 3
+        assert!(long_debug.ends_with("63}"), "long_debug: {long_debug}"); // 99 = 16*6 + 3
     }
 
     fn format_blob(v: Vec<u8>) -> String {
@@ -607,11 +618,10 @@ mod tests {
         );
         assert!(
             long_str.starts_with("Blob{100 bytes;"),
-            "long_str: {}",
-            long_str
+            "long_str: {long_str}"
         );
         // The last printed byte is 39, which is 16*2 + 7
-        assert!(long_str.ends_with("27…}"), "long_str: {}", long_str);
+        assert!(long_str.ends_with("27…}"), "long_str: {long_str}");
     }
 
     /// Makes sure that `val` deserializes to `obj`

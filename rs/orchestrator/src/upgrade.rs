@@ -6,27 +6,28 @@ use crate::{
     registry_helper::RegistryHelper,
 };
 use async_trait::async_trait;
+use guest_upgrade_server::DiskEncryptionKeyExchangeServerAgent;
 use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::{
-    error::{UpgradeError, UpgradeResult},
     ImageUpgrader, Rebooting,
+    error::{UpgradeError, UpgradeResult},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::proxy::try_from_option_field;
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{
+    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
     consensus::{CatchUpPackage, HasHeight},
     crypto::{
         canister_threshold_sig::MasterPublicKey,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet},
     },
-    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use std::{
     collections::{BTreeMap, HashMap},
@@ -41,6 +42,8 @@ const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 pub(crate) enum OrchestratorControlFlow {
     /// The node is assigned to the subnet with the given subnet id.
     Assigned(SubnetId),
+    /// The node is in the process of leaving subnet with the given id.
+    Leaving(SubnetId),
     /// The node is unassigned.
     Unassigned,
     /// The node should stop the orchestrator.
@@ -91,6 +94,7 @@ pub(crate) struct Upgrade {
     registry_replicator: Arc<RegistryReplicator>,
     pub logger: ReplicaLogger,
     node_id: NodeId,
+    disk_encryption_key_exchange_agent: Option<DiskEncryptionKeyExchangeServerAgent>,
     /// The replica version that is prepared by 'prepare_upgrade' to upgrade to.
     pub prepared_upgrade_version: Option<ReplicaVersion>,
     pub orchestrator_data_directory: PathBuf,
@@ -111,6 +115,7 @@ impl Upgrade {
         release_content_dir: PathBuf,
         logger: ReplicaLogger,
         orchestrator_data_directory: PathBuf,
+        disk_encryption_key_exchange_agent: Option<DiskEncryptionKeyExchangeServerAgent>,
     ) -> Self {
         let value = Self {
             registry,
@@ -126,6 +131,7 @@ impl Upgrade {
             logger: logger.clone(),
             prepared_upgrade_version: None,
             orchestrator_data_directory,
+            disk_encryption_key_exchange_agent,
         };
         if let Err(e) = value.report_reboot_time() {
             warn!(logger, "Cannot report the reboot time: {}", e);
@@ -171,8 +177,7 @@ impl Upgrade {
                     let subnet_id =
                         get_subnet_id(&*self.registry.registry_client, cup).map_err(|err| {
                             OrchestratorError::UpgradeError(format!(
-                                "Couldn't determine the subnet id: {:?}",
-                                err
+                                "Couldn't determine the subnet id: {err:?}"
                             ))
                         })?;
                     (subnet_id, maybe_proto, maybe_cup)
@@ -190,8 +195,7 @@ impl Upgrade {
                     let nidkg_id: NiDkgId = try_from_option_field(proto.signer.clone(), "NiDkgId")
                         .map_err(|err| {
                             OrchestratorError::UpgradeError(format!(
-                                "Couldn't deserialize NiDkgId to determine the subnet id: {:?}",
-                                err
+                                "Couldn't deserialize NiDkgId to determine the subnet id: {err:?}"
                             ))
                         })?;
 
@@ -244,16 +248,16 @@ impl Upgrade {
 
         // If we replaced the previous local CUP, compare potential threshold master public keys with
         // the ones in the new CUP, to make sure they haven't changed. Raise an alert if they did.
-        if let Some(old_cup) = local_cup {
-            if old_cup.height() < latest_cup.height() {
-                compare_master_public_keys(
-                    &old_cup,
-                    &latest_cup,
-                    self.metrics.as_ref(),
-                    self.orchestrator_data_directory.join(KEY_CHANGES_FILENAME),
-                    &self.logger,
-                );
-            }
+        if let Some(old_cup) = local_cup
+            && old_cup.height() < latest_cup.height()
+        {
+            compare_master_public_keys(
+                &old_cup,
+                &latest_cup,
+                self.metrics.as_ref(),
+                self.orchestrator_data_directory.join(KEY_CHANGES_FILENAME),
+                &self.logger,
+            );
         }
 
         // If the CUP is unsigned, it's a registry CUP and we're in a genesis or subnet
@@ -277,25 +281,29 @@ impl Upgrade {
 
         // Now when we have the most recent CUP, we check if we're still assigned.
         // If not, go into unassigned state.
-        if should_node_become_unassigned(
+        let flow = match should_node_become_unassigned(
             &*self.registry.registry_client,
             self.node_id,
             subnet_id,
             &latest_cup,
         ) {
-            self.stop_replica()?;
-            return match self.remove_state().await {
-                Ok(()) => Ok(OrchestratorControlFlow::Unassigned),
-                Err(err) => {
-                    warn!(
-                        self.logger,
-                        "Removal of the node state failed with error {}", err
-                    );
-                    self.metrics.critical_error_state_removal_failed.inc();
-                    Err(err)
-                }
-            };
-        }
+            UnassignmentDecision::StayInSubnet => OrchestratorControlFlow::Assigned(subnet_id),
+            UnassignmentDecision::Later => OrchestratorControlFlow::Leaving(subnet_id),
+            UnassignmentDecision::Now => {
+                self.stop_replica()?;
+                return match self.remove_state().await {
+                    Ok(()) => Ok(OrchestratorControlFlow::Unassigned),
+                    Err(err) => {
+                        warn!(
+                            self.logger,
+                            "Removal of the node state failed with error {}", err
+                        );
+                        self.metrics.critical_error_state_removal_failed.inc();
+                        Err(err)
+                    }
+                };
+            }
+        };
 
         // If we arrived here, we have the newest CUP and we're still assigned.
         // Now we check if this CUP requires a new replica version.
@@ -333,7 +341,11 @@ impl Upgrade {
         // not arrive at the corresponding CUP yet.
         self.prepare_upgrade_if_scheduled(subnet_id).await?;
 
-        Ok(OrchestratorControlFlow::Assigned(subnet_id))
+        Ok(flow)
+    }
+
+    pub fn node_id(&self) -> NodeId {
+        self.node_id
     }
 
     // Special case for when we are doing bootstrap subnet recovery for
@@ -346,44 +358,47 @@ impl Upgrade {
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
-        if let Some(registry_contents) = self
+        let Some(registry_store_uri) = self
             .registry
             .registry_client
             .get_cup_contents(subnet_id, registry_version)
             .ok()
             .and_then(|record| record.value)
-        {
-            if let Some(registry_store_uri) = registry_contents.registry_store_uri {
-                warn!(
-                    self.logger,
-                    "Downloading registry data from {} with hash {} for subnet recovery",
-                    registry_store_uri.uri,
-                    registry_store_uri.hash,
-                );
-                let downloader = FileDownloader::new(Some(self.logger.clone()));
-                let local_store_location = tempfile::tempdir()
-                    .expect("temporary location for local store download could not be created")
-                    .keep();
-                downloader
-                    .download_and_extract_tar(
-                        &registry_store_uri.uri,
-                        &local_store_location,
-                        Some(registry_store_uri.hash),
-                    )
-                    .await
-                    .map_err(OrchestratorError::FileDownloadError)?;
-                if let Err(e) = self.stop_replica() {
-                    // Even though we fail to stop the replica, we should still
-                    // replace the registry local store, so we simply issue a warning.
-                    warn!(self.logger, "Failed to stop replica with error {:?}", e);
-                }
-                let new_local_store = LocalStoreImpl::new(local_store_location);
-                self.registry_replicator
-                    .stop_polling_and_set_local_registry_data(&new_local_store);
-                reexec_current_process(&self.logger);
-            }
+            .and_then(|registry_contents| registry_contents.registry_store_uri)
+        else {
+            return Ok(());
+        };
+
+        warn!(
+            self.logger,
+            "Downloading registry data from {} with hash {} for subnet recovery",
+            registry_store_uri.uri,
+            registry_store_uri.hash,
+        );
+        let downloader = FileDownloader::new(Some(self.logger.clone()));
+        let local_store_location = tempfile::tempdir()
+            .expect("temporary location for local store download could not be created")
+            .keep();
+        downloader
+            .download_and_extract_tar(
+                &registry_store_uri.uri,
+                &local_store_location,
+                Some(registry_store_uri.hash),
+            )
+            .await
+            .map_err(OrchestratorError::FileDownloadError)?;
+        if let Err(e) = self.stop_replica() {
+            // Even though we fail to stop the replica, we should still
+            // replace the registry local store, so we simply issue a warning.
+            warn!(self.logger, "Failed to stop replica with error {:?}", e);
         }
-        Ok(())
+        let new_local_store = LocalStoreImpl::new(local_store_location);
+        self.registry_replicator
+            .stop_polling_and_set_local_registry_data(&new_local_store)
+            .await;
+        // Restart the current process to pick up the new local store.
+        // The call should not return. If it does, it is an error.
+        Err(reexec_current_process(&self.logger))
     }
 
     async fn remove_state(&self) -> OrchestratorResult<()> {
@@ -579,6 +594,17 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
         ))
     }
 
+    async fn maybe_exchange_disk_encryption_key(&mut self) -> UpgradeResult<()> {
+        if let Some(agent) = &self.disk_encryption_key_exchange_agent {
+            agent
+                .exchange_keys()
+                .await
+                .map_err(|e| UpgradeError::DiskEncryptionKeyExchangeError(e.to_string()))
+        } else {
+            Ok(())
+        }
+    }
+
     fn log(&self) -> &ReplicaLogger {
         &self.logger
     }
@@ -586,7 +612,7 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
     fn get_load_balance_number(&self) -> usize {
         // XOR all the u8 in node_id:
         let principal = self.node_id.get().0;
-        principal.as_slice().iter().fold(0, |acc, x| (acc ^ x)) as usize
+        principal.as_slice().iter().fold(0, |acc, x| acc ^ x) as usize
     }
 
     async fn check_for_upgrade(&mut self) -> UpgradeResult<OrchestratorControlFlow> {
@@ -638,6 +664,27 @@ fn get_subnet_id(registry: &dyn RegistryClient, cup: &CatchUpPackage) -> Result<
     }
 }
 
+/// Represents the unassignment decision that the node should take.
+#[derive(PartialEq, Eq, Debug)]
+enum UnassignmentDecision {
+    /// Unassign right now.
+    ///
+    /// This means that the node is no longer participating in consensus
+    /// and can be deemed as unassigned as of now.
+    Now,
+    /// Unassign later.
+    ///
+    /// This means that the node is still pariticpating in consensus and
+    /// it was only requested for the node to be unassigned in the
+    /// registry. Here, the node is still participating in the subnet.
+    Later,
+    /// Stay in subnet.
+    ///
+    /// This means that the node is participating in consensus and
+    /// there are no requests for this node to leave.
+    StayInSubnet,
+}
+
 // Checks if the node still belongs to the subnet it was assigned the last time.
 // We decide this by checking the subnet membership starting from the oldest
 // relevant version of the local CUP and ending with the latest registry
@@ -647,25 +694,44 @@ fn should_node_become_unassigned(
     node_id: NodeId,
     subnet_id: SubnetId,
     cup: &CatchUpPackage,
-) -> bool {
+) -> UnassignmentDecision {
     let oldest_relevant_version = cup.get_oldest_registry_version_in_use().get();
     let latest_registry_version = registry.get_latest_version().get();
     // Make sure that if the latest registry version is for some reason violating
     // the assumption that it's higher/equal than any other version used in the
     // system, we still do not remove the subnet state by a mistake.
     if latest_registry_version < oldest_relevant_version {
-        return false;
+        return UnassignmentDecision::StayInSubnet;
     }
-    for version in oldest_relevant_version..=latest_registry_version {
-        if let Ok(Some(members)) =
-            registry.get_node_ids_on_subnet(subnet_id, RegistryVersion::from(version))
-        {
-            if members.iter().any(|id| id == &node_id) {
-                return false;
-            }
+
+    // If the node is at the latest registry version in a subnet it shouldn't be unassigned.
+    if node_is_in_subnet_at_version(registry, node_id, subnet_id, latest_registry_version) {
+        return UnassignmentDecision::StayInSubnet;
+    }
+
+    for version in oldest_relevant_version..latest_registry_version {
+        if node_is_in_subnet_at_version(registry, node_id, subnet_id, version) {
+            return UnassignmentDecision::Later;
         }
     }
-    true
+
+    UnassignmentDecision::Now
+}
+
+fn node_is_in_subnet_at_version(
+    registry: &dyn RegistryClient,
+    node_id: NodeId,
+    subnet_id: SubnetId,
+    version: u64,
+) -> bool {
+    registry
+        .get_node_ids_on_subnet(subnet_id, RegistryVersion::from(version))
+        .map(|maybe_members| {
+            maybe_members
+                .map(|members| members.iter().any(|id| id == &node_id))
+                .unwrap_or(false)
+        })
+        .unwrap_or(false)
 }
 
 // Call `sync` and `fstrim` on the data partition
@@ -678,14 +744,12 @@ async fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
                 Ok(())
             } else {
                 Err(format!(
-                    "Failed to run command '{:?}', return value: {}",
-                    fstrim_script, status
+                    "Failed to run command '{fstrim_script:?}', return value: {status}"
                 ))
             }
         }
         Err(err) => Err(format!(
-            "Failed to run command '{:?}', error: {}",
-            fstrim_script, err
+            "Failed to run command '{fstrim_script:?}', error: {err}"
         )),
     }
 }
@@ -702,7 +766,7 @@ fn remove_node_state(
     let tmpdir = tempfile::Builder::new()
         .prefix("ic_config")
         .tempdir()
-        .map_err(|err| format!("Couldn't create a temporary directory: {:?}", err))?;
+        .map_err(|err| format!("Couldn't create a temporary directory: {err:?}"))?;
     let config = Config::load_with_tmpdir(
         ConfigSource::File(replica_config_file),
         tmpdir.path().to_path_buf(),
@@ -710,10 +774,7 @@ fn remove_node_state(
 
     let consensus_pool_path = config.artifact_pool.consensus_pool_path;
     remove_dir_all(&consensus_pool_path).map_err(|err| {
-        format!(
-            "Couldn't delete the consensus pool at {:?}: {:?}",
-            consensus_pool_path, err
-        )
+        format!("Couldn't delete the consensus pool at {consensus_pool_path:?}: {err:?}")
     })?;
 
     let state_path = config.state_manager.state_root();
@@ -785,20 +846,14 @@ fn remove_node_state(
     }
 
     remove_file(&cup_path)
-        .map_err(|err| format!("Couldn't delete the CUP at {:?}: {:?}", cup_path, err))?;
+        .map_err(|err| format!("Couldn't delete the CUP at {cup_path:?}: {err:?}"))?;
 
     let key_changed_metric = orchestrator_data_directory.join(KEY_CHANGES_FILENAME);
     if key_changed_metric.try_exists().map_err(|err| {
-        format!(
-            "Failed to check if {:?} exists, because {:?}",
-            key_changed_metric, err
-        )
+        format!("Failed to check if {key_changed_metric:?} exists, because {err:?}")
     })? {
         remove_file(&key_changed_metric).map_err(|err| {
-            format!(
-                "Couldn't delete the key changes metric at {:?}: {:?}",
-                key_changed_metric, err
-            )
+            format!("Couldn't delete the key changes metric at {key_changed_metric:?}: {err:?}")
         })?;
     }
 
@@ -952,40 +1007,46 @@ fn report_master_public_key_changed_metric(
 
 #[cfg(test)]
 mod tests {
+    use prost::Message;
     use std::collections::BTreeMap;
 
     use super::*;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
     };
     use ic_crypto_test_utils_ni_dkg::{
-        run_ni_dkg_and_create_single_transcript, NiDkgTestEnvironment, RandomNiDkgConfig,
+        NiDkgTestEnvironment, RandomNiDkgConfig, run_ni_dkg_and_create_single_transcript,
     };
-    use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+    use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
+    use ic_interfaces_registry::{RegistryClientVersionedResult, RegistryVersionedRecord};
     use ic_management_canister_types_private::{
         EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
     };
     use ic_metrics::MetricsRegistry;
+    use ic_protobuf::registry::subnet::v1::SubnetRecord;
     use ic_test_utilities_consensus::fake::{Fake, FakeContent};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
+        PrincipalId, Time,
         batch::ValidationContext,
         consensus::{
-            dkg::DkgSummary,
-            idkg::{self, MasterKeyTranscript, TranscriptAttributes},
             Block, BlockPayload, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload,
             RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
+            dkg::DkgSummary,
+            idkg::{self, MasterKeyTranscript, TranscriptAttributes},
         },
         crypto::{
+            AlgorithmId, CryptoHash, CryptoHashOf,
             canister_threshold_sig::idkg::IDkgTranscript,
             threshold_sig::ni_dkg::{NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTranscript},
-            AlgorithmId, CryptoHash, CryptoHashOf,
         },
+        registry::RegistryClientError,
         signature::ThresholdSignature,
         time::UNIX_EPOCH,
     };
-    use tempfile::{tempdir, TempDir};
+    use mockall::mock;
+    use tempfile::{TempDir, tempdir};
 
     fn make_ecdsa_key_id() -> MasterPublicKeyId {
         MasterPublicKeyId::Ecdsa(EcdsaKeyId {
@@ -1114,13 +1175,22 @@ mod tests {
     struct Setup {
         rng: ReproducibleRng,
         tmp: TempDir,
+        nidkg_registry_version: Option<u64>,
     }
 
     impl Setup {
         fn new() -> Self {
+            Self::new_with_nidkg_registry_version(None)
+        }
+
+        fn new_with_nidkg_registry_version(nidkg_registry_version: Option<u64>) -> Self {
             let tmp = tempdir().expect("Unable to create temp directory");
             let rng = reproducible_rng();
-            Self { rng, tmp }
+            Self {
+                rng,
+                tmp,
+                nidkg_registry_version,
+            }
         }
 
         fn generate_key_transcript(
@@ -1164,14 +1234,19 @@ mod tests {
 
         fn generate_nidkg_key_transcript(&mut self, key_id: &MasterPublicKeyId) -> KeyTranscript {
             let MasterPublicKeyId::VetKd(vetkd_key_id) = key_id.clone() else {
-                panic!("Can't generate nidkg transcript for {}", key_id);
+                panic!("Can't generate nidkg transcript for {key_id}");
             };
-            let config = RandomNiDkgConfig::builder()
+            let mut config = RandomNiDkgConfig::builder()
                 .dkg_tag(NiDkgTag::HighThresholdForKey(
                     NiDkgMasterPublicKeyId::VetKd(vetkd_key_id),
                 ))
-                .subnet_size(4)
-                .build(&mut self.rng);
+                .subnet_size(4);
+
+            if let Some(version) = self.nidkg_registry_version {
+                config = config.registry_version(RegistryVersion::new(version));
+            }
+
+            let config = config.build(&mut self.rng);
             let env =
                 NiDkgTestEnvironment::new_for_config_with_remote_vault(config.get(), &mut self.rng);
             KeyTranscript::NiDkg(run_ni_dkg_and_create_single_transcript(
@@ -1289,10 +1364,8 @@ mod tests {
             let c1 = make_cup(Height::from(10), Some(key.clone()));
 
             let key_id2 = clone_key_id_with_name(&key_id1, "other_key");
-            let c2 = if let (
-                MasterPublicKeyId::VetKd(ref key_id),
-                KeyTranscript::NiDkg(ref transcript),
-            ) = (&key_id2, &key.1)
+            let c2 = if let (MasterPublicKeyId::VetKd(key_id), KeyTranscript::NiDkg(transcript)) =
+                (&key_id2, &key.1)
             {
                 let mut transcript2 = transcript.clone();
                 transcript2.dkg_id.dkg_tag =
@@ -1357,5 +1430,129 @@ mod tests {
 
             assert_eq!(before, after);
         });
+    }
+
+    mock! {
+        pub FakeRegistryClient{}
+
+        impl RegistryClient for FakeRegistryClient {
+                fn get_versioned_value(
+                    &self,
+                    key: &str,
+                    version: RegistryVersion,
+                ) -> RegistryClientVersionedResult<Vec<u8>>;
+
+                fn get_key_family(
+                    &self,
+                    key_prefix: &str,
+                    version: RegistryVersion,
+                ) -> Result<Vec<String>, RegistryClientError>;
+
+                fn get_latest_version(&self) -> RegistryVersion;
+                fn get_version_timestamp(&self, registry_version: RegistryVersion) -> Option<Time>;
+        }
+    }
+
+    #[derive(Debug)]
+    enum NodeInSubnetOnVersion {
+        No,
+        Yes { from: u64, to: u64 },
+    }
+
+    #[test]
+    fn test_unassignment_decision() {
+        let key_id = make_vetkd_key_id();
+        let node_id = NodeId::new(PrincipalId::new_node_test_id(1));
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+
+        let empty_subnet = Ok(RegistryVersionedRecord {
+            key: "".to_string(),
+            version: RegistryVersion::new(0),
+            value: Some(SubnetRecord::default().encode_to_vec()),
+        });
+        let subnet_with_node = Ok(RegistryVersionedRecord {
+            key: "".to_string(),
+            version: RegistryVersion::new(0),
+            value: Some(
+                SubnetRecord {
+                    membership: vec![node_id.get().to_vec()],
+                    ..Default::default()
+                }
+                .encode_to_vec(),
+            ),
+        });
+
+        let latest_registry_version = 10;
+        for (oldest_relevant_version, node_in_subnet, expected_decision) in [
+            // Latest registry version is behind the oldest relevant version
+            (
+                15,
+                NodeInSubnetOnVersion::No,
+                UnassignmentDecision::StayInSubnet,
+            ),
+            // Node is in a subnet at latest registry version
+            (
+                10,
+                NodeInSubnetOnVersion::Yes { from: 5, to: 10 },
+                UnassignmentDecision::StayInSubnet,
+            ),
+            // Node isn't in a subnet at latest registry version
+            // but it was between oldest relevant version and latest
+            // registry version
+            (
+                5,
+                NodeInSubnetOnVersion::Yes { from: 5, to: 7 },
+                UnassignmentDecision::Later,
+            ),
+            // Node isn't in a subnet at latest registry version
+            // and it wasn't from oldest relevant version until
+            // the latest registry version
+            (
+                5,
+                NodeInSubnetOnVersion::Yes { from: 1, to: 4 },
+                UnassignmentDecision::Now,
+            ),
+            // Node wasn't ever in a subnet
+            (5, NodeInSubnetOnVersion::No, UnassignmentDecision::Now),
+        ] {
+            let mut registry_client = MockFakeRegistryClient::new();
+            registry_client
+                .expect_get_latest_version()
+                .return_const(RegistryVersion::new(latest_registry_version));
+
+            let mut setup = Setup::new_with_nidkg_registry_version(Some(oldest_relevant_version));
+            let key_transcript = setup.generate_key_transcript(&key_id);
+            let cup = make_cup(Height::from(15), Some(key_transcript));
+
+            println!(
+                "Use-case: {oldest_relevant_version}, {node_in_subnet:?}, {expected_decision:?}"
+            );
+            match node_in_subnet {
+                NodeInSubnetOnVersion::No => registry_client
+                    .expect_get_versioned_value()
+                    .return_const(empty_subnet.clone()),
+                NodeInSubnetOnVersion::Yes { from, to } => {
+                    let subnet_with_node = subnet_with_node.clone();
+                    let empty_subnet = empty_subnet.clone();
+                    registry_client
+                        .expect_get_versioned_value()
+                        .returning(move |_key, ver| {
+                            if from <= ver.get() && ver.get() <= to {
+                                subnet_with_node.clone()
+                            } else {
+                                empty_subnet.clone()
+                            }
+                        })
+                }
+            };
+
+            let response =
+                should_node_become_unassigned(&registry_client, node_id, subnet_id, &cup);
+
+            assert!(
+                response == expected_decision,
+                "Expected {expected_decision:?} but got: {response:?}"
+            );
+        }
     }
 }

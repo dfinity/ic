@@ -5,9 +5,9 @@ use std::sync::Arc;
 use crate::launcher_service::LauncherService;
 use crate::protocol::transport::{Message, WireMessage};
 use crate::{rpc, transport, transport::UnixStreamMuxWriter};
-use ic_embedders::{wasm_utils, CompilationResult, SerializedModule, WasmtimeEmbedder};
+use ic_embedders::{CompilationResult, SerializedModule, WasmtimeEmbedder, wasm_utils};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
-use ic_logger::{error, trace, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, trace};
 use ic_wasm_types::WasmEngineError;
 
 // A helper used for actual compilation in the compiler sandbox
@@ -67,7 +67,7 @@ impl WasmCompilerProxy {
         argv: &[String],
     ) -> HypervisorResult<Self> {
         let (socket_a, socket_b) = UnixStream::pair()
-            .map_err(|e| unexpected(&format!("Failed to create a socket: {}", e)))?;
+            .map_err(|e| unexpected(&format!("Failed to create a socket: {e}")))?;
         use std::os::unix::io::AsRawFd;
 
         let _ignore = launcher
@@ -115,8 +115,7 @@ impl WasmCompilerProxy {
                 })
                 .map_err(|e| {
                     unexpected(&format!(
-                        "Compiler proxy failed to spawn socket reader thread: {}",
-                        e
+                        "Compiler proxy failed to spawn socket reader thread: {e}"
                     ))
                 })?
         };

@@ -10,8 +10,8 @@ use ic_sys::PAGE_SIZE;
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
-    ingress::WasmResult, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, time::expiry_time_from_now,
-    CanisterId, NumBytes, RegistryVersion,
+    CanisterId, NumBytes, RegistryVersion, ingress::WasmResult,
+    messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, time::expiry_time_from_now,
 };
 use std::sync::Arc;
 
@@ -1001,7 +1001,7 @@ fn escape(id: &CanisterId) -> String {
 
 fn escape_bytes(x: &[u8]) -> String {
     x.iter().fold(String::new(), |mut res, b| {
-        res.push_str(&format!("\\{:02x}", b));
+        res.push_str(&format!("\\{b:02x}"));
         res
     })
 }
@@ -1308,7 +1308,7 @@ fn test_inter_canister_message_exchange_1() {
         env.execute_ingress(canister_id, "compute", vec![*num])
             .unwrap();
         let val = env.query(canister_id, "read", vec![]).unwrap().bytes();
-        assert_eq!(val[0], 2 * num + 3, "computation for value {} failed", num);
+        assert_eq!(val[0], 2 * num + 3, "computation for value {num} failed");
     }
 }
 
@@ -1428,7 +1428,7 @@ fn test_inter_canister_message_exchange_2() {
         env.execute_ingress(canister_id, "compute", vec![*num])
             .unwrap();
         let val = env.query(canister_id, "read", vec![]).unwrap().bytes();
-        assert_eq!(val[0], 4 * num, "computation for value {} failed", num);
+        assert_eq!(val[0], 4 * num, "computation for value {num} failed");
     }
 }
 
@@ -1592,8 +1592,7 @@ fn test_inter_canister_message_exchange_3() {
             assert_eq!(
                 val[0],
                 2 * 3 * 5 * num,
-                "computation for value {} failed",
-                num
+                "computation for value {num} failed"
             );
         }
     })
@@ -1671,7 +1670,7 @@ fn test_inter_canister_message_exchange_4() {
     for num in &[11, 7, 5, 1] {
         env.execute_ingress(id, "compute", vec![*num]).unwrap();
         let val = env.query(id, "read", vec![]).unwrap().bytes();
-        assert_eq!(val[0], num * num, "computation for value {} failed", num);
+        assert_eq!(val[0], num * num, "computation for value {num} failed");
     }
 }
 
@@ -1840,14 +1839,13 @@ fn inter_canister_response_limit() {
                     (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param i32 i32)))
 
                     (func $hi
-                      (call $msg_reply_data_append (i32.const 30) (i32.const {}))
+                      (call $msg_reply_data_append (i32.const 30) (i32.const {size}))
                       (call $msg_reply)
                     )
 
                     (memory $memory 1)
                     (export "canister_update hi" (func $hi))
-                    (export "memory" (memory $memory)))"#,
-                size),
+                    (export "memory" (memory $memory)))"#),
             vec![], None);
     let err = env.execute_ingress(canister_a, "hi", vec![5]).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
@@ -1930,7 +1928,7 @@ fn setup_initial_dkg_method_interface() {
                 assert_eq!(records.low_threshold_transcript_record.threshold, 1);
                 assert_eq!(records.high_threshold_transcript_record.threshold, 1);
             }
-            response => panic!("Unexpected response {:?}", response),
+            response => panic!("Unexpected response {response:?}"),
         }
     });
 }

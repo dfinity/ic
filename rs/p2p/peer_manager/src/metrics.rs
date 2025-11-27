@@ -1,18 +1,20 @@
-use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
-use prometheus::{Histogram, IntCounter, IntGauge};
+use ic_metrics::{MetricsRegistry, buckets::exponential_buckets};
+use prometheus::{Histogram, IntCounter, IntCounterVec, IntGauge};
 
 #[derive(Clone, Debug)]
-pub struct PeerManagerMetrics {
-    pub topology_updates: IntCounter,
-    pub earliest_registry_version: IntGauge,
-    pub latest_registry_version: IntGauge,
-    pub topology_watcher_update_duration: Histogram,
-    pub topology_update_duration: Histogram,
+pub(crate) struct PeerManagerMetrics {
+    pub(crate) topology_updates: IntCounter,
+    pub(crate) earliest_registry_version: IntGauge,
+    pub(crate) latest_registry_version: IntGauge,
+    pub(crate) topology_watcher_update_duration: Histogram,
+    pub(crate) topology_update_duration: Histogram,
+    // An alert will be triggered if this is incremented.
+    pub(crate) topology_watcher_errors: IntCounterVec,
 }
 
 impl PeerManagerMetrics {
     /// The constructor returns a `PeerManagerMetrics` instance.
-    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+    pub(crate) fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
             topology_updates: metrics_registry.int_counter(
                 "peer_manager_topology_updates_total",
@@ -37,6 +39,11 @@ impl PeerManagerMetrics {
                 "Duration for fetching new topology from the registry.",
                 // 0.1 ms, 1ms, 10ms, 100ms
                 exponential_buckets(0.0001, 10.0, 4),
+            ),
+            topology_watcher_errors: metrics_registry.int_counter_vec(
+                "peer_manager_topology_watcher_errors_total",
+                "Number of errors encountered while updating the peer list.",
+                &["error_label"],
             ),
         }
     }

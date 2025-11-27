@@ -21,12 +21,12 @@ use anyhow::Result;
 
 use ic_config::subnet_config::SCHNORR_SIGNATURE_FEE;
 use ic_consensus_threshold_sig_system_test_utils::{
-    generate_dummy_schnorr_signature_with_logger, get_public_key_for_canister_id_with_logger,
-    get_schnorr_signature_with_logger, make_bip340_key_id, make_eddsa_key_id, verify_signature,
-    DKG_INTERVAL, NUMBER_OF_NODES,
+    DKG_INTERVAL, NUMBER_OF_NODES, generate_dummy_schnorr_signature_with_logger,
+    get_public_key_for_canister_id_with_logger, get_schnorr_signature_with_logger,
+    make_bip340_key_id, make_eddsa_key_id, verify_signature,
 };
 use ic_management_canister_types_private::MasterPublicKeyId;
-use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
@@ -37,7 +37,7 @@ use ic_system_test_driver::driver::test_env_api::{
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::*;
 use ic_types::{CanisterId, Cycles, Height};
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 const KIB: usize = 1024;
 const MIB: usize = 1024 * KIB;
@@ -127,7 +127,7 @@ async fn gen_message_and_get_signature_depending_on_limit(
 ) -> Result<(Vec<u8>, Vec<u8>), String> {
     let MasterPublicKeyId::Schnorr(key_id) = key_id else {
         // TODO(CON-1522): Create tests for ECDSA and VetKD key ids.
-        panic!("Unexpected key id type: {}", key_id);
+        panic!("Unexpected key id type: {key_id}");
     };
 
     let message = dummy_message(message_size);

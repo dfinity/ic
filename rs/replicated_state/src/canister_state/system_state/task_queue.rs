@@ -1,12 +1,10 @@
 pub mod proto;
 
 use crate::ExecutionTask;
-use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::ExecutionRoundType;
 use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
 use ic_types::CanisterId;
 use ic_types::NumBytes;
-use num_traits::SaturatingSub;
 use std::collections::VecDeque;
 
 /// `TaskQueue` represents the implementation of queue structure for canister tasks satisfying the following conditions:
@@ -60,7 +58,8 @@ impl TaskQueue {
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_)
             | ExecutionTask::AbortedExecution { .. } => unreachable!(
-                "Unsuccessful removal of the task {:?}. Removal of task from TaskQueue is only supported for OnLowWasmMemory type.", task
+                "Unsuccessful removal of the task {:?}. Removal of task from TaskQueue is only supported for OnLowWasmMemory type.",
+                task
             ),
         };
     }
@@ -118,29 +117,14 @@ impl TaskQueue {
     /// 2. Paused executions can exist only in ordinary rounds (not checkpoint rounds).
     /// 3. If deterministic time slicing is disabled, then there are no paused tasks.
     ///    Aborted tasks may still exist if DTS was disabled in recent checkpoints.
-    pub fn check_dts_invariants(
-        &self,
-        deterministic_time_slicing: FlagStatus,
-        current_round_type: ExecutionRoundType,
-        id: &CanisterId,
-    ) {
+    pub fn check_dts_invariants(&self, current_round_type: ExecutionRoundType, id: &CanisterId) {
         if let Some(paused_or_aborted_task) = &self.paused_or_aborted_task {
             match paused_or_aborted_task {
                 ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
                     assert_eq!(
-                    current_round_type,
-                    ExecutionRoundType::OrdinaryRound,
-                    "Unexpected paused execution {:?} after a checkpoint round in canister {:?}",
-                    paused_or_aborted_task,
-                    id
-                );
-
-                    assert_eq!(
-                        deterministic_time_slicing,
-                        FlagStatus::Enabled,
-                        "Unexpected paused execution {:?} with disabled DTS in canister: {:?}",
-                        paused_or_aborted_task,
-                        id
+                        current_round_type,
+                        ExecutionRoundType::OrdinaryRound,
+                        "Unexpected paused execution {paused_or_aborted_task:?} after a checkpoint round in canister {id:?}"
                     );
                 }
                 ExecutionTask::AbortedExecution { .. }
@@ -149,7 +133,8 @@ impl TaskQueue {
                 | ExecutionTask::GlobalTimer
                 | ExecutionTask::OnLowWasmMemory => {
                     unreachable!(
-                        "Unexpected on task type {:?} in TaskQueue::paused_or_aborted_task in canister {:?} .", paused_or_aborted_task, id
+                        "Unexpected on task type {:?} in TaskQueue::paused_or_aborted_task in canister {:?} .",
+                        paused_or_aborted_task, id
                     )
                 }
             }
@@ -158,16 +143,10 @@ impl TaskQueue {
         if let Some(task) = self.queue.front() {
             match task {
                 ExecutionTask::Heartbeat => {
-                    panic!(
-                        "Unexpected heartbeat task after a round in canister {:?}",
-                        id
-                    );
+                    panic!("Unexpected heartbeat task after a round in canister {id:?}");
                 }
                 ExecutionTask::GlobalTimer => {
-                    panic!(
-                        "Unexpected global timer task after a round in canister {:?}",
-                        id
-                    );
+                    panic!("Unexpected global timer task after a round in canister {id:?}");
                 }
                 ExecutionTask::OnLowWasmMemory
                 | ExecutionTask::AbortedExecution { .. }
@@ -175,7 +154,8 @@ impl TaskQueue {
                 | ExecutionTask::PausedExecution { .. }
                 | ExecutionTask::PausedInstallCode(_) => {
                     unreachable!(
-                        "Unexpected task type {:?} in TaskQueue::queue, after a round in canister {:?}", task, id
+                        "Unexpected task type {:?} in TaskQueue::queue, after a round in canister {:?}",
+                        task, id
                     );
                 }
             }
@@ -194,8 +174,7 @@ impl TaskQueue {
         for task in self.queue.iter() {
             debug_assert!(
                 *task == ExecutionTask::Heartbeat || *task == ExecutionTask::GlobalTimer,
-                "Unexpected task type {:?} in TaskQueue::queue.",
-                task
+                "Unexpected task type {task:?} in TaskQueue::queue."
             );
         }
 
@@ -262,16 +241,11 @@ impl TaskQueue {
 
 /// Condition for `OnLowWasmMemoryHook` is satisfied if the following holds:
 ///
-/// 1. In the case of `memory_allocation`
-///    `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
-/// 2. Without memory allocation
-///    `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
+///   `wasm_memory_threshold > wasm_memory_limit - wasm_memory_usage`
 ///
 /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
 pub fn is_low_wasm_memory_hook_condition_satisfied(
-    memory_usage: NumBytes,
     wasm_memory_usage: NumBytes,
-    memory_allocation: Option<NumBytes>,
     wasm_memory_limit: Option<NumBytes>,
     wasm_memory_threshold: NumBytes,
 ) -> bool {
@@ -281,50 +255,29 @@ pub fn is_low_wasm_memory_hook_condition_satisfied(
     let wasm_memory_limit =
         wasm_memory_limit.unwrap_or_else(|| NumBytes::new(4 * 1024 * 1024 * 1024));
 
-    debug_assert!(
-        wasm_memory_usage <= memory_usage,
-        "Wasm memory usage {} is greater that memory usage {}.",
-        wasm_memory_usage,
-        memory_usage
-    );
-
-    let memory_usage_without_wasm_memory = memory_usage.saturating_sub(&wasm_memory_usage);
-
-    // If the canister has memory allocation, then it maximum allowed Wasm memory can be calculated
-    // as min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit).
-    let wasm_capacity = memory_allocation.map_or_else(
-        || wasm_memory_limit,
-        |memory_allocation| {
-            std::cmp::min(
-                memory_allocation.saturating_sub(&memory_usage_without_wasm_memory),
-                wasm_memory_limit,
-            )
-        },
-    );
-
     // Conceptually we can think that the remaining Wasm memory is
-    // equal to `wasm_capacity - wasm_memory_usage` and that should
+    // equal to `wasm_memory_limit - wasm_memory_usage` and that should
     // be compared with `wasm_memory_threshold` when checking for
     // the condition for the hook. However, since `wasm_memory_limit`
     // is ignored in some executions as stated above it is possible
-    // that `wasm_memory_usage` is greater than `wasm_capacity` to
-    // avoid overflowing subtraction we adopted inequality.
-    wasm_capacity < wasm_memory_usage + wasm_memory_threshold
+    // that `wasm_memory_usage` is greater than `wasm_memory_limit` and to
+    // avoid overflowing subtraction we adjusted the inequality.
+    wasm_memory_limit < wasm_memory_usage + wasm_memory_threshold
 }
 
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
-    use crate::{metadata_state::subnet_call_context_manager::InstallCodeCallId, ExecutionTask};
+    use crate::{ExecutionTask, metadata_state::subnet_call_context_manager::InstallCodeCallId};
 
     use super::TaskQueue;
     use crate::canister_state::system_state::PausedExecutionId;
     use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
     use ic_test_utilities_types::messages::IngressBuilder;
     use ic_types::{
-        messages::{CanisterCall, CanisterMessageOrTask, CanisterTask},
         Cycles,
+        messages::{CanisterCall, CanisterMessageOrTask, CanisterTask},
     };
 
     #[test]

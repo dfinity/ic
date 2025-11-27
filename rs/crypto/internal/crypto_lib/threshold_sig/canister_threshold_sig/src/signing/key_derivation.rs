@@ -1,12 +1,12 @@
 use crate::*;
-use ic_crypto_internal_hmac::{hkdf, Hmac, Sha512};
+use ic_crypto_internal_hmac::{Hmac, Sha512, hkdf};
 
 /// Derivation Index
 ///
-/// In BIP32 and SLIP-0010, derivation indicies are 32 bit
+/// In BIP32 and SLIP-0010, derivation indices are 32 bit
 /// integers. We support an extension of BIP32 which uses arbitrary
 /// byte strings. If each of the index values is 4 bytes long
-/// then the derivation is compatable with standard BIP32 / SLIP-0010
+/// then the derivation is compatible with standard BIP32 / SLIP-0010
 #[derive(Clone, Debug)]
 pub struct DerivationIndex(pub Vec<u8>);
 
@@ -113,7 +113,7 @@ impl DerivationPath {
     /// Extended to support larger inputs, which is needed for
     /// deriving the canister public key
     ///
-    /// This follows SLIP-0010 to accomodate other curves. For K256, SLIP-0010
+    /// This follows SLIP-0010 to accommodate other curves. For K256, SLIP-0010
     /// and BIP32 are identical (with overwhelming probability; they differ in
     /// an exceptional case that occurs ~1 in 2**128 key derivations)
     fn bip32_ckdpub(

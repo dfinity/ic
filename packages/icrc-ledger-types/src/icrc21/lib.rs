@@ -47,8 +47,8 @@ impl AccountOrId {
 impl Display for AccountOrId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AccountOrId::Account(account) => write!(f, "{}", account),
-            AccountOrId::AccountIdAddress(Some(str)) => write!(f, "{}", str),
+            AccountOrId::Account(account) => write!(f, "{account}"),
+            AccountOrId::AccountIdAddress(Some(str)) => write!(f, "{str}"),
             AccountOrId::AccountIdAddress(None) => write!(f, ""),
         }
     }
@@ -333,8 +333,7 @@ pub fn build_icrc21_consent_info(
     if consent_msg_request.arg.len() > MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize {
         return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
             description: format!(
-                "The argument size is too large. The maximum allowed size is {} bytes.",
-                MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES
+                "The argument size is too large. The maximum allowed size is {MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES} bytes."
             ),
         }));
     }
@@ -377,7 +376,7 @@ pub fn build_icrc21_consent_info(
                 created_at_time: _,
             } = Decode!(&consent_msg_request.arg, TransferArg).map_err(|e| {
                 Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                    description: format!("Failed to decode TransferArg: {}", e),
+                    description: format!("Failed to decode TransferArg: {e}"),
                 })
             })?;
             icrc21_check_fee(&fee, &ledger_fee)?;
@@ -407,7 +406,7 @@ pub fn build_icrc21_consent_info(
                 created_at_time: _,
             } = Decode!(&consent_msg_request.arg, TransferFromArgs).map_err(|e| {
                 Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                    description: format!("Failed to decode TransferFromArgs: {}", e),
+                    description: format!("Failed to decode TransferFromArgs: {e}"),
                 })
             })?;
             icrc21_check_fee(&fee, &ledger_fee)?;
@@ -439,7 +438,7 @@ pub fn build_icrc21_consent_info(
                 created_at_time: _,
             } = Decode!(&consent_msg_request.arg, ApproveArgs).map_err(|e| {
                 Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                    description: format!("Failed to decode ApproveArgs: {}", e),
+                    description: format!("Failed to decode ApproveArgs: {e}"),
                 })
             })?;
             icrc21_check_fee(&fee, &ledger_fee)?;
@@ -475,7 +474,7 @@ pub fn build_icrc21_consent_info(
                 None => {
                     return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
                         description: "transfer args should be provided".to_string(),
-                    }))
+                    }));
                 }
             };
             display_message_builder = display_message_builder
@@ -496,15 +495,14 @@ pub fn build_icrc21_consent_info(
 }
 
 pub fn icrc21_check_fee(fee: &Option<Nat>, ledger_fee: &Nat) -> Result<(), Icrc21Error> {
-    if let Some(fee) = fee {
-        if fee != ledger_fee {
-            return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                description: format!(
-                    "The fee specified in the arguments ({}) is different than the ledger fee ({})",
-                    fee, ledger_fee
-                ),
-            }));
-        }
+    if let Some(fee) = fee
+        && fee != ledger_fee
+    {
+        return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+            description: format!(
+                "The fee specified in the arguments ({fee}) is different than the ledger fee ({ledger_fee})"
+            ),
+        }));
     }
     Ok(())
 }

@@ -2,30 +2,32 @@
 
 use crate::artifact::{IdentifiableArtifact, PbArtifact};
 pub use crate::consensus::idkg::common::{
-    unpack_reshare_of_unmasked_params, IDkgBlockReader, IDkgTranscriptAttributes,
-    IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, MaskedTranscript, PreSigId,
-    PseudoRandomId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId,
-    ReshareOfMaskedParams, ReshareOfUnmaskedParams, TranscriptAttributes, TranscriptCastError,
-    TranscriptLookupError, TranscriptParamsError, TranscriptRef, UnmaskedTimesMaskedParams,
-    UnmaskedTranscript,
+    IDkgBlockReader, IDkgTranscriptAttributes, IDkgTranscriptOperationRef, IDkgTranscriptParamsRef,
+    MaskedTranscript, PreSigId, PseudoRandomId, RandomTranscriptParams,
+    RandomUnmaskedTranscriptParams, RequestId, ReshareOfMaskedParams, ReshareOfUnmaskedParams,
+    TranscriptAttributes, TranscriptCastError, TranscriptLookupError, TranscriptParamsError,
+    TranscriptRef, UnmaskedTimesMaskedParams, UnmaskedTranscript,
+    unpack_reshare_of_unmasked_params,
 };
 use crate::consensus::idkg::ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation};
 use crate::crypto::vetkd::VetKdEncryptedKeyShareContent;
 use crate::{
+    Height, NodeId, RegistryVersion, SubnetId,
     consensus::BasicSignature,
     crypto::{
+        AlgorithmId, CryptoHash, CryptoHashOf, CryptoHashable, Signed,
+        SignedBytesWithoutDomainSeparator,
         canister_threshold_sig::{
+            ThresholdEcdsaSigShare, ThresholdSchnorrSigShare,
             error::*,
             idkg::{
                 IDkgComplaint, IDkgDealingSupport, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
                 IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
             },
-            ThresholdEcdsaSigShare, ThresholdSchnorrSigShare,
         },
-        crypto_hash, AlgorithmId, CryptoHash, CryptoHashOf, CryptoHashable, Signed,
-        SignedBytesWithoutDomainSeparator,
+        crypto_hash,
     },
-    node_id_into_protobuf, node_id_try_from_option, Height, NodeId, RegistryVersion, SubnetId,
+    node_id_into_protobuf, node_id_try_from_option,
 };
 use common::SignatureScheme;
 use ic_base_types::{subnet_id_into_protobuf, subnet_id_try_from_protobuf};
@@ -35,7 +37,7 @@ use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::types::v1 as pb_types;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     registry::subnet::v1 as subnet_pb,
     types::v1 as pb,
 };
@@ -241,6 +243,16 @@ impl IDkgPayload {
             .flat_map(|(_, pre_sig)| pre_sig.iter_transcript_configs_in_creation())
             .chain(key_transcripts)
             .chain(xnet_reshares_transcripts)
+    }
+
+    /// Return an iterator of all transcript configs that have no matching
+    /// results yet.
+    pub fn iter_pre_sig_transcript_configs_in_creation(
+        &self,
+    ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> + '_ {
+        self.pre_signatures_in_creation
+            .iter()
+            .flat_map(|(_, pre_sig)| pre_sig.iter_transcript_configs_in_creation())
     }
 
     /// Return an iterator of the ongoing xnet reshare transcripts on the source side.
@@ -553,7 +565,7 @@ impl Display for MasterKeyTranscript {
             "Current = None".to_string()
         };
         match &self.next_in_creation {
-            KeyTranscriptCreation::Begin => write!(f, "{}, Next = Begin", current),
+            KeyTranscriptCreation::Begin => write!(f, "{current}, Next = Begin"),
             KeyTranscriptCreation::RandomTranscriptParams(x) => write!(
                 f,
                 "{}, Next = RandomTranscriptParams({:?}",
@@ -578,7 +590,7 @@ impl Display for MasterKeyTranscript {
                 current,
                 x.as_ref().transcript_id
             ),
-            KeyTranscriptCreation::Created(x) => write!(f, "{}, Next = Created({:?})", current, x),
+            KeyTranscriptCreation::Created(x) => write!(f, "{current}, Next = Created({x:?})"),
         }
     }
 }
@@ -893,6 +905,18 @@ impl IDkgMessage {
             IDkgMessage::VetKdKeyShare(x) => x.message_id(),
             IDkgMessage::Complaint(x) => x.message_id(),
             IDkgMessage::Opening(x) => x.message_id(),
+        }
+    }
+
+    pub fn sig_share_dedup_key(&self) -> Option<(RequestId, NodeId)> {
+        match self {
+            IDkgMessage::EcdsaSigShare(x) => Some((x.request_id, x.signer_id)),
+            IDkgMessage::SchnorrSigShare(x) => Some((x.request_id, x.signer_id)),
+            IDkgMessage::VetKdKeyShare(x) => Some((x.request_id, x.signer_id)),
+            IDkgMessage::Dealing(_)
+            | IDkgMessage::DealingSupport(_)
+            | IDkgMessage::Complaint(_)
+            | IDkgMessage::Opening(_) => None,
         }
     }
 }
@@ -2002,8 +2026,7 @@ impl TryFrom<&pb::IDkgPayload> for IDkgPayload {
         for proto in &payload.idkg_transcripts {
             let transcript: IDkgTranscript = proto.try_into().map_err(|err| {
                 ProxyDecodeError::Other(format!(
-                    "IDkgPayload:: Failed to convert transcript: {:?}",
-                    err
+                    "IDkgPayload:: Failed to convert transcript: {err:?}"
                 ))
             })?;
             let transcript_id = transcript.transcript_id;
@@ -2035,8 +2058,7 @@ impl TryFrom<&pb::IDkgPayload> for IDkgPayload {
                 Some(response) => {
                     let unreported = response.clone().try_into().map_err(|err| {
                         ProxyDecodeError::Other(format!(
-                            "IDkgPayload:: failed to convert initial dealing: {:?}",
-                            err
+                            "IDkgPayload:: failed to convert initial dealing: {err:?}"
                         ))
                     })?;
                     CompletedReshareRequest::Unreported(unreported)

@@ -699,7 +699,7 @@ async fn test_finalize_maturity_disbursement_ledger_failure() {
         .now_or_never()
         .unwrap();
     let Err(FinalizeMaturityDisbursementError::FailToMintIcp { neuron_id, reason }) = result else {
-        panic!("Expected a FailToMintIcp error, but got: {:?}", result);
+        panic!("Expected a FailToMintIcp error, but got: {result:?}");
     };
     assert_eq!(neuron_id, NeuronId { id: 1 });
     assert!(reason.contains("Failed to mint ICP"));

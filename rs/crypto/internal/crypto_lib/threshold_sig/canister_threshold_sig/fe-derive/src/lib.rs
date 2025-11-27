@@ -1,7 +1,7 @@
 use num_bigint_dig::{BigUint, ModInverse};
 use num_traits::{
-    identities::{One, Zero},
     ToPrimitive,
+    identities::{One, Zero},
 };
 use quote::quote;
 use std::collections::BTreeMap;
@@ -115,7 +115,7 @@ impl syn::parse::Parse for FieldElementConfig {
         let _comma: syn::token::Comma = input.parse()?;
 
         let params: syn::punctuated::Punctuated<NameAndValue, syn::token::Comma> =
-            input.parse_terminated(NameAndValue::parse)?;
+            syn::punctuated::Punctuated::parse_terminated(input)?;
 
         let modulus = parse_integer(&m_val.value());
 
@@ -167,27 +167,27 @@ pub fn derive_field_element(input: proc_macro::TokenStream) -> proc_macro::Token
         panic!("Modulus is not prime");
     }
 
-    let mut gen = proc_macro2::TokenStream::new();
-    gen.extend(define_fe_struct(&config));
+    let mut r#gen = proc_macro2::TokenStream::new();
+    r#gen.extend(define_fe_struct(&config));
 
     for param in &config.params {
-        gen.extend(custom_param(&config, param.0));
+        r#gen.extend(custom_param(&config, param.0));
     }
 
     if config.is_p_3_mod_4 {
-        gen.extend(p_3_mod_4_extras(&config));
+        r#gen.extend(p_3_mod_4_extras(&config));
     }
 
     if config.is_p_5_mod_8 && config.params.contains_key("SQRT_NEG_1") {
-        gen.extend(p_5_mod_8_extras(&config));
+        r#gen.extend(p_5_mod_8_extras(&config));
     }
 
-    gen.into()
+    r#gen.into()
 }
 
 fn define_fe_struct(config: &FieldElementConfig) -> proc_macro2::TokenStream {
     let ident = config.ident.clone();
-    let ident_str = format!("{}", ident);
+    let ident_str = format!("{ident}");
     let limbs = config.limbs;
 
     let modulus_limbs = biguint_as_u64s(&config.modulus, limbs);

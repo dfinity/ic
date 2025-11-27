@@ -10,7 +10,7 @@ use ic_registry_local_store::{ChangelogEntry, KeyMutation, LocalStoreImpl, Local
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_transport::{
     delete,
-    pb::v1::{registry_mutation, RegistryAtomicMutateRequest, RegistryMutation},
+    pb::v1::{RegistryAtomicMutateRequest, RegistryMutation, registry_mutation},
     upsert,
 };
 use ic_sys::utility_command::{UtilityCommand, UtilityCommandError};
@@ -113,7 +113,7 @@ pub fn make_hsm_sender(hsm_slot: &str, key_id: &str, pin: &str) -> Sender {
     if let Err(UtilityCommandError::Failed(err, _status)) = res {
         // The key id is not found.
         if err.contains("object not found") {
-            panic!("Cannot find key with id {}", key_id);
+            panic!("Cannot find key with id {key_id}");
         }
         // The pin is incorrect.
         if err.contains("CKR_PIN_INCORRECT") {
@@ -124,10 +124,7 @@ pub fn make_hsm_sender(hsm_slot: &str, key_id: &str, pin: &str) -> Sender {
     let pub_key = UtilityCommand::read_public_key(Some(hsm_slot), Some(key_id))
         .execute()
         .unwrap_or_else(|e| {
-            panic!(
-                "Error while trying to read the public key from the HSM. Underlying error: {}",
-                e
-            )
+            panic!("Error while trying to read the public key from the HSM. Underlying error: {e}")
         });
 
     let key_id = key_id.to_string();
@@ -153,13 +150,16 @@ pub fn set_up_env_vars_for_all_canisters<P: AsRef<Path>>(wasm_dir: P) {
     'outer: for canister in &NNS_CANISTER_WASMS {
         // Can either .wasm.gz or .wasm be found?
         for ext in &[".wasm.gz", ".wasm"] {
-            let file_part = format!("{}{}", canister, ext);
+            let file_part = format!("{canister}{ext}");
             let mut path = wasm_dir.as_ref().to_path_buf();
             path.push(file_part.as_str());
             if path.is_file() {
                 // Sets up the env var following the pattern expected by
                 // WASM::from_location_specified_by_env_var
-                std::env::set_var(Wasm::env_var_name(canister, &[]), path.to_str().unwrap());
+                // TODO: Audit that the environment access only happens in single-threaded code.
+                unsafe {
+                    std::env::set_var(Wasm::env_var_name(canister, &[]), path.to_str().unwrap())
+                };
                 continue 'outer;
             }
         }

@@ -1,4 +1,4 @@
-use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{forward_secure::*, Epoch};
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{Epoch, forward_secure::*};
 use proptest::prelude::*;
 use rand::SeedableRng;
 

@@ -24,6 +24,7 @@ rust_library(
         "@crate_index//:hashlink",
         "@crate_index//:hex",
         "@crate_index//:http",
+        "@crate_index//:lmdb-rkv",
         "@crate_index//:parking_lot",
         "@crate_index//:prometheus",
         "@crate_index//:prost",
@@ -108,6 +109,7 @@ rust_test(
         # Keep sorted.
         "//rs/bitcoin/adapter/test_utils",
         "//rs/bitcoin/replica_types",
+        "//rs/test_utilities/logger",
         "@crate_index//:tempfile",
     ],
 )
@@ -132,8 +134,13 @@ rust_test(
         "BLOCKS_DATA_PATH": "$(rootpath @bitcoin_adapter_mainnet_blocks//file)",
         "TESTNET_HEADERS_DATA_PATH": "$(rootpath @bitcoin_adapter_testnet_headers//file)",
         "TESTNET_BLOCKS_DATA_PATH": "$(rootpath @bitcoin_adapter_testnet_blocks//file)",
+        "RUST_TEST_THREADS": "4",
+        "RUST_TEST_NOCAPTURE": "1",
     },
-    tags = ["requires-network"],
+    flaky = True,
+    tags = [
+        "cpu:4",
+    ],
     # Because dogecoind binary package is not available on darwin or arm64.
     target_compatible_with = [
         "@platforms//cpu:x86_64",
@@ -158,6 +165,15 @@ rust_bench(
     name = "e2e_bench",
     testonly = True,
     srcs = ["benches/e2e.rs"],
+    data = [
+        # Keep sorted.
+        "@bitcoin_adapter_mainnet_headers//file",
+        "@doge_headers_800k_mainnet_auxpow//file",
+    ],
+    env = {
+        "BITCOIN_MAINNET_HEADERS_DATA_PATH": "$(rootpath @bitcoin_adapter_mainnet_headers//file)",
+        "DOGECOIN_MAINNET_HEADERS_DATA_PATH": "$(rootpath @doge_headers_800k_mainnet_auxpow//file)",
+    },
     deps = [
         # Keep sorted.
         ":adapter",
@@ -167,6 +183,7 @@ rust_bench(
         "//rs/bitcoin/service",
         "//rs/bitcoin/validation",
         "//rs/config",
+        "//rs/crypto/test_utils/reproducible_rng",
         "//rs/http_endpoints/async_utils",
         "//rs/interfaces/adapter_client",
         "//rs/monitoring/logger",
@@ -174,17 +191,21 @@ rust_bench(
         "//rs/test_utilities/logger",
         "@crate_index//:bitcoin",
         "@crate_index//:criterion",
+        "@crate_index//:flate2",
         "@crate_index//:futures",
         "@crate_index//:hashlink",
         "@crate_index//:hex",
         "@crate_index//:http",
         "@crate_index//:ic-btc-interface",
+        "@crate_index//:mockall",
         "@crate_index//:parking_lot",
         "@crate_index//:prometheus",
         "@crate_index//:prost",
         "@crate_index//:rand",
+        "@crate_index//:scrypt",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
+        "@crate_index//:sha2",
         "@crate_index//:slog",
         "@crate_index//:slog-async",
         "@crate_index//:static_assertions",

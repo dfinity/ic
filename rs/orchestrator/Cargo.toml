@@ -11,10 +11,12 @@ assert_matches = { workspace = true }
 async-trait = { workspace = true }
 backoff = { workspace = true }
 candid = { workspace = true }
+config = { path = "../ic_os/config" }
 clap = { workspace = true }
 exec = "0.3.1"
 env-file-reader = "0.3.0"
 get_if_addrs = { workspace = true }
+guest_upgrade_server = { path = "../ic_os/guest_upgrade/server" }
 hex = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
@@ -22,7 +24,7 @@ hyper-util = { workspace = true }
 hyper-rustls = { workspace = true }
 ic-agent = { workspace = true }
 ic-config = { path = "../config" }
-ic-consensus = { path = "../consensus" }
+ic-consensus-cup-utils = { path = "../consensus/cup_utils" }
 ic-consensus-dkg = { path = "../consensus/dkg" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
@@ -70,6 +72,7 @@ async-stream = { workspace = true }
 hyper-util = { workspace = true }
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
+ic-crypto-test-utils-crypto-returning-ok = { path = "../crypto/test_utils/crypto_returning_ok" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-test-utils-tls = { path = "../crypto/test_utils/tls" }
@@ -77,7 +80,6 @@ ic-crypto-tls-interfaces-mocks = { path = "../crypto/tls_interfaces/mocks" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
-ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-in-memory-logger = { path = "../test_utilities/in_memory_logger" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }

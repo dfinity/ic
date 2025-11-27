@@ -78,6 +78,10 @@ ic-nervous-system-integration-tests = { path = "../../nervous_system/integration
 ic-registry-canister-api = { path = "../canister/api" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 
+[lib]
+name = "ic_admin"
+path = "src/lib.rs"
+
 [[bin]]
 name = "ic-admin"
-path = "src/main.rs"
+path = "bin/main.rs"

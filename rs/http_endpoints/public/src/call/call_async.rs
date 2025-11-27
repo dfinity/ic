@@ -2,26 +2,26 @@
 
 use super::{IngressError, IngressValidator, IngressWatcherHandle};
 use crate::{
-    common::{Cbor, CborUserError, WithTimeout},
     HttpError,
+    common::{Cbor, CborUserError, WithTimeout},
 };
 use axum::{
+    Router,
     body::Body,
     extract::{DefaultBodyLimit, Path, State},
     response::{IntoResponse, Response},
-    Router,
 };
 use http::Request;
 use hyper::StatusCode;
 use ic_logger::warn;
 use ic_types::{
-    messages::{HttpCallContent, HttpRequestEnvelope},
     CanisterId,
+    messages::{HttpCallContent, HttpRequestEnvelope},
 };
 use std::{convert::Infallible, sync::Arc, time::Duration};
 use tokio::sync::Semaphore;
 use tokio_util::time::FutureExt;
-use tower::{util::BoxCloneService, ServiceBuilder};
+use tower::{ServiceBuilder, util::BoxCloneService};
 
 /// The maximum time we wait for a message to be certified
 /// before recording its certification time.

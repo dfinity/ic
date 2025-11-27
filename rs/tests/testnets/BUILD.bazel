@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_ENV", "SNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "IC_GATEWAY_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_ENV", "SNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -13,7 +13,6 @@ system_test(
     name = "single_large_node",
     tags = [
         "dynamic_testnet",
-        "k8s",
         "manual",
     ],
     visibility = ["//visibility:public"],  # public because part of top-level manual test suite
@@ -30,7 +29,6 @@ system_test(
     name = "single_app_large_node",
     tags = [
         "dynamic_testnet",
-        "k8s",
         "manual",
     ],
     runtime_deps = GRAFANA_RUNTIME_DEPS,
@@ -46,7 +44,6 @@ system_test_nns(
     name = "single_app_large_node_with_nns",
     tags = [
         "dynamic_testnet",
-        "k8s",
         "manual",
     ],
     runtime_deps = GRAFANA_RUNTIME_DEPS,
@@ -63,7 +60,6 @@ system_test(
     name = "single_app_small_node",
     tags = [
         "dynamic_testnet",
-        "k8s",
         "manual",
     ],
     runtime_deps = GRAFANA_RUNTIME_DEPS,
@@ -290,7 +286,7 @@ system_test_nns(
 system_test_nns(
     name = "src_testing",
     env = SNS_CANISTER_ENV | {
-        "XRC_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
+        "XRC_WASM_PATH": "$(rootpath //rs/rust_canisters/xrc_mock:xrc_mock_canister)",
         "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
         "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
         "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
@@ -301,7 +297,7 @@ system_test_nns(
         "manual",
     ],
     runtime_deps = GRAFANA_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
-        "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
+        "//rs/rust_canisters/xrc_mock:xrc_mock_canister",
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
         "@sns_aggregator//file",
@@ -311,7 +307,7 @@ system_test_nns(
         # Keep sorted.
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
-        "//rs/rosetta-api/tvl/xrc_mock",
+        "//rs/rust_canisters/xrc_mock",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nns/nns_dapp",
@@ -319,5 +315,26 @@ system_test_nns(
         "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:ic-xrc-types",
+    ],
+)
+
+system_test_nns(
+    name = "nns_recovery",
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    uses_guestos_test_update = True,
+    uses_setupos_img = True,
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/limits",
+        "//rs/tests/consensus/subnet_recovery:lib",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nested",
+        "//rs/tests/nested/nns_recovery:common",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
     ],
 )

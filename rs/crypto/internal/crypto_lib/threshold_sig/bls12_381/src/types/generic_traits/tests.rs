@@ -13,17 +13,17 @@ proptest! {
         })]
 
     #[test]
-    fn debug_trait_on_public_key_bytes_works(public_key_bytes in threshold_sig_public_key_bytes()) { let _ =format!("{:?}", public_key_bytes); }
+    fn debug_trait_on_public_key_bytes_works(public_key_bytes in threshold_sig_public_key_bytes()) { let _ =format!("{public_key_bytes:?}"); }
 
     #[test]
-    fn debug_trait_on_individual_signature_bytes_works(individual_signature_bytes: IndividualSignatureBytes) { let _ = format!("{:?}", individual_signature_bytes); }
+    fn debug_trait_on_individual_signature_bytes_works(individual_signature_bytes: IndividualSignatureBytes) { let _ = format!("{individual_signature_bytes:?}"); }
 
     #[test]
-    fn debug_trait_on_combined_signature_bytes_works(combined_signature_bytes: CombinedSignatureBytes) { let _ = format!("{:?}", combined_signature_bytes); }
+    fn debug_trait_on_combined_signature_bytes_works(combined_signature_bytes: CombinedSignatureBytes) { let _ = format!("{combined_signature_bytes:?}"); }
 
     #[test]
     fn debug_should_redact_secretkey_bytes(secret_key_bytes: SecretKeyBytes) {
-        let debug_str = format!("{:?}", secret_key_bytes);
+        let debug_str = format!("{secret_key_bytes:?}");
         let raw_str = base64::encode(secret_key_bytes.0.expose_secret());
         assert!(!debug_str.contains(&raw_str));
         assert_eq!(debug_str, "REDACTED");

@@ -167,8 +167,14 @@ impl From<AddConfigError> for api::AddConfigError {
     fn from(value: AddConfigError) -> Self {
         match value {
             AddConfigError::Unauthorized => api::AddConfigError::Unauthorized,
-            AddConfigError::InvalidInputConfig(err) => api::AddConfigError::InvalidInputConfig(err.to_string()),
-            AddConfigError::LinkingRuleToDisclosedIncident { index, incident_id } => api::AddConfigError::PolicyViolation(format!("Rule at index={index} is linked to an already disclosed incident_id={incident_id}")),
+            AddConfigError::InvalidInputConfig(err) => {
+                api::AddConfigError::InvalidInputConfig(err.to_string())
+            }
+            AddConfigError::LinkingRuleToDisclosedIncident { index, incident_id } => {
+                api::AddConfigError::PolicyViolation(format!(
+                    "Rule at index={index} is linked to an already disclosed incident_id={incident_id}"
+                ))
+            }
             AddConfigError::Internal(error) => api::AddConfigError::Internal(error.to_string()),
         }
     }

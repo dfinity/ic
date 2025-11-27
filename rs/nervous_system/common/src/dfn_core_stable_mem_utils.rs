@@ -1,7 +1,7 @@
 //! Implements `BufferedStableMemWriter` and `BufferedStableMemReader` types for
 //! buffered serialization and deserialization to/from stable memory.
 
-use bytes::{buf::UninitSlice, Buf, BufMut};
+use bytes::{Buf, BufMut, buf::UninitSlice};
 use dfn_core::stable;
 #[cfg(test)]
 use std::sync::{Arc, Mutex};
@@ -248,9 +248,7 @@ impl Buf for BufferedStableMemReader {
         let remaining = self.remaining();
         assert!(
             cnt <= remaining,
-            "Trying to advance {} bytes while only {} bytes remaining",
-            cnt,
-            remaining
+            "Trying to advance {cnt} bytes while only {remaining} bytes remaining"
         );
 
         // Why below is correct:

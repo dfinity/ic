@@ -6,8 +6,8 @@ use ic_interfaces::consensus_pool::{
 };
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
-    consensus::{Block, CatchUpPackage, ConsensusMessage, Finalization, HasHeight, HashedBlock},
     Height, Time,
+    consensus::{Block, CatchUpPackage, ConsensusMessage, Finalization, HasHeight, HashedBlock},
 };
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -101,10 +101,10 @@ impl<'a> CachedChainIterator<'a> {
             }
         }
         // Use cached blocks if the height is finalized
-        if parent_height <= self.finalized_chain.tip().height() {
-            if let Ok(block) = self.finalized_chain.get_block_by_height(parent_height) {
-                return Some(block.clone());
-            }
+        if parent_height <= self.finalized_chain.tip().height()
+            && let Ok(block) = self.finalized_chain.get_block_by_height(parent_height)
+        {
+            return Some(block.clone());
         }
 
         for proposal in self
@@ -282,10 +282,7 @@ pub(crate) fn get_highest_finalized_block(
                         return proposal.content.into_inner();
                     }
                 }
-                panic!(
-                    "Missing validated block proposal matching finalization {:?}",
-                    finalization
-                )
+                panic!("Missing validated block proposal matching finalization {finalization:?}")
             }
         }
         Err(_) => catch_up_package.content.block.as_ref().clone(),
@@ -305,7 +302,9 @@ pub(crate) fn update_summary_block(
         Ordering::Less => {
             panic!(
                 "DKG start_height {} of the given finalized block at height {} is less than summary block height {}",
-                start_height, finalized_tip.height(), summary_height
+                start_height,
+                finalized_tip.height(),
+                summary_height
             );
         }
         Ordering::Equal => (),
@@ -329,8 +328,7 @@ pub(crate) fn update_summary_block(
                     });
                 *summary_block = block.unwrap_or_else(|| {
                     panic!(
-                        "Consensus pool has finalization {:?}, but its referenced block is not found",
-                        finalization
+                        "Consensus pool has finalization {finalization:?}, but its referenced block is not found"
                     )
                 });
                 return;
@@ -507,11 +505,12 @@ impl ConsensusBlockChain for ConsensusBlockChainImpl {
 mod test {
     use super::*;
     use crate::test_utils::fake_block_proposal;
-    use ic_interfaces::consensus_pool::{ValidatedConsensusArtifact, HEIGHT_CONSIDERED_BEHIND};
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
+    use ic_interfaces::consensus_pool::{HEIGHT_CONSIDERED_BEHIND, ValidatedConsensusArtifact};
     use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};
-    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::FakeStateManager};
+    use ic_test_utilities::state_manager::FakeStateManager;
     use ic_test_utilities_consensus::fake::*;
-    use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
+    use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::consensus::*;

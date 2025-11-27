@@ -1,20 +1,20 @@
 //! Tests of the whole NiDKG protocol
+use crate::public_key_store::PublicKeySetOnceError;
 use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
-use crate::public_key_store::PublicKeySetOnceError;
+use crate::secret_key_store::SecretKeyStoreInsertionError;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
-use crate::secret_key_store::SecretKeyStoreInsertionError;
 use crate::threshold::ni_dkg::NIDKG_THRESHOLD_SCOPE;
 use crate::vault::api::NiDkgCspVault;
-use crate::vault::local_csp_vault::ni_dkg::ni_dkg_clib::types::FsEncryptionKeySetWithPop;
-use crate::vault::local_csp_vault::ni_dkg::ni_dkg_clib::types::FsEncryptionSecretKey;
+use crate::vault::local_csp_vault::LocalCspVault;
 use crate::vault::local_csp_vault::ni_dkg::CspFsEncryptionKeySet;
 use crate::vault::local_csp_vault::ni_dkg::CspNiDkgTranscript;
 use crate::vault::local_csp_vault::ni_dkg::CspSecretKey;
 use crate::vault::local_csp_vault::ni_dkg::Epoch;
 use crate::vault::local_csp_vault::ni_dkg::NIDKG_FS_SCOPE;
-use crate::vault::local_csp_vault::LocalCspVault;
+use crate::vault::local_csp_vault::ni_dkg::ni_dkg_clib::types::FsEncryptionKeySetWithPop;
+use crate::vault::local_csp_vault::ni_dkg::ni_dkg_clib::types::FsEncryptionSecretKey;
 use crate::vault::test_utils;
 use crate::vault::test_utils::ni_dkg::fixtures::MockNetwork;
 use assert_matches::assert_matches;
@@ -28,9 +28,9 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::Transcript;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
 use ic_crypto_test_utils::set_of;
-use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
-use ic_types::crypto::error::KeyNotFoundError;
+use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
 use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::error::KeyNotFoundError;
 use ic_types_test_utils::ids::NODE_42;
 
 use crate::key_id::KeyId;
@@ -194,8 +194,8 @@ fn should_fail_with_transient_internal_error_if_nidkg_secret_key_persistence_fai
 }
 
 #[test]
-fn should_fail_with_internal_error_if_nidkg_secret_key_persistence_fails_due_to_serialization_error(
-) {
+fn should_fail_with_internal_error_if_nidkg_secret_key_persistence_fails_due_to_serialization_error()
+ {
     let mut sks_returning_serialization_error = MockSecretKeyStore::new();
     let expected_serialization_error = "cannot serialize keys".to_string();
     sks_returning_serialization_error
@@ -218,8 +218,8 @@ fn should_fail_with_internal_error_if_nidkg_secret_key_persistence_fails_due_to_
 }
 
 #[test]
-fn should_return_internal_error_from_load_threshold_signing_key_internal_if_nidkg_secret_key_persistence_fails_due_to_serialization_error(
-) {
+fn should_return_internal_error_from_load_threshold_signing_key_internal_if_nidkg_secret_key_persistence_fails_due_to_serialization_error()
+ {
     const INTERNAL_ERROR: &str = "cannot serialize keys";
     let fs_key_id = KeyId::from([0u8; 32]);
     let vault = csp_vault_with_fs_key_id_and_mock_secret_key_store_insert_error(
@@ -237,8 +237,8 @@ fn should_return_internal_error_from_load_threshold_signing_key_internal_if_nidk
 }
 
 #[test]
-fn should_return_transient_internal_error_from_load_threshold_signing_key_if_nidkg_secret_key_persistence_fails_due_to_transient_internal_error(
-) {
+fn should_return_transient_internal_error_from_load_threshold_signing_key_if_nidkg_secret_key_persistence_fails_due_to_transient_internal_error()
+ {
     const INTERNAL_ERROR: &str = "transient internal error";
     let fs_key_id = KeyId::from([0u8; 32]);
     let vault = csp_vault_with_fs_key_id_and_mock_secret_key_store_insert_error(
@@ -389,8 +389,8 @@ fn should_update_forward_secure_key_if_epoch_to_update_to_is_newer_than_that_in_
 }
 
 #[test]
-fn should_not_update_forward_secure_key_in_sks_if_epoch_in_sks_was_updated_to_the_epoch_to_update_to_in_the_meantime(
-) {
+fn should_not_update_forward_secure_key_in_sks_if_epoch_in_sks_was_updated_to_the_epoch_to_update_to_in_the_meantime()
+ {
     let mut sks = MockSecretKeyStore::new();
     let key_id = KeyId::from([0u8; 32]);
     let rng = &mut reproducible_rng();
@@ -429,8 +429,8 @@ fn should_not_update_forward_secure_key_in_sks_if_epoch_in_sks_was_updated_to_th
 }
 
 #[test]
-fn should_update_forward_secure_key_in_sks_if_epoch_in_sks_was_updated_to_an_older_epoch_than_the_one_to_update_to(
-) {
+fn should_update_forward_secure_key_in_sks_if_epoch_in_sks_was_updated_to_an_older_epoch_than_the_one_to_update_to()
+ {
     let mut sks = MockSecretKeyStore::new();
     let key_id = KeyId::from([0u8; 32]);
     let rng = &mut reproducible_rng();

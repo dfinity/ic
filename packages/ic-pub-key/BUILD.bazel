@@ -1,0 +1,73 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "ic-pub-key",
+    srcs = glob(["src/**/*.rs"]),
+    crate_features = [
+        "secp256k1",
+        "ed25519",
+        "vetkeys",
+    ],
+    crate_name = "ic_pub_key",
+    version = "0.2.0",
+    deps = [
+        "//packages/ic-ed25519",
+        "//packages/ic-secp256k1",
+        "@crate_index//:ic-management-canister-types",
+        "@crate_index//:ic-vetkeys",
+    ],
+)
+
+# Once https://github.com/bazelbuild/rules_rust/pull/3544 is part of a release
+# and we are using the respective rules_rust version, we can use the new
+# crate_features rather than the rustdoc_flags.
+rust_doc(
+    name = "doc",
+    crate = ":ic-pub-key",
+    rustdoc_flags = [
+        "--cfg=feature=\"secp256k1\"",
+        "--cfg=feature=\"ed25519\"",
+        "--cfg=feature=\"vetkeys\"",
+    ],
+)
+
+# TODO: The rust_doc_test rule is disabled because currently it is not possible
+# to enable crate features. This will soon become possible though once
+# https://github.com/bazelbuild/rules_rust/pull/3544 is part of a release and
+# we are using the respective rules_rust version.
+# rust_doc_test(
+#     name = "doc_test",
+#     crate = ":ic-pub-key",
+#     crate_features = [
+#         "secp256k1",
+#         "ed25519",
+#         "vetkeys",
+#     ],
+#     deps = [":ic-pub-key"],
+# )
+
+rust_test(
+    name = "unit_tests",
+    crate = ":ic-pub-key",
+    crate_features = [
+        "secp256k1",
+        "ed25519",
+        "vetkeys",
+    ],
+)
+
+rust_test_suite(
+    name = "integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    crate_features = [
+        "secp256k1",
+        "ed25519",
+        "vetkeys",
+    ],
+    deps = [
+        ":ic-pub-key",
+        "@crate_index//:hex",
+    ],
+)

@@ -25,10 +25,10 @@ cfg_if::cfg_if! {
 }
 
 pub use call::{
-    call_async, call_sync, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle,
+    IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle, call_async, call_sync,
 };
-pub use common::cors_layer;
 use common::CONTENT_TYPE_CBOR;
+pub use common::{cors_layer, make_plaintext_response};
 use ic_http_endpoints_async_utils::start_tcp_listener;
 use ic_nns_delegation_manager::NNSDelegationReader;
 pub use query::QueryServiceBuilder;
@@ -37,7 +37,7 @@ pub use read_state::subnet::SubnetReadStateServiceBuilder;
 
 use crate::{
     catch_up_package::CatchUpPackageService,
-    common::{make_plaintext_response, map_box_error_to_response},
+    common::map_box_error_to_response,
     dashboard::DashboardService,
     health_status_refresher::HealthStatusRefreshLayer,
     metrics::{
@@ -51,15 +51,15 @@ use crate::{
 };
 
 use axum::{
+    Router,
     error_handling::HandleErrorLayer,
     extract::{DefaultBodyLimit, MatchedPath, State},
     middleware::Next,
-    response::Redirect,
+    response::{IntoResponse, Redirect, Response},
     routing::get,
-    Router,
 };
 use crossbeam::atomic::AtomicCell;
-use hyper::{body::Incoming, Request, StatusCode};
+use hyper::{Request, StatusCode, body::Incoming};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use ic_config::http_handler::Config;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
@@ -72,17 +72,17 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_metrics::{histogram_vec_timer::HistogramVecTimer, MetricsRegistry};
+use ic_logger::{ReplicaLogger, error, info, warn};
+use ic_metrics::{MetricsRegistry, histogram_vec_timer::HistogramVecTimer};
 use ic_pprof::PprofCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_tracing::ReloadHandles;
 use ic_types::{
+    Height, NodeId, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     malicious_flags::MaliciousFlags,
     messages::{MessageId, QueryResponseHash, ReplicaHealthStatus, SignedIngress},
-    Height, NodeId, SubnetId,
 };
 use std::{
     io::Write,
@@ -95,10 +95,10 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::mpsc::{Receiver, Sender},
     sync::watch,
-    time::{sleep, timeout, Instant},
+    time::{Instant, sleep, timeout},
 };
 use tokio_util::sync::CancellationToken;
-use tower::{limit::GlobalConcurrencyLimitLayer, BoxError, Service, ServiceBuilder};
+use tower::{BoxError, Service, ServiceBuilder, limit::GlobalConcurrencyLimitLayer};
 use tower_http::{limit::RequestBodyLimitLayer, trace::TraceLayer};
 
 /// [TLS Application-Layer Protocol Negotiation (ALPN) Protocol `HTTP/2 over TLS` ID][spec]
@@ -117,6 +117,12 @@ const TLS_HANDHAKE_BYTES: u8 = 22;
 pub struct HttpError {
     pub status: StatusCode,
     pub message: String,
+}
+
+impl IntoResponse for HttpError {
+    fn into_response(self) -> Response {
+        (self.status, self.message).into_response()
+    }
 }
 
 /// Struct that holds all endpoint services.
@@ -205,9 +211,9 @@ fn create_port_file(path: PathBuf, port: u16) {
         )
     });
     let mut port_file = NamedTempFile::new_in(dir)
-        .unwrap_or_else(|err| panic!("Could not open temporary port report file: {}", err));
+        .unwrap_or_else(|err| panic!("Could not open temporary port report file: {err}"));
     port_file
-        .write_all(format!("{}", port).as_bytes())
+        .write_all(format!("{port}").as_bytes())
         .unwrap_or_else(|err| {
             panic!(
                 "Could not write to temporary port report file {}: {}",
@@ -252,10 +258,10 @@ pub fn start_server(
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
+    query_signer: Arc<dyn BasicSigner<QueryResponseHash>>,
     registry_client: Arc<dyn RegistryClient>,
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
-    ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig>,
+    ingress_verifier: Arc<dyn IngressSigVerifier>,
     node_id: NodeId,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
@@ -348,6 +354,7 @@ pub fn start_server(
             registry_client.clone(),
             ingress_verifier.clone(),
             nns_delegation_reader.clone(),
+            nns_subnet_id,
             version,
         )
         .with_health_status(health_status.clone())
@@ -364,6 +371,7 @@ pub fn start_server(
         SubnetReadStateServiceBuilder::builder(
             nns_delegation_reader.clone(),
             state_reader.clone(),
+            nns_subnet_id,
             version,
         )
         .with_health_status(health_status.clone())
@@ -564,6 +572,8 @@ fn make_router(
     metrics: HttpHandlerMetrics,
     health_status_refresher: HealthStatusRefreshLayer,
 ) -> Router {
+    let pprof_concurrency_limiter =
+        GlobalConcurrencyLimitLayer::new(config.max_pprof_concurrent_requests);
     let base_router = Router::new()
         .route(
             "/",
@@ -577,87 +587,86 @@ fn make_router(
             make_plaintext_response(StatusCode::NOT_FOUND, "Endpoint not found.".to_string())
         });
 
-    let service_builder = |concurrency_limit| {
+    let service_builder = |concurrency_limit_layer: GlobalConcurrencyLimitLayer| {
         ServiceBuilder::new()
             .layer(HandleErrorLayer::new(map_box_error_to_response))
             .load_shed()
-            .layer(GlobalConcurrencyLimitLayer::new(concurrency_limit))
+            .layer(concurrency_limit_layer)
     };
 
-    let final_router = base_router
-        .merge(
-            http_handler
-                .status_router
-                .layer(service_builder(config.max_status_concurrent_requests)),
-        )
-        .merge(
-            http_handler
-                .call_v2_router
-                .layer(service_builder(config.max_call_concurrent_requests)),
-        )
-        // TODO(CON-1574): see if there is any reasonable explicit concurrency limit we could use here.
-        .merge(http_handler.call_v3_router)
-        .merge(http_handler.call_v4_router)
-        .merge(
-            http_handler
-                .query_v2_router
-                .layer(service_builder(config.max_query_concurrent_requests)),
-        )
-        .merge(
-            http_handler
-                .query_v3_router
-                .layer(service_builder(config.max_query_concurrent_requests)),
-        )
-        .merge(
-            http_handler
-                .subnet_read_state_v2_router
-                .layer(service_builder(config.max_read_state_concurrent_requests)),
-        )
-        .merge(
-            http_handler
-                .subnet_read_state_v3_router
-                .layer(service_builder(config.max_read_state_concurrent_requests)),
-        )
-        .merge(
-            http_handler
-                .canister_read_state_v2_router
-                .layer(service_builder(config.max_read_state_concurrent_requests)),
-        )
-        .merge(
-            http_handler
-                .canister_read_state_v3_router
-                .layer(service_builder(config.max_read_state_concurrent_requests)),
-        )
-        .merge(http_handler.catchup_router.layer(service_builder(
-            config.max_catch_up_package_concurrent_requests,
-        )))
-        .merge(
-            http_handler
-                .dashboard_router
-                .layer(service_builder(config.max_dashboard_concurrent_requests)),
-        )
-        .merge(
-            http_handler
-                .pprof_home_router
-                .layer(service_builder(config.max_pprof_concurrent_requests)),
-        )
-        .merge(
-            http_handler
-                .pprof_flamegraph_router
-                .layer(service_builder(config.max_pprof_concurrent_requests)),
-        )
-        .merge(
-            http_handler
-                .pprof_profile_router
-                .layer(service_builder(config.max_pprof_concurrent_requests)),
-        )
-        .merge(
-            http_handler
-                .tracing_flamegraph_router
-                .layer(service_builder(
-                    config.max_tracing_flamegraph_concurrent_requests,
-                )),
-        );
+    let final_router =
+        base_router
+            .merge(http_handler.status_router.layer(service_builder(
+                GlobalConcurrencyLimitLayer::new(config.max_status_concurrent_requests),
+            )))
+            .merge(http_handler.call_v2_router.layer(service_builder(
+                GlobalConcurrencyLimitLayer::new(config.max_call_concurrent_requests),
+            )))
+            // TODO(CON-1574): see if there is any reasonable explicit concurrency limit we could use here.
+            .merge(http_handler.call_v3_router)
+            .merge(http_handler.call_v4_router)
+            .merge(http_handler.query_v2_router.layer(service_builder(
+                GlobalConcurrencyLimitLayer::new(config.max_query_concurrent_requests),
+            )))
+            .merge(http_handler.query_v3_router.layer(service_builder(
+                GlobalConcurrencyLimitLayer::new(config.max_query_concurrent_requests),
+            )))
+            .merge(
+                http_handler
+                    .subnet_read_state_v2_router
+                    .layer(service_builder(GlobalConcurrencyLimitLayer::new(
+                        config.max_read_state_concurrent_requests,
+                    ))),
+            )
+            .merge(
+                http_handler
+                    .subnet_read_state_v3_router
+                    .layer(service_builder(GlobalConcurrencyLimitLayer::new(
+                        config.max_read_state_concurrent_requests,
+                    ))),
+            )
+            .merge(
+                http_handler
+                    .canister_read_state_v2_router
+                    .layer(service_builder(GlobalConcurrencyLimitLayer::new(
+                        config.max_read_state_concurrent_requests,
+                    ))),
+            )
+            .merge(
+                http_handler
+                    .canister_read_state_v3_router
+                    .layer(service_builder(GlobalConcurrencyLimitLayer::new(
+                        config.max_read_state_concurrent_requests,
+                    ))),
+            )
+            .merge(http_handler.catchup_router.layer(service_builder(
+                GlobalConcurrencyLimitLayer::new(config.max_catch_up_package_concurrent_requests),
+            )))
+            .merge(http_handler.dashboard_router.layer(service_builder(
+                GlobalConcurrencyLimitLayer::new(config.max_dashboard_concurrent_requests),
+            )))
+            .merge(
+                http_handler
+                    .pprof_home_router
+                    .layer(service_builder(pprof_concurrency_limiter.clone())),
+            )
+            .merge(
+                http_handler
+                    .pprof_flamegraph_router
+                    .layer(service_builder(pprof_concurrency_limiter.clone())),
+            )
+            .merge(
+                http_handler
+                    .pprof_profile_router
+                    .layer(service_builder(pprof_concurrency_limiter)),
+            )
+            .merge(
+                http_handler
+                    .tracing_flamegraph_router
+                    .layer(service_builder(GlobalConcurrencyLimitLayer::new(
+                        config.max_tracing_flamegraph_concurrent_requests,
+                    ))),
+            );
 
     final_router.layer(
         ServiceBuilder::new()
@@ -696,7 +705,7 @@ async fn verify_cbor_content_header(
     {
         return make_plaintext_response(
             StatusCode::BAD_REQUEST,
-            format!("Unexpected content-type, expected {}.", CONTENT_TYPE_CBOR),
+            format!("Unexpected content-type, expected {CONTENT_TYPE_CBOR}."),
         );
     }
 
@@ -758,13 +767,13 @@ pub(crate) mod tests {
 
     use axum::body::Body;
     use bytes::Bytes;
-    use futures_util::{future::select_all, stream::pending, FutureExt};
+    use futures_util::{FutureExt, future::select_all, stream::pending};
     use http::{
+        HeaderName, HeaderValue, Method,
         header::{
             ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS,
             ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_TYPE,
         },
-        HeaderName, HeaderValue, Method,
     };
     use http_body_util::Empty;
     use http_body_util::Full;

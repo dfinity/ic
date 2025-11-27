@@ -1,13 +1,13 @@
 use candid::Principal;
 use ic_cdk::{init, post_upgrade, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_icrc1::{blocks::encoded_block_to_generic_block, Block};
+use ic_icrc1::{Block, blocks::encoded_block_to_generic_block};
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::{
-    cell::Cell as StableCell, log::Log as StableLog, memory_manager::MemoryManager,
-    storable::Bound, DefaultMemoryImpl, RestrictedMemory, Storable,
+    DefaultMemoryImpl, RestrictedMemory, Storable, cell::Cell as StableCell, log::Log as StableLog,
+    memory_manager::MemoryManager, storable::Bound,
 };
 use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult};
 use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest, GetBlocksResult};
@@ -114,7 +114,7 @@ impl Default for ArchiveConfig {
 }
 
 impl Storable for ArchiveConfig {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(self, &mut buf).expect("failed to encode archive config");
         Cow::Owned(buf)
@@ -144,7 +144,7 @@ fn with_blocks<R>(f: impl FnOnce(&BlockLog) -> R) -> R {
 
 fn decode_transaction(txid: u64, bytes: Vec<u8>) -> Transaction {
     Block::<Tokens>::decode(EncodedBlock::from(bytes))
-        .unwrap_or_else(|e| ic_cdk::api::trap(format!("failed to decode block {}: {}", txid, e)))
+        .unwrap_or_else(|e| ic_cdk::api::trap(format!("failed to decode block {txid}: {e}")))
         .into()
 }
 
@@ -348,6 +348,10 @@ fn icrc3_supported_block_types() -> Vec<SupportedBlockType> {
             url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md"
                 .to_string(),
         },
+        SupportedBlockType {
+            block_type: "107feecol".to_string(),
+            url: "https://github.com/dfinity/ICRC/pull/117".to_string(),
+        },
     ]
 }
 
@@ -442,7 +446,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
-                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
                     .build()
             }
         }
@@ -455,7 +459,7 @@ fn main() {}
 
 #[test]
 fn check_candid_interface() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
     use std::path::PathBuf;
 
     candid::export_service!();

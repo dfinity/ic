@@ -35,7 +35,7 @@ use ic_sns_swap::{
         NotifyPaymentFailureResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Swap,
     },
 };
-use ic_stable_structures::{writer::Writer, Memory};
+use ic_stable_structures::{Memory, writer::Writer};
 use prost::Message;
 use std::{
     cell::RefCell,
@@ -184,10 +184,7 @@ async fn do_get_canister_status(
         .await
         .map(CanisterStatusResultV2::from)
         .unwrap_or_else(|err| {
-            panic!(
-                "Couldn't get canister_status of {}. Err: {:#?}",
-                canister_id, err
-            )
+            panic!("Couldn't get canister_status of {canister_id}. Err: {err:#?}")
         })
 }
 
@@ -329,9 +326,10 @@ fn init_timers() {
     });
 
     if requires_periodic_tasks {
-        let new_timer_id = ic_cdk_timers::set_timer_interval(RUN_PERIODIC_TASKS_INTERVAL, || {
-            ic_cdk::spawn(run_periodic_tasks())
-        });
+        let new_timer_id =
+            ic_cdk_timers::set_timer_interval(RUN_PERIODIC_TASKS_INTERVAL, async || {
+                run_periodic_tasks().await
+            });
         TIMER_ID.with(|saved_timer_id| {
             let mut saved_timer_id = saved_timer_id.borrow_mut();
             if let Some(saved_timer_id) = *saved_timer_id {
@@ -351,17 +349,14 @@ fn init_timers() {
 fn reset_timers(_request: ResetTimersRequest) -> ResetTimersResponse {
     let reset_timers_cool_down_interval_seconds = RESET_TIMERS_COOL_DOWN_INTERVAL.as_secs();
 
-    if let Some(timers) = swap_mut().timers {
-        if let Some(last_reset_timestamp_seconds) = timers.last_reset_timestamp_seconds {
-            if now_seconds().saturating_sub(last_reset_timestamp_seconds)
-                < reset_timers_cool_down_interval_seconds
-            {
-                panic!(
-                    "Reset has already been called within the past {:?} seconds",
-                    reset_timers_cool_down_interval_seconds
-                );
-            }
-        }
+    if let Some(timers) = swap_mut().timers
+        && let Some(last_reset_timestamp_seconds) = timers.last_reset_timestamp_seconds
+        && now_seconds().saturating_sub(last_reset_timestamp_seconds)
+            < reset_timers_cool_down_interval_seconds
+    {
+        panic!(
+            "Reset has already been called within the past {reset_timers_cool_down_interval_seconds:?} seconds"
+        );
     }
 
     init_timers();
@@ -450,8 +445,7 @@ fn canister_post_upgrade() {
         Err(err) => {
             panic!(
                 "Error deserializing canister state post-upgrade. \
-                CANISTER HAS BROKEN STATE!!!!. Error: {:?}",
-                err
+                CANISTER HAS BROKEN STATE!!!!. Error: {err:?}"
             );
         }
         Ok(proto) => set_state(proto),
@@ -461,8 +455,7 @@ fn canister_post_upgrade() {
     // rolls back.
     swap().rebuild_indexes().unwrap_or_else(|err| {
         panic!(
-            "Error rebuilding the Swap canister indexes. The stable memory has been exhausted: {}",
-            err
+            "Error rebuilding the Swap canister indexes. The stable memory has been exhausted: {err}"
         )
     });
 
@@ -543,6 +536,15 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "sale_cf_total_icp_e8s",
         swap().current_neurons_fund_participation_e8s() as f64,
         "The total amount of ICP contributed by the Community Fund",
+    )?;
+    w.encode_gauge(
+        "swap_auto_finalization_failed",
+        if swap().has_auto_finalization_failed() {
+            1.0
+        } else {
+            0.0
+        },
+        "Whether the auto-finalization has failed (1.0 if failed, 0.0 if succeeded or not attempted)",
     )?;
 
     Ok(())

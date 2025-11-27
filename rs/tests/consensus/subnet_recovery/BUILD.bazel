@@ -17,10 +17,10 @@ STATIC_FILE_SERVER_IMAGE_RUNTIME_DEPS = [
 ]
 
 rust_library(
-    name = "common",
+    name = "lib",
     testonly = True,
-    srcs = ["common.rs"],
-    crate_name = "ic_consensus_system_test_subnet_recovery_common",
+    srcs = glob(["**/*.rs"]),
+    crate_name = "ic_consensus_system_test_subnet_recovery",
     deps = [
         # Keep sorted.
         "//rs/nns/constants",
@@ -41,6 +41,7 @@ rust_library(
         "@crate_index//:serde",
         "@crate_index//:serde_json",
         "@crate_index//:slog",
+        "@crate_index//:ssh2",
         "@crate_index//:url",
     ],
 )
@@ -50,7 +51,6 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     tags = [
         "colocate",
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
@@ -58,7 +58,7 @@ system_test_nns(
     uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -70,7 +70,6 @@ system_test_nns(
     flaky = True,  # flakiness rate of over 3.33% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "colocate",
-        "k8s",
         "long_test",
         "subnet_recovery",
     ],
@@ -78,7 +77,7 @@ system_test_nns(
     uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -89,7 +88,6 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     tags = [
         "colocate",
-        "k8s",
         "long_test",
         "subnet_recovery",
     ],
@@ -97,7 +95,7 @@ system_test_nns(
     uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -108,7 +106,6 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     tags = [
         "colocate",
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
@@ -116,7 +113,7 @@ system_test_nns(
     uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -128,7 +125,6 @@ system_test_nns(
     flaky = True,  # flakiness rate of over 1.67% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "colocate",
-        "k8s",
         "long_test",
         "subnet_recovery",
     ],
@@ -137,7 +133,7 @@ system_test_nns(
     uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -149,7 +145,6 @@ system_test_nns(
     flaky = True,  # flakiness rate of 3.33% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "colocate",
-        "k8s",
         "long_test",
         "subnet_recovery",
     ],
@@ -158,7 +153,7 @@ system_test_nns(
     uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -169,7 +164,6 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     tags = [
         "colocate",
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
@@ -177,7 +171,7 @@ system_test_nns(
     uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -185,18 +179,21 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_local_test",
-    env = MESSAGE_CANISTER_ENV,
+    env = MESSAGE_CANISTER_ENV | {
+        "IC_ADMIN_PATH": "$(rootpath //rs/registry/admin:ic-admin)",
+    },
     tags = [
         "colocate",
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
     test_timeout = "eternal",
     uses_guestos_test_update = True,
-    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + [
+        "//rs/registry/admin:ic-admin",
+    ],
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -207,7 +204,6 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     tags = [
         "colocate",
-        "k8s",
         "long_test",
         "subnet_recovery",
     ],
@@ -216,7 +212,7 @@ system_test_nns(
     uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -228,7 +224,6 @@ system_test_nns(
     flaky = True,  # flakiness rate of over 6% over the month from 2025-02-11 till 2025-03-11 (only for //rs/tests/consensus/subnet_recovery:sr_app_no_upgrade_with_chain_keys_test_head_nns_colocate).
     tags = [
         "colocate",
-        "k8s",
         "long_test",
         "subnet_recovery",
     ],
@@ -237,7 +232,7 @@ system_test_nns(
     uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -258,7 +253,7 @@ system_test_nns(
     uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":lib",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -269,7 +264,6 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     tags = [
         "colocate",
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
@@ -280,6 +274,7 @@ system_test_nns(
         SUBNET_RECOVERY_RUNTIME_DEPS + ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION + STATIC_FILE_SERVER_IMAGE_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
+        ":lib",
         "//rs/recovery",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",

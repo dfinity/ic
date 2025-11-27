@@ -1,35 +1,35 @@
 use crate::events::MinterEventAssert;
 use crate::flow::{
-    encode_principal, DepositCkEthParams, DepositParams, DepositTransactionData,
-    LedgerTransactionAssert, ProcessWithdrawal,
+    DepositCkEthParams, DepositParams, DepositTransactionData, LedgerTransactionAssert,
+    ProcessWithdrawal, encode_principal,
 };
 use crate::mock::{
     JsonRpcMethod, JsonRpcRequestMatcher, MockJsonRpcProviders, MockJsonRpcProvidersBuilder,
 };
 use crate::response::{block_response, empty_logs, fee_history};
 use crate::{
-    assert_reply, format_ethereum_address_to_eip_55, new_state_machine, CkEthSetup, LedgerBalance,
-    DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
+    CkEthSetup, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
     DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
     DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS, ERC20_HELPER_CONTRACT_ADDRESS,
-    ETH_HELPER_CONTRACT_ADDRESS, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_TICKS,
-    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
+    ETH_HELPER_CONTRACT_ADDRESS, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, LedgerBalance, MAX_TICKS,
+    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC, assert_reply,
+    format_ethereum_address_to_eip_55, new_state_machine,
 };
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use evm_rpc_types::Hex32;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_cketh_minter::SCRAPING_ETH_LOGS_INTERVAL;
 use ic_cketh_minter::endpoints::ckerc20::{
     RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
 };
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::{CkErc20Token, MinterInfo};
 use ic_cketh_minter::numeric::{BlockNumber, Erc20Value};
-use ic_cketh_minter::SCRAPING_ETH_LOGS_INTERVAL;
 use ic_ethereum_types::Address;
 pub use ic_ledger_suite_orchestrator::candid::AddErc20Arg as Erc20Token;
 use ic_ledger_suite_orchestrator::candid::InitArg as LedgerSuiteOrchestratorInitArg;
-use ic_ledger_suite_orchestrator_test_utils::{supported_erc20_tokens, LedgerSuiteOrchestrator};
+use ic_ledger_suite_orchestrator_test_utils::{LedgerSuiteOrchestrator, supported_erc20_tokens};
 use ic_state_machine_tests::{ErrorCode, StateMachine, WasmResult};
 use ic_types::messages::MessageId;
 use icrc_ledger_types::icrc1::account::Account;
@@ -547,7 +547,7 @@ impl DepositCkErc20WithSubaccountParams {
             assert_eq!(amount_hex.len(), 64);
             let subaccount = hex::encode(self.recipient_subaccount.unwrap_or([0; 32]));
             assert_eq!(amount_hex.len(), 64);
-            format!("0x{}{}", amount_hex, subaccount)
+            format!("0x{amount_hex}{subaccount}")
         };
 
         let topics = vec![

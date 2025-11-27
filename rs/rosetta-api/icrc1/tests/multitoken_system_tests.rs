@@ -1,20 +1,15 @@
 use crate::common::local_replica;
 use crate::common::local_replica::{create_and_install_icrc_ledger, test_identity};
-use crate::common::utils::{get_rosetta_blocks_from_icrc1_ledger, wait_for_rosetta_block};
+use crate::common::utils::{
+    get_rosetta_blocks_from_icrc1_ledger, metrics_gauge_value, wait_for_rosetta_block,
+};
 use candid::Nat;
 use candid::Principal;
 use common::local_replica::get_custom_agent;
-use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
+use ic_agent::identity::BasicIdentity;
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
-use ic_icrc1_ledger::{InitArgs, InitArgsBuilder};
-use ic_icrc1_test_utils::KeyPairGenerator;
-use ic_icrc1_test_utils::{
-    minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
-    DEFAULT_TRANSFER_FEE,
-};
-use ic_icrc1_tokens_u256::U256;
 use ic_icrc_rosetta::common::constants::STATUS_COMPLETED;
 use ic_icrc_rosetta::common::types::Error;
 use ic_icrc_rosetta::common::types::OperationType;
@@ -26,10 +21,17 @@ use ic_icrc_rosetta::construction_api::types::ConstructionMetadataRequestOptions
 use ic_icrc_rosetta::data_api::types::{QueryBlockRangeRequest, QueryBlockRangeResponse};
 use ic_icrc_rosetta_client::RosettaClient;
 use ic_icrc_rosetta_runner::RosettaClientArgsBuilder;
-use ic_icrc_rosetta_runner::{make_transaction_with_rosetta_client_binary, DEFAULT_TOKEN_SYMBOL};
 use ic_icrc_rosetta_runner::{
-    start_rosetta, RosettaContext, RosettaOptions, DEFAULT_DECIMAL_PLACES,
+    DEFAULT_DECIMAL_PLACES, RosettaContext, RosettaOptions, start_rosetta,
 };
+use ic_icrc_rosetta_runner::{DEFAULT_TOKEN_SYMBOL, make_transaction_with_rosetta_client_binary};
+use ic_icrc1_ledger::{InitArgs, InitArgsBuilder};
+use ic_icrc1_test_utils::KeyPairGenerator;
+use ic_icrc1_test_utils::{
+    ArgWithCaller, DEFAULT_TRANSFER_FEE, LedgerEndpointArg, minter_identity,
+    valid_transactions_strategy,
+};
+use ic_icrc1_tokens_u256::U256;
 use ic_rosetta_api::DEFAULT_BLOCKCHAIN;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
@@ -79,7 +81,7 @@ lazy_static! {
 
 fn path_from_env(var: &str) -> PathBuf {
     std::fs::canonicalize(
-        std::env::var(var).unwrap_or_else(|_| panic!("Environment variable {} is not set", var)),
+        std::env::var(var).unwrap_or_else(|_| panic!("Environment variable {var} is not set")),
     )
     .unwrap()
 }
@@ -235,8 +237,7 @@ impl SetupBuilder {
             let subnet_id = pocket_ic.get_subnet(icrc1_ledger.canister_id).unwrap();
             assert_eq!(
                 subnet_id, sns_subnet_id,
-                "The canister subnet {} does not match the SNS subnet {}",
-                subnet_id, sns_subnet_id
+                "The canister subnet {subnet_id} does not match the SNS subnet {sns_subnet_id}"
             );
             icrc1_ledgers.push(icrc1_ledger);
         }
@@ -298,11 +299,11 @@ impl RosettaLedgerTestingEnvironmentBuilder {
         let symbol_part = self
             .icrc1_symbol
             .as_ref()
-            .map_or("".to_string(), |symbol| format!(":s={}", symbol));
+            .map_or("".to_string(), |symbol| format!(":s={symbol}"));
         let decimals_part = self
             .icrc1_decimals
             .as_ref()
-            .map_or("".to_string(), |decimals| format!(":d={}", decimals));
+            .map_or("".to_string(), |decimals| format!(":d={decimals}"));
 
         format!(
             "{}{}{}",
@@ -495,16 +496,12 @@ async fn assert_rosetta_balance(
             break;
         } else {
             println!(
-                "Waited for rosetta, received block index {} but expected {}, waiting some more...",
-                latest_rosetta_block, block_index
+                "Waited for rosetta, received block index {latest_rosetta_block} but expected {block_index}, waiting some more..."
             );
         }
 
         if start.elapsed() > timeout {
-            panic!(
-                "Failed to get block index {} within {:?}",
-                block_index, timeout
-            );
+            panic!("Failed to get block index {block_index} within {timeout:?}");
         }
     }
 
@@ -1036,49 +1033,57 @@ fn test_block_transaction() {
                                 actual_block_transaction_response
                             );
 
-                            assert!(rosetta_client
-                                .block_transaction(
-                                    icrc1_ledgers[0].network_identifier(),
-                                    BlockIdentifier {
-                                        index: u64::MAX,
-                                        hash: hex::encode(block.clone().get_block_hash().clone()),
-                                    },
-                                    TransactionIdentifier {
-                                        hash: hex::encode(
-                                            block.clone().get_transaction_hash().clone()
-                                        )
-                                    }
-                                )
-                                .await
-                                .is_err());
+                            assert!(
+                                rosetta_client
+                                    .block_transaction(
+                                        icrc1_ledgers[0].network_identifier(),
+                                        BlockIdentifier {
+                                            index: u64::MAX,
+                                            hash: hex::encode(
+                                                block.clone().get_block_hash().clone()
+                                            ),
+                                        },
+                                        TransactionIdentifier {
+                                            hash: hex::encode(
+                                                block.clone().get_transaction_hash().clone()
+                                            )
+                                        }
+                                    )
+                                    .await
+                                    .is_err()
+                            );
 
-                            assert!(rosetta_client
-                                .block_transaction(
-                                    icrc1_ledgers[0].network_identifier().clone(),
-                                    BlockIdentifier {
-                                        index: block.index,
-                                        hash: hex::encode("wrong hash"),
-                                    },
-                                    TransactionIdentifier {
-                                        hash: hex::encode(block.clone().get_transaction_hash())
-                                    }
-                                )
-                                .await
-                                .is_err());
+                            assert!(
+                                rosetta_client
+                                    .block_transaction(
+                                        icrc1_ledgers[0].network_identifier().clone(),
+                                        BlockIdentifier {
+                                            index: block.index,
+                                            hash: hex::encode("wrong hash"),
+                                        },
+                                        TransactionIdentifier {
+                                            hash: hex::encode(block.clone().get_transaction_hash())
+                                        }
+                                    )
+                                    .await
+                                    .is_err()
+                            );
 
-                            assert!(rosetta_client
-                                .block_transaction(
-                                    icrc1_ledgers[0].network_identifier().clone(),
-                                    BlockIdentifier {
-                                        index: block.index,
-                                        hash: hex::encode(block.clone().get_block_hash()),
-                                    },
-                                    TransactionIdentifier {
-                                        hash: hex::encode("wrong tx hash")
-                                    }
-                                )
-                                .await
-                                .is_err());
+                            assert!(
+                                rosetta_client
+                                    .block_transaction(
+                                        icrc1_ledgers[0].network_identifier().clone(),
+                                        BlockIdentifier {
+                                            index: block.index,
+                                            hash: hex::encode(block.clone().get_block_hash()),
+                                        },
+                                        TransactionIdentifier {
+                                            hash: hex::encode("wrong tx hash")
+                                        }
+                                    )
+                                    .await
+                                    .is_err()
+                            );
                         }
                     }
                 });
@@ -1110,11 +1115,13 @@ fn test_ledger_symbol_check() {
         );
     });
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .downcast_ref::<String>()
-        .unwrap()
-        .contains("Provided symbol does not match symbol retrieved in online mode."));
+    assert!(
+        result
+            .unwrap_err()
+            .downcast_ref::<String>()
+            .unwrap()
+            .contains("Provided symbol does not match symbol retrieved in online mode.")
+    );
 }
 
 #[test]
@@ -1343,6 +1350,87 @@ fn test_mempool() {
             .await;
         let err = response.expect_err("expected an error");
         assert_eq!(err, Error::mempool_transaction_missing());
+    });
+}
+
+#[test]
+fn test_metrics() {
+    const NUM_BLOCKS: u64 = 2;
+    let sender_keypair = Secp256k1KeyPair::generate(0);
+    let rt = Runtime::new().unwrap();
+    let icrc1_ledger_1_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID)
+        .with_symbol("SYM1")
+        .with_decimals(6)
+        // The Icrc1LedgerBuilder already includes one initial balance, but we add another one here
+        // so that the index of the latest block is non-zero.
+        .with_initial_balance(
+            sender_keypair.generate_principal_id().unwrap().0,
+            1_000_000_000_000u64,
+        );
+    let setup = Setup::builder()
+        .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
+        .build(&rt);
+
+    let rosetta_ledger_setup_builder =
+        RosettaLedgerTestingEnvironmentBuilder::new(&setup.icrc1_ledgers[0], setup.port)
+            .with_icrc1_symbol("SYM1".to_string());
+
+    let icrc1_ledgers = setup.icrc1_ledgers.clone();
+
+    rt.block_on(async {
+        let env = RosettaTestingEnvironmentBuilder::new(false, setup.port)
+            .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_builder)
+            .build()
+            .await;
+        wait_for_rosetta_block(
+            &env.rosetta_client,
+            env.rosetta_ledger_testing_envs[0]
+                .network_identifier
+                .clone(),
+            NUM_BLOCKS - 1,
+        )
+        .await;
+
+        let metrics = env
+            .rosetta_client
+            .metrics()
+            .await
+            .expect("should return metrics");
+
+        let network_identifier = env.rosetta_ledger_testing_envs[0]
+            .network_identifier
+            .clone();
+
+        let current_index = env
+            .rosetta_client
+            .network_status(network_identifier.clone())
+            .await
+            .expect("Unable to call network_status")
+            .current_block_identifier
+            .index;
+
+        let ledger_num_blocks = get_rosetta_blocks_from_icrc1_ledger(
+            icrc1_ledgers[0].agent.clone(),
+            0,
+            *MAX_BLOCKS_PER_REQUEST,
+        )
+        .await
+        .len();
+        assert_eq!(ledger_num_blocks as u64, NUM_BLOCKS);
+        assert_eq!(current_index, NUM_BLOCKS - 1);
+
+        let rosetta_synched_block_height =
+            metrics_gauge_value(&metrics, "rosetta_synched_block_height")
+                .expect("should export rosetta_synched_block_height metric");
+        assert_eq!(rosetta_synched_block_height as u64, NUM_BLOCKS - 1);
+        let rosetta_verified_block_height =
+            metrics_gauge_value(&metrics, "rosetta_verified_block_height")
+                .expect("should export rosetta_verified_block_height metric");
+        assert_eq!(rosetta_verified_block_height as u64, NUM_BLOCKS - 1);
+        let rosetta_target_block_height =
+            metrics_gauge_value(&metrics, "rosetta_target_block_height")
+                .expect("should export rosetta_target_block_height metric");
+        assert_eq!(rosetta_target_block_height as u64, NUM_BLOCKS - 1);
     });
 }
 
@@ -1751,6 +1839,7 @@ fn test_construction_submit() {
                             ic_icrc1::Operation::Approve { fee, .. } => fee,
                             ic_icrc1::Operation::Mint { .. } => None,
                             ic_icrc1::Operation::Burn { .. } => None,
+                            ic_icrc1::Operation::FeeCollector { .. } => None,
                         };
 
                         if matches!(
@@ -2453,10 +2542,12 @@ fn test_query_blocks_range() {
                             .try_into()
                             .unwrap();
                         assert_eq!(query_block_range_response.blocks.len(), num_blocks);
-                        assert!(query_block_range_response
-                            .blocks
-                            .iter()
-                            .all(|block| block.block_identifier.index <= highest_block_index));
+                        assert!(
+                            query_block_range_response
+                                .blocks
+                                .iter()
+                                .all(|block| block.block_identifier.index <= highest_block_index)
+                        );
                     }
                 });
                 Ok(())

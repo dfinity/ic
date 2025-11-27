@@ -2,8 +2,8 @@
 //! writing Rust canisters.
 
 use candid::CandidType;
-use ic_protobuf::proxy::try_from_option_field;
 use ic_protobuf::proxy::ProxyDecodeError;
+use ic_protobuf::proxy::try_from_option_field;
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, DisplayerOf, Id};
 use serde::Deserialize;
@@ -185,8 +185,8 @@ pub enum SnapshotIdError {
 impl fmt::Display for SnapshotIdError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidLength(err) => write!(f, "Invalid length of SnapshotId: {}", err),
-            Self::InvalidFormat(err) => write!(f, "Invalid format of SnapshotId: {}", err,),
+            Self::InvalidLength(err) => write!(f, "Invalid length of SnapshotId: {err}"),
+            Self::InvalidFormat(err) => write!(f, "Invalid format of SnapshotId: {err}",),
         }
     }
 }
@@ -318,7 +318,7 @@ impl std::fmt::Display for SnapshotId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let local_id = self.get_local_snapshot_id();
         let canister_id = self.get_canister_id();
-        write!(f, "{}-{}", canister_id, local_id)
+        write!(f, "{canister_id}-{local_id}")
     }
 }
 

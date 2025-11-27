@@ -1,6 +1,6 @@
 [package]
 name = "attestation_testing"
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
 ic-interfaces-registry-mocks = { path = "../../../interfaces/registry/mocks" }

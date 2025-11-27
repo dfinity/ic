@@ -1,5 +1,5 @@
 use ic_interfaces_registry::{RegistryClient, ZERO_REGISTRY_VERSION};
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_protobuf::{
     registry::{
         node::v1::ConnectionEndpoint,
@@ -14,14 +14,14 @@ use ic_registry_client_helpers::{
     subnet::{SubnetRegistry, SubnetTransportRegistry},
 };
 use ic_registry_keys::{
-    make_canister_ranges_key, make_subnet_list_record_key, make_subnet_record_key,
-    CANISTER_RANGES_PREFIX, ROOT_SUBNET_ID_KEY,
+    CANISTER_RANGES_PREFIX, ROOT_SUBNET_ID_KEY, make_canister_ranges_key,
+    make_subnet_list_record_key, make_subnet_record_key,
 };
-use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore};
+use ic_registry_local_store::{ChangelogEntry, KeyMutation, LocalStore};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, NodeId, RegistryVersion, SubnetId,
+    CanisterId, NodeId, RegistryVersion, SubnetId, crypto::threshold_sig::ThresholdSigPublicKey,
 };
 use prost::Message;
 use std::{
@@ -50,8 +50,8 @@ pub(crate) struct InternalState {
     registry_client: Arc<dyn RegistryClient>,
     local_store: Arc<dyn LocalStore>,
     latest_version: RegistryVersion,
-    nns_pub_key: Option<ThresholdSigPublicKey>,
     nns_urls: Vec<Url>,
+    nns_pub_key: Option<ThresholdSigPublicKey>,
     registry_canister: Option<Arc<RegistryCanister>>,
     registry_canister_fallback: Option<Arc<RegistryCanister>>,
     poll_delay: Duration,
@@ -64,12 +64,13 @@ impl InternalState {
         node_id: Option<NodeId>,
         registry_client: Arc<dyn RegistryClient>,
         local_store: Arc<dyn LocalStore>,
-        config_urls: Vec<Url>,
+        config_nns_urls: Vec<Url>,
+        maybe_config_nns_pub_key: Option<ThresholdSigPublicKey>,
         poll_delay: Duration,
     ) -> Self {
-        let registry_canister_fallback = if !config_urls.is_empty() {
+        let registry_canister_fallback = if !config_nns_urls.is_empty() {
             Some(Arc::new(RegistryCanister::new_with_query_timeout(
-                config_urls,
+                config_nns_urls,
                 poll_delay,
             )))
         } else {
@@ -81,8 +82,8 @@ impl InternalState {
             registry_client,
             local_store,
             latest_version: ZERO_REGISTRY_VERSION,
-            nns_pub_key: None,
             nns_urls: vec![],
+            nns_pub_key: maybe_config_nns_pub_key,
             registry_canister: None,
             registry_canister_fallback,
             poll_delay,
@@ -113,78 +114,63 @@ impl InternalState {
             }
         }
 
-        let registry_canister = if self.failed_poll_count >= MAX_CONSECUTIVE_FAILURES
-            && self.registry_canister_fallback.is_some()
-        {
-            info!(
-                self.logger,
-                "Polling NNS failed {} times consecutively, trying config urls once...",
-                self.failed_poll_count
-            );
-            self.failed_poll_count = -1;
-            self.registry_canister_fallback.as_ref()
-        } else {
-            self.registry_canister.as_ref()
+        let Some(nns_pub_key) = self.nns_pub_key else {
+            return Err("NNS public key not set in the registry and not configured.".to_string());
         };
 
-        // Poll registry canister and apply changes to local changelog
-        if let Some(registry_canister_ref) = registry_canister {
-            let registry_canister = Arc::clone(registry_canister_ref);
-            let nns_pub_key = self
-                .nns_pub_key
-                .expect("registry canister is set => pub key is set");
-            // Note, code duplicate in registry_replicator.rs initialize_local_store()
-            let mut resp = match registry_canister
-                .get_certified_changes_since(latest_version.get(), &nns_pub_key)
-                .await
-            {
-                Ok((records, _, _)) => {
-                    self.failed_poll_count = 0;
-                    records
-                }
-                Err(e) => {
-                    self.failed_poll_count += 1;
-                    return Err(format!(
-                        "Error when trying to fetch updates from NNS: {:?}",
-                        e
-                    ));
-                }
-            };
-
-            resp.sort_by_key(|tr| tr.version);
-            let changelog = resp.iter().fold(Changelog::default(), |mut cl, r| {
-                let rel_version = (r.version - latest_version).get();
-                if cl.len() < rel_version as usize {
-                    cl.push(ChangelogEntry::default());
-                }
-                cl.last_mut().unwrap().push(KeyMutation {
-                    key: r.key.clone(),
-                    value: r.value.clone(),
-                });
-                cl
-            });
-
-            let entries = changelog.len();
-
-            changelog
-                .into_iter()
-                .enumerate()
-                .try_for_each(|(i, cle)| {
-                    let v = latest_version + RegistryVersion::from(i as u64 + 1);
-                    self.local_store.store(v, cle)
-                })
-                .expect("Writing to the FS failed: Stop.");
-
-            if entries > 0 {
+        let registry_canister = match (
+            self.registry_canister.as_ref(),
+            self.registry_canister_fallback.as_ref(),
+        ) {
+            (_, Some(fallback)) if self.failed_poll_count >= MAX_CONSECUTIVE_FAILURES => {
+                // After several failed attempts to poll the NNS, try the config URLs once, which
+                // would possibly fix the local store for the next poll.
                 info!(
                     self.logger,
-                    "Stored registry versions up to: {}",
-                    latest_version + RegistryVersion::from(entries as u64)
+                    "Polling NNS failed {} times consecutively, trying config urls once...",
+                    self.failed_poll_count
                 );
+                // Set to -1 so that the counter is set back to 0 both on success and failure of the
+                // poll.
+                self.failed_poll_count = -1;
+                Arc::clone(fallback)
+            }
+            (None, Some(fallback)) => {
+                info!(
+                    self.logger,
+                    "Remote registry canister not initialized, probably due to missing NNS config data in the registry, trying config urls..."
+                );
+                Arc::clone(fallback)
+            }
+            (Some(canister), _) => Arc::clone(canister),
+            (None, None) => return Err("No remote registry canister configured.".to_string()),
+        };
+
+        match write_certified_changes_to_local_store(
+            &registry_canister,
+            &nns_pub_key,
+            self.local_store.as_ref(),
+            latest_version,
+        )
+        .await
+        {
+            Ok(last_stored_version) => {
+                self.failed_poll_count = 0;
+                if last_stored_version != latest_version {
+                    info!(
+                        self.logger,
+                        "Stored registry versions up to: {}", last_stored_version
+                    );
+                }
+                Ok(())
+            }
+            Err(e) => {
+                self.failed_poll_count += 1;
+                Err(format!(
+                    "Error when trying to fetch updates from NNS: {e:?}",
+                ))
             }
         }
-
-        Ok(())
     }
 
     /// Iff at version `latest_version` the node id of this node appears on a
@@ -206,7 +192,7 @@ impl InternalState {
         };
 
         fn map_to_str<E: Debug>(msg: &str, v: RegistryVersion, e: E) -> String {
-            format!("{} at version {}: {:?}", msg, v, e)
+            format!("{msg} at version {v}: {e:?}")
         }
 
         let (subnet_id, subnet_record) = match self
@@ -219,7 +205,7 @@ impl InternalState {
                     "Error retrieving subnet records",
                     latest_version,
                     e,
-                ))
+                ));
             }
             _ => return Ok(()),
         };
@@ -301,13 +287,9 @@ impl InternalState {
     fn get_root_subnet_id(&self, version: RegistryVersion) -> Result<SubnetId, String> {
         match self.registry_client.get_root_subnet_id(version) {
             Ok(Some(v)) => Ok(v),
-            Ok(_) => Err(format!(
-                "No NNS subnet id configured at version {}",
-                version
-            )),
+            Ok(_) => Err(format!("No NNS subnet id configured at version {version}")),
             Err(e) => Err(format!(
-                "Could not fetch nns subnet id at version {}: {:?}",
-                version, e
+                "Could not fetch nns subnet id at version {version}: {e:?}"
             )),
         }
     }
@@ -323,12 +305,10 @@ impl InternalState {
         {
             Ok(Some(v)) => Ok(v),
             Ok(None) => Err(format!(
-                "Public key for subnet {} not set at version {}",
-                subnet_id, version
+                "Public key for subnet {subnet_id} not set at version {version}"
             )),
             Err(e) => Err(format!(
-                "Error when retrieving public key for subnet {} at version {}: {:?}",
-                subnet_id, version, e
+                "Error when retrieving public key for subnet {subnet_id} at version {version}: {e:?}"
             )),
         }
     }
@@ -345,15 +325,13 @@ impl InternalState {
             Ok(Some(v)) => v,
             Ok(None) => {
                 return Err(format!(
-                    "Missing or incomplete transport infos for subnet {} at version {}.",
-                    subnet_id, version
-                ))
+                    "Missing or incomplete transport infos for subnet {subnet_id} at version {version}."
+                ));
             }
             Err(e) => {
                 return Err(format!(
-                    "Error retrieving transport infos for subnet {} at version {}: {:?}.",
-                    subnet_id, version, e
-                ))
+                    "Error retrieving transport infos for subnet {subnet_id} at version {version}: {e:?}."
+                ));
             }
         };
 
@@ -374,7 +352,7 @@ impl InternalState {
         let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
             Ok(v) => {
                 if v.is_ipv6() {
-                    format!("[{}]", v)
+                    format!("[{v}]")
                 } else {
                     v.to_string()
                 }
@@ -394,6 +372,49 @@ impl InternalState {
             }
         }
     }
+}
+
+/// Poll the registry canister for certified changes since `from_version`, and
+/// write them to the local store.
+/// Returns the latest registry version written to the local store, or an error if
+/// fetching the changes failed.
+/// Panics if writing to the local store fails.
+pub async fn write_certified_changes_to_local_store(
+    registry_canister: &RegistryCanister,
+    nns_pub_key: &ThresholdSigPublicKey,
+    local_store: &dyn LocalStore,
+    from_version: RegistryVersion,
+) -> Result<RegistryVersion, String> {
+    let (records, _, _) = registry_canister
+        .get_certified_changes_since(from_version.get(), nns_pub_key)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut changelog: BTreeMap<RegistryVersion, ChangelogEntry> = BTreeMap::new();
+    for record in records {
+        changelog
+            .entry(record.version)
+            .or_default()
+            .push(KeyMutation {
+                key: record.key,
+                value: record.value,
+            });
+    }
+
+    let last_version = changelog
+        .last_key_value()
+        .map(|(last_version, _)| *last_version)
+        .unwrap_or(from_version); // If `changelog` is empty, i.e. no new changes.
+
+    for (registry_version, changelog_entry) in changelog {
+        local_store
+            .store(registry_version, changelog_entry)
+            .expect("Writing to the FS failed at version {registry_version}");
+    }
+
+    // If the local store did not panic in the loop above, then `last_version` is indeed the last
+    // version stored on disk.
+    Ok(last_version)
 }
 
 /// Standalone function for switch-over logic, for unit testing.
@@ -503,20 +524,36 @@ pub fn apply_switch_over_to_last_changelog_entry_impl(
 #[cfg(test)]
 mod test {
     use super::*;
+    use ic_certification_test_utils::{CertificateBuilder, CertificateData::*};
+    use ic_crypto_tree_hash::Digest;
+    use ic_protobuf::registry::crypto::v1::PublicKey as PbPublicKey;
     use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_client_helpers::node::NodeRecord;
     use ic_registry_keys::{
-        make_canister_ranges_key, make_subnet_list_record_key, make_subnet_record_key,
-        ROOT_SUBNET_ID_KEY,
+        ROOT_SUBNET_ID_KEY, make_canister_ranges_key, make_crypto_threshold_signing_pubkey_key,
+        make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
     };
+    use ic_registry_local_store::{LocalStoreImpl, LocalStoreWriter};
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
-    use ic_types::{CanisterId, PrincipalId, SubnetId};
+    use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_types::{CanisterId, SubnetId};
+    use ic_types_test_utils::ids::{NODE_1, SUBNET_1, SUBNET_2, SUBNET_3};
     use std::collections::BTreeMap;
     use std::convert::TryFrom;
     use std::sync::Arc;
+    use tempfile::TempDir;
 
-    fn create_test_subnet_id(id: u64) -> SubnetId {
-        SubnetId::from(PrincipalId::new_subnet_test_id(id))
+    const TEST_POLL_DELAY: Duration = Duration::from_secs(1);
+
+    fn create_threshold_sig_public_key(byte: u8) -> ThresholdSigPublicKey {
+        let (_, pk, _) = CertificateBuilder::new(CanisterData {
+            canister_id: CanisterId::from_u64(0),
+            certified_data: Digest([byte; 32]),
+        })
+        .build();
+
+        pk
     }
 
     fn create_test_subnet_record(start_as_nns: bool, subnet_type: SubnetType) -> SubnetRecord {
@@ -580,11 +617,131 @@ mod test {
         client
     }
 
+    #[tokio::test]
+    async fn test_uses_fallback_after_consecutive_failures() {
+        with_test_replica_logger(|logger| async {
+            let tempdir = TempDir::new().unwrap();
+            let local_store = Arc::new(LocalStoreImpl::new(tempdir.path()));
+            let registry_client = Arc::new(FakeRegistryClient::new(local_store.clone()));
+
+            let config_nns_urls = vec![Url::parse("http://fallback:1234").unwrap()];
+            let config_nns_pub_key = create_threshold_sig_public_key(0);
+
+            // Initialize root subnet, public key and node record in the registry
+            // The node endpoint is invalid on purpose to trigger failures.
+            // The expected behavior is to try the fallback URLs after MAX_CONSECUTIVE_FAILURES.
+            let http_endpoint = ConnectionEndpoint {
+                ip_addr: "2001:db8::1".to_string(),
+                port: 8080,
+            };
+            local_store
+                .store(
+                    RegistryVersion::from(1),
+                    vec![KeyMutation {
+                        key: ROOT_SUBNET_ID_KEY.to_string(),
+                        value: Some(ic_types::subnet_id_into_protobuf(SUBNET_1).encode_to_vec()),
+                    }],
+                )
+                .expect("Failed to set root subnet ID");
+            local_store
+                .store(
+                    RegistryVersion::from(2),
+                    vec![KeyMutation {
+                        key: make_crypto_threshold_signing_pubkey_key(SUBNET_1),
+                        value: Some(
+                            PbPublicKey::from(create_threshold_sig_public_key(1)).encode_to_vec(),
+                        ),
+                    }],
+                )
+                .expect("Failed to set subnet public key");
+            local_store
+                .store(
+                    RegistryVersion::from(3),
+                    vec![KeyMutation {
+                        key: make_node_record_key(NODE_1),
+                        value: Some(
+                            NodeRecord {
+                                http: Some(http_endpoint.clone()),
+                                ..Default::default()
+                            }
+                            .encode_to_vec(),
+                        ),
+                    }],
+                )
+                .expect("Failed to set node record");
+            local_store
+                .store(
+                    RegistryVersion::from(4),
+                    vec![KeyMutation {
+                        key: make_subnet_record_key(SUBNET_1),
+                        value: Some(
+                            SubnetRecord {
+                                membership: vec![NODE_1.get().to_vec()],
+                                ..Default::default()
+                            }
+                            .encode_to_vec(),
+                        ),
+                    }],
+                )
+                .expect("Failed to set subnet record");
+            registry_client.reload();
+
+            let mut internal_state = InternalState::new(
+                logger,
+                None,
+                Arc::clone(&registry_client) as Arc<dyn RegistryClient>,
+                Arc::clone(&local_store) as Arc<dyn LocalStore>,
+                config_nns_urls.clone(),
+                Some(config_nns_pub_key),
+                TEST_POLL_DELAY,
+            );
+
+            // Will first try to fetch from data found inside the registry
+            let node_api_url = internal_state.http_endpoint_to_url(&http_endpoint).unwrap();
+            let fallback_url = &config_nns_urls[0];
+            for _ in 0..MAX_CONSECUTIVE_FAILURES {
+                let result = internal_state.poll().await;
+                assert!(result.is_err_and(|err| {
+                    // Full error message looks like:
+                    //
+                    // "Error when trying to fetch updates from NNS: UnknownError(\"Failed to query
+                    // get_certified_changes_since on canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Request
+                    // failed for
+                    // http://[2001:db8::1]:8080/api/v2/canister/rwlget-iiaaa-aaaaa-aaaaa-cai/query:
+                    // hyper_util::client::legacy::Error(Connect, ConnectError(\\\"tcp connect
+                    // error\\\", Os { code: 101, kind: NetworkUnreachable, message: \\\"Network is
+                    // unreachable\\\" }))\")"
+                    err.contains("Error when trying to fetch updates from NNS:")
+                        && err.contains(node_api_url.as_str())
+                        && !err.contains(fallback_url.as_str())
+                }));
+            }
+
+            // Will then try to fetch from the fallback URLs
+            let result = internal_state.poll().await;
+            assert!(result.is_err_and(|err| {
+                // Full error message looks like:
+                //
+                // "Error when trying to fetch updates from NNS: UnknownError(\"Failed to query
+                // get_certified_changes_since on canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Request
+                // failed for
+                // http://fallback:1234/api/v2/canister/rwlget-iiaaa-aaaaa-aaaaa-cai/query:
+                // hyper_util::client::legacy::Error(Connect, ConnectError(\\\"tcp connect
+                // error\\\", Os { code: 101, kind: NetworkUnreachable, message: \\\"Network is
+                // unreachable\\\" }))\")"
+                err.contains("Error when trying to fetch updates from NNS:")
+                    && err.contains(fallback_url.as_str())
+                    && !err.contains(node_api_url.as_str())
+            }));
+        })
+        .await
+    }
+
     #[test]
     fn test_apply_switch_over_modifies_last_changelog_entry_and_updates_keys_as_expected() {
-        let old_nns_subnet_id = create_test_subnet_id(1);
-        let new_nns_subnet_id = create_test_subnet_id(2);
-        let other_subnet_id = create_test_subnet_id(3);
+        let old_nns_subnet_id = SUBNET_1;
+        let new_nns_subnet_id = SUBNET_2;
+        let other_subnet_id = SUBNET_3;
         let new_nns_subnet_record = create_test_subnet_record(true, SubnetType::Application);
 
         // Create routing table with old NNS subnet and another subnet

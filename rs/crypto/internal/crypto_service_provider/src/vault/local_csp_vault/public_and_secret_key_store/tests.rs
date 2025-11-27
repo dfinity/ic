@@ -2,16 +2,16 @@ use crate::LocalCspVault;
 
 mod key_id_computations {
     use super::*;
+    use crate::CspVault;
     use crate::vault::api::PublicKeyStoreCspVault;
     use crate::vault::local_csp_vault::public_and_secret_key_store::{
-        compute_committee_signing_key_id, compute_dkg_dealing_encryption_key_id,
-        compute_idkg_dealing_encryption_key_id, compute_node_signing_key_id,
-        compute_tls_certificate_key_id, ExternalPublicKeyError,
+        ExternalPublicKeyError, compute_committee_signing_key_id,
+        compute_dkg_dealing_encryption_key_id, compute_idkg_dealing_encryption_key_id,
+        compute_node_signing_key_id, compute_tls_certificate_key_id,
     };
     use crate::vault::test_utils::pks_and_sks::{
-        generate_idkg_dealing_encryption_key_pair, NODE_1,
+        NODE_1, generate_idkg_dealing_encryption_key_pair,
     };
-    use crate::CspVault;
     use assert_matches::assert_matches;
     use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381;
     use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
@@ -190,7 +190,7 @@ mod public_key_comparisons {
     use super::*;
     use crate::vault::api::LocalPublicKeyError;
     use crate::vault::local_csp_vault::public_and_secret_key_store::{
-        compare_public_keys, LocalNodePublicKeyResults, LocalNodePublicKeys,
+        LocalNodePublicKeyResults, LocalNodePublicKeys, compare_public_keys,
     };
     use crate::vault::test_utils::pks_and_sks::{
         convert_to_external_public_keys, generate_all_keys,
@@ -448,10 +448,10 @@ mod pks_and_sks_contains {
         MultiSignatureCspVault, NiDkgCspVault, NodeKeysError, NodeKeysErrors,
         PksAndSksContainsErrors, SecretKeyError, TlsHandshakeCspVault,
     };
+    use crate::vault::test_utils::pks_and_sks::NODE_1;
     use crate::vault::test_utils::pks_and_sks::convert_to_external_public_keys;
     use crate::vault::test_utils::pks_and_sks::generate_all_keys;
     use crate::vault::test_utils::pks_and_sks::generate_idkg_dealing_encryption_key_pair;
-    use crate::vault::test_utils::pks_and_sks::NODE_1;
     use assert_matches::assert_matches;
     use ic_types_test_utils::ids::node_test_id;
 
@@ -461,9 +461,11 @@ mod pks_and_sks_contains {
 
         let current_node_public_keys = generate_all_keys(&csp_vault);
 
-        assert!(csp_vault
-            .pks_and_sks_contains(convert_to_external_public_keys(current_node_public_keys))
-            .is_ok());
+        assert!(
+            csp_vault
+                .pks_and_sks_contains(convert_to_external_public_keys(current_node_public_keys))
+                .is_ok()
+        );
     }
 
     #[test]
@@ -473,14 +475,16 @@ mod pks_and_sks_contains {
         let _second_idkg_pk = generate_idkg_dealing_encryption_key_pair(&csp_vault);
         let _third_idkg_pk = generate_idkg_dealing_encryption_key_pair(&csp_vault);
 
-        assert!(csp_vault
-            .pks_and_sks_contains(convert_to_external_public_keys(current_node_public_keys))
-            .is_ok());
+        assert!(
+            csp_vault
+                .pks_and_sks_contains(convert_to_external_public_keys(current_node_public_keys))
+                .is_ok()
+        );
     }
 
     #[test]
-    fn should_return_success_for_pks_and_sks_contains_if_all_keys_match_with_multiple_idkg_keys_and_external_key_not_first_in_vector(
-    ) {
+    fn should_return_success_for_pks_and_sks_contains_if_all_keys_match_with_multiple_idkg_keys_and_external_key_not_first_in_vector()
+     {
         let csp_vault = LocalCspVault::builder_for_test().build();
         let _initial_node_public_keys = generate_all_keys(&csp_vault);
         let _second_idkg_pk = generate_idkg_dealing_encryption_key_pair(&csp_vault);
@@ -489,14 +493,16 @@ mod pks_and_sks_contains {
             .expect("Failed to get current node public keys");
         let _third_idkg_pk = generate_idkg_dealing_encryption_key_pair(&csp_vault);
 
-        assert!(csp_vault
-            .pks_and_sks_contains(convert_to_external_public_keys(current_node_public_keys))
-            .is_ok());
+        assert!(
+            csp_vault
+                .pks_and_sks_contains(convert_to_external_public_keys(current_node_public_keys))
+                .is_ok()
+        );
     }
 
     #[test]
-    fn should_return_success_for_pks_and_sks_contains_if_all_keys_match_where_idkg_keys_have_different_timestamps(
-    ) {
+    fn should_return_success_for_pks_and_sks_contains_if_all_keys_match_where_idkg_keys_have_different_timestamps()
+     {
         let csp_vault = LocalCspVault::builder_for_test().build();
         let _current_node_public_keys = generate_all_keys(&csp_vault);
         let mut external_public_keys = convert_to_external_public_keys(
@@ -789,8 +795,8 @@ mod pks_and_sks_contains {
     }
 
     #[test]
-    fn should_return_error_for_pks_and_sks_contains_if_external_dkg_dealing_encryption_key_is_malformed(
-    ) {
+    fn should_return_error_for_pks_and_sks_contains_if_external_dkg_dealing_encryption_key_is_malformed()
+     {
         let csp_vault = LocalCspVault::builder_for_test().build();
         let mut current_node_public_keys = generate_all_keys(&csp_vault);
         if let Some(dkg_dealing_encryption_public_key) =
@@ -850,8 +856,8 @@ mod pks_and_sks_contains {
     }
 
     #[test]
-    fn should_return_error_for_pks_and_sks_contains_if_external_idkg_dealing_encryption_key_is_malformed(
-    ) {
+    fn should_return_error_for_pks_and_sks_contains_if_external_idkg_dealing_encryption_key_is_malformed()
+     {
         let csp_vault = LocalCspVault::builder_for_test().build();
         let mut current_node_public_keys = generate_all_keys(&csp_vault);
         if let Some(idkg_dealing_encryption_public_key) =
@@ -883,19 +889,19 @@ mod pks_and_sks_contains {
 }
 
 mod validate_pks_and_sks {
+    use crate::LocalCspVault;
     use crate::key_id::KeyId;
     use crate::keygen::utils::mega_public_key_from_proto;
-    use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
     use crate::public_key_store::PublicKeyStore;
-    use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
+    use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
     use crate::secret_key_store::SecretKeyStore;
+    use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
     use crate::types::CspPublicKey;
     use crate::vault::api::ValidatePksAndSksKeyPairError::{
         PublicKeyInvalid, PublicKeyNotFound, SecretKeyNotFound,
     };
     use crate::vault::api::{PublicAndSecretKeyStoreCspVault, ValidatePksAndSksError};
     use crate::vault::local_csp_vault::public_and_secret_key_store::LocalNodePublicKeys;
-    use crate::LocalCspVault;
     use assert_matches::assert_matches;
     use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
     use ic_crypto_test_utils_keys::public_keys::{
@@ -1414,36 +1420,31 @@ mod validate_pks_and_sks {
         if let Some(key_id) = key_ids.node_signing_key_id {
             assert!(
                 key_ids_to_insert.insert(key_id),
-                "duplicated key ID {:?}",
-                key_id
+                "duplicated key ID {key_id:?}"
             );
         }
         if let Some(key_id) = key_ids.committee_signing_key_id {
             assert!(
                 key_ids_to_insert.insert(key_id),
-                "duplicated key ID {:?}",
-                key_id
+                "duplicated key ID {key_id:?}"
             );
         }
         if let Some(key_id) = key_ids.tls_secret_key_id {
             assert!(
                 key_ids_to_insert.insert(key_id),
-                "duplicated key ID {:?}",
-                key_id
+                "duplicated key ID {key_id:?}"
             );
         }
         if let Some(key_id) = key_ids.dkg_dealing_encryption_key_id {
             assert!(
                 key_ids_to_insert.insert(key_id),
-                "duplicated key ID {:?}",
-                key_id
+                "duplicated key ID {key_id:?}"
             );
         }
         for key_id in key_ids.idkg_dealing_encryption_key_ids {
             assert!(
                 key_ids_to_insert.insert(key_id),
-                "duplicated key ID {:?}",
-                key_id
+                "duplicated key ID {key_id:?}"
             );
         }
         for key_id in key_ids_to_insert {

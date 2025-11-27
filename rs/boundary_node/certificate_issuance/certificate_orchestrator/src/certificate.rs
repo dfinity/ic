@@ -2,15 +2,15 @@ use std::ops::Bound;
 
 use anyhow::anyhow;
 use certificate_orchestrator_interface::{
-    EncryptedPair, ExportPackage, IcCertificate, Id, Registration, LEFT_GUARD, RIGHT_GUARD,
+    EncryptedPair, ExportPackage, IcCertificate, Id, LEFT_GUARD, RIGHT_GUARD, Registration,
 };
 use ic_cdk::api::msg_caller;
 use prometheus::labels;
 
 use crate::{
+    LocalRef, StableMap, StorableId, WithMetrics,
     acl::{Authorize, AuthorizeError, WithAuthorize},
     ic_certification::{add_cert, get_cert_for_range, set_root_hash},
-    LocalRef, StableMap, StorableId, WithMetrics,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -246,11 +246,7 @@ impl Export for Exporter {
                         let k = StorableId::from(s);
                         if pairs.contains_key(&k) {
                             let mut i = pairs.iter_upper_bound(&k);
-                            if i.next().is_none() {
-                                pairs.iter()
-                            } else {
-                                i
-                            }
+                            if i.next().is_none() { pairs.iter() } else { i }
                         } else {
                             pairs.iter_upper_bound(&k)
                         }

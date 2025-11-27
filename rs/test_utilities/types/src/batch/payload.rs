@@ -68,9 +68,9 @@ mod tests {
     #[test]
     fn payload_serialize_then_deserialize() {
         use ic_types::{
-            batch::BatchPayload,
-            consensus::{dkg::DkgDataPayload, Payload},
             Height,
+            batch::BatchPayload,
+            consensus::{Payload, dkg::DkgDataPayload},
         };
 
         // Test default empty payload

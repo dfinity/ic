@@ -1,5 +1,5 @@
 use crate::JoinOnDrop;
-use crossbeam_channel::{bounded, unbounded, Sender};
+use crossbeam_channel::{Sender, bounded, unbounded};
 use std::time::Duration;
 
 /// An object to be deallocated in the background.
@@ -104,8 +104,8 @@ impl DeallocationSender {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Instant;
 
     /// A struct that increments one of two counters on drop, depending on whether

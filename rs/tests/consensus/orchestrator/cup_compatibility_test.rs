@@ -23,14 +23,14 @@ end::catalog[] */
 use anyhow::Result;
 use ic_recovery::file_sync_helper::download_binary;
 use ic_system_test_driver::driver::test_env_api::{
-    get_dependency_path, get_mainnet_application_subnet_revision, get_mainnet_nns_revision,
-    READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    READY_WAIT_TIMEOUT, RETRY_BACKOFF, get_dependency_path,
+    get_mainnet_application_subnet_revision, get_mainnet_nns_revision,
 };
 use ic_system_test_driver::driver::{group::SystemTestGroup, test_env::TestEnv};
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
 use ic_types::ReplicaVersion;
-use slog::{error, info, Logger};
+use slog::{Logger, error, info};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;

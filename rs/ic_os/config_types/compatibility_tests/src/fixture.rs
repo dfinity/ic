@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use config_types::*;
 use std::fs;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -6,8 +6,8 @@ use std::path::Path;
 
 /// Generates fixtures for the current version, enforcing version increment if config_types has been modified
 pub fn generate_fixtures(fixtures_dir: &Path) -> Result<()> {
-    generate_fixture_for_config(fixtures_dir, "hostos", generate_default_hostos_config())?;
-    generate_fixture_for_config(fixtures_dir, "guestos", generate_default_guestos_config())?;
+    generate_fixture_for_config(fixtures_dir, "hostos", generate_hostos_config())?;
+    generate_fixture_for_config(fixtures_dir, "guestos", generate_guestos_config())?;
 
     Ok(())
 }
@@ -33,22 +33,21 @@ where
 /// Checks if the current config_types structure has changed compared to the existing fixture version
 fn config_structure_changed<T>(existing_fixture_path: &Path, new_config: &T) -> Result<bool>
 where
-    T: serde::de::DeserializeOwned + PartialEq,
+    T: serde::Serialize + serde::de::DeserializeOwned,
 {
     // If an existing fixture doesn't exist, this is a new config version
     if !existing_fixture_path.exists() {
         return Ok(false);
     }
 
-    let file = fs::File::open(existing_fixture_path)?;
+    let existing_json = fs::read_to_string(existing_fixture_path)?;
+    let new_json = serde_json::to_string_pretty(new_config)?;
 
-    match serde_json::from_reader::<_, T>(file) {
-        Ok(existing_config) => Ok(existing_config != *new_config),
-        Err(_) => Ok(true), // If we can't parse the existing fixture, assume structure changed
-    }
+    // Compare the JSON strings - if they're different, the config structure or values have changed
+    Ok(existing_json != new_json)
 }
 
-fn generate_default_hostos_config() -> HostOSConfig {
+fn generate_hostos_config() -> HostOSConfig {
     let network_settings = NetworkSettings {
         ipv6_config: Ipv6Config::Fixed(FixedIpv6Config {
             address: "2a00:fb01:400:200::1/64".to_string(),
@@ -66,7 +65,6 @@ fn generate_default_hostos_config() -> HostOSConfig {
         node_reward_type: Some("type3.1".to_string()),
         mgmt_mac: "00:00:00:00:00:01".parse().unwrap(),
         deployment_environment: DeploymentEnvironment::Mainnet,
-        logging: Logging::default(),
         enable_trusted_execution_environment: false,
         use_nns_public_key: false,
         nns_urls: vec![
@@ -77,11 +75,17 @@ fn generate_default_hostos_config() -> HostOSConfig {
         icos_dev_settings: ICOSDevSettings::default(),
     };
 
+    #[allow(deprecated)]
     let hostos_settings = HostOSSettings {
-        vm_memory: 4096,
+        vm_memory: 16,
         vm_cpu: "kvm".to_string(),
         vm_nr_of_vcpus: 64,
         verbose: false,
+        hostos_dev_settings: HostOSDevSettings {
+            vm_memory: 16,
+            vm_cpu: "kvm".to_string(),
+            vm_nr_of_vcpus: 64,
+        },
     };
 
     HostOSConfig {
@@ -93,16 +97,16 @@ fn generate_default_hostos_config() -> HostOSConfig {
     }
 }
 
-fn generate_default_guestos_config() -> GuestOSConfig {
+fn generate_guestos_config() -> GuestOSConfig {
     let sev_cert_chain_pem = "-----BEGIN CERTIFICATE-----\
                                      -----END CERTIFICATE-----"
         .to_string();
-    let default_hostos_config = generate_default_hostos_config();
+    let hostos_config = generate_hostos_config();
     GuestOSConfig {
         config_version: CONFIG_VERSION.to_string(),
-        network_settings: default_hostos_config.network_settings,
-        icos_settings: default_hostos_config.icos_settings,
-        guestos_settings: default_hostos_config.guestos_settings,
+        network_settings: hostos_config.network_settings,
+        icos_settings: hostos_config.icos_settings,
+        guestos_settings: hostos_config.guestos_settings,
         guest_vm_type: GuestVMType::Default,
         upgrade_config: GuestOSUpgradeConfig {
             peer_guest_vm_address: Some("2a00:fb01:400:200:6801:95ff:fed7:d475".parse().unwrap()),
@@ -110,5 +114,6 @@ fn generate_default_guestos_config() -> GuestOSConfig {
         trusted_execution_environment_config: Some(TrustedExecutionEnvironmentConfig {
             sev_cert_chain_pem,
         }),
+        recovery_config: None,
     }
 }

@@ -1,6 +1,6 @@
-use bitcoin::{dogecoin::Network as DogeNetwork, Network as BtcNetwork};
+use bitcoin::{Network as BtcNetwork, dogecoin::Network as DogeNetwork};
 use candid::{Encode, Principal};
-use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
+use canister_test::{Canister, Runtime, ic00::EcdsaKeyId};
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_btc_adapter_test_utils::rpc_client::RpcClientType;
@@ -9,8 +9,8 @@ use ic_btc_checker::{
 };
 use ic_btc_interface::{Config, Fees, Flag, Network};
 use ic_ckbtc_minter::{
-    lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg, Mode},
     CKBTC_LEDGER_MEMO_SIZE,
+    lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg, Mode},
 };
 use ic_config::{
     execution_environment::{BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID},
@@ -24,23 +24,23 @@ use ic_management_canister_types::{CanisterIdRecord, ProvisionalCreateCanisterWi
 use ic_management_canister_types_private::{BitcoinNetwork, EcdsaCurve, MasterPublicKeyId};
 use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
-use ic_registry_subnet_features::{SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{DEFAULT_ECDSA_MAX_QUEUE_SIZE, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            IcNodeSnapshot, NnsInstallationBuilder, SshSession, SubnetSnapshot,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+            NnsInstallationBuilder, SshSession, SubnetSnapshot, get_dependency_path,
         },
         universal_vm::{UniversalVm, UniversalVms},
     },
-    util::{assert_create_agent, block_on, MessageCanister},
+    util::{MessageCanister, assert_create_agent, block_on},
 };
 use ic_types::Height;
 use icp_ledger::ArchiveOptions;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::{
     env,
     net::{IpAddr, Ipv6Addr, SocketAddr},
@@ -80,7 +80,7 @@ pub(crate) const BITCOIND_RPC_USER: &str = "btc-dev-preview";
 
 pub(crate) const BITCOIND_RPC_PASSWORD: &str = "Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ksXQ5I2_-Hm4w=";
 
-const BITCOIND_RPC_AUTH : &str = "btc-dev-preview:8555f1162d473af8e1f744aa056fd728$afaf9cb17b8cf0e8e65994d1195e4b3a4348963b08897b4084d210e5ee588bcb";
+const BITCOIND_RPC_AUTH: &str = "btc-dev-preview:8555f1162d473af8e1f744aa056fd728$afaf9cb17b8cf0e8e65994d1195e4b3a4348963b08897b4084d210e5ee588bcb";
 
 const HTTPS_PORT: u16 = 20443;
 
@@ -438,8 +438,7 @@ pub async fn install_btc_checker(
     let universal_vm = deployed_universal_vm.get_vm().unwrap();
     let btc_node_ipv6 = universal_vm.ipv6;
     let json_rpc_url = format!(
-        "https://{}:{}@[{}]:{}",
-        BITCOIND_RPC_USER, BITCOIND_RPC_PASSWORD, btc_node_ipv6, HTTPS_PORT,
+        "https://{BITCOIND_RPC_USER}:{BITCOIND_RPC_PASSWORD}@[{btc_node_ipv6}]:{HTTPS_PORT}",
     );
     let init_args = CheckArg::InitArg(CheckerInitArg {
         btc_network: ic_btc_checker::BtcNetwork::Regtest { json_rpc_url },

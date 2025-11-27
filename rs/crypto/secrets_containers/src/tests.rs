@@ -20,7 +20,7 @@ mod secret_array {
 
         let sec = SecretArray::new_and_dont_zeroize_argument(&input);
 
-        let debug_string = format!("{:?}", sec);
+        let debug_string = format!("{sec:?}");
 
         assert!(debug_string.contains("REDACTED"));
         assert!(!debug_string.contains(&SECRET_BYTE.to_string()[..]));
@@ -159,7 +159,7 @@ mod secret_array {
         let deserialized_err = serde_cbor::from_slice::<SecretArray<SECRET_SIZE>>(&bad_serialized);
 
         let err = deserialized_err.unwrap_err();
-        let err_msg = format!("{}", err);
+        let err_msg = format!("{err}");
         assert!(err_msg.contains("invalid length"));
     }
 
@@ -214,7 +214,7 @@ mod secret_vec {
 
         let sec = SecretVec::new_and_dont_zeroize_argument(&input);
 
-        let debug_string = format!("{:?}", sec);
+        let debug_string = format!("{sec:?}");
 
         assert!(debug_string.contains("REDACTED"));
         assert!(!debug_string.contains(&SECRET_BYTE.to_string()[..]));
@@ -369,7 +369,7 @@ mod secret_bytes {
 
         let sec = SecretBytes::new_from_unowned(&input);
 
-        let debug_string = format!("{:?}", sec);
+        let debug_string = format!("{sec:?}");
 
         assert!(debug_string.contains("REDACTED"));
         assert!(!debug_string.contains(&SECRET_BYTE.to_string()[..]));

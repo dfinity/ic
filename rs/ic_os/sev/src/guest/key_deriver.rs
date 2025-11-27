@@ -17,7 +17,7 @@ pub fn derive_key_from_sev_measurement(
     field_select.set_measurement(true);
 
     let derived_key = sev_firmware
-        .get_derived_key(Some(1), DerivedKey::new(false, field_select, 0, 0, 0))
+        .get_derived_key(Some(1), DerivedKey::new(false, field_select, 0, 0, 0, None))
         .context("Failed to get derived key from SEV firmware")?;
 
     let mut output = vec![0; 32];
@@ -85,7 +85,7 @@ mod tests {
                 derive_key_from_sev_measurement(
                     &mut mock_sev_guest_firmware,
                     Key::DiskEncryptionKey {
-                        device_path: Path::new(&format!("/dev/vda{}", i)),
+                        device_path: Path::new(&format!("/dev/vda{i}")),
                     },
                 )
                 .unwrap()

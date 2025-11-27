@@ -1,8 +1,8 @@
 use super::*;
 use crate::{neuron_store::voting_power, pb::v1::Vote};
 use ic_stable_structures::{
-    memory_manager::{MemoryId, MemoryManager},
     VectorMemory,
+    memory_manager::{MemoryId, MemoryManager},
 };
 
 fn voting_power_map(voting_powers: Vec<u64>) -> HashMap<u64, u64> {

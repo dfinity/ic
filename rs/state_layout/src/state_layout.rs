@@ -1,38 +1,45 @@
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     Global, LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotSource,
 };
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_protobuf::state::{
     canister_snapshot_bits::v1 as pb_canister_snapshot_bits,
     canister_state_bits::v1 as pb_canister_state_bits, ingress::v1 as pb_ingress,
     queues::v1 as pb_queues, stats::v1 as pb_stats, system_metadata::v1 as pb_metadata,
 };
 use ic_replicated_state::{
+    CanisterStatus, ExportedFunctions, NumWasmPages,
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
         system_state::{
-            wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase, TaskQueue,
+            CanisterHistory, CyclesUseCase, TaskQueue, wasm_chunk_store::WasmChunkStoreMetadata,
         },
     },
     page_map::{Shard, StorageLayout, StorageResult},
-    CanisterStatus, ExportedFunctions, NumWasmPages,
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
-    batch::TotalQueryStats, nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId,
-    CanisterLog, CanisterTimer, ComputeAllocation, Cycles, ExecutionRound, Height,
-    LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
+    AccumulatedPriority, CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles,
+    ExecutionRound, Height, LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId,
+    SnapshotId, Time, batch::TotalQueryStats, nominal_cycles::NominalCycles,
 };
 use ic_utils::thread::maybe_parallel_map;
 use ic_wasm_types::{CanisterModule, MemoryMappableWasmFile, WasmHash};
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::collections::{BTreeMap, BTreeSet};
-use std::convert::{identity, From, TryFrom};
+use std::convert::{From, TryFrom, identity};
 use std::ffi::OsStr;
 use std::fs::OpenOptions;
 use std::io::{Error, Write};
+
+/// Result of marking files readonly, containing counts for monitoring
+#[derive(Debug, Clone)]
+pub struct ReadonlyMarkingResult {
+    pub files_traversed: usize,
+    pub files_made_readonly: usize,
+}
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -42,7 +49,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use crate::error::LayoutError;
 use crate::utils::do_copy;
 
-use crossbeam_channel::{bounded, unbounded, Sender};
+use crossbeam_channel::{Sender, bounded, unbounded};
 use ic_utils_thread::JoinOnDrop;
 
 pub mod proto;
@@ -60,10 +67,16 @@ pub const CANISTER_FILE: &str = "canister.pbuf";
 pub const INGRESS_HISTORY_FILE: &str = "ingress_history.pbuf";
 pub const SPLIT_MARKER_FILE: &str = "split_from.pbuf";
 pub const SUBNET_QUEUES_FILE: &str = "subnet_queues.pbuf";
+pub const REFUNDS_FILE: &str = "refunds.pbuf";
 pub const SYSTEM_METADATA_FILE: &str = "system_metadata.pbuf";
 pub const STATS_FILE: &str = "stats.pbuf";
 pub const WASM_FILE: &str = "software.wasm";
 pub const UNVERIFIED_CHECKPOINT_MARKER: &str = "unverified_checkpoint_marker";
+pub const OVERLAY: &str = "overlay";
+pub const VMEMORY_0: &str = "vmemory_0";
+pub const STABLE_MEMORY: &str = "stable_memory";
+pub const WASM_CHUNK_STORE: &str = "wasm_chunk_store";
+pub const BIN_FILE: &str = "bin";
 
 /// `ReadOnly` is the access policy used for reading checkpoints. We
 /// don't want to ever modify persisted states.
@@ -175,6 +188,7 @@ pub struct CanisterStateBits {
     pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
     pub total_query_stats: TotalQueryStats,
     pub log_visibility: LogVisibilityV2,
+    pub log_memory_limit: NumBytes,
     pub canister_log: CanisterLog,
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
@@ -381,7 +395,10 @@ impl TipHandler {
     /// full state and is converted to a checkpoint.
     /// This directory is cleaned during restart of a node and reset to
     /// last full checkpoint.
-    pub fn tip(&mut self, height: Height) -> Result<CheckpointLayout<RwPolicy<Self>>, LayoutError> {
+    pub fn tip(
+        &mut self,
+        height: Height,
+    ) -> Result<CheckpointLayout<RwPolicy<'_, Self>>, LayoutError> {
         CheckpointLayout::new_untracked(self.tip_path(), height)
     }
 
@@ -620,8 +637,17 @@ impl StateLayout {
     ) -> Result<(), LayoutError> {
         for height in self.checkpoint_heights()? {
             let cp_layout = self.checkpoint_verified(height)?;
-            cp_layout.mark_files_readonly_and_sync(thread_pool.as_mut())?;
+            let result = cp_layout.mark_files_readonly_and_sync(thread_pool.as_mut())?;
+
+            info!(
+                &self.log,
+                "Marked checkpoint files readonly: made {} files readonly out of {} traversed for checkpoint {}",
+                result.files_made_readonly,
+                result.files_traversed,
+                height
+            );
         }
+
         Ok(())
     }
 
@@ -706,10 +732,9 @@ impl StateLayout {
     }
 
     /// Returns scratchpad used during statesync
-    pub fn state_sync_scratchpad(&self, height: Height) -> Result<PathBuf, LayoutError> {
-        Ok(self
-            .tmp()
-            .join(format!("state_sync_scratchpad_{:016x}", height.get())))
+    pub fn state_sync_scratchpad(&self, height: Height) -> PathBuf {
+        self.tmp()
+            .join(format!("state_sync_scratchpad_{:016x}", height.get()))
     }
 
     /// Returns the path to cache an unfinished statesync at `height`
@@ -738,7 +763,7 @@ impl StateLayout {
         &self,
         scratchpad_layout: CheckpointLayout<RwPolicy<T>>,
         height: Height,
-    ) -> Result<CheckpointLayout<RwPolicy<T>>, LayoutError> {
+    ) -> Result<CheckpointLayout<RwPolicy<'_, T>>, LayoutError> {
         scratchpad_layout.create_unverified_checkpoint_marker()?;
         self.scratchpad_to_checkpoint(scratchpad_layout, height)
     }
@@ -747,7 +772,7 @@ impl StateLayout {
         &self,
         layout: CheckpointLayout<RwPolicy<T>>,
         height: Height,
-    ) -> Result<CheckpointLayout<RwPolicy<T>>, LayoutError> {
+    ) -> Result<CheckpointLayout<RwPolicy<'_, T>>, LayoutError> {
         // The scratchpad must have an unverified marker before it is promoted to a checkpoint.
         debug_assert!(!layout.is_checkpoint_verified());
         debug_assert_eq!(height, layout.height());
@@ -761,7 +786,7 @@ impl StateLayout {
             } else {
                 LayoutError::IoError {
                     path: scratchpad.to_path_buf(),
-                    message: format!("Failed to rename scratchpad to checkpoint {}", height),
+                    message: format!("Failed to rename scratchpad to checkpoint {height}"),
                     io_err: err,
                 }
             }
@@ -784,7 +809,7 @@ impl StateLayout {
                 } else {
                     LayoutError::IoError {
                         path: dst,
-                        message: format!("Failed to clone checkpoint {} to {}", from, to),
+                        message: format!("Failed to clone checkpoint {from} to {to}"),
                         io_err,
                     }
                 }
@@ -871,7 +896,7 @@ impl StateLayout {
         let mut checkpoint_ref_registry = self.checkpoint_ref_registry.lock().unwrap();
         match checkpoint_ref_registry.get_mut(&height) {
             None => {
-                debug_assert!(false, "Double removal at height {}", height);
+                debug_assert!(false, "Double removal at height {height}");
                 return;
             }
             Some(ref mut data) => {
@@ -1193,7 +1218,7 @@ impl StateLayout {
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
             other => other.map_err(|err| LayoutError::IoError {
                 path: cp_path,
-                message: format!("Failed to mark checkpoint {} diverged", height),
+                message: format!("Failed to mark checkpoint {height} diverged"),
                 io_err: err,
             }),
         }
@@ -1240,18 +1265,12 @@ impl StateLayout {
         self.rename_to_tmp_path(&cp_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
                 path: cp_path.clone(),
-                message: format!(
-                    "failed to rename diverged checkpoint {} to tmp path",
-                    height
-                ),
+                message: format!("failed to rename diverged checkpoint {height} to tmp path"),
                 io_err: err,
             })?;
         std::fs::remove_dir_all(&tmp_path).map_err(|err| LayoutError::IoError {
             path: cp_path,
-            message: format!(
-                "failed to remove diverged checkpoint {} from tmp path",
-                height
-            ),
+            message: format!("failed to remove diverged checkpoint {height} from tmp path"),
             io_err: err,
         })
     }
@@ -1275,7 +1294,7 @@ impl StateLayout {
         self.copy_and_sync_checkpoint(&cp_name, cp_path.as_path(), dst.as_path(), None)
             .map_err(|err| LayoutError::IoError {
                 path: cp_path,
-                message: format!("Failed to backup checkpoint {}", height),
+                message: format!("Failed to backup checkpoint {height}"),
                 io_err: err,
             })?;
         sync_path(&backups_dir).map_err(|err| LayoutError::IoError {
@@ -1296,12 +1315,12 @@ impl StateLayout {
         self.rename_to_tmp_path(&backup_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
                 path: backup_path.clone(),
-                message: format!("failed to rename backup {} to tmp path", height),
+                message: format!("failed to rename backup {height} to tmp path"),
                 io_err: err,
             })?;
         std::fs::remove_dir_all(&tmp_path).map_err(|err| LayoutError::IoError {
             path: backup_path,
-            message: format!("failed to remove backup {} from tmp path", height),
+            message: format!("failed to remove backup {height} from tmp path"),
             io_err: err,
         })
     }
@@ -1330,7 +1349,7 @@ impl StateLayout {
 
         std::fs::rename(&cp_path, &dst).map_err(|err| LayoutError::IoError {
             path: cp_path,
-            message: format!("failed to archive checkpoint {}", height),
+            message: format!("failed to archive checkpoint {height}"),
             io_err: err,
         })?;
 
@@ -1388,7 +1407,7 @@ impl StateLayout {
         dst: &Path,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> std::io::Result<()> {
-        let scratch_name = format!("scratchpad_{}", name);
+        let scratch_name = format!("scratchpad_{name}");
         let scratchpad = self.fs_tmp().join(scratch_name);
         self.ensure_dir_exists(&scratchpad)?;
 
@@ -1511,7 +1530,7 @@ where
                     return Err(LayoutError::CorruptedLayout {
                         path: dir.path(),
                         message: "not UTF-8".into(),
-                    })
+                    });
                 }
             }
         }
@@ -1532,15 +1551,12 @@ where
 /// directory names under `canister_states`).
 fn parse_canister_id(hex: &str) -> Result<CanisterId, String> {
     let blob = hex::decode(hex).map_err(|err| {
-        format!(
-            "failed to convert directory name {} into a canister ID: {}",
-            hex, err
-        )
+        format!("failed to convert directory name {hex} into a canister ID: {err}")
     })?;
 
     Ok(CanisterId::unchecked_from_principal(
         PrincipalId::try_from(&blob[..])
-            .map_err(|err| format!("failed to parse principal ID: {}", err))?,
+            .map_err(|err| format!("failed to parse principal ID: {err}"))?,
     ))
 }
 
@@ -1548,13 +1564,10 @@ fn parse_canister_id(hex: &str) -> Result<CanisterId, String> {
 /// directory names under `snapshots`).
 fn parse_snapshot_id(hex: &str) -> Result<SnapshotId, String> {
     let blob = hex::decode(hex).map_err(|err| {
-        format!(
-            "failed to convert directory name {} into a snapshot ID: {}",
-            hex, err
-        )
+        format!("failed to convert directory name {hex} into a snapshot ID: {err}")
     })?;
 
-    SnapshotId::try_from(&blob).map_err(|err| format!("failed to parse snapshot ID: {}", err))
+    SnapshotId::try_from(&blob).map_err(|err| format!("failed to parse snapshot ID: {err}"))
 }
 
 /// Parses the canister ID from a relative path, if it is the path of a canister or snapshot
@@ -1564,12 +1577,11 @@ fn parse_snapshot_id(hex: &str) -> Result<SnapshotId, String> {
 pub fn canister_id_from_path(path: &Path) -> Option<CanisterId> {
     let mut path = path.iter();
     let top_level = path.next();
-    if top_level == Some(OsStr::new(CANISTER_STATES_DIR))
-        || top_level == Some(OsStr::new(SNAPSHOTS_DIR))
+    if (top_level == Some(OsStr::new(CANISTER_STATES_DIR))
+        || top_level == Some(OsStr::new(SNAPSHOTS_DIR)))
+        && let Some(hex) = path.next()
     {
-        if let Some(hex) = path.next() {
-            return parse_canister_id(hex.to_str()?).ok();
-        }
+        return parse_canister_id(hex.to_str()?).ok();
     }
     None
 }
@@ -1582,10 +1594,7 @@ fn parse_and_sort_checkpoint_heights(names: &[String]) -> Result<Vec<Height>, La
                 .map(Height::new)
                 .map_err(|e| LayoutError::CorruptedLayout {
                     path: name.into(),
-                    message: format!(
-                        "failed to convert checkpoint name {} into a number: {}",
-                        name, e
-                    ),
+                    message: format!("failed to convert checkpoint name {name} into a number: {e}"),
                 })
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -1681,6 +1690,10 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
 
     pub fn subnet_queues(&self) -> ProtoFileWith<pb_queues::CanisterQueues, Permissions> {
         self.0.root.join(SUBNET_QUEUES_FILE).into()
+    }
+
+    pub fn refunds(&self) -> ProtoFileWith<pb_queues::Refunds, Permissions> {
+        self.0.root.join(REFUNDS_FILE).into()
     }
 
     pub fn split_marker(&self) -> ProtoFileWith<pb_metadata::SplitFrom, Permissions> {
@@ -1801,10 +1814,11 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
 
     /// Recursively set permissions to readonly for all files under the checkpoint
     /// except for the unverified checkpoint marker file.
+    /// Returns counts of files traversed and files made readonly for monitoring.
     pub fn mark_files_readonly_and_sync(
         &self,
         mut thread_pool: Option<&mut scoped_threadpool::Pool>,
-    ) -> Result<(), LayoutError> {
+    ) -> Result<ReadonlyMarkingResult, LayoutError> {
         let checkpoint_path = self.raw_path();
         let convert_io_err = |err: std::io::Error| -> LayoutError {
             LayoutError::IoError {
@@ -1823,17 +1837,24 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         // since another thread might also be validating the checkpoint and may have already deleted the marker.
         // Marking the unverified marker as read-only is unnecessary for this function's purpose and may cause an error.
         paths.retain(|p| p != &self.unverified_checkpoint_marker());
+
+        let files_traversed = paths.len();
+
         let results = maybe_parallel_map(&mut thread_pool, paths.iter(), |p| {
-            mark_readonly_if_file(p)?;
+            let was_made_readonly = mark_readonly_if_file(p)?;
             #[cfg(not(target_os = "linux"))]
             sync_path(p)?;
-            Ok::<(), std::io::Error>(())
+            Ok::<bool, std::io::Error>(was_made_readonly)
         });
 
-        results
+        let files_made_readonly = results
             .into_iter()
-            .try_for_each(identity)
-            .map_err(convert_io_err)?;
+            .collect::<Result<Vec<bool>, std::io::Error>>()
+            .map_err(convert_io_err)?
+            .iter()
+            .filter(|&&was_made| was_made)
+            .count();
+
         #[cfg(target_os = "linux")]
         {
             let f = std::fs::File::open(checkpoint_path).map_err(convert_io_err)?;
@@ -1844,7 +1865,10 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
                 }
             }
         }
-        Ok(())
+        Ok(ReadonlyMarkingResult {
+            files_traversed,
+            files_made_readonly,
+        })
     }
 }
 
@@ -1913,7 +1937,7 @@ impl CheckpointLayout<ReadOnly> {
         &self,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
-        self.mark_files_readonly_and_sync(thread_pool)?;
+        let _result = self.mark_files_readonly_and_sync(thread_pool)?;
         self.remove_unverified_checkpoint_marker()
     }
 }
@@ -2020,10 +2044,7 @@ impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
             copy_file_and_set_permissions(log, &overlay, &dst_path).map_err(|err| {
                 LayoutError::IoError {
                     path: dst.base(),
-                    message: format!(
-                        "Cannot copy or hardlink file {:?} to {:?}",
-                        overlay, dst_path
-                    ),
+                    message: format!("Cannot copy or hardlink file {overlay:?} to {dst_path:?}"),
                     io_err: err,
                 }
             })?;
@@ -2041,13 +2062,13 @@ impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
 impl<Permissions: AccessPolicy> StorageLayout for PageMapLayout<Permissions> {
     // The path to the base file.
     fn base(&self) -> PathBuf {
-        self.root.join(format!("{}.bin", self.name_stem))
+        self.root.join(format!("{}.{BIN_FILE}", self.name_stem))
     }
 
     /// Overlay path encoding, consistent with `overlay_height()` and `overlay_shard()`
     fn overlay(&self, height: Height, shard: Shard) -> PathBuf {
         self.root.join(format!(
-            "{:016x}_{:04x}_{}.overlay",
+            "{:016x}_{:04x}_{}.{OVERLAY}",
             height.get(),
             shard.get(),
             self.name_stem,
@@ -2085,7 +2106,7 @@ impl<Permissions: AccessPolicy> StorageLayout for PageMapLayout<Permissions> {
             .map_err(|err| {
                 Box::new(LayoutError::CorruptedLayout {
                     path: overlay.to_path_buf(),
-                    message: format!("failed to get height for overlay {}: {}", hex, err),
+                    message: format!("failed to get height for overlay {hex}: {err}"),
                 }) as Box<dyn std::error::Error + Send>
             })
     }
@@ -2113,7 +2134,7 @@ impl<Permissions: AccessPolicy> StorageLayout for PageMapLayout<Permissions> {
         u64::from_str_radix(hex, 16).map(Shard::new).map_err(|err| {
             Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
-                message: format!("failed to get shard for overlay {}: {}", hex, err),
+                message: format!("failed to get shard for overlay {hex}: {err}"),
             }) as Box<dyn std::error::Error + Send>
         })
     }
@@ -2189,7 +2210,7 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
     pub fn vmemory_0(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.canister_root.clone(),
-            name_stem: "vmemory_0".into(),
+            name_stem: VMEMORY_0.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
         }
@@ -2198,7 +2219,7 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
     pub fn stable_memory(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.canister_root.clone(),
-            name_stem: "stable_memory".into(),
+            name_stem: STABLE_MEMORY.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
         }
@@ -2207,7 +2228,7 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
     pub fn wasm_chunk_store(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.canister_root.clone(),
-            name_stem: "wasm_chunk_store".into(),
+            name_stem: WASM_CHUNK_STORE.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
         }
@@ -2279,7 +2300,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
     pub fn vmemory_0(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.snapshot_root.clone(),
-            name_stem: "vmemory_0".into(),
+            name_stem: VMEMORY_0.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
         }
@@ -2288,7 +2309,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
     pub fn stable_memory(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.snapshot_root.clone(),
-            name_stem: "stable_memory".into(),
+            name_stem: STABLE_MEMORY.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
         }
@@ -2297,7 +2318,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
     pub fn wasm_chunk_store(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.snapshot_root.clone(),
-            name_stem: "wasm_chunk_store".into(),
+            name_stem: WASM_CHUNK_STORE.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
         }
@@ -2440,7 +2461,8 @@ where
             path: self.path.clone(),
             message: "failed to mark protobuf as readonly".to_string(),
             io_err: err,
-        })
+        })?;
+        Ok(())
     }
 }
 
@@ -2590,8 +2612,7 @@ where
         std::fs::hard_link(src_path, dst_path).map_err(|err| LayoutError::IoError {
             path: src_path.to_path_buf(),
             message: format!(
-                "Failed to hardlink {:?} to {:?} while making a canister snapshot",
-                src_path, dst_path,
+                "Failed to hardlink {src_path:?} to {dst_path:?} while making a canister snapshot",
             ),
             io_err: err,
         })?;
@@ -2631,7 +2652,8 @@ where
             path: self.path.clone(),
             message: "failed to mark wasm binary as readonly".to_string(),
             io_err: err,
-        })
+        })?;
+        Ok(())
     }
 
     /// Removes the file if it exists, else does nothing.
@@ -2649,7 +2671,7 @@ fn dir_file_names(p: &Path) -> std::io::Result<Vec<String>> {
         let string = e?.file_name().into_string().map_err(|file_name| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("failed to convert file name {:?} to string", file_name),
+                format!("failed to convert file name {file_name:?} to string"),
             )
         })?;
         result.push(string);
@@ -2657,7 +2679,10 @@ fn dir_file_names(p: &Path) -> std::io::Result<Vec<String>> {
     Ok(result)
 }
 
-fn mark_readonly_if_file(path: &Path) -> std::io::Result<()> {
+/// Marks a file as readonly if it's not already readonly.
+/// Returns true if the file was actually made readonly (was writable before),
+/// false if the file was already readonly or is a directory.
+fn mark_readonly_if_file(path: &Path) -> std::io::Result<bool> {
     let metadata = path.metadata()?;
     if !metadata.is_dir() {
         let mut permissions = metadata.permissions();
@@ -2673,9 +2698,10 @@ fn mark_readonly_if_file(path: &Path) -> std::io::Result<()> {
                     ),
                 )
             })?;
+            return Ok(true);
         }
     }
-    Ok(())
+    Ok(false)
 }
 
 fn dir_list_recursive(

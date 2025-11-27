@@ -10,6 +10,8 @@ use ic_system_test_driver::driver::{
 };
 use ic_types::ReplicaVersion;
 use os_qualification_utils::{
+    ConfigurableApiBoundaryNodes, ConfigurableSubnet, ConfigurableUnassignedNodes, IcConfig,
+    SubnetSimple,
     defs::QualificationExecutor,
     mock_env_variables,
     steps::{
@@ -19,8 +21,6 @@ use os_qualification_utils::{
         workload::{ApiBoundaryNodeWorkload, Workload},
         xnet::XNet,
     },
-    ConfigurableApiBoundaryNodes, ConfigurableSubnet, ConfigurableUnassignedNodes, IcConfig,
-    SubnetSimple,
 };
 use std::time::Duration;
 
@@ -106,7 +106,9 @@ pub fn main() -> anyhow::Result<()> {
                             version: initial_version.clone(),
                             url: get_guestos_initial_update_img_url(),
                             sha256: get_guestos_initial_update_img_sha256(),
-                            guest_launch_measurements: get_guestos_initial_launch_measurements(),
+                            guest_launch_measurements: Some(
+                                get_guestos_initial_launch_measurements(),
+                            ),
                         }),
                         // Ensure that application subnets are on the
                         // initial version. As the step above, this
@@ -140,7 +142,7 @@ pub fn main() -> anyhow::Result<()> {
                             version: target_version.clone(),
                             url: get_guestos_update_img_url(),
                             sha256: get_guestos_update_img_sha256(),
-                            guest_launch_measurements: get_guestos_launch_measurements(),
+                            guest_launch_measurements: Some(get_guestos_launch_measurements()),
                         }),
                         // Ensure that application subnets are on the
                         // new version.
@@ -194,7 +196,9 @@ pub fn main() -> anyhow::Result<()> {
                             version: initial_version.clone(),
                             url: get_guestos_initial_update_img_url(),
                             sha256: get_guestos_initial_update_img_sha256(),
-                            guest_launch_measurements: get_guestos_initial_launch_measurements(),
+                            guest_launch_measurements: Some(
+                                get_guestos_initial_launch_measurements(),
+                            ),
                         }),
                         // Downgrade to the inital version
                         Box::new(UpdateSubnetType {

@@ -12,8 +12,8 @@ fn main() -> Result<(), String> {
 
     // Output the values directly
     match payload {
-        Payload::HostOSVsockVersion(version) => println!("{}", version),
-        Payload::HostOSVersion(version) => println!("{}", version),
+        Payload::HostOSVsockVersion(version) => println!("{version}"),
+        Payload::HostOSVersion(version) => println!("{version}"),
         Payload::NoPayload => (),
     }
 

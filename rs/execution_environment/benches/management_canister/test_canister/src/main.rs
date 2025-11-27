@@ -2,17 +2,17 @@
 use candid::{CandidType, Principal};
 use futures::future::join_all;
 use ic_cdk::api::management_canister::ecdsa::{
-    ecdsa_public_key as ic_cdk_ecdsa_public_key, sign_with_ecdsa as ic_cdk_sign_with_ecdsa,
     EcdsaKeyId, EcdsaPublicKeyArgument, SignWithEcdsaArgument,
+    ecdsa_public_key as ic_cdk_ecdsa_public_key, sign_with_ecdsa as ic_cdk_sign_with_ecdsa,
 };
 use ic_cdk::api::management_canister::http_request::{
-    http_request as ic_cdk_http_request, CanisterHttpRequestArgument,
-    HttpHeader as IcCdkHttpHeader, HttpMethod,
+    CanisterHttpRequestArgument, HttpHeader as IcCdkHttpHeader, HttpMethod,
+    http_request as ic_cdk_http_request,
 };
 use ic_cdk::api::management_canister::main::{
-    create_canister as ic_cdk_create_canister, install_code as ic_cdk_install_code,
-    update_settings as ic_cdk_update_settings, CanisterInstallMode, CanisterSettings,
-    CreateCanisterArgument, InstallCodeArgument, UpdateSettingsArgument,
+    CanisterInstallMode, CanisterSettings, CreateCanisterArgument, InstallCodeArgument,
+    UpdateSettingsArgument, create_canister as ic_cdk_create_canister,
+    install_code as ic_cdk_install_code, update_settings as ic_cdk_update_settings,
 };
 use ic_cdk::update;
 use serde::{Deserialize, Serialize};

@@ -3,7 +3,7 @@ use candid::types::principal::PrincipalError;
 use candid::{CandidType, Principal};
 use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
-use serde::{de::Error, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::Error};
 use std::{convert::TryFrom, fmt};
 
 /// A type representing a canister's [`PrincipalId`].
@@ -35,8 +35,8 @@ pub enum CanisterIdError {
 impl fmt::Display for CanisterIdError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidPrincipalId(string) => write!(f, "Got an invalid principal id {}", string),
-            Self::PrincipalIdParseError(err) => write!(f, "Could not parse principal: {}", err),
+            Self::InvalidPrincipalId(string) => write!(f, "Got an invalid principal id {string}"),
+            Self::PrincipalIdParseError(err) => write!(f, "Could not parse principal: {err}"),
         }
     }
 }

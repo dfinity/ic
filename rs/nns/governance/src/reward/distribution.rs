@@ -95,8 +95,7 @@ impl<Memory: ic_stable_structures::Memory> RewardsDistributionStateMachine<Memor
     ) -> Result<(), String> {
         if self.distributions.contains_key(&day_after_genesis) {
             return Err(format!(
-                "{}Rewards distribution already exists for day_after_genesis: {}",
-                LOG_PREFIX, day_after_genesis
+                "{LOG_PREFIX}Rewards distribution already exists for day_after_genesis: {day_after_genesis}"
             ));
         }
         self.distributions.insert(
@@ -168,7 +167,8 @@ impl RewardsDistribution {
                             .saturating_add(reward_e8s),
                     );
                 } else {
-                    neuron.maturity_e8s_equivalent += reward_e8s;
+                    neuron.maturity_e8s_equivalent =
+                        neuron.maturity_e8s_equivalent.saturating_add(reward_e8s);
                 }
             }) {
                 Ok(_) => {}
@@ -189,7 +189,7 @@ impl RewardsDistribution {
 }
 
 impl Storable for RewardsDistributionInProgress {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::from(self.encode_to_vec())
     }
 
@@ -234,7 +234,7 @@ mod test {
     use crate::neuron::{DissolveStateAndAge, Neuron, NeuronBuilder};
     use crate::pb::v1::VotingPowerEconomics;
     use crate::test_utils::{
-        test_subaccount_for_neuron_id, MockEnvironment, MockRandomness, StubCMC, StubIcpLedger,
+        MockEnvironment, MockRandomness, StubCMC, StubIcpLedger, test_subaccount_for_neuron_id,
     };
     use ic_base_types::PrincipalId;
     use ic_nervous_system_timers::test::run_pending_timers_every_interval_for_count;
@@ -392,8 +392,8 @@ mod test {
         assert!(rewards_distribution_state_machine.distributions.is_empty());
     }
 
-    #[test]
-    fn test_distribute_pending_rewards() {
+    #[tokio::test]
+    async fn test_distribute_pending_rewards() {
         // We are testing recoverability of the system (i.e. it got stalled, but we didnt' lose data, and now
         // it is able to finish processing)
         let mut governance = Governance::new(
@@ -406,13 +406,13 @@ mod test {
 
         for i in 1..=5 {
             governance
-                .add_neuron(i, make_neuron(i, 1000, 1000), false)
+                .add_neuron(i, make_neuron(i, 1000, 1000))
                 .unwrap();
         }
         for i in 6..=10 {
             let mut neuron = make_neuron(i, 1000, 1000);
             neuron.auto_stake_maturity = Some(true);
-            governance.add_neuron(i, neuron, false).unwrap();
+            governance.add_neuron(i, neuron).unwrap();
         }
 
         let mut distribution = RewardsDistribution::new();
@@ -425,7 +425,7 @@ mod test {
 
         // We have to run this more times b/c the test version of is_over_instructions_limit returns true every
         // other time it's called.
-        run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(2), 10);
+        run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(2), 10).await;
 
         with_rewards_distribution_state_machine_mut(|rewards_distribution_state_machine| {
             assert!(rewards_distribution_state_machine.distributions.is_empty())

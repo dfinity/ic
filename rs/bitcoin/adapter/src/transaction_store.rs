@@ -8,11 +8,11 @@ use bitcoin::{
     p2p::message_blockdata::Inventory,
 };
 use hashlink::LinkedHashMap;
-use ic_logger::{debug, info, trace, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, info, trace};
 use ic_metrics::MetricsRegistry;
 
-use crate::metrics::TransactionMetrics;
 use crate::ProcessNetworkMessageError;
+use crate::metrics::TransactionMetrics;
 use crate::{Channel, Command};
 
 /// How long should the transaction manager hold on to a transaction.
@@ -125,7 +125,7 @@ impl TransactionStore {
     /// This method is used to broadcast known transaction IDs to connected peers.
     /// If the timeout period has passed for a transaction ID, it is broadcasted again.
     /// If the transaction has not been broadcasted, the transaction ID is broadcasted.
-    pub fn advertise_txids<Block>(&mut self, channel: &mut impl Channel<Block>) {
+    pub fn advertise_txids<Header, Block>(&mut self, channel: &mut impl Channel<Header, Block>) {
         self.remove_old_txns();
         for address in channel.available_connections() {
             let mut inventory = vec![];
@@ -170,11 +170,11 @@ impl TransactionStore {
     /// This function processes a `getdata` message from a BTC node.
     /// If there are messages for transactions, the transaction is sent to the
     /// requesting node. Transactions sent are then removed from the cache.
-    pub fn process_bitcoin_network_message<Block>(
+    pub fn process_bitcoin_network_message<Header, Block>(
         &self,
-        channel: &mut impl Channel<Block>,
+        channel: &mut impl Channel<Header, Block>,
         addr: SocketAddr,
-        message: &NetworkMessage<Block>,
+        message: &NetworkMessage<Header, Block>,
     ) -> Result<(), ProcessNetworkMessageError> {
         if let NetworkMessage::GetData(inventory) = message {
             if inventory.len() > MAXIMUM_TRANSACTION_PER_INV {
@@ -182,15 +182,15 @@ impl TransactionStore {
             }
 
             for inv in inventory {
-                if let Inventory::Transaction(txid) = inv {
-                    if let Some(TransactionInfo { transaction, .. }) = self.transactions.get(txid) {
-                        channel
-                            .send(Command {
-                                address: Some(addr),
-                                message: NetworkMessage::Tx(transaction.clone()),
-                            })
-                            .ok();
-                    }
+                if let Inventory::Transaction(txid) = inv
+                    && let Some(TransactionInfo { transaction, .. }) = self.transactions.get(txid)
+                {
+                    channel
+                        .send(Command {
+                            address: Some(addr),
+                            message: NetworkMessage::Tx(transaction.clone()),
+                        })
+                        .ok();
                 }
             }
         }
@@ -202,15 +202,16 @@ impl TransactionStore {
 mod test {
     use super::*;
     use bitcoin::{
-        absolute::{LockTime, LOCK_TIME_THRESHOLD},
+        Block, Network, Transaction,
+        absolute::{LOCK_TIME_THRESHOLD, LockTime},
+        block::Header,
         blockdata::constants::genesis_block,
         consensus::serialize,
-        Block, Network, Transaction,
     };
     use ic_logger::replica_logger::no_op_logger;
     use std::str::FromStr;
 
-    type TestChannel = crate::common::test_common::TestChannel<Block>;
+    type TestChannel = crate::common::test_common::TestChannel<Header, Block>;
 
     /// This function creates a new transaction manager with a test logger.
     fn make_transaction_manager() -> TransactionStore {
@@ -237,7 +238,7 @@ mod test {
     #[test]
     fn test_reap() {
         let mut channel = TestChannel::new(vec![
-            SocketAddr::from_str("127.0.0.1:8333").expect("invalid address")
+            SocketAddr::from_str("127.0.0.1:8333").expect("invalid address"),
         ]);
         let mut manager = make_transaction_manager();
         let transaction = get_transaction();
@@ -263,7 +264,7 @@ mod test {
     #[test]
     fn test_broadcast_txids() {
         let mut channel = TestChannel::new(vec![
-            SocketAddr::from_str("127.0.0.1:8333").expect("invalid address")
+            SocketAddr::from_str("127.0.0.1:8333").expect("invalid address"),
         ]);
         let mut manager = make_transaction_manager();
         let transaction = get_transaction();

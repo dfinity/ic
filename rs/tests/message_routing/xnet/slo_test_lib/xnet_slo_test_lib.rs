@@ -392,10 +392,7 @@ pub fn check_success(
                 i,
                 format!("Error ratio below {}%", config.error_percentage_threshold).as_str(),
                 "Failed calls",
-                &format!(
-                    "{}% ({}/{})",
-                    error_percentage, failed_calls, attempted_calls
-                ),
+                &format!("{error_percentage}% ({failed_calls}/{attempted_calls})"),
             );
         }
 
@@ -540,8 +537,7 @@ pub async fn stop_all_canister(canisters: &[Vec<Canister<'_>>]) {
                 .await
                 .unwrap_or_else(|e| {
                     panic!(
-                        "Stopping canister_idx={} on subnet_idx={} failed with error: {}",
-                        canister_idx, subnet_idx, e
+                        "Stopping canister_idx={canister_idx} on subnet_idx={subnet_idx} failed with error: {e}"
                     )
                 });
         });
@@ -565,8 +561,7 @@ pub async fn collect_metrics(canisters: &[Vec<Canister<'_>>]) -> Vec<Vec<Metrics
                 .await
                 .unwrap_or_else(|_| {
                     panic!(
-                        "Collecting metrics for canister_idx={} on subnet_idx={} failed.",
-                        canister_idx, subnet_idx
+                        "Collecting metrics for canister_idx={canister_idx} on subnet_idx={subnet_idx} failed."
                     )
                 })
         });

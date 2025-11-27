@@ -1,12 +1,11 @@
 use super::{QueryCache, QueryCacheMetrics};
 use crate::{
-    metrics,
+    InternalHttpQueryHandler, metrics,
     query_handler::query_cache::{EntryEnv, EntryKey, EntryValue},
-    InternalHttpQueryHandler,
 };
 use ic_base_types::CanisterId;
 use ic_error_types::ErrorCode;
-use ic_heap_bytes::{total_bytes, DeterministicHeapBytes, HeapBytes};
+use ic_heap_bytes::{DeterministicHeapBytes, HeapBytes, total_bytes};
 use ic_interfaces::execution_environment::{SystemApiCallCounters, SystemApiCallId};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
@@ -1530,6 +1529,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::CostCall
         | SystemApiCallId::CostCreateCanister
         | SystemApiCallId::CostHttpRequest
+        | SystemApiCallId::CostHttpRequestV2
         | SystemApiCallId::CostSignWithEcdsa
         | SystemApiCallId::CostSignWithSchnorr
         | SystemApiCallId::CostVetkdDeriveKey

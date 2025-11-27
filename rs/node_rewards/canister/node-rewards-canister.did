@@ -1,9 +1,103 @@
+// get_node_providers_rewards_calculation
+
+type DateUtc = record {
+  day: opt nat32;
+  month: opt nat32;
+  year: opt nat32;
+};
+
+type RewardsCalculationVersion = record {
+  version: nat32;
+};
+
+type NodeMetricsDaily = record {
+  subnet_assigned: opt principal;
+  subnet_assigned_failure_rate: opt float64;
+  num_blocks_proposed: opt nat64;
+  num_blocks_failed: opt nat64;
+  original_failure_rate: opt float64;
+  relative_failure_rate: opt float64;
+};
+
+type DailyNodeFailureRate = variant {
+  SubnetMember: record { node_metrics: opt NodeMetricsDaily };
+  NonSubnetMember: record { extrapolated_failure_rate: opt float64 };
+};
+
+type DailyNodeRewards = record {
+  node_id: opt principal;
+  node_reward_type: opt text;
+  region: opt text;
+  dc_id: opt text;
+  daily_node_failure_rate: opt DailyNodeFailureRate;
+  performance_multiplier: opt float64;
+  rewards_reduction: opt float64;
+  base_rewards_xdr_permyriad: opt float64;
+  adjusted_rewards_xdr_permyriad: opt float64;
+};
+
+type NodeTypeRegionBaseRewards = record {
+  monthly_xdr_permyriad: opt float64;
+  daily_xdr_permyriad: opt float64;
+  node_reward_type: opt text;
+  region: opt text;
+};
+
+type Type3BaseRewards = record {
+  region: opt text;
+  nodes_count: opt nat64;
+  avg_rewards_xdr_permyriad: opt float64;
+  avg_coefficient: opt float64;
+  daily_xdr_permyriad: opt float64;
+};
+
+type DailyNodeProviderRewards = record {
+  total_base_rewards_xdr_permyriad: opt nat64;
+  total_adjusted_rewards_xdr_permyriad: opt nat64;
+  base_rewards: vec NodeTypeRegionBaseRewards;
+  base_rewards_type3: vec Type3BaseRewards;
+  daily_nodes_rewards: vec DailyNodeRewards;
+};
+
+type DailyResults = record {
+    subnets_failure_rate: vec record { principal; float64 };
+    provider_results: vec record { principal; DailyNodeProviderRewards };
+};
+
+type GetNodeProvidersRewardsCalculationResponse = variant { Ok: DailyResults; Err: text };
+
+type GetNodeProvidersRewardsCalculationRequest = record {
+  day: DateUtc;
+  algorithm_version: opt RewardsCalculationVersion;
+};
+
+// get_node_providers_rewards
+
+type NodeProvidersRewards = record {
+  rewards_xdr_permyriad: vec record {
+    principal;
+    nat64;
+  };
+  algorithm_version: RewardsCalculationVersion;
+};
+
+type GetNodeProvidersRewardsRequest = record {
+  from_day: DateUtc;
+  to_day: DateUtc;
+  algorithm_version: opt RewardsCalculationVersion;
+};
+
+type GetNodeProvidersRewardsResponse = variant { Ok: NodeProvidersRewards; Err: text };
+
+
+// get_node_providers_monthly_xdr_rewards
+
 type GetNodeProvidersMonthlyXdrRewardsRequest = record {
     registry_version: opt nat64;
 };
 
 type GetNodeProvidersMonthlyXdrRewardsResponse = record {
-    rewards : opt NodeProvidersMonthlyXdrRewards;
+    rewards: opt NodeProvidersMonthlyXdrRewards;
     error: opt text;
 };
 
@@ -12,116 +106,10 @@ type NodeProvidersMonthlyXdrRewards = record {
     registry_version: opt nat64;
 };
 
-type GetNodeProvidersRewardsRequest = record {
-  from_nanos: nat64;
-  to_nanos: nat64;
-};
-
-type NodeProvidersRewards = record {
-  rewards_xdr_permyriad: vec record {
-    principal;
-    nat64;
-  };
-};
-
-type Decimal = record {
-  human_readable: opt text;
-};
-
-type NodeMetricsDaily = record {
-  subnet_assigned: opt principal;
-  subnet_assigned_fr_percent: opt Decimal;
-  num_blocks_proposed: opt nat64;
-  num_blocks_failed: opt nat64;
-  original_fr_percent: opt Decimal;
-  relative_fr_percent: opt Decimal;
-};
-
-type Assigned = record {
-  node_metrics: opt NodeMetricsDaily;
-};
-
-type Unassigned = record {
-  extrapolated_fr_percent: opt Decimal;
-};
-
-type Status = variant {
-  Assigned: Assigned;
-  Unassigned: Unassigned;
-};
-
-type NodeStatus = record {
-  status: opt Status;
-};
-
-type DayUtc = record {
-  value: opt nat64;
-};
-
-type DailyResults = record {
-  day: opt DayUtc;
-  node_status: opt NodeStatus;
-  performance_multiplier_percent: opt Decimal;
-  rewards_reduction_percent: opt Decimal;
-  base_rewards_xdr_permyriad: opt Decimal;
-  adjusted_rewards_xdr_permyriad: opt Decimal;
-};
-
-type NodeResults = record {
-  node_id: opt principal;
-  node_reward_type: opt text;
-  region: opt text;
-  dc_id: opt text;
-  daily_results: vec DailyResults;
-};
-
-type BaseRewards = record {
-  monthly_xdr_permyriad: opt Decimal;
-  daily_xdr_permyriad: opt Decimal;
-  node_reward_type: opt text;
-  region: opt text;
-};
-
-type DailyBaseRewardsType3 = record {
-  day: opt DayUtc;
-  region: opt text;
-  nodes_count: opt nat64;
-  avg_rewards_xdr_permyriad: opt Decimal;
-  avg_coefficient_percent: opt Decimal;
-  value_xdr_permyriad: opt Decimal;
-};
-
-type NodeProviderRewards = record {
-  rewards_total_xdr_permyriad: opt nat64;
-  base_rewards: vec BaseRewards;
-  base_rewards_type3: vec DailyBaseRewardsType3;
-  nodes_results: vec NodeResults;
-};
-
-type GetNodeProviderRewardsCalculationRequest = record {
-  from_nanos: nat64;
-  to_nanos: nat64;
-  provider_id: principal;
-  historical: bool;
-};
-
-type HistoricalRewardPeriod = record {
-  from_nanos: nat64;
-  to_nanos: nat64;
-  providers_rewarded: vec principal;
-};
-
-type GetNodeProvidersRewardsResponse = variant { Ok : NodeProvidersRewards; Err : text };
-
-type GetNodeProviderRewardsCalculationResponse = variant { Ok : NodeProviderRewards; Err : text };
-
-type GetHistoricalRewardPeriodsResponse = variant { Ok : vec HistoricalRewardPeriod; Err : text };
-
-service : () -> {
+service: () -> {
     get_node_providers_monthly_xdr_rewards: (GetNodeProvidersMonthlyXdrRewardsRequest) -> (
         GetNodeProvidersMonthlyXdrRewardsResponse
     );
     get_node_providers_rewards: (GetNodeProvidersRewardsRequest) -> (GetNodeProvidersRewardsResponse);
-    get_node_provider_rewards_calculation : (GetNodeProviderRewardsCalculationRequest) -> (GetNodeProviderRewardsCalculationResponse) query;
-    get_historical_reward_periods: () -> (GetHistoricalRewardPeriodsResponse) query;
+    get_node_providers_rewards_calculation: (GetNodeProvidersRewardsCalculationRequest) -> (GetNodeProvidersRewardsCalculationResponse) query;
 }

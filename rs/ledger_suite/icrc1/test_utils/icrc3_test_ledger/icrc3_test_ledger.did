@@ -109,16 +109,57 @@ type GetBlocksResponse = record {
   }
 };
 
-service : {
+type ICRC3DataCertificate = record {
+  // See https://internetcomputer.org/docs/current/references/ic-interface-spec#certification
+  certificate : blob;
+
+  // CBOR encoded hash_tree
+  hash_tree : blob
+};
+
+// The value returned from the [icrc1_metadata] endpoint.
+type MetadataValue = variant {
+  Nat : nat;
+  Int : int;
+  Text : text;
+  Blob : blob
+};
+
+type ArchiveBlocksArgs = record {
+  archive_id : principal;
+  num_blocks : nat64
+};
+
+type BlockWithId = record {
+  id : nat;
+  block : ICRC3Value
+};
+
+type ArchiveBlocksResult = variant {
+    Ok : nat64;
+    Err : text;
+};
+
+service : () -> {
     // Update endpoint to add a block to the ledger
     add_block : (ICRC3Value) -> (AddBlockResult);
+
+    add_block_with_id : (BlockWithId) -> (AddBlockResult);
 
     icrc1_supported_standards : () -> (vec StandardRecord) query;
 
     // Query endpoint to retrieve blocks (ICRC-3 compatible)
     icrc3_get_blocks : (vec GetBlocksArgs) -> (GetBlocksResult) query;
 
+    icrc3_get_tip_certificate : () -> (opt ICRC3DataCertificate) query;
+
     icrc10_supported_standards : () -> (vec StandardRecord) query;
 
     get_blocks : (GetBlocksArgs) -> (GetBlocksResponse) query;
+
+    icrc1_metadata : () -> (vec record { text; MetadataValue }) query;    
+
+    set_icrc3_enabled : (bool) -> ();
+
+    archive_blocks : (ArchiveBlocksArgs) -> (ArchiveBlocksResult);
 }

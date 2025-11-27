@@ -15,18 +15,18 @@ use ic_system_test_driver::{
         test_env_api::{HasPublicApiUrl, IcNodeContainer},
     },
     systest,
-    util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
+    util::{UniversalCanister, assert_create_agent, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::{
-    ckbtc_setup, create_canister, install_bitcoin_canister, install_btc_checker, install_ledger,
-    install_minter, subnet_app, subnet_sys, upgrade_btc_checker,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, ckbtc_setup,
+    create_canister, install_bitcoin_canister, install_btc_checker, install_ledger, install_minter,
+    subnet_app, subnet_sys, upgrade_btc_checker,
     utils::{
-        assert_account_balance, assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
-        generate_blocks, get_btc_address, get_rpc_client, send_to_btc_address, start_canister,
-        stop_canister, upgrade_canister, wait_for_bitcoin_balance, wait_for_mempool_change,
-        BITCOIN_NETWORK_TRANSFER_FEE, BTC_BLOCK_REWARD,
+        BITCOIN_NETWORK_TRANSFER_FEE, BTC_BLOCK_REWARD, assert_account_balance,
+        assert_mint_transaction, assert_no_new_utxo, assert_no_transaction, generate_blocks,
+        get_btc_address, get_rpc_client, send_to_btc_address, start_canister, stop_canister,
+        upgrade_canister, wait_for_bitcoin_balance, wait_for_mempool_change,
     },
-    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
@@ -164,10 +164,7 @@ pub fn test_btc_checker(env: TestEnv) {
         match update_balance_checker_unavailable {
             Err(UpdateBalanceError::TemporarilyUnavailable(_)) => (),
             other => {
-                panic!(
-                    "Expected the Bitcoin checker canister to be unavailable, got {:?}",
-                    other
-                );
+                panic!("Expected the Bitcoin checker canister to be unavailable, got {other:?}");
             }
         }
         start_canister(&btc_checker_canister).await;
@@ -186,8 +183,7 @@ pub fn test_btc_checker(env: TestEnv) {
         assert_eq!(
             update_balance_new_utxos.len(),
             2,
-            "BUG: should re-evaluate all UTXOs {:?}",
-            update_balance_new_utxos
+            "BUG: should re-evaluate all UTXOs {update_balance_new_utxos:?}"
         );
 
         for utxo_status in update_balance_new_utxos {
@@ -332,7 +328,10 @@ pub fn test_btc_checker(env: TestEnv) {
         let _mempool_txids = wait_for_mempool_change(&btc_rpc, &logger).await;
         generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
         // We can compute the minter's fee
-        let minters_fee: u64 = ic_ckbtc_minter::evaluate_minter_fee(1, 2);
+        let fee = minter_agent
+            .estimate_withdrawal_fee(retrieve_amount)
+            .await
+            .unwrap();
         // Use the following estimator : https://btc.network/estimate
         // 1 input and 2 outputs => 141 vbyte
         // The regtest network fee defined in ckbtc/minter/src/lib.rs is 5 sat/vbyte.
@@ -341,7 +340,7 @@ pub fn test_btc_checker(env: TestEnv) {
         wait_for_bitcoin_balance(
             &universal_canister,
             &logger,
-            retrieve_amount - minters_fee - bitcoin_network_fee,
+            retrieve_amount - fee.minter_fee - bitcoin_network_fee,
             &btc_address2,
         )
         .await;

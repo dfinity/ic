@@ -32,7 +32,7 @@ use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot,
 };
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{block_on, runtime_from_url, MetricsFetcher};
+use ic_system_test_driver::util::{MetricsFetcher, block_on, runtime_from_url};
 use ic_types::malicious_behavior::MaliciousBehavior;
 use slog::info;
 use std::time::Duration;
@@ -170,7 +170,7 @@ pub async fn test_async(env: TestEnv, config: Config) {
     tokio::time::sleep(Duration::from_secs(config.runtime.as_secs())).await;
 
     for (index, subnet) in env.topology_snapshot().subnets().enumerate() {
-        println!("Collecting metrics for subnet {}.", index);
+        println!("Collecting metrics for subnet {index}.");
         fetch_metrics_and_assert(&env, subnet).await;
     }
 }

@@ -1,9 +1,9 @@
 use super::*;
 
-use canbench_rs::{bench, bench_fn, BenchResult};
+use canbench_rs::{BenchResult, bench, bench_fn};
 use ic_stable_structures::{
-    memory_manager::{MemoryId, MemoryManager},
     VectorMemory,
+    memory_manager::{MemoryId, MemoryManager},
 };
 use std::collections::HashMap;
 

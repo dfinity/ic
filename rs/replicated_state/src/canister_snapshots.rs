@@ -1,11 +1,11 @@
 use crate::{
+    CanisterState, NumWasmPages, PageMap,
     canister_state::{
+        WASM_PAGE_SIZE_IN_BYTES,
         execution_state::{Memory, WasmExecutionMode},
         system_state::wasm_chunk_store::{self, ValidatedChunk, WasmChunkStore},
-        WASM_PAGE_SIZE_IN_BYTES,
     },
-    page_map::{Buffer, PageAllocatorFileDescriptor},
-    CanisterState, NumWasmPages, PageMap,
+    page_map::{Buffer, PageAllocatorFileDescriptor, PersistenceError},
 };
 use ic_config::embedders::{MAX_GLOBALS, WASM_MAX_SIZE};
 use ic_management_canister_types_private::{
@@ -14,8 +14,8 @@ use ic_management_canister_types_private::{
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    CanisterId, CanisterTimer, NumBytes, PrincipalId, SnapshotId, Time, MAX_STABLE_MEMORY_IN_BYTES,
-    MAX_WASM64_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
+    CanisterId, CanisterTimer, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
+    MAX_WASM64_MEMORY_IN_BYTES, NumBytes, PrincipalId, SnapshotId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -300,6 +300,17 @@ impl From<&Memory> for PageMemory {
 impl From<&PageMemory> for Memory {
     fn from(pg_memory: &PageMemory) -> Self {
         Memory::new(pg_memory.page_map.clone(), pg_memory.size)
+    }
+}
+
+impl TryFrom<(&PageMemory, Arc<dyn PageAllocatorFileDescriptor>)> for Memory {
+    type Error = PersistenceError;
+
+    fn try_from(
+        (pg_memory, fd_factory): (&PageMemory, Arc<dyn PageAllocatorFileDescriptor>),
+    ) -> Result<Self, PersistenceError> {
+        let new_page_map = pg_memory.page_map.clean_copy(fd_factory)?;
+        Ok(Memory::new(new_page_map, pg_memory.size))
     }
 }
 
@@ -601,7 +612,7 @@ impl ValidatedSnapshotMetadata {
         if raw.wasm_module_size > WASM_MAX_SIZE.get() {
             return Err(MetadataValidationError::WasmModuleTooLarge);
         }
-        if raw.wasm_memory_size as usize % WASM_PAGE_SIZE_IN_BYTES != 0 {
+        if !(raw.wasm_memory_size as usize).is_multiple_of(WASM_PAGE_SIZE_IN_BYTES) {
             return Err(MetadataValidationError::WasmMemoryNotPageAligned);
         }
         match wasm_mode {
@@ -616,7 +627,7 @@ impl ValidatedSnapshotMetadata {
                 }
             }
         }
-        if raw.stable_memory_size as usize % WASM_PAGE_SIZE_IN_BYTES != 0 {
+        if !(raw.stable_memory_size as usize).is_multiple_of(WASM_PAGE_SIZE_IN_BYTES) {
             return Err(MetadataValidationError::StableMemoryNotPageAligned);
         }
         if raw.stable_memory_size > MAX_STABLE_MEMORY_IN_BYTES {
@@ -711,8 +722,8 @@ mod tests {
     use super::*;
     use super::{CanisterSnapshot, CanisterSnapshots, PageMap};
     use ic_test_utilities_types::ids::canister_test_id;
-    use ic_types::time::UNIX_EPOCH;
     use ic_types::NumBytes;
+    use ic_types::time::UNIX_EPOCH;
     use maplit::{btreemap, btreeset};
 
     fn fake_canister_snapshot(

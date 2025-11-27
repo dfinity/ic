@@ -25,5 +25,5 @@ pub fn format_timestamp(timestamp_seconds: u64) -> Option<String> {
 /// in which case falls back to a string containing the literal `timestamp_seconds`.
 pub fn format_timestamp_for_humans(timestamp_seconds: u64) -> String {
     format_timestamp(timestamp_seconds)
-        .unwrap_or_else(|| format!("timestamp {} seconds", timestamp_seconds))
+        .unwrap_or_else(|| format!("timestamp {timestamp_seconds} seconds"))
 }

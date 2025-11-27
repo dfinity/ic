@@ -13,20 +13,22 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::canister_state::CanisterRandomnessGenerator;
 use ic_nns_governance::{
     governance::{
-        Environment, Governance, HeapGrowthPotential, HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
+        Environment, Governance, HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES, HeapGrowthPotential,
     },
     pb::v1::{
+        GovernanceError, InstallCode, ManageNeuron, Motion, Proposal,
         governance_error::ErrorType,
         install_code::CanisterInstallMode,
         manage_neuron::{
-            claim_or_refresh::{By, MemoAndController},
             ClaimOrRefresh, Command,
+            claim_or_refresh::{By, MemoAndController},
         },
-        proposal, ExecuteNnsFunction, GovernanceError, InstallCode, ManageNeuron, Motion, Proposal,
+        proposal,
     },
+    proposals::execute_nns_function::ValidExecuteNnsFunction,
 };
 use ic_nns_governance_api::{
-    self as api, manage_neuron_response::Command as CommandResponse, ManageNeuronResponse,
+    self as api, ManageNeuronResponse, manage_neuron_response::Command as CommandResponse,
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
@@ -41,7 +43,11 @@ impl Environment for DegradedEnv {
         111000222
     }
 
-    fn execute_nns_function(&self, _: u64, _: &ExecuteNnsFunction) -> Result<(), GovernanceError> {
+    fn execute_nns_function(
+        &self,
+        _: u64,
+        _: &ValidExecuteNnsFunction,
+    ) -> Result<(), GovernanceError> {
         unimplemented!()
     }
 
@@ -114,7 +120,7 @@ impl CMC for DegradedEnv {
 /// Constructs a test principal id from an integer.
 /// Convenience functions to make creating neurons more concise.
 fn principal(i: u64) -> PrincipalId {
-    PrincipalId::try_from(format!("SID{}", i).as_bytes().to_vec()).unwrap()
+    PrincipalId::try_from(format!("SID{i}").as_bytes().to_vec()).unwrap()
 }
 
 /// Constructs a fixture with 2 neurons of different stakes and no

@@ -30,8 +30,8 @@ use crate::{
     signer::ThresholdSignatureBuilder,
     utils::build_signature_inputs,
     utils::{
-        block_chain_cache, get_idkg_chain_key_config_if_enabled, IDkgBlockReaderImpl,
-        InvalidChainCacheError,
+        IDkgBlockReaderImpl, InvalidChainCacheError, block_chain_cache,
+        get_idkg_chain_key_config_if_enabled,
     },
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
@@ -45,35 +45,38 @@ use ic_management_canister_types_private::{
     Payload, ReshareChainKeyResponse, SignWithECDSAReply, SignWithSchnorrReply,
 };
 use ic_replicated_state::{
+    ReplicatedState,
     metadata_state::subnet_call_context_manager::{
         IDkgSignWithThresholdContext, SignWithThresholdContext,
     },
-    ReplicatedState,
 };
 use ic_types::{
+    Height, SubnetId,
     batch::ValidationContext,
     consensus::{
-        idkg::{
-            self,
-            common::{BuildSignatureInputsError, CombinedSignature, ThresholdSigInputs},
-            IDkgBlockReader, TranscriptRef,
-        },
         Block, BlockPayload, HasHeight,
+        idkg::{
+            self, IDkgBlockReader, TranscriptRef,
+            common::{BuildSignatureInputsError, CombinedSignature, ThresholdSigInputs},
+        },
     },
     crypto::canister_threshold_sig::{
+        ThresholdEcdsaCombinedSignature, ThresholdSchnorrCombinedSignature,
         error::{
             IDkgVerifyInitialDealingsError, IDkgVerifyTranscriptError,
             ThresholdEcdsaVerifyCombinedSignatureError, ThresholdSchnorrVerifyCombinedSigError,
         },
         idkg::{IDkgTranscript, IDkgTranscriptId, InitialIDkgDealings, SignedIDkgDealing},
-        ThresholdEcdsaCombinedSignature, ThresholdSchnorrCombinedSignature,
     },
     messages::CallbackId,
     registry::RegistryClientError,
     state_manager::StateManagerError,
-    Height, SubnetId,
 };
 use prometheus::HistogramVec;
+use rayon::{
+    ThreadPool,
+    iter::{IntoParallelIterator, ParallelIterator},
+};
 use std::{collections::BTreeMap, convert::TryFrom};
 
 #[allow(clippy::enum_variant_names)]
@@ -238,6 +241,7 @@ pub fn validate_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
+    thread_pool: &ThreadPool,
     pool_reader: &PoolReader<'_>,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     context: &ValidationContext,
@@ -268,6 +272,7 @@ pub fn validate_payload(
                     subnet_id,
                     registry_client,
                     crypto,
+                    thread_pool,
                     pool_reader,
                     state_manager,
                     context,
@@ -338,6 +343,7 @@ fn validate_data_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
+    thread_pool: &ThreadPool,
     pool_reader: &PoolReader<'_>,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     context: &ValidationContext,
@@ -418,6 +424,7 @@ fn validate_data_payload(
         || {
             validate_transcript_refs(
                 crypto,
+                thread_pool,
                 &block_reader,
                 &prev_payload,
                 curr_payload,
@@ -454,6 +461,7 @@ fn validate_data_payload(
         &block_reader,
         &builder,
         &builder,
+        thread_pool,
         state_manager,
         registry_client,
         None,
@@ -514,18 +522,20 @@ impl ThresholdSignatureBuilder for CachedBuilder {
 // in prev_payload resolve correctly. So only new references need to be checked.
 fn validate_transcript_refs(
     crypto: &dyn ConsensusCrypto,
+    thread_pool: &ThreadPool,
     block_reader: &dyn IDkgBlockReader,
     prev_payload: &idkg::IDkgPayload,
     curr_payload: &idkg::IDkgPayload,
     curr_height: Height,
 ) -> Result<BTreeMap<IDkgTranscriptId, IDkgTranscript>, IDkgValidationError> {
     use InvalidIDkgPayloadReason::*;
-    let mut count = 0;
     let idkg_transcripts = &curr_payload.idkg_transcripts;
     let prev_configs = prev_payload
         .iter_transcript_configs_in_creation()
         .map(|config| (config.transcript_id, config))
         .collect::<BTreeMap<_, _>>();
+
+    let mut verify_transcript_args = Vec::new();
     for transcript_ref in curr_payload.active_transcripts().iter() {
         if transcript_ref.height >= curr_height || block_reader.transcript(transcript_ref).is_err()
         {
@@ -537,19 +547,30 @@ fn validate_transcript_refs(
                 let config = prev_configs
                     .get(transcript_id)
                     .ok_or(NewTranscriptMissingParams(*transcript_id))?;
-                let params = config.translate(block_reader)?;
-                crypto.verify_transcript(&params, transcript)?;
-                count += 1;
+                verify_transcript_args.push((config, transcript));
             } else {
                 return Err(NewTranscriptNotFound(*transcript_id).into());
             }
         }
     }
-    if count as usize == idkg_transcripts.len() {
-        Ok(idkg_transcripts.clone())
-    } else {
-        Err(NewTranscriptMiscount(count).into())
+
+    let results = thread_pool
+        .install(|| {
+            verify_transcript_args
+                .into_par_iter()
+                .map(|(config, transcript)| {
+                    let params = config.translate(block_reader)?;
+                    crypto.verify_transcript(&params, transcript)?;
+                    Ok(())
+                })
+        })
+        .collect::<Result<Vec<()>, IDkgValidationError>>()?;
+
+    if results.len() != idkg_transcripts.len() {
+        return Err(NewTranscriptMiscount(results.len() as u64).into());
     }
+
+    Ok(idkg_transcripts.clone())
 }
 
 fn validate_reshare_dealings(
@@ -561,13 +582,13 @@ fn validate_reshare_dealings(
     use InvalidIDkgPayloadReason::*;
     let mut new_reshare_agreement = BTreeMap::new();
     for (request, dealings) in curr_payload.xnet_reshare_agreements.iter() {
-        if let idkg::CompletedReshareRequest::Unreported(dealings) = &dealings {
-            if !prev_payload.xnet_reshare_agreements.contains_key(request) {
-                if !prev_payload.ongoing_xnet_reshares.contains_key(request) {
-                    return Err(XNetReshareAgreementWithoutRequest(request.clone()).into());
-                }
-                new_reshare_agreement.insert(request.clone(), dealings);
+        if let idkg::CompletedReshareRequest::Unreported(dealings) = &dealings
+            && !prev_payload.xnet_reshare_agreements.contains_key(request)
+        {
+            if !prev_payload.ongoing_xnet_reshares.contains_key(request) {
+                return Err(XNetReshareAgreementWithoutRequest(request.clone()).into());
             }
+            new_reshare_agreement.insert(request.clone(), dealings);
         }
     }
     let mut new_dealings = BTreeMap::new();
@@ -591,19 +612,19 @@ fn validate_reshare_dealings(
 
 fn decode_initial_dealings(data: &[u8]) -> Result<InitialIDkgDealings, InvalidIDkgPayloadReason> {
     let reshare_chain_key_response = ReshareChainKeyResponse::decode(data)
-        .map_err(|err| InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err)))?;
+        .map_err(|err| InvalidIDkgPayloadReason::DecodingError(format!("{err:?}")))?;
 
     let initial_dealings = match reshare_chain_key_response {
         ReshareChainKeyResponse::IDkg(initial_idkg_dealings) => initial_idkg_dealings,
         ReshareChainKeyResponse::NiDkg(_) => {
             return Err(InvalidIDkgPayloadReason::DecodingError(
                 "Found an NiDkg response".to_string(),
-            ))
+            ));
         }
     };
 
     InitialIDkgDealings::try_from(&initial_dealings)
-        .map_err(|err| InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err)))
+        .map_err(|err| InvalidIDkgPayloadReason::DecodingError(format!("{err:?}")))
 }
 
 // Validate new signature agreements in the current payload.
@@ -624,42 +645,40 @@ fn validate_new_signature_agreements(
         })
         .collect::<BTreeMap<_, _>>();
     for (random_id, completed) in curr_payload.signature_agreements.iter() {
-        if let idkg::CompletedSignature::Unreported(response) = completed {
-            if let ic_types::messages::Payload::Data(data) = &response.payload {
-                if prev_payload.signature_agreements.contains_key(random_id) {
-                    return Err(InvalidIDkgPayloadReason::NewSignatureUnexpected(*random_id).into());
+        if let idkg::CompletedSignature::Unreported(response) = completed
+            && let ic_types::messages::Payload::Data(data) = &response.payload
+        {
+            if prev_payload.signature_agreements.contains_key(random_id) {
+                return Err(InvalidIDkgPayloadReason::NewSignatureUnexpected(*random_id).into());
+            }
+            let (id, context) = context_map.get(random_id).ok_or(
+                InvalidIDkgPayloadReason::NewSignatureMissingContext(*random_id),
+            )?;
+            let (_, input) = build_signature_inputs(*id, context)?;
+            match input {
+                ThresholdSigInputs::Ecdsa(input) => {
+                    let reply = SignWithECDSAReply::decode(data).map_err(|err| {
+                        InvalidIDkgPayloadReason::DecodingError(format!("{err:?}"))
+                    })?;
+                    let signature = ThresholdEcdsaCombinedSignature {
+                        signature: reply.signature,
+                    };
+                    ThresholdEcdsaSigVerifier::verify_combined_sig(crypto, &input, &signature)?;
+                    new_signatures.insert(*id, CombinedSignature::Ecdsa(signature));
                 }
-                let (id, context) = context_map.get(random_id).ok_or(
-                    InvalidIDkgPayloadReason::NewSignatureMissingContext(*random_id),
-                )?;
-                let (_, input) = build_signature_inputs(*id, context)?;
-                match input {
-                    ThresholdSigInputs::Ecdsa(input) => {
-                        let reply = SignWithECDSAReply::decode(data).map_err(|err| {
-                            InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
-                        })?;
-                        let signature = ThresholdEcdsaCombinedSignature {
-                            signature: reply.signature,
-                        };
-                        ThresholdEcdsaSigVerifier::verify_combined_sig(crypto, &input, &signature)?;
-                        new_signatures.insert(*id, CombinedSignature::Ecdsa(signature));
-                    }
-                    ThresholdSigInputs::Schnorr(input) => {
-                        let reply = SignWithSchnorrReply::decode(data).map_err(|err| {
-                            InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
-                        })?;
-                        let signature = ThresholdSchnorrCombinedSignature {
-                            signature: reply.signature,
-                        };
-                        ThresholdSchnorrSigVerifier::verify_combined_sig(
-                            crypto, &input, &signature,
-                        )?;
-                        new_signatures.insert(*id, CombinedSignature::Schnorr(signature));
-                    }
-                    ThresholdSigInputs::VetKd(_) => {
-                        // We don't expect to find agreements for vet KD contexts in the IDKG payload
-                        return Err(InvalidIDkgPayloadReason::VetKdUnexpected(*id).into());
-                    }
+                ThresholdSigInputs::Schnorr(input) => {
+                    let reply = SignWithSchnorrReply::decode(data).map_err(|err| {
+                        InvalidIDkgPayloadReason::DecodingError(format!("{err:?}"))
+                    })?;
+                    let signature = ThresholdSchnorrCombinedSignature {
+                        signature: reply.signature,
+                    };
+                    ThresholdSchnorrSigVerifier::verify_combined_sig(crypto, &input, &signature)?;
+                    new_signatures.insert(*id, CombinedSignature::Schnorr(signature));
+                }
+                ThresholdSigInputs::VetKd(_) => {
+                    // We don't expect to find agreements for vet KD contexts in the IDKG payload
+                    return Err(InvalidIDkgPayloadReason::VetKdUnexpected(*id).into());
                 }
             }
         }
@@ -671,32 +690,35 @@ fn validate_new_signature_agreements(
 mod test {
     use super::*;
     use crate::{
+        MAX_IDKG_THREADS,
         payload_builder::{
             filter_idkg_reshare_chain_key_contexts,
             resharing::{initiate_reshare_requests, update_completed_reshare_requests},
             signatures::update_signature_agreements,
         },
         test_utils::*,
+        utils::build_thread_pool,
     };
     use assert_matches::assert_matches;
+    use ic_crypto_temp_crypto::TempCryptoComponent;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        dummy_values::dummy_dealings, CanisterThresholdSigTestEnvironment,
+        CanisterThresholdSigTestEnvironment, dummy_values::dummy_dealings,
     };
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces_state_manager::CertifiedStateSnapshot;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{MasterPublicKeyId, Payload, SignWithECDSAReply};
-    use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_consensus::idkg::*;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
+        Height,
         consensus::idkg::{
-            common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef, CompletedSignature,
-            IDkgMasterPublicKeyId,
+            CompletedSignature, IDkgMasterPublicKeyId, common::PreSignatureRef,
+            ecdsa::PreSignatureQuadrupleRef,
         },
         crypto::AlgorithmId,
         messages::CallbackId,
-        Height,
     };
     use idkg::RequestId;
     use std::collections::BTreeSet;
@@ -711,6 +733,7 @@ mod test {
 
     fn test_validate_transcript_refs(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
+        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
         let num_of_nodes = 4;
         let subnet_id = subnet_test_id(1);
         let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes, &mut rng);
@@ -721,14 +744,17 @@ mod test {
         let mut curr_payload = prev_payload.clone();
 
         // Empty payload verifies
-        assert!(validate_transcript_refs(
-            crypto,
-            &block_reader,
-            &prev_payload,
-            &curr_payload,
-            Height::from(0)
-        )
-        .is_ok());
+        assert!(
+            validate_transcript_refs(
+                crypto,
+                thread_pool.as_ref(),
+                &block_reader,
+                &prev_payload,
+                &curr_payload,
+                Height::from(0)
+            )
+            .is_ok()
+        );
 
         // Add a transcript
         let height_100 = Height::new(100);
@@ -742,6 +768,7 @@ mod test {
         assert_matches!(
             validate_transcript_refs(
                 crypto,
+                thread_pool.as_ref(),
                 &block_reader,
                 &prev_payload,
                 &curr_payload,
@@ -765,6 +792,7 @@ mod test {
             idkg::KeyTranscriptCreation::Created(transcript_ref_0);
         let res = validate_transcript_refs(
             crypto,
+            thread_pool.as_ref(),
             &block_reader,
             &prev_payload,
             &curr_payload,
@@ -772,10 +800,28 @@ mod test {
         );
         assert!(res.is_ok());
 
+        let real_crypto = TempCryptoComponent::builder().build_arc();
+
+        // Error because of real crypto should not verify the transcript
+        assert_matches!(
+            validate_transcript_refs(
+                real_crypto.as_ref(),
+                thread_pool.as_ref(),
+                &block_reader,
+                &prev_payload,
+                &curr_payload,
+                height_100,
+            ),
+            Err(ValidationError::InvalidArtifact(
+                InvalidIDkgPayloadReason::IDkgVerifyTranscriptError(_)
+            ))
+        );
+
         // Error because of height mismatch
         assert_matches!(
             validate_transcript_refs(
                 crypto,
+                thread_pool.as_ref(),
                 &block_reader,
                 &prev_payload,
                 &curr_payload,
@@ -794,6 +840,7 @@ mod test {
         assert_matches!(
             validate_transcript_refs(
                 crypto,
+                thread_pool.as_ref(),
                 &block_reader,
                 &prev_payload,
                 &curr_payload,
@@ -806,14 +853,17 @@ mod test {
 
         curr_payload.idkg_transcripts = BTreeMap::new();
         block_reader.add_transcript(*transcript_ref_1.as_ref(), transcript_1);
-        assert!(validate_transcript_refs(
-            crypto,
-            &block_reader,
-            &prev_payload,
-            &curr_payload,
-            Height::from(101),
-        )
-        .is_ok());
+        assert!(
+            validate_transcript_refs(
+                crypto,
+                thread_pool.as_ref(),
+                &block_reader,
+                &prev_payload,
+                &curr_payload,
+                Height::from(101),
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -1241,6 +1291,7 @@ mod test {
         let mut rng = reproducible_rng();
         use ic_types::consensus::idkg::*;
         let num_of_nodes = 4;
+        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
         let subnet_id = subnet_test_id(1);
         let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes, &mut rng);
         let registry_version = env.newest_registry_version;
@@ -1319,6 +1370,7 @@ mod test {
 
         let error = validate_transcript_refs(
             crypto,
+            thread_pool.as_ref(),
             &block_reader,
             &prev_payload,
             &curr_payload,

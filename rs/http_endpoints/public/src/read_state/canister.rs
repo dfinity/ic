@@ -1,47 +1,55 @@
-use super::{parse_principal_id, verify_principal_ids};
+use super::{
+    DeprecatedCanisterRangesFilter, get_certificate_and_create_response,
+    make_service_unavailable_response, parse_principal_id, verify_principal_ids,
+};
 use crate::{
-    common::{build_validator, into_cbor, validation_error_to_http_error, Cbor, WithTimeout},
     HttpError, ReplicaHealthStatus,
+    common::{Cbor, WithTimeout, build_validator, validation_error_to_http_error},
 };
 
 use axum::{
+    Router,
     body::Body,
     extract::{DefaultBodyLimit, State},
     response::{IntoResponse, Response},
-    Router,
 };
 use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
-use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
+use ic_crypto_tree_hash::Path;
 use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
-use ic_replicated_state::{canister_state::execution_state::CustomSectionType, ReplicatedState};
+use ic_replicated_state::{ReplicatedState, canister_state::execution_state::CustomSectionType};
 use ic_types::{
+    CanisterId, PrincipalId, SubnetId, UserId,
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, Certificate, HttpReadStateContent, HttpReadStateResponse, HttpRequest,
-        HttpRequestEnvelope, MessageId, ReadState, EXPECTED_MESSAGE_ID_LENGTH,
+        EXPECTED_MESSAGE_ID_LENGTH, HttpReadStateContent, HttpRequest, HttpRequestEnvelope,
+        MessageId, ReadState,
     },
-    CanisterId, PrincipalId, UserId,
 };
 use ic_validator::{CanisterIdSet, HttpRequestVerifier};
 use std::{
     convert::{Infallible, TryFrom},
     sync::Arc,
 };
-use tower::{util::BoxCloneService, ServiceBuilder};
+use tower::{ServiceBuilder, util::BoxCloneService};
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Version {
-    // Endpoint with the NNS delegation using the flat format of the canister ranges.
+    /// Endpoint with the NNS delegation using the flat format of the canister ranges.
+    /// `/subnet/<subnet_id>/canister_ranges` path is allowed
     V2,
-    // Endpoint with the NNS delegation using the tree format of the canister ranges.
+    /// Endpoint with the NNS delegation using the tree format of the canister ranges.
+    /// Explicitly requesting `/subnet/<subnet_id>/canister_ranges` path is NOT allowed
+    /// except when `subnet_id == nns_subnet_id`. Moreover, all paths of the form
+    /// `/subnet/<subnet_id>/canister_ranges`, where `subnet_id != nns_subnet_id`, are
+    /// pruned from the returned certificate.
     V3,
 }
 
@@ -54,6 +62,7 @@ pub struct CanisterReadStateService {
     time_source: Arc<dyn TimeSource>,
     validator: Arc<dyn HttpRequestVerifier<ReadState, RegistryRootOfTrustProvider>>,
     registry_client: Arc<dyn RegistryClient>,
+    nns_subnet_id: SubnetId,
     version: Version,
 }
 
@@ -64,8 +73,9 @@ pub struct CanisterReadStateServiceBuilder {
     nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     time_source: Option<Arc<dyn TimeSource>>,
-    ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+    ingress_verifier: Arc<dyn IngressSigVerifier>,
     registry_client: Arc<dyn RegistryClient>,
+    nns_subnet_id: SubnetId,
     version: Version,
 }
 
@@ -83,8 +93,9 @@ impl CanisterReadStateServiceBuilder {
         log: ReplicaLogger,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         registry_client: Arc<dyn RegistryClient>,
-        ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+        ingress_verifier: Arc<dyn IngressSigVerifier>,
         nns_delegation_reader: NNSDelegationReader,
+        nns_subnet_id: SubnetId,
         version: Version,
     ) -> Self {
         Self {
@@ -96,6 +107,7 @@ impl CanisterReadStateServiceBuilder {
             time_source: None,
             ingress_verifier,
             registry_client,
+            nns_subnet_id,
             version,
         }
     }
@@ -129,6 +141,7 @@ impl CanisterReadStateServiceBuilder {
             time_source: self.time_source.unwrap_or(Arc::new(SysTimeSource::new())),
             validator: build_validator(self.ingress_verifier, self.malicious_flags),
             registry_client: self.registry_client,
+            nns_subnet_id: self.nns_subnet_id,
             version: self.version,
         };
         Router::new().route(
@@ -155,6 +168,7 @@ pub(crate) async fn canister_read_state(
         time_source,
         validator,
         registry_client,
+        nns_subnet_id,
         version,
     }): State<CanisterReadStateService>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpReadStateContent>>>,
@@ -173,22 +187,18 @@ pub(crate) async fn canister_read_state(
         Ok(request) => request,
         Err(e) => {
             let status = StatusCode::BAD_REQUEST;
-            let text = format!("Malformed request: {:?}", e);
+            let text = format!("Malformed request: {e:?}");
             return (status, text).into_response();
         }
     };
     let read_state = request.content().clone();
     let registry_version = registry_client.get_latest_version();
 
-    let make_service_unavailable_response = || {
-        let status = StatusCode::SERVICE_UNAVAILABLE;
-        let text = "Certified state is not available yet. Please try again...".to_string();
-        (status, text).into_response()
-    };
     let root_of_trust_provider =
         RegistryRootOfTrustProvider::new(Arc::clone(&registry_client), registry_version);
     // Since spawn blocking requires 'static we can't use any references
     let request_c = request.clone();
+
     let response = tokio::task::spawn_blocking(move || {
         let targets = match validator.validate_request(
             &request_c,
@@ -202,59 +212,43 @@ pub(crate) async fn canister_read_state(
             }
         };
 
-        let certified_state_reader = match state_reader.get_certified_state_snapshot() {
-            Some(reader) => reader,
-            None => return make_service_unavailable_response(),
+        let Some(certified_state_reader) = state_reader.get_certified_state_snapshot() else {
+            return make_service_unavailable_response();
         };
 
         // Verify authorization for requested paths.
         if let Err(HttpError { status, message }) = verify_paths(
+            version,
             certified_state_reader.get_state(),
             &read_state.source,
             &read_state.paths,
             &targets,
             effective_canister_id.into(),
+            nns_subnet_id,
         ) {
             return (status, message).into_response();
         }
 
-        // Create labeled tree. This may be an expensive operation and by
-        // creating the labeled tree after verifying the paths we know that
-        // the depth is max 4.
-        // Always add "time" to the paths even if not explicitly requested.
-        let mut paths: Vec<Path> = read_state.paths;
-        paths.push(Path::from(Label::from("time")));
-        let labeled_tree = match sparse_labeled_tree_from_paths(&paths) {
-            Ok(tree) => tree,
-            Err(TooLongPathError) => {
-                let status = StatusCode::BAD_REQUEST;
-                let text = "Failed to parse requested paths: path is too long.".to_string();
-                return (status, text).into_response();
-            }
-        };
-
-        let (tree, certification) = match certified_state_reader.read_certified_state(&labeled_tree)
-        {
-            Some(r) => r,
-            None => return make_service_unavailable_response(),
-        };
-
-        let signature = certification.signed.signature.signature.get().0;
         let delegation_from_nns = match version {
             Version::V2 => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
             Version::V3 => nns_delegation_reader
                 .get_delegation(CanisterRangesFilter::Tree(effective_canister_id)),
         };
-        let res = HttpReadStateResponse {
-            certificate: Blob(into_cbor(&Certificate {
-                tree,
-                signature: Blob(signature),
-                delegation: delegation_from_nns,
-            })),
+
+        let maybe_nns_subnet_filter = match version {
+            Version::V2 => DeprecatedCanisterRangesFilter::KeepAll,
+            Version::V3 => DeprecatedCanisterRangesFilter::KeepOnlyNNS(nns_subnet_id),
         };
-        Cbor(res).into_response()
+
+        get_certificate_and_create_response(
+            read_state.paths,
+            delegation_from_nns,
+            certified_state_reader.as_ref(),
+            maybe_nns_subnet_filter,
+        )
     })
     .await;
+
     match response {
         Ok(res) => res,
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
@@ -263,11 +257,13 @@ pub(crate) async fn canister_read_state(
 
 // Verifies that the `user` is authorized to retrieve the `paths` requested.
 fn verify_paths(
+    version: Version,
     state: &ReplicatedState,
     user: &UserId,
     paths: &[Path],
     targets: &CanisterIdSet,
     effective_principal_id: PrincipalId,
+    nns_subnet_id: SubnetId,
 ) -> Result<(), HttpError> {
     let mut last_request_status_id: Option<MessageId> = None;
 
@@ -287,7 +283,7 @@ fn verify_paths(
             [b"canister", canister_id, b"metadata", name] => {
                 let name = String::from_utf8(Vec::from(*name)).map_err(|err| HttpError {
                     status: StatusCode::BAD_REQUEST,
-                    message: format!("Could not parse the custom section name: {}.", err),
+                    message: format!("Could not parse the custom section name: {err}."),
                 })?;
 
                 // Get principal id from byte slice.
@@ -303,53 +299,71 @@ fn verify_paths(
             }
             [b"api_boundary_nodes"] => {}
             [b"api_boundary_nodes", _node_id]
-            | [b"api_boundary_nodes", _node_id, b"domain" | b"ipv4_address" | b"ipv6_address"] => {}
+            | [
+                b"api_boundary_nodes",
+                _node_id,
+                b"domain" | b"ipv4_address" | b"ipv6_address",
+            ] => {}
             [b"subnet"] => {}
-            [b"subnet", _subnet_id]
-            | [b"subnet", _subnet_id, b"public_key" | b"canister_ranges" | b"node"] => {}
+            [b"subnet", _subnet_id] | [b"subnet", _subnet_id, b"public_key" | b"node"] => {}
+            // `/subnet/<subnet_id>/canister_ranges` is always allowed on the `/api/v2` endpoint
+            [b"subnet", _subnet_id, b"canister_ranges"] if version == Version::V2 => {}
+            // `/subnet/<subnet_id>/canister_ranges` is allowed on the `/api/v3` endpoint
+            // only when `subnet_id == nns_subnet_id`.
+            [b"subnet", subnet_id, b"canister_ranges"]
+                if version == Version::V3
+                    && parse_principal_id(subnet_id)? == nns_subnet_id.get() => {}
             [b"subnet", _subnet_id, b"node", _node_id]
             | [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {}
             [b"request_status", request_id]
-            | [b"request_status", request_id, b"status" | b"reply" | b"reject_code" | b"reject_message" | b"error_code"] =>
-            {
+            | [
+                b"request_status",
+                request_id,
+                b"status" | b"reply" | b"reject_code" | b"reject_message" | b"error_code",
+            ] => {
                 let message_id = MessageId::try_from(*request_id).map_err(|_| HttpError {
                     status: StatusCode::BAD_REQUEST,
-                    message: format!("Invalid request id in paths. Maybe the request ID is not of {} bytes in length?!", EXPECTED_MESSAGE_ID_LENGTH)
+                    message: format!(
+                        "Invalid request id in paths. \
+                        Maybe the request ID is not \
+                        of {EXPECTED_MESSAGE_ID_LENGTH} bytes in length?!"
+                    ),
                 })?;
 
-                if let Some(x) = last_request_status_id {
-                    if x != message_id {
-                        return Err(HttpError {
-                                status: StatusCode::BAD_REQUEST,
-                                message: format!("More than one non-unique request ID exists in request_status paths: {} and {}.",
-                                   x, message_id),
-                            });
-                    }
+                if let Some(x) = last_request_status_id
+                    && x != message_id
+                {
+                    return Err(HttpError {
+                        status: StatusCode::BAD_REQUEST,
+                        message: format!(
+                            "More than one non-unique request ID exists in \
+                                request_status paths: {x} and {message_id}."
+                        ),
+                    });
                 }
                 last_request_status_id = Some(message_id.clone());
 
                 // Verify that the request was signed by the same user.
                 let ingress_status = state.get_ingress_status(&message_id);
-                if let Some(ingress_user_id) = ingress_status.user_id() {
-                    if ingress_user_id != *user {
-                        return Err(HttpError {
-                            status: StatusCode::FORBIDDEN,
-                            message:
-                                "The user tries to access Request ID not signed by the caller."
-                                    .to_string(),
-                        });
-                    }
+                if let Some(ingress_user_id) = ingress_status.user_id()
+                    && ingress_user_id != *user
+                {
+                    return Err(HttpError {
+                        status: StatusCode::FORBIDDEN,
+                        message: "The user tries to access Request ID not signed by the caller."
+                            .to_string(),
+                    });
                 }
 
-                if let Some(receiver) = ingress_status.receiver() {
-                    if !targets.contains(&receiver) {
-                        return Err(HttpError {
-                                    status: StatusCode::FORBIDDEN,
-                                    message:
-                                        "The user tries to access request IDs for canisters not belonging to sender delegation targets."
-                                            .to_string(),
-                                });
-                    }
+                if let Some(receiver) = ingress_status.receiver()
+                    && !targets.contains(&receiver)
+                {
+                    return Err(HttpError {
+                        status: StatusCode::FORBIDDEN,
+                        message: "The user tries to access request IDs for canisters \
+                                      not belonging to sender delegation targets."
+                            .to_string(),
+                    });
                 }
             }
             _ => {
@@ -393,8 +407,7 @@ fn can_read_canister_metadata(
                 return Err(HttpError {
                     status: StatusCode::FORBIDDEN,
                     message: format!(
-                        "Custom section {:.100} can only be requested by the controllers of the canister.",
-                        custom_section_name
+                        "Custom section {custom_section_name:.100} can only be requested by the controllers of the canister."
                     ),
                 });
             }
@@ -409,20 +422,25 @@ fn can_read_canister_metadata(
 mod test {
     use super::*;
     use crate::{
-        common::test::{array, assert_cbor_ser_equal, bytes, int},
         HttpError,
+        common::test::{array, assert_cbor_ser_equal, bytes, int},
     };
     use hyper::StatusCode;
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree, Path};
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        canister_snapshots::CanisterSnapshots, CanisterQueues, ReplicatedState, SystemMetadata,
+        CanisterQueues, RefundPool, ReplicatedState, SystemMetadata,
+        canister_snapshots::CanisterSnapshots,
     };
     use ic_test_utilities_state::insert_dummy_canister;
-    use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
+    use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, canister_test_id, user_test_id};
     use ic_types::{batch::RawQueryStats, time::UNIX_EPOCH};
     use ic_validator::CanisterIdSet;
+    use rstest::rstest;
     use std::collections::BTreeMap;
+
+    const NNS_SUBNET_ID: SubnetId = SUBNET_0;
+    const APP_SUBNET_ID: SubnetId = SUBNET_1;
 
     #[test]
     fn encoding_read_state_tree_empty() {
@@ -487,7 +505,7 @@ mod test {
         let controller = user_test_id(24);
         let non_controller = user_test_id(20);
 
-        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        let mut state = ReplicatedState::new(APP_SUBNET_ID, SubnetType::Application);
         insert_dummy_canister(&mut state, canister_id, controller.get());
 
         let public_name = "dummy";
@@ -512,7 +530,7 @@ mod test {
         let controller = user_test_id(24);
         let non_controller = user_test_id(20);
 
-        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        let mut state = ReplicatedState::new(APP_SUBNET_ID, SubnetType::Application);
         insert_dummy_canister(&mut state, canister_id, controller.get());
 
         // Non-controller cannot read private custom section named `candid`.
@@ -532,17 +550,25 @@ mod test {
         );
     }
 
-    #[test]
-    fn test_canister_ranges_are_not_allowed() {
-        let state = ReplicatedState::new_from_checkpoint(
+    fn fake_replicated_state() -> ReplicatedState {
+        let mut metadata = SystemMetadata::new(APP_SUBNET_ID, SubnetType::Application);
+        metadata.batch_time = UNIX_EPOCH;
+        ReplicatedState::new_from_checkpoint(
             BTreeMap::new(),
-            SystemMetadata::new(subnet_test_id(1), SubnetType::Application),
+            metadata,
             CanisterQueues::default(),
+            RefundPool::default(),
             RawQueryStats::default(),
             CanisterSnapshots::default(),
-        );
+        )
+    }
+
+    #[rstest]
+    fn test_canister_ranges_are_not_allowed(#[values(Version::V2, Version::V3)] version: Version) {
+        let state = fake_replicated_state();
 
         let error = verify_paths(
+            version,
             &state,
             &user_test_id(1),
             &[Path::new(vec![
@@ -551,36 +577,32 @@ mod test {
             ])],
             &CanisterIdSet::all(),
             canister_test_id(1).get(),
+            NNS_SUBNET_ID,
         )
         .expect_err("Should fail because canister_ranges are not allowed");
 
         assert_eq!(error.status, StatusCode::NOT_FOUND)
     }
 
-    #[test]
-    fn test_verify_path() {
-        let subnet_id = subnet_test_id(1);
-        let mut metadata = SystemMetadata::new(subnet_id, SubnetType::Application);
-        metadata.batch_time = UNIX_EPOCH;
-        let state = ReplicatedState::new_from_checkpoint(
-            BTreeMap::new(),
-            metadata,
-            CanisterQueues::default(),
-            RawQueryStats::default(),
-            CanisterSnapshots::default(),
-        );
+    #[rstest]
+    fn test_verify_path(#[values(Version::V2, Version::V3)] version: Version) {
+        let state = fake_replicated_state();
         assert_eq!(
             verify_paths(
+                version,
                 &state,
                 &user_test_id(1),
                 &[Path::from(Label::from("time"))],
                 &CanisterIdSet::all(),
                 canister_test_id(1).get(),
+                NNS_SUBNET_ID,
             ),
             Ok(())
         );
+
         assert_eq!(
             verify_paths(
+                version,
                 &state,
                 &user_test_id(1),
                 &[
@@ -597,19 +619,83 @@ mod test {
                 ],
                 &CanisterIdSet::all(),
                 canister_test_id(1).get(),
+                NNS_SUBNET_ID,
             ),
             Ok(())
         );
-        assert!(verify_paths(
+
+        let err = verify_paths(
+            version,
             &state,
             &user_test_id(1),
             &[
                 Path::new(vec![Label::from("request_status"), [0; 32].into()]),
-                Path::new(vec![Label::from("request_status"), [1; 32].into()])
+                Path::new(vec![Label::from("request_status"), [1; 32].into()]),
             ],
             &CanisterIdSet::all(),
             canister_test_id(1).get(),
+            NNS_SUBNET_ID,
         )
-        .is_err());
+        .expect_err("Should fail the validation");
+        assert_eq!(err.status, StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn deprecated_canister_ranges_path_is_not_allowed_on_the_v3_endpoint_except_for_the_nns_subnet()
+    {
+        let state = fake_replicated_state();
+        let err = verify_paths(
+            Version::V3,
+            &state,
+            &user_test_id(1),
+            &[Path::new(vec![
+                Label::from("subnet"),
+                APP_SUBNET_ID.get().to_vec().into(),
+                Label::from("canister_ranges"),
+            ])],
+            &CanisterIdSet::all(),
+            canister_test_id(1).get(),
+            NNS_SUBNET_ID,
+        )
+        .expect_err("Should fail the validation");
+        assert_eq!(err.status, StatusCode::NOT_FOUND);
+
+        assert!(
+            verify_paths(
+                Version::V3,
+                &state,
+                &user_test_id(1),
+                &[Path::new(vec![
+                    Label::from("subnet"),
+                    NNS_SUBNET_ID.get().to_vec().into(),
+                    Label::from("canister_ranges"),
+                ])],
+                &CanisterIdSet::all(),
+                canister_test_id(1).get(),
+                NNS_SUBNET_ID,
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn deprecated_canister_ranges_path_is_allowed_on_the_v2_endpoint() {
+        let state = fake_replicated_state();
+        assert!(
+            verify_paths(
+                Version::V2,
+                &state,
+                &user_test_id(1),
+                &[Path::new(vec![
+                    Label::from("subnet"),
+                    APP_SUBNET_ID.get().to_vec().into(),
+                    Label::from("canister_ranges"),
+                ])],
+                &CanisterIdSet::all(),
+                canister_test_id(1).get(),
+                NNS_SUBNET_ID,
+            )
+            .is_ok()
+        );
     }
 }

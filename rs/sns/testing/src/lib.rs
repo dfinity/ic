@@ -7,7 +7,7 @@ use icp_ledger::Tokens;
 use rust_decimal::Decimal;
 use url::Url;
 
-pub mod nns_dapp;
+pub mod bootstrap;
 pub mod sns;
 pub mod utils;
 
@@ -254,8 +254,4 @@ pub struct NnsInitArgs {
     /// If not provided, the ephemeral identity with hardcoded principal will be used.
     #[arg(long)]
     pub icp_treasury_identity: Option<String>,
-    /// The NNS Neuron ID that will have the majority voting power in the created NNS.
-    /// Defaults to '1'.
-    #[arg(long)]
-    pub deciding_nns_neuron_id: Option<u64>,
 }

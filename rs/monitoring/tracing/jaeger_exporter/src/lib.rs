@@ -1,7 +1,7 @@
 use anyhow::anyhow;
-use opentelemetry::{trace::TracerProvider, KeyValue};
+use opentelemetry::{KeyValue, trace::TracerProvider};
 use opentelemetry_otlp::{SpanExporter, WithExportConfig};
-use opentelemetry_sdk::{runtime as sdk_runtime, trace as sdk_trace, Resource};
+use opentelemetry_sdk::{Resource, runtime as sdk_runtime, trace as sdk_trace};
 use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::{Layer, Registry};
 
@@ -9,7 +9,7 @@ pub fn jaeger_exporter(
     jaeger_addr: &str,
     service_name: &'static str,
     rt_handle: &tokio::runtime::Handle,
-) -> Result<impl Layer<Registry> + Send + Sync, anyhow::Error> {
+) -> Result<impl Layer<Registry> + Send + Sync + use<>, anyhow::Error> {
     if jaeger_addr.is_empty() {
         return Err(anyhow!("Empty jaeger addr."));
     }

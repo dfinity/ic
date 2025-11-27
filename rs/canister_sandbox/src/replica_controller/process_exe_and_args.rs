@@ -21,7 +21,13 @@ const SANDBOX_EXECUTABLE_NAME: &str = "canister_sandbox";
 const LAUNCHER_EXECUTABLE_NAME: &str = "sandbox_launcher";
 
 // These binaries support running in the canister sandbox mode.
-const RUNNABLE_AS_SANDBOX: &[&str] = &["ic-replay", "ic-recovery", "pocket-ic", "pocket-ic-server"];
+const RUNNABLE_AS_SANDBOX: &[&str] = &[
+    "ic-replay",
+    "ic-recovery",
+    "pocket-ic",
+    "pocket-ic-server",
+    "pocket-ic-server-head-nns",
+];
 
 enum SandboxCrate {
     SandboxLauncher,
@@ -136,13 +142,13 @@ fn current_binary_path() -> Option<PathBuf> {
 fn check_binary_signature(binary_path: PathBuf) -> bool {
     let mut signature_found = false;
 
-    if let Ok(data) = std::fs::read(binary_path) {
-        if let Ok(obj_file) = object::File::parse(&*data) {
-            signature_found = obj_file.sections().any(|section| {
+    if let Ok(data) = std::fs::read(binary_path)
+        && let Ok(obj_file) = object::File::parse(&*data)
+    {
+        signature_found = obj_file.sections().any(|section| {
                 matches!(section.name(), Ok(name) if name == crate::SANDBOX_SECTION_NAME)
                     && matches!(section.data(), Ok(data) if data.starts_with(&crate::SANDBOX_MAGIC_BYTES))
             });
-        }
     }
     signature_found
 }
@@ -158,7 +164,7 @@ fn create_sandbox_argv_for_testing(krate: SandboxCrate) -> Option<Vec<String>> {
     // In CI we expect the sandbox executable to be in our path so this should
     // succeed.
     if let Ok(exec_path) = which::which(executable_name) {
-        println!("Running sandbox with executable {:?}", exec_path);
+        println!("Running sandbox with executable {exec_path:?}");
         return Some(vec![exec_path.to_str().unwrap().to_string()]);
     }
 
@@ -169,11 +175,10 @@ fn create_sandbox_argv_for_testing(krate: SandboxCrate) -> Option<Vec<String>> {
     // When running in a dev environment we expect `cargo` to be in our path and
     // we should be able to find the `canister_sandbox` or `sandbox_launcher`
     // cargo manifest so this should succeed.
-    match (which::which("cargo"), cargo_manifest_for_testing(&krate)) {
+    match (which::which("cargo"), cargo_manifest_for_testing()) {
         (Ok(path), Some(manifest_path)) => {
             println!(
-                "Building {} with cargo {:?} and manifest {:?}",
-                executable_name, path, manifest_path
+                "Building {executable_name} with cargo {path:?} and manifest {manifest_path:?}"
             );
             let path = path.to_str().unwrap().to_string();
             let cell = match krate {
@@ -200,7 +205,7 @@ fn create_sandbox_argv_for_testing(krate: SandboxCrate) -> Option<Vec<String>> {
 /// Only for testing purposes.
 /// Finds the cargo manifest of the `canister_sandbox` or `sandbox_launcher`
 /// crate in the directory path of the current manifest.
-fn cargo_manifest_for_testing(krate: &SandboxCrate) -> Option<PathBuf> {
+fn cargo_manifest_for_testing() -> Option<PathBuf> {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").ok();
     let mut next_parent = manifest_dir.as_ref().map(Path::new);
     let mut current_manifest = None;
@@ -220,13 +225,8 @@ fn cargo_manifest_for_testing(krate: &SandboxCrate) -> Option<PathBuf> {
     // which causes rebuilding of all dependencies that have already been
     // built by `cargo test`.
     let canister_sandbox: PathBuf = [
-        current_manifest.as_ref()?.parent()?,
-        &match krate {
-            SandboxCrate::SandboxLauncher => Path::new("canister_sandbox").join("sandbox_launcher"),
-            SandboxCrate::CanisterSandbox => PathBuf::from("canister_sandbox"),
-            SandboxCrate::CompilerSandbox => PathBuf::from("compiler_sandbox"),
-        },
-        Path::new("Cargo.toml"),
+        current_manifest?.parent()?,
+        Path::new("rs/canister_sandbox/Cargo.toml"),
     ]
     .iter()
     .collect();
@@ -308,14 +308,14 @@ fn get_profile_args(current_exe: Option<PathBuf>) -> Vec<String> {
     }
     if let Some(current_exe) = current_exe {
         let current_exe = current_exe.to_string_lossy().to_string();
-        if let Some(caps) = PROFILE_PARSE_RE.captures(&current_exe) {
-            if let Some(dir) = caps.get(2) {
-                // Match directory name to profile
-                match dir.as_str() {
-                    "debug" => return vec![],
-                    p => return vec!["--profile".to_string(), p.to_string()],
-                };
-            }
+        if let Some(caps) = PROFILE_PARSE_RE.captures(&current_exe)
+            && let Some(dir) = caps.get(2)
+        {
+            // Match directory name to profile
+            match dir.as_str() {
+                "debug" => return vec![],
+                p => return vec!["--profile".to_string(), p.to_string()],
+            };
         }
     }
     vec![]

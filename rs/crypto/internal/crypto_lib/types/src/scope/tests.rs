@@ -6,16 +6,12 @@ fn test_string_representation(value: &Scope, string: &str) {
     assert_eq!(
         String::from(value),
         string,
-        "Stringifying {} does not yield expected '{}'.",
-        value,
-        string
+        "Stringifying {value} does not yield expected '{string}'."
     );
     assert_eq!(
         Ok(*value),
         Scope::from_str(string),
-        "Parsing '{}' does not yield expected {}.",
-        string,
-        value
+        "Parsing '{string}' does not yield expected {value}."
     );
 }
 

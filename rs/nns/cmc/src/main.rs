@@ -1,31 +1,27 @@
 #![allow(deprecated)]
-use candid::{CandidType, Encode};
+use candid::{CandidType, Encode, Nat};
 use core::cmp::Ordering;
 use cycles_minting_canister::*;
-use dfn_protobuf::ProtoBuf;
 use environment::Environment;
 use exchange_rate_canister::{
     RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
 };
 use ic_cdk::{
-    api::call::{arg_data_raw, reply_raw, CallResult, ManualReply},
-    futures::{in_executor_context, spawn_017_compat},
+    api::call::{CallResult, ManualReply},
     heartbeat, init, post_upgrade, pre_upgrade, println, query, update,
 };
 use ic_crypto_tree_hash::{
-    flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
-    WitnessGeneratorImpl,
+    HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
+    WitnessGeneratorImpl, flatmap,
 };
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ledger_core::{block::BlockType, tokens::CheckedSub};
-// TODO(EXC-1687): remove temporary aliases `Ic00CanisterSettingsArgs` and `Ic00CanisterSettingsArgsBuilder`.
 use ic_management_canister_types_private::{
-    BoundedVec, CanisterIdRecord, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder as Ic00CanisterSettingsArgsBuilder, CreateCanisterArgs, Method,
-    IC_00,
+    BoundedVec, CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
+    CreateCanisterArgs, IC_00, Method,
 };
 use ic_nervous_system_common::{
-    serve_metrics, NNS_DAPP_BACKEND_CANISTER_ID, ONE_HOUR_SECONDS, ONE_MONTH_SECONDS,
+    NNS_DAPP_BACKEND_CANISTER_ID, ONE_HOUR_SECONDS, ONE_MONTH_SECONDS, serve_metrics,
 };
 use ic_nervous_system_governance::maturity_modulation::{
     MAX_MATURITY_MODULATION_PERMYRIAD, MIN_MATURITY_MODULATION_PERMYRIAD,
@@ -38,21 +34,19 @@ use ic_nns_constants::{
 };
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use icp_ledger::{
-    AccountIdentifier, Block, BlockIndex, BlockRes, CyclesResponse, Memo, Operation, SendArgs,
-    Subaccount, Tokens, Transaction, TransactionNotification, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, Block, BlockIndex, BlockRes, DEFAULT_TRANSFER_FEE, Memo, Operation,
+    SendArgs, Subaccount, Tokens, Transaction,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
-use on_wire::{FromWire, IntoWire, NewType};
-use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
+use rand::{SeedableRng, rngs::StdRng, seq::SliceRandom};
 use serde::{Deserialize, Serialize};
-use std::time::SystemTime;
 use std::{
     cell::{Cell, RefCell},
-    collections::{btree_map::Entry, BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, btree_map::Entry},
     convert::TryInto,
     thread::LocalKey,
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 
 mod environment;
@@ -309,11 +303,10 @@ impl State {
         match stored_state_version.cmp(&current_state_version) {
             Ordering::Greater => {
                 return Err(format!(
-                    "[cycles] ERROR: stored state version {:?} is greater than the current state \
-                     version {:?}!  This likely means a rollback happened. This is not supported. \
-                     Please upgrade to a hotfix instead.",
-                    stored_state_version, current_state_version
-                ))
+                    "[cycles] ERROR: stored state version {stored_state_version:?} is greater than the current state \
+                     version {current_state_version:?}!  This likely means a rollback happened. This is not supported. \
+                     Please upgrade to a hotfix instead."
+                ));
             }
             Ordering::Less => {
                 // This is where you would put a function to do the migration, which would look something like this:
@@ -324,15 +317,13 @@ impl State {
                 // }
                 // Migrations should be deleted after execution to keep the codebase tidy.
                 return Err(format!(
-                    "[cycles] ERROR: stored state version {:?} is lesser than the current state \
-                     version {:?}! Did you forget to migrate the old to the current type?",
-                    stored_state_version, current_state_version
+                    "[cycles] ERROR: stored state version {stored_state_version:?} is lesser than the current state \
+                     version {current_state_version:?}! Did you forget to migrate the old to the current type?"
                 ));
             }
             Ordering::Equal => print(format!(
-                "[cycles] INFO: stored state version {:?} equals the current state version {:?}. \
+                "[cycles] INFO: stored state version {stored_state_version:?} equals the current state version {current_state_version:?}. \
                 Continuing to decode the stable storage ... ",
-                stored_state_version, current_state_version,
             )),
         };
         let state = deserializer.get_value::<State>().unwrap();
@@ -445,18 +436,26 @@ fn init(maybe_args: Option<CyclesCanisterInitPayload>) {
         maybe_args.expect("Payload is expected to initialization the cycles minting canister.");
     print(format!(
         "[cycles] init() with ledger canister {}, governance canister {}, exchange rate canister {}, minting account {}, and cycles ledger canister {}",
-        args.ledger_canister_id.as_ref().map(|x| x.to_string()).unwrap_or_else(|| "<none>".to_string()),
-        args.governance_canister_id.as_ref().map(|x| x.to_string()).unwrap_or_else(|| "<none>".to_string()),
-        args.exchange_rate_canister.as_ref()
+        args.ledger_canister_id
+            .as_ref()
+            .map(|x| x.to_string())
+            .unwrap_or_else(|| "<none>".to_string()),
+        args.governance_canister_id
+            .as_ref()
+            .map(|x| x.to_string())
+            .unwrap_or_else(|| "<none>".to_string()),
+        args.exchange_rate_canister
+            .as_ref()
             .map(|x| match x {
                 ExchangeRateCanister::Set(id) => id.to_string(),
-                ExchangeRateCanister::Unset => "<unset>".to_string()
+                ExchangeRateCanister::Unset => "<unset>".to_string(),
             })
             .unwrap_or_else(|| "<none>".to_string()),
         args.minting_account_id
             .map(|x| x.to_string())
             .unwrap_or_else(|| "<none>".to_string()),
-        args.cycles_ledger_canister_id.as_ref()
+        args.cycles_ledger_canister_id
+            .as_ref()
             .map(|x| x.to_string())
             .unwrap_or_else(|| "<none>".to_string()),
     ));
@@ -487,7 +486,7 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 /// Set the list of subnets in which a principal is allowed to create
 /// canisters. If `subnets` is empty, remove the mapping for a
 /// principal. If `who` is None, set the default list of subnets.
-#[update(hidden = true)]
+#[update]
 fn set_authorized_subnetwork_list(arg: SetAuthorizedSubnetworkListArgs) {
     let SetAuthorizedSubnetworkListArgs { who, subnets } = arg;
     with_state_mut(|state| {
@@ -515,17 +514,16 @@ fn set_authorized_subnetwork_list(arg: SetAuthorizedSubnetworkListArgs) {
         }
         if !already_assigned.is_empty() {
             panic!(
-                "Subnets {:?} are already assigned to a type and cannot be authorized.",
-                already_assigned
+                "Subnets {already_assigned:?} are already assigned to a type and cannot be authorized."
             );
         }
 
         if let Some(who) = who {
             if subnets.is_empty() {
-                print(format!("[cycles] removing subnet list for {}", who));
+                print(format!("[cycles] removing subnet list for {who}"));
                 state.authorized_subnets.remove(&who);
             } else {
-                print(format!("[cycles] setting subnet list for {}", who));
+                print(format!("[cycles] setting subnet list for {who}"));
                 state.authorized_subnets.insert(who, subnets);
             }
         } else {
@@ -535,7 +533,7 @@ fn set_authorized_subnetwork_list(arg: SetAuthorizedSubnetworkListArgs) {
     });
 }
 
-#[update(hidden = true, manual_reply = true)]
+#[update(manual_reply = true)]
 fn update_subnet_type(args: UpdateSubnetTypeArgs) {
     match do_update_subnet_type(args) {
         Ok(response) => ManualReply::<()>::one(response),
@@ -571,7 +569,7 @@ fn add_subnet_type(subnet_type: String) -> UpdateSubnetTypeResult {
 
         match subnet_types_to_subnets.entry(subnet_type.clone()) {
             Entry::Vacant(entry) => {
-                print(format!("[cycles] Adding new subnet type: {}", subnet_type));
+                print(format!("[cycles] Adding new subnet type: {subnet_type}"));
                 entry.insert(BTreeSet::new());
                 Ok(())
             }
@@ -595,7 +593,7 @@ fn remove_subnet_type(subnet_type: String) -> UpdateSubnetTypeResult {
                         subnets.iter().copied().collect(),
                     )))
                 } else {
-                    print(format!("[cycles] Removing subnet type: {}", subnet_type));
+                    print(format!("[cycles] Removing subnet type: {subnet_type}"));
                     // Type does not have any assigned subnets, so it can be removed.
                     subnet_types_to_subnets.remove(&subnet_type);
                     Ok(())
@@ -606,7 +604,7 @@ fn remove_subnet_type(subnet_type: String) -> UpdateSubnetTypeResult {
     })
 }
 
-#[update(hidden = true, manual_reply = true)]
+#[update(manual_reply = true)]
 fn change_subnet_type_assignment(args: ChangeSubnetTypeAssignmentArgs) {
     match do_change_subnet_type_assignment(args) {
         Ok(response) => ManualReply::<()>::one(response),
@@ -699,8 +697,7 @@ fn add_subnets_to_type(
         match subnet_types_to_subnets.entry(subnet_type.clone()) {
             Entry::Occupied(mut entry) => {
                 print(format!(
-                    "[cycles] Adding subnets {:?} to type: {}",
-                    subnets, subnet_type
+                    "[cycles] Adding subnets {subnets:?} to type: {subnet_type}"
                 ));
                 let existing_subnets = entry.get_mut();
                 existing_subnets.extend(subnets);
@@ -745,8 +742,7 @@ fn remove_subnets_from_type(
 
                 // Subnets can now safely be removed from the type.
                 print(format!(
-                    "[cycles] Removing subnets {:?} from type: {}",
-                    subnets, subnet_type
+                    "[cycles] Removing subnets {subnets:?} from type: {subnet_type}"
                 ));
                 let existing_subnets = entry.get_mut();
                 for subnet in subnets.iter() {
@@ -860,7 +856,7 @@ fn convert_conversion_rate_to_payload(
     serializer.self_describe().unwrap();
     mixed_hash_tree
         .serialize(&mut serializer)
-        .unwrap_or_else(|e| ic_cdk::trap(format!("failed to serialize a hash tree: {}", e)));
+        .unwrap_or_else(|e| ic_cdk::trap(format!("failed to serialize a hash tree: {e}")));
 
     serializer.into_inner()
 }
@@ -1013,8 +1009,7 @@ fn do_set_icp_xdr_conversion_rate(
     proposed_conversion_rate: IcpXdrConversionRate,
 ) -> Result<(), String> {
     print(format!(
-        "[cycles] conversion rate update: {:?}",
-        proposed_conversion_rate
+        "[cycles] conversion rate update: {proposed_conversion_rate:?}"
     ));
 
     if proposed_conversion_rate.xdr_permyriad_per_icp == 0 {
@@ -1022,15 +1017,13 @@ fn do_set_icp_xdr_conversion_rate(
     }
 
     mutate_state(safe_state, |state| {
-        if let Some(current_conversion_rate) = state.icp_xdr_conversion_rate.as_ref() {
-            if proposed_conversion_rate.timestamp_seconds
+        if let Some(current_conversion_rate) = state.icp_xdr_conversion_rate.as_ref()
+            && proposed_conversion_rate.timestamp_seconds
                 <= current_conversion_rate.timestamp_seconds
-            {
-                return Err(
-                    "Proposed conversion rate must have greater timestamp than current one"
-                        .to_string(),
-                );
-            }
+        {
+            return Err(
+                "Proposed conversion rate must have greater timestamp than current one".to_string(),
+            );
         }
 
         state.icp_xdr_conversion_rate = Some(proposed_conversion_rate.clone());
@@ -1124,34 +1117,6 @@ fn remove_subnet_from_authorized_subnet_list(arg: RemoveSubnetFromAuthorizedSubn
             .values_mut()
             .for_each(|subnet_list| subnet_list.retain(|subnet| *subnet != subnet_to_remove))
     });
-}
-
-#[export_name = "canister_update transaction_notification_pb"]
-fn transaction_notification_pb() {
-    in_executor_context(|| {
-        let input = arg_data_raw();
-        spawn_017_compat(async move {
-            let request = ProtoBuf::<TransactionNotification>::from_bytes(input)
-                .expect("Could not decode TransactionNotification")
-                .into_inner();
-
-            match do_transaction_notification(request).await {
-                Ok(response) => match ProtoBuf::new(response).into_bytes() {
-                    Ok(buf) => reply_raw(&buf),
-                    Err(e) => ic_cdk::api::call::reject(&format!("Error: {:?}", e)),
-                },
-                Err(e) => ic_cdk::api::call::reject(&format!("Error: {:?}", e)),
-            }
-        })
-    })
-}
-
-#[update(manual_reply = true, hidden = true)]
-async fn transaction_notification(tn: TransactionNotification) {
-    match do_transaction_notification(tn).await {
-        Ok(response) => ManualReply::<CyclesResponse>::one(response),
-        Err(e) => ManualReply::reject(format!("Error: {:?}", e)),
-    };
 }
 
 fn is_transient_error<T>(result: &Result<T, NotifyError>) -> bool {
@@ -1286,8 +1251,7 @@ async fn notify_mint_cycles(
         return Err(NotifyError::Other {
             error_code: NotifyErrorCode::DepositMemoTooLong as u64,
             error_message: format!(
-                "Memo length {} exceeds the maximum length of {}",
-                deposit_memo_len, MAX_MEMO_LENGTH
+                "Memo length {deposit_memo_len} exceeds the maximum length of {MAX_MEMO_LENGTH}"
             ),
         });
     }
@@ -1499,9 +1463,8 @@ fn authorize_caller_to_call_notify_create_canister_on_behalf_of_creator(
     let err = NotifyError::Other {
         error_code: NotifyErrorCode::Unauthorized as u64,
         error_message: format!(
-            "{} is not authorized to call notify_create_canister on behalf \
-             of {}. (Do not retry, because the same result will occur.)",
-            caller, creator,
+            "{caller} is not authorized to call notify_create_canister on behalf \
+             of {creator}. (Do not retry, because the same result will occur.)",
         ),
     };
 
@@ -1563,9 +1526,8 @@ async fn query_block(block_index: BlockIndex, ledger_id: CanisterId) -> Result<B
     let raw_block = match b {
         None => {
             return Err(NotifyError::InvalidTransaction(format!(
-                "Block {} not found",
-                block_index
-            )))
+                "Block {block_index} not found"
+            )));
         }
         Some(Ok(block)) => block,
         Some(Err(canister_id)) => {
@@ -1579,20 +1541,18 @@ async fn query_block(block_index: BlockIndex, ledger_id: CanisterId) -> Result<B
                 })?;
             b.ok_or_else(|| {
                 failed_to_fetch_block(format!(
-                    "Block {} not found in archive {}",
-                    block_index, canister_id
+                    "Block {block_index} not found in archive {canister_id}"
                 ))
             })?
             .map_err(|redirect_canister_id| {
                 failed_to_fetch_block(format!(
-                    "Unexpected response from archive (redirected to {})",
-                    redirect_canister_id
+                    "Unexpected response from archive (redirected to {redirect_canister_id})"
                 ))
             })?
         }
     };
     Block::decode(raw_block)
-        .map_err(|e| failed_to_fetch_block(format!("Failed to decode block: {}", e)))
+        .map_err(|e| failed_to_fetch_block(format!("Failed to decode block: {e}")))
 }
 
 fn memo_to_intent_str(memo: Memo) -> String {
@@ -1647,7 +1607,7 @@ async fn fetch_transaction(
         _ => {
             return Err(NotifyError::InvalidTransaction(
                 "Notification transaction must be of type Transfer".into(),
-            ))
+            ));
         }
     };
 
@@ -1657,8 +1617,7 @@ async fn fetch_transaction(
     );
     if to != expected_to {
         return Err(NotifyError::InvalidTransaction(format!(
-            "Destination account in the block ({}) different than in the notification ({})",
-            to, expected_to_subaccount,
+            "Destination account in the block ({to}) different than in the notification ({expected_to_subaccount})",
         )));
     }
 
@@ -1889,8 +1848,7 @@ async fn issue_automatic_refund_if_memo_not_offerred(
             // of the special meaningful values.
             NotifiedCreateCanister(_) | NotifiedMint(_) | NotifiedTopUp(_) => {
                 Err(NotifyError::InvalidTransaction(format!(
-                    "Block has already been processed: {:?}",
-                    prior_block_status,
+                    "Block has already been processed: {prior_block_status:?}",
                 )))
             }
         };
@@ -1935,178 +1893,6 @@ async fn issue_automatic_refund_if_memo_not_offerred(
     })
 }
 
-/// Processes a legacy notification from the Ledger canister.
-async fn do_transaction_notification(
-    tn: TransactionNotification,
-) -> Result<CyclesResponse, String> {
-    let caller = caller();
-
-    print(format!(
-        "[cycles] notified about transaction {:?} by {}",
-        tn, caller
-    ));
-
-    let ledger_canister_id = with_state(|state| state.ledger_canister_id);
-
-    if CanisterId::unchecked_from_principal(caller) != ledger_canister_id {
-        return Err(format!(
-            "This canister can only be notified by the ledger canister ({}), not by {}.",
-            ledger_canister_id, caller
-        ));
-    }
-
-    // We need this check if MAX_NOTIFY_HISTORY is smaller than max number of transactions
-    // the ledger can process within 24h
-    let last_purged_notification = with_state(|state| state.last_purged_notification);
-
-    if tn.block_height <= last_purged_notification {
-        return Err(NotifyError::TransactionTooOld(last_purged_notification + 1).to_string());
-    }
-
-    let block_height = tn.block_height;
-    with_state_mut(|state| match state.blocks_notified.entry(block_height) {
-        Entry::Occupied(entry) => match entry.get() {
-            NotificationStatus::Processing => Err("Another notification is in progress".into()),
-            NotificationStatus::NotifiedTopUp(resp) => Err(format!("Already notified: {:?}", resp)),
-            NotificationStatus::NotifiedCreateCanister(resp) => {
-                Err(format!("Already notified: {:?}", resp))
-            }
-            NotificationStatus::NotifiedMint(resp) => Err(format!("Already notified: {:?}", resp)),
-            NotificationStatus::NotMeaningfulMemo(resp) => {
-                Err(format!("Already notified: {:?}", resp))
-            }
-        },
-        Entry::Vacant(entry) => {
-            entry.insert(NotificationStatus::Processing);
-            Ok(())
-        }
-    })?;
-
-    let from = AccountIdentifier::new(tn.from, tn.from_subaccount);
-
-    let (cycles_response, notification_status) = if tn.memo == MEMO_CREATE_CANISTER {
-        let controller = authorize_sender_to_create_canister_via_ledger_notify(&tn)?;
-        match process_create_canister(controller, from, tn.amount, None, None).await {
-            Ok(canister_id) => (
-                Ok(CyclesResponse::CanisterCreated(canister_id)),
-                Some(NotificationStatus::NotifiedCreateCanister(Ok(canister_id))),
-            ),
-            Err(NotifyError::Refunded {
-                reason,
-                block_index,
-            }) => (
-                Ok(CyclesResponse::Refunded(reason.clone(), block_index)),
-                Some(NotificationStatus::NotifiedCreateCanister(Err(
-                    NotifyError::Refunded {
-                        reason,
-                        block_index,
-                    },
-                ))),
-            ),
-            Err(e) => (Err(e), None),
-        }
-    } else if tn.memo == MEMO_TOP_UP_CANISTER {
-        let canister_id = (&tn
-            .to_subaccount
-            .ok_or_else(|| "Topping up requires a subaccount.".to_string())?)
-            .try_into()
-            .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
-
-        // Always use base cycles limit for minting cycles, since the Subnet Rental Canister
-        // doesn't call this endpoint.
-        let process_top_up_result = process_top_up(
-            canister_id,
-            from,
-            tn.amount,
-            CyclesMintingLimiterSelector::BaseLimit,
-        )
-        .await;
-
-        match process_top_up_result {
-            Ok(cycles) => (
-                Ok(CyclesResponse::ToppedUp(())),
-                Some(NotificationStatus::NotifiedTopUp(Ok(cycles))),
-            ),
-            Err(NotifyError::Refunded {
-                reason,
-                block_index,
-            }) => (
-                Ok(CyclesResponse::Refunded(reason.clone(), block_index)),
-                Some(NotificationStatus::NotifiedTopUp(Err(
-                    NotifyError::Refunded {
-                        reason,
-                        block_index,
-                    },
-                ))),
-            ),
-            Err(e) => (Err(e), None),
-        }
-    } else {
-        let err = NotifyError::InvalidTransaction(format!(
-            "Do not know what to do with transaction with memo {}.",
-            tn.memo.0
-        ));
-        (Err(err), None)
-    };
-
-    with_state_mut(|state| {
-        if let Some(status) = notification_status {
-            state.blocks_notified.insert(block_height, status);
-        }
-        if is_transient_error(&cycles_response) {
-            state.blocks_notified.remove(&block_height);
-        }
-    });
-
-    cycles_response.map_err(|e| e.to_string())
-}
-
-/// Returns Ok(controller/creator/sender) if sender == creator (aka controller).
-///
-/// That is, we disallow sending ICP on behalf of someone else; whereas, we used to allow it.
-///
-/// The reason for this restriction is that the creator might be authorized to create canisters on
-/// restricted subnets.
-///
-/// The only fields used are
-///     * from: This is taken as the sender.
-///     * to_subaccount: This is used to infer the creator/controller.
-///
-/// It is assumed that memo == MEMO_CREATE_CANISTER. (However, behavior is the same if that
-/// assumption does not hold.)
-fn authorize_sender_to_create_canister_via_ledger_notify(
-    transaction_notification: &TransactionNotification,
-) -> Result<PrincipalId, String> {
-    let sender = transaction_notification.from;
-
-    let creator = {
-        let to_subaccount = transaction_notification.to_subaccount.ok_or_else(|| {
-            format!(
-                "Transfer has no destination subaccount:\n{:#?}",
-                transaction_notification,
-            )
-        })?;
-
-        PrincipalId::try_from(&to_subaccount).map_err(|err| {
-            format!(
-                "Cannot determine creator principal from ICP transfer to Cycles \
-                 Minting Canister destination subaccount {}: {}",
-                to_subaccount, err,
-            )
-        })?
-    };
-
-    if sender == creator {
-        return Ok(creator);
-    }
-
-    Err(format!(
-        "Principal {} sent ICP to the Cycles Minting Canister on behalf of {} \
-         in order to create a canister, but this is not allowed (anymore).",
-        sender, creator,
-    ))
-}
-
 // If conversion fails, log and return an error
 fn tokens_to_cycles(amount: Tokens) -> Result<Cycles, NotifyError> {
     with_state(|state| {
@@ -2145,8 +1931,7 @@ async fn process_create_canister(
     let sub = Subaccount::from(&controller);
 
     print(format!(
-        "Creating canister with controller {} with {} cycles.",
-        controller, cycles,
+        "Creating canister with controller {controller} with {cycles} cycles.",
     ));
 
     // Create the canister. If this fails, refund. Either way,
@@ -2205,8 +1990,7 @@ async fn process_top_up(
     let sub = Subaccount::from(&canister_id);
 
     print(format!(
-        "Topping up canister {} by {} cycles.",
-        canister_id, cycles
+        "Topping up canister {canister_id} by {cycles} cycles."
     ));
 
     match deposit_cycles(canister_id, cycles, true, limiter_to_use).await {
@@ -2228,20 +2012,17 @@ async fn process_top_up(
 /// Burning doesn't return errors - we don't want to reject the transaction
 /// notification because then it could be retried.
 async fn burn_and_log(from_subaccount: Subaccount, amount: Tokens) {
-    let msg = format!(
-        "Burning of {} ICPTs from subaccount {}",
-        amount, from_subaccount
-    );
+    let msg = format!("Burning of {amount} ICPTs from subaccount {from_subaccount}");
     let minting_account_id = with_state(|state| state.minting_account_id);
     if minting_account_id.is_none() {
-        print(format!("{} failed: minting_account_id not set", msg));
+        print(format!("{msg} failed: minting_account_id not set"));
         return;
     }
     let minting_account_id = minting_account_id.unwrap();
     let ledger_canister_id = with_state(|state| state.ledger_canister_id);
 
     if amount < DEFAULT_TRANSFER_FEE {
-        print(format!("{}: amount too small ({})", msg, amount));
+        print(format!("{msg}: amount too small ({amount})"));
         return;
     }
 
@@ -2256,10 +2037,10 @@ async fn burn_and_log(from_subaccount: Subaccount, amount: Tokens) {
     let res: CallResult<BlockIndex> = call_protobuf(ledger_canister_id, "send_pb", send_args).await;
 
     match res {
-        Ok(block) => print(format!("{} done in block {}.", msg, block)),
+        Ok(block) => print(format!("{msg} done in block {block}.")),
         Err((code, err)) => {
             let code = code as i32;
-            print(format!("{} failed with code {}: {:?}", msg, code, err))
+            print(format!("{msg} failed with code {code}: {err:?}"))
         }
     }
 }
@@ -2286,11 +2067,10 @@ async fn refund_icp(
             x.checked_sub(&extra_fee)
                 .ok_or("Underflow in subtracting the extra fee from the amount")
         })
+        && to_refund > Tokens::ZERO
     {
-        if to_refund > Tokens::ZERO {
-            burned = extra_fee;
-            refunded = to_refund;
-        }
+        burned = extra_fee;
+        refunded = to_refund;
     }
 
     if refunded > Tokens::ZERO {
@@ -2308,11 +2088,11 @@ async fn refund_icp(
             let code = code as i32;
             NotifyError::Other {
                 error_code: NotifyErrorCode::RefundFailed as u64,
-                error_message: format!("Refund to {} failed with code {}: {}", to, code, err),
+                error_message: format!("Refund to {to} failed with code {code}: {err}"),
             }
         })?;
 
-        print(format!("Refund to {} done in block {}.", to, block));
+        print(format!("Refund to {to} done in block {block}."));
 
         refund_block_index = Some(block);
     }
@@ -2414,10 +2194,7 @@ async fn do_create_canister(
                         subnet_types_to_subnets
                             .get(&subnet_type)
                             .map(|set| set.iter().cloned().collect())
-                            .ok_or(format!(
-                                "Provided subnet type {} does not exist",
-                                subnet_type
-                            ))
+                            .ok_or(format!("Provided subnet type {subnet_type} does not exist"))
                     }
                     None => Ok(get_subnets_for(&controller_id)),
                 })
@@ -2441,7 +2218,9 @@ async fn do_create_canister(
                 {
                     Ok(vec![subnet])
                 } else {
-                    Err(format!("Subnet {} does not exist or {} is not authorized to deploy to that subnet.", subnet, controller_id))
+                    Err(format!(
+                        "Subnet {subnet} does not exist or {controller_id} is not authorized to deploy to that subnet."
+                    ))
                 }
             }),
         },
@@ -2472,11 +2251,9 @@ async fn do_create_canister(
             settings
         })
         .unwrap_or_else(|| {
-            CanisterSettingsArgs::from(
-                Ic00CanisterSettingsArgsBuilder::new()
-                    .with_controllers(vec![controller_id])
-                    .build(),
-            )
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![controller_id])
+                .build()
         });
 
     for subnet_id in subnets {
@@ -2484,7 +2261,7 @@ async fn do_create_canister(
             subnet_id.get().0,
             &Method::CreateCanister.to_string(),
             (CreateCanisterArgs {
-                settings: Some(Ic00CanisterSettingsArgs::from(canister_settings.clone())),
+                settings: Some(canister_settings.clone()),
                 sender_canister_version: Some(ic_cdk::api::canister_version()),
             },),
             u128::from(cycles),
@@ -2498,15 +2275,14 @@ async fn do_create_canister(
                     "Creating canister in subnet {} failed with code {}: {}",
                     subnet_id, code as i32, msg
                 );
-                print(format!("[cycles] {}", err));
+                print(format!("[cycles] {err}"));
                 last_err = Some(err);
                 continue;
             }
         };
 
         print(format!(
-            "[cycles] created canister {} in subnet {}",
-            canister_id, subnet_id
+            "[cycles] created canister {canister_id} in subnet {subnet_id}"
         ));
 
         return Ok(canister_id);
@@ -2539,11 +2315,9 @@ fn ensure_balance(
     Ok(())
 }
 
-#[export_name = "canister_query total_cycles_minted"]
-fn total_cycles_minted() {
-    let value: u64 = with_state(|state| state.total_cycles_minted.get().try_into().unwrap());
-    let response = ProtoBuf::new(value).into_bytes().unwrap();
-    reply_raw(&response);
+#[query(hidden = true)]
+fn total_cycles_minted() -> Nat {
+    with_state(|state| state.total_cycles_minted.get().into())
 }
 
 /// Return the list of subnets in which this controller is allowed to create
@@ -2632,7 +2406,7 @@ async fn update_exchange_rate() {
             UpdateExchangeRateError::InvalidRate(_)
             | UpdateExchangeRateError::FailedToRetrieveRate(_)
             | UpdateExchangeRateError::FailedToSetRate(_) => {
-                print(format!("[cycles] {}", error));
+                print(format!("[cycles] {error}"));
             }
             UpdateExchangeRateError::Disabled
             | UpdateExchangeRateError::NotReadyToGetRate(_)
@@ -2843,16 +2617,14 @@ mod tests {
         let on_behalf_of_self_result = authorize(creator);
         assert!(
             on_behalf_of_self_result.is_ok(),
-            "{:#?}",
-            on_behalf_of_self_result,
+            "{on_behalf_of_self_result:#?}",
         );
 
         let eve = PrincipalId::new_user_test_id(898_071_769);
         let on_behalf_of_other_result = authorize(eve);
         assert!(
             on_behalf_of_other_result.is_err(),
-            "{:#?}",
-            on_behalf_of_other_result,
+            "{on_behalf_of_other_result:#?}",
         );
         let err = on_behalf_of_other_result.unwrap_err();
         match &err {
@@ -2863,29 +2635,25 @@ mod tests {
                 assert_eq!(
                     *error_code,
                     NotifyErrorCode::Unauthorized as u64,
-                    "{:#?}",
-                    err,
+                    "{err:#?}",
                 );
 
                 let error_message = error_message.to_lowercase();
                 for key_word in ["authorize", "on behalf"] {
                     assert!(
                         error_message.contains(key_word),
-                        "{} not in {:#?}",
-                        key_word,
-                        err,
+                        "{key_word} not in {err:#?}",
                     );
                 }
             }
 
-            _ => panic!("{:#?}", err),
+            _ => panic!("{err:#?}"),
         }
 
         let caller_is_nns_dapp_result = authorize(PrincipalId::from(*NNS_DAPP_BACKEND_CANISTER_ID));
         assert!(
             caller_is_nns_dapp_result.is_ok(),
-            "{:#?}",
-            caller_is_nns_dapp_result,
+            "{caller_is_nns_dapp_result:#?}",
         );
 
         // Also allow nns-dapp backend canister ID used in test.
@@ -2893,109 +2661,8 @@ mod tests {
             authorize(PrincipalId::from_str("qsgjb-riaaa-aaaaa-aaaga-cai").unwrap());
         assert!(
             caller_is_nns_dapp_result.is_ok(),
-            "{:#?}",
-            caller_is_nns_dapp_result,
+            "{caller_is_nns_dapp_result:#?}",
         );
-    }
-
-    #[test]
-    fn test_authorize_sender_to_create_canister_via_ledger_notify() {
-        // Happy case.
-        let creator = PrincipalId::new_user_test_id(777);
-        let ok_transaction_notification = TransactionNotification {
-            from: creator,
-            to_subaccount: Some(Subaccount::from(&creator)),
-
-            // These are not used.
-            memo: MEMO_CREATE_CANISTER, // Just for realism.
-            from_subaccount: None,
-            to: CanisterId::from_u64(111),
-            block_height: 222,
-            amount: Tokens::from_e8s(333),
-        };
-
-        // Evil case.
-        assert_eq!(
-            authorize_sender_to_create_canister_via_ledger_notify(&ok_transaction_notification,),
-            Ok(creator),
-        );
-
-        let evil = PrincipalId::new_user_test_id(666);
-        let evil_transaction_notification = TransactionNotification {
-            from: evil,
-            ..ok_transaction_notification.clone()
-        };
-
-        let evil_result =
-            authorize_sender_to_create_canister_via_ledger_notify(&evil_transaction_notification);
-
-        let evil_result = match evil_result {
-            Err(err) => err.to_lowercase(),
-            wrong => panic!("Evil result is supposed to be Err, but was {:?}", wrong),
-        };
-        for key_word in ["create", "canister", "on behalf of", "not allowed"] {
-            assert!(
-                evil_result.contains(key_word),
-                "{} not in {:?}",
-                key_word,
-                evil_result
-            );
-        }
-
-        // Invalid transfer case 1: no destination subaccount.
-        let no_destination_subaccount_transaction_notification = TransactionNotification {
-            to_subaccount: None,
-            ..ok_transaction_notification.clone()
-        };
-
-        let no_destination_subaccount_result =
-            authorize_sender_to_create_canister_via_ledger_notify(
-                &no_destination_subaccount_transaction_notification,
-            );
-
-        let no_destination_subaccount_result = match no_destination_subaccount_result {
-            Err(err) => err.to_lowercase(),
-            wrong => panic!(
-                "No destination subaccount result is supposed to be Err, but was {:?}",
-                wrong,
-            ),
-        };
-        for key_word in ["has no", "destination", "subaccount"] {
-            assert!(
-                no_destination_subaccount_result.contains(key_word),
-                "{} not in {:?}",
-                key_word,
-                no_destination_subaccount_result,
-            );
-        }
-
-        // Invalid transfer case 2: destination subaccount present, but does not map to (creator)
-        // principal.
-        let garbage_subaccount = [42_u8; 32];
-        let no_creator_transaction_notification = TransactionNotification {
-            to_subaccount: Some(Subaccount(garbage_subaccount)),
-            ..ok_transaction_notification
-        };
-
-        let no_creator_result = authorize_sender_to_create_canister_via_ledger_notify(
-            &no_creator_transaction_notification,
-        );
-
-        let no_creator_result = match no_creator_result {
-            Err(err) => err.to_lowercase(),
-            wrong => panic!(
-                "No destination subaccount result is supposed to be Err, but was {:?}",
-                wrong,
-            ),
-        };
-        for key_word in ["determine", "creator", "subaccount"] {
-            assert!(
-                no_creator_result.contains(key_word),
-                "{} not in {:?}",
-                key_word,
-                no_creator_result,
-            );
-        }
     }
 
     #[test]
@@ -3482,7 +3149,7 @@ mod tests {
 
     #[test]
     fn test_candid_interface_compatibility() {
-        use candid_parser::utils::{service_equal, CandidSource};
+        use candid_parser::utils::{CandidSource, service_equal};
         use std::path::PathBuf;
 
         candid::export_service!();
@@ -3561,16 +3228,14 @@ mod tests {
 
             let original_err = match result {
                 Err(NotifyError::InvalidTransaction(err)) => err,
-                wrong => panic!("{:?}", wrong),
+                wrong => panic!("{wrong:?}"),
             };
 
             let lower_err = original_err.to_lowercase();
             for key_word in ["memo", "77", "42"] {
                 assert!(
                     lower_err.contains(key_word),
-                    "{} not in {:?}",
-                    key_word,
-                    original_err
+                    "{key_word} not in {original_err:?}"
                 );
             }
         }
@@ -3592,16 +3257,14 @@ mod tests {
 
             let original_err = match result {
                 Err(NotifyError::InvalidTransaction(err)) => err,
-                wrong => panic!("{:?}", wrong),
+                wrong => panic!("{wrong:?}"),
             };
 
             let lower_err = original_err.to_lowercase();
             for key_word in ["memo", "78", "42"] {
                 assert!(
                     lower_err.contains(key_word),
-                    "{} not in {:?}",
-                    key_word,
-                    original_err
+                    "{key_word} not in {original_err:?}"
                 );
             }
         }
@@ -3622,16 +3285,14 @@ mod tests {
 
             let original_err = match result {
                 Err(NotifyError::InvalidTransaction(err)) => err,
-                wrong => panic!("{:?}", wrong),
+                wrong => panic!("{wrong:?}"),
             };
 
             let lower_err = original_err.to_lowercase();
             for key_word in ["memo", "0", "42"] {
                 assert!(
                     lower_err.contains(key_word),
-                    "{} not in {:?}",
-                    key_word,
-                    original_err
+                    "{key_word} not in {original_err:?}"
                 );
             }
         }
@@ -3651,16 +3312,14 @@ mod tests {
 
             let original_err = match result {
                 Err(NotifyError::InvalidTransaction(err)) => err,
-                wrong => panic!("{:?}", wrong),
+                wrong => panic!("{wrong:?}"),
             };
 
             let lower_err = original_err.to_lowercase();
             for key_word in ["memo", "0", "42"] {
                 assert!(
                     lower_err.contains(key_word),
-                    "{} not in {:?}",
-                    key_word,
-                    original_err
+                    "{key_word} not in {original_err:?}"
                 );
             }
         }

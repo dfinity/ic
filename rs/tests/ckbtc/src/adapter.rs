@@ -1,7 +1,7 @@
 use crate::IcRpcClientType;
-use bitcoin::{consensus::deserialize, Amount};
+use bitcoin::{Amount, consensus::deserialize};
 use candid::{Encode, Principal};
-use ic_agent::{agent::RejectCode, Agent, AgentError};
+use ic_agent::{Agent, AgentError, agent::RejectCode};
 use ic_btc_adapter_test_utils::rpc_client::{ListUnspentResultEntry, RpcClient, RpcClientType};
 use ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID;
 use ic_management_canister_types_private::{
@@ -9,10 +9,10 @@ use ic_management_canister_types_private::{
     BitcoinGetSuccessorsResponsePartial, BitcoinSendTransactionInternalArgs, Method as Ic00Method,
     Payload,
 };
-use ic_system_test_driver::util::{MessageCanister, MESSAGE_CANISTER_WASM};
+use ic_system_test_driver::util::{MESSAGE_CANISTER_WASM, MessageCanister};
 use ic_types::PrincipalId;
-use ic_utils::interfaces::{management_canister::CanisterStatus, ManagementCanister};
-use slog::{info, Logger};
+use ic_utils::interfaces::{ManagementCanister, management_canister::CanisterStatus};
+use slog::{Logger, info};
 use std::{str::FromStr, time::Duration};
 
 /// A proxy to make requests to the bitcoin adapter

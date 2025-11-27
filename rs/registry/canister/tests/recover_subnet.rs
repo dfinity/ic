@@ -1,6 +1,6 @@
 use candid::Encode;
 use canister_test::{Canister, Runtime};
-use ic_base_types::{subnet_id_into_protobuf, NodeId, PrincipalId, SubnetId};
+use ic_base_types::{NodeId, PrincipalId, SubnetId, subnet_id_into_protobuf};
 use ic_config::Config;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces_registry::RegistryClient;
@@ -28,22 +28,22 @@ use ic_registry_keys::{
     make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_subnet_features::{
-    ChainKeyConfig, KeyConfig as KeyConfigInternal, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+    ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig as KeyConfigInternal,
 };
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest, upsert};
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
+    Height, RegistryVersion, ReplicaVersion,
     crypto::{
+        AlgorithmId, BasicSig, BasicSigOf,
         canister_threshold_sig::idkg::{
             IDkgDealing, IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation,
             IDkgTranscriptParams, IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
             InitialIDkgDealings, SignedIDkgDealing,
         },
-        AlgorithmId, BasicSig, BasicSigOf,
     },
     signature::BasicSignature,
-    Height, RegistryVersion, ReplicaVersion,
 };
 use prost::Message;
 use rand::{CryptoRng, Rng, RngCore};
@@ -60,6 +60,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
     str::FromStr,
+    sync::Arc,
 };
 
 mod common;
@@ -841,9 +842,9 @@ fn dummy_initial_idkg_dealing_for_tests<R: Rng + CryptoRng>(
         nodes
     }
     fn random_transcript_id<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
-        let id = rng.gen::<u64>();
-        let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
-        let height = Height::from(rng.gen::<u64>());
+        let id = rng.r#gen::<u64>();
+        let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.r#gen::<u64>()));
+        let height = Height::from(rng.r#gen::<u64>());
 
         IDkgTranscriptId::new(subnet, id, height)
     }
@@ -856,7 +857,7 @@ fn dummy_initial_idkg_dealing_for_tests<R: Rng + CryptoRng>(
             let signed_dealing = SignedIDkgDealing {
                 content: IDkgDealing {
                     transcript_id,
-                    internal_dealing_raw: format!("Dummy raw dealing for dealer {}", node_id)
+                    internal_dealing_raw: format!("Dummy raw dealing for dealer {node_id}")
                         .into_bytes(),
                 },
                 signature: BasicSignature {
@@ -878,7 +879,7 @@ fn dummy_initial_idkg_dealing_for_tests<R: Rng + CryptoRng>(
             transcript_id: random_transcript_id(rng),
             receivers: IDkgReceivers::new(previous_receivers).unwrap(),
             registry_version: RegistryVersion::from(314),
-            verified_dealings: BTreeMap::new(),
+            verified_dealings: Arc::new(BTreeMap::new()),
             transcript_type,
             algorithm_id: alg,
             internal_transcript_raw: vec![],

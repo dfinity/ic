@@ -3,8 +3,8 @@ use std::path::Path;
 
 use config_types::ConfigMap;
 
-use anyhow::{anyhow, bail};
 use anyhow::{Context, Result};
+use anyhow::{anyhow, bail};
 use ini::Ini;
 
 pub struct ConfigIniSettings {
@@ -72,7 +72,7 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         .map(|address| {
             address
                 .parse::<Ipv4Addr>()
-                .context(format!("Invalid IPv4 address: {}", address))
+                .context(format!("Invalid IPv4 address: {address}"))
         })
         .transpose()?;
 
@@ -81,7 +81,7 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         .map(|address| {
             address
                 .parse::<Ipv4Addr>()
-                .context(format!("Invalid IPv4 gateway: {}", address))
+                .context(format!("Invalid IPv4 gateway: {address}"))
         })
         .transpose()?;
 
@@ -90,7 +90,7 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         .map(|prefix| {
             let prefix = prefix
                 .parse::<u8>()
-                .context(format!("Invalid IPv4 prefix length: {}", prefix))?;
+                .context(format!("Invalid IPv4 prefix length: {prefix}"))?;
             if prefix > 32 {
                 bail!(
                     "IPv4 prefix length must be between 0 and 32, got {}",

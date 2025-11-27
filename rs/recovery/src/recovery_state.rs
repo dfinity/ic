@@ -1,13 +1,13 @@
 use crate::{
+    NeuronArgs, RecoveryArgs,
     app_subnet_recovery::{self, AppSubnetRecovery},
     cmd::SubCommand,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::{path_exists, read_file, write_file},
     nns_recovery_failover_nodes::{self, NNSRecoveryFailoverNodes},
     nns_recovery_same_nodes::{self, NNSRecoverySameNodes},
-    NeuronArgs, RecoveryArgs,
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::path::{Path, PathBuf};
 
 const RECOVERY_STATE_FILE_NAME: &str = "recovery_state.json";
@@ -174,7 +174,7 @@ mod tests {
                 dir: PathBuf::from(dir),
                 nns_url: Url::parse("https://fake_nns_url.com/").unwrap(),
                 replica_version: None,
-                key_file: Some(PathBuf::from(dir)),
+                admin_key_file: Some(PathBuf::from(dir)),
                 test_mode: true,
                 skip_prompts: true,
                 use_local_binaries: false,
@@ -184,8 +184,10 @@ mod tests {
                 upgrade_version: None,
                 replacement_nodes: None,
                 replay_until_height: None,
-                pub_key: Some(String::from("Fake public key")),
-                download_method: None,
+                readonly_pub_key: Some(String::from("Fake public key")),
+                readonly_key_file: Some(PathBuf::from(dir)),
+                download_pool_node: None,
+                download_state_method: None,
                 keep_downloaded_state: Some(false),
                 upload_method: None,
                 wait_for_cup_node: None,

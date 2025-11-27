@@ -2,9 +2,9 @@
 use crate::{execution_environment::CanisterOutOfCyclesError, validation::ValidationError};
 use ic_error_types::ErrorCode;
 use ic_types::{
+    CanisterId, Height, NumBytes, Time,
     batch::{Batch, ValidationContext, XNetPayload},
     consensus::Payload,
-    CanisterId, Height, NumBytes, Time,
 };
 
 /// Errors that `MessageRouting` may return.
@@ -168,31 +168,29 @@ impl std::fmt::Display for IngressInductionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             IngressInductionError::CanisterNotFound(canister_id) => {
-                write!(f, "Canister {} not found", canister_id)
+                write!(f, "Canister {canister_id} not found")
             }
             IngressInductionError::CanisterStopped(canister_id) => {
-                write!(f, "Canister {} is stopped", canister_id)
+                write!(f, "Canister {canister_id} is stopped")
             }
             IngressInductionError::CanisterStopping(canister_id) => {
-                write!(f, "Canister {} is stopping", canister_id)
+                write!(f, "Canister {canister_id} is stopping")
             }
-            IngressInductionError::CanisterOutOfCycles(err) => write!(f, "{}", err),
+            IngressInductionError::CanisterOutOfCycles(err) => write!(f, "{err}"),
             IngressInductionError::CanisterMethodNotFound(method) => write!(
                 f,
-                "Cannot enqueue management message because {} method is unknown.",
-                method
+                "Cannot enqueue management message because {method} method is unknown."
             ),
             IngressInductionError::SubnetMethodNotAllowed(method) => write!(
                 f,
-                "Cannot enqueue management message because {} method is not allowed to be called via ingress messages.",
-                method
+                "Cannot enqueue management message because {method} method is not allowed to be called via ingress messages."
             ),
             IngressInductionError::InvalidManagementPayload => write!(
                 f,
                 "Cannot enqueue management message because its Candid payload is invalid."
             ),
             IngressInductionError::IngressHistoryFull { capacity } => {
-                write!(f, "Maximum ingress history capacity {} reached", capacity)
+                write!(f, "Maximum ingress history capacity {capacity} reached")
             }
         }
     }

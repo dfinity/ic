@@ -134,8 +134,7 @@ pub fn export_metrics_as_http_response(
             .build(),
         Err(err) => {
             // Return an HTTP 500 error with detailed error information
-            HttpResponseBuilder::server_error(format!("Failed to encode metrics: {:?}", err))
-                .build()
+            HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err:?}")).build()
         }
     }
 }

@@ -1,15 +1,24 @@
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
+exports_files([
+    "templates/ic.json5.template",
+])
+
 DEPENDENCIES = [
     # Keep sorted.
+    ":build_script",
     "//rs/config",
     "//rs/ic_os/config_types",
     "//rs/ic_os/deterministic_ips",
+    "//rs/ic_os/linux_kernel_command_line",
     "//rs/ic_os/network",
+    "//rs/ic_os/sev",
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
+    "@crate_index//:askama",
     "@crate_index//:clap",
     "@crate_index//:fs_extra",
     "@crate_index//:get_if_addrs",
@@ -24,7 +33,7 @@ DEPENDENCIES = [
     "@crate_index//:walkdir",
 ]
 
-DEV_DEPENDENCIES = [
+TEST_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:once_cell",
     "@crate_index//:tempfile",
@@ -33,6 +42,12 @@ DEV_DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 ALIASES = {}
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    data = ["templates/ic.json5.template"],
+)
 
 BIN_SOURCES = [
     "src/main.rs",
@@ -47,9 +62,13 @@ rust_library(
     name = "config_lib",
     srcs = LIB_SOURCES,
     crate_name = "config",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
+        "//rs/orchestrator:__pkg__",
     ],
     deps = DEPENDENCIES,
 )
@@ -59,6 +78,9 @@ rust_library(
     srcs = LIB_SOURCES,
     crate_features = ["dev"],
     crate_name = "config",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
@@ -69,15 +91,18 @@ rust_library(
 # You can update the golden files with
 # bazel test //rs/ic_os/config:config_lib_test --test_env=UPDATE_GOLDENFILES=1 --spawn_strategy=local
 rust_test(
-    name = "config_lib_test",
-    compile_data = [
-        "//ic-os/components:guestos/generate-ic-config/ic.json5.template",
-    ],
+    name = "config_lib_test_dev",
     crate = ":config_lib_dev",
     crate_features = ["dev"],
     data = glob(["golden/*"]),
     env = {"CARGO_MANIFEST_DIR": "rs/ic_os/generate_guestos_vm_config"},
-    deps = DEV_DEPENDENCIES,
+    deps = TEST_DEPENDENCIES,
+)
+
+rust_test(
+    name = "config_lib_test",
+    crate = ":config_lib",
+    deps = TEST_DEPENDENCIES,
 )
 
 rust_binary(
@@ -86,6 +111,9 @@ rust_binary(
     aliases = ALIASES,
     crate_name = "config",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     deps = [
         ":config_lib",
     ] + DEPENDENCIES,
@@ -98,6 +126,9 @@ rust_binary(
     crate_features = ["dev"],
     crate_name = "config",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     deps = [
         ":config_lib_dev",
     ] + DEPENDENCIES,
@@ -105,10 +136,7 @@ rust_binary(
 
 rust_test(
     name = "config_test",
-    compile_data = [
-        "//ic-os/components:guestos/generate-ic-config/ic.json5.template",
-    ],
     crate = ":config_dev",
     crate_features = ["dev"],
-    deps = DEV_DEPENDENCIES,
+    deps = TEST_DEPENDENCIES,
 )

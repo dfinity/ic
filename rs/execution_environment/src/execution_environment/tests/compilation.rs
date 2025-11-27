@@ -2,10 +2,10 @@ mod execution_tests {
     use crate::CompilationCostHandling;
     use ic_error_types::ErrorCode;
     use ic_replicated_state::{
-        canister_state::execution_state::{WasmBinary, WasmExecutionMode, WasmMetadata},
         ExecutionState, ExportedFunctions, Memory,
+        canister_state::execution_state::{WasmBinary, WasmExecutionMode, WasmMetadata},
     };
-    use ic_test_utilities_execution_environment::{wat_compilation_cost, ExecutionTestBuilder};
+    use ic_test_utilities_execution_environment::{ExecutionTestBuilder, wat_compilation_cost};
     use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_int_counter_vec};
     use ic_types::Cycles;
     use ic_types::{batch::CanisterCyclesCostSchedule, methods::WasmMethod};

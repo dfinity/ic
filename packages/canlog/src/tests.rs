@@ -1,4 +1,4 @@
-use crate::{log, GetLogFilter, Log, LogEntry, LogFilter, LogPriorityLevels, Sort};
+use crate::{GetLogFilter, Log, LogEntry, LogFilter, LogPriorityLevels, Sort, log};
 use proptest::{prop_assert, proptest};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;

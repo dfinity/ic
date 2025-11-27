@@ -5,7 +5,7 @@ use crate::{
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use serde::{Deserialize, Serialize};
-use slog::{o, Drain, Logger};
+use slog::{Drain, Logger, o};
 use std::{
     fmt,
     net::{IpAddr, Ipv6Addr},
@@ -41,34 +41,33 @@ pub fn data_location_from_str(s: &str) -> RecoveryResult<DataLocation> {
     }
     Ok(DataLocation::Remote(IpAddr::V6(
         Ipv6Addr::from_str(s).map_err(|e| {
-            RecoveryError::UnexpectedError(format!("Unable to parse ipv6 address {:?}", e))
+            RecoveryError::UnexpectedError(format!("Unable to parse ipv6 address {e:?}"))
         })?,
     )))
 }
 
 pub fn block_on<F: Future>(f: F) -> F::Output {
-    let rt = Runtime::new().unwrap_or_else(|err| panic!("Could not create tokio runtime: {}", err));
+    let rt = Runtime::new().unwrap_or_else(|err| panic!("Could not create tokio runtime: {err}"));
     rt.block_on(f)
 }
 
 pub fn parse_hex_str(string: &str) -> RecoveryResult<u64> {
     u64::from_str_radix(string, 16).map_err(|e| {
         RecoveryError::invalid_output_error(format!(
-            "Could not read checkpoint height from dir name '{}': {}",
-            string, e
+            "Could not read checkpoint height from dir name '{string}': {e}"
         ))
     })
 }
 
 pub fn subnet_id_from_str(s: &str) -> RecoveryResult<SubnetId> {
     PrincipalId::from_str(s)
-        .map_err(|e| RecoveryError::UnexpectedError(format!("Unable to parse subnet_id {:?}", e)))
+        .map_err(|e| RecoveryError::UnexpectedError(format!("Unable to parse subnet_id {e:?}")))
         .map(SubnetId::from)
 }
 
 pub fn node_id_from_str(s: &str) -> RecoveryResult<NodeId> {
     PrincipalId::from_str(s)
-        .map_err(|e| RecoveryError::UnexpectedError(format!("Unable to parse node_id {:?}", e)))
+        .map_err(|e| RecoveryError::UnexpectedError(format!("Unable to parse node_id {e:?}")))
         .map(NodeId::from)
 }
 

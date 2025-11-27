@@ -15,7 +15,7 @@ impl fmt::Display for CurrentNodePublicKeysError {
                 let appendix = if details.is_empty() {
                     String::default()
                 } else {
-                    format!(": {}", details)
+                    format!(": {details}")
                 };
 
                 write!(

@@ -3,7 +3,7 @@ name = "ic-icp-rosetta-runner"
 version = "0.1.0"
 authors = ["The Internet Computer Project Developers"]
 description = "Build Once. Integrate Your Blockchain Everywhere. "
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
 candid = { workspace = true }
@@ -14,7 +14,7 @@ reqwest = { workspace = true }
 [dev-dependencies]
 pocket-ic = { path = "../../../../packages/pocket-ic" }
 reqwest = { workspace = true }
-ic-ledger-test-utils = { path = "../../../ledger_suite/icp/test_utils" }
+ic-nns-constants = { path = "../../../nns/constants" }
 icp-ledger = { path = "../../../ledger_suite/icp" }
 tempfile = { workspace = true }
 ic-rosetta-test-utils = { path = "../test_utils" }

@@ -1,15 +1,15 @@
 use async_trait::async_trait;
-use dfn_candid::{candid_one, CandidOne};
-use dfn_core::{over_async, over_init, println};
+use dfn_candid::CandidOne;
+use dfn_core::{over_init, println};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_clients::management_canister_client::ManagementCanisterClientImpl;
 use ic_nervous_system_common::NANO_SECONDS_PER_SECOND;
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_sns_root::{
-    pb::v1::{CanisterCallError, SnsRootCanister},
-    types::Environment,
     ArchiveInfo, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
     LedgerCanisterClient,
+    pb::v1::{CanisterCallError, SnsRootCanister},
+    types::Environment,
 };
 use std::{cell::RefCell, time::Duration};
 
@@ -37,7 +37,7 @@ thread_local! {
     static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
 }
 
-#[export_name = "canister_init"]
+#[ic_cdk::init]
 fn canister_init() {
     println!("Unstoppable Canister Init!");
 
@@ -48,7 +48,7 @@ fn canister_init() {
         });
     });
 
-    ic_cdk_timers::set_timer(Duration::from_millis(10), || {
+    ic_cdk_timers::set_timer(Duration::from_millis(10), async {
         let future = async {
             println!("Unstoppable canister loop is starting...");
 
@@ -56,30 +56,13 @@ fn canister_init() {
                 interrupt().await;
             }
         };
+        // Using dfn_core::api::futures::spawn here is necessary to ensure the canister unstoppable.
         dfn_core::api::futures::spawn(future);
     });
 }
 
-#[export_name = "canister_update get_sns_canisters_summary"]
-fn get_sns_canisters_summary() {
-    over_async(
-        candid_one,
-        |request: GetSnsCanistersSummaryRequest| async move {
-            get_sns_canisters_summary_impl(request).await
-        },
-    )
-}
-
-struct NoopLedgerClient;
-
-#[async_trait]
-impl LedgerCanisterClient for NoopLedgerClient {
-    async fn archives(&self) -> Result<Vec<ArchiveInfo>, CanisterCallError> {
-        todo!()
-    }
-}
-
-async fn get_sns_canisters_summary_impl(
+#[ic_cdk::update]
+async fn get_sns_canisters_summary(
     _request: GetSnsCanistersSummaryRequest,
 ) -> GetSnsCanistersSummaryResponse {
     let canister_env = CanisterEnvironment {};
@@ -94,6 +77,15 @@ async fn get_sns_canisters_summary_impl(
         PrincipalId(ic_cdk::api::canister_self()),
     )
     .await
+}
+
+struct NoopLedgerClient;
+
+#[async_trait]
+impl LedgerCanisterClient for NoopLedgerClient {
+    async fn archives(&self) -> Result<Vec<ArchiveInfo>, CanisterCallError> {
+        todo!()
+    }
 }
 
 async fn interrupt() {

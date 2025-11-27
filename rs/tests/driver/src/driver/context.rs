@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::driver::test_env::TestEnv;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use regex::Regex;
 use slog::Logger;
 use std::{
@@ -24,9 +24,9 @@ pub struct GroupContext {
     pub debug_keepalive: bool,
     pub no_farm_keepalive: bool,
     pub group_base_name: String,
-    pub k8s: bool,
     pub logs_enabled: bool,
     pub exclude_logs: Vec<Regex>,
+    pub quiet: bool,
 }
 
 impl GroupContext {
@@ -42,14 +42,14 @@ impl GroupContext {
         debug_keepalive: bool,
         no_farm_keepalive: bool,
         group_base_name: String,
-        k8s: bool,
         logs_enabled: bool,
         exclude_logs: Vec<Regex>,
+        quiet: bool,
     ) -> Result<Self> {
         let task_id = subproc_info.as_ref().map(|t| t.0.clone());
         let sock_id = subproc_info.map(|t| t.1).unwrap_or_default();
         let socket_path = Self::log_socket_path(sock_id);
-        let logger = Self::create_logger(socket_path, task_id)?;
+        let logger = Self::create_logger(socket_path, task_id, quiet)?;
 
         let exec_path = std::env::current_exe().expect("could not acquire parent process path");
         if !exec_path.is_file() {
@@ -68,9 +68,9 @@ impl GroupContext {
             debug_keepalive,
             no_farm_keepalive,
             group_base_name,
-            k8s,
             logs_enabled,
             exclude_logs,
+            quiet,
         })
     }
 
@@ -191,14 +191,18 @@ impl GroupContext {
     }
 
     /// Create a logger for this process.
-    fn create_logger(sock_path: PathBuf, subproc_id: Option<TaskId>) -> Result<Logger> {
+    fn create_logger(
+        sock_path: PathBuf,
+        subproc_id: Option<TaskId>,
+        quiet: bool,
+    ) -> Result<Logger> {
         if let Some(task_id) = subproc_id {
             let sender = LogSender::new(task_id, sock_path.clone())
                 .with_context(|| format!("Log socket path: {sock_path:?}"))?;
             let logger = Logger::root(sender, slog::o!());
             Ok(logger)
         } else {
-            let logger = crate::driver::logger::new_stdout_logger();
+            let logger = crate::driver::logger::new_stdout_logger(quiet);
             Ok(logger)
         }
     }

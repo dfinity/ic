@@ -8,12 +8,9 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
-candid = { workspace = true }
 hex = { workspace = true }
-ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-icrc1-test-utils = { path = "../../../ledger_suite/icrc1/test_utils" }
 ic-rosetta-api = { path = "../" }
-ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-types = { path = "../../../types/types" }
 icp-ledger = { path = "../../../ledger_suite/icp" }
 nix = { workspace = true }
@@ -21,7 +18,6 @@ rand = { workspace = true }
 reqwest = { workspace = true }
 rosetta-core = { path = "../../common/rosetta_core" }
 serde = { workspace = true }
-serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }

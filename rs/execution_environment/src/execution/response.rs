@@ -9,23 +9,23 @@ use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 
 use ic_embedders::{
     wasm_executor::{
-        wasm_execution_error, CanisterStateChanges, PausedWasmExecution, WasmExecutionResult,
+        CanisterStateChanges, PausedWasmExecution, WasmExecutionResult, wasm_execution_error,
     },
     wasmtime_embedder::system_api::{ApiType, ExecutionParameters},
 };
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_replicated_state::{CallContext, CallOrigin, CanisterState};
 use ic_sys::PAGE_SIZE;
+use ic_types::Cycles;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RequestMetadata,
     Response,
 };
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
-use ic_types::Cycles;
 use ic_types::{NumBytes, NumInstructions, Time};
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
@@ -170,7 +170,7 @@ impl ResponseHelper {
             .refund_for_response_transmission(
                 round.log,
                 round.counters.response_cycles_refund_error,
-                response,
+                &response.response_payload,
                 original.callback.prepayment_for_response_transmission,
                 original.subnet_size,
                 round.cost_schedule,
@@ -188,7 +188,7 @@ impl ResponseHelper {
             applied_subnet_memory_reservation: NumBytes::new(0),
             deallocation_sender: deallocation_sender.clone(),
         };
-        helper.apply_subnet_memory_reservation(original, round_limits);
+        helper.apply_subnet_memory_reservation(round_limits);
         helper
     }
 
@@ -242,7 +242,7 @@ impl ResponseHelper {
                 );
                 // Since this branch doesn't call `early_finish()`, it needs to manually
                 // revert the subnet memory reservation.
-                self.revert_subnet_memory_reservation(original, round_limits);
+                self.revert_subnet_memory_reservation(round_limits);
                 return Err(ExecuteMessageResult::Finished {
                     canister: self.canister,
                     heap_delta: NumBytes::from(0),
@@ -274,12 +274,8 @@ impl ResponseHelper {
 
     /// Returns a struct with all the necessary information to replay the
     /// initial steps in subsequent rounds.
-    fn pause(
-        self,
-        original: &OriginalContext,
-        round_limits: &mut RoundLimits,
-    ) -> PausedResponseHelper {
-        self.revert_subnet_memory_reservation(original, round_limits);
+    fn pause(self, round_limits: &mut RoundLimits) -> PausedResponseHelper {
+        self.revert_subnet_memory_reservation(round_limits);
         self.deallocation_sender.send(Box::new(self.canister));
         PausedResponseHelper {
             refund_for_sent_cycles: self.refund_for_sent_cycles,
@@ -329,7 +325,7 @@ impl ResponseHelper {
             deallocation_sender: deallocation_sender.clone(),
         };
 
-        helper.apply_subnet_memory_reservation(original, round_limits);
+        helper.apply_subnet_memory_reservation(round_limits);
 
         helper.apply_initial_refunds();
 
@@ -392,11 +388,11 @@ impl ResponseHelper {
                 reveal_top_up,
             };
             info!(
-                    round.log,
-                    "[DTS] Failed response callback execution of canister {} due to concurrent cycle change: {:?}.",
-                    self.canister.canister_id(),
-                    err,
-                );
+                round.log,
+                "[DTS] Failed response callback execution of canister {} due to concurrent cycle change: {:?}.",
+                self.canister.canister_id(),
+                err,
+            );
             // Return total instructions: wasm executor leftovers + cleanup reservation.
             return Err((
                 self,
@@ -418,6 +414,7 @@ impl ResponseHelper {
             round.counters.state_changes_error,
             call_tree_metrics,
             original.call_context_creation_time,
+            is_composite_query(&original.call_origin),
             &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
 
@@ -491,6 +488,7 @@ impl ResponseHelper {
             round.counters.state_changes_error,
             call_tree_metrics,
             original.call_context_creation_time,
+            is_composite_query(&original.call_origin),
             &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
 
@@ -537,7 +535,7 @@ impl ResponseHelper {
         round: &RoundContext,
         round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
-        self.revert_subnet_memory_reservation(original, round_limits);
+        self.revert_subnet_memory_reservation(round_limits);
 
         let instructions_used = NumInstructions::from(
             original
@@ -639,12 +637,8 @@ impl ResponseHelper {
         self.refund_for_sent_cycles
     }
 
-    fn apply_subnet_memory_reservation(
-        &mut self,
-        original: &OriginalContext,
-        round_limits: &mut RoundLimits,
-    ) {
-        let reservation = original.subnet_memory_reservation;
+    fn apply_subnet_memory_reservation(&mut self, round_limits: &mut RoundLimits) {
+        let reservation = round_limits.subnet_memory_reservation;
         round_limits.subnet_available_memory.apply_reservation(
             reservation,
             NumBytes::new(0),
@@ -654,14 +648,10 @@ impl ResponseHelper {
         self.applied_subnet_memory_reservation = reservation;
     }
 
-    fn revert_subnet_memory_reservation(
-        &self,
-        original: &OriginalContext,
-        round_limits: &mut RoundLimits,
-    ) {
+    fn revert_subnet_memory_reservation(&self, round_limits: &mut RoundLimits) {
         debug_assert_eq!(
             self.applied_subnet_memory_reservation,
-            original.subnet_memory_reservation
+            round_limits.subnet_memory_reservation
         );
         round_limits.subnet_available_memory.revert_reservation(
             self.applied_subnet_memory_reservation,
@@ -687,9 +677,18 @@ struct OriginalContext {
     subnet_size: usize,
     freezing_threshold: Cycles,
     canister_id: CanisterId,
-    subnet_memory_reservation: NumBytes,
     instructions_executed: NumInstructions,
     log_dirty_pages: FlagStatus,
+}
+
+fn is_composite_query(origin: &CallOrigin) -> bool {
+    match origin {
+        CallOrigin::CanisterQuery { .. } => true,
+        CallOrigin::CanisterUpdate { .. }
+        | CallOrigin::Ingress { .. }
+        | CallOrigin::Query { .. }
+        | CallOrigin::SystemTask => false,
+    }
 }
 
 /// Struct used to hold necessary information for the
@@ -905,7 +904,6 @@ pub fn execute_response(
     round: RoundContext,
     round_limits: &mut RoundLimits,
     subnet_size: usize,
-    subnet_memory_reservation: NumBytes,
     call_tree_metrics: &dyn CallTreeMetrics,
     log_dirty_pages: FlagStatus,
     deallocation_sender: &DeallocationSender,
@@ -955,7 +953,6 @@ pub fn execute_response(
         subnet_size,
         freezing_threshold,
         canister_id: clean_canister.canister_id(),
-        subnet_memory_reservation,
         instructions_executed: call_context.instructions_executed(),
         log_dirty_pages,
     };
@@ -982,10 +979,10 @@ pub fn execute_response(
     };
 
     let func_ref = match original.call_origin {
-        CallOrigin::Ingress(_, _)
-        | CallOrigin::CanisterUpdate(_, _, _)
-        | CallOrigin::SystemTask => FuncRef::UpdateClosure(closure),
-        CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => FuncRef::QueryClosure(closure),
+        CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
+            FuncRef::UpdateClosure(closure)
+        }
+        CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => FuncRef::QueryClosure(closure),
     };
 
     let api_type = match &response.response_payload {
@@ -1071,10 +1068,10 @@ fn execute_response_cleanup(
         .instruction_limits
         .update(instructions_left);
     let func_ref = match original.call_origin {
-        CallOrigin::Ingress(_, _)
-        | CallOrigin::CanisterUpdate(_, _, _)
-        | CallOrigin::SystemTask => FuncRef::UpdateClosure(cleanup_closure),
-        CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
+        CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
+            FuncRef::UpdateClosure(cleanup_closure)
+        }
+        CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => {
             FuncRef::QueryClosure(cleanup_closure)
         }
     };
@@ -1134,7 +1131,7 @@ fn process_response_result(
             update_round_limits(round_limits, &slice);
             let paused_execution = Box::new(PausedResponseExecution {
                 paused_wasm_execution,
-                helper: helper.pause(&original, round_limits),
+                helper: helper.pause(round_limits),
                 execution_parameters,
                 reserved_cleanup_instructions,
                 original,
@@ -1234,7 +1231,7 @@ fn process_cleanup_result(
             update_round_limits(round_limits, &slice);
             let paused_execution = Box::new(PausedCleanupExecution {
                 paused_wasm_execution,
-                helper: helper.pause(&original, round_limits),
+                helper: helper.pause(round_limits),
                 execution_parameters,
                 callback_err,
                 original,

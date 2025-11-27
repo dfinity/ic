@@ -1,6 +1,6 @@
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
-use ic_config::state_manager::{lsmt_config_default, Config, LsmtConfig};
+use ic_config::state_manager::{Config, LsmtConfig, lsmt_config_default};
 use ic_interfaces::{
     certification::{InvalidCertificationReason, Verifier, VerifierError},
     p2p::state_sync::{Chunk, ChunkId, Chunkable},
@@ -12,11 +12,12 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
-use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState, Stream};
+use ic_replicated_state::{ReplicatedState, Stream, testing::ReplicatedStateTesting};
 use ic_state_manager::{
-    state_sync::types::{StateSyncMessage, MANIFEST_CHUNK_ID_OFFSET},
+    StateManagerImpl,
     state_sync::StateSync,
-    stream_encoding, StateManagerImpl,
+    state_sync::types::{MANIFEST_CHUNK_ID_OFFSET, StateSyncMessage},
+    stream_encoding,
 };
 use ic_test_utilities_consensus::fake::{Fake, FakeVerifier};
 use ic_test_utilities_logger::with_test_replica_logger;
@@ -24,11 +25,11 @@ use ic_test_utilities_state::{initial_execution_state, new_canister_state};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
 use ic_types::{
+    CanisterId, CryptoHashOfState, Cycles, Height, RegistryVersion, SubnetId,
     consensus::certification::{Certification, CertificationContent},
     crypto::Signed,
     signature::ThresholdSignature,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
-    CanisterId, CryptoHashOfState, Cycles, Height, RegistryVersion, SubnetId,
 };
 use ic_wasm_types::CanisterModule;
 use std::{collections::HashSet, sync::Arc};
@@ -169,7 +170,7 @@ pub fn encode_decode_stream_test<
         );
 
         let decoded_slice =
-            decoded_slice.unwrap_or_else(|e| panic!("Failed to decode slice with error {:?}", e));
+            decoded_slice.unwrap_or_else(|e| panic!("Failed to decode slice with error {e:?}"));
 
         assert_eq!(
             stream.slice(stream.header().begin(), size_limit),
@@ -243,7 +244,7 @@ pub fn encode_partial_slice_test(
                 RegistryVersion::new(1),
                 &same_payload_slice,
             )
-            .unwrap_or_else(|e| panic!("Failed to decode slice with error {:?}", e));
+            .unwrap_or_else(|e| panic!("Failed to decode slice with error {e:?}"));
         let msg_count = decoded_slice.messages().map_or(0, |m| m.len());
 
         // Slice with the same witness and matching payload.
@@ -325,14 +326,11 @@ pub fn wait_for_checkpoint(state_manager: &impl StateManager, h: Height) -> Cryp
         match state_manager.get_state_hash_at(h) {
             Ok(hash) => return hash,
             Err(StateHashError::Permanent(err)) => {
-                panic!("Unable to get checkpoint @{}: {:?}", h, err);
+                panic!("Unable to get checkpoint @{h}: {err:?}");
             }
             Err(StateHashError::Transient(err)) => match err {
                 TransientStateHashError::StateNotCommittedYet(_) => {
-                    panic!(
-                        "state must be committed before calling wait_for_checkpoint: {:?}",
-                        err
-                    );
+                    panic!("state must be committed before calling wait_for_checkpoint: {err:?}");
                 }
                 TransientStateHashError::HashNotComputedYet(_) => {
                     std::thread::sleep(Duration::from_millis(500));
@@ -341,7 +339,7 @@ pub fn wait_for_checkpoint(state_manager: &impl StateManager, h: Height) -> Cryp
         }
     }
 
-    panic!("Checkpoint @{} didn't complete in {:?}", h, timeout)
+    panic!("Checkpoint @{h} didn't complete in {timeout:?}")
 }
 
 pub fn insert_dummy_canister(state: &mut ReplicatedState, canister_id: CanisterId) {
@@ -440,7 +438,7 @@ pub fn pipe_meta_manifest(
     let mut chunk = src
         .clone()
         .get_chunk(id)
-        .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
+        .unwrap_or_else(|| panic!("Requested unknown chunk {id}"));
 
     if use_bad_chunk {
         alter_chunk_data(&mut chunk);
@@ -473,7 +471,7 @@ pub fn pipe_manifest(
         let mut chunk = src
             .clone()
             .get_chunk(*id)
-            .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
+            .unwrap_or_else(|| panic!("Requested unknown chunk {id}"));
 
         if use_bad_chunk && index == ids.len() / 2 {
             alter_chunk_data(&mut chunk);
@@ -517,7 +515,7 @@ pub fn pipe_partial_state_sync(
             let mut chunk = src
                 .clone()
                 .get_chunk(*id)
-                .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
+                .unwrap_or_else(|| panic!("Requested unknown chunk {id}"));
 
             if use_bad_chunk && index == ids.len() / 2 {
                 alter_chunk_data(&mut chunk);
@@ -630,7 +628,12 @@ where
         &MetricsRegistry,
         Arc<StateManagerImpl>,
         StateSync,
-        Box<dyn Fn(StateManagerImpl, Option<Height>) -> (MetricsRegistry, Arc<StateManagerImpl>)>,
+        Box<
+            dyn Fn(
+                StateManagerImpl,
+                Option<Height>,
+            ) -> (MetricsRegistry, Arc<StateManagerImpl>, StateSync),
+        >,
     ),
 {
     let tmp = tmpdir("sm");
@@ -653,12 +656,12 @@ where
                 starting_height,
                 ic_types::malicious_flags::MaliciousFlags::default(),
             ));
+            let state_sync = StateSync::new(state_manager.clone(), log.clone());
 
-            (metrics_registry, state_manager)
+            (metrics_registry, state_manager, state_sync)
         };
 
-        let (metrics_registry, state_manager) = make_state_manager(None);
-        let state_sync = StateSync::new(state_manager.clone(), log.clone());
+        let (metrics_registry, state_manager, state_sync) = make_state_manager(None);
 
         let restart_fn = Box::new(move |state_manager, starting_height| {
             drop(state_manager);

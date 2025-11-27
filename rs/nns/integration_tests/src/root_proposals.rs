@@ -15,7 +15,7 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
     registry::initial_mutations_for_a_multinode_nns_subnet,
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
@@ -203,10 +203,12 @@ fn test_unauthorized_user_cant_submit_on_root_proposals() {
             .await
             .expect("Error submitting root proposal (Generic error)");
         assert!(response.is_err());
-        assert!(response
-            .err()
-            .unwrap()
-            .contains("must be among the node operators of the nns subnet"));
+        assert!(
+            response
+                .err()
+                .unwrap()
+                .contains("must be among the node operators of the nns subnet")
+        );
         Ok(())
     })
 }
@@ -243,10 +245,12 @@ fn test_cant_submit_root_proposal_with_wrong_sha() {
             .await
             .expect("Error submitting root proposal (Generic error)");
         assert!(response.is_err());
-        assert!(response
-            .err()
-            .unwrap()
-            .contains("Expected governance wasm sha must match"));
+        assert!(
+            response
+                .err()
+                .unwrap()
+                .contains("Expected governance wasm sha must match")
+        );
         Ok(())
     })
 }

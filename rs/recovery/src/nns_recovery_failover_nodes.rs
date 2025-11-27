@@ -1,4 +1,5 @@
 use crate::{
+    CUPS_DIR, IC_REGISTRY_LOCAL_STORE, NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step,
     admin_helper::RegistryParams,
     cli::{
         print_height_info, read_optional, read_optional_data_location, read_optional_node_ids,
@@ -9,7 +10,6 @@ use crate::{
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
     util::{DataLocation, SshUser},
-    NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, CUPS_DIR, IC_REGISTRY_LOCAL_STORE,
 };
 use clap::Parser;
 use ic_base_types::SubnetId;
@@ -25,7 +25,16 @@ use url::Url;
 pub const CANISTER_CALLER_ID: &str = "r7inp-6aaaa-aaaaa-aaabq-cai";
 
 #[derive(
-    Copy, Clone, PartialEq, Debug, Deserialize, EnumIter, EnumMessage, EnumString, Serialize,
+    Copy,
+    Clone,
+    PartialEq,
+    Debug,
+    Deserialize,
+    EnumIter,
+    EnumMessage,
+    EnumString,
+    Serialize,
+    strum_macros::Display,
 )]
 pub enum StepType {
     StopReplica,
@@ -141,14 +150,10 @@ impl NNSRecoveryFailoverNodes {
         }
     }
 
-    pub fn get_recovery_api(&self) -> &Recovery {
-        &self.recovery
-    }
-
     pub fn get_local_store_tar(&self) -> PathBuf {
         self.recovery
             .work_dir
-            .join(format!("{}.tar.zst", IC_REGISTRY_LOCAL_STORE))
+            .join(format!("{IC_REGISTRY_LOCAL_STORE}.tar.zst"))
     }
 }
 
@@ -261,7 +266,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 Ok(Box::new(self.recovery.get_download_certs_step(
                     self.params.subnet_id,
                     SshUser::Admin,
-                    /*alt_key_file=*/ None,
+                    self.recovery.admin_key_file.clone(),
                     !self.interactive(),
                 )))
             }
@@ -274,7 +279,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 if let Some(node_ip) = self.params.download_node {
                     Ok(Box::new(self.recovery.get_download_state_step(
                         node_ip,
-                        /*try_readonly=*/ false,
+                        SshUser::Admin,
+                        self.recovery.admin_key_file.clone(),
                         /*keep_downloaded_state=*/ false,
                         /*additional_excludes=*/ vec![CUPS_DIR],
                     )))
@@ -305,6 +311,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                     Ok(Box::new(self.recovery.get_download_registry_store_step(
                         ip,
                         self.params.subnet_id,
+                        SshUser::Admin,
+                        self.recovery.admin_key_file.clone(),
                     )))
                 } else {
                     Err(RecoveryError::StepSkipped)
@@ -351,11 +359,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
             StepType::ProposeCUP => {
                 let url = if let Some(aux_ip) = self.params.aux_ip {
                     let url_str = format!(
-                        "http://[{}]:8081/tmp/recovery_registry/{}.tar.zst",
-                        aux_ip, IC_REGISTRY_LOCAL_STORE
+                        "http://[{aux_ip}]:8081/tmp/recovery_registry/{IC_REGISTRY_LOCAL_STORE}.tar.zst"
                     );
                     Some(Url::parse(&url_str).map_err(|e| {
-                        RecoveryError::invalid_output_error(format!("Failed to parse Url: {}", e))
+                        RecoveryError::invalid_output_error(format!("Failed to parse Url: {e}"))
                     })?)
                 } else {
                     self.params.registry_url.clone()

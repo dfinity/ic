@@ -1,5 +1,5 @@
 use crate::error::{OrchestratorError, OrchestratorResult};
-use ic_consensus::make_registry_cup;
+use ic_consensus_cup_utils::make_registry_cup;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::{
@@ -14,8 +14,8 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_keys::FirewallRulesScope;
 use ic_types::{
-    consensus::CatchUpPackage, hostos_version::HostosVersion, NodeId, PrincipalId, RegistryVersion,
-    ReplicaVersion, SubnetId,
+    NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId, consensus::CatchUpPackage,
+    hostos_version::HostosVersion,
 };
 use std::{convert::TryFrom, net::IpAddr, sync::Arc};
 
@@ -66,10 +66,9 @@ impl RegistryHelper {
         if let Some((subnet_id, subnet_record)) = self
             .registry_client
             .get_listed_subnet_for_node_id(self.node_id, version)?
+            && !subnet_record.start_as_nns
         {
-            if !subnet_record.start_as_nns {
-                return Ok(subnet_id);
-            }
+            return Ok(subnet_id);
         }
 
         Err(OrchestratorError::NodeUnassignedError(
@@ -228,8 +227,7 @@ impl RegistryHelper {
                 let replica_version = ReplicaVersion::try_from(record.replica_version.as_ref())
                     .map_err(|err| {
                         OrchestratorError::UpgradeError(format!(
-                            "Couldn't parse the replica version: {}",
-                            err
+                            "Couldn't parse the replica version: {err}"
                         ))
                     })?;
                 Ok(replica_version)
@@ -295,8 +293,7 @@ impl RegistryHelper {
             .map(|node_record| {
                 HostosVersion::try_from(node_record).map_err(|err| {
                     OrchestratorError::UpgradeError(format!(
-                        "Could not parse HostOS version: {}",
-                        err
+                        "Could not parse HostOS version: {err}"
                     ))
                 })
             })

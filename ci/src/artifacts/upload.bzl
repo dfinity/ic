@@ -55,7 +55,7 @@ _upload_artifacts = rule(
     executable = True,
     attrs = {
         "inputs": attr.label_list(allow_files = True, default = []),
-        "_rclone": attr.label(allow_single_file = True, default = "@rclone//:rclone"),
+        "_rclone": attr.label(allow_single_file = True, default = "@//:rclone"),
         "_artifacts_uploader": attr.label(allow_single_file = True, default = ":upload.sh"),
         "_version_txt": attr.label(allow_single_file = True, default = "//bazel:version.txt"),
     },

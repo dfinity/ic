@@ -1,10 +1,10 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
-use crate::dashboard::{filters, DashboardTemplate, Fetched, Status, DEFAULT_TX_TABLE_PAGE_SIZE};
+use crate::dashboard::{DEFAULT_TX_TABLE_PAGE_SIZE, DashboardTemplate, Fetched, Status, filters};
 use crate::state::{Config, Timestamp, TransactionCheckData};
 use crate::{dashboard, state};
 use bitcoin::Address;
-use bitcoin::{absolute::LockTime, transaction::Version, Transaction};
-use ic_btc_checker::{blocklist::BTC_ADDRESS_BLOCKLIST, BtcNetwork, CheckMode};
+use bitcoin::{Transaction, absolute::LockTime, transaction::Version};
+use ic_btc_checker::{BtcNetwork, CheckMode, blocklist::BTC_ADDRESS_BLOCKLIST};
 use ic_btc_interface::Txid;
 use std::str::FromStr;
 
@@ -196,7 +196,7 @@ mod assertions {
         pub fn has_btc_network_in_title(&self, btc_network: BtcNetwork) -> &Self {
             self.has_string_value(
                 "title",
-                &format!("Bitcoin Checker Canister Dashboard for ({})", btc_network),
+                &format!("Bitcoin Checker Canister Dashboard for ({btc_network})"),
                 "wrong btc_network",
             )
         }
@@ -204,7 +204,7 @@ mod assertions {
         pub fn has_check_mode(&self, check_mode: CheckMode) -> &Self {
             self.has_string_value(
                 "#check-mode > td > code",
-                &format!("{}", check_mode),
+                &format!("{check_mode}"),
                 "wrong check mode",
             )
         }
@@ -212,7 +212,7 @@ mod assertions {
         pub fn has_outcall_capacity(&self, outcall_capacity: u32) -> &Self {
             self.has_string_value(
                 "#outcall-capacity > td > code",
-                &format!("{}", outcall_capacity),
+                &format!("{outcall_capacity}"),
                 "wrong outcall capacity",
             )
         }
@@ -220,7 +220,7 @@ mod assertions {
         pub fn has_cached_entries(&self, cached_entries: usize) -> &Self {
             self.has_string_value(
                 "#cached-entries > td > code",
-                &format!("{}", cached_entries),
+                &format!("{cached_entries}"),
                 "wrong cached entries",
             )
         }

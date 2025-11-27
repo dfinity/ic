@@ -19,6 +19,8 @@ CANISTERS = {
     "ic-btc-checker.wasm.gz": "//rs/bitcoin/checker:btc_checker_canister",
     "ic-ckbtc-minter.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter",
     "ic-ckbtc-minter_debug.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+    "ic-ckdoge-minter.wasm.gz": "//rs/dogecoin/ckdoge/minter:ckdoge_minter",
+    "ic-ckdoge-minter_debug.wasm.gz": "//rs/dogecoin/ckdoge/minter:ckdoge_minter_debug",
     "ic-cketh-minter.wasm.gz": "//rs/ethereum/cketh/minter:cketh_minter",
     "ic-icrc1-archive.wasm.gz": "//rs/ledger_suite/icrc1/archive:archive_canister",
     "ic-icrc1-archive-u256.wasm.gz": "//rs/ledger_suite/icrc1/archive:archive_canister_u256",
@@ -31,7 +33,8 @@ CANISTERS = {
     "identity-canister.wasm.gz": "//rs/nns/identity:identity-canister",
     "ledger-archive-node-canister.wasm.gz": "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm",
     "ledger-canister.wasm.gz": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
-    "ledger-canister_notify-method.wasm.gz": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
+    # FIXME(FI-1845): Remove once all users have migrated to the ledger canister without notify-method in the name.
+    "ledger-canister_notify-method.wasm.gz": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
     "lifeline_canister.wasm.gz": "//rs/nns/handlers/lifeline/impl:lifeline_canister",
     "migration-canister.wasm.gz": "//rs/migration_canister:migration-canister",
     "nns-ui-canister.wasm.gz": "//rs/nns/nns-ui:nns-ui-canister",
@@ -83,8 +86,8 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     # -- XC team --
     # Size when constraint addded: 447_593 bytes
     "ic-btc-checker.wasm.gz": 6,
-    # Size when constraint addded: 696_633 bytes
-    "ic-ckbtc-minter.wasm.gz": 8,
+    # Size when constraint addded: 802_894 bytes
+    "ic-ckbtc-minter.wasm.gz": 9,
     # Size when constraint addded: 1_230_630 bytes
     "ic-cketh-minter.wasm.gz": 13,
     # The orchestrator needs to embed 3 wasms at compile time

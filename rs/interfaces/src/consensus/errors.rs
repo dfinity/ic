@@ -1,8 +1,8 @@
 use ic_types::consensus::idkg::{
+    TranscriptParamsError,
     common::{BuildSignatureInputsError, TranscriptOperationError},
     ecdsa::PreSignatureQuadrupleError,
     schnorr::PreSignatureTranscriptError,
-    TranscriptParamsError,
 };
 
 use crate::crypto::ErrorReproducibility;

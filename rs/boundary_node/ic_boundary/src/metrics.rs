@@ -7,29 +7,27 @@ use anyhow::Error;
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
+    Extension,
     extract::{Request, State},
     middleware::Next,
     response::{IntoResponse, Response},
-    Extension,
 };
 use bytes::Bytes;
 use candid::Principal;
 use http::header::CONTENT_TYPE;
 use humantime::format_rfc3339;
-use ic_bn_lib::{
-    http::{body::CountingBody, cache::CacheStatus, http_version, ConnInfo},
-    tasks::Run,
-};
+use ic_bn_lib::http::{body::CountingBody, cache::CacheStatus, http_version};
 use ic_bn_lib::{
     prometheus::{
-        proto::MetricFamily, register_histogram_vec_with_registry,
+        Encoder, HistogramOpts, HistogramVec, IntCounterVec, IntGauge, IntGaugeVec, Registry,
+        TextEncoder, proto::MetricFamily, register_histogram_vec_with_registry,
         register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
-        register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
-        IntGauge, IntGaugeVec, Registry, TextEncoder,
+        register_int_gauge_with_registry,
     },
     pubsub::Broker,
 };
-use ic_types::{messages::ReplicaHealthStatus, CanisterId, SubnetId};
+use ic_bn_lib_common::{traits::Run, types::http::ConnInfo};
+use ic_types::{CanisterId, SubnetId, messages::ReplicaHealthStatus};
 use serde_json::json;
 use sha3::{Digest, Sha3_256};
 use tikv_jemalloc_ctl::{epoch, stats};
@@ -39,8 +37,11 @@ use tracing::info;
 
 use crate::{
     errors::ErrorCause,
-    http::middleware::{cache::CacheState, geoip, retry::RetryResult},
-    routes::{Health, RequestContext, RequestType},
+    http::{
+        RequestType,
+        middleware::{cache::CacheState, geoip, retry::RetryResult},
+    },
+    routes::{Health, RequestContext},
     snapshot::{Node, RegistrySnapshot, Subnet},
 };
 
@@ -828,11 +829,13 @@ mod test {
                     .map(|x| x.value());
 
                 match (node_id, subnet_id) {
-                    (Some(node_id), Some(subnet_id)) => assert!(snapshot
-                        .nodes
-                        .get(node_id)
-                        .map(|x| x.subnet_id.to_string() == subnet_id)
-                        .unwrap_or(false)),
+                    (Some(node_id), Some(subnet_id)) => assert!(
+                        snapshot
+                            .nodes
+                            .get(node_id)
+                            .map(|x| x.subnet_id.to_string() == subnet_id)
+                            .unwrap_or(false)
+                    ),
 
                     (Some(_), None) => only_node_id += 1,
                     (None, Some(_)) => only_subnet_id += 1,

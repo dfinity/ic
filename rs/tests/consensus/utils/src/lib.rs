@@ -1,9 +1,9 @@
 use ic_system_test_driver::{
-    driver::test_env_api::{set_var_to_path, HasPublicApiUrl, IcNodeSnapshot},
-    util::{block_on, MetricsFetcher},
+    driver::test_env_api::{HasPublicApiUrl, IcNodeSnapshot, set_var_to_path},
+    util::{MetricsFetcher, block_on},
 };
 use ic_types::Height;
-use slog::{info, warn, Logger};
+use slog::{Logger, info, warn};
 use std::path::PathBuf;
 
 pub mod impersonate_upstreams;

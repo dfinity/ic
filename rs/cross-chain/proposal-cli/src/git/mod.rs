@@ -1,9 +1,6 @@
-use crate::candid::{encode_upgrade_args, UpgradeArgs};
-use crate::canister::{DownloadableFile, TargetCanister};
-use candid::Principal;
+use crate::candid::{UpgradeArgs, encode_upgrade_args};
+use crate::canister::TargetCanister;
 use std::fmt::{Display, Formatter};
-use std::fs::File;
-use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
@@ -27,7 +24,7 @@ impl<const N: usize> FromStr for Hash<N> {
             ));
         }
         let mut bytes = [0u8; N];
-        hex::decode_to_slice(s, &mut bytes).map_err(|e| format!("Invalid hex string: {}", e))?;
+        hex::decode_to_slice(s, &mut bytes).map_err(|e| format!("Invalid hex string: {e}"))?;
         Ok(Self(bytes))
     }
 }
@@ -94,42 +91,6 @@ impl GitRepository {
         self.dir.path().join(canister.candid_file())
     }
 
-    pub async fn parse_canister_id_batch(&self, canisters: &[TargetCanister]) -> Vec<Principal> {
-        let mut fut = Vec::with_capacity(canisters.len());
-        for canister in canisters {
-            fut.push(self.parse_canister_id(canister));
-        }
-        futures::future::join_all(fut).await
-    }
-
-    pub async fn parse_canister_id(&self, canister: &TargetCanister) -> Principal {
-        let canister_ids: serde_json::Value = match canister.canister_ids_json_file() {
-            DownloadableFile::Local { path } => {
-                let full_path = self.dir.path().join(&path);
-                let canister_ids_file = File::open(&full_path)
-                    .unwrap_or_else(|_| panic!("failed to open {:?}", &full_path));
-                serde_json::from_reader(BufReader::new(canister_ids_file))
-            }
-            DownloadableFile::Remote { url } => {
-                let resp = reqwest::get(url).await.expect("request failed");
-                let body = resp.text().await.expect("body invalid");
-                serde_json::from_reader(BufReader::new(body.as_bytes()))
-            }
-        }
-        .expect("failed to parse json");
-
-        let canister_id = canister_ids
-            .as_object()
-            .unwrap()
-            .get(canister.canister_name())
-            .unwrap()
-            .get("ic")
-            .unwrap()
-            .as_str()
-            .unwrap();
-        Principal::from_text(canister_id).unwrap()
-    }
-
     pub fn checkout(&mut self, commit: &GitCommitHash) {
         let git_checkout = self
             .git()
@@ -162,20 +123,20 @@ impl GitRepository {
         let mut git_log = self.git();
         git_log
             .arg("log")
-            .arg(format!("--format={}", FORMAT_PARAMS))
-            .arg(format!("{}..{}", from, to))
+            .arg(format!("--format={FORMAT_PARAMS}"))
+            .arg(format!("{from}..{to}"))
             .arg("--");
         for repo_dir in canister.git_log_dirs() {
             git_log.arg(repo_dir);
         }
         let log = git_log.output().expect("failed to run git log");
-        assert!(log.status.success(), "failed to run git log: {:?}", log);
+        assert!(log.status.success(), "failed to run git log: {log:?}");
 
         let executed_command = iter::once(git_log.get_program())
             .chain(git_log.get_args())
             .fold(String::new(), |acc, arg| acc + " " + arg.to_str().unwrap())
             .trim()
-            .replace(FORMAT_PARAMS, format!("'{}'", FORMAT_PARAMS).as_str());
+            .replace(FORMAT_PARAMS, format!("'{FORMAT_PARAMS}'").as_str());
 
         let output = String::from_utf8_lossy(&log.stdout)
             .lines()

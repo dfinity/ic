@@ -9,7 +9,7 @@ use crate::{
     },
 };
 use ic_types::PrincipalId;
-use icp_ledger::{Operation, Tokens, DEFAULT_TRANSFER_FEE};
+use icp_ledger::{DEFAULT_TRANSFER_FEE, Operation, Tokens};
 
 /// Helper for `from_operations` that creates `Transfer`s from related
 /// debit/credit/fee operations.
@@ -42,7 +42,7 @@ impl State {
     /// previously.
     pub fn flush(&mut self) -> Result<(), ApiError> {
         let trans_err = |msg| {
-            let msg = format!("Bad transaction: {}", msg);
+            let msg = format!("Bad transaction: {msg}");
             let err = ApiError::InvalidTransaction(false, msg.into());
             Err(err)
         };
@@ -81,7 +81,7 @@ impl State {
             if cr_amount == Tokens::ZERO && fee_acc == to {
                 std::mem::swap(&mut from, &mut to);
             } else {
-                let msg = format!("Fee should be taken from {}", from);
+                let msg = format!("Fee should be taken from {from}");
                 return trans_err(msg);
             }
         }
@@ -284,12 +284,12 @@ impl State {
         percentage_to_spawn: Option<u32>,
         controller: Option<PrincipalId>,
     ) -> Result<(), ApiError> {
-        if let Some(pct) = percentage_to_spawn {
-            if !(1..=100).contains(&pct) {
-                let msg = format!("Invalid percentage to spawn: {}", pct);
-                let err = ApiError::InvalidTransaction(false, msg.into());
-                return Err(err);
-            }
+        if let Some(pct) = percentage_to_spawn
+            && !(1..=100).contains(&pct)
+        {
+            let msg = format!("Invalid percentage to spawn: {pct}");
+            let err = ApiError::InvalidTransaction(false, msg.into());
+            return Err(err);
         }
         self.flush()?;
         self.actions.push(Request::Spawn(Spawn {
@@ -326,12 +326,12 @@ impl State {
         neuron_index: u64,
         percentage_to_stake: Option<u32>,
     ) -> Result<(), ApiError> {
-        if let Some(pct) = percentage_to_stake {
-            if !(1..=100).contains(&pct) {
-                let msg = format!("Invalid percentage to stake: {}", pct);
-                let err = ApiError::InvalidTransaction(false, msg.into());
-                return Err(err);
-            }
+        if let Some(pct) = percentage_to_stake
+            && !(1..=100).contains(&pct)
+        {
+            let msg = format!("Invalid percentage to stake: {pct}");
+            let err = ApiError::InvalidTransaction(false, msg.into());
+            return Err(err);
         }
         self.flush()?;
         self.actions.push(Request::StakeMaturity(StakeMaturity {

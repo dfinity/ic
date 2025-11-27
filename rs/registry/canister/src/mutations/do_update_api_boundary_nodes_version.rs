@@ -47,10 +47,7 @@ impl Registry {
         &mut self,
         payload: DeployGuestosToSomeApiBoundaryNodes,
     ) {
-        println!(
-            "{}do_update_api_boundary_nodes_version: {:?}",
-            LOG_PREFIX, payload
-        );
+        println!("{LOG_PREFIX}do_update_api_boundary_nodes_version: {payload:?}");
 
         // Ensure payload is valid
         self.validate_update_api_boundary_nodes_version_payload(&payload);

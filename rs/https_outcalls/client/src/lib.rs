@@ -7,11 +7,10 @@ use crate::client::BrokenCanisterHttpClient;
 use ic_adapter_metrics_client::AdapterMetrics;
 use ic_config::adapters::AdaptersConfig;
 use ic_http_endpoints_async_utils::ExecuteOnTokioRuntime;
-use ic_interfaces::execution_environment::QueryExecutionService;
+use ic_interfaces::execution_environment::TransformExecutionService;
 use ic_interfaces_adapter_client::NonBlockingChannel;
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_metrics::MetricsRegistry;
-use ic_nns_delegation_manager::NNSDelegationReader;
 use ic_types::canister_http::{CanisterHttpRequest, CanisterHttpResponse};
 use std::convert::TryFrom;
 use tokio::net::UnixStream;
@@ -22,10 +21,9 @@ pub fn setup_canister_http_client(
     rt_handle: tokio::runtime::Handle,
     metrics_registry: &MetricsRegistry,
     adapter_config: AdaptersConfig,
-    query_handler: QueryExecutionService,
+    transform_handler: TransformExecutionService,
     max_canister_http_requests_in_flight: usize,
     log: ReplicaLogger,
-    nns_delegation_reader: NNSDelegationReader,
 ) -> Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send> {
     match adapter_config.https_outcalls_uds_path {
         None => {
@@ -69,10 +67,9 @@ pub fn setup_canister_http_client(
                     Box::new(CanisterHttpAdapterClientImpl::new(
                         rt_handle,
                         channel,
-                        query_handler,
+                        transform_handler,
                         max_canister_http_requests_in_flight,
                         metrics_registry.clone(),
-                        nns_delegation_reader,
                         log,
                     ))
                 }

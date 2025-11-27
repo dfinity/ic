@@ -14,16 +14,14 @@ pub fn fetch_histogram_stats(registry: &MetricsRegistry, name: &str) -> Option<H
     let stats = stats_map.remove(&Labels::new());
     assert!(
         stats_map.is_empty(),
-        "{}: expecting `Histogram`, found `HistogramVec` {:?}",
-        name,
-        stats_map
+        "{name}: expecting `Histogram`, found `HistogramVec` {stats_map:?}"
     );
     stats
 }
 
 #[test]
 fn test_fetch_histogram_stats() {
-    use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+    use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 
     let r = MetricsRegistry::new();
     let h = r.histogram(
@@ -67,7 +65,7 @@ pub fn fetch_histogram_vec_stats(
 
 #[test]
 fn test_fetch_histogram_vec_stats() {
-    use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+    use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 
     let r = MetricsRegistry::new();
     let h = r.histogram_vec(
@@ -158,9 +156,7 @@ pub fn fetch_counter(registry: &MetricsRegistry, name: &str) -> Option<f64> {
     let value = value_map.remove(&Labels::new());
     assert!(
         value_map.is_empty(),
-        "{}: expecting `Counter`, found `CounterVec` {:?}",
-        name,
-        value_map
+        "{name}: expecting `Counter`, found `CounterVec` {value_map:?}"
     );
     value
 }
@@ -236,9 +232,7 @@ pub fn fetch_gauge(registry: &MetricsRegistry, name: &str) -> Option<f64> {
     let value = value_map.remove(&Labels::new());
     assert!(
         value_map.is_empty(),
-        "{}: expecting `Gauge`, found `GaugeVec` {:?}",
-        name,
-        value_map
+        "{name}: expecting `Gauge`, found `GaugeVec` {value_map:?}"
     );
     value
 }

@@ -10,6 +10,7 @@ documentation.workspace = true
 candid = { workspace = true }
 futures = { workspace = true }
 ic-agent = { workspace = true }
+ic-management-canister-types-private = { path = "../../../types/management_canister_types/" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }

@@ -16,16 +16,25 @@ path = "src/main.rs"
 
 [dependencies]
 candid = { workspace = true }
+ciborium = { workspace = true }
 ic-cdk = { workspace = true }
+ic-certification = { workspace = true }
 ic-icrc1 = { path = "../.." }
+ic-ledger-canister-core = { path = "../../../common/ledger_canister_core" }
 icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
+leb128 = { workspace = true }
 num-traits = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
 ic-base-types = { path = "../../../../types/base_types" }
+ic-cbor = { workspace = true }
+ic-icrc1-index-ng = { path = "../../index-ng" }
 ic-icrc1-ledger = { path = "../../ledger" }
 ic-icrc1-test-utils = { path = ".." }
+ic-ledger-suite-state-machine-helpers = { path = "../../../test_utils/state_machine_helpers" }
 ic-ledger-suite-state-machine-tests = { path = "../../../tests/sm-tests" }
 ic-state-machine-tests = { path = "../../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../../test_utilities/load_wasm" }

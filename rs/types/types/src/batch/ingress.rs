@@ -1,9 +1,9 @@
 use crate::{
+    CountBytes, Time,
     artifact::IngressMessageId,
     messages::{
-        HttpRequestError, MessageId, SignedIngress, SignedRequestBytes, EXPECTED_MESSAGE_ID_LENGTH,
+        EXPECTED_MESSAGE_ID_LENGTH, HttpRequestError, MessageId, SignedIngress, SignedRequestBytes,
     },
-    CountBytes, Time,
 };
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -32,6 +32,24 @@ impl From<&IngressPayload> for pb::IngressPayload {
                     expiry: ingress_message_id.expiry().as_nanos_since_unix_epoch(),
                     message_id: ingress_message_id.message_id.as_bytes().to_vec(),
                     signed_request_bytes: serialized_ingress_message.as_ref().to_vec(),
+                },
+            )
+            .collect();
+
+        pb::IngressPayload { ingress_messages }
+    }
+}
+
+impl From<IngressPayload> for pb::IngressPayload {
+    fn from(ingress_payload: IngressPayload) -> Self {
+        let ingress_messages = ingress_payload
+            .serialized_ingress_messages
+            .into_iter()
+            .map(
+                |(ingress_message_id, serialized_ingress_message)| pb::IngressMessage {
+                    expiry: ingress_message_id.expiry().as_nanos_since_unix_epoch(),
+                    message_id: ingress_message_id.message_id.as_bytes().to_vec(),
+                    signed_request_bytes: serialized_ingress_message.into(),
                 },
             )
             .collect();
@@ -152,6 +170,19 @@ impl<'a> FromIterator<&'a SignedIngress> for IngressPayload {
 impl From<Vec<SignedIngress>> for IngressPayload {
     fn from(msgs: Vec<SignedIngress>) -> IngressPayload {
         IngressPayload::from_iter(&msgs)
+    }
+}
+
+impl From<Vec<(IngressMessageId, SignedIngress)>> for IngressPayload {
+    fn from(msgs: Vec<(IngressMessageId, SignedIngress)>) -> IngressPayload {
+        let serialized_ingress_messages = msgs
+            .into_iter()
+            .map(|(id, ingress)| (id, SignedRequestBytes::from(ingress)))
+            .collect();
+
+        Self {
+            serialized_ingress_messages,
+        }
     }
 }
 

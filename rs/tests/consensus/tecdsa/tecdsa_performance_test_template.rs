@@ -11,30 +11,29 @@
 // You can setup this test by executing the following commands:
 //
 //   $ ci/container/container-run.sh
-//   $ ict test tecdsa_performance_test_colocate --keepalive -- --test_tmpdir=./performance --test_env DOWNLOAD_P8S_DATA=1
+//   $ ict test tecdsa_performance_test_colocate --keepalive -- --test_tmpdir=./performance --test_env DOWNLOAD_P8S_DATA=1 --test_env NODES_COUNT=40
 //
 // The --test_tmpdir=./performance will store the test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
 //
 //   $ ssh -i performance/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@$ipv6
 //
-// Note that you can get the $ipv6 address of the IC node by looking for a log line like:
+// Note that you can get the $ipv6 address of IC nodes by looking for the "IC TopologySnapshot" in the logs:
 //
-//   Apr 11 15:34:10.175 INFO[rs/tests/src/driver/farm.rs:94:0]
-//     VM(h2tf2-odxlp-fx5uw-kvn43-bam4h-i4xmw-th7l2-xxwvv-dxxpz-bs3so-iqe)
-//     Host: ln1-dll10.ln1.dfinity.network
-//     IPv6: 2a0b:21c0:4003:2:5051:85ff:feec:6864
-//     vCPUs: 64
-//     Memory: 512142680 KiB
+// [...] TEST_LOG: ============================================== IC TopologySnapshot, registry version 1 ==============================================
+// [...] TEST_LOG: Subnet id=s7nx3-ohrn3-yr3me-2u2uz-ggc3p-sxctl-6gi4m-24zkp-xbkv6-7awbl-eqe, index=0, type=System
+// [...] TEST_LOG:    Node id=gi22p-z65m6-2je6o-ofjrq-dgbhz-oovnh-qt5r4-ipuzz-zgr6s-zadz5-5ae, ipv6=2602:fb2b:100:10:50c0:4aff:fe48:621c, index=0
+// [...] TEST_LOG: Subnet id=skbnp-ytnyv-g45vf-lxmc7-uo4d4-uul7e-uqlmt-obllg-ayzue-vqlbb-bae, index=1, type=Application
+// [...] TEST_LOG:    Node id=hubhq-5a45w-jikdq-mmt2k-dtfou-w5kkl-hhqap-akg77-ucuti-iy7ea-sae, ipv6=2602:fb2b:100:10:5060:c4ff:feb4:7698, index=0
+// [...] TEST_LOG:    Node id=ahm26-luzd4-ip3xt-oma5e-f7mzd-xkmne-52tun-jtf2n-qhoe6-gpmyt-dae, ipv6=2602:fb2b:100:10:50fb:c3ff:fe3d:e3d1, index=1
+// [...] TEST_LOG:    Node id=ellje-2rvws-jx6v5-acjhp-uogh2-3gm2z-utyc3-avgre-56u3f-ybbk3-fae, ipv6=2602:fb2b:100:10:5033:d9ff:fea5:1c7b, index=2
+// =====================================================================================================================================
 //
 // To get live access to P8s and Grafana while the test is running look for the following log lines:
 //
-//   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:168:0]
-//     Prometheus Web UI at http://prometheus.performance--1681227226065.testnet.farm.dfinity.systems
-//   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:170:0]
-//     IC Progress Clock at http://grafana.performance--1681227226065.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now
-//   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:169:0]
-//     Grafana at http://grafana.performance--1681227226065.testnet.farm.dfinity.systems
+// [...] TEST_LOG: [...] {"event_name":"prometheus_vm_created_event","body":"Prometheus Web UI at http://prometheus.tecdsa-performance-test-colocate--1758706685338.testnet.farm.dfinity.systems"}
+// [...] TEST_LOG: [...] {"event_name":"grafana_instance_created_event","body":"Grafana at http://grafana.tecdsa-performance-test-colocate--1758706685338.testnet.farm.dfinity.systems"}
+// [...] TEST_LOG: [...] {"event_name":"ic_progress_clock_created_event","body":"IC Progress Clock at http://grafana.tecdsa-performance-test-colocate--1758706685338.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now"}
 //
 // To inspect the metrics after the test has finished, exit the dev container
 // and run a local p8s and Grafana on the downloaded p8s data directory using:
@@ -59,7 +58,7 @@ use ic_consensus_system_test_utils::{
     subnet::enable_chain_key_signing_on_subnet,
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    run_chain_key_signature_test, ChainSignatureRequest,
+    ChainSignatureRequest, run_chain_key_signature_test,
 };
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
@@ -82,7 +81,7 @@ use ic_system_test_driver::generic_workload_engine::metrics::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    block_on, get_app_subnet_and_node, get_nns_node, MessageCanister, SignerCanister,
+    MessageCanister, SignerCanister, block_on, get_app_subnet_and_node, get_nns_node,
 };
 use ic_types::Height;
 use slog::{error, info};
@@ -92,7 +91,6 @@ use std::time::Duration;
 use tokio::runtime::{Builder, Runtime};
 
 // Environment parameters
-const NODES_COUNT: usize = 25;
 const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 const TESTING_PERIOD: Duration = Duration::from_secs(900); // testing time under load
@@ -109,10 +107,10 @@ const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
     .with_bandwidth(BANDWIDTH_MBITS);
 
 // Signature parameters
-const PRE_SIGNATURES_TO_CREATE: u32 = 30;
-const MAX_QUEUE_SIZE: u32 = 10;
+const PRE_SIGNATURES_TO_CREATE: u32 = 40;
+const MAX_QUEUE_SIZE: u32 = 30;
 const CANISTER_COUNT: usize = 4;
-const SIGNATURE_REQUESTS_PER_SECOND: f64 = 2.5;
+const SIGNATURE_REQUESTS_PER_SECOND: f64 = 9.0;
 
 const SMALL_MSG_SIZE_BYTES: usize = 32;
 #[allow(dead_code)]
@@ -167,6 +165,19 @@ fn make_key_ids() -> Vec<MasterPublicKeyId> {
 }
 
 pub fn setup(env: TestEnv) {
+    let nodes_count: usize = std::env::var("NODES_COUNT")
+        .or(std::env::var("DEFAULT_NODES_COUNT"))
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .expect(
+            "Failed to parse NODES_COUNT or DEFAULT_NODES_COUNT environment variable as an usize!",
+        );
+
+    info!(
+        env.logger(),
+        "Deploying a testnet with a {nodes_count}-node application subnet ...",
+    );
+
     let key_ids = make_key_ids();
     info!(env.logger(), "Running the test with key ids: {:?}", key_ids);
 
@@ -182,14 +193,18 @@ pub fn setup(env: TestEnv) {
     };
 
     InternetComputer::new()
-        .with_required_host_features(vec![HostFeature::Performance, HostFeature::Dell])
         .add_subnet(
             Subnet::new(SubnetType::System)
+                .with_required_host_features(vec![
+                    HostFeature::Performance,
+                    HostFeature::Supermicro,
+                ])
                 .with_default_vm_resources(vm_resources)
                 .add_nodes(1),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
+                .with_required_host_features(vec![HostFeature::Performance, HostFeature::Dell])
                 .with_default_vm_resources(vm_resources)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .with_chain_key_config(ChainKeyConfig {
@@ -205,7 +220,7 @@ pub fn setup(env: TestEnv) {
                     idkg_key_rotation_period_ms: None,
                     max_parallel_pre_signature_transcripts_in_creation: None,
                 })
-                .add_nodes(NODES_COUNT),
+                .add_nodes(nodes_count),
         )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
@@ -359,7 +374,7 @@ pub fn tecdsa_performance_test(
             .await;
 
         info!(log, "Reporting workload execution results");
-        env.emit_report(format!("{}", metrics));
+        env.emit_report(format!("{metrics}"));
         info!(log, "Step 5: Assert expected number of successful requests");
         let requests_count = rps * duration.as_secs_f64();
         let min_expected_success_calls = (SUCCESS_THRESHOLD * requests_count) as usize;

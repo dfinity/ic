@@ -8,6 +8,7 @@ LIB_DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ed25519",
     "//packages/ic-error-types",
+    "//packages/icrc-ledger-types",
     "//packages/pocket-ic:pocket-ic",
     "//rs/bitcoin/adapter",
     "//rs/boundary_node/ic_boundary",
@@ -31,6 +32,7 @@ LIB_DEPENDENCIES = [
     "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
+    "//rs/nervous_system/common",
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/constants",
@@ -40,7 +42,11 @@ LIB_DEPENDENCIES = [
     "//rs/nns/sns-wasm",
     "//rs/protobuf",
     "//rs/registry/canister",
+    "//rs/registry/canister/api",
+    "//rs/registry/client",
+    "//rs/registry/helpers",
     "//rs/registry/keys",
+    "//rs/registry/nns_data_provider",
     "//rs/registry/proto_data_provider",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
@@ -76,7 +82,10 @@ LIB_DEPENDENCIES = [
     "@crate_index//:hyper",
     "@crate_index//:hyper-util",
     "@crate_index//:ic-agent",
+    "@crate_index//:ic-bn-lib-common",
+    "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-doge-interface",
     "@crate_index//:ic-gateway",
     "@crate_index//:ic-utils",
     "@crate_index//:itertools",
@@ -115,6 +124,7 @@ TEST_DEPENDENCIES = [
     "//rs/registry/transport",
     "//rs/types/management_canister_types",
     "//rs/types/types",
+    "@crate_index//:bitcoin",
     "@crate_index//:candid",
     "@crate_index//:candid_parser",
     "@crate_index//:flate2",
@@ -122,6 +132,7 @@ TEST_DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-doge-interface",
     "@crate_index//:ic-gateway",
     "@crate_index//:ic-utils",
     "@crate_index//:nix",
@@ -138,99 +149,163 @@ TEST_DEPENDENCIES = [
     "@crate_index//:wat",
 ]
 
-SPEC_TEST_DEPENDENCIES = TEST_DEPENDENCIES + [
-    "//rs/tests/research/spec_compliance",
-    "//rs/registry/subnet_type",
-]
-
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
 ]
 
 ALIASES = {}
 
-MAINNET_CANISTER_DATA = [
-    "@internet_identity_dev_at_mainnet_commit//file",
-    "@mainnet_cycles_ledger_canister//file",
-    "@mainnet_cycles_ledger_index//file",
-    "@mainnet_ic-icrc1-archive//file",
-    "@mainnet_ic-icrc1-index-ng//file",
-    "@mainnet_ic-icrc1-ledger//file",
-    "@mainnet_icp_index_canister//file",
-    "@mainnet_icp_ledger_canister//file",
-    "@mainnet_nns_cycles-minting-canister//file",
-    "@mainnet_nns_registry_canister//file",
-    "@mainnet_nns_root-canister//file",
-    "@mainnet_nns_sns-wasm-canister//file",
-    "@mainnet_sns-governance-canister//file",
-    "@mainnet_sns-root-canister//file",
-    "@mainnet_sns-swap-canister//file",
-    "@nns_governance_canister_test_at_mainnet_commit//file",
-    "@sns_aggregator_test_at_mainnet_commit//file",
+EXTERNAL_CANISTER_DATA = [
+    "@mainnet_canisters//:cycles_ledger.wasm.gz",
+    "@mainnet_canisters//:internet_identity_test.wasm.gz",
+    "@mainnet_canisters//:sns_aggregator_test.wasm.gz",
+    "@mainnet_canisters//:nns_dapp_test.wasm.gz",
+    "@mainnet_canisters//:bitcoin_testnet.wasm.gz",
+    "@mainnet_canisters//:dogecoin.wasm.gz",
 ]
 
-MAINNET_CANISTER_ENV = {
-    "REGISTRY_CANISTER_WASM_PATH": "$(location @mainnet_nns_registry_canister//file)",
-    "CYCLES_MINTING_CANISTER_WASM_PATH": "$(location @mainnet_nns_cycles-minting-canister//file)",
-    "ICP_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_icp_ledger_canister//file)",
-    "ICP_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_icp_index_canister//file)",
-    "CYCLES_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_cycles_ledger_canister//file)",
-    "CYCLES_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_cycles_ledger_index//file)",
-    "GOVERNANCE_TEST_CANISTER_WASM_PATH": "$(location @nns_governance_canister_test_at_mainnet_commit//file)",
-    "ROOT_CANISTER_WASM_PATH": "$(location @mainnet_nns_root-canister//file)",
-    "SNS_WASM_CANISTER_WASM_PATH": "$(location @mainnet_nns_sns-wasm-canister//file)",
-    "SNS_ROOT_CANISTER_WASM_PATH": "$(location @mainnet_sns-root-canister//file)",
-    "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(location @mainnet_sns-governance-canister//file)",
-    "SNS_SWAP_CANISTER_WASM_PATH": "$(location @mainnet_sns-swap-canister//file)",
-    "SNS_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-ledger//file)",
-    "SNS_LEDGER_ARCHIVE_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-archive//file)",
-    "SNS_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-index-ng//file)",
-    "SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH": "$(location @sns_aggregator_test_at_mainnet_commit//file)",
-    "INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH": "$(location @internet_identity_dev_at_mainnet_commit//file)",
+EXTERNAL_CANISTER_ENV = {
+    "CYCLES_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:cycles_ledger.wasm.gz)",
+    "INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:internet_identity_test.wasm.gz)",
+    "SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:sns_aggregator_test.wasm.gz)",
+    "NNS_DAPP_TEST_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:nns_dapp_test.wasm.gz)",
+    "BITCOIN_TESTNET_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:bitcoin_testnet.wasm.gz)",
+    "DOGECOIN_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:dogecoin.wasm.gz)",
 }
 
-cargo_build_script(
-    name = "build_script",
-    srcs = ["build.rs"],
-    aliases = ALIASES,
-    build_script_env = MAINNET_CANISTER_ENV,
-    data = MAINNET_CANISTER_DATA + [
-        "templates/dashboard.html",
-    ],
-    deps = BUILD_DEPENDENCIES,
-)
+HEAD_NNS_CANISTER_DATA = [
+    "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256",
+    "//rs/ledger_suite/icrc1/archive:archive_canister",
+    "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
+    "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+    "//rs/ledger_suite/icp/index:ic-icp-index-canister",
+    "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
+    "//rs/nns/cmc:cycles-minting-canister",
+    "//rs/registry/canister:registry-canister",
+    "//rs/nns/handlers/root/impl:root-canister",
+    "//rs/nns/sns-wasm:sns-wasm-canister",
+    "//rs/sns/governance:sns-governance-canister-test",
+    "//rs/sns/root:sns-root-canister",
+    "//rs/sns/swap:sns-swap-canister",
+    "//rs/nns/governance:governance-canister-test",
+    "//rs/migration_canister:migration-canister",
+]
 
-rust_binary(
-    name = "pocket-ic-server",
-    testonly = True,
-    srcs = ["src/main.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    # TODO: restrict the visibility
-    visibility = ["//visibility:public"],
-    deps = LIB_DEPENDENCIES + [
-        ":pocket-ic-server-lib",
-        "//rs/canister_sandbox:build_script",
-    ],
-)
+HEAD_NNS_CANISTER_ENV = {
+    "REGISTRY_CANISTER_WASM_PATH": "$(location //rs/registry/canister:registry-canister)",
+    "CYCLES_MINTING_CANISTER_WASM_PATH": "$(location //rs/nns/cmc:cycles-minting-canister)",
+    "ICP_LEDGER_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
+    "ICP_INDEX_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icp/index:ic-icp-index-canister)",
+    "CYCLES_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256)",
+    "GOVERNANCE_TEST_CANISTER_WASM_PATH": "$(location //rs/nns/governance:governance-canister-test)",
+    "ROOT_CANISTER_WASM_PATH": "$(location //rs/nns/handlers/root/impl:root-canister)",
+    "SNS_WASM_CANISTER_WASM_PATH": "$(location //rs/nns/sns-wasm:sns-wasm-canister)",
+    "SNS_ROOT_CANISTER_WASM_PATH": "$(location //rs/sns/root:sns-root-canister)",
+    "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(location //rs/sns/governance:sns-governance-canister-test)",
+    "SNS_SWAP_CANISTER_WASM_PATH": "$(location //rs/sns/swap:sns-swap-canister)",
+    "SNS_LEDGER_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+    "SNS_LEDGER_ARCHIVE_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icrc1/archive:archive_canister)",
+    "SNS_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icrc1/index-ng:index_ng_canister)",
+    "MIGRATION_CANISTER_WASM_PATH": "$(location //rs/migration_canister:migration-canister)",
+}
 
-rust_library(
-    name = "pocket-ic-server-lib",
-    testonly = True,
-    srcs = [
-        "src/beta_features.rs",
-        "src/external_canister_types.rs",
-        "src/lib.rs",
-        "src/pocket_ic.rs",
-    ] + glob([
-        "src/state_api/**/*.rs",
-    ]),
-    compile_data = MAINNET_CANISTER_DATA,
-    crate_name = "pocket_ic_server",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    rustc_env = MAINNET_CANISTER_ENV,
-    version = "9.0.3",
-    deps = LIB_DEPENDENCIES + [":build_script"],
-)
+MAINNET_NNS_CANISTER_DATA = [
+    "@mainnet_canisters//:cycles_ledger_index.wasm.gz",
+    "@mainnet_canisters//:sns_archive.wasm.gz",
+    "@mainnet_canisters//:sns_index.wasm.gz",
+    "@mainnet_canisters//:sns_ledger.wasm.gz",
+    "@mainnet_canisters//:index.wasm.gz",
+    "@mainnet_canisters//:ledger.wasm.gz",
+    "@mainnet_canisters//:cycles-minting.wasm.gz",
+    "@mainnet_canisters//:registry.wasm.gz",
+    "@mainnet_canisters//:root.wasm.gz",
+    "@mainnet_canisters//:sns-wasm.wasm.gz",
+    "@mainnet_canisters//:sns_governance.wasm.gz",
+    "@mainnet_canisters//:sns_root.wasm.gz",
+    "@mainnet_canisters//:swap.wasm.gz",
+    "@mainnet_canisters//:governance-canister_test.wasm.gz",
+    "//rs/migration_canister:migration-canister",  # the migration canister is not yet deployed to the ICP mainnet
+]
+
+MAINNET_NNS_CANISTER_ENV = {
+    "REGISTRY_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:registry.wasm.gz)",
+    "CYCLES_MINTING_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:cycles-minting.wasm.gz)",
+    "ICP_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:ledger.wasm.gz)",
+    "ICP_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:index.wasm.gz)",
+    "CYCLES_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:cycles_ledger_index.wasm.gz)",
+    "GOVERNANCE_TEST_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:governance-canister_test.wasm.gz)",
+    "ROOT_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:root.wasm.gz)",
+    "SNS_WASM_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:sns-wasm.wasm.gz)",
+    "SNS_ROOT_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:sns_root.wasm.gz)",
+    "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:sns_governance.wasm.gz)",
+    "SNS_SWAP_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:swap.wasm.gz)",
+    "SNS_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:sns_ledger.wasm.gz)",
+    "SNS_LEDGER_ARCHIVE_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:sns_archive.wasm.gz)",
+    "SNS_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:sns_index.wasm.gz)",
+    "MIGRATION_CANISTER_WASM_PATH": "$(location //rs/migration_canister:migration-canister)",
+}
+
+[
+    cargo_build_script(
+        name = "build_script" + name_suffix,
+        srcs = ["build.rs"],
+        aliases = ALIASES,
+        build_script_env = EXTERNAL_CANISTER_ENV | nns_canister_env,
+        data = EXTERNAL_CANISTER_DATA + nns_canister_data + [
+            "templates/dashboard.html",
+        ],
+        deps = BUILD_DEPENDENCIES,
+    )
+    for (name_suffix, nns_canister_data, nns_canister_env) in [
+        ("_head_nns", HEAD_NNS_CANISTER_DATA, HEAD_NNS_CANISTER_ENV),
+        ("", MAINNET_NNS_CANISTER_DATA, MAINNET_NNS_CANISTER_ENV),
+    ]
+]
+
+[
+    rust_library(
+        name = "pocket-ic-server-lib" + name_suffix,
+        testonly = True,
+        srcs = [
+            "src/beta_features.rs",
+            "src/external_canister_types.rs",
+            "src/lib.rs",
+            "src/pocket_ic.rs",
+        ] + glob([
+            "src/state_api/**/*.rs",
+        ]),
+        compile_data = EXTERNAL_CANISTER_DATA + nns_canister_data,
+        crate_name = "pocket_ic_server",
+        proc_macro_deps = MACRO_DEPENDENCIES,
+        rustc_env = EXTERNAL_CANISTER_ENV | nns_canister_env,
+        version = "10.0.0",
+        deps = LIB_DEPENDENCIES + [":build_script"],
+    )
+    for (name_suffix, nns_canister_data, nns_canister_env) in [
+        ("-head-nns", HEAD_NNS_CANISTER_DATA, HEAD_NNS_CANISTER_ENV),
+        ("", MAINNET_NNS_CANISTER_DATA, MAINNET_NNS_CANISTER_ENV),
+    ]
+]
+
+[
+    rust_binary(
+        name = "pocket-ic-server" + name_suffix,
+        testonly = True,
+        srcs = ["src/main.rs"],
+        compile_data = ["src/mainnet_routing_table.json"],  # generated by running `ic-admin get-routing-table --json`
+        proc_macro_deps = MACRO_DEPENDENCIES,
+        # TODO: restrict the visibility
+        visibility = ["//visibility:public"],
+        deps = LIB_DEPENDENCIES + [
+            ":pocket-ic-server-lib" + name_suffix,
+            "//rs/canister_sandbox:build_script",
+        ],
+    )
+    for name_suffix in [
+        "-head-nns",
+        "",
+    ]
+]
 
 rust_ic_test(
     name = "pocket-ic-server-lib-test",
@@ -243,8 +318,8 @@ rust_test(
     name = "external_types_tests",
     size = "small",
     srcs = ["tests/external_types_tests.rs"],
-    data = MAINNET_CANISTER_DATA,
-    rustc_env = MAINNET_CANISTER_ENV,
+    data = EXTERNAL_CANISTER_DATA + MAINNET_NNS_CANISTER_DATA,
+    rustc_env = EXTERNAL_CANISTER_ENV | MAINNET_NNS_CANISTER_ENV,
     # this test is manual to not block automatic PR merge
     # bumping mainnet canister versions
     # from which the external types are derived
@@ -256,6 +331,7 @@ rust_test(
     rust_test(
         name = name,
         size = "medium",
+        timeout = "long",
         srcs = [
             "tests/common.rs",
             "tests/" + name + ".rs",
@@ -275,17 +351,9 @@ rust_test(
         tags = [
             "cpu:8",
             # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
-            #  ---- test_http_gateway stdout ----
-            #  thread 'test_http_gateway' panicked at rs/pocket_ic_server/tests/test.rs:383:48:
-            #  called `Result::unwrap()` on an `Err` value: reqwest::Error {
-            #    kind: Request, url: "http://7tjcv-pp777-77776-qaaaa-cai.raw.localhost:49380/",
-            #    source: hyper_util::client::legacy::Error(
-            #      Connect,
-            #      ConnectError("tcp connect error", Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" })
-            #    )
-            #  }
+            # Failed to bind PocketIC server to address 127.0.0.1:0
             "requires-network",
-            "test_macos",
+            "test_all_platforms",
         ],
         deps = TEST_DEPENDENCIES,
     )
@@ -296,37 +364,7 @@ rust_test(
 ]
 
 rust_test(
-    name = "spec_test",
-    # the test sometimes times out on CI with default timeout
-    # of "moderate" (5 minutes) - 2025-07-03
-    timeout = "long",
-    srcs = [
-        "tests/common.rs",
-        "tests/spec_test.rs",
-    ],
-    data = [
-        ":pocket-ic-server",
-        "//hs/spec_compliance:ic-ref-test",
-        "//rs/tests/httpbin-rs:httpbin",
-        "//rs/tests/research:ic-hs",
-        "//rs/universal_canister/impl:universal_canister.wasm.gz",
-    ],
-    env = {
-        "HTTPBIN_BIN": "$(rootpath //rs/tests/httpbin-rs:httpbin)",
-        "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
-        "IC_REF_TEST_ROOT": "rs/tests/research/ic-hs",
-        "IC_REF_TEST_BIN": "$(rootpath //hs/spec_compliance:ic-ref-test)",
-        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
-    },
-    tags = [
-        "cpu:8",
-    ],
-    deps = SPEC_TEST_DEPENDENCIES,
-)
-
-rust_test(
     name = "bitcoin_integration_tests",
-    size = "small",
     srcs = [
         "tests/bitcoin_integration_tests.rs",
     ],
@@ -335,21 +373,38 @@ rust_test(
         ":pocket-ic-server",
         "//:bitcoind",
         "@bitcoin_example_canister//file",
-        "@btc_canister//file",
         "@mozilla_root_ca_store//file",
     ],
     env = {
         "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
-        "BASIC_BITCOIN_WASM": "$(rootpath @bitcoin_example_canister//file)",
+        "BITCOIN_EXAMPLE_CANISTER_WASM": "$(rootpath @bitcoin_example_canister//file)",
         "BITCOIND_BIN": "$(rootpath //:bitcoind)",
-        "BTC_WASM": "$(rootpath @btc_canister//file)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
     tags = [
-        # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
-        # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
-        "requires-network",
-        "test_macos",
+        "test_all_platforms",
     ],
+    deps = TEST_DEPENDENCIES,
+)
+
+rust_test(
+    name = "dogecoin_integration_tests",
+    srcs = [
+        "tests/dogecoin_integration_tests.rs",
+    ],
+    aliases = {},
+    data = [
+        ":pocket-ic-server",
+        "//:dogecoind",
+        "@dogecoin_example_canister//file",
+        "@mozilla_root_ca_store//file",
+    ],
+    env = {
+        "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
+        "DOGECOIN_EXAMPLE_CANISTER_WASM": "$(rootpath @dogecoin_example_canister//file)",
+        "DOGECOIND_BIN": "$(rootpath //:dogecoind)",
+        "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
+    },
+    tags = [],
     deps = TEST_DEPENDENCIES,
 )

@@ -2,39 +2,34 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/config",
-    "//rs/interfaces",
-    "//rs/interfaces/state_manager",
-    "//rs/monitoring/logger",
-    "//rs/monitoring/metrics",
-    "//rs/replicated_state",
-    "//rs/types/types",
-    "@crate_index//:crossbeam-channel",
-    "@crate_index//:prometheus",
-    "@crate_index//:slog",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/interfaces/state_manager/mocks",
-    "//rs/test_utilities",
-    "//rs/test_utilities/state",
-    "//rs/test_utilities/time",
-    "//rs/types/types_test_utils",
-]
-
 rust_library(
     name = "query_stats",
     srcs = glob(["src/**"]),
     crate_name = "ic_query_stats",
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/interfaces",
+        "//rs/interfaces/state_manager",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/replicated_state",
+        "//rs/types/types",
+        "@crate_index//:crossbeam-channel",
+        "@crate_index//:prometheus",
+        "@crate_index//:slog",
+    ],
 )
 
 rust_test(
     name = "query_stats_test",
     crate = ":query_stats",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/interfaces/state_manager",
+        "//rs/interfaces/state_manager/mocks",
+        "//rs/test_utilities/state",
+        "//rs/types/types_test_utils",
+    ],
 )

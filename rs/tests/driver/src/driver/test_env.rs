@@ -1,12 +1,12 @@
 use anyhow::{Context, Result};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_registry_local_registry::LocalRegistry;
-use ic_sys::fs::{sync_path, write_atomically, Clobber};
+use ic_sys::fs::{Clobber, sync_path, write_atomically};
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
-use slog::{info, o, warn, Drain, Logger};
+use serde::de::DeserializeOwned;
+use slog::{Drain, Logger, info, o, warn};
 use slog_async::OverflowStrategy;
 use std::fs::{self, File};
 use std::os::unix::prelude::AsRawFd;
@@ -46,7 +46,7 @@ impl TestEnv {
     pub fn new<P: AsRef<Path>>(path: P, logger: Logger) -> Result<TestEnv> {
         let base_path = PathBuf::from(path.as_ref());
         let log_file = append_and_lock_exclusive(base_path.join("test.log"))?;
-        let file_drain = slog_term::FullFormat::new(slog_term::PlainSyncDecorator::new(log_file))
+        let file_drain = slog_term::FullFormat::new(slog_term::PlainDecorator::new(log_file))
             .build()
             .fuse();
         let file_drain = slog_async::Async::new(file_drain)
@@ -69,8 +69,8 @@ impl TestEnv {
 
     pub fn read_json_object<T: DeserializeOwned, P: AsRef<Path>>(&self, p: P) -> Result<T> {
         let path = self.get_json_path(&p);
-        let file = File::open(&path).with_context(|| format!("Could not open: {:?}", path))?;
-        serde_json::from_reader(file).with_context(|| format!("{:?}: Could not read json.", path))
+        let file = File::open(&path).with_context(|| format!("Could not open: {path:?}"))?;
+        serde_json::from_reader(file).with_context(|| format!("{path:?}: Could not read json."))
     }
 
     pub fn write_json_object<T: Serialize, P: AsRef<Path>>(&self, p: P, t: &T) -> Result<()> {
@@ -85,7 +85,7 @@ impl TestEnv {
         write_atomically(&path, Clobber::Yes, |buf| {
             serde_json::to_writer(buf, t).map_err(|e| std::io::Error::other(e.to_string()))
         })
-        .with_context(|| format!("{:?}: Could not write json object.", path))
+        .with_context(|| format!("{path:?}: Could not write json object."))
     }
 
     pub fn get_path<P: AsRef<Path>>(&self, p: P) -> PathBuf {
@@ -166,7 +166,7 @@ impl TestEnv {
         let mut path = self.get_path(&p);
         let new_ext = match path.extension().and_then(|x| x.to_str()) {
             Some("json") => return path,
-            Some(x) => format!("{}.json", x),
+            Some(x) => format!("{x}.json"),
             _ => "json".to_string(),
         };
         path.set_extension(new_ext);
@@ -233,16 +233,17 @@ pub trait RequiredHostFeaturesFromCmdLine {
 
 impl RequiredHostFeaturesFromCmdLine for TestEnv {
     fn read_host_features(&self, context: &str) -> Option<Vec<HostFeature>> {
-        if let Ok(host_features_from_command_line) = Vec::<HostFeature>::try_read_attribute(self) {
-            warn!(
-                self.logger(),
-                "Using host features supplied on the command line ({:?}) for {}, overriding others.",
-                &host_features_from_command_line,
-                context
-            );
-            Some(host_features_from_command_line)
-        } else {
-            None
+        match Vec::<HostFeature>::try_read_attribute(self) {
+            Ok(host_features_from_command_line) => {
+                warn!(
+                    self.logger(),
+                    "Using host features supplied on the command line ({:?}) for {}, overriding others.",
+                    &host_features_from_command_line,
+                    context
+                );
+                Some(host_features_from_command_line)
+            }
+            _ => None,
         }
     }
 }
@@ -290,7 +291,7 @@ impl HasIcPrepDir for TestEnv {
         if self.prep_dir(name).is_some() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
-                format!("prep-directory for '{}' already exists", name),
+                format!("prep-directory for '{name}' already exists"),
             ));
         }
         let p = ic_prep_path(self.base_path(), name);
@@ -311,7 +312,7 @@ fn ic_prep_path(base_path: PathBuf, name: &str) -> PathBuf {
     let dir_name = if name.is_empty() {
         "ic_prep".to_string()
     } else {
-        format!("ic_prep_{}", name)
+        format!("ic_prep_{name}")
     };
     base_path.join(dir_name)
 }
@@ -328,16 +329,21 @@ fn append_and_lock_exclusive<P: AsRef<Path>>(p: P) -> Result<File> {
 
 pub trait SshKeyGen {
     /// Generates an SSH key-pair for the given user and stores it in self.
-    fn ssh_keygen(&self) -> Result<()>;
+    fn ssh_keygen_for_user(&self, username: &str) -> Result<()>;
+
+    /// Generates a key-pair for the default user.
+    fn ssh_keygen(&self) -> Result<()> {
+        self.ssh_keygen_for_user(SSH_USERNAME)
+    }
 }
 
 impl SshKeyGen for TestEnv {
     /// Generates an SSH key-pair for the given user and stores it in the TestEnv.
-    fn ssh_keygen(&self) -> Result<()> {
+    fn ssh_keygen_for_user(&self, username: &str) -> Result<()> {
         let ssh_authorized_pub_keys_dir = self.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
         let ssh_authorized_priv_key_dir = self.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
 
-        let priv_key = ssh_authorized_priv_key_dir.join(SSH_USERNAME);
+        let priv_key = ssh_authorized_priv_key_dir.join(username);
 
         if !priv_key.exists() {
             fs::create_dir_all(ssh_authorized_pub_keys_dir.clone())?;
@@ -350,7 +356,7 @@ impl SshKeyGen for TestEnv {
                 .arg("-N")
                 .arg("")
                 .arg("-C")
-                .arg(SSH_USERNAME)
+                .arg(username)
                 .arg("-f")
                 .arg(priv_key.clone())
                 .spawn()?;
@@ -359,7 +365,7 @@ impl SshKeyGen for TestEnv {
                 .expect("Expected ssh-keygen to finish successfully");
 
             let orig_pub_key = priv_key.with_extension("pub");
-            let final_pub_key = ssh_authorized_pub_keys_dir.join(SSH_USERNAME);
+            let final_pub_key = ssh_authorized_pub_keys_dir.join(username);
             fs::rename(orig_pub_key, final_pub_key)?;
         }
 

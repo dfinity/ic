@@ -79,7 +79,7 @@ pub fn serve_metrics(
         Err(err) => HttpResponse {
             status: 500_u16.into(),
             headers: vec![],
-            body: format!("Failed to encode metrics: {}", err).into(),
+            body: format!("Failed to encode metrics: {err}").into(),
         },
     }
 }
@@ -261,7 +261,7 @@ impl LogsRequest {
     fn skip_old_log_entries<'a>(
         &self,
         log_buffer: &'a LogBuffer,
-    ) -> impl Iterator<Item = &'a LogEntry> {
+    ) -> impl Iterator<Item = &'a LogEntry> + use<'a> {
         let max_skip_timestamp = self.time;
         log_buffer
             .entries_partition_point(move |log_entry| log_entry.timestamp <= max_skip_timestamp)
@@ -292,8 +292,7 @@ impl TryFrom<CanisterHttpRequestArgument> for LogsRequest {
             Ok(severity) => severity,
             Err(err) => {
                 defects.push(format!(
-                    "Invalid value for query parameter `severity` ({}): {}",
-                    severity, err,
+                    "Invalid value for query parameter `severity` ({severity}): {err}",
                 ));
                 // Dummy value; won't actually be used, because defects is now nonempty.
                 LogSeverity::Info
@@ -304,8 +303,7 @@ impl TryFrom<CanisterHttpRequestArgument> for LogsRequest {
             Ok(time) => time,
             Err(err) => {
                 defects.push(format!(
-                    "Invalid value for query parameter `time` ({}): {}",
-                    time, err,
+                    "Invalid value for query parameter `time` ({time}): {err}",
                 ));
                 // Dummy value; won't actually be used, because defects is now nonempty.
                 0
@@ -363,7 +361,7 @@ impl FromStr for LogSeverity {
         let severity = match name {
             "Info" => Self::Info,
             "Error" => Self::Error,
-            _ => return Err(format!("Unknown log severity name: {}", name)),
+            _ => return Err(format!("Unknown log severity name: {name}")),
         };
 
         Ok(severity)
@@ -377,7 +375,7 @@ impl Display for LogSeverity {
             Self::Error => "Error",
         };
 
-        write!(formatter, "{}", s)
+        write!(formatter, "{s}")
     }
 }
 
@@ -405,7 +403,7 @@ where
 
     /// Based on the timestamp of the head log entry; earlier entries have
     /// higher priority.
-    fn priority(&self) -> impl Ord + Debug {
+    fn priority(&self) -> impl Ord + Debug + use<I> {
         Reverse(
             self.head
                 .map(|log_entry| log_entry.timestamp)

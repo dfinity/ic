@@ -6,6 +6,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::Priority;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
@@ -17,7 +18,6 @@ pub mod invariants;
 
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
-use crate::logs::P0;
 use crate::reimbursement::{
     InvalidTransactionError, ReimburseWithdrawalTask, ReimbursedError, ReimbursedWithdrawal,
     ReimbursedWithdrawalResult, WithdrawalReimbursementReason,
@@ -25,13 +25,12 @@ use crate::reimbursement::{
 use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use crate::updates::update_balance::SuspendedUtxo;
 use crate::{
-    address::BitcoinAddress, compute_min_withdrawal_amount, ECDSAPublicKey, GetUtxosCache, Network,
-    Timestamp, WithdrawalFee,
+    ECDSAPublicKey, GetUtxosCache, Network, Timestamp, WithdrawalFee, address::BitcoinAddress,
 };
 use candid::{CandidType, Deserialize, Principal};
+use canlog::log;
 use ic_base_types::CanisterId;
-use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Txid, Utxo};
-use ic_canister_log::log;
+use ic_btc_interface::{OutPoint, Txid, Utxo};
 use ic_utils_ensure::ensure_eq;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
@@ -430,6 +429,9 @@ pub struct CkBtcMinterState {
 
     pub last_fee_per_vbyte: Vec<u64>,
 
+    /// The last median fee per vbyte computed from `last_fee_per_vbyte`.
+    pub last_median_fee_per_vbyte: Option<u64>,
+
     /// The fee for a single Bitcoin check request.
     pub check_fee: u64,
 
@@ -565,7 +567,7 @@ impl CkBtcMinterState {
                 self.min_confirmations = min_conf;
             } else {
                 log!(
-                    P0,
+                    Priority::Info,
                     "Didn't increase min_confirmations to {} (current value: {})",
                     min_conf,
                     self.min_confirmations
@@ -632,7 +634,7 @@ impl CkBtcMinterState {
         target: Option<Account>,
     ) -> Vec<BtcRetrievalStatusV2> {
         let target_account = target.unwrap_or(Account {
-            owner: ic_cdk::caller(),
+            owner: ic_cdk::api::msg_caller(),
             subaccount: None,
         });
 
@@ -749,20 +751,17 @@ impl CkBtcMinterState {
             return true;
         }
 
-        if let Some(req) = self.pending_retrieve_btc_requests.first() {
-            if self.max_time_in_queue_nanos < now.saturating_sub(req.received_at) {
-                return true;
-            }
+        if let Some(req) = self.pending_retrieve_btc_requests.first()
+            && self.max_time_in_queue_nanos < now.saturating_sub(req.received_at)
+        {
+            return true;
         }
 
-        if let Some(req) = self.pending_retrieve_btc_requests.last() {
-            if let Some(last_submission_time) = self.last_transaction_submission_time_ns {
-                if self.max_time_in_queue_nanos
-                    < req.received_at.saturating_sub(last_submission_time)
-                {
-                    return true;
-                }
-            }
+        if let Some(req) = self.pending_retrieve_btc_requests.last()
+            && let Some(last_submission_time) = self.last_transaction_submission_time_ns
+            && self.max_time_in_queue_nanos < req.received_at.saturating_sub(last_submission_time)
+        {
+            return true;
         }
 
         false
@@ -845,8 +844,7 @@ impl CkBtcMinterState {
             self.stuck_transactions.swap_remove(pos)
         } else {
             ic_cdk::trap(format!(
-                "Attempted to finalized a non-existent transaction {}",
-                txid
+                "Attempted to finalized a non-existent transaction {txid}"
             ));
         };
 
@@ -1332,9 +1330,8 @@ impl CkBtcMinterState {
 
         if let Some(tx_status) = self.requests_in_flight.get(&ledger_burn_index) {
             panic!(
-                "BUG: Cannot reimburse withdrawal request {} since there is a transaction for that withdrawal with status: {:?}",
-                ledger_burn_index,
-                tx_status)
+                "BUG: Cannot reimburse withdrawal request {ledger_burn_index} since there is a transaction for that withdrawal with status: {tx_status:?}"
+            )
         }
 
         for submitted_tx in self
@@ -1348,9 +1345,8 @@ impl CkBtcMinterState {
                 .any(|req| req.block_index == ledger_burn_index)
             {
                 panic!(
-                    "BUG: Cannot reimburse withdrawal request {} since there is a submitted transaction for that withdrawal: {:?}",
-                    ledger_burn_index,
-                    submitted_tx);
+                    "BUG: Cannot reimburse withdrawal request {ledger_burn_index} since there is a submitted transaction for that withdrawal: {submitted_tx:?}"
+                );
             }
         }
         self.pending_withdrawal_reimbursements
@@ -1517,54 +1513,6 @@ impl CkBtcMinterState {
         })
     }
 
-    pub fn estimate_median_fee_per_vbyte(&self) -> Option<MillisatoshiPerByte> {
-        /// The default fee we use on regtest networks.
-        const DEFAULT_REGTEST_FEE: MillisatoshiPerByte = 5_000;
-
-        let median_fee = match &self.btc_network {
-            Network::Mainnet | Network::Testnet => {
-                if self.last_fee_per_vbyte.len() < 100 {
-                    return None;
-                }
-                Some(self.last_fee_per_vbyte[50])
-            }
-            Network::Regtest => Some(DEFAULT_REGTEST_FEE),
-        };
-        median_fee.map(|f| f.max(self.minimum_fee_per_vbyte()))
-    }
-
-    pub fn update_median_fee_per_vbyte(
-        &mut self,
-        fees: Vec<MillisatoshiPerByte>,
-    ) -> Option<MillisatoshiPerByte> {
-        if fees.len() < 100 {
-            log!(
-                P0,
-                "[update_median_fee_per_vbyte]: not enough data points ({}) to compute the fee",
-                fees.len()
-            );
-            return None;
-        }
-        self.last_fee_per_vbyte = fees;
-        let median_fee = self
-            .estimate_median_fee_per_vbyte()
-            .expect("BUG: last_fee_per_vbyte set");
-        self.fee_based_retrieve_btc_min_amount =
-            compute_min_withdrawal_amount(median_fee, self.retrieve_btc_min_amount, self.check_fee);
-        Some(median_fee)
-    }
-
-    /// An estimated fee per vbyte of 142 millistatoshis per vbyte was selected around 2025.06.21 01:09:50 UTC
-    /// for Bitcoin Mainnet, whereas the median fee around that time should have been 2_000.
-    /// Until we know the root cause, we ensure that the estimated fee has a meaningful minimum value.
-    pub const fn minimum_fee_per_vbyte(&self) -> MillisatoshiPerByte {
-        match &self.btc_network {
-            Network::Mainnet => 1_500,
-            Network::Testnet => 1_000,
-            Network::Regtest => 0,
-        }
-    }
-
     /// Quarantine the reimbursement request identified by its index to prevent double minting.
     /// WARNING!: It's crucial that this method does not panic,
     /// since it's called inside the clean-up callback, when an unexpected panic did occur before.
@@ -1589,10 +1537,7 @@ impl CkBtcMinterState {
             .pending_withdrawal_reimbursements
             .remove(&burn_index)
             .unwrap_or_else(|| {
-                panic!(
-                    "BUG: missing pending reimbursement of withdrawal {}.",
-                    burn_index
-                )
+                panic!("BUG: missing pending reimbursement of withdrawal {burn_index}.")
             });
         let reimbursed = ReimbursedWithdrawal {
             account: reimbursement.account,
@@ -1604,8 +1549,7 @@ impl CkBtcMinterState {
             self.reimbursed_withdrawals
                 .insert(burn_index, Ok(reimbursed)),
             None,
-            "BUG: Reimbursement of withdrawal {:?} was already completed!",
-            reimbursement
+            "BUG: Reimbursement of withdrawal {reimbursement:?} was already completed!"
         );
     }
 }
@@ -1808,6 +1752,7 @@ impl From<InitArgs> for CkBtcMinterState {
             is_distributing_fee: false,
             mode: args.mode,
             last_fee_per_vbyte: vec![1; 100],
+            last_median_fee_per_vbyte: Some(1),
             check_fee: args
                 .check_fee
                 .unwrap_or(crate::lifecycle::init::DEFAULT_CHECK_FEE),

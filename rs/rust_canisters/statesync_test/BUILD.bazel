@@ -10,7 +10,6 @@ DEPENDENCIES = [
     "@crate_index//:ic-cdk",
     "@crate_index//:lazy_static",
     "@crate_index//:rand",
-    "@crate_index//:rand_pcg",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
 ]

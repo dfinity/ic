@@ -3,11 +3,11 @@ use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_P
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
-    manage_neuron_response::Command,
-    proposal_submission_helpers::create_external_update_proposal_candid, NnsFunction,
+    NnsFunction, manage_neuron_response::Command,
+    proposal_submission_helpers::create_external_update_proposal_candid,
 };
 use ic_nns_test_utils::{
-    common::{build_root_wasm, modify_wasm_bytes, NnsInitPayloadsBuilder},
+    common::{NnsInitPayloadsBuilder, build_root_wasm, modify_wasm_bytes},
     governance::HardResetNnsRootToVersionPayload,
     state_test_helpers::{
         nns_governance_make_proposal, nns_wait_for_proposal_execution, setup_nns_canisters,
@@ -59,10 +59,9 @@ fn test_reset_root_with_governance_proposal() {
 
     let proposal_id = match response.command.unwrap() {
         Command::MakeProposal(response) => response.proposal_id.unwrap(),
-        other_response => panic!(
-            "Response not expected MakeProposal, instead: {:?} ",
-            other_response
-        ),
+        other_response => {
+            panic!("Response not expected MakeProposal, instead: {other_response:?} ")
+        }
     };
 
     nns_wait_for_proposal_execution(&state_machine, proposal_id.id);

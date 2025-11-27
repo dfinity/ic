@@ -4,8 +4,8 @@ use crate::Secp256k1KeyPair;
 impl Secp256k1KeyPair {
     /// Parses a secp256k1 key pair from PEM.
     pub fn from_pem(pem: &str) -> Result<Self, String> {
-        let sk = ic_secp256k1::PrivateKey::deserialize_rfc5915_pem(pem)
-            .map_err(|e| format!("{:?}", e))?;
+        let sk =
+            ic_secp256k1::PrivateKey::deserialize_rfc5915_pem(pem).map_err(|e| format!("{e:?}"))?;
 
         let pk = sk.public_key();
 
@@ -14,8 +14,8 @@ impl Secp256k1KeyPair {
 
     /// Parses a secp256k1 key pair from DER in RFC 5915 format
     pub fn from_der(der: &[u8]) -> Result<Self, String> {
-        let sk = ic_secp256k1::PrivateKey::deserialize_rfc5915_der(der)
-            .map_err(|e| format!("{:?}", e))?;
+        let sk =
+            ic_secp256k1::PrivateKey::deserialize_rfc5915_der(der).map_err(|e| format!("{e:?}"))?;
 
         let pk = sk.public_key();
 

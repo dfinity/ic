@@ -1,4 +1,5 @@
 use crate::crypto::ErrorReproducibility;
+use ic_types::crypto::CryptoError;
 use ic_types::crypto::canister_threshold_sig::error::{
     EcdsaPresignatureQuadrupleCreationError, IDkgParamsValidationError, IDkgVerifyComplaintError,
     IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyInitialDealingsError,
@@ -12,7 +13,6 @@ use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRe
 use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgLoadTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
 use ic_types::crypto::vetkd::{VetKdKeyShareVerificationError, VetKdKeyVerificationError};
-use ic_types::crypto::CryptoError;
 use ic_types::registry::RegistryClientError;
 
 #[cfg(test)]

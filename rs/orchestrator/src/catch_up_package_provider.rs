@@ -36,21 +36,21 @@ use crate::{
     utils::https_endpoint_to_url,
 };
 use http_body_util::{BodyExt, Full};
-use hyper::{body::Bytes, Method, Request, StatusCode};
+use hyper::{Method, Request, StatusCode, body::Bytes};
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_protobuf::{registry::node::v1::NodeRecord, types::v1 as pb};
 use ic_sys::fs::write_protobuf_using_tmp_file;
 use ic_types::{
+    Height, NodeId, RegistryVersion, SubnetId,
     consensus::{
+        HasHeight, HasVersion,
         catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
-        HasHeight,
     },
     crypto::*,
-    Height, NodeId, RegistryVersion, SubnetId,
 };
 use prost::Message;
 use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc, time::Duration};
@@ -66,7 +66,7 @@ pub(crate) struct CatchUpPackageProvider {
     registry: Arc<RegistryHelper>,
     cup_dir: PathBuf,
     crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
-    crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
+    crypto_tls_config: Arc<dyn TlsConfig>,
     logger: ReplicaLogger,
     node_id: NodeId,
     #[allow(clippy::disallowed_types)]
@@ -82,7 +82,7 @@ impl CatchUpPackageProvider {
         registry: Arc<RegistryHelper>,
         cup_dir: PathBuf,
         crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
-        crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
+        crypto_tls_config: Arc<dyn TlsConfig>,
         logger: ReplicaLogger,
         node_id: NodeId,
     ) -> Self {
@@ -101,7 +101,7 @@ impl CatchUpPackageProvider {
         registry: Arc<RegistryHelper>,
         cup_dir: PathBuf,
         crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
-        crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
+        crypto_tls_config: Arc<dyn TlsConfig>,
         logger: ReplicaLogger,
         node_id: NodeId,
         initial_backoff: Duration,
@@ -227,10 +227,7 @@ impl CatchUpPackageProvider {
         subnet_id: SubnetId,
     ) -> Result<Option<(pb::CatchUpPackage, CatchUpPackage)>, String> {
         let http = node_record.clone().http.ok_or_else(|| {
-            format!(
-                "Node {} record's http endpoint is None: {:?}",
-                node_id, node_record
-            )
+            format!("Node {node_id} record's http endpoint is None: {node_record:?}")
         })?;
         let mut uri = https_endpoint_to_url(&http)?;
         uri.path_segments_mut()
@@ -247,7 +244,7 @@ impl CatchUpPackageProvider {
             return Ok(None);
         };
         let cup = CatchUpPackage::try_from(&protobuf)
-            .map_err(|e| format!("Failed to read CUP from peer at url {}: {:?}", uri, e))?;
+            .map_err(|e| format!("Failed to read CUP from peer at url {uri}: {e:?}"))?;
 
         self.crypto
             .verify_combined_threshold_sig_by_public_key(
@@ -256,7 +253,7 @@ impl CatchUpPackageProvider {
                 subnet_id,
                 cup.content.block.get_value().context.registry_version,
             )
-            .map_err(|e| format!("Failed to verify CUP signature at: {:?} with: {:?}", uri, e))?;
+            .map_err(|e| format!("Failed to verify CUP signature at: {uri:?} with: {e:?}"))?;
 
         Ok(Some((protobuf, cup)))
     }
@@ -280,12 +277,7 @@ impl CatchUpPackageProvider {
         let client_config = self
             .crypto_tls_config
             .client_config(*node_id, self.registry.get_latest_version())
-            .map_err(|e| {
-                format!(
-                    "Failed to create tls client config for {}: {:?}",
-                    node_id, e
-                )
-            })?;
+            .map_err(|e| format!("Failed to create tls client config for {node_id}: {e:?}"))?;
 
         let https = HttpsConnectorBuilder::new()
             .with_tls_config(client_config)
@@ -305,14 +297,14 @@ impl CatchUpPackageProvider {
                     .header(hyper::header::CONTENT_TYPE, "application/cbor")
                     .uri(&url)
                     .body(Full::from(body))
-                    .map_err(|e| format!("Failed to create request to {}: {:?}", url, e))?,
+                    .map_err(|e| format!("Failed to create request to {url}: {e:?}"))?,
             ),
         );
 
         let res = req
             .await
-            .map_err(|e| format!("Querying CUP endpoint at {} timed out: {:?}", url, e))?
-            .map_err(|e| format!("Failed to query CUP endpoint at {}: {:?}", url, e))?;
+            .map_err(|e| format!("Querying CUP endpoint at {url} timed out: {e:?}"))?
+            .map_err(|e| format!("Failed to query CUP endpoint at {url}: {e:?}"))?;
 
         let status = res.status();
         let mut backoff = self.backoff.lock().await;
@@ -326,8 +318,7 @@ impl CatchUpPackageProvider {
                     Ok(bytes) => bytes.to_bytes(),
                     Err(e) => {
                         return Err(format!(
-                            "Failed to convert the response body to bytes: {:?}",
-                            e
+                            "Failed to convert the response body to bytes: {e:?}"
                         ));
                     }
                 }
@@ -349,9 +340,9 @@ impl CatchUpPackageProvider {
             // Replicas should return `NO_CONTENT` if their own CUP isn't higher than `param`
             StatusCode::NO_CONTENT => Ok(None),
             StatusCode::OK => pb::CatchUpPackage::decode(&bytes[..])
-                .map_err(|e| format!("Failed to deserialize CUP from protobuf: {:?}", e))
+                .map_err(|e| format!("Failed to deserialize CUP from protobuf: {e:?}"))
                 .map(Some),
-            other_status => Err(format!("Status: {}, body: {:?}", other_status, bytes)),
+            other_status => Err(format!("Status: {other_status}, body: {bytes:?}")),
         }
     }
 
@@ -374,9 +365,18 @@ impl CatchUpPackageProvider {
         })?;
         info!(
             self.logger,
-            "Persisting CUP (registry version={}, height={}) to file {}",
+            "Persisting CUP (replica_version={}, registry_version={}, height={}, signed={}, state_hash={}, timestamp={}) to file {}",
+            cup.content.version(),
             cup.content.registry_version(),
-            cup.height(),
+            cup.content.height(),
+            cup.is_signed(),
+            hex::encode(cup.content.state_hash.clone().get().0),
+            cup.content
+                .block
+                .get_value()
+                .context
+                .time
+                .as_nanos_since_unix_epoch(),
             &cup_file_path.display(),
         );
         write_protobuf_using_tmp_file(&cup_file_path, cup_proto).map_err(|e| {
@@ -507,27 +507,27 @@ mod tests {
         catch_up_package_provider::CatchUpPackageProvider, registry_helper::RegistryHelper,
     };
     use assert_matches::assert_matches;
-    use http_body_util::{combinators::BoxBody, StreamBody};
+    use http_body_util::{StreamBody, combinators::BoxBody};
     use hyper::{
+        Response,
         body::{Bytes, Frame},
         server::conn::http2,
         service::service_fn,
-        Response,
     };
     use hyper_util::rt::{TokioExecutor, TokioIo};
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
     use ic_logger::no_op_logger;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_node_record_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_test_utilities::crypto::CryptoReturningOk;
-    use ic_test_utilities_registry::{add_single_subnet_record, SubnetRecordBuilder};
-    use ic_test_utilities_types::ids::{node_test_id, SUBNET_0};
+    use ic_test_utilities_registry::{SubnetRecordBuilder, add_single_subnet_record};
+    use ic_test_utilities_types::ids::{SUBNET_0, node_test_id};
     use rcgen::{CertificateParams, KeyPair};
     use rustls::{
+        ClientConfig, DigitallySignedStruct, ServerConfig, SignatureScheme,
         client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
         pki_types::{CertificateDer, PrivatePkcs8KeyDer, ServerName, UnixTime},
-        ClientConfig, DigitallySignedStruct, ServerConfig, SignatureScheme,
     };
     use std::{
         convert::Infallible,
@@ -768,7 +768,7 @@ mod tests {
     async fn test_fetch_catch_up_package_body_request_times_out() {
         let send_cup = Arc::new(Mutex::new(false));
         let server_addr = start_server(TestService::SendBodyOrStall(send_cup.clone())).await;
-        let url = format!("https://{}", server_addr);
+        let url = format!("https://{server_addr}");
         let tmp_dir = tempfile::tempdir().unwrap();
         let node_id = node_test_id(1);
 
@@ -813,7 +813,7 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_catch_up_package_unresponsive_times_out() {
         let server_addr = start_server(TestService::Unresponsive).await;
-        let url = format!("https://{}", server_addr);
+        let url = format!("https://{server_addr}");
         let tmp_dir = tempfile::tempdir().unwrap();
         let node_id = node_test_id(1);
 
@@ -834,7 +834,7 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_catch_up_package_no_content() {
         let server_addr = start_server(TestService::NoContent).await;
-        let url = format!("https://{}", server_addr);
+        let url = format!("https://{server_addr}");
         let tmp_dir = tempfile::tempdir().unwrap();
         let node_id = node_test_id(1);
 
@@ -855,7 +855,7 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_catch_up_package_bad_request() {
         let server_addr = start_server(TestService::BadRequest).await;
-        let url = format!("https://{}", server_addr);
+        let url = format!("https://{server_addr}");
         let tmp_dir = tempfile::tempdir().unwrap();
         let node_id = node_test_id(1);
 

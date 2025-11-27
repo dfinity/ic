@@ -17,8 +17,8 @@ Success::
 end::catalog[] */
 #![allow(deprecated)]
 
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use candid::Principal;
 use canister_http::*;
 use canister_test::Canister;
@@ -29,8 +29,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    load_wasm, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, READY_WAIT_TIMEOUT,
-    RETRY_BACKOFF,
+    HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, READY_WAIT_TIMEOUT,
+    RETRY_BACKOFF, load_wasm,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util;
@@ -40,8 +40,8 @@ use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::info;
 use std::env;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -152,7 +152,7 @@ pub fn test(env: TestEnv) {
                     >,
                     RemoteHttpRequest {
                         request: UnvalidatedCanisterHttpRequestArgs {
-                            url: format!("https://[{webserver_ipv6}]:20443/anything/{n}"),
+                            url: format!("https://[{webserver_ipv6}]/anything/{n}"),
                             headers: vec![],
                             method: HttpMethod::GET,
                             body: Some("".as_bytes().to_vec()),
@@ -165,6 +165,7 @@ pub fn test(env: TestEnv) {
                             }),
                             max_response_bytes: None,
                             is_replicated: None,
+                            pricing_version: None,
                         },
                         cycles: 500_000_000_000,
                     },
@@ -270,7 +271,7 @@ pub fn test(env: TestEnv) {
                             Option<Result<RemoteHttpResponse, (RejectionCode, String)>>,
                             String,
                         >,
-                        format!("https://[{webserver_ipv6}]:20443/anything/{n}"),
+                        format!("https://[{webserver_ipv6}]/anything/{n}"),
                     )
                     .await
                     .expect("Failed to call proxy canister.");

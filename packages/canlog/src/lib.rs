@@ -52,10 +52,10 @@ extern crate self as canlog;
 mod tests;
 mod types;
 
-pub use crate::types::{LogFilter, RegexString, RegexSubstitution, Sort};
+pub use crate::types::{InvalidRegex, LogFilter, RegexString, RegexSubstitution, Sort};
 
 pub use ic_canister_log::{
-    declare_log_buffer, export as export_logs, log as raw_log, GlobalBuffer, Sink,
+    GlobalBuffer, Sink, declare_log_buffer, export as export_logs, log as raw_log,
 };
 use serde::{Deserialize, Serialize};
 
@@ -78,7 +78,7 @@ pub use canlog_derive::LogPriorityLevels;
 /// trait. See the example in the crate documentation.
 #[macro_export]
 macro_rules! log {
-    ($enum_variant:expr, $($args:tt)*) => {
+    ($enum_variant:expr_2021, $($args:tt)*) => {
         {
             use ::canlog::LogPriorityLevels;
             ::canlog::raw_log!($enum_variant.get_sink(), $($args)*);
@@ -231,8 +231,8 @@ fn debug_print<S: std::convert::AsRef<str>>(s: S) {
 /// Format and then print the formatted message
 #[cfg(not(target_family = "wasm"))]
 macro_rules! ic_cdk_println {
-     ($fmt:expr) => (std::println!($fmt));
-     ($fmt:expr, $($arg:tt)*) => (std::println!($fmt, $($arg)*));
+     ($fmt:expr_2021) => (std::println!($fmt));
+     ($fmt:expr_2021, $($arg:tt)*) => (std::println!($fmt, $($arg)*));
  }
 
 #[doc(hidden)]

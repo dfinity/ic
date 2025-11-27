@@ -1,22 +1,23 @@
 use crate::guest::firmware::{MockSevGuestFirmware, SevGuestFirmware};
-use der::pem::LineEnding;
 use der::EncodePem;
-use p384::ecdsa::signature::Signer;
+use der::pem::LineEnding;
 use p384::ecdsa::Signature;
+use p384::ecdsa::signature::Signer;
 use p384::pkcs8::EncodePublicKey;
 use rand::SeedableRng;
 use rsa::RsaPrivateKey;
 use sev::certs::snp::ecdsa::Signature as AttestationReportSignature;
 use sev::firmware::guest::AttestationReport;
+use sev::parser::Encoder;
 use sha2::Sha384;
 use std::str::FromStr;
 use std::time::Duration;
+use x509_cert::Certificate;
 use x509_cert::builder::{Builder, CertificateBuilder, Profile};
 use x509_cert::name::Name;
 use x509_cert::serial_number::SerialNumber;
 use x509_cert::spki::SubjectPublicKeyInfo;
 use x509_cert::time::Validity;
-use x509_cert::Certificate;
 
 /// Builder for creating test attestation reports with customizable fields.
 pub struct AttestationReportBuilder {
@@ -26,7 +27,7 @@ pub struct AttestationReportBuilder {
 impl AttestationReportBuilder {
     pub fn new() -> Self {
         let mut attestation_report = AttestationReport::default();
-        attestation_report.family_id.0[0] = 0x1A;
+        attestation_report.family_id[0] = 0x1A;
         attestation_report.cpuid_fam_id = Some(0x19);
         attestation_report.cpuid_mod_id = Some(0x00);
         attestation_report.version = 3;
@@ -122,7 +123,7 @@ impl FakeAttestationReportSigner {
     ) -> Result<(), std::io::Error> {
         let mut raw_report_bytes = vec![];
         // Write the report without signature to a byte vector.
-        attestation_report.write_bytes(&mut raw_report_bytes)?;
+        attestation_report.encode(&mut raw_report_bytes, ())?;
 
         let measurable_bytes: &[u8] = &raw_report_bytes[..Self::ATTESTATION_REPORT_MEASURABLE_LEN];
         let signature =
@@ -201,7 +202,7 @@ fn convert_signature(signature: &Signature) -> AttestationReportSignature {
     let mut s = [0; 72];
     s[0..48].copy_from_slice(&s_source);
 
-    AttestationReportSignature::new(r.try_into().unwrap(), s.try_into().unwrap())
+    AttestationReportSignature::new(r, s)
 }
 
 #[derive(Clone)]
@@ -277,7 +278,7 @@ impl MockSevGuestFirmwareBuilder {
                 };
 
                 let mut out = vec![];
-                attestation_report.write_bytes(&mut out).unwrap();
+                attestation_report.encode(&mut out, ()).unwrap();
                 Ok(out)
             });
 

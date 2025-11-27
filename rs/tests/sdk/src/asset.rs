@@ -1,4 +1,4 @@
-use backoff::{retry_notify, ExponentialBackoff};
+use backoff::{ExponentialBackoff, retry_notify};
 use candid::Principal;
 use ic_system_test_driver::driver::{ic_gateway_vm::HasIcGatewayVm, test_env::TestEnv};
 use slog::{error, info};
@@ -11,7 +11,10 @@ pub fn get_asset_as_string(
     key: &str,
 ) -> String {
     let log = env.logger();
-    info!(log, "GET asset {key} as string from canister {canister_id} through ic-gateway {ic_gateway_vm_name}");
+    info!(
+        log,
+        "GET asset {key} as string from canister {canister_id} through ic-gateway {ic_gateway_vm_name}"
+    );
     let ic_gateway = env.get_deployed_ic_gateway(ic_gateway_vm_name).unwrap();
     let ic_gateway_url = ic_gateway.get_public_url();
     let ic_gateway_domain = ic_gateway_url.domain().unwrap();

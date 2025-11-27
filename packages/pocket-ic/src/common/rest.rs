@@ -114,11 +114,11 @@ impl std::fmt::Display for RawEffectivePrincipal {
             RawEffectivePrincipal::None => write!(f, "None"),
             RawEffectivePrincipal::SubnetId(subnet_id) => {
                 let principal = Principal::from_slice(subnet_id);
-                write!(f, "SubnetId({})", principal)
+                write!(f, "SubnetId({principal})")
             }
             RawEffectivePrincipal::CanisterId(canister_id) => {
                 let principal = Principal::from_slice(canister_id);
-                write!(f, "CanisterId({})", principal)
+                write!(f, "CanisterId({principal})")
             }
         }
     }
@@ -224,7 +224,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
                 match result {
                     Ok(t) => ApiResponse::Success(t),
                     Err(e) => ApiResponse::Error {
-                        message: format!("Could not parse response: {}", e),
+                        message: format!("Could not parse response: {e}"),
                     },
                 }
             }
@@ -235,7 +235,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
                         ApiResponse::Started { state_label, op_id }
                     }
                     Err(e) => ApiResponse::Error {
-                        message: format!("Could not parse response: {}", e),
+                        message: format!("Could not parse response: {e}"),
                     },
                 }
             }
@@ -246,7 +246,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
                         ApiResponse::Busy { state_label, op_id }
                     }
                     Err(e) => ApiResponse::Error {
-                        message: format!("Could not parse response: {}", e),
+                        message: format!("Could not parse response: {e}"),
                     },
                 }
             }
@@ -255,7 +255,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
                 match result {
                     Ok(e) => ApiResponse::Error { message: e.message },
                     Err(e) => ApiResponse::Error {
-                        message: format!("Could not parse error: {}", e),
+                        message: format!("Could not parse error: {e}"),
                     },
                 }
             }
@@ -546,52 +546,80 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
     }
 }
 
-/// Forward-compatible configuration type used instead of `bool` and `Option<bool>`:
-/// if provided, the corresponding feature is enabled.
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
-pub struct EmptyConfig {}
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub enum IcpConfigFlag {
+    Disabled,
+    Enabled,
+}
 
-/// Specifies nonmainnet features enabled in this instance.
+/// Specifies ICP config of this instance.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
-pub struct NonmainnetFeatures {
-    /// Enables (beta) features (disabled on the ICP mainnet).
-    pub enable_beta_features: Option<EmptyConfig>,
-    /// Disables canister backtraces (enabled on the ICP mainnet).
-    pub disable_canister_backtrace: Option<EmptyConfig>,
-    /// Disables limits on function name length in canister WASM (enabled on the ICP mainnet).
-    pub disable_function_name_length_limits: Option<EmptyConfig>,
-    /// Disables rate-limiting of canister execution (enabled on the ICP mainnet).
+pub struct IcpConfig {
+    /// Beta features (disabled on the ICP mainnet).
+    pub beta_features: Option<IcpConfigFlag>,
+    /// Canister backtraces (enabled on the ICP mainnet).
+    pub canister_backtrace: Option<IcpConfigFlag>,
+    /// Limits on function name length in canister WASM (enabled on the ICP mainnet).
+    pub function_name_length_limits: Option<IcpConfigFlag>,
+    /// Rate-limiting of canister execution (enabled on the ICP mainnet).
     /// Canister execution refers to instructions and memory writes here.
-    pub disable_canister_execution_rate_limiting: Option<EmptyConfig>,
+    pub canister_execution_rate_limiting: Option<IcpConfigFlag>,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub enum IcpFeaturesConfig {
+    /// Default configuration of an ICP feature resembling mainnet configuration as closely as possible.
+    #[default]
+    DefaultConfig,
 }
 
 /// Specifies ICP features enabled by deploying their corresponding system canisters
 /// when creating a PocketIC instance and keeping them up to date
 /// during the PocketIC instance lifetime.
+/// The subnets to which the corresponding system canisters are deployed must be empty,
+/// i.e., their corresponding field in `ExtendedSubnetConfigSet` must be `None`
+/// or `Some(config)` with `config.state_config = SubnetStateConfig::New`.
+/// An ICP feature is enabled if its `IcpFeaturesConfig` is provided, i.e.,
+/// if the corresponding field is not `None`.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct IcpFeatures {
-    pub registry: Option<EmptyConfig>,
+    /// Deploys the NNS registry canister and keeps its content in sync with registry used internally by PocketIC.
+    /// Subnets: NNS.
+    pub registry: Option<IcpFeaturesConfig>,
+    /// Deploys the NNS cycles minting canister, sets ICP/XDR conversion rate, and keeps its subnet lists in sync with PocketIC topology.
     /// If the `cycles_minting` feature is enabled, then the default timestamp of a PocketIC instance is set to 10 May 2021 10:00:01 AM CEST (the smallest value that is strictly larger than the default timestamp hard-coded in the CMC state).
-    pub cycles_minting: Option<EmptyConfig>,
-    pub icp_token: Option<EmptyConfig>,
-    pub cycles_token: Option<EmptyConfig>,
-    pub nns_governance: Option<EmptyConfig>,
-    pub sns: Option<EmptyConfig>,
-    pub ii: Option<EmptyConfig>,
-}
-
-impl IcpFeatures {
-    pub fn all_icp_features() -> Self {
-        Self {
-            registry: Some(EmptyConfig {}),
-            cycles_minting: Some(EmptyConfig {}),
-            icp_token: Some(EmptyConfig {}),
-            cycles_token: Some(EmptyConfig {}),
-            nns_governance: Some(EmptyConfig {}),
-            sns: Some(EmptyConfig {}),
-            ii: Some(EmptyConfig {}),
-        }
-    }
+    /// Subnets: NNS.
+    pub cycles_minting: Option<IcpFeaturesConfig>,
+    /// Deploys the ICP ledger and index canisters and initializes the ICP account of the anonymous principal with 1,000,000,000 ICP.
+    /// Subnets: NNS.
+    pub icp_token: Option<IcpFeaturesConfig>,
+    /// Deploys the cycles ledger and index canisters and initializes the cycles account of the anonymous principal with 2^127 cycles.
+    /// Subnets: II.
+    pub cycles_token: Option<IcpFeaturesConfig>,
+    /// Deploys the NNS governance and root canisters and sets up an initial NNS neuron with 1 ICP stake.
+    /// The initial NNS neuron is controlled by the anonymous principal.
+    /// Subnets: NNS.
+    pub nns_governance: Option<IcpFeaturesConfig>,
+    /// Deploys the SNS-W and aggregator canisters, sets up the SNS subnet list in the SNS-W canister according to PocketIC topology,
+    /// and uploads the SNS canister WASMs to the SNS-W canister.
+    /// Subnets: NNS, SNS.
+    pub sns: Option<IcpFeaturesConfig>,
+    /// Deploys the Internet Identity canister.
+    /// Subnets: II.
+    pub ii: Option<IcpFeaturesConfig>,
+    /// Deploys the NNS frontend dapp. The HTTP gateway must be specified via `http_gateway_config` in `InstanceConfig`
+    /// and the ICP features `cycles_minting`, `icp_token`, `nns_governance`, `sns`, `ii` must all be enabled.
+    /// Subnets: NNS.
+    pub nns_ui: Option<IcpFeaturesConfig>,
+    /// Deploys the Bitcoin canister under the testnet canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai` and configured for the regtest network.
+    /// Subnets: Bitcoin.
+    pub bitcoin: Option<IcpFeaturesConfig>,
+    /// Deploys the Dogecoin canister under the mainnet canister ID `gordg-fyaaa-aaaan-aaadq-cai` and configured for the regtest network.
+    /// Subnets: Bitcoin.
+    pub dogecoin: Option<IcpFeaturesConfig>,
+    /// Deploys the canister migration orchestrator canister.
+    /// Subnets: NNS.
+    pub canister_migration: Option<IcpFeaturesConfig>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -607,15 +635,23 @@ pub enum InitialTime {
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub enum IncompleteStateFlag {
+    #[default]
+    Disabled,
+    Enabled,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct InstanceConfig {
     pub subnet_config_set: ExtendedSubnetConfigSet,
     pub http_gateway_config: Option<InstanceHttpGatewayConfig>,
     pub state_dir: Option<PathBuf>,
-    pub nonmainnet_features: Option<NonmainnetFeatures>,
+    pub icp_config: Option<IcpConfig>,
     pub log_level: Option<String>,
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
+    pub dogecoind_addr: Option<Vec<SocketAddr>>,
     pub icp_features: Option<IcpFeatures>,
-    pub allow_incomplete_state: Option<EmptyConfig>,
+    pub incomplete_state: Option<IncompleteStateFlag>,
     pub initial_time: Option<InitialTime>,
 }
 
@@ -748,13 +784,12 @@ impl ExtendedSubnetConfigSet {
 
     pub fn try_with_icp_features(mut self, icp_features: &IcpFeatures) -> Result<Self, String> {
         let check_empty_subnet = |subnet: &Option<SubnetSpec>, subnet_desc, icp_feature| {
-            if let Some(config) = subnet {
-                if !matches!(config.state_config, SubnetStateConfig::New) {
-                    return Err(format!(
-                        "The {} subnet must be empty when specifying the `{}` ICP feature.",
-                        subnet_desc, icp_feature
-                    ));
-                }
+            if let Some(config) = subnet
+                && !matches!(config.state_config, SubnetStateConfig::New)
+            {
+                return Err(format!(
+                    "The {subnet_desc} subnet must be empty when specifying the `{icp_feature}` ICP feature."
+                ));
             }
             Ok(())
         };
@@ -768,6 +803,10 @@ impl ExtendedSubnetConfigSet {
             nns_governance,
             sns,
             ii,
+            nns_ui,
+            bitcoin,
+            dogecoin,
+            canister_migration,
         } = icp_features;
         // NNS canisters
         for (flag, icp_feature_str) in [
@@ -776,30 +815,33 @@ impl ExtendedSubnetConfigSet {
             (icp_token, "icp_token"),
             (nns_governance, "nns_governance"),
             (sns, "sns"),
+            (nns_ui, "nns_ui"),
+            (canister_migration, "canister_migration"),
         ] {
-            // using `EmptyConfig { }` explicitly
-            // to force an update after adding a new field to `EmptyConfig`
-            if let Some(EmptyConfig {}) = flag {
+            if flag.is_some() {
                 check_empty_subnet(&self.nns, "NNS", icp_feature_str)?;
                 self.nns = Some(self.nns.unwrap_or_default());
             }
         }
         // canisters on the II subnet
         for (flag, icp_feature_str) in [(cycles_token, "cycles_token"), (ii, "ii")] {
-            // using `EmptyConfig { }` explicitly
-            // to force an update after adding a new field to `EmptyConfig`
-            if let Some(EmptyConfig {}) = flag {
+            if flag.is_some() {
                 check_empty_subnet(&self.ii, "II", icp_feature_str)?;
                 self.ii = Some(self.ii.unwrap_or_default());
             }
         }
         // canisters on the SNS subnet
         for (flag, icp_feature_str) in [(sns, "sns")] {
-            // using `EmptyConfig { }` explicitly
-            // to force an update after adding a new field to `EmptyConfig`
-            if let Some(EmptyConfig {}) = flag {
+            if flag.is_some() {
                 check_empty_subnet(&self.sns, "SNS", icp_feature_str)?;
                 self.sns = Some(self.sns.unwrap_or_default());
+            }
+        }
+        // canisters on the Bitcoin subnet
+        for (flag, icp_feature_str) in [(bitcoin, "bitcoin"), (dogecoin, "dogecoin")] {
+            if flag.is_some() {
+                check_empty_subnet(&self.bitcoin, "Bitcoin", icp_feature_str)?;
+                self.bitcoin = Some(self.bitcoin.unwrap_or_default());
             }
         }
         Ok(self)
@@ -1055,4 +1097,29 @@ impl From<MockCanisterHttpResponse> for RawMockCanisterHttpResponse {
             additional_responses: mock_canister_http_response.additional_responses,
         }
     }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawCanisterSnapshotDownload {
+    pub sender: RawPrincipalId,
+    pub canister_id: RawCanisterId,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub snapshot_id: Vec<u8>,
+    pub snapshot_dir: PathBuf,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawCanisterSnapshotUpload {
+    pub sender: RawPrincipalId,
+    pub canister_id: RawCanisterId,
+    pub replace_snapshot: Option<RawCanisterSnapshotId>,
+    pub snapshot_dir: PathBuf,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawCanisterSnapshotId {
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub snapshot_id: Vec<u8>,
 }

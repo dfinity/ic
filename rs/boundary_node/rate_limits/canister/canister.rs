@@ -8,11 +8,11 @@ use crate::confidentiality_formatting::{
 };
 use crate::disclose::{DisclosesRules, RulesDiscloser};
 use crate::getter::{ConfigGetter, EntityGetter, IncidentGetter, RuleGetter};
-use crate::logs::{self, Log, LogEntry, Priority, P0};
+use crate::logs::{self, Log, LogEntry, P0, Priority};
 use crate::metrics::{
-    export_metrics_as_http_response, with_metrics_registry, WithMetrics, METRICS,
+    METRICS, WithMetrics, export_metrics_as_http_response, with_metrics_registry,
 };
-use crate::state::{init_version_and_config, with_canister_state, CanisterApi};
+use crate::state::{CanisterApi, init_version_and_config, with_canister_state};
 use candid::Principal;
 use ic_canister_log::{export as export_logs, log};
 use ic_cdk::api::call::call;
@@ -199,7 +199,7 @@ fn http_request(request: HttpRequest) -> HttpResponse {
                     Err(_) => {
                         return HttpResponseBuilder::bad_request()
                             .with_body_and_content_length("failed to parse the 'time' parameter")
-                            .build()
+                            .build();
                     }
                 },
                 None => 0,
@@ -253,47 +253,50 @@ fn periodically_poll_api_boundary_nodes(interval: u64, canister_api: Arc<dyn Can
 
     ic_cdk_timers::set_timer_interval(interval, move || {
         let canister_api = canister_api.clone();
-        ic_cdk::spawn(async move {
+
+        async move {
             let canister_id = Principal::from(REGISTRY_CANISTER_ID);
 
-            let (call_status, message) =
-                match call::<_, (Result<Vec<ApiBoundaryNodeIdRecord>, String>,)>(
-                    canister_id,
-                    REGISTRY_CANISTER_METHOD,
-                    (&GetApiBoundaryNodeIdsRequest {},),
-                )
-                .await
-                {
-                    Ok((Ok(api_bn_records),)) => {
-                        // Set authorized readers of the rate-limit config.
-                        canister_api.set_api_boundary_nodes_principals(
-                            api_bn_records.into_iter().filter_map(|n| n.id).collect(),
-                        );
-                        // Update metric.
-                        let current_time = ic_cdk::api::time() as i64;
-                        METRICS.with(|cell| {
-                            let mut cell = cell.borrow_mut();
-                            cell.last_successful_registry_poll_time
-                                .borrow_mut()
-                                .set(current_time);
-                        });
-                        ("success", "")
-                    }
-                    Ok((Err(err),)) => {
-                        log!(
+            let (call_status, message) = match call::<
+                _,
+                (Result<Vec<ApiBoundaryNodeIdRecord>, String>,),
+            >(
+                canister_id,
+                REGISTRY_CANISTER_METHOD,
+                (&GetApiBoundaryNodeIdsRequest {},),
+            )
+            .await
+            {
+                Ok((Ok(api_bn_records),)) => {
+                    // Set authorized readers of the rate-limit config.
+                    canister_api.set_api_boundary_nodes_principals(
+                        api_bn_records.into_iter().filter_map(|n| n.id).collect(),
+                    );
+                    // Update metric.
+                    let current_time = ic_cdk::api::time() as i64;
+                    METRICS.with(|cell| {
+                        let mut cell = cell.borrow_mut();
+                        cell.last_successful_registry_poll_time
+                            .borrow_mut()
+                            .set(current_time);
+                    });
+                    ("success", "")
+                }
+                Ok((Err(err),)) => {
+                    log!(
                         P0,
                         "[poll_api_boundary_nodes]: failed to fetch nodes from registry {err:?}",
                     );
-                        ("failure", "calling_canister_method_failed")
-                    }
-                    Err(err) => {
-                        log!(
+                    ("failure", "calling_canister_method_failed")
+                }
+                Err(err) => {
+                    log!(
                         P0,
                         "[poll_api_boundary_nodes]: failed to fetch nodes from registry {err:?}",
                     );
-                        ("failure", "canister_call_rejected")
-                    }
-                };
+                    ("failure", "canister_call_rejected")
+                }
+            };
 
             // Update metric.
             METRICS.with(|cell| {
@@ -303,7 +306,7 @@ fn periodically_poll_api_boundary_nodes(interval: u64, canister_api: Arc<dyn Can
                     .with_label_values(&[call_status, message])
                     .inc();
             });
-        });
+        }
     });
 }
 
@@ -313,7 +316,7 @@ mod tests {
 
     #[test]
     fn check_candid_interface_compatibility() {
-        use candid_parser::utils::{service_equal, CandidSource};
+        use candid_parser::utils::{CandidSource, service_equal};
 
         fn source_to_str(source: &CandidSource) -> String {
             match source {
@@ -336,14 +339,13 @@ mod tests {
                 Ok(_) => {}
                 Err(e) => {
                     eprintln!(
-                        "{} is not compatible with {}!\n\n\
-                {}:\n\
-                {}\n\n\
-                {}:\n\
-                {}\n",
-                        new_name, old_name, new_name, new_str, old_name, old_str
+                        "{new_name} is not compatible with {old_name}!\n\n\
+                {new_name}:\n\
+                {new_str}\n\n\
+                {old_name}:\n\
+                {old_str}\n"
                     );
-                    panic!("{:?}", e);
+                    panic!("{e:?}");
                 }
             }
         }

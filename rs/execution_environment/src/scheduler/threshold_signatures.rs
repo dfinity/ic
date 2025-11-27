@@ -3,16 +3,16 @@ use std::{collections::BTreeMap, sync::Arc};
 use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
 use ic_crypto_prng::Csprng;
 use ic_interfaces::execution_environment::RegistryExecutionSettings;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     EcdsaMatchedPreSignature, PreSignatureStash, SchnorrMatchedPreSignature,
     SignWithThresholdContext, ThresholdArguments,
 };
 use ic_types::{
-    batch::AvailablePreSignatures,
-    consensus::idkg::{common::PreSignature, IDkgMasterPublicKeyId, PreSigId},
-    crypto::canister_threshold_sig::idkg::IDkgTranscript,
     ExecutionRound, Height,
+    batch::AvailablePreSignatures,
+    consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
+    crypto::canister_threshold_sig::idkg::IDkgTranscript,
 };
 use more_asserts::debug_unreachable;
 use rand::RngCore;
@@ -290,8 +290,8 @@ mod tests {
     use ic_test_utilities_consensus::idkg::{key_transcript_for_tests, pre_signature_for_tests};
     use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::{
-        consensus::idkg::PreSigId, messages::CallbackId, time::UNIX_EPOCH, Randomness,
-        RegistryVersion,
+        Randomness, RegistryVersion, consensus::idkg::PreSigId, messages::CallbackId,
+        time::UNIX_EPOCH,
     };
 
     fn ecdsa_key_id(i: u8) -> IDkgMasterPublicKeyId {
@@ -390,9 +390,11 @@ mod tests {
         expected_id: u64,
         expected_height: Height,
     ) {
-        assert!(context
-            .matched_pre_signature
-            .is_some_and(|(pid, h)| pid.id() == expected_id && h == expected_height));
+        assert!(
+            context
+                .matched_pre_signature
+                .is_some_and(|(pid, h)| pid.id() == expected_id && h == expected_height)
+        );
         match &context.args {
             ThresholdArguments::Ecdsa(args) => {
                 let pre_sig = args.pre_signature.clone().unwrap();

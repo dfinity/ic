@@ -1,12 +1,12 @@
 use crate::{
-    sns::archive::ArchiveCanister, sns::governance::GovernanceCanister, sns::index::IndexCanister,
-    sns::ledger::LedgerCanister, sns::swap::SwapCanister, sns::Sns, CallCanisters,
+    CallCanisters, sns::Sns, sns::archive::ArchiveCanister, sns::governance::GovernanceCanister,
+    sns::index::IndexCanister, sns::ledger::LedgerCanister, sns::swap::SwapCanister,
 };
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_clients::canister_status::CanisterStatusResult;
 use ic_sns_root::{
-    pb::v1::{ListSnsCanistersRequest, ListSnsCanistersResponse},
     GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
+    pb::v1::{ListSnsCanistersRequest, ListSnsCanistersResponse},
 };
 use requests::GetSnsControlledCanisterStatus;
 use serde::{Deserialize, Serialize};
@@ -39,7 +39,7 @@ impl TryFrom<ListSnsCanistersResponse> for SnsCanisters {
             extensions,
         } = src
         else {
-            return Err(format!("Some SNS canisters were missing: {:?}", src));
+            return Err(format!("Some SNS canisters were missing: {src:?}"));
         };
 
         let sns = Sns {

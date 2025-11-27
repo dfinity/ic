@@ -16,11 +16,11 @@ use ic_nns_gtc::{
 use ic_nns_test_utils::{
     common::{NnsInitPayloads, NnsInitPayloadsBuilder},
     governance::{
-        bump_gzip_timestamp, get_pending_proposals, reinstall_nns_canister_by_proposal,
-        submit_external_update_proposal, upgrade_nns_canister_by_proposal,
-        upgrade_nns_canister_with_arg_by_proposal, HardResetNnsRootToVersionPayload,
+        HardResetNnsRootToVersionPayload, bump_gzip_timestamp, get_pending_proposals,
+        reinstall_nns_canister_by_proposal, submit_external_update_proposal,
+        upgrade_nns_canister_by_proposal, upgrade_nns_canister_with_arg_by_proposal,
     },
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
 };
 use icp_ledger::{LedgerCanisterInitPayload, LedgerCanisterPayload, Tokens};
 use lifeline::LIFELINE_CANISTER_WASM;

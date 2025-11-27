@@ -8,19 +8,19 @@ use crate::{
         validate_upgrade_extension,
     },
     follower_index::{
-        add_neuron_to_follower_index, build_follower_index,
+        FollowerIndex, add_neuron_to_follower_index, build_follower_index,
         legacy::{
             self, add_neuron_to_function_followee_index, build_function_followee_index,
             remove_neuron_from_function_followee_index,
         },
-        remove_neuron_from_follower_index, FollowerIndex,
+        remove_neuron_from_follower_index,
     },
     following::{self, ValidatedSetFollowing},
     icrc_ledger_helper::ICRCLedgerHelper,
     logs::{ERROR, INFO},
     neuron::{
-        NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
-        MAX_LIST_NEURONS_RESULTS,
+        DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER, MAX_LIST_NEURONS_RESULTS, NeuronState,
+        RemovePermissionsStatus,
     },
     pb::{
         sns_root_types::{
@@ -29,31 +29,8 @@ use crate::{
             SetDappControllersResponse,
         },
         v1::{
-            claim_swap_neurons_response::SwapNeuron,
-            get_neuron_response, get_proposal_response,
-            governance::{
-                self,
-                neuron_in_flight_command::{self, Command as InFlightCommand},
-                GovernanceCachedMetrics, MaturityModulation, NeuronInFlightCommand, PendingVersion,
-                SnsMetadata, Version,
-            },
-            governance_error::ErrorType,
-            manage_neuron::{
-                self,
-                claim_or_refresh::{By, MemoAndController},
-                AddNeuronPermissions, ClaimOrRefresh, DisburseMaturity, FinalizeDisburseMaturity,
-                RemoveNeuronPermissions, SetFollowing,
-            },
-            manage_neuron_response::{
-                DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
-            },
-            nervous_system_function::FunctionType,
-            neuron::{DissolveState, Followees, TopicFollowees},
-            proposal::Action,
-            proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
-            transfer_sns_treasury_funds::TransferFrom,
-            upgrade_journal_entry, valuation, Account as AccountProto, AddMaturityRequest,
-            AddMaturityResponse, AdvanceTargetVersionRequest, AdvanceTargetVersionResponse, Ballot,
+            Account as AccountProto, AddMaturityRequest, AddMaturityResponse,
+            AdvanceTargetVersionRequest, AdvanceTargetVersionResponse, Ballot,
             ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
             ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters,
             DisburseMaturityInProgress, Empty, ExecuteExtensionOperation,
@@ -72,21 +49,43 @@ use crate::{
             RegisterExtension, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
             TransferSnsTreasuryFunds, TreasuryMetrics, UpgradeSnsControlledCanister, Vote,
             VotingPowerMetrics, WaitForQuietState,
+            claim_swap_neurons_response::SwapNeuron,
+            get_neuron_response, get_proposal_response,
+            governance::{
+                self, GovernanceCachedMetrics, MaturityModulation, NeuronInFlightCommand,
+                PendingVersion, SnsMetadata, Version,
+                neuron_in_flight_command::{self, Command as InFlightCommand},
+            },
+            governance_error::ErrorType,
+            manage_neuron::{
+                self, AddNeuronPermissions, ClaimOrRefresh, DisburseMaturity,
+                FinalizeDisburseMaturity, RemoveNeuronPermissions, SetFollowing,
+                claim_or_refresh::{By, MemoAndController},
+            },
+            manage_neuron_response::{
+                DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
+            },
+            nervous_system_function::FunctionType,
+            neuron::{DissolveState, Followees, TopicFollowees},
+            proposal::Action,
+            proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
+            transfer_sns_treasury_funds::TransferFrom,
+            upgrade_journal_entry, valuation,
         },
     },
     proposal::{
-        get_action_auxiliary,
+        MAX_LIST_PROPOSAL_RESULTS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, TreasuryAccount,
+        ValidGenericNervousSystemFunction, get_action_auxiliary,
         transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err,
         validate_and_render_proposal, validate_and_render_set_topics_for_custom_proposals,
-        TreasuryAccount, ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
-        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
     },
     sns_upgrade::{
-        canister_type_and_wasm_hash_for_upgrade, get_all_sns_canisters, get_canisters_to_upgrade,
-        get_running_version, get_upgrade_params, get_wasm, SnsCanisterType, UpgradeSnsParams,
+        SnsCanisterType, UpgradeSnsParams, canister_type_and_wasm_hash_for_upgrade,
+        get_all_sns_canisters, get_canisters_to_upgrade, get_running_version, get_upgrade_params,
+        get_wasm,
     },
     treasury::{assess_treasury_balance, interpret_token_code, tokens_to_e8s},
-    types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock, Wasm},
+    types::{Environment, HeapGrowthPotential, LedgerUpdateLock, Wasm, is_registered_function_id},
 };
 
 use candid::{Decode, Encode};
@@ -103,12 +102,11 @@ use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
-    i2d,
+    NervousSystemError, ONE_DAY_SECONDS, ONE_HOUR_SECONDS, i2d,
     ledger::{self, compute_distribution_subaccount_bytes},
-    NervousSystemError, ONE_DAY_SECONDS, ONE_HOUR_SECONDS,
 };
 use ic_nervous_system_governance::maturity_modulation::{
-    apply_maturity_modulation, MIN_MATURITY_MODULATION_PERMYRIAD,
+    MIN_MATURITY_MODULATION_PERMYRIAD, apply_maturity_modulation,
 };
 use ic_nervous_system_lock::acquire;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
@@ -130,9 +128,9 @@ use std::{
     cell::RefCell,
     cmp::Ordering,
     collections::{
+        HashMap, HashSet,
         btree_map::{BTreeMap, Entry},
         btree_set::BTreeSet,
-        HashMap, HashSet,
     },
     convert::{TryFrom, TryInto},
     future::Future,
@@ -469,7 +467,7 @@ impl ValidGovernanceProto {
     ) -> Result<&'a Inner, String> {
         field_value
             .as_ref()
-            .ok_or_else(|| format!("GovernanceProto {} field must be populated.", field_name))
+            .ok_or_else(|| format!("GovernanceProto {field_name} field must be populated."))
     }
 
     /// Because enum fields (such as mode) are of type i32, not FooEnum.
@@ -487,8 +485,7 @@ impl ValidGovernanceProto {
         if mode == governance::Mode::Unspecified {
             return Err(format!(
                 "The mode field must be populated (with something other \
-                 than Unspecified): {:#?}",
-                governance_proto
+                 than Unspecified): {governance_proto:#?}"
             ));
         }
 
@@ -505,8 +502,7 @@ impl ValidGovernanceProto {
         match CanisterId::try_from(principal_id) {
             Ok(_) => Ok(()),
             Err(err) => Err(format!(
-                "Unable to convert {} PrincipalId to CanisterId: {:#?}",
-                name, err,
+                "Unable to convert {name} PrincipalId to CanisterId: {err:#?}",
             )),
         }
     }
@@ -788,7 +784,7 @@ impl Governance {
 
     pub fn set_mode(&mut self, mode: i32, caller: PrincipalId) {
         let mode =
-            governance::Mode::try_from(mode).unwrap_or_else(|_| panic!("Unknown mode: {}", mode));
+            governance::Mode::try_from(mode).unwrap_or_else(|_| panic!("Unknown mode: {mode}"));
 
         if !self.is_swap_canister(caller) {
             panic!("Caller must be the swap canister.");
@@ -798,7 +794,7 @@ impl Governance {
         // Normal mode (from PreInitializationSwap). Therefore, this is here
         // just to make sure we do not proceed with unexpected operations.
         if mode != governance::Mode::Normal {
-            panic!("Entering {:?} mode is not allowed.", mode);
+            panic!("Entering {mode:?} mode is not allowed.");
         }
 
         self.proto.mode = mode as i32;
@@ -853,7 +849,7 @@ impl Governance {
 
     /// Returns an error to be used when a neuron is not found.
     fn neuron_not_found_error(nid: &NeuronId) -> GovernanceError {
-        GovernanceError::new_with_message(ErrorType::NotFound, format!("Neuron not found: {}", nid))
+        GovernanceError::new_with_message(ErrorType::NotFound, format!("Neuron not found: {nid}"))
     }
 
     /// Returns and error to be used if the subaccount computed from the given memo already exists
@@ -862,10 +858,7 @@ impl Governance {
     fn invalid_subaccount_with_nonce(memo: u64) -> GovernanceError {
         GovernanceError::new_with_message(
             ErrorType::PreconditionFailed,
-            format!(
-                "A neuron already exists with given PrincipalId and memo: {:?}",
-                memo
-            ),
+            format!("A neuron already exists with given PrincipalId and memo: {memo:?}"),
         )
     }
 
@@ -929,7 +922,8 @@ impl Governance {
     /// Releases the lock on a given neuron.
     pub(crate) fn unlock_neuron(&mut self, id: &str) {
         if self.proto.in_flight_commands.remove(id).is_none() {
-            log!(ERROR,
+            log!(
+                ERROR,
                 "Unexpected condition when unlocking neuron {}: the neuron was not registered as 'in flight'",
                 id
             );
@@ -959,10 +953,7 @@ impl Governance {
         if self.proto.neurons.contains_key(&neuron_id.to_string()) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                format!(
-                    "Cannot add neuron. There is already a neuron with id: {}",
-                    neuron_id
-                ),
+                format!("Cannot add neuron. There is already a neuron with id: {neuron_id}"),
             ));
         }
 
@@ -997,10 +988,7 @@ impl Governance {
         if !self.proto.neurons.contains_key(&neuron_id.to_string()) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotFound,
-                format!(
-                    "Cannot remove neuron. Can't find a neuron with id: {}",
-                    neuron_id
-                ),
+                format!("Cannot remove neuron. Can't find a neuron with id: {neuron_id}"),
             ));
         }
 
@@ -1143,7 +1131,7 @@ impl Governance {
         if state != NeuronState::Dissolved {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                format!("Neuron {} is NOT dissolved. It is in state {:?}", id, state),
+                format!("Neuron {id} is NOT dissolved. It is in state {state:?}"),
             ));
         }
 
@@ -1160,7 +1148,7 @@ impl Governance {
             Some(ai_pb) => Account::try_from(ai_pb.clone()).map_err(|e| {
                 GovernanceError::new_with_message(
                     ErrorType::InvalidCommand,
-                    format!("The recipient's subaccount is invalid due to: {}", e),
+                    format!("The recipient's subaccount is invalid due to: {e}"),
                 )
             })?,
         };
@@ -1476,8 +1464,9 @@ impl Governance {
 
         if merge_maturity.percentage_to_merge > 100 || merge_maturity.percentage_to_merge == 0 {
             return Err(GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    "The percentage of maturity to merge must be a value between 1 and 100 (inclusive)."));
+                ErrorType::PreconditionFailed,
+                "The percentage of maturity to merge must be a value between 1 and 100 (inclusive).",
+            ));
         }
 
         let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
@@ -1493,13 +1482,11 @@ impl Governance {
 
         if maturity_to_merge <= transaction_fee_e8s {
             return Err(GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    format!(
-                        "Tried to merge {} e8s, but can't merge an amount less than the transaction fee of {} e8s",
-                        maturity_to_merge,
-                        transaction_fee_e8s
-                    ),
-                ));
+                ErrorType::PreconditionFailed,
+                format!(
+                    "Tried to merge {maturity_to_merge} e8s, but can't merge an amount less than the transaction fee of {transaction_fee_e8s} e8s"
+                ),
+            ));
         }
 
         let nid = neuron.id.as_ref().expect("Neurons must have an id");
@@ -1569,7 +1556,8 @@ impl Governance {
         if percentage_to_stake > 100 || percentage_to_stake == 0 {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                "The percentage of maturity to stake must be a value between 0 (exclusive) and 100 (inclusive)."));
+                "The percentage of maturity to stake must be a value between 0 (exclusive) and 100 (inclusive).",
+            ));
         }
 
         let mut maturity_to_stake = (neuron
@@ -1636,10 +1624,7 @@ impl Governance {
             Some(account) => Account::try_from(account.clone()).map_err(|e| {
                 GovernanceError::new_with_message(
                     ErrorType::InvalidCommand,
-                    format!(
-                        "The given account to disburse the maturity to is invalid due to: {}",
-                        e
-                    ),
+                    format!("The given account to disburse the maturity to is invalid due to: {e}"),
                 )
             })?,
         };
@@ -1650,7 +1635,8 @@ impl Governance {
         {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                "The percentage of maturity to disburse must be a value between 1 and 100 (inclusive)."));
+                "The percentage of maturity to disburse must be a value between 1 and 100 (inclusive).",
+            ));
         }
 
         // The amount to deduct = the amount in the neuron * request.percentage / 100.
@@ -1675,8 +1661,7 @@ impl Governance {
                         ErrorType::PreconditionFailed,
                         format!(
                             "Could not calculate worst case maturity modulation \
-                            and therefore cannot disburse maturity. Err: {}",
-                            err
+                            and therefore cannot disburse maturity. Err: {err}"
                         ),
                     )
                 })?;
@@ -1686,9 +1671,8 @@ impl Governance {
                 ErrorType::PreconditionFailed,
                 format!(
                     "If worst case maturity modulation is applied (-5%) then this neuron would \
-                     disburse {} e8s, but can't disburse an amount less than the transaction fee \
-                     of {} e8s.",
-                    worst_case_maturity_modulation, transaction_fee_e8s
+                     disburse {worst_case_maturity_modulation} e8s, but can't disburse an amount less than the transaction fee \
+                     of {transaction_fee_e8s} e8s."
                 ),
             ));
         }
@@ -1987,12 +1971,11 @@ impl Governance {
         }
 
         // Return the rejection fee to the proposal's proposer
-        if let Some(nid) = &proposal_data.proposer {
-            if let Some(neuron) = self.proto.neurons.get_mut(&nid.to_string()) {
-                if neuron.neuron_fees_e8s >= proposal_data.reject_cost_e8s {
-                    neuron.neuron_fees_e8s -= proposal_data.reject_cost_e8s;
-                }
-            }
+        if let Some(nid) = &proposal_data.proposer
+            && let Some(neuron) = self.proto.neurons.get_mut(&nid.to_string())
+            && neuron.neuron_fees_e8s >= proposal_data.reject_cost_e8s
+        {
+            neuron.neuron_fees_e8s -= proposal_data.reject_cost_e8s;
         }
 
         // A yes decision has been made, execute the proposal!
@@ -2251,8 +2234,7 @@ impl Governance {
                 ErrorType::InvalidProposal,
                 format!(
                     "A Proposal somehow made it all the way to execution despite being \
-                         invalid for having its `unspecified` field populated. action: {:?}",
-                    action
+                         invalid for having its `unspecified` field populated. action: {action:?}"
                 ),
             )),
         };
@@ -2269,9 +2251,11 @@ impl Governance {
         let id = nervous_system_function.id;
 
         if nervous_system_function.is_native() {
-            return Err(GovernanceError::new_with_message(ErrorType::PreconditionFailed,
-                                                         "Can only add NervousSystemFunction's of \
-                                                          GenericNervousSystemFunction function_type"));
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Can only add NervousSystemFunction's of \
+                                                          GenericNervousSystemFunction function_type",
+            ));
         }
 
         if is_registered_function_id(id, &self.proto.id_to_nervous_system_functions) {
@@ -2279,8 +2263,7 @@ impl Governance {
                 ErrorType::PreconditionFailed,
                 format!(
                     "Failed to add NervousSystemFunction. \
-                             There is/was already a NervousSystemFunction with id: {}",
-                    id
+                             There is/was already a NervousSystemFunction with id: {id}"
                 ),
             ));
         }
@@ -2297,14 +2280,15 @@ impl Governance {
                 {
                     return Err(GovernanceError::new_with_message(
                         ErrorType::PreconditionFailed,
-                        "Cannot add generic nervous system functions that targets sns core canisters, the NNS ledger, or ic00"));
+                        "Cannot add generic nervous system functions that targets sns core canisters, the NNS ledger, or ic00",
+                    ));
                 }
             }
             Err(msg) => {
                 return Err(GovernanceError::new_with_message(
                     ErrorType::PreconditionFailed,
                     msg,
-                ))
+                ));
             }
         }
 
@@ -2322,17 +2306,18 @@ impl Governance {
     ) -> Result<(), GovernanceError> {
         let entry = self.proto.id_to_nervous_system_functions.entry(id);
         match entry {
-            Entry::Vacant(_) =>
-                Err(GovernanceError::new_with_message(
-                    ErrorType::NotFound,
-                    format!("Failed to remove NervousSystemFunction. There is no NervousSystemFunction with id: {}", id),
+            Entry::Vacant(_) => Err(GovernanceError::new_with_message(
+                ErrorType::NotFound,
+                format!(
+                    "Failed to remove NervousSystemFunction. There is no NervousSystemFunction with id: {id}"
+                ),
             )),
             Entry::Occupied(mut o) => {
                 // Insert a deletion marker to signify that there was a NervousSystemFunction
                 // with this id at some point, but that it was deleted.
                 o.insert(NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER.clone());
                 Ok(())
-            },
+            }
         }
     }
 
@@ -2353,7 +2338,7 @@ impl Governance {
             .map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::InvalidProposal,
-                    format!("Invalid RegisterExtension: {:?}", err),
+                    format!("Invalid RegisterExtension: {err:?}"),
                 )
             })?;
 
@@ -2379,7 +2364,7 @@ impl Governance {
             .map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::InvalidProposal,
-                    format!("Invalid UpgradeExtension: {:?}", err),
+                    format!("Invalid UpgradeExtension: {err:?}"),
                 )
             })?;
 
@@ -2625,8 +2610,7 @@ impl Governance {
                 ErrorType::PreconditionFailed,
                 format!(
                     "Failed to perform ManageNervousSystemParameters action, proposed \
-                        parameters would lead to invalid NervousSystemParameters: {}",
-                    msg
+                        parameters would lead to invalid NervousSystemParameters: {msg}"
                 ),
             )),
         }
@@ -2670,7 +2654,7 @@ impl Governance {
                 .map_err(|e| {
                     GovernanceError::new_with_message(
                         ErrorType::External,
-                        format!("Could not get list of SNS canisters from SNS Root: {}", e),
+                        format!("Could not get list of SNS canisters from SNS Root: {e}"),
                     )
                 })?;
 
@@ -2687,8 +2671,7 @@ impl Governance {
                 ErrorType::InvalidCommand,
                 format!(
                     "UpgradeSnsControlledCanister can only upgrade dapp canisters that are registered \
-                    with the SNS root: see Root::register_dapp_canister. Valid targets are: {:?}",
-                    dapp_canisters
+                    with the SNS root: see Root::register_dapp_canister. Valid targets are: {dapp_canisters:?}"
                 ),
             ));
         }
@@ -2763,7 +2746,7 @@ impl Governance {
             .map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!("Canister method call failed: {:?}", err),
+                    format!("Canister method call failed: {err:?}"),
                 )
             })
     }
@@ -2847,7 +2830,7 @@ impl Governance {
         let current_version = self.get_or_reset_deployed_version().await.map_err(|err| {
             GovernanceError::new_with_message(
                 ErrorType::External,
-                format!("Could not execute proposal: {}", err),
+                format!("Could not execute proposal: {err}"),
             )
         })?;
 
@@ -2863,7 +2846,7 @@ impl Governance {
             .map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::InvalidProposal,
-                    format!("Could not execute proposal: {}", err),
+                    format!("Could not execute proposal: {err}"),
                 )
             })?;
 
@@ -2878,7 +2861,7 @@ impl Governance {
             .map_err(|e| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!("Could not execute proposal: {}", e),
+                    format!("Could not execute proposal: {e}"),
                 )
             })?
             .wasm;
@@ -2936,7 +2919,7 @@ impl Governance {
             .map_err(|e| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!("Could not get wasm for upgrade: {}", e),
+                    format!("Could not get wasm for upgrade: {e}"),
                 )
             })?
             .wasm;
@@ -2958,7 +2941,7 @@ impl Governance {
                     .map_err(|e| {
                         GovernanceError::new_with_message(
                             ErrorType::External,
-                            format!("Could not get list of SNS canisters from SNS Root: {}", e),
+                            format!("Could not get list of SNS canisters from SNS Root: {e}"),
                         )
                     })?;
             for target_canister_id in canister_ids_to_upgrade {
@@ -3009,8 +2992,7 @@ impl Governance {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "Another TransferSnsTreasuryFunds proposal (ID = {}) is already in progress.",
-                    already_in_progress_proposal_id,
+                    "Another TransferSnsTreasuryFunds proposal (ID = {already_in_progress_proposal_id}) is already in progress.",
                 ),
             ));
         }
@@ -3047,7 +3029,7 @@ impl Governance {
                 .map_err(|e| {
                     GovernanceError::new_with_message(
                         ErrorType::External,
-                        format!("Error making ICP treasury transfer: {}", e),
+                        format!("Error making ICP treasury transfer: {e}"),
                     )
                 }),
             TransferFrom::SnsTokenTreasury => {
@@ -3066,7 +3048,7 @@ impl Governance {
                     .map_err(|e| {
                         GovernanceError::new_with_message(
                             ErrorType::External,
-                            format!("Error making SNS Token treasury transfer: {}", e),
+                            format!("Error making SNS Token treasury transfer: {e}"),
                         )
                     })
             }
@@ -3115,7 +3097,7 @@ impl Governance {
         let current_version = self.get_or_reset_deployed_version().await.map_err(|err| {
             GovernanceError::new_with_message(
                 ErrorType::External,
-                format!("Could not execute proposal: {}", err),
+                format!("Could not execute proposal: {err}"),
             )
         })?;
 
@@ -3130,14 +3112,14 @@ impl Governance {
                         ledger_canister_id,
                         Some(1),
                     )
-                ).map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not execute proposal. Error encoding canister_info request.\n{}", e)))?
+                ).map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not execute proposal. Error encoding canister_info request.\n{e}")))?
             )
             .await
             .map(|b| {
                 candid::decode_one::<CanisterInfoResponse>(&b)
-                .map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not execute proposal. Error decoding canister_info response.\n{}", e)))
+                .map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not execute proposal. Error decoding canister_info response.\n{e}")))
             })
-            .map_err(|err: (Option<i32>, String)| GovernanceError::new_with_message(ErrorType::External, format!("Canister method call canister_info failed: {:?}", err)))??;
+            .map_err(|err: (Option<i32>, String)| GovernanceError::new_with_message(ErrorType::External, format!("Canister method call canister_info failed: {err:?}")))??;
 
         let ledger_canister_info_version_number_before_upgrade: u64 =
             ledger_canister_info
@@ -3154,10 +3136,7 @@ impl Governance {
         .map_err(|e| {
             GovernanceError::new_with_message(
                 ErrorType::External,
-                format!(
-                    "Could not execute proposal. Error getting ledger canister wasm: {}",
-                    e
-                ),
+                format!("Could not execute proposal. Error getting ledger canister wasm: {e}"),
             )
         })?
         .wasm;
@@ -3190,42 +3169,31 @@ impl Governance {
                             ledger_canister_id,
                             Some(20), // Get enough to ensure we did not miss the relevant change
                         )
-                    ).map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not check if ledger upgrade succeeded. Error encoding canister_info request.\n{}", e)))?
+                    ).map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not check if ledger upgrade succeeded. Error encoding canister_info request.\n{e}")))?
                 )
                 .await
                 .map(|b| {
                     candid::decode_one::<CanisterInfoResponse>(&b)
-                        .map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not check if ledger upgrade succeeded. Error decoding canister_info response.\n{}", e)))
+                        .map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not check if ledger upgrade succeeded. Error decoding canister_info response.\n{e}")))
                 })
-                .map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not check if ledger upgrade succeeded. Canister method call canister_info failed: {:?}", e)))??;
+                .map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not check if ledger upgrade succeeded. Canister method call canister_info failed: {e:?}")))??;
 
             for canister_change in ledger_canister_info.changes().iter().rev() {
                 if canister_change.canister_version()
                     > ledger_canister_info_version_number_before_upgrade
-                {
-                    if let CanisterChangeDetails::CanisterCodeDeployment(code_deployment) =
+                    && let CanisterChangeDetails::CanisterCodeDeployment(code_deployment) =
                         canister_change.details()
+                    && let CanisterInstallMode::Upgrade = code_deployment.mode()
+                    && code_deployment.module_hash()[..] == current_version.ledger_wasm_hash[..]
+                {
+                    // success
+                    // update nervous-system-parameters transaction_fee if the fee is changed.
+                    if let Some(nervous_system_parameters) = self.proto.parameters.as_mut()
+                        && let Some(transfer_fee) = manage_ledger_parameters.transfer_fee
                     {
-                        if let CanisterInstallMode::Upgrade = code_deployment.mode() {
-                            if code_deployment.module_hash()[..]
-                                == current_version.ledger_wasm_hash[..]
-                            {
-                                // success
-                                // update nervous-system-parameters transaction_fee if the fee is changed.
-                                if let Some(nervous_system_parameters) =
-                                    self.proto.parameters.as_mut()
-                                {
-                                    if let Some(transfer_fee) =
-                                        manage_ledger_parameters.transfer_fee
-                                    {
-                                        nervous_system_parameters.transaction_fee_e8s =
-                                            Some(transfer_fee);
-                                    }
-                                }
-                                return Ok(());
-                            }
-                        }
+                        nervous_system_parameters.transaction_fee_e8s = Some(transfer_fee);
                     }
+                    return Ok(());
                 }
             }
 
@@ -3541,12 +3509,11 @@ impl Governance {
         let proposer_dissolve_delay = proposer.dissolve_delay_seconds(now_seconds);
         if proposer_dissolve_delay < min_dissolve_delay_for_vote {
             return Err(GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    format!(
-                        "The proposer's dissolve delay {} is less than the minimum required dissolve delay of {}",
-                        proposer_dissolve_delay, min_dissolve_delay_for_vote
-                    ),
-                ));
+                ErrorType::PreconditionFailed,
+                format!(
+                    "The proposer's dissolve delay {proposer_dissolve_delay} is less than the minimum required dissolve delay of {min_dissolve_delay_for_vote}"
+                ),
+            ));
         }
 
         // If the current stake of the proposer neuron is less than the cost
@@ -4003,7 +3970,7 @@ impl Governance {
         // relationships, i.e., the `function_followee_index`.
         let neuron = self.proto.neurons.get_mut(&id.to_string()).ok_or_else(||
             // The specified neuron is not present.
-            GovernanceError::new_with_message(ErrorType::NotFound, format!("Follower neuron not found: {}", id)))?;
+            GovernanceError::new_with_message(ErrorType::NotFound, format!("Follower neuron not found: {id}")))?;
 
         // Check that the caller is authorized to change followers (same authorization
         // as voting required).
@@ -4095,7 +4062,7 @@ impl Governance {
         let neuron = self.proto.neurons.get_mut(&id.to_string()).ok_or_else(|| {
             GovernanceError::new_with_message(
                 ErrorType::NotFound,
-                format!("Follower neuron not found: {}", id),
+                format!("Follower neuron not found: {id}"),
             )
         })?;
 
@@ -4482,7 +4449,11 @@ impl Governance {
         {
             Ok(_) => (),
             Err(message) => {
-                log!(ERROR, "Could not claim_swap_neurons, one or more NervousSystemParameters were not valid. Err: {}", message);
+                log!(
+                    ERROR,
+                    "Could not claim_swap_neurons, one or more NervousSystemParameters were not valid. Err: {}",
+                    message
+                );
                 return ClaimSwapNeuronsResponse::new_with_error(ClaimSwapNeuronsError::Internal);
             }
         }
@@ -4653,8 +4624,7 @@ impl Governance {
                 ErrorType::PreconditionFailed,
                 format!(
                     "Cannot add permission to neuron. Max \
-                    number of principals reached {}",
-                    max_number_of_principals_per_neuron
+                    number of principals reached {max_number_of_principals_per_neuron}"
                 ),
             ));
         }
@@ -4878,7 +4848,7 @@ impl Governance {
         neuron_id: &NeuronId,
         command: &manage_neuron::Command,
     ) -> Result<(), GovernanceError> {
-        use manage_neuron::{configure::Operation::*, Command::*};
+        use manage_neuron::{Command::*, configure::Operation::*};
 
         // If this is a "claim" call, the neuron doesn't exist yet, so we return (because no checks
         // can be made). A "refresh" call can be made on a vesting neuron, so in this case also
@@ -4896,7 +4866,7 @@ impl Governance {
         let err = |op: &str| -> Result<(), GovernanceError> {
             Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                format!("Neuron {} is vesting and cannot call {}", neuron_id, op),
+                format!("Neuron {neuron_id} is vesting and cannot call {op}"),
             ))
         };
 
@@ -5013,10 +4983,12 @@ impl Governance {
                 }
                 Err(err) => {
                     log!(
-                                    ERROR,
-                                    "Could not apply maturity modulation to {:?} for neuron {} due to {:?}, skipping",
-                                    disbursement, neuron_id, err
-                                );
+                        ERROR,
+                        "Could not apply maturity modulation to {:?} for neuron {} due to {:?}, skipping",
+                        disbursement,
+                        neuron_id,
+                        err
+                    );
                     continue;
                 }
             };
@@ -5053,10 +5025,12 @@ impl Governance {
                 Ok(account) => account,
                 Err(e) => {
                     log!(
-                                ERROR,
-                                "Failure parsing account of DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
-                                disbursement, neuron_id, e
-                            );
+                        ERROR,
+                        "Failure parsing account of DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
+                        disbursement,
+                        neuron_id,
+                        e
+                    );
                     continue;
                 }
             };
@@ -5073,18 +5047,22 @@ impl Governance {
             match transfer_result {
                 Ok(block_index) => {
                     log!(
-                                INFO,
-                                "Transferring DisburseMaturityInProgress-entry {:?} for neuron {} at block {}.",
-                                disbursement, neuron_id, block_index
-                            );
+                        INFO,
+                        "Transferring DisburseMaturityInProgress-entry {:?} for neuron {} at block {}.",
+                        disbursement,
+                        neuron_id,
+                        block_index
+                    );
                     let neuron = match self.get_neuron_result_mut(&neuron_id) {
                         Ok(neuron) => neuron,
                         Err(e) => {
                             log!(
-                                        ERROR,
-                                        "Failed updating DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
-                                        disbursement, neuron_id, e
-                                    );
+                                ERROR,
+                                "Failed updating DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
+                                disbursement,
+                                neuron_id,
+                                e
+                            );
                             continue;
                         }
                     };
@@ -5092,10 +5070,12 @@ impl Governance {
                 }
                 Err(e) => {
                     log!(
-                                ERROR,
-                                "Failed transferring funds for DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
-                                disbursement, neuron_id, e
-                            );
+                        ERROR,
+                        "Failed transferring funds for DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
+                        disbursement,
+                        neuron_id,
+                        e
+                    );
                 }
             }
         }
@@ -5119,12 +5099,8 @@ impl Governance {
     }
 
     async fn treasury_valuation_amount_e8s(&self, treasury: i32) -> Result<u64, String> {
-        let token = interpret_token_code(treasury).map_err(|err| {
-            format!(
-                "Failed to interpret treasury token code {}: {}",
-                treasury, err
-            )
-        })?;
+        let token = interpret_token_code(treasury)
+            .map_err(|err| format!("Failed to interpret treasury token code {treasury}: {err}"))?;
 
         let treasury_valuation_result = assess_treasury_balance(
             token,
@@ -5135,42 +5111,30 @@ impl Governance {
         .await;
 
         let treasury_valuation = treasury_valuation_result
-            .map_err(|err| format!("Failed to assess treasury balance for {:?}: {}", token, err))?;
+            .map_err(|err| format!("Failed to assess treasury balance for {token:?}: {err}"))?;
 
         let amount_e8s =
             tokens_to_e8s(treasury_valuation.valuation_factors.tokens).map_err(|err| {
-                format!(
-                    "Failed to convert treasury balance to e8s for {:?}: {}",
-                    token, err
-                )
+                format!("Failed to convert treasury balance to e8s for {token:?}: {err}")
             })?;
 
         Ok(amount_e8s)
     }
 
     fn treasury_account(&self, treasury: i32) -> Result<Account, String> {
-        let token = interpret_token_code(treasury).map_err(|err| {
-            format!(
-                "Failed to interpret treasury token code {}: {}",
-                treasury, err
-            )
-        })?;
+        let token = interpret_token_code(treasury)
+            .map_err(|err| format!("Failed to interpret treasury token code {treasury}: {err}"))?;
 
         let treasury_account = token
             .treasury_account(self.env.canister_id())
-            .map_err(|err| {
-                format!(
-                    "Failed to get treasury account for token {:?}: {}",
-                    token, err
-                )
-            })?;
+            .map_err(|err| format!("Failed to get treasury account for token {token:?}: {err}"))?;
 
         Ok(treasury_account)
     }
 
     async fn original_treasury_icp_amount_e8s(&self) -> Result<u64, String> {
         let request = Encode!(&GetDerivedStateRequest {})
-            .map_err(|err| format!("Failed to encode Swap.get_derived_state request: {:?}", err))?;
+            .map_err(|err| format!("Failed to encode Swap.get_derived_state request: {err:?}"))?;
 
         let derived_state_result = self
             .env
@@ -5180,13 +5144,10 @@ impl Governance {
                 request,
             )
             .await
-            .map_err(|err| format!("Calling Swap.get_derived_state failed: {:?}", err))
+            .map_err(|err| format!("Calling Swap.get_derived_state failed: {err:?}"))
             .and_then(|response| {
                 Decode!(&response, GetDerivedStateResponse).map_err(|err| {
-                    format!(
-                        "Failed to decode Swap.get_derived_state response: {:?}",
-                        err
-                    )
+                    format!("Failed to decode Swap.get_derived_state response: {err:?}")
                 })
             })?;
 
@@ -5339,10 +5300,9 @@ impl Governance {
         if let Some(GovernanceCachedMetrics {
             timestamp_seconds, ..
         }) = self.proto.metrics
+            && now_seconds.saturating_sub(timestamp_seconds) < ONE_HOUR_SECONDS
         {
-            if now_seconds.saturating_sub(timestamp_seconds) < ONE_HOUR_SECONDS {
-                return;
-            }
+            return;
         }
 
         let num_treasury_metrics = self
@@ -5496,10 +5456,10 @@ impl Governance {
                     .take(proposals_of_action.len() - max_proposals_to_keep_per_action)
                 {
                     // Check that this proposal can be purged.
-                    if let Some(proposal) = self.proto.proposals.get(proposal_id) {
-                        if proposal.can_be_purged(now_seconds) {
-                            self.proto.proposals.remove(proposal_id);
-                        }
+                    if let Some(proposal) = self.proto.proposals.get(proposal_id)
+                        && proposal.can_be_purged(now_seconds)
+                    {
+                        self.proto.proposals.remove(proposal_id);
                     }
                 }
             }
@@ -5630,8 +5590,7 @@ impl Governance {
         // Find the target position of the target version
         if !upgrade_steps.contains(&target_version) {
             let message = format!(
-                "Target version {} is not on the upgrade path {:?}",
-                target_version, upgrade_steps
+                "Target version {target_version} is not on the upgrade path {upgrade_steps:?}"
             );
             self.invalidate_target_version(message);
             return;
@@ -5662,7 +5621,7 @@ impl Governance {
                 Ok((canister_type, wasm_hash)) => (canister_type, wasm_hash),
 
                 Err(err) => {
-                    let message = format!("Upgrade attempt failed: {}", err);
+                    let message = format!("Upgrade attempt failed: {err}");
                     log!(ERROR, "{}", message);
                     self.invalidate_target_version(message);
                     return;
@@ -5681,12 +5640,12 @@ impl Governance {
             proposal_id: None,
         });
 
-        println!("Initiating upgrade to version: {:?}", next_version);
+        println!("Initiating upgrade to version: {next_version:?}");
         let upgrade_attempt = self
             .upgrade_sns_framework_canister(wasm_hash, canister_type)
             .await;
         if let Err(err) = upgrade_attempt {
-            let message = format!("Upgrade attempt failed: {}", err);
+            let message = format!("Upgrade attempt failed: {err}");
             log!(ERROR, "{}", message);
             self.proto.pending_version = None;
             self.invalidate_target_version(message);
@@ -5975,9 +5934,7 @@ impl Governance {
         let total_reward_shares: Decimal = neuron_id_to_reward_shares.values().sum();
         debug_assert!(
             total_reward_shares >= dec!(0),
-            "total_reward_shares: {} neuron_id_to_reward_shares: {:#?}",
-            total_reward_shares,
-            neuron_id_to_reward_shares,
+            "total_reward_shares: {total_reward_shares} neuron_id_to_reward_shares: {neuron_id_to_reward_shares:#?}",
         );
 
         // Because of rounding (and other shenanigans), it is possible that some
@@ -6020,16 +5977,11 @@ impl Governance {
                 // Round down, and convert to u64.
                 let neuron_reward_e8s = u64::try_from(neuron_reward_e8s).unwrap_or_else(|err| {
                     panic!(
-                        "Calculating reward for neuron {:?}:\n\
-                             neuron_reward_shares: {}\n\
-                             rewards_purse_e8s: {}\n\
-                             total_reward_shares: {}\n\
-                             err: {}",
-                        neuron_id,
-                        neuron_reward_shares,
-                        rewards_purse_e8s,
-                        total_reward_shares,
-                        err,
+                        "Calculating reward for neuron {neuron_id:?}:\n\
+                             neuron_reward_shares: {neuron_reward_shares}\n\
+                             rewards_purse_e8s: {rewards_purse_e8s}\n\
+                             total_reward_shares: {total_reward_shares}\n\
+                             err: {err}",
                     )
                 });
                 // If the neuron has auto-stake-maturity on, add the new maturity to the
@@ -6051,9 +6003,7 @@ impl Governance {
         // than the original purse.
         debug_assert!(
             i2d(distributed_e8s_equivalent) <= rewards_purse_e8s,
-            "rewards distributed ({}) > purse ({})",
-            distributed_e8s_equivalent,
-            rewards_purse_e8s,
+            "rewards distributed ({distributed_e8s_equivalent}) > purse ({rewards_purse_e8s})",
         );
 
         // This field is deprecated. People should really use end_timestamp_seconds
@@ -6069,7 +6019,8 @@ impl Governance {
             let p = match self.get_proposal_data_mut(*pid) {
                 Some(p) => p,
                 None => {
-                    log!(ERROR,
+                    log!(
+                        ERROR,
                         "Cannot find proposal {}, despite it being considered for rewards distribution.",
                         pid.id
                     );
@@ -6111,8 +6062,7 @@ impl Governance {
                 debug_assert_eq!(
                     p.status(),
                     ProposalDecisionStatus::Rejected,
-                    "Failed to force ProposalData status to become Rejected. p:\n{:#?}",
-                    p,
+                    "Failed to force ProposalData status to become Rejected. p:\n{p:#?}",
                 );
             }
 
@@ -6477,10 +6427,7 @@ impl Governance {
             None => {
                 return Err(GovernanceError::new_with_message(
                     ErrorType::PreconditionFailed,
-                    format!(
-                        "Cannot update neuron. There is no neuron with id: {}",
-                        neuron_id
-                    ),
+                    format!("Cannot update neuron. There is no neuron with id: {neuron_id}"),
                 ));
             }
         };

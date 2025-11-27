@@ -20,7 +20,7 @@ use ic_system_test_driver::{
             RETRY_BACKOFF,
         },
     },
-    util::{block_on, MetricsFetcher},
+    util::{MetricsFetcher, block_on},
 };
 use ic_types::Height;
 

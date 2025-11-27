@@ -4,29 +4,29 @@
 pub mod common;
 
 use crate::common::{
-    create_conn_and_send_request, default_get_latest_state, default_latest_certified_height,
-    default_read_certified_state, get_free_localhost_socket_addr, HttpEndpointBuilder,
+    HttpEndpointBuilder, create_conn_and_send_request, default_get_latest_state,
+    default_latest_certified_height, default_read_certified_state, get_free_localhost_socket_addr,
 };
-use axum::body::{to_bytes, Body};
+use axum::body::{Body, to_bytes};
 use bytes::Bytes;
-use futures_util::{future::BoxFuture, FutureExt, StreamExt};
+use futures_util::{FutureExt, StreamExt, future::BoxFuture};
 use http_body::Frame;
 use http_body_util::StreamBody;
-use hyper::{body::Incoming, Method, Request, StatusCode};
+use hyper::{Method, Request, StatusCode, body::Incoming};
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_canister_client::prepare_read_state;
 use ic_canister_client_sender::Sender;
 use ic_canonical_state::encoding::types::{Cycles, SubnetMetrics};
 use ic_certification_test_utils::{
-    serialize_to_cbor, Certificate as TestCertificate, CertificateBuilder, CertificateData,
+    Certificate as TestCertificate, CertificateBuilder, CertificateData, serialize_to_cbor,
 };
 use ic_config::http_handler::Config;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
-use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, MixedHashTree, Path};
+use ic_crypto_tree_hash::{Label, LabeledTree, MatchPatternPath, MixedHashTree, Path, flatmap};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_http_endpoints_public::{query, read_state};
 use ic_http_endpoints_test_agent::{
-    self, wait_for_status_healthy, Call, CanisterReadState, IngressMessage, Query, APPLICATION_CBOR,
+    self, APPLICATION_CBOR, Call, CanisterReadState, IngressMessage, Query, wait_for_status_healthy,
 };
 use ic_interfaces::execution_environment::QueryExecutionError;
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
@@ -40,30 +40,30 @@ use ic_read_state_response_parser::parse_subnet_read_state_response;
 use ic_registry_keys::make_crypto_threshold_signing_pubkey_key;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities_state::ReplicatedStateBuilder;
-use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id, NODE_1};
+use ic_test_utilities_types::ids::{NODE_1, canister_test_id, subnet_test_id, user_test_id};
 use ic_types::{
+    CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
     artifact::UnvalidatedArtifactMutation,
     consensus::certification::{Certification, CertificationContent},
     crypto::{
-        threshold_sig::{
-            ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-            ThresholdSigPublicKey,
-        },
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
+        threshold_sig::{
+            ThresholdSigPublicKey,
+            ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        },
     },
     ingress::WasmResult,
     messages::{Blob, Certificate, CertificateDelegation},
     signature::ThresholdSignature,
     time::current_time,
-    CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
 };
 use prost::Message;
 use reqwest::header::CONTENT_TYPE;
 use rstest::rstest;
 use rustls::{
+    ClientConfig, DigitallySignedStruct, SignatureScheme,
     client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
     pki_types::{CertificateDer, ServerName, UnixTime},
-    ClientConfig, DigitallySignedStruct, SignatureScheme,
 };
 use serde_bytes::ByteBuf;
 use serde_cbor::value::Value as CBOR;
@@ -72,14 +72,14 @@ use std::{
     convert::Infallible,
     net::TcpStream,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
 };
 use tokio::{
     net::TcpSocket,
     runtime::Runtime,
-    time::{sleep, Duration},
+    time::{Duration, sleep},
 };
 use tokio_rustls::TlsConnector;
 
@@ -134,7 +134,7 @@ fn test_healthy_behind() {
         wait_for_status_healthy(&addr).await.unwrap();
         healthy.store(true, Ordering::SeqCst);
 
-        let url = format!("http://{}/api/v2/status", addr);
+        let url = format!("http://{addr}/api/v2/status");
 
         let response = reqwest::Client::new()
             .get(url)
@@ -151,7 +151,7 @@ fn test_healthy_behind() {
             .expect("Status endpoint is a valid CBOR.");
 
         let CBOR::Map(replica_status) = replica_status else {
-            panic!("Expected a map, got {:?}", replica_status);
+            panic!("Expected a map, got {replica_status:?}");
         };
 
         let replica_health_status = replica_status
@@ -205,8 +205,7 @@ fn test_unauthorized_controller(
         assert_eq!(TEXT_PLAIN, response.headers().get(CONTENT_TYPE).unwrap());
         assert_eq!(
             format!(
-                "Effective principal id in URL {} does not match requested principal id: {}.",
-                canister1, canister2
+                "Effective principal id in URL {canister1} does not match requested principal id: {canister2}."
             ),
             response.text().await.unwrap()
         );
@@ -269,8 +268,7 @@ fn test_unauthorized_query(
 
         assert_eq!(
             format!(
-                "Specified CanisterId {} does not match effective canister id in URL {}",
-                canister1, canister2
+                "Specified CanisterId {canister1} does not match effective canister id in URL {canister2}"
             ),
             response.text().await.unwrap()
         )
@@ -302,7 +300,7 @@ fn test_update_call_to_management_canister(
     rt.spawn(async move {
         loop {
             let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
-            resp.send_response(Ok(()))
+            resp.send_response(Ok(Ok(())))
         }
     });
 
@@ -341,7 +339,7 @@ fn test_unauthorized_call(#[values(Call::V2, Call::V3, Call::V4)] endpoint: Call
     rt.spawn(async move {
         loop {
             let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
-            resp.send_response(Ok(()))
+            resp.send_response(Ok(Ok(())))
         }
     });
 
@@ -378,8 +376,7 @@ fn test_unauthorized_call(#[values(Call::V2, Call::V3, Call::V4)] endpoint: Call
 
         assert_eq!(
             format!(
-                "Specified CanisterId {} does not match effective canister id in URL {}",
-                canister1, canister2
+                "Specified CanisterId {canister1} does not match effective canister id in URL {canister2}"
             ),
             invalid_update_call.text().await.unwrap()
         );
@@ -591,7 +588,7 @@ fn test_status_code_when_ingress_filter_fails(
         let (_, send_response) = request.unwrap();
 
         let response = UserError::new(ErrorCode::IngressHistoryFull, "Test reject message");
-        send_response.send_response(Err(response));
+        send_response.send_response(Ok(Err(response)));
     });
 
     rt.block_on(async move {
@@ -632,8 +629,7 @@ fn test_graceful_shutdown_of_the_endpoint() {
     let connection_to_endpoint = TcpStream::connect(addr);
     assert!(
         connection_to_endpoint.is_ok(),
-        "Connecting to endpoint failed: {:?}.",
-        connection_to_endpoint
+        "Connecting to endpoint failed: {connection_to_endpoint:?}."
     );
 
     // If the shutdown of the endpoint is not "graceful" then the test will timeout
@@ -666,7 +662,7 @@ fn test_too_long_paths_are_rejected(
     HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let long_path: Path = (0..100)
-        .map(|i| format!("hallo{}", i).into())
+        .map(|i| format!("hallo{i}").into())
         .collect::<Vec<Label>>()
         .into();
 
@@ -725,6 +721,8 @@ fn can_retrieve_subnet_metrics(
     #[values(read_state::subnet::Version::V2, read_state::subnet::Version::V3)]
     version: read_state::subnet::Version,
 ) {
+    use ic_crypto_tree_hash::MatchPatternPath;
+
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -818,9 +816,10 @@ fn can_retrieve_subnet_metrics(
                     self.2.height
                 }
 
-                fn read_certified_state(
+                fn read_certified_state_with_exclusion(
                     &self,
                     _paths: &LabeledTree<()>,
+                    _exclusion: Option<&MatchPatternPath>,
                 ) -> Option<(MixedHashTree, Certification)> {
                     Some((self.1.clone(), self.2.clone()))
                 }
@@ -973,7 +972,7 @@ fn test_http_2_requests_are_accepted() {
         wait_for_status_healthy(&addr).await.unwrap();
 
         client
-            .get(format!("http://{}/api/v2/status", addr))
+            .get(format!("http://{addr}/api/v2/status"))
             .header("Content-Type", "application/cbor")
             .send()
             .await
@@ -982,8 +981,7 @@ fn test_http_2_requests_are_accepted() {
 
     assert!(
         response.status().is_success(),
-        "Response was not successful: {:?}.",
-        response
+        "Response was not successful: {response:?}."
     );
     assert_eq!(response.version(), reqwest::Version::HTTP_2);
 }
@@ -1095,7 +1093,7 @@ fn test_http_1_requests_are_accepted() {
         wait_for_status_healthy(&addr).await.unwrap();
 
         client
-            .get(format!("http://{}/api/v2/status", addr))
+            .get(format!("http://{addr}/api/v2/status"))
             .header("Content-Type", "application/cbor")
             .send()
             .await
@@ -1104,8 +1102,7 @@ fn test_http_1_requests_are_accepted() {
 
     assert!(
         response.status().is_success(),
-        "Response was not successful: {:?}.",
-        response
+        "Response was not successful: {response:?}."
     );
     assert_eq!(response.version(), reqwest::Version::HTTP_11);
 }
@@ -1117,6 +1114,8 @@ fn test_http_1_requests_are_accepted() {
 fn test_call_handler_returns_early_for_ingress_message_already_in_certified_state(
     #[values(Call::V3, Call::V4)] endpoint: Call,
 ) {
+    use ic_crypto_tree_hash::MatchPatternPath;
+
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -1154,9 +1153,10 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
                     unimplemented!();
                 }
 
-                fn read_certified_state(
+                fn read_certified_state_with_exclusion(
                     &self,
                     paths: &LabeledTree<()>,
+                    _exclusion: Option<&MatchPatternPath>,
                 ) -> Option<(MixedHashTree, Certification)> {
                     let message_id = match paths {
                         LabeledTree::SubTree(flat_map) => {
@@ -1224,7 +1224,7 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
     rt.spawn(async move {
         loop {
             let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
-            resp.send_response(Ok(()))
+            resp.send_response(Ok(Ok(())))
         }
     });
 
@@ -1252,7 +1252,7 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
             serde_cbor::from_slice::<CBOR>(&response_body).expect("Response is a valid CBOR.");
 
         let CBOR::Map(response_map) = response else {
-            panic!("Expected a map, got {:?}", response);
+            panic!("Expected a map, got {response:?}");
         };
 
         assert_eq!(
@@ -1262,7 +1262,7 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
 
         let certificate = match response_map.get(&CBOR::Text("certificate".to_string())) {
             Some(CBOR::Bytes(certificate)) => certificate,
-            Some(content) => panic!("Expected bytes for Certificate. Got {:?} instead", content),
+            Some(content) => panic!("Expected bytes for Certificate. Got {content:?} instead"),
             _ => panic!("Reply is missing."),
         };
 
@@ -1293,7 +1293,7 @@ fn test_duplicate_concurrent_requests_return_early(#[values(Call::V3, Call::V4)]
     rt.spawn(async move {
         loop {
             let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
-            resp.send_response(Ok(()))
+            resp.send_response(Ok(Ok(())))
         }
     });
 
@@ -1349,7 +1349,7 @@ fn test_duplicate_concurrent_requests_return_early(#[values(Call::V3, Call::V4)]
             serde_cbor::from_slice::<CBOR>(&response_body).expect("Response is a valid CBOR.");
 
         let CBOR::Map(response_map) = response else {
-            panic!("Expected a map, got {:?}", response);
+            panic!("Expected a map, got {response:?}");
         };
 
         assert_eq!(
@@ -1390,7 +1390,7 @@ fn test_sync_call_endpoint_responds_with_certificate(
     rt.spawn(async move {
         loop {
             let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
-            resp.send_response(Ok(()))
+            resp.send_response(Ok(Ok(())))
         }
     });
 
@@ -1435,7 +1435,7 @@ fn test_sync_call_endpoint_responds_with_certificate(
             serde_cbor::from_slice::<CBOR>(&response_body).expect("Response is a valid CBOR.");
 
         let CBOR::Map(response_map) = response else {
-            panic!("Expected a map, got {:?}", response);
+            panic!("Expected a map, got {response:?}");
         };
 
         assert_eq!(
@@ -1445,7 +1445,7 @@ fn test_sync_call_endpoint_responds_with_certificate(
 
         let certificate = match response_map.get(&CBOR::Text("certificate".to_string())) {
             Some(CBOR::Bytes(certificate)) => certificate,
-            Some(content) => panic!("Expected bytes for Certificate. Got {:?} instead", content),
+            Some(content) => panic!("Expected bytes for Certificate. Got {content:?} instead"),
             _ => panic!("Reply is missing."),
         };
 
@@ -1476,7 +1476,7 @@ fn test_synchronous_call_endpoint_no_certification(#[values(Call::V3, Call::V4)]
     rt.spawn(async move {
         loop {
             let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
-            resp.send_response(Ok(()))
+            resp.send_response(Ok(Ok(())))
         }
     });
 
@@ -1519,9 +1519,10 @@ impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
         unimplemented!()
     }
 
-    fn read_certified_state(
+    fn read_certified_state_with_exclusion(
         &self,
         _paths: &LabeledTree<()>,
+        _exclusion: Option<&MatchPatternPath>,
     ) -> Option<(MixedHashTree, Certification)> {
         None
     }
@@ -1575,7 +1576,7 @@ fn test_call_v3_response_when_state_reader_fails(
     rt.spawn(async move {
         loop {
             let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
-            resp.send_response(Ok(()))
+            resp.send_response(Ok(Ok(())))
         }
     });
 
@@ -1633,7 +1634,7 @@ fn test_call_response_when_p2p_not_running(
     rt.spawn(async move {
         loop {
             let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
-            resp.send_response(Ok(()))
+            resp.send_response(Ok(Ok(())))
         }
     });
 

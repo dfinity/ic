@@ -2,7 +2,9 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::CanisterId;
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
-use ic_rosetta_test_utils::test_http_request_decoding_quota;
+use ic_ledger_suite_state_machine_tests::{
+    check_icrc3_supported_block_types, test_http_request_decoding_quota,
+};
 use ic_state_machine_tests::{StateMachine, WasmResult};
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::Account;
@@ -111,6 +113,7 @@ fn test_icrc3_get_blocks() {
                 created_at_time: None,
                 memo: None,
             },
+            btype: None,
         }
     };
 
@@ -128,6 +131,7 @@ fn test_icrc3_get_blocks() {
         Operation::Mint {
             to: Account::from(Principal::anonymous()),
             amount: Tokens::from(1_000_000_000u64),
+            fee: None,
         },
     );
     let blockid0 = block_with_id(0, block0.clone());
@@ -259,10 +263,12 @@ fn test_icrc3_get_blocks_number_of_blocks_limit() {
                 operation: Operation::Mint {
                     to: Account::from(Principal::anonymous()),
                     amount: Tokens::from(amount as u64),
+                    fee: None,
                 },
                 created_at_time: None,
                 memo: None,
             },
+            btype: None,
         }
         .encode()
     }
@@ -347,4 +353,11 @@ fn test_archive_http_request_decoding_quota() {
     let setup = Setup::default();
 
     test_http_request_decoding_quota(&setup.state_machine, setup.archive_id);
+}
+
+#[test]
+fn test_icrc3_supported_block_types() {
+    let setup = Setup::default();
+
+    check_icrc3_supported_block_types(&setup.state_machine, setup.archive_id, true);
 }

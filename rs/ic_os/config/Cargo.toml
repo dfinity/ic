@@ -1,10 +1,11 @@
 [package]
 name = "config"
 version = "1.0.0"
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+askama = { workspace = true }
 clap = { workspace = true }
 macaddr = { workspace = true }
 utils = { path = "../utils" }
@@ -15,13 +16,15 @@ serde_with = "1.6.2"
 regex = { workspace = true }
 ic-config = { path = "../../config" }
 config_types = { path = "../config_types" }
-network = { path = "../network" }                     # Only required by bin
+network = { path = "../network" }                                     # Only required by bin
 deterministic_ips = { path = "../deterministic_ips" }
+linux_kernel_command_line = { path = "../linux_kernel_command_line" }
 tempfile = { workspace = true }
 rust-ini = { workspace = true }
 fs_extra = { workspace = true }
 walkdir = { workspace = true }
 get_if_addrs = { workspace = true }
+ic_sev = { path = "../sev" }
 
 [dev-dependencies]
 once_cell = "1.8"

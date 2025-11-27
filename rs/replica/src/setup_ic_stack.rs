@@ -2,12 +2,11 @@ use crate::setup::get_subnet_type;
 use ic_artifact_pool::{
     consensus_pool::ConsensusPoolImpl, ensure_persistent_pool_replica_version_compatibility,
 };
-use ic_btc_adapter_client::{setup_bitcoin_adapter_clients, BitcoinAdapterClients};
+use ic_btc_adapter_client::{BitcoinAdapterClients, setup_bitcoin_adapter_clients};
 use ic_btc_consensus::BitcoinPayloadBuilder;
-use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, Config};
+use ic_config::{Config, artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig};
 use ic_consensus_certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
-use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
 use ic_http_endpoints_xnet::XNetEndpoint;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
@@ -17,7 +16,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
 use ic_nns_delegation_manager::start_nns_delegation_manager;
@@ -26,18 +25,18 @@ use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replica_setup_ic_network::setup_consensus_and_p2p;
 use ic_replicated_state::ReplicatedState;
-use ic_state_manager::{state_sync::StateSync, StateManagerImpl};
+use ic_state_manager::{StateManagerImpl, state_sync::StateSync};
 use ic_tracing::ReloadHandles;
 use ic_types::{
+    Height, NodeId, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     consensus::{CatchUpPackage, HasHeight},
     messages::SignedIngress,
-    Height, NodeId, SubnetId,
 };
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::sync::{Arc, RwLock};
 use tokio::sync::{
-    mpsc::{channel, Sender},
+    mpsc::{Sender, channel},
     watch,
 };
 use tokio_util::sync::CancellationToken;
@@ -107,8 +106,9 @@ pub fn construct_ic_stack(
             // This case is only possible if the replica is started without an orchestrator which
             // is currently only possible in the local development mode with `dfx`.
             None => {
-                let registry_cup = ic_consensus::make_registry_cup(&*registry, subnet_id, log)
-                    .expect("Couldn't create a registry CUP");
+                let registry_cup =
+                    ic_consensus_cup_utils::make_registry_cup(&*registry, subnet_id, log)
+                        .expect("Couldn't create a registry CUP");
 
                 info!(
                     log,
@@ -179,27 +179,21 @@ pub fn construct_ic_stack(
         config.malicious_behavior.malicious_flags.clone(),
     ));
     // ---------- EXECUTION DEPS FOLLOW ----------
-    let subnet_config = SubnetConfig::new(subnet_type);
-    let cycles_account_manager = Arc::new(CyclesAccountManager::new(
-        subnet_config.scheduler_config.max_instructions_per_message,
-        subnet_type,
-        subnet_id,
-        subnet_config.cycles_account_manager_config,
-    ));
 
     let (completed_execution_messages_tx, finalized_ingress_height_rx) =
         channel(COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE);
     let max_canister_http_requests_in_flight =
         config.hypervisor.max_canister_http_requests_in_flight;
 
+    let subnet_config = SubnetConfig::new(subnet_type);
+
     let execution_services = ExecutionServices::setup_execution(
         log.clone(),
         metrics_registry,
         subnet_id,
         subnet_type,
-        subnet_config.scheduler_config,
         config.hypervisor.clone(),
-        cycles_account_manager.clone(),
+        subnet_config.clone(),
         state_manager.clone(),
         state_manager.get_fd_factory(),
         completed_execution_messages_tx,
@@ -226,7 +220,7 @@ pub fn construct_ic_stack(
             execution_services.ingress_history_writer,
             execution_services.scheduler,
             config.hypervisor,
-            Arc::clone(&cycles_account_manager),
+            Arc::clone(&execution_services.cycles_account_manager),
             subnet_id,
             metrics_registry,
             log.clone(),
@@ -303,10 +297,9 @@ pub fn construct_ic_stack(
         rt_handle_main.clone(),
         metrics_registry,
         config.adapters_config,
-        execution_services.https_outcalls_service,
+        execution_services.transform_execution_service,
         max_canister_http_requests_in_flight,
         log.clone(),
-        nns_delegation_watcher.clone(),
     );
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
     let state_sync = StateSync::new(state_manager.clone(), log.clone());
@@ -338,7 +331,7 @@ pub fn construct_ic_stack(
         Arc::clone(&crypto) as Arc<_>,
         registry.clone(),
         execution_services.ingress_history_reader,
-        cycles_account_manager,
+        execution_services.cycles_account_manager,
         canister_http_adapter_client,
         config.nns_registry_replicator.poll_delay_duration_ms,
         max_certified_height_tx,

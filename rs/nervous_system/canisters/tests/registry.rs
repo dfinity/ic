@@ -2,11 +2,11 @@ use candid::{CandidType, Encode};
 use canister_test::Project;
 use ic_base_types::CanisterId;
 use ic_crypto_sha2::Sha256;
-use ic_nervous_system_agent::{pocketic_impl::PocketIcAgent, CallCanisters, Request};
+use ic_nervous_system_agent::{CallCanisters, Request, pocketic_impl::PocketIcAgent};
 use ic_nervous_system_chunks::test_data::MEGA_BLOB;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
-use ic_nns_test_utils::common::{build_test_registry_wasm, NnsInitPayloadsBuilder};
+use ic_nns_test_utils::common::{NnsInitPayloadsBuilder, build_test_registry_wasm};
 use ic_registry_canister_api::mutate_test_high_capacity_records;
 use ic_registry_fetch_large_record_test_canister::ContentSummary;
 use pocket_ic::PocketIcBuilder;
@@ -88,7 +88,9 @@ async fn test_registry_get_changes_since() {
 
     // Step 1.4: Install a canister that calls registry_changes_since (the code
     // under test).
-    let fetch_large_record_test_canister_id = CanisterId::from(670_767_024);
+    // The following canister ID must belong to the canister ranges
+    // of a subnet on the ICP mainnet.
+    let fetch_large_record_test_canister_id = CanisterId::from(29_767_024);
     install_canister(
         &pocket_ic,
         "fetch_large_record_test_canister_id",

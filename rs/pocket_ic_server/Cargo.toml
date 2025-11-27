@@ -1,7 +1,7 @@
 [package]
 name = "pocket-ic-server"
-version = "9.0.3"
-edition = "2021"
+version = "10.0.0"
+edition.workspace = true
 
 [dependencies]
 aide = { workspace = true }
@@ -31,15 +31,18 @@ icp-ledger = { path = "../ledger_suite/icp" }
 ic-agent = { workspace = true }
 ic-boundary = { path = "../boundary_node/ic_boundary" }
 ic-btc-adapter = { path = "../bitcoin/adapter" }
+ic-btc-interface = { workspace = true }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-cdk = { workspace = true }
 ic-config = { path = "../config" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
+ic-doge-interface = { workspace = true }
 ic-ed25519 = { path = "../../packages/ic-ed25519" }
 ic-error-types = { path = "../../packages/ic-error-types" }
 ic-gateway = { workspace = true }
+ic-bn-lib-common = { workspace = true }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-https-outcalls-adapter = { path = "../https_outcalls/adapter" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
@@ -54,13 +57,18 @@ ic-limits = { path = "../limits" }
 ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
+ic-nervous-system-common = { path = "../nervous_system/common" }
 ic-nns-common = { path = "../nns/common" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-nns-delegation-manager = { path = "../http_endpoints/nns_delegation_manager" }
 ic-nns-governance-api = { path = "../nns/governance/api" }
 ic-nns-governance-init = { path = "../nns/governance/init" }
 ic-nns-handler-root = { path = "../nns/handlers/root/impl" }
+ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
 ic-protobuf = { path = "../protobuf" }
+ic-registry-canister-api = { path = "../registry/canister/api" }
+ic-registry-client = { path = "../registry/client" }
+ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
@@ -76,6 +84,7 @@ ic-types = { path = "../types/types" }
 ic-utils = { workspace = true }
 ic-utils-thread = { path = "../utils/thread" }
 ic-validator-ingress-message = { path = "../validator/ingress_message" }
+icrc-ledger-types = { path = "../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
 libc = { workspace = true }
 pocket-ic = { path = "../../packages/pocket-ic" }
@@ -104,7 +113,6 @@ wat = { workspace = true }
 candid_parser = { workspace = true }
 flate2 = { workspace = true }
 ic-btc-adapter-test-utils = { path = "../bitcoin/adapter/test_utils" }
-ic-btc-interface = { workspace = true }
 ic-config = { path = "../config" }
 ic-registry-transport = { path = "../registry/transport" }
 nix = { version = "0.29.0" }
@@ -113,5 +121,4 @@ rcgen = { workspace = true }
 reqwest = { workspace = true }
 rustls = { workspace = true }
 serde_json = { workspace = true }
-spec-compliance = { path = "../tests/research/spec_compliance" }
 walrus = { workspace = true }

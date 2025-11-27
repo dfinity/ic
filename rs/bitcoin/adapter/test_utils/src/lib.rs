@@ -1,13 +1,13 @@
 use std::collections::HashSet;
 
 use bitcoin::{
+    Block, BlockHash, Target, Transaction, TxMerkleNode,
     block::{Header as BlockHeader, Version},
     consensus::deserialize,
     hashes::Hash,
-    Block, BlockHash, Target, Transaction, TxMerkleNode,
 };
 use hex::FromHex;
-use rand::{prelude::StdRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, prelude::StdRng};
 
 pub mod bitcoind;
 pub mod rpc_client;

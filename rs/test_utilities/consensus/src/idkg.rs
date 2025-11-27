@@ -1,20 +1,21 @@
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    generate_ecdsa_presig_quadruple, generate_key_transcript, setup_unmasked_random_params,
-    CanisterThresholdSigTestEnvironment, IDkgParticipants,
+    CanisterThresholdSigTestEnvironment, IDkgParticipants, ThresholdEcdsaSigInputsOwned,
+    ThresholdSchnorrSigInputsOwned, generate_ecdsa_presig_quadruple, generate_key_transcript,
+    setup_unmasked_random_params,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
 use ic_management_canister_types_private::{
     EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdKeyId,
 };
 use ic_replicated_state::{
+    ReplicatedState,
     metadata_state::subnet_call_context_manager::{
         EcdsaArguments, EcdsaMatchedPreSignature, PreSignatureStash, ReshareChainKeyContext,
         SchnorrArguments, SchnorrMatchedPreSignature, SignWithThresholdContext, ThresholdArguments,
         VetKdArguments,
     },
-    ReplicatedState,
 };
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::{
@@ -22,34 +23,35 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
+    Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,
     batch::ConsensusResponse,
     consensus::{
         certification::Certification,
         idkg::{
-            common::{PreSignature, PreSignatureRef, ThresholdSigInputs},
-            ecdsa::PreSignatureQuadrupleRef,
-            schnorr::PreSignatureTranscriptRef,
             HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId, IDkgPayload, IDkgReshareRequest,
             KeyTranscriptCreation, MaskedTranscript, MasterKeyTranscript, PreSigId, RequestId,
             TranscriptRef, UnmaskedTranscript,
+            common::{PreSignature, PreSignatureRef, ThresholdSigInputs},
+            ecdsa::PreSignatureQuadrupleRef,
+            schnorr::PreSignatureTranscriptRef,
         },
     },
     crypto::{
+        AlgorithmId, ExtendedDerivationPath,
         canister_threshold_sig::{
+            SchnorrPreSignatureTranscript,
             idkg::{
                 IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
                 IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
             },
-            SchnorrPreSignatureTranscript, ThresholdEcdsaSigInputs, ThresholdSchnorrSigInputs,
         },
         threshold_sig::ni_dkg::{
             NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
-        AlgorithmId, ExtendedDerivationPath,
+        vetkd::VetKdArgs,
     },
     messages::{CallbackId, Payload},
     time::UNIX_EPOCH,
-    Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -387,9 +389,10 @@ impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
         self.height
     }
 
-    fn read_certified_state(
+    fn read_certified_state_with_exclusion(
         &self,
         _paths: &LabeledTree<()>,
+        _exclusion: Option<&MatchPatternPath>,
     ) -> Option<(MixedHashTree, Certification)> {
         None
     }
@@ -403,8 +406,8 @@ pub struct TestPreSigRef {
     pub pre_signature_ref: PreSignatureRef,
 }
 
-impl From<&ThresholdEcdsaSigInputs> for TestPreSigRef {
-    fn from(inputs: &ThresholdEcdsaSigInputs) -> TestPreSigRef {
+impl From<&ThresholdEcdsaSigInputsOwned> for TestPreSigRef {
+    fn from(inputs: &ThresholdEcdsaSigInputsOwned) -> TestPreSigRef {
         let height = Height::from(0);
         let quad = inputs.presig_quadruple();
         let key = inputs.key_transcript();
@@ -437,8 +440,8 @@ impl From<&ThresholdEcdsaSigInputs> for TestPreSigRef {
     }
 }
 
-impl From<&ThresholdSchnorrSigInputs> for TestPreSigRef {
-    fn from(inputs: &ThresholdSchnorrSigInputs) -> TestPreSigRef {
+impl From<&ThresholdSchnorrSigInputsOwned> for TestPreSigRef {
+    fn from(inputs: &ThresholdSchnorrSigInputsOwned) -> TestPreSigRef {
         let height = Height::from(0);
         let pre_signature = inputs.presig_transcript();
         let key = inputs.key_transcript();
@@ -597,7 +600,7 @@ pub fn create_pre_sig_ref_with_height(
         transcript_id: key_unmasked_id,
         receivers: IDkgReceivers::new(receivers.clone()).unwrap(),
         registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
             key_masked_id,
         )),
@@ -655,7 +658,7 @@ pub fn create_ecdsa_pre_sig_ref_with_args(
         transcript_id: kappa_unmasked_id,
         receivers: IDkgReceivers::new(receivers.clone()).unwrap(),
         registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random),
         algorithm_id,
         internal_transcript_raw: vec![],
@@ -667,7 +670,7 @@ pub fn create_ecdsa_pre_sig_ref_with_args(
         transcript_id: lambda_masked_id,
         receivers: IDkgReceivers::new(receivers.clone()).unwrap(),
         registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
         algorithm_id,
         internal_transcript_raw: vec![],
@@ -682,7 +685,7 @@ pub fn create_ecdsa_pre_sig_ref_with_args(
         transcript_id: kappa_unmasked_times_lambda_masked_id,
         receivers: IDkgReceivers::new(receivers.clone()).unwrap(),
         registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type: IDkgTranscriptType::Masked(
             IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(kappa_unmasked_id, lambda_masked_id),
         ),
@@ -700,7 +703,7 @@ pub fn create_ecdsa_pre_sig_ref_with_args(
         transcript_id: key_unmasked_times_lambda_masked_id,
         receivers: IDkgReceivers::new(receivers.clone()).unwrap(),
         registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type: IDkgTranscriptType::Masked(
             IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(key_unmasked_id, lambda_masked_id),
         ),
@@ -755,7 +758,7 @@ pub fn create_schnorr_pre_sig_ref_with_args(
         transcript_id: blinder_unmasked_id,
         receivers: IDkgReceivers::new(receivers.clone()).unwrap(),
         registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random),
         algorithm_id,
         internal_transcript_raw: vec![],
@@ -780,10 +783,27 @@ pub fn create_pre_sig_ref(caller: u8, key_id: &IDkgMasterPublicKeyId) -> TestPre
     create_pre_sig_ref_with_height(caller, Height::new(100), key_id)
 }
 
+#[allow(clippy::large_enum_variant)]
+pub enum ThresholdSigInputsOwned {
+    Ecdsa(ThresholdEcdsaSigInputsOwned),
+    Schnorr(ThresholdSchnorrSigInputsOwned),
+    VetKd(VetKdArgs),
+}
+
+impl ThresholdSigInputsOwned {
+    pub fn as_ref<'a>(&'a self) -> ThresholdSigInputs<'a> {
+        match self {
+            ThresholdSigInputsOwned::Ecdsa(i) => ThresholdSigInputs::Ecdsa(i.as_ref()),
+            ThresholdSigInputsOwned::Schnorr(i) => ThresholdSigInputs::Schnorr(i.as_ref()),
+            ThresholdSigInputsOwned::VetKd(i) => ThresholdSigInputs::VetKd(i.clone()),
+        }
+    }
+}
+
 pub fn create_threshold_sig_inputs(
     caller: u8,
     key_id: &IDkgMasterPublicKeyId,
-) -> ThresholdSigInputs {
+) -> ThresholdSigInputsOwned {
     let path = ExtendedDerivationPath {
         caller: PrincipalId::try_from(&vec![caller]).unwrap(),
         derivation_path: vec![],
@@ -797,16 +817,14 @@ pub fn create_threshold_sig_inputs(
                 PreSigId(1),
                 RegistryVersion::from(1),
             );
-            ThresholdSigInputs::Ecdsa(
-                ThresholdEcdsaSigInputs::new(
-                    &path,
-                    &[1; 32],
-                    rnd,
-                    pre_sig.pre_signature.as_ref().clone(),
-                    pre_sig.key_transcript.as_ref().clone(),
-                )
-                .unwrap(),
-            )
+            ThresholdSigInputsOwned::Ecdsa(ThresholdEcdsaSigInputsOwned::new(
+                path.caller,
+                path.derivation_path,
+                [1; 32].to_vec(),
+                rnd.get(),
+                pre_sig.pre_signature.as_ref().clone(),
+                pre_sig.key_transcript.as_ref().clone(),
+            ))
         }
         MasterPublicKeyId::Schnorr(key_id) => {
             let pre_sig = fake_schnorr_matched_pre_signature(
@@ -815,17 +833,15 @@ pub fn create_threshold_sig_inputs(
                 PreSigId(1),
                 RegistryVersion::from(1),
             );
-            ThresholdSigInputs::Schnorr(
-                ThresholdSchnorrSigInputs::new(
-                    &path,
-                    &[1; 64],
-                    None,
-                    rnd,
-                    pre_sig.pre_signature.as_ref().clone(),
-                    pre_sig.key_transcript.as_ref().clone(),
-                )
-                .unwrap(),
-            )
+            ThresholdSigInputsOwned::Schnorr(ThresholdSchnorrSigInputsOwned::new(
+                path.caller,
+                path.derivation_path,
+                vec![1; 64],
+                None,
+                rnd.get(),
+                pre_sig.pre_signature.as_ref().clone(),
+                pre_sig.key_transcript.as_ref().clone(),
+            ))
         }
         MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
     }

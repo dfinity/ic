@@ -1,8 +1,8 @@
 use bitcoin::{
-    consensus::encode::deserialize, dogecoin::Network as DogeNetwork, Amount, BlockHash,
-    Network as BtcNetwork,
+    Amount, BlockHash, Network as BtcNetwork, consensus::encode::deserialize,
+    dogecoin::Network as DogeNetwork,
 };
-use ic_btc_adapter::{start_server, AdapterNetwork, Config, IncomingSource};
+use ic_btc_adapter::{AdapterNetwork, Config, IncomingSource, start_server};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::{
     bitcoind::{Conf, Daemon},
@@ -13,8 +13,9 @@ use ic_btc_replica_types::{
     Network, SendTransactionRequest,
 };
 use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig;
+use ic_config::logger::{Config as LoggerConfig, Level as LoggerLevel};
 use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError};
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_metrics::MetricsRegistry;
 use std::{
     collections::{HashMap, HashSet},
@@ -91,24 +92,23 @@ fn make_send_tx_request(
 }
 
 fn start_adapter<T: RpcClientType + Into<AdapterNetwork>>(
-    logger: &ReplicaLogger,
-    metrics_registry: &MetricsRegistry,
+    logger: ReplicaLogger,
+    metrics_registry: MetricsRegistry,
     rt_handle: &tokio::runtime::Handle,
     nodes: Vec<SocketAddr>,
     uds_path: &Path,
     network: T,
 ) {
     let config = Config {
-        network: network.into(),
         incoming_source: IncomingSource::Path(uds_path.to_path_buf()),
         nodes,
         ipv6_only: true,
         address_limits: (1, 1),
         idle_seconds: 6, // it can take at most 5 seconds for tcp connections etc to be established.
-        ..Default::default()
+        ..Config::default_with(network.into())
     };
-
-    start_server(logger, metrics_registry, rt_handle, config);
+    let _enter = rt_handle.enter();
+    rt_handle.spawn(start_server(logger, metrics_registry, config));
 }
 
 fn start_bitcoind<T: RpcClientType>(network: T) -> Daemon<T> {
@@ -120,7 +120,7 @@ fn start_bitcoind<T: RpcClientType>(network: T) -> Daemon<T> {
     let name = format!("{}_CORE_PATH", T::NAME.to_uppercase());
     let path = std::env::var(&name).unwrap_or_else(|_| panic!("Failed to get {name} env variable"));
 
-    Daemon::new(&path, network, conf).unwrap()
+    Daemon::new(&path, network, conf)
 }
 
 fn start_client<T: RpcClientType>(
@@ -169,8 +169,8 @@ fn start_adapter_and_client<T: RpcClientType + Into<AdapterNetwork>>(
     let res = Builder::new()
         .make(|uds_path| {
             start_adapter(
-                &logger,
-                &metrics_registry,
+                logger.clone(),
+                metrics_registry.clone(),
                 rt.handle(),
                 urls.clone(),
                 uds_path,
@@ -190,8 +190,17 @@ fn start_adapter_and_client<T: RpcClientType + Into<AdapterNetwork>>(
         .parse()
         .unwrap();
     if let AdapterState::Active = adapter_state {
-        // We send this request to make sure the adapter is not idle.
-        let _ = make_get_successors_request(&res.0, anchor[..].to_vec(), vec![]);
+        // Send this request to make sure the adapter is not idle.
+        // Retry until the request goes through, because the adapter may not be fully
+        // started yet.
+        for _ in 0..10 {
+            let res = make_get_successors_request(&res.0, anchor[..].to_vec(), vec![]);
+            if res.is_err() {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            } else {
+                break;
+            }
+        }
     }
 
     res
@@ -296,7 +305,7 @@ fn sync_until_end_block<T: RpcClientType>(
                 panic!("Wrong type of response")
             }
             Err(RpcError::Unavailable(_)) | Err(RpcError::Cancelled(_)) => (), // Adapter still syncing headers or likely a timeout
-            Err(err) => panic!("{:?}", err),
+            Err(err) => panic!("{err:?}"),
         }
         tries += 1;
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -341,7 +350,7 @@ fn sync_blocks<T: RpcClientType>(
                 panic!("Wrong type of response")
             }
             Err(RpcError::Unavailable(_)) | Err(RpcError::Cancelled(_)) => (), // Adapter still syncing headers or likely a timeout
-            Err(err) => panic!("{:?}", err),
+            Err(err) => panic!("{err:?}"),
         }
         tries += 1;
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -376,7 +385,7 @@ fn sync_blocks_at_once<T: RpcClientType>(
                 panic!("Wrong type of response")
             }
             Err(RpcError::Unavailable(_)) | Err(RpcError::Cancelled(_)) => (), // Adapter still syncing headers or likely a timeout
-            Err(err) => panic!("{:?}", err),
+            Err(err) => panic!("{err:?}"),
         }
         tries += 1;
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -495,7 +504,7 @@ fn sync_headers_until_checkpoint(adapter_client: &AdapterClient, anchor: Vec<u8>
                 // Checkpoint has not been surpassed, adapter still syncing headers
                 std::thread::sleep(std::time::Duration::from_secs(10));
             }
-            Err(err) => panic!("{:?}", err),
+            Err(err) => panic!("{err:?}"),
             _ => return,
         }
     }
@@ -806,7 +815,8 @@ fn doge_test_send_tx() {
 
 /// Checks that the client (replica) receives blocks from both created forks.
 fn test_receives_blocks_from_forks<T: RpcClientType + Into<AdapterNetwork>>() {
-    let logger = no_op_logger();
+    use ic_logger::new_replica_logger_from_config;
+
     let network = T::REGTEST;
     let bitcoind1 = start_bitcoind(network);
     let client1 = &bitcoind1.rpc_client;
@@ -818,6 +828,12 @@ fn test_receives_blocks_from_forks<T: RpcClientType + Into<AdapterNetwork>>() {
     let url2 = bitcoind2.p2p_socket().unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
+
+    let logger_config = LoggerConfig {
+        level: LoggerLevel::Trace,
+        ..LoggerConfig::default()
+    };
+    let (logger, _async_log_guard) = new_replica_logger_from_config(&logger_config);
     let (adapter_client, _path) = start_active_adapter_and_client(
         &rt,
         vec![SocketAddr::V4(url1), SocketAddr::V4(url2)],
@@ -1009,7 +1025,7 @@ fn test_btc_mainnet_data() {
         .unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let bitcoind_addr = ic_btc_adapter_test_utils::bitcoind::mock_bitcoin::<bitcoin::Block>(
+    let bitcoind_addr = ic_btc_adapter_test_utils::bitcoind::mock_bitcoin::<bitcoin::Network>(
         rt.handle(),
         headers_data_path,
         blocks_data_path,
@@ -1045,7 +1061,7 @@ fn test_btc_testnet_data() {
         .unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let bitcoind_addr = ic_btc_adapter_test_utils::bitcoind::mock_bitcoin::<bitcoin::Block>(
+    let bitcoind_addr = ic_btc_adapter_test_utils::bitcoind::mock_bitcoin::<bitcoin::Network>(
         rt.handle(),
         headers_data_path,
         blocks_data_path,

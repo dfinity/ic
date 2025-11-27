@@ -1,4 +1,4 @@
-use tracing_subscriber::{layer::Layer, reload::Handle, Registry};
+use tracing_subscriber::{Registry, layer::Layer, reload::Handle};
 
 pub mod utils;
 

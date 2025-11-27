@@ -1,9 +1,9 @@
 use crate::page_map::{
-    page_allocator::page_allocator_registry::PageAllocatorRegistry, FileDescriptor,
+    FileDescriptor, page_allocator::page_allocator_registry::PageAllocatorRegistry,
 };
 
 use super::{PageAllocator, PageAllocatorSerialization, PageSerialization};
-use ic_sys::{PageIndex, PAGE_SIZE};
+use ic_sys::{PAGE_SIZE, PageIndex};
 use nix::unistd::dup;
 
 fn duplicate_file_descriptors(

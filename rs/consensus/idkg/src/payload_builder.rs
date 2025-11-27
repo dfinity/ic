@@ -1,9 +1,9 @@
 //! This module implements the IDKG payload builder.
 use crate::{
-    metrics::{IDkgPayloadMetrics, CRITICAL_ERROR_MASTER_KEY_TRANSCRIPT_MISSING},
+    metrics::{CRITICAL_ERROR_MASTER_KEY_TRANSCRIPT_MISSING, IDkgPayloadMetrics},
     pre_signer::{IDkgTranscriptBuilder, IDkgTranscriptBuilderImpl},
     signer::{ThresholdSignatureBuilder, ThresholdSignatureBuilderImpl},
-    utils::{block_chain_reader, get_idkg_chain_key_config_if_enabled, InvalidChainCacheError},
+    utils::{InvalidChainCacheError, block_chain_reader, get_idkg_chain_key_config_if_enabled},
 };
 pub(super) use errors::IDkgPayloadError;
 use errors::MembershipError;
@@ -12,22 +12,26 @@ use ic_crypto::retrieve_mega_public_key_from_registry;
 use ic_interfaces::idkg::IDkgPool;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
-use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
+use ic_replicated_state::{ReplicatedState, metadata_state::subnet_call_context_manager::*};
 use ic_types::{
+    Height, NodeId, RegistryVersion, SubnetId, Time,
     batch::ValidationContext,
     consensus::{
+        Block, HasHeight,
         idkg::{
             self, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId, IDkgPayload,
-            MasterKeyTranscript, TranscriptAttributes, STORE_PRE_SIGNATURES_IN_STATE,
+            MasterKeyTranscript, STORE_PRE_SIGNATURES_IN_STATE, TranscriptAttributes,
         },
-        Block, HasHeight,
     },
-    crypto::canister_threshold_sig::idkg::InitialIDkgDealings,
+    crypto::canister_threshold_sig::idkg::{IDkgTranscript, IDkgTranscriptId, InitialIDkgDealings},
     messages::CallbackId,
-    Height, NodeId, RegistryVersion, SubnetId, Time,
+};
+use rayon::{
+    ThreadPool,
+    iter::{IntoParallelIterator, ParallelIterator},
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -470,6 +474,7 @@ pub fn create_data_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
+    thread_pool: &ThreadPool,
     pool_reader: &PoolReader<'_>,
     idkg_pool: Arc<RwLock<dyn IDkgPool>>,
     state_manager: &dyn StateManager<State = ReplicatedState>,
@@ -536,6 +541,7 @@ pub fn create_data_payload(
         &block_reader,
         &transcript_builder,
         &signature_builder,
+        thread_pool,
         state_manager,
         registry_client,
         Some(idkg_payload_metrics),
@@ -582,6 +588,7 @@ pub(crate) fn create_data_payload_helper(
     block_reader: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
     signature_builder: &dyn ThresholdSignatureBuilder,
+    thread_pool: &ThreadPool,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     registry_client: &dyn RegistryClient,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
@@ -647,6 +654,7 @@ pub(crate) fn create_data_payload_helper(
         block_reader,
         transcript_builder,
         signature_builder,
+        thread_pool,
         idkg_payload_metrics,
         log,
         STORE_PRE_SIGNATURES_IN_STATE,
@@ -671,6 +679,7 @@ pub(crate) fn create_data_payload_helper_2(
     block_reader: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
     signature_builder: &dyn ThresholdSignatureBuilder,
+    thread_pool: &ThreadPool,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
     store_pre_signatures_in_state: bool,
@@ -711,6 +720,19 @@ pub(crate) fn create_data_payload_helper_2(
         store_pre_signatures_in_state,
     );
 
+    let inputs = idkg_payload
+        .iter_pre_sig_transcript_configs_in_creation()
+        .collect::<Vec<_>>();
+    let transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript> = thread_pool.install(|| {
+        inputs
+            .into_par_iter()
+            .filter_map(|params_ref| {
+                transcript_builder.get_completed_transcript(params_ref.transcript_id)
+            })
+            .map(|t| (t.transcript_id, t))
+            .collect()
+    });
+
     if !store_pre_signatures_in_state {
         // If pre-signatures are stored on the blockchain, then we may only purge pre-signatures
         // for rotated key transcripts once we are sure that they haven't been paired with ongoing
@@ -732,10 +754,9 @@ pub(crate) fn create_data_payload_helper_2(
                 .matched_pre_signature
                 .as_ref()
                 .is_some_and(|(pid, _)| idkg_payload.available_pre_signatures.contains_key(pid))
+                && let Ok(key_id) = context.key_id().try_into()
             {
-                if let Ok(key_id) = context.key_id().try_into() {
-                    *matched_pre_signatures_per_key_id.entry(key_id).or_insert(0) += 1;
-                }
+                *matched_pre_signatures_per_key_id.entry(key_id).or_insert(0) += 1;
             }
         }
 
@@ -749,12 +770,7 @@ pub(crate) fn create_data_payload_helper_2(
     }
 
     let new_transcripts = [
-        pre_signatures::update_pre_signatures_in_creation(
-            idkg_payload,
-            transcript_builder,
-            height,
-            log,
-        )?,
+        pre_signatures::update_pre_signatures_in_creation(idkg_payload, transcripts, height, log)?,
         key_transcript::update_next_key_transcripts(
             receivers,
             next_interval_registry_version,
@@ -805,16 +821,20 @@ pub(crate) fn create_data_payload_helper_2(
 mod tests {
     use super::*;
     use crate::{
+        MAX_IDKG_THREADS,
         test_utils::*,
-        utils::{block_chain_reader, generate_responses_to_signature_request_contexts},
+        utils::{
+            block_chain_reader, build_thread_pool, generate_responses_to_signature_request_contexts,
+        },
     };
     use assert_matches::assert_matches;
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_crypto_test_utils_canister_threshold_sigs::{
+        CanisterThresholdSigTestEnvironment, IDkgParticipants,
         dummy_values::dummy_initial_idkg_dealing_for_tests, generate_tecdsa_protocol_inputs,
-        generate_tschnorr_protocol_inputs, CanisterThresholdSigTestEnvironment, IDkgParticipants,
+        generate_tschnorr_protocol_inputs,
     };
-    use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+    use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
     use ic_interfaces_registry::RegistryValue;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::MasterPublicKeyId;
@@ -826,28 +846,28 @@ mod tests {
         fake::{Fake, FakeContentSigner},
         idkg::*,
     };
-    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, user_test_id};
     use ic_types::{
+        Height, Randomness, RegistryVersion,
         batch::BatchPayload,
         consensus::{
+            BlockPayload, BlockProposal, DataPayload, HashedBlock, Payload, Rank, SummaryPayload,
             dkg::{DkgDataPayload, DkgSummary},
             idkg::{
                 IDkgPayload, PreSigId, ReshareOfUnmaskedParams, TranscriptRef, UnmaskedTranscript,
                 UnmaskedTranscriptWithAttributes,
             },
-            BlockPayload, BlockProposal, DataPayload, HashedBlock, Payload, Rank, SummaryPayload,
         },
         crypto::{
-            canister_threshold_sig::{
-                idkg::IDkgTranscript, ThresholdEcdsaCombinedSignature,
-                ThresholdSchnorrCombinedSignature,
-            },
             AlgorithmId, CryptoHash, CryptoHashOf, ExtendedDerivationPath,
+            canister_threshold_sig::{
+                ThresholdEcdsaCombinedSignature, ThresholdSchnorrCombinedSignature,
+                idkg::IDkgTranscript,
+            },
         },
         messages::CallbackId,
         time::UNIX_EPOCH,
-        Height, Randomness, RegistryVersion,
     };
     use idkg::common::CombinedSignature;
     use std::{collections::BTreeSet, convert::TryInto};
@@ -972,6 +992,7 @@ mod tests {
     ) {
         const PRE_SIGNATURES_TO_CREATE_IN_ADVANCE: u32 = 5;
         let valid_keys = BTreeSet::from([key_id.clone()]);
+        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
 
         let (mut idkg_payload, _env) = set_up_idkg_payload_with_keys(vec![key_id.clone()]);
         // The parent payload has two pre-signatures
@@ -1014,6 +1035,7 @@ mod tests {
             &TestIDkgBlockReader::new(),
             &TestIDkgTranscriptBuilder::new(),
             &TestThresholdSignatureBuilder::new(),
+            thread_pool.as_ref(),
             /*idkg_payload_metrics*/ None,
             &ic_logger::replica_logger::no_op_logger(),
             store_pre_signatures_in_state,
@@ -1024,12 +1046,16 @@ mod tests {
             // If pre-signatures are stored on the blockchain, then
             // the two initial pre-signature remain in available_pre_signatures.
             assert_eq!(idkg_payload.available_pre_signatures.len(), 2);
-            assert!(idkg_payload
-                .available_pre_signatures
-                .contains_key(&pre_sig1));
-            assert!(idkg_payload
-                .available_pre_signatures
-                .contains_key(&pre_sig2));
+            assert!(
+                idkg_payload
+                    .available_pre_signatures
+                    .contains_key(&pre_sig1)
+            );
+            assert!(
+                idkg_payload
+                    .available_pre_signatures
+                    .contains_key(&pre_sig2)
+            );
 
             // The matched pre-signature is replenished, therefore
             // PRE_SIGNATURES_TO_CREATE_IN_ADVANCE new pre-signatures minus
@@ -1238,6 +1264,7 @@ mod tests {
         key_id: &IDkgMasterPublicKeyId,
         store_pre_signatures_in_state: bool,
     ) {
+        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
         let (mut idkg_payload, _env) = set_up_idkg_payload_with_keys(vec![key_id.clone()]);
         let pre_sig_id = create_available_pre_signature(&mut idkg_payload, key_id.clone(), 13);
         let request_id = request_id(0, Height::from(0));
@@ -1285,6 +1312,7 @@ mod tests {
             &block_reader,
             &transcript_builder,
             &signature_builder,
+            thread_pool.as_ref(),
             /*idkg_payload_metrics*/ None,
             &ic_logger::replica_logger::no_op_logger(),
             store_pre_signatures_in_state,
@@ -1311,6 +1339,7 @@ mod tests {
             &block_reader,
             &transcript_builder,
             &signature_builder,
+            thread_pool.as_ref(),
             /*idkg_payload_metrics*/ None,
             &ic_logger::replica_logger::no_op_logger(),
             store_pre_signatures_in_state,
@@ -1336,7 +1365,7 @@ mod tests {
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
             let subnet_id = subnet_test_id(1);
             let mut expected_transcripts = BTreeSet::new();
-            let transcript_builder = TestIDkgTranscriptBuilder::new();
+            let mut transcripts = BTreeMap::new();
             let mut add_expected_transcripts = |trancript_refs: Vec<idkg::TranscriptRef>| {
                 for transcript_ref in trancript_refs {
                     expected_transcripts.insert(transcript_ref.transcript_id);
@@ -1446,14 +1475,14 @@ mod tests {
                 &config_ref.translate(&block_reader).unwrap(),
                 &mut rng,
             );
-            transcript_builder.add_transcript(config_ref.transcript_id, transcript.clone());
+            transcripts.insert(config_ref.transcript_id, transcript.clone());
             idkg_payload
                 .idkg_transcripts
                 .insert(config_ref.transcript_id, transcript);
             let parent_block_height = Height::new(15);
             let result = pre_signatures::update_pre_signatures_in_creation(
                 &mut idkg_payload,
-                &transcript_builder,
+                transcripts,
                 parent_block_height,
                 &no_op_logger(),
             )
@@ -1595,7 +1624,7 @@ mod tests {
             let mut rng = reproducible_rng();
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
             let subnet_id = subnet_test_id(1);
-            let transcript_builder = TestIDkgTranscriptBuilder::new();
+            let mut transcripts = BTreeMap::new();
             // Create a summary block with transcripts
             let summary_height = Height::new(5);
             let env = CanisterThresholdSigTestEnvironment::new(4, &mut rng);
@@ -1705,14 +1734,14 @@ mod tests {
                 &config_ref.translate(&block_reader).unwrap(),
                 &mut rng,
             );
-            transcript_builder.add_transcript(config_ref.transcript_id, transcript.clone());
+            transcripts.insert(config_ref.transcript_id, transcript.clone());
             idkg_payload
                 .idkg_transcripts
                 .insert(config_ref.transcript_id, transcript);
             let parent_block_height = Height::new(15);
             let result = pre_signatures::update_pre_signatures_in_creation(
                 &mut idkg_payload,
-                &transcript_builder,
+                transcripts,
                 parent_block_height,
                 &no_op_logger(),
             )
@@ -1840,9 +1869,11 @@ mod tests {
                 });
             let summary_from_proto = IDkgPayload::try_from(&summary_proto).unwrap();
             // Make sure the previous RequestId record can be retrieved by its pseudo_random_id.
-            assert!(summary_from_proto
-                .signature_agreements
-                .contains_key(&[4; 32]));
+            assert!(
+                summary_from_proto
+                    .signature_agreements
+                    .contains_key(&[4; 32])
+            );
         })
     }
 
@@ -1951,7 +1982,7 @@ mod tests {
             // set to Begin (membership changed).
             let payload_1 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -1997,7 +2028,7 @@ mod tests {
 
             let payload_3 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2028,6 +2059,7 @@ mod tests {
         key_id: &IDkgMasterPublicKeyId,
         store_pre_signatures_in_state: bool,
     ) {
+        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();
             let Dependencies {
@@ -2151,7 +2183,7 @@ mod tests {
             // set to Begin (membership changed).
             let payload_1 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2203,7 +2235,7 @@ mod tests {
 
             let payload_2 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2266,7 +2298,7 @@ mod tests {
 
             let payload_4 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(2),
@@ -2348,6 +2380,7 @@ mod tests {
                 &block_reader,
                 &transcript_builder,
                 &signature_builder,
+                thread_pool.as_ref(),
                 None,
                 &no_op_logger(),
                 store_pre_signatures_in_state,
@@ -2378,6 +2411,7 @@ mod tests {
                 &block_reader,
                 &transcript_builder,
                 &signature_builder,
+                thread_pool.as_ref(),
                 None,
                 &no_op_logger(),
                 store_pre_signatures_in_state,
@@ -2401,6 +2435,7 @@ mod tests {
         key_id: &IDkgMasterPublicKeyId,
         store_pre_signatures_in_state: bool,
     ) {
+        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 registry,
@@ -2440,7 +2475,7 @@ mod tests {
             // set to Begin.
             let payload_1 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2475,6 +2510,7 @@ mod tests {
                 &block_reader,
                 &transcript_builder,
                 &signature_builder,
+                thread_pool.as_ref(),
                 None,
                 &no_op_logger(),
                 store_pre_signatures_in_state,
@@ -2489,7 +2525,7 @@ mod tests {
             // unfinished next_in_creation
             let payload_3 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(3),
@@ -2527,7 +2563,7 @@ mod tests {
             );
             let payload_4 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(3),
@@ -2560,6 +2596,7 @@ mod tests {
         key_id: &IDkgMasterPublicKeyId,
         store_pre_signatures_in_state: bool,
     ) {
+        let thread_pool = build_thread_pool(MAX_IDKG_THREADS);
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();
             let Dependencies {
@@ -2623,7 +2660,7 @@ mod tests {
             // set to XnetReshareOfUnmaskedParams.
             let payload_1 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2659,6 +2696,7 @@ mod tests {
                 &block_reader,
                 &transcript_builder,
                 &signature_builder,
+                thread_pool.as_ref(),
                 None,
                 &no_op_logger(),
                 store_pre_signatures_in_state,
@@ -2690,6 +2728,7 @@ mod tests {
                 &block_reader,
                 &transcript_builder,
                 &signature_builder,
+                thread_pool.as_ref(),
                 None,
                 &no_op_logger(),
                 store_pre_signatures_in_state,
@@ -2719,6 +2758,7 @@ mod tests {
                 &block_reader,
                 &transcript_builder,
                 &signature_builder,
+                thread_pool.as_ref(),
                 None,
                 &no_op_logger(),
                 store_pre_signatures_in_state,
@@ -2737,7 +2777,7 @@ mod tests {
             // should be created successfully
             let payload_5 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(4),
@@ -2763,7 +2803,7 @@ mod tests {
             // should be created successfully
             let payload_6 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(5),

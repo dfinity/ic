@@ -5,7 +5,7 @@ use crate::{
     register_extension::RegisterExtensionArgs,
     upgrade_sns_controlled_canister::UpgradeSnsControlledCanisterArgs,
 };
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use candid::{CandidType, Decode, Encode, IDLArgs};
 use ic_agent::Agent;
 use ic_base_types::PrincipalId;
@@ -13,9 +13,9 @@ use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance_api::{
-    manage_neuron::{self, NeuronIdOrSubaccount},
+    MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
+    manage_neuron::NeuronIdOrSubaccount,
     manage_neuron_response::{self, MakeProposalResponse},
-    ManageNeuron, ManageNeuronResponse, Proposal,
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
@@ -260,7 +260,10 @@ impl DeployTestflightArgs {
                     .neurons_fund_participation
                     .unwrap_or_default()
                 {
-                    println!("Neuron's fund participation was enabled in {}, but is not supported by SNS testflight. Proceeding as if it was disabled.", init_config_file.display());
+                    println!(
+                        "Neuron's fund participation was enabled in {}, but is not supported by SNS testflight. Proceeding as if it was disabled.",
+                        init_config_file.display()
+                    );
                     create_service_nervous_system
                         .swap_parameters
                         .as_mut()
@@ -326,6 +329,7 @@ pub fn add_sns_wasm_for_tests(args: AddSnsWasmForTestsArgs) -> Result<()> {
             proposal_id: None,
         }),
         hash: sns_wasm_hash.to_vec(),
+        skip_update_latest_version: Some(false),
     };
 
     let sns_wasms_canister_id = args
@@ -337,7 +341,7 @@ pub fn add_sns_wasm_for_tests(args: AddSnsWasmForTestsArgs) -> Result<()> {
     let idl = IDLArgs::from_bytes(&Encode!(&add_sns_wasm_request).unwrap()).unwrap();
     let mut argument_file = NamedTempFile::new().expect("Could not open temp file");
     argument_file
-        .write_all(format!("{}", idl).as_bytes())
+        .write_all(format!("{idl}").as_bytes())
         .expect("Could not write wasm to temp file");
     let argument_path = argument_file.path().as_os_str().to_str().unwrap();
 
@@ -357,21 +361,15 @@ pub fn add_sns_wasm_for_tests(args: AddSnsWasmForTestsArgs) -> Result<()> {
 
 /// Return the `PrincipalId` of the given dfx identity
 pub(crate) fn get_identity(identity: &str, network: &str) -> PrincipalId {
-    println!("dfx identity {}", identity);
+    println!("dfx identity {identity}");
     let output = call_dfx(&["identity", "--network", network, identity]);
 
     let canister_id = String::from_utf8(output.stdout).unwrap_or_else(|_| {
-        panic!(
-            "Could not parse the output of 'dfx identity {}' as a string",
-            identity
-        )
+        panic!("Could not parse the output of 'dfx identity {identity}' as a string")
     });
 
     PrincipalId::from_str(canister_id.trim()).unwrap_or_else(|_| {
-        panic!(
-            "Could not parse the output of 'dfx identity {}' as a PrincipalId",
-            identity
-        )
+        panic!("Could not parse the output of 'dfx identity {identity}' as a PrincipalId")
     })
 }
 
@@ -509,7 +507,7 @@ impl Canister {
         // pass to `dfx canister call --argument-file`.
         let request = Encode!(&request).context("Unable to serialize the request")?;
         let request = IDLArgs::from_bytes(&request).context("Unable to format request")?;
-        let request = format!("{}", request);
+        let request = format!("{request}");
         let mut argument_file =
             NamedTempFile::new().context("Could not create temporary argument file.")?;
         argument_file
@@ -550,12 +548,9 @@ impl Canister {
 
         let response = stdout.trim_end();
         let response = hex::decode(response)
-            .with_context(|| format!("Unable to hex decode the response:\n{:?}.", response,))?;
+            .with_context(|| format!("Unable to hex decode the response:\n{response:?}.",))?;
         Decode!(&response, Req::Response).with_context(|| {
-            format!(
-                "Candid deserialization of response failed. Response:\n{:?}",
-                response,
-            )
+            format!("Candid deserialization of response failed. Response:\n{response:?}",)
         })
     }
 }
@@ -576,21 +571,21 @@ impl NnsGovernanceCanister {
     pub(crate) fn make_proposal(
         &self,
         proposer: &NeuronIdOrSubaccount,
-        proposal: &Proposal,
+        proposal: &MakeProposalRequest,
     ) -> Result<MakeProposalResponse, anyhow::Error> {
         // TODO: Jira ticket NNS1-3555
         #[allow(non_local_definitions)]
-        impl Request for ManageNeuron {
+        impl Request for ManageNeuronRequest {
             type Response = ManageNeuronResponse;
             const METHOD_NAME: &'static str = "manage_neuron";
         }
 
         // Step 1: Construct request.
         let neuron_id_or_subaccount = Some(proposer.clone());
-        let manage_neuron_request = ManageNeuron {
+        let manage_neuron_request = ManageNeuronRequest {
             id: None,
             neuron_id_or_subaccount,
-            command: Some(manage_neuron::Command::MakeProposal(Box::new(
+            command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
                 proposal.clone(),
             ))),
         };
@@ -787,7 +782,7 @@ fn call_dfx(args: &[&str]) -> Output {
     let output = Command::new(dfx_cmd)
         .args(args)
         .output()
-        .unwrap_or_else(|e| panic!("dfx failed when called with args: {:?}: {}", args, e));
+        .unwrap_or_else(|e| panic!("dfx failed when called with args: {args:?}: {e}"));
 
     // Some dfx commands output stderr instead of stdout, so we assign it for use in both
     // success and error cases below.
@@ -795,12 +790,9 @@ fn call_dfx(args: &[&str]) -> Output {
 
     if output.status.success() {
         print!("{}", String::from_utf8_lossy(&output.stdout));
-        print!("{}", std_err);
+        print!("{std_err}");
     } else {
-        println!(
-            "dfx failed when called with args: {:?}, error: {}",
-            args, std_err
-        );
+        println!("dfx failed when called with args: {args:?}, error: {std_err}");
     }
 
     output
@@ -827,8 +819,7 @@ fn all_arguments_have_description() {
             if arg.get_help().is_none() && arg.get_long_help().is_none() {
                 let arg_name = arg.get_id().to_string();
                 panic!(
-                    "Argument '{}' in command '{}' doesn't have a description. Add one (probably as a doc comment of the field).",
-                    arg_name, path
+                    "Argument '{arg_name}' in command '{path}' doesn't have a description. Add one (probably as a doc comment of the field)."
                 );
             }
         }
@@ -839,7 +830,7 @@ fn all_arguments_have_description() {
             let new_path = if path.is_empty() {
                 subcmd_name.to_string()
             } else {
-                format!("{} {}", path, subcmd_name)
+                format!("{path} {subcmd_name}")
             };
             check_arg_descriptions(subcmd, &new_path);
         }
