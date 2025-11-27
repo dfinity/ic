@@ -374,10 +374,10 @@ fn post_process_update_balance(
                         && let TlaValue::Set(us) = utxos
                     {
                         for u in us {
-                            if let TlaValue::Record(r) = u {
-                                if let Some(id) = r.get("id") {
-                                    utxo_owner_map.insert(id.clone(), addr.clone());
-                                }
+                            if let TlaValue::Record(r) = u
+                                && let Some(id) = r.get("id")
+                            {
+                                utxo_owner_map.insert(id.clone(), addr.clone());
                             }
                         }
                     }
