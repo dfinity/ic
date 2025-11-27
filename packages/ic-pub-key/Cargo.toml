@@ -21,7 +21,7 @@ vetkeys = ["dep:ic-vetkeys"]
 ic-secp256k1 = { workspace = true, optional = true }
 ic-ed25519 = { workspace = true, optional = true }
 ic-vetkeys = { workspace = true, optional = true }
-ic-management-canister-types = "0.3.2"
+ic-management-canister-types = { workspace = true }
 
 [dev-dependencies]
 hex = "0.4"

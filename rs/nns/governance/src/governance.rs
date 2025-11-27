@@ -270,7 +270,7 @@ pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
 /// The number of seconds between automated Node Provider reward events
 /// Currently 1/12 of a year: 2629800 = 86400 * 365.25 / 12
-const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
+pub const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
 
 const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
 

@@ -1,7 +1,7 @@
 use super::*;
 
 use ic_base_types::PrincipalId;
-use ic_nns_governance_api::Value as ApiValue;
+use ic_nns_governance_api::SelfDescribingValue as ApiValue;
 use maplit::hashmap;
 
 #[track_caller]
@@ -9,7 +9,7 @@ fn assert_self_describing_value_is(
     action: impl LocallyDescribableProposalAction,
     expected: ApiValue,
 ) {
-    let SelfDescribingProposalAction { value, .. } = action.to_self_describing();
+    let SelfDescribingProposalAction { value, .. } = action.to_self_describing_action();
     // Use ApiValue for testing because: (1) it should only be used for API responses, and (2) it's
     // more straightforward to construct (while the protobuf type only exists for storage).
     let value = ApiValue::from(value.unwrap());
