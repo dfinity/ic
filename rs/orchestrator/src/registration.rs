@@ -158,11 +158,20 @@ impl NodeRegistration {
                         .with_identity(signer)
                         .build()
                         .expect("Failed to create IC agent");
+                    if let Err(e) = agent.fetch_root_key().await {
+                        let message = format!(
+                            "Node {} failed to cache the root key of the nns in Agent. Further responses from the IC may not be accurately decoded. Error: {}",
+                            self.node_id, e
+                        );
+                        warn!(self.log, "{}", message);
+                        UtilityCommand::notify_host(&message, 1);
+                    }
                     let add_node_encoded = Encode!(&add_node_payload)
                         .expect("Could not encode payload for the registration request");
 
                     if let Err(e) = agent
                         .update(&Principal::from(REGISTRY_CANISTER_ID), "add_node")
+                        .with_effective_canister_id(Principal::from(REGISTRY_CANISTER_ID))
                         .with_arg(add_node_encoded)
                         .call_and_wait()
                         .await
