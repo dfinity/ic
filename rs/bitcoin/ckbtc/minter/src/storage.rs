@@ -216,59 +216,58 @@ mod benches {
     }
 
     #[bench(raw)]
-    fn build_unsigned_transaction() -> canbench_rs::BenchResult {
-        // These thread local state must be re-initialized after
-        // canbench loads the stable memory from a file.
-        MEMORY_MANAGER
-            .with(|x| *x.borrow_mut() = MemoryManager::init(DefaultMemoryImpl::default()));
-        V0_EVENTS.with(|x| {
-            *x.borrow_mut() = MEMORY_MANAGER.with(|m| {
-                StableLog::init(
-                    m.borrow().get(V0_LOG_INDEX_MEMORY_ID),
-                    m.borrow().get(V0_LOG_DATA_MEMORY_ID),
-                )
-                    .expect("failed to initialize stable log")
-            })
-        });
-        // V1_EVENTS is created as empty (by using `new` than `init`) because
-        // it might already have an existing init event before running this benchmark.
-        V1_EVENTS.with(|x| {
-            *x.borrow_mut() = MEMORY_MANAGER.with(|m| {
-                StableLog::new(
-                    m.borrow().get(V1_LOG_INDEX_MEMORY_ID),
-                    m.borrow().get(V1_LOG_DATA_MEMORY_ID),
-                )
-            })
-        });
-        migrate_old_events_if_not_empty();
+    fn build_unsigned_transaction_1_50k_sats() -> canbench_rs::BenchResult {
+        bench_build_unsigned_transaction(50_000) // minimum withdrawal amount
+    }
 
-        assert_eq!(count_events(), 551915);
-        let state = replay::<DoNotCheckInvariants>(events()).unwrap_or_else(|e| {
-            ic_cdk::trap(format!("[upgrade]: failed to replay the event log: {e:?}"))
-        });
+    #[bench(raw)]
+    fn build_unsigned_transaction_2_100k_sats() -> canbench_rs::BenchResult {
+        bench_build_unsigned_transaction(100_000)
+    }
 
-        state.validate_config();
+    #[bench(raw)]
+    fn build_unsigned_transaction_3_1m_sats() -> canbench_rs::BenchResult {
+        bench_build_unsigned_transaction(1_000_000)
+    }
 
-        replace_state(state);
+    #[bench(raw)]
+    fn build_unsigned_transaction_4_10m_sats() -> canbench_rs::BenchResult {
+        bench_build_unsigned_transaction(10_000_000)
+    }
 
+    #[bench(raw)]
+    fn build_unsigned_transaction_5_1_btc() -> canbench_rs::BenchResult {
+        bench_build_unsigned_transaction(100_000_000)
+    }
+
+    #[bench(raw)]
+    fn build_unsigned_transaction_6_10_btc() -> canbench_rs::BenchResult {
+        bench_build_unsigned_transaction(1_000_000_000)
+    }
+
+    fn bench_build_unsigned_transaction(withdrawal_amount: u64) -> canbench_rs::BenchResult {
+        rebuild_mainnet_state();
         state::read_state(|s| {
-            assert_eq!(s.available_utxos.len(), 67231);
+            // The distribution of UTXOs is a key factor in the complexity of building a transaction,
+            // the more UTXOs with small values there are, the more instructions will be required to build a transaction for a large amount
+            // because more UTXOs are needed to cover that amount.
+            // NOTE: Those benchmarks reflect the performance of the minter on **mainnet**.
+            // Changing the number of available of UTXOs is unavoidable when updating the retrieved mainnet events used for testing,
+            // so that fluctuations in performance is acceptable, but large degradation would indicate a regression.
+            assert_eq!(s.available_utxos.len(), 66_212);
         });
+
         let dummy_minter_address = crate::BitcoinAddress::P2wpkhV0([u8::MAX; 20]);
         let dummy_recipient_address = crate::BitcoinAddress::P2wpkhV0([42_u8; 20]);
-        let withdrawal_amount = 1_000_000_000; //10 BTC
         let median_fee_millisatoshi_per_vbyte = 1_000; //1 sat/vbyte
         let fee_estimator = state::read_state(|s| IC_CANISTER_RUNTIME.fee_estimator(s));
 
         canbench_rs::bench_fn(|| {
             state::mutate_state(|s| {
-                let _p = canbench_rs::bench_scope("clone_available_utxos");
-                let clone = s.available_utxos.clone();
-
-                let _p = canbench_rs::bench_scope("utxos_selection");
+                let _scope = canbench_rs::bench_scope("utxos_selection");
                 let selected_utxos = crate::utxos_selection(withdrawal_amount, &mut s.available_utxos, 1);
 
-                let _p = canbench_rs::bench_scope("build_unsigned_transaction_from_inputs");
+                let _scope = canbench_rs::bench_scope("build_unsigned_transaction_from_inputs");
                 crate::build_unsigned_transaction_from_inputs(
                     &selected_utxos,
                     vec![(dummy_recipient_address, withdrawal_amount)],
@@ -278,5 +277,28 @@ mod benches {
                 ).unwrap()
             });
         })
+    }
+
+    fn rebuild_mainnet_state() {
+        // These thread local state must be re-initialized after
+        // canbench loads the stable memory from a file.
+        MEMORY_MANAGER
+            .with(|x| *x.borrow_mut() = MemoryManager::init(DefaultMemoryImpl::default()));
+        V1_EVENTS.with(|x| {
+            *x.borrow_mut() = MEMORY_MANAGER.with(|m| {
+                StableLog::init(
+                    m.borrow().get(V1_LOG_INDEX_MEMORY_ID),
+                    m.borrow().get(V1_LOG_DATA_MEMORY_ID),
+                )
+                    .expect("failed to initialize stable log")
+            })
+        });
+        assert_eq!(count_events(), 768_723);
+
+        let state = replay::<DoNotCheckInvariants>(events()).unwrap_or_else(|e| {
+            ic_cdk::trap(format!("[upgrade]: failed to replay the event log: {e:?}"))
+        });
+        state.validate_config();
+        replace_state(state);
     }
 }
