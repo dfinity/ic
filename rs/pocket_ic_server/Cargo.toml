@@ -28,6 +28,7 @@ http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
 icp-ledger = { path = "../ledger_suite/icp" }
+ic-admin = { path = "../registry/admin" }
 ic-agent = { workspace = true }
 ic-boundary = { path = "../boundary_node/ic_boundary" }
 ic-btc-adapter = { path = "../bitcoin/adapter" }
@@ -107,6 +108,7 @@ tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 uuid = { workspace = true }
+url = { workspace = true }
 wat = { workspace = true }
 
 [dev-dependencies]

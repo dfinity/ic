@@ -299,6 +299,8 @@ MAINNET_NNS_CANISTER_ENV = {
         deps = LIB_DEPENDENCIES + [
             ":pocket-ic-server-lib" + name_suffix,
             "//rs/canister_sandbox:build_script",
+	    "//rs/registry/admin",
+	    "@crate_index//:url",
         ],
     )
     for name_suffix in [
