@@ -7670,6 +7670,7 @@ dependencies = [
  "icrc-ledger-client-cdk",
  "icrc-ledger-types",
  "lazy_static",
+ "local_key",
  "maplit",
  "minicbor",
  "minicbor-derive",
@@ -7683,6 +7684,8 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "simple_asn1",
+ "tla_instrumentation",
+ "tla_instrumentation_proc_macros",
  "tokio",
 ]
 
