@@ -256,7 +256,7 @@ jobs:
     needs: [config]
     timeout-minutes: 180
     runs-on:
-      labels: darwin-8
+      labels: darwin-1
     # Run on protected branches, but only on public repo
     if: github.repository == 'dfinity/ic'
     steps:
