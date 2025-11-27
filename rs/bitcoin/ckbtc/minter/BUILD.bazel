@@ -116,6 +116,7 @@ TLA_DATA = select({
     "//conditions:default": [
         ":tla_models",
         "@tla_apalache//:bin/apalache-mc",
+        "@bazel_tools//tools/jdk:current_java_runtime",
     ],
 })
 
@@ -267,7 +268,6 @@ rust_ic_test(
         "//rs/bitcoin/checker:btc_checker_canister",
         "//rs/bitcoin/mock:bitcoin_canister_mock",
         "//rs/ledger_suite/icrc1/ledger:ledger_canister",
-        "@bazel_tools//tools/jdk:current_java_runtime",
     ] + TLA_DATA,
     env = TLA_ENV | {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/ckbtc/minter",
