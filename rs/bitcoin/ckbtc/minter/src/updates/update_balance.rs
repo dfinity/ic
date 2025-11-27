@@ -22,6 +22,11 @@ const MAX_CHECK_TRANSACTION_RETRY: usize = 10;
 
 use super::get_btc_address::init_ecdsa_public_key;
 
+#[cfg(feature = "tla")]
+use crate::tla::{
+    UPDATE_BALANCE_DESC, account_to_tla, btc_address_to_tla, dummy_utxo, utxo_set_to_tla,
+    utxo_to_tla,
+};
 use crate::{
     CanisterRuntime, Timestamp,
     guard::{GuardError, balance_update_guard},
@@ -31,14 +36,9 @@ use crate::{
     tx::{DisplayAmount, DisplayOutpoint},
 };
 #[cfg(feature = "tla")]
-use crate::tla::{
-    account_to_tla, btc_address_to_tla, utxo_set_to_tla, utxo_to_tla, UPDATE_BALANCE_DESC,
-    dummy_utxo
-};
-#[cfg(feature = "tla")]
 use crate::{
-    tla::TLA_INSTRUMENTATION_STATE, tla::TLA_TRACES_LKEY, tla::TLA_TRACES_MUTEX,
-    tla_log_locals, tla_log_request, tla_log_response, tla_snapshotter,
+    tla::TLA_INSTRUMENTATION_STATE, tla::TLA_TRACES_LKEY, tla::TLA_TRACES_MUTEX, tla_log_locals,
+    tla_log_request, tla_log_response, tla_snapshotter,
 };
 #[cfg(feature = "tla")]
 use tla_instrumentation::{Destination, InstrumentationState, TlaValue, ToTla};
@@ -164,7 +164,6 @@ pub async fn update_balance<R: CanisterRuntime>(
     args: UpdateBalanceArgs,
     runtime: &R,
 ) -> Result<Vec<UtxoStatus>, UpdateBalanceError> {
-
     let caller = runtime.caller();
     if args.owner.unwrap_or(caller) == runtime.id() {
         ic_cdk::trap("cannot update minter's balance");
@@ -215,7 +214,8 @@ pub async fn update_balance<R: CanisterRuntime>(
         CallSource::Client,
         runtime,
     )
-    .await.map_err(|e| {
+    .await
+    .map_err(|e| {
         #[cfg(feature = "tla")]
         tla_log_response!(
             Destination::new("btc_canister"),
@@ -305,7 +305,7 @@ pub async fn update_balance<R: CanisterRuntime>(
 
     let check_fee = read_state(|s| s.check_fee);
     let mut utxo_statuses: Vec<UtxoStatus> = vec![];
-    #[cfg(feature="tla")]
+    #[cfg(feature = "tla")]
     let mut utxos_shadow: Vec<Utxo> = processable_utxos.iter().cloned().collect();
     for utxo in processable_utxos {
         if utxo.value <= check_fee {
@@ -326,12 +326,12 @@ pub async fn update_balance<R: CanisterRuntime>(
         match status {
             // Skip utxos that are already checked but has unknown mint status
             UtxoCheckStatus::CleanButMintUnknown => {
-                #[cfg(feature="tla")]
+                #[cfg(feature = "tla")]
                 {
                     utxos_shadow.retain(|u| u != &utxo);
                 }
-                continue
-            },
+                continue;
+            }
             UtxoCheckStatus::Clean => {
                 mutate_state(|s| {
                     state::audit::mark_utxo_checked(s, utxo.clone(), caller_account, runtime)
@@ -389,6 +389,14 @@ pub async fn update_balance<R: CanisterRuntime>(
             .await
         {
             Ok(block_index) => {
+                #[cfg(feature = "tla")]
+                tla_log_response!(
+                    Destination::new("ledger"),
+                    TlaValue::Variant {
+                        tag: "OK".to_string(),
+                        value: Box::new(TlaValue::Constant("UNIT".to_string())),
+                    }
+                );
                 log!(
                     Priority::Debug,
                     "Minted {amount} {token_name} for account {caller_account} corresponding to utxo {} with value {}",
@@ -409,23 +417,8 @@ pub async fn update_balance<R: CanisterRuntime>(
                     utxo,
                     minted_amount: amount,
                 });
-                #[cfg(feature = "tla")]
-                tla_log_response!(
-                    Destination::new("ledger"),
-                    TlaValue::Variant {
-                        tag: "OK".to_string(),
-                        value: Box::new(TlaValue::Constant("UNIT".to_string())),
-                    }
-                );
             }
             Err(err) => {
-                log!(
-                    Priority::Info,
-                    "Failed to mint ckBTC for UTXO {}: {:?}",
-                    DisplayOutpoint(&utxo.outpoint),
-                    err
-                );
-                utxo_statuses.push(UtxoStatus::Checked(utxo));
                 #[cfg(feature = "tla")]
                 tla_log_response!(
                     Destination::new("ledger"),
@@ -434,6 +427,13 @@ pub async fn update_balance<R: CanisterRuntime>(
                         value: Box::new(TlaValue::Constant("UNIT".to_string())),
                     }
                 );
+                log!(
+                    Priority::Info,
+                    "Failed to mint ckBTC for UTXO {}: {:?}",
+                    DisplayOutpoint(&utxo.outpoint),
+                    err
+                );
+                utxo_statuses.push(UtxoStatus::Checked(utxo));
             }
         }
         // Defuse the guard. Note that In case of a panic (either before or after this point)
