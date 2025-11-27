@@ -6002,11 +6002,15 @@ dependencies = [
  "config",
  "config_types",
  "deterministic_ips",
+ "grub",
  "guestos_recovery_tui",
+ "ic_device",
  "itertools 0.12.1",
  "network",
  "regex",
+ "tempfile",
  "utils",
+ "uuid",
 ]
 
 [[package]]

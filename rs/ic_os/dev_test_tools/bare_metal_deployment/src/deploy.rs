@@ -4,9 +4,24 @@ use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
+use thiserror::Error;
 
-// Defines RELOAD_HOSTOS_CMD, the tool to reload the HostOS that is copied to the baremetal host.
-include!(concat!(env!("OUT_DIR"), "/reload_hostos_cmd.rs"));
+/// Error type for bare metal deployment operations
+#[derive(Debug, Error)]
+pub enum DeploymentError {
+    /// SSH authentication failed
+    #[error("SSH authentication failed")]
+    SshAuthFailed,
+    /// SSH connection failed (host unreachable)
+    #[error("SSH connection failed: {0}")]
+    SshConnectionFailed(String),
+    /// Other deployment error
+    #[error("{0}")]
+    Other(#[from] anyhow::Error),
+}
+
+// Defines RELOAD_ICOS_CMD, the tool to reload the IC-OS that is copied to the baremetal host.
+include!(concat!(env!("OUT_DIR"), "/reload_icos_cmd.rs"));
 
 const SSH_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -36,12 +51,14 @@ pub fn deploy_to_bare_metal(
     config: &DeploymentConfig,
     ip: IpAddr,
     ssh_private_key_path: &Path,
-) -> Result<()> {
+) -> Result<(), DeploymentError> {
     if config.hostos_upgrade_image.is_none()
         && config.guestos_image.is_none()
         && config.setupos_config_image.is_none()
     {
-        bail!("hostos_image, guestos_image or setupos_config_image must be specified");
+        return Err(DeploymentError::Other(anyhow::anyhow!(
+            "hostos_image, guestos_image or setupos_config_image must be specified"
+        )));
     }
 
     println!("Starting bare metal deployment to {ip}");
@@ -49,13 +66,13 @@ pub fn deploy_to_bare_metal(
     let ssh_session = establish_ssh_connection(ip, ssh_private_key_path)?;
     copy_via_scp(
         &ssh_session,
-        RELOAD_HOSTOS_CMD,
-        RELOAD_HOSTOS_CMD.len() as u64,
-        Path::new("/tmp/reload_hostos_cmd"),
+        RELOAD_ICOS_CMD,
+        RELOAD_ICOS_CMD.len() as u64,
+        Path::new("/tmp/reload_icos_cmd"),
         0o755,
     )?;
 
-    let mut reload_hostos_cmd = String::from("/tmp/reload_hostos_cmd");
+    let mut reload_icos_cmd = String::from("/tmp/reload_icos_cmd");
 
     let image_configs = [
         (
@@ -90,27 +107,35 @@ pub fn deploy_to_bare_metal(
                     remote_path
                 }
             };
-            reload_hostos_cmd.push_str(&format!(" {}={}", flag, source));
+            reload_icos_cmd.push_str(&format!(" {}={}", flag, source));
         }
     }
 
-    println!("Executing reload_hostos...");
-    execute_bash_script(&ssh_session, &reload_hostos_cmd)?;
+    println!("Executing reload_icos...");
+    execute_bash_script(&ssh_session, &reload_icos_cmd)?;
 
     println!("Deployment completed");
     Ok(())
 }
 
-fn establish_ssh_connection(host_ip: IpAddr, private_key_path: &Path) -> Result<Session> {
-    let tcp = TcpStream::connect_timeout(&SocketAddr::new(host_ip, 22), SSH_CONNECT_TIMEOUT)?;
+pub fn establish_ssh_connection(
+    host_ip: IpAddr,
+    private_key_path: &Path,
+) -> Result<Session, DeploymentError> {
+    let tcp = TcpStream::connect_timeout(&SocketAddr::new(host_ip, 22), SSH_CONNECT_TIMEOUT)
+        .map_err(|e| DeploymentError::SshConnectionFailed(e.to_string()))?;
 
-    let mut sess = Session::new()?;
+    let mut sess = Session::new().map_err(|e| DeploymentError::Other(e.into()))?;
     sess.set_tcp_stream(tcp);
-    sess.handshake()?;
+    sess.handshake()
+        .map_err(|e| DeploymentError::SshConnectionFailed(e.to_string()))?;
 
     sess.userauth_pubkey_file("admin", None, private_key_path, None)
-        .context("Auth failed")?;
-    ensure!(sess.authenticated(), "Session not authenticated");
+        .map_err(|_| DeploymentError::SshAuthFailed)?;
+
+    if !sess.authenticated() {
+        return Err(DeploymentError::SshAuthFailed);
+    }
 
     Ok(sess)
 }
@@ -121,12 +146,20 @@ fn copy_via_scp<R: Read>(
     size: u64,
     remote_path: &Path,
     mode: i32,
-) -> Result<()> {
-    let mut remote_file = session.scp_send(remote_path, mode, size, None)?;
-    std::io::copy(&mut reader, &mut remote_file)?;
-    remote_file.send_eof()?;
-    remote_file.wait_eof()?;
-    remote_file.wait_close()?;
+) -> Result<(), DeploymentError> {
+    let mut remote_file = session
+        .scp_send(remote_path, mode, size, None)
+        .map_err(|e| DeploymentError::Other(e.into()))?;
+    std::io::copy(&mut reader, &mut remote_file).map_err(|e| DeploymentError::Other(e.into()))?;
+    remote_file
+        .send_eof()
+        .map_err(|e| DeploymentError::Other(e.into()))?;
+    remote_file
+        .wait_eof()
+        .map_err(|e| DeploymentError::Other(e.into()))?;
+    remote_file
+        .wait_close()
+        .map_err(|e| DeploymentError::Other(e.into()))?;
     Ok(())
 }
 
@@ -135,25 +168,46 @@ fn copy_file_via_scp(
     local_path: &Path,
     remote_path: &Path,
     mode: i32,
-) -> Result<()> {
-    let size = std::fs::metadata(local_path)?.len();
-    let file = std::fs::File::open(local_path)?;
+) -> Result<(), DeploymentError> {
+    let size = std::fs::metadata(local_path)
+        .map_err(|e| DeploymentError::Other(e.into()))?
+        .len();
+    let file = std::fs::File::open(local_path).map_err(|e| DeploymentError::Other(e.into()))?;
     copy_via_scp(session, file, size, remote_path, mode)
 }
 
-fn execute_bash_script(session: &Session, script: &str) -> Result<()> {
-    let mut channel = session.channel_session()?;
-    channel.exec("bash")?;
-    channel.write_all(script.as_bytes())?;
-    channel.send_eof()?;
+fn execute_bash_script(session: &Session, script: &str) -> Result<(), DeploymentError> {
+    let mut channel = session
+        .channel_session()
+        .map_err(|e| DeploymentError::Other(e.into()))?;
+    channel
+        .exec("bash")
+        .map_err(|e| DeploymentError::Other(e.into()))?;
+    channel
+        .write_all(script.as_bytes())
+        .map_err(|e| DeploymentError::Other(e.into()))?;
+    channel
+        .send_eof()
+        .map_err(|e| DeploymentError::Other(e.into()))?;
 
     let mut out = String::new();
-    channel.read_to_string(&mut out)?;
+    channel
+        .read_to_string(&mut out)
+        .map_err(|e| DeploymentError::Other(e.into()))?;
     let mut err = String::new();
-    channel.stderr().read_to_string(&mut err)?;
+    channel
+        .stderr()
+        .read_to_string(&mut err)
+        .map_err(|e| DeploymentError::Other(e.into()))?;
 
-    if channel.exit_status()? != 0 {
-        bail!("Script failed. Output: {out}\nError: {err}");
+    if channel
+        .exit_status()
+        .map_err(|e| DeploymentError::Other(e.into()))?
+        != 0
+    {
+        return Err(DeploymentError::Other(anyhow::anyhow!(
+            "Script failed. Output: {out}\nError: {err}"
+        )));
     }
 
     Ok(())
