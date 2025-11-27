@@ -1,5 +1,5 @@
 use bitcoin::{Network as BtcNetwork, dogecoin::Network as DogeNetwork};
-use candid::{Encode, Principal, decode_one};
+use candid::{Encode, Principal};
 use canister_test::{Canister, Runtime, ic00::EcdsaKeyId};
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -84,7 +84,7 @@ const UNIVERSAL_VM_NAME: &str = "btc-node";
 #[cfg(feature = "tla")]
 pub fn fetch_and_check_traces(agent: &CkBtcMinterAgent) {
     // Fetch traces from the canister
-    let traces: Vec<tla_instrumentation::UpdateTrace> = decode_one(
+    let traces: Vec<tla_instrumentation::UpdateTrace> = ::candid::decode_one(
         &block_on(
             agent
                 .agent
