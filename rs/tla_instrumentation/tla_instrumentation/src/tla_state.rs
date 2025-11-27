@@ -62,9 +62,8 @@ impl VarAssignment {
     }
 
     pub fn merge_or_panic(&self, other: VarAssignment, context: &str) -> VarAssignment {
-        self.merge(other).unwrap_or_else(|e| {
-            panic!("Failed to merge VarAssignments in {context}: {e}")
-        })
+        self.merge(other)
+            .unwrap_or_else(|e| panic!("Failed to merge VarAssignments in {context}: {e}"))
     }
 }
 

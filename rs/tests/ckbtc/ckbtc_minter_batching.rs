@@ -30,6 +30,9 @@ use serde_bytes::ByteBuf;
 use slog::{debug, info};
 use std::time::{Duration, Instant};
 
+#[cfg(feature = "tla")]
+use ic_tests_ckbtc::fetch_and_check_traces;
+
 pub const SHORT_TIMEOUT: Duration = Duration::from_secs(300);
 
 pub const RETRIEVE_REQUESTS_COUNT_TO_BATCH: usize = 20;
@@ -281,6 +284,9 @@ pub fn test_batching(env: TestEnv) {
 
         // We also check that the destination address have received 20 utxos
         assert_eq!(unspent_result.len(), RETRIEVE_REQUESTS_COUNT_TO_BATCH);
+
+        #[cfg(feature = "tla")]
+        fetch_and_check_traces(minter_canister.clone(), runtime.as_ref());
     })
 }
 

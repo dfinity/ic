@@ -8,22 +8,22 @@ mod update_balance {
         ignored_utxo, init_args, init_state, ledger_account, mock::MockCanisterRuntime,
         quarantined_utxo, utxo,
     };
-    use crate::updates::get_btc_address::account_to_p2wpkh_address_from_state;
+    #[cfg(feature = "tla")]
+    use crate::tla::{TLA_TRACES_LKEY, check_traces as tla_check_traces};
     use crate::updates::update_balance;
     use crate::updates::update_balance::{
         SuspendedUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
     };
+    use crate::updates::get_btc_address::account_to_p2wpkh_address_from_state;
     use crate::{CanisterRuntime, GetUtxosResponse, Timestamp, storage};
-    #[cfg(feature = "tla")]
-    use crate::tla::{TLA_TRACES_LKEY, check_traces as tla_check_traces};
-    #[cfg(feature = "tla")]
-    use tla_instrumentation_proc_macros::with_tla_trace_check;
     use ic_btc_checker::{CheckTransactionResponse, CheckTransactionStatus};
     use ic_btc_interface::Utxo;
     use ic_management_canister_types_private::BoundedVec;
     use icrc_ledger_types::icrc1::account::Account;
     use std::iter;
     use std::time::Duration;
+    #[cfg(feature = "tla")]
+    use tla_instrumentation_proc_macros::with_tla_trace_check;
 
     #[tokio::test]
     #[cfg_attr(feature = "tla", with_tla_trace_check)]

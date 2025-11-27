@@ -13,4 +13,3 @@ pub static TLA_TRACES_MUTEX: Option<RwLock<Vec<UpdateTrace>>> = Some(RwLock::new
 
 #[cfg(all(not(target_family = "wasm"), feature = "tla"))]
 pub static TLA_TRACES_MUTEX: Option<RwLock<Vec<UpdateTrace>>> = None;
-

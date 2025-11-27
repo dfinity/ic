@@ -32,10 +32,6 @@ macro_rules! tla_log_label {
 
 #[macro_export]
 macro_rules! tla_snapshotter {
-    () => {{
-        ::std::sync::Arc::new(::std::sync::Mutex::new(|| $crate::tla::get_tla_globals()))
-    }};
-    ($($args:tt)*) => {{
-        tla_snapshotter!()
-    }};
+    () => {{ ::std::sync::Arc::new(::std::sync::Mutex::new(|| $crate::tla::get_tla_globals())) }};
+    ($($args:tt)*) => {{ tla_snapshotter!() }};
 }

@@ -1,12 +1,14 @@
-use std::collections::{BTreeMap, BTreeSet, HashSet};
-use std::thread;
-use std::hash::Hash;
-use std::path::PathBuf;
-use std::sync::mpsc;
 use ic_btc_interface::{OutPoint, Utxo};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use lazy_static::lazy_static;
-use tla_instrumentation::{GlobalState, ResolvedStatePair, TlaConstantAssignment, TlaValue, ToTla, Update, VarAssignment};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::hash::Hash;
+use std::path::PathBuf;
+use std::sync::mpsc;
+use std::thread;
+use tla_instrumentation::{
+    GlobalState, ResolvedStatePair, TlaConstantAssignment, TlaValue, ToTla, Update, VarAssignment,
+};
 
 use crate::state::{self, CkBtcMinterState};
 use crate::updates::get_btc_address::account_to_p2wpkh_address_from_state;
@@ -14,8 +16,8 @@ use crate::updates::get_btc_address::account_to_p2wpkh_address_from_state;
 mod store;
 
 pub use store::{TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX};
-pub use tla_instrumentation::checker::{check_tla_code_link, PredicateDescription};
-pub use tla_instrumentation::{disable_tla, enable_tla, UpdateTrace};
+pub use tla_instrumentation::checker::{PredicateDescription, check_tla_code_link};
+pub use tla_instrumentation::{UpdateTrace, disable_tla, enable_tla};
 
 const UPDATE_BALANCE_PROCESS_ID: &str = "Update_Balance";
 pub const UPDATE_BALANCE_START: &str = "Update_Balance_Start";
@@ -147,12 +149,15 @@ pub fn perform_trace_check(traces: Vec<UpdateTrace>) {
             let under_limit_len = t.state_pairs.iter().filter(|p| is_under_limit(p)).count();
             ic_cdk::println!(
                 "TLA/Apalache checks: keeping {}/{} state pairs for update {}",
-                under_limit_len, total_len, t.model_name
+                under_limit_len,
+                total_len,
+                t.model_name
             );
         }
         ic_cdk::println!(
             "Total of {} state pairs to be checked with Apalache; will retain at most {}",
-            total_pairs, STATE_PAIR_COUNT_LIMIT
+            total_pairs,
+            STATE_PAIR_COUNT_LIMIT
         )
     }
     print_stats(&traces);
@@ -263,27 +268,15 @@ fn snapshot_state(state: &CkBtcMinterState) -> GlobalState {
     let update_balance_locks = principals_from_accounts(state.update_balance_accounts.iter());
     let retrieve_btc_locks = principals_from_accounts(state.retrieve_btc_accounts.iter());
 
-    gs.add(
-        "update_balance_locks",
-        TlaValue::Set(update_balance_locks),
-    );
-    gs.add(
-        "retrieve_btc_locks",
-        TlaValue::Set(retrieve_btc_locks),
-    );
+    gs.add("update_balance_locks", TlaValue::Set(update_balance_locks));
+    gs.add("retrieve_btc_locks", TlaValue::Set(retrieve_btc_locks));
     gs.add("locks", TlaValue::Set(BTreeSet::new()));
-    gs.add(
-        "pending",
-        pending_requests_to_tla(state),
-    );
+    gs.add("pending", pending_requests_to_tla(state));
     gs.add(
         "submitted_transactions",
         submitted_transactions_to_tla(&state.submitted_transactions),
     );
-    gs.add(
-        "utxos_state_addresses",
-        utxos_state_addresses_to_tla(state),
-    );
+    gs.add("utxos_state_addresses", utxos_state_addresses_to_tla(state));
     gs.add("available_utxos", available_utxos_to_tla(state));
     gs.add("finalized_utxos", finalized_utxos_to_tla(state));
     gs.add("check_fee", state.check_fee.to_tla_value());
@@ -291,7 +284,9 @@ fn snapshot_state(state: &CkBtcMinterState) -> GlobalState {
     gs
 }
 
-fn post_process_update_balance(trace: &mut Vec<tla_instrumentation::ResolvedStatePair>) -> TlaConstantAssignment {
+fn post_process_update_balance(
+    trace: &mut Vec<tla_instrumentation::ResolvedStatePair>,
+) -> TlaConstantAssignment {
     let mut principals = BTreeSet::new();
     let mut subaccounts = BTreeSet::new();
     let mut deposit_addresses = BTreeMap::new();
@@ -318,10 +313,25 @@ fn post_process_update_balance(trace: &mut Vec<tla_instrumentation::ResolvedStat
                     }
                 }
             }
-            if let Some(fee) = state.0 .0.remove("check_fee") {
+            if let Some(fee) = state.0.0.remove("check_fee") {
                 check_fee = Some(fee);
             }
-            state.0 .0.remove("btc_address");
+            state.0.0.remove("btc_address");
+            // If locals were missing, infer deposit address from any recorded utxos.
+            if let Some(TlaValue::Function(addrs)) = state.get("utxos_state_addresses") {
+                for (acct, utxos) in addrs {
+                    if deposit_addresses.contains_key(acct) {
+                        continue;
+                    }
+                    if let TlaValue::Set(us) = utxos {
+                        if let Some(TlaValue::Record(first)) = us.iter().next() {
+                            if let Some(owner) = first.get("owner") {
+                                deposit_addresses.insert(acct.clone(), owner.clone());
+                            }
+                        }
+                    }
+                }
+            }
             state
                 .0
                 .0
@@ -342,16 +352,82 @@ fn post_process_update_balance(trace: &mut Vec<tla_instrumentation::ResolvedStat
                 .0
                 .entry("ledger_to_minter".to_string())
                 .or_insert_with(|| TlaValue::Set(BTreeSet::new()));
+            let mut utxo_owner_map: BTreeMap<TlaValue, TlaValue> = BTreeMap::new();
+            if let Some(TlaValue::Function(addrs)) = state.get("utxos_state_addresses") {
+                for (acct, utxos) in addrs {
+                    if let Some(addr) = deposit_addresses.get(acct) {
+                        if let TlaValue::Set(us) = utxos {
+                            for u in us {
+                                if let TlaValue::Record(r) = u {
+                                    if let Some(id) = r.get("id") {
+                                        utxo_owner_map.insert(id.clone(), addr.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if let Some(TlaValue::Function(addrs)) = state.get("utxos_state_addresses") {
+                let remapped: BTreeMap<_, _> = addrs
+                    .iter()
+                    .map(|(acct, utxos)| {
+                        if let Some(addr) = deposit_addresses.get(acct) {
+                            let utxos = match utxos {
+                                TlaValue::Set(us) => TlaValue::Set(
+                                    us.iter()
+                                        .map(|u| match u {
+                                            TlaValue::Record(r) => {
+                                                let mut r = r.clone();
+                                                r.insert("owner".to_string(), addr.clone());
+                                                TlaValue::Record(r)
+                                            }
+                                            other => other.clone(),
+                                        })
+                                        .collect(),
+                                ),
+                                other => other.clone(),
+                            };
+                            (acct.clone(), utxos)
+                        } else {
+                            (acct.clone(), utxos.clone())
+                        }
+                    })
+                    .collect();
+                state.0.0.insert(
+                    "utxos_state_addresses".to_string(),
+                    TlaValue::Function(remapped),
+                );
+            }
+            if let Some(TlaValue::Set(avail)) = state.get("available_utxos") {
+                let remapped: BTreeSet<_> = avail
+                    .iter()
+                    .map(|u| match u {
+                        TlaValue::Record(r) => {
+                            let mut r = r.clone();
+                            if let Some(id) = r.get("id") {
+                                if let Some(owner) = utxo_owner_map.get(id) {
+                                    r.insert("owner".to_string(), owner.clone());
+                                }
+                            }
+                            TlaValue::Record(r)
+                        }
+                        other => other.clone(),
+                    })
+                    .collect();
+                state
+                    .0
+                    .0
+                    .insert("available_utxos".to_string(), TlaValue::Set(remapped));
+            }
             if let Some(TlaValue::Seq(reqs)) = state.get("minter_to_btc_canister") {
                 let mapped: Vec<_> = reqs
                     .iter()
                     .filter_map(|req| match req {
-                        TlaValue::Record(r) => {
-                            Some(TlaValue::Record(BTreeMap::from([
-                                ("caller_id".to_string(), r.get("caller")?.clone()),
-                                ("request".to_string(), r.get("method_and_args")?.clone()),
-                            ])))
-                        }
+                        TlaValue::Record(r) => Some(TlaValue::Record(BTreeMap::from([
+                            ("caller_id".to_string(), r.get("caller")?.clone()),
+                            ("request".to_string(), r.get("method_and_args")?.clone()),
+                        ]))),
                         _ => None,
                     })
                     .collect();
@@ -364,12 +440,10 @@ fn post_process_update_balance(trace: &mut Vec<tla_instrumentation::ResolvedStat
                 let mapped: Vec<_> = reqs
                     .iter()
                     .filter_map(|req| match req {
-                        TlaValue::Record(r) => {
-                            Some(TlaValue::Record(BTreeMap::from([
-                                ("caller_id".to_string(), r.get("caller")?.clone()),
-                                ("request".to_string(), r.get("method_and_args")?.clone()),
-                            ])))
-                        }
+                        TlaValue::Record(r) => Some(TlaValue::Record(BTreeMap::from([
+                            ("caller_id".to_string(), r.get("caller")?.clone()),
+                            ("request".to_string(), r.get("method_and_args")?.clone()),
+                        ]))),
                         _ => None,
                     })
                     .collect();
@@ -382,30 +456,26 @@ fn post_process_update_balance(trace: &mut Vec<tla_instrumentation::ResolvedStat
                 let mapped: BTreeSet<_> = resps
                     .iter()
                     .filter_map(|resp| match resp {
-                        TlaValue::Record(r) => {
-                            Some(TlaValue::Record(BTreeMap::from([
-                                ("caller_id".to_string(), r.get("caller")?.clone()),
-                                ("response".to_string(), r.get("response")?.clone()),
-                            ])))
-                        }
+                        TlaValue::Record(r) => Some(TlaValue::Record(BTreeMap::from([
+                            ("caller_id".to_string(), r.get("caller")?.clone()),
+                            ("response".to_string(), r.get("response")?.clone()),
+                        ]))),
                         _ => None,
                     })
                     .collect();
-                state.0 .0.insert(
-                    "btc_canister_to_minter".to_string(),
-                    TlaValue::Set(mapped),
-                );
+                state
+                    .0
+                    .0
+                    .insert("btc_canister_to_minter".to_string(), TlaValue::Set(mapped));
             }
             if let Some(TlaValue::Set(resps)) = state.get("ledger_to_minter") {
                 let mapped: BTreeSet<_> = resps
                     .iter()
                     .filter_map(|resp| match resp {
-                        TlaValue::Record(r) => {
-                            Some(TlaValue::Record(BTreeMap::from([
-                                ("caller_id".to_string(), r.get("caller")?.clone()),
-                                ("status".to_string(), r.get("response")?.clone()),
-                            ])))
-                        }
+                        TlaValue::Record(r) => Some(TlaValue::Record(BTreeMap::from([
+                            ("caller_id".to_string(), r.get("caller")?.clone()),
+                            ("status".to_string(), r.get("response")?.clone()),
+                        ]))),
                         _ => None,
                     })
                     .collect();
@@ -512,12 +582,7 @@ fn submitted_transactions_to_tla(
                     ("txid".to_string(), tx.txid.to_string().to_tla_value()),
                     (
                         "used_utxos".to_string(),
-                        TlaValue::Set(
-                            tx.used_utxos
-                                .iter()
-                                .map(|u| utxo_to_tla(u, ""))
-                                .collect(),
-                        ),
+                        TlaValue::Set(tx.used_utxos.iter().map(|u| utxo_to_tla(u, "")).collect()),
                     ),
                     (
                         "change_output".to_string(),
@@ -550,12 +615,7 @@ fn utxos_state_addresses_to_tla(state: &CkBtcMinterState) -> TlaValue {
             let address = account_to_p2wpkh_address_from_state(state, account);
             (
                 account_to_tla(account),
-                TlaValue::Set(
-                    utxos
-                        .iter()
-                        .map(|u| utxo_to_tla(u, &address))
-                        .collect(),
-                ),
+                TlaValue::Set(utxos.iter().map(|u| utxo_to_tla(u, &address)).collect()),
             )
         })
         .collect();
@@ -586,12 +646,7 @@ fn finalized_utxos_to_tla(state: &CkBtcMinterState) -> TlaValue {
             let address = account_to_p2wpkh_address_from_state(state, account);
             (
                 account.owner.to_tla_value(),
-                TlaValue::Set(
-                    utxos
-                        .iter()
-                        .map(|u| utxo_to_tla(u, &address))
-                        .collect(),
-                ),
+                TlaValue::Set(utxos.iter().map(|u| utxo_to_tla(u, &address)).collect()),
             )
         })
         .collect();
@@ -614,7 +669,10 @@ pub fn dummy_utxo() -> TlaValue {
                 0_u64.to_tla_value(),
             ]),
         ),
-        ("owner".to_string(), TlaValue::Literal("dummy_address".to_string())),
+        (
+            "owner".to_string(),
+            TlaValue::Literal("dummy_address".to_string()),
+        ),
         ("value".to_string(), 0_u64.to_tla_value()),
     ]))
 }

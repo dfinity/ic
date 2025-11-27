@@ -582,7 +582,7 @@ fn check_traces(env: &StateMachine, minter_id: CanisterId) {
     let res = env
         .query(minter_id, "get_tla_traces", Encode!(&()).unwrap())
         .expect("get_tla_traces query failed");
-    let traces= Decode!(&res.bytes(), Vec<ic_ckbtc_minter::tla::UpdateTrace>)
+    let traces = Decode!(&res.bytes(), Vec<ic_ckbtc_minter::tla::UpdateTrace>)
         .expect("failed to decode get_tla_traces response");
     perform_trace_check(traces);
 }
@@ -1760,7 +1760,6 @@ fn test_transaction_resubmission_finalize_new_above_threshold() {
     ckbtc.finalize_transaction(new_tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), new_txid);
     ckbtc.minter_self_check();
-
 }
 
 #[test]

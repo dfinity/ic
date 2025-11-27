@@ -69,9 +69,15 @@ process (Retrieve_BTC \in RETRIEVE_BTC_PROCESS_IDS)
 {
 Retrieve_BTC_Start:
     \* Choose parameters and send a burn message to the ledger
-    with(user \in PRINCIPALS; amt \in 1..BTC_SUPPLY) {
-        amount := amt;
-        send_minter_to_ledger_burn(self, BURN_ADDRESS(user), amount);
+    either {
+        \* Non deterministically fail the call, abstracting away the various checks
+        \* that can fail in the implementation before we burn BTC.
+        goto Done;
+    } or {
+        with(user \in PRINCIPALS; amt \in 1..BTC_SUPPLY) {
+            amount := amt;
+            send_minter_to_ledger_burn(self, BURN_ADDRESS(user), amount);
+        };
     };
 Retrieve_BTC_Wait_Burn:
     \* Receive the ledger response
@@ -95,7 +101,7 @@ Retrieve_BTC_Wait_Burn:
 
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "a0124875" /\ chksum(tla) = "d45f0693")
+\* BEGIN TRANSLATION (chksum(pcal) = "979d11e9" /\ chksum(tla) = "2c4acb19")
 VARIABLES pc, utxos_state_addresses, available_utxos, finalized_utxos, 
           update_balance_locks, retrieve_btc_locks, locks, pending, 
           submitted_transactions, minter_to_btc_canister, 
@@ -129,11 +135,13 @@ Init == (* Global variables *)
         /\ pc = [self \in ProcSet |-> "Retrieve_BTC_Start"]
 
 Retrieve_BTC_Start(self) == /\ pc[self] = "Retrieve_BTC_Start"
-                            /\ \E user \in PRINCIPALS:
-                                 \E amt \in 1..BTC_SUPPLY:
-                                   /\ amount' = [amount EXCEPT ![self] = amt]
-                                   /\ minter_to_ledger' = Append(minter_to_ledger, Burn_Request(self, (BURN_ADDRESS(user)), amount'[self]))
-                            /\ pc' = [pc EXCEPT ![self] = "Retrieve_BTC_Wait_Burn"]
+                            /\ \/ /\ pc' = [pc EXCEPT ![self] = "Done"]
+                                  /\ UNCHANGED <<minter_to_ledger, amount>>
+                               \/ /\ \E user \in PRINCIPALS:
+                                       \E amt \in 1..BTC_SUPPLY:
+                                         /\ amount' = [amount EXCEPT ![self] = amt]
+                                         /\ minter_to_ledger' = Append(minter_to_ledger, Burn_Request(self, (BURN_ADDRESS(user)), amount'[self]))
+                                  /\ pc' = [pc EXCEPT ![self] = "Retrieve_BTC_Wait_Burn"]
                             /\ UNCHANGED << utxos_state_addresses, 
                                             available_utxos, finalized_utxos, 
                                             update_balance_locks, 
@@ -180,7 +188,7 @@ Spec == Init /\ [][Next]_vars
 
 Termination == <>(\A self \in ProcSet: pc[self] = "Done")
 
-\* END TRANSLATION 
+\* END TRANSLATION
 
 local_vars == << amount, next_request_id  >>
 

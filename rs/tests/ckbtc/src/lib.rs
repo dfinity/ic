@@ -91,8 +91,8 @@ pub fn fetch_and_check_traces(minter_canister: Canister, runtime: &Runtime) {
 
 #[cfg(feature = "tla")]
 fn get_tla_module_path(module: &str) -> std::path::PathBuf {
-    let modules = std::env::var("TLA_MODULES")
-        .expect("TLA_MODULES must be set for TLA trace checking");
+    let modules =
+        std::env::var("TLA_MODULES").expect("TLA_MODULES must be set for TLA trace checking");
     modules
         .split_whitespace()
         .map(std::path::PathBuf::from)

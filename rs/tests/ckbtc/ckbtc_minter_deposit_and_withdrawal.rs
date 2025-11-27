@@ -16,6 +16,8 @@ use ic_system_test_driver::{
     systest,
     util::{assert_create_agent, block_on, runtime_from_url},
 };
+#[cfg(feature = "tla")]
+use ic_tests_ckbtc::fetch_and_check_traces;
 use ic_tests_ckbtc::{
     BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, TRANSFER_FEE, ckbtc_setup,
     create_canister, install_bitcoin_canister, install_btc_checker, install_ledger, install_minter,
@@ -26,8 +28,6 @@ use ic_tests_ckbtc::{
         wait_for_update_balance,
     },
 };
-#[cfg(feature = "tla")]
-use ic_tests_ckbtc::fetch_and_check_traces;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use slog::{debug, info};

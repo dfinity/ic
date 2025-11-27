@@ -8,8 +8,6 @@ use ic_ckbtc_minter::updates::{
     retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError},
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
-#[cfg(feature = "tla")]
-use ic_tests_ckbtc::fetch_and_check_traces;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
@@ -19,6 +17,8 @@ use ic_system_test_driver::{
     systest,
     util::{UniversalCanister, assert_create_agent, block_on, runtime_from_url},
 };
+#[cfg(feature = "tla")]
+use ic_tests_ckbtc::fetch_and_check_traces;
 use ic_tests_ckbtc::{
     BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, ckbtc_setup,
     create_canister, install_bitcoin_canister, install_btc_checker, install_ledger, install_minter,
