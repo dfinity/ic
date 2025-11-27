@@ -1,11 +1,11 @@
 use crate::MetadataEntry;
 use crate::common::storage::types::{RosettaBlock, RosettaCounter};
 use anyhow::{Context, bail};
-use candid::Nat;
+use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_ledger_core::tokens::Zero;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
-use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use num_bigint::BigUint;
 use rusqlite::Connection;
 use rusqlite::{CachedStatement, Params, named_params, params};
@@ -111,6 +111,12 @@ pub fn get_fee_collector_from_block(
     rosetta_block: &RosettaBlock,
     connection: &Connection,
 ) -> anyhow::Result<Option<Account>> {
+    // First check if we have a 107 fee collector
+    if let Some(fee_collector_107) = get_fee_collector_107_for_idx(connection, rosetta_block.index)?
+    {
+        return Ok(fee_collector_107);
+    }
+
     // First check if the fee collector is directly specified in the block
     if let Some(fee_collector) = rosetta_block.get_fee_collector() {
         return Ok(Some(fee_collector));
@@ -342,11 +348,23 @@ pub fn update_account_balances(
                         .unwrap_or(Nat(BigUint::zero()));
                     debit(
                         from,
-                        fee,
+                        fee.clone(),
                         rosetta_block.index,
                         connection,
                         &mut account_balances_cache,
                     )?;
+
+                    if let Some(Some(collector)) =
+                        get_fee_collector_107_for_idx(connection, rosetta_block.index)?
+                    {
+                        credit(
+                            collector,
+                            fee,
+                            rosetta_block.index,
+                            connection,
+                            &mut account_balances_cache,
+                        )?;
+                    }
                 }
                 crate::common::storage::types::IcrcOperation::Transfer {
                     from,
@@ -391,10 +409,10 @@ pub fn update_account_balances(
                     }
                 }
                 crate::common::storage::types::IcrcOperation::FeeCollector {
-                    fee_collector,
-                    caller,
+                    fee_collector: _,
+                    caller: _,
                 } => {
-                    // we don't need to credit fee to anyone here
+                    // Fee Collector setting operations don't have a fee
                 }
             }
         }
@@ -520,21 +538,15 @@ pub fn store_blocks(
                 fee,
                 expires_at,
             ),
-            // can we reuse some of the fields, e.g. from = caller, to=fee_collector?
-            //
-            // we probably need to extend the block table with fee collector column
-            // we could copy the fee collector from previous column or have another
-            // column with feecol block index (similar to legacy mechanism)
-            // or add a separate table where we add fee collectors (probably now)
             crate::common::storage::types::IcrcOperation::FeeCollector {
                 fee_collector,
                 caller,
             } => (
                 "107feecol",
+                caller,
                 None,
-                None,
-                None,
-                None,
+                fee_collector.map(|fc| fc.owner),
+                fee_collector.map(|fc| *fc.effective_subaccount()),
                 None,
                 None,
                 Nat::from(0u64),
@@ -577,6 +589,16 @@ pub fn store_blocks(
                         ":transaction_created_at_time":transaction_created_at_time_i64,
                         ":approval_expires_at":approval_expires_at_i64
                     })?;
+        if operation_type == "107feecol" {
+            insert_tx.prepare_cached(
+        "INSERT OR IGNORE INTO fee_collectors_107 (block_idx, caller_principal, fee_collector_principal, fee_collector_subaccount) VALUES (:block_idx, :caller_principal, :fee_collector_principal, :fee_collector_subaccount)")?
+                    .execute(named_params! {
+                        ":block_idx":rosetta_block.index,
+                        ":caller_principal":from_principal.map(|x| x.as_slice().to_vec()),
+                        ":fee_collector_principal":to_principal.map(|x| x.as_slice().to_vec()),
+                        ":fee_collector_subaccount":to_subaccount,
+                    })?;
+        }
     }
     insert_tx.commit()?;
     Ok(())
@@ -618,6 +640,18 @@ fn get_block_at_next_idx(
     );
     let mut stmt = connection.prepare_cached(&command)?;
     read_single_block(&mut stmt, params![])
+}
+
+// Returns ICRC-107 fee collector that has effect on block at `block_idx`
+pub fn get_fee_collector_107_for_idx(
+    connection: &Connection,
+    block_idx: u64,
+) -> anyhow::Result<Option<Option<Account>>> {
+    let command = format!(
+        "SELECT fee_collector_principal,fee_collector_subaccount FROM fee_collectors_107 WHERE block_idx < {block_idx} ORDER BY block_idx DESC LIMIT 1"
+    );
+    let mut stmt = connection.prepare_cached(&command)?;
+    read_single_fee_collector_107(&mut stmt, params![])
 }
 
 // Returns a RosettaBlock if the block hash exists in the database, else returns None.
@@ -861,6 +895,52 @@ where
     let mut result = vec![];
     for block in blocks {
         result.push(block?);
+    }
+    Ok(result)
+}
+
+fn read_single_fee_collector_107<P>(
+    stmt: &mut CachedStatement,
+    params: P,
+) -> anyhow::Result<Option<Option<Account>>>
+where
+    P: Params,
+{
+    let fcs: Vec<Option<Account>> = read_fee_collectors_107(stmt, params)?;
+    if fcs.len() == 1 {
+        // Return the fee collector if only one was found
+        Ok(Some(fcs[0].clone()))
+    } else if fcs.is_empty() {
+        // Return None if no block was found
+        Ok(None)
+    } else {
+        // If more than one block was found return an error
+        bail!("Multiple fee collectors found with given parameters".to_owned(),)
+    }
+}
+
+// Executes the constructed statement that reads the 107 fee collectors.
+fn read_fee_collectors_107<P>(
+    stmt: &mut CachedStatement,
+    params: P,
+) -> anyhow::Result<Vec<Option<Account>>>
+where
+    P: Params,
+{
+    let fee_collectors = stmt.query_map(params, |row| {
+        let owner_bytes: Option<[u8; 29]> = row.get(0)?;
+        let subaccount: Option<Subaccount> = row.get(1)?;
+        match owner_bytes {
+            Some(owner_bytes) => Ok(Some(Account {
+                owner: Principal::from_slice(&owner_bytes),
+                subaccount,
+            })),
+            None => Ok(None),
+        }
+    })?;
+    let mut result = vec![];
+    for fc in fee_collectors {
+        result.push(fc?);
     }
     Ok(result)
 }
