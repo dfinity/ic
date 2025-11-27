@@ -4109,12 +4109,12 @@ pub struct FinalizeDisburseMaturity {
     PartialEq,
     ::prost::Message,
 )]
-pub struct Value {
-    #[prost(oneof = "value::Value", tags = "1, 2, 3, 4, 5, 6")]
-    pub value: ::core::option::Option<value::Value>,
+pub struct SelfDescribingValue {
+    #[prost(oneof = "self_describing_value::Value", tags = "1, 2, 3, 4, 5, 6")]
+    pub value: ::core::option::Option<self_describing_value::Value>,
 }
-/// Nested message and enum types in `Value`.
-pub mod value {
+/// Nested message and enum types in `SelfDescribingValue`.
+pub mod self_describing_value {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -4135,9 +4135,9 @@ pub mod value {
         #[prost(bytes, tag = "4")]
         Int(::prost::alloc::vec::Vec<u8>),
         #[prost(message, tag = "5")]
-        Array(super::ValueArray),
+        Array(super::SelfDescribingValueArray),
         #[prost(message, tag = "6")]
-        Map(super::ValueMap),
+        Map(super::SelfDescribingValueMap),
     }
 }
 #[derive(
@@ -4149,9 +4149,9 @@ pub mod value {
     PartialEq,
     ::prost::Message,
 )]
-pub struct ValueArray {
+pub struct SelfDescribingValueArray {
     #[prost(message, repeated, tag = "1")]
-    pub values: ::prost::alloc::vec::Vec<Value>,
+    pub values: ::prost::alloc::vec::Vec<SelfDescribingValue>,
 }
 #[derive(
     candid::CandidType,
@@ -4162,9 +4162,9 @@ pub struct ValueArray {
     PartialEq,
     ::prost::Message,
 )]
-pub struct ValueMap {
+pub struct SelfDescribingValueMap {
     #[prost(map = "string, message", tag = "1")]
-    pub values: ::std::collections::HashMap<::prost::alloc::string::String, Value>,
+    pub values: ::std::collections::HashMap<::prost::alloc::string::String, SelfDescribingValue>,
 }
 /// Proposal action that is self-describing. It can be understood without the schema of a specific
 /// proposal type.
@@ -4183,7 +4183,7 @@ pub struct SelfDescribingProposalAction {
     #[prost(string, tag = "2")]
     pub type_description: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "3")]
-    pub value: ::core::option::Option<Value>,
+    pub value: ::core::option::Option<SelfDescribingValue>,
 }
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow

@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+* Temporary logging for when add_node traps.
+
 ## Changed
 
 ## Deprecated

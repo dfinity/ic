@@ -48,7 +48,7 @@ use ic_types::{
     NodeIndex, NumberOfNodes,
     crypto::{CryptoError, CryptoResult},
 };
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryInto;
 
 pub mod dkg_errors;
 pub mod ni_dkg_errors;
@@ -99,25 +99,7 @@ pub fn individual_public_key(
     public_coefficients: &PublicCoefficientsBytes,
     index: NodeIndex,
 ) -> CryptoResult<PublicKeyBytes> {
-    let public_coefficients = PublicCoefficients::try_from(public_coefficients)?;
-    let public_key: PublicKey = crypto::individual_public_key(&public_coefficients, index);
-    Ok(PublicKeyBytes::from(public_key))
-}
-
-/// Derives the public key of one signatory from the `public_coefficients`.
-///
-/// Equivalent to `individual_public_key`,
-/// but uses an "unchecked" deserialization for improved efficiency.
-///
-/// # Security Notice
-/// This skips an important security check, and so should
-/// only be used when`public_coefficients` were obtained
-/// from a trusted source.
-pub fn individual_public_key_from_trusted_bytes(
-    public_coefficients: &PublicCoefficientsBytes,
-    index: NodeIndex,
-) -> CryptoResult<PublicKeyBytes> {
-    let public_coefficients = PublicCoefficients::from_trusted_bytes(public_coefficients)?;
+    let public_coefficients = PublicCoefficients::deserialize_cached(public_coefficients)?;
     let public_key: PublicKey = crypto::individual_public_key(&public_coefficients, index);
     Ok(PublicKeyBytes::from(public_key))
 }
@@ -215,7 +197,7 @@ pub fn verify_individual_signature(
     public_key: PublicKeyBytes,
 ) -> CryptoResult<()> {
     let signature = (&signature).try_into()?;
-    let pk = PublicKey::try_from(&public_key)?;
+    let pk = PublicKey::deserialize_cached(&public_key)?;
     crypto::verify_individual_sig(message, &signature, &pk)
 }
 
@@ -237,7 +219,7 @@ pub fn verify_combined_signature(
     public_key: PublicKeyBytes,
 ) -> CryptoResult<()> {
     let signature = (&signature).try_into()?;
-    let pk = PublicKey::try_from(&public_key)?;
+    let pk = PublicKey::deserialize_cached(&public_key)?;
     crypto::verify_combined_sig(message, &signature, &pk)
 }
 

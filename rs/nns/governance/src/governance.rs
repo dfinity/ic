@@ -130,6 +130,7 @@ use ic_sns_wasm::pb::v1::{
     DeployNewSnsRequest, DeployNewSnsResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
 };
 use ic_stable_structures::{Storable, storable::Bound};
+use ic_types::Time;
 use icp_ledger::{AccountIdentifier, Subaccount, TOKEN_SUBDIVIDABLE_BY, Tokens};
 use itertools::Itertools;
 use maplit::hashmap;
@@ -269,7 +270,7 @@ pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
 /// The number of seconds between automated Node Provider reward events
 /// Currently 1/12 of a year: 2629800 = 86400 * 365.25 / 12
-const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
+pub const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
 
 const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
 
@@ -4031,26 +4032,26 @@ impl Governance {
         }
     }
 
-    fn next_start_date_node_providers_rewards(&self) -> Result<DateUtc, GovernanceError> {
-        let latest_node_provider_rewards = self
-            .get_most_recent_monthly_node_provider_rewards()
-            .ok_or(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "No rewards found for the last month.",
-            ))?;
+    fn next_start_date_node_providers_rewards(&self) -> DateUtc {
+        if let Some(rewards) = self.get_most_recent_monthly_node_provider_rewards() {
+            if let Some(end_date) = rewards.end_date {
+                // Case 1a: end_date exists → next start date is the day after
+                let naive_date =
+                    NaiveDate::from_ymd(end_date.year as i32, end_date.month, end_date.day);
+                return DateUtc::from(naive_date.succ());
+            }
 
-        if let Some(end_date) = latest_node_provider_rewards.end_date {
-            let naive_date =
-                NaiveDate::from_ymd(end_date.year as i32, end_date.month, end_date.day);
-            let next_start_date = DateUtc::from(naive_date.succ());
-
-            Ok(next_start_date)
-        } else {
-            let next_start_date =
-                DateUtc::from_unix_timestamp_seconds(latest_node_provider_rewards.timestamp);
-
-            Ok(next_start_date)
+            // Case 1b: end_date is None → fall back to the timestamp of the reward
+            return DateUtc::from_unix_timestamp_seconds(rewards.timestamp);
         }
+
+        // Case 2: No previous rewards → default start date
+        // This is only used for test environments where there are no previous rewards.
+        let default_ts = Time::from_nanos_since_unix_epoch(ic_cdk::api::time())
+            .as_secs_since_unix_epoch()
+            .saturating_sub(NODE_PROVIDER_REWARD_PERIOD_SECONDS);
+
+        DateUtc::from_unix_timestamp_seconds(default_ts)
     }
 
     async fn perform_action(&mut self, pid: u64, action: ValidProposalAction) {
@@ -7608,7 +7609,7 @@ impl Governance {
     ) -> Result<MonthlyNodeProviderRewards, GovernanceError> {
         let mut rewards = vec![];
 
-        let start_date = self.next_start_date_node_providers_rewards()?;
+        let start_date = self.next_start_date_node_providers_rewards();
         let now = self.env.now();
 
         // Today we have collected up to and included node metrics of yesterday

@@ -40,7 +40,7 @@ fn timer() {
     // ic_ckbtc_minter::timer invokes ic_cdk::spawn
     // which must be wrapped in in_executor_context
     // as required by the new ic-cdk-executor.
-    ic_cdk::futures::in_executor_context(|| {
+    ic_cdk::futures::internals::in_executor_context(|| {
         #[cfg(feature = "self_check")]
         ok_or_die(check_invariants());
 

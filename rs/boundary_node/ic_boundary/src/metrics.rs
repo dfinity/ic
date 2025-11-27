@@ -16,10 +16,7 @@ use bytes::Bytes;
 use candid::Principal;
 use http::header::CONTENT_TYPE;
 use humantime::format_rfc3339;
-use ic_bn_lib::{
-    http::{ConnInfo, body::CountingBody, cache::CacheStatus, http_version},
-    tasks::Run,
-};
+use ic_bn_lib::http::{body::CountingBody, cache::CacheStatus, http_version};
 use ic_bn_lib::{
     prometheus::{
         Encoder, HistogramOpts, HistogramVec, IntCounterVec, IntGauge, IntGaugeVec, Registry,
@@ -29,6 +26,7 @@ use ic_bn_lib::{
     },
     pubsub::Broker,
 };
+use ic_bn_lib_common::{traits::Run, types::http::ConnInfo};
 use ic_types::{CanisterId, SubnetId, messages::ReplicaHealthStatus};
 use serde_json::json;
 use sha3::{Digest, Sha3_256};

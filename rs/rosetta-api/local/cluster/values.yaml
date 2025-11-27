@@ -1,3 +1,24 @@
+# Number of replicas for each deployment
+replicaCount: 1
+
+# Use persistent volumes for /data partition
+usePersistentVolumes: false
+
+# Volume configuration
+volumeMounts:
+  - name: data-volume
+    mountPath: /data
+
+volumes:
+  - name: data-volume
+
+# PersistentVolumeClaim configuration (used when usePersistentVolumes is true)
+persistentVolume:
+  storageClass: "standard"
+  accessModes:
+    - ReadWriteOnce
+  size: 50Gi
+
 commonResources: &commonResources
   limits:
     memory: "1024Mi"
