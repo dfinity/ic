@@ -305,8 +305,7 @@ pub mod testing {
                         offset_bytes,
                         len_bytes,
                         options,
-                    )
-                    .await?,
+                    )?,
                 );
             }
 
@@ -317,23 +316,21 @@ pub mod testing {
     }
 
     impl ExtractingFilesystemMounter {
-        async fn extract_partition_to_tempdir(
+        fn extract_partition_to_tempdir(
             &self,
             device: PathBuf,
             offset_bytes: u64,
             len_bytes: u64,
             options: MountOptions,
         ) -> Result<Arc<TempDir>> {
-            async fn extract_partition<P: Partition>(
+            fn extract_partition<P: Partition>(
                 device: &Path,
                 offset_bytes: u64,
                 len_bytes: u64,
                 target: &Path,
             ) -> Result<()> {
-                P::open_range(device.to_path_buf(), offset_bytes, len_bytes)
-                    .await?
+                P::open_range(device.to_path_buf(), offset_bytes, len_bytes)?
                     .copy_files_to(target)
-                    .await
                     .context("Could not copy files to tempdir")
             }
 
@@ -347,7 +344,6 @@ pub mod testing {
                         len_bytes,
                         extraction_dir.path(),
                     )
-                    .await
                 }
                 FileSystem::Ext4 => {
                     extract_partition::<ExtPartition>(
@@ -356,7 +352,6 @@ pub mod testing {
                         len_bytes,
                         extraction_dir.path(),
                     )
-                    .await
                 }
             }
             .context(format!(

@@ -1,3 +1,4 @@
+use std::fs;
 use anyhow::{Context, Error};
 use clap::Parser;
 use linux_kernel_command_line::{ImproperlyQuotedValue, KernelCommandLine};
@@ -7,7 +8,6 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use tempfile::NamedTempFile;
-use tokio::fs;
 
 use partition_tools::{Partition, ext::ExtPartition};
 
@@ -85,14 +85,13 @@ fn munge(
     ))
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Error> {
+fn main() -> Result<(), Error> {
     let cli = Cli::parse();
     let boot_args_path = Path::new("/boot_args");
 
     // Open boot file system.
     eprintln!("Opening boot file system {}", cli.image_path.display());
-    let mut bootfs = ExtPartition::open(cli.image_path, Some(5)).await?;
+    let mut bootfs = ExtPartition::open(cli.image_path, Some(5))?;
 
     // Overwrite checks.
     if cli.defeat_installer {
@@ -107,22 +106,21 @@ async fn main() -> Result<(), Error> {
     fs::write(
         temp_boot_args.path(),
         munge(
-            std::str::from_utf8(&bootfs.read_file(boot_args_path).await?)?,
+            std::str::from_utf8(&bootfs.read_file(boot_args_path)?)?,
             true,
             cli.defeat_installer,
         )
         .context("Could not parse the BOOT_ARGS variable in the existing boot_args file")?,
     )
-    .await
     .context("failed to write temporary boot args")?;
-    fs::set_permissions(temp_boot_args.path(), Permissions::from_mode(0o755)).await?;
+    fs::set_permissions(temp_boot_args.path(), Permissions::from_mode(0o755))?;
 
     bootfs
         .write_file(temp_boot_args.path(), boot_args_path)
-        .await?;
+        .context("failed to write boot args")?;
 
     eprintln!("Closing boot file system");
-    bootfs.close().await?;
+    bootfs.close()?;
 
     Ok(())
 }
