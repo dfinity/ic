@@ -2,7 +2,10 @@
 
 use crate::{
     ReplicaHealthStatus,
-    common::{Cbor, WithTimeout, build_validator, validation_error_to_http_error},
+    common::{
+        Cbor, WithTimeout, build_validator, certified_state_unavailable_error,
+        validation_error_to_http_error,
+    },
 };
 
 use axum::{
@@ -73,7 +76,7 @@ pub struct QueryServiceBuilder {
     malicious_flags: Option<MaliciousFlags>,
     nns_delegation_reader: NNSDelegationReader,
     time_source: Option<Arc<dyn TimeSource>>,
-    ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+    ingress_verifier: Arc<dyn IngressSigVerifier>,
     registry_client: Arc<dyn RegistryClient>,
     query_execution_service: QueryExecutionService,
     version: Version,
@@ -92,9 +95,9 @@ impl QueryServiceBuilder {
     pub fn builder(
         log: ReplicaLogger,
         node_id: NodeId,
-        signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
+        signer: Arc<dyn BasicSigner<QueryResponseHash>>,
         registry_client: Arc<dyn RegistryClient>,
-        ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+        ingress_verifier: Arc<dyn IngressSigVerifier>,
         nns_delegation_reader: NNSDelegationReader,
         query_execution_service: QueryExecutionService,
         version: Version,
@@ -253,9 +256,7 @@ pub(crate) async fn query(
 
     let (response, timestamp) = match query_execution_response {
         Err(QueryExecutionError::CertifiedStateUnavailable) => {
-            let status = StatusCode::SERVICE_UNAVAILABLE;
-            let text = "Certified state unavailable. Please try again.".to_string();
-            return (status, text).into_response();
+            return certified_state_unavailable_error().into_response();
         }
         Ok((response, time)) => (response, time),
     };

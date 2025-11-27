@@ -303,6 +303,8 @@ tecdsa_performance_test_template = system_test_nns(
     ],
 )
 
+DEFAULT_NODES_COUNT = str(25)
+
 system_test_nns(
     name = "tecdsa_performance_test",
     additional_colocate_tags = [
@@ -321,6 +323,7 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV | SIGNER_CANISTER_ENV | {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "ecdsa_secp256k1",
         "BENCHMARK_NAME": "tecdsa_performance_test",
+        "DEFAULT_NODES_COUNT": DEFAULT_NODES_COUNT,
     },
     tags = [
         "colocate",
@@ -349,6 +352,7 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV | SIGNER_CANISTER_ENV | {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "schnorr_ed25519",
         "BENCHMARK_NAME": "tschnorr_ed25519_performance_test",
+        "DEFAULT_NODES_COUNT": DEFAULT_NODES_COUNT,
     },
     tags = [
         "colocate",
@@ -377,6 +381,7 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV | SIGNER_CANISTER_ENV | {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "schnorr_bip340",
         "BENCHMARK_NAME": "tschnorr_bip340_performance_test",
+        "DEFAULT_NODES_COUNT": DEFAULT_NODES_COUNT,
     },
     tags = [
         "colocate",
@@ -405,6 +410,7 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV | SIGNER_CANISTER_ENV | {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "vetkd_bls12_381_g2",
         "BENCHMARK_NAME": "vetkd_performance_test",
+        "DEFAULT_NODES_COUNT": DEFAULT_NODES_COUNT,
     },
     tags = [
         "colocate",

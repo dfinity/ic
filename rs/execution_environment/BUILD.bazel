@@ -122,10 +122,10 @@ rust_ic_test_suite(
         "//rs/rust_canisters/backtrace_canister:backtrace-canister",
         "//rs/rust_canisters/backtrace_canister:backtrace-canister-without-names",
         "//rs/rust_canisters/call_loop_canister:call-loop-canister",
+        "//rs/tests/test_canisters/image_classification:image-classification",
         "//rs/universal_canister/impl:universal_canister.module",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
         "//rs/universal_canister/impl:universal_canister_no_heartbeat.wasm.gz",
-        "//testnet/prebuilt-canisters:image-classification",
     ],
     env = dict([
         ("BACKTRACE_CANISTER_WASM_PATH", "$(rootpath //rs/rust_canisters/backtrace_canister:backtrace-canister)"),
@@ -134,7 +134,7 @@ rust_ic_test_suite(
         ("UNIVERSAL_CANISTER_WASM_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)"),
         ("UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister_no_heartbeat.wasm.gz)"),
         ("UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.module)"),
-        ("IMAGE_CLASSIFICATION_CANISTER_WASM_PATH", "$(rootpath //testnet/prebuilt-canisters:image-classification)"),
+        ("IMAGE_CLASSIFICATION_CANISTER_WASM_PATH", "$(rootpath //rs/tests/test_canisters/image_classification:image-classification)"),
     ]),
     proc_macro_deps = [
         # Keep sorted.
@@ -207,6 +207,8 @@ rust_ic_test(
         "UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister_no_heartbeat.wasm.gz)",
         "RUST_TEST_THREADS": "4",
     },
+    # The failure rate of this test jumped to over 10% in the week starting on 2025-11-17 so we marked it as flaky:
+    flaky = True,
     tags = [
         "cpu:4",
         "test_all_platforms_slow",

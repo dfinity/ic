@@ -3,6 +3,7 @@ use std::{
     str::FromStr,
 };
 
+use ic_nervous_system_access_list::AccessList;
 #[cfg(any(test, feature = "canbench-rs"))]
 use ic_nervous_system_temporary::Temporary;
 use ic_types::{PrincipalId, SubnetId};
@@ -21,7 +22,7 @@ thread_local! {
     // These are needed for the phased rollout approach in order
     // allow granular rolling out of the feature to specific subnets
     // to specific subset of callers.
-    static NODE_SWAPPING_WHITELISTED_CALLERS: RefCell<Vec<PrincipalId>> = RefCell::new(
+    static NODE_SWAPPING_CALLERS_POLICY: RefCell<AccessList<PrincipalId>> = RefCell::new(AccessList::allow(
         [
             "xph6u-z3z2t-s7hh7-gtlxh-bbgbx-aatlm-eab4o-bsank-nqruh-3ub4q-sae",
             "lgp6d-brhlv-35izu-khc6p-rfszo-zdwng-xbtkh-xyvjg-y3due-7ha7t-uae",
@@ -42,11 +43,10 @@ thread_local! {
                 println!("{LOG_PREFIX}Coudln't parse {p} as a PrincipalId due to error: {e:?}",);
                 None
             }
-        })
-        .collect(),
-    );
+        }),
+    ));
 
-    static NODE_SWAPPING_ENABLED_SUBNETS: RefCell<Vec<SubnetId>> = RefCell::new(
+    static NODE_SWAPPING_SUBNETS_POLICY: RefCell<AccessList<SubnetId>> = RefCell::new(AccessList::allow(
         [
             "2fq7c-slacv-26cgz-vzbx2-2jrcs-5edph-i5s2j-tck77-c3rlz-iobzx-mqe",
             "2zs4v-uoqha-xsuun-lveyr-i4ktc-5y3ju-aysud-niobd-gxnqa-ctqem-hae",
@@ -100,9 +100,8 @@ thread_local! {
                 println!("{LOG_PREFIX}Coudln't parse {p} as a SubnetId due to error: {e:?}",);
                 None
             }
-        })
-        .collect(),
-    );
+        }),
+    ));
 }
 
 pub(crate) fn is_chunkifying_large_values_enabled() -> bool {
@@ -142,20 +141,20 @@ pub mod temporary_overrides {
     }
 
     pub fn test_set_swapping_whitelisted_callers(override_callers: Vec<PrincipalId>) {
-        NODE_SWAPPING_WHITELISTED_CALLERS.replace(override_callers.into_iter().collect());
+        let policy = AccessList::allow(override_callers);
+        NODE_SWAPPING_CALLERS_POLICY.replace(policy);
     }
 
     pub fn test_set_swapping_enabled_subnets(override_subnets: Vec<SubnetId>) {
-        NODE_SWAPPING_ENABLED_SUBNETS.replace(override_subnets.into_iter().collect());
+        let policy = AccessList::allow(override_subnets);
+        NODE_SWAPPING_SUBNETS_POLICY.replace(policy);
     }
 }
 
 pub(crate) fn is_node_swapping_enabled_on_subnet(subnet_id: SubnetId) -> bool {
-    NODE_SWAPPING_ENABLED_SUBNETS
-        .with_borrow(|enabled_subnets| enabled_subnets.contains(&subnet_id))
+    NODE_SWAPPING_SUBNETS_POLICY.with_borrow(|subnet_policy| subnet_policy.is_allowed(&subnet_id))
 }
 
 pub(crate) fn is_node_swapping_enabled_for_caller(caller: PrincipalId) -> bool {
-    NODE_SWAPPING_WHITELISTED_CALLERS
-        .with_borrow(|enabled_callers| enabled_callers.contains(&caller))
+    NODE_SWAPPING_CALLERS_POLICY.with_borrow(|caller_policy| caller_policy.is_allowed(&caller))
 }

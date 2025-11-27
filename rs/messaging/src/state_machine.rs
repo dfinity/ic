@@ -12,7 +12,7 @@ use ic_logger::{ReplicaLogger, error, fatal};
 use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
-use ic_types::batch::Batch;
+use ic_types::batch::{Batch, BatchContent};
 use ic_types::{Cycles, ExecutionRound, NumBytes};
 use std::time::Instant;
 
@@ -82,7 +82,7 @@ impl StateMachine for StateMachineImpl {
         &self,
         mut state: ReplicatedState,
         network_topology: NetworkTopology,
-        mut batch: Batch,
+        batch: Batch,
         subnet_features: SubnetFeatures,
         registry_settings: &RegistryExecutionSettings,
         node_public_keys: NodePublicKeys,
@@ -90,8 +90,17 @@ impl StateMachine for StateMachineImpl {
     ) -> ReplicatedState {
         let since = Instant::now();
 
+        let (batch_messages, mut consensus_responses, chain_key_data) = match batch.content {
+            BatchContent::Data {
+                batch_messages,
+                consensus_responses,
+                chain_key_data,
+            } => (batch_messages, consensus_responses, chain_key_data),
+            BatchContent::Splitting { .. } => unimplemented!("Subnet splitting is not yet enabled"),
+        };
+
         // Get query stats from blocks and add them to the state, so that they can be aggregated later.
-        if let Some(query_stats) = &batch.messages.query_stats {
+        if let Some(query_stats) = &batch_messages.query_stats {
             deliver_query_stats(
                 query_stats,
                 &mut state,
@@ -156,7 +165,8 @@ impl StateMachine for StateMachineImpl {
 
         // Preprocess messages and add messages to the induction pool through the Demux.
         let since = Instant::now();
-        let mut state_with_messages = self.demux.process_payload(state, batch.messages);
+
+        let mut state_with_messages = self.demux.process_payload(state, batch_messages);
         // Batch creation time is essentially wall time (on some replica), so the median
         // duration should be meaningful.
         self.metrics.induct_batch_latency.observe(
@@ -168,7 +178,7 @@ impl StateMachine for StateMachineImpl {
         // Append additional responses to the consensus queue.
         state_with_messages
             .consensus_queue
-            .append(&mut batch.consensus_responses);
+            .append(&mut consensus_responses);
 
         self.observe_phase_duration(PHASE_INDUCTION, &since);
 
@@ -187,7 +197,7 @@ impl StateMachine for StateMachineImpl {
         let state_after_execution = self.scheduler.execute_round(
             state_with_messages,
             batch.randomness,
-            batch.chain_key_data,
+            chain_key_data,
             &batch.replica_version,
             ExecutionRound::from(batch.batch_number.get()),
             round_summary,
