@@ -16626,7 +16626,6 @@ dependencies = [
  "clap 4.5.27",
  "partition_tools",
  "tempfile",
- "tokio",
 ]
 
 [[package]]
