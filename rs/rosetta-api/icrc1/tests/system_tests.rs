@@ -882,6 +882,73 @@ fn test_error_backoff() {
     });
 }
 
+#[test]
+fn test_fc_107() {
+    let rt = Runtime::new().unwrap();
+    let setup = Setup::builder()
+        .with_custom_ledger_wasm(icrc3_test_ledger())
+        .build();
+
+    rt.block_on(async {
+        let env = RosettaTestingEnvironmentBuilder::new(&setup).build().await;
+
+        let agent = get_custom_agent(Arc::new(test_identity()), setup.port).await;
+
+        let fc_account = Account {
+            owner: PrincipalId::new_user_test_id(12).into(),
+            subaccount: None,
+        };
+
+        let block0 = BlockBuilder::new(0, 0)
+            .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
+            .build();
+
+        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block0)
+            .await
+            .expect("failed to add block");
+        assert_eq!(block_index, Nat::from(0u64));
+
+        let block_index =
+            wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 0).await;
+        assert_eq!(block_index.unwrap(), 0);
+
+        let block1 = BlockBuilder::<Tokens>::new(1, 1)
+            .with_btype("107feecol".to_string())
+            .with_parent_hash(block0.hash().to_vec())
+            .fee_collector(Some(fc_account), None, None)
+            .build();
+
+        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block1)
+            .await
+            .expect("failed to add block");
+        assert_eq!(block_index, Nat::from(1u64));
+
+        let block2 = BlockBuilder::new(2, 2)
+            .with_parent_hash(block1.hash().to_vec())
+            .with_fee(Tokens::from(123))
+            .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
+            .build();
+
+        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block2)
+            .await
+            .expect("failed to add block");
+        assert_eq!(block_index, Nat::from(2u64));
+
+        let block_index =
+            wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 2).await;
+        assert_eq!(block_index.unwrap(), 2);
+
+        assert_rosetta_balance(
+            fc_account,
+            2,
+            123u64,
+            &env.rosetta_client,
+            env.network_identifier.clone(),
+        )
+        .await;
+    });
+}
+
 const NUM_BLOCKS: u64 = 6;
 async fn verify_unrecognized_block_handling(setup: &Setup, bad_block_index: u64) {
     let mut log_file = NamedTempFile::new().expect("failed to create a temp file");

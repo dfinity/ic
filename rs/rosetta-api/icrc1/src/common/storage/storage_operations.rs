@@ -117,7 +117,9 @@ pub fn get_fee_collector_from_block(
         return Ok(fee_collector_107);
     }
 
-    // First check if the fee collector is directly specified in the block
+    // FeeCollector 107 does not apply to this block, see if there is a legacy fee collector
+
+    // Check if the fee collector is directly specified in the block
     if let Some(fee_collector) = rosetta_block.get_fee_collector() {
         return Ok(Some(fee_collector));
     }
@@ -928,7 +930,7 @@ where
     P: Params,
 {
     let fee_collectors = stmt.query_map(params, |row| {
-        let owner_bytes: Option<[u8; 29]> = row.get(0)?;
+        let owner_bytes: Option<Vec<u8>> = row.get(0)?;
         let subaccount: Option<Subaccount> = row.get(1)?;
         match owner_bytes {
             Some(owner_bytes) => Ok(Some(Account {
