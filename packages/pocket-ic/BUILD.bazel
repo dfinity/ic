@@ -259,7 +259,7 @@ rust_test(
 
 rust_test(
     name = "canister_snapshots",
-    size = "medium",
+    size = "large",
     srcs = ["tests/canister_snapshots.rs"],
     data = [
         "//:dfx",

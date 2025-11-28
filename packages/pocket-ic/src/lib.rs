@@ -150,7 +150,7 @@ impl PocketIcState {
         }
     }
 
-    pub(crate) fn state_dir(&self) -> PathBuf {
+    pub fn state_dir(&self) -> PathBuf {
         match &self.state {
             PocketIcStateKind::StateDir(state_dir) => state_dir.clone(),
             PocketIcStateKind::TempDir(temp_dir) => temp_dir.path().to_path_buf(),

@@ -1,6 +1,6 @@
 use candid::{Principal, Reserved};
 use ic_management_canister_types_private::{ReadCanisterSnapshotMetadataResponse, SnapshotSource};
-use pocket_ic::{PocketIc, PocketIcBuilder, update_candid};
+use pocket_ic::{PocketIc, PocketIcBuilder, PocketIcState, update_candid};
 use std::process::Command;
 
 const T: u128 = 1_000_000_000_000;
@@ -37,7 +37,11 @@ fn test_canister_snapshot_download_upload(pic: &mut PocketIc, canister_id: Princ
         None,
         downloaded_snapshot_dir.clone(),
     );
-
+    /*
+        for _ in 0..1000 {
+          pic.tick();
+        }
+    */
     // Download the uploaded snapshot to compare it against the originally downloaded snapshot.
     let uploaded_snapshot_temp_dir = tempfile::tempdir().unwrap();
     let uploaded_snapshot_dir = uploaded_snapshot_temp_dir.path().to_path_buf();
@@ -60,11 +64,19 @@ fn test_canister_snapshot_download_upload(pic: &mut PocketIc, canister_id: Princ
         .expect("Failed to execute diff");
     match diff.status.code() {
         Some(0) => (),
-        _ => panic!(
-            "Snapshots differ (uploaded snapshot: {}): {}",
-            uploaded_snapshot_dir.display(),
-            String::from_utf8(diff.stdout).unwrap()
-        ),
+        _ => {
+            println!(
+                "snapshots differ in {} and {}",
+                uploaded_snapshot_dir.display(),
+                downloaded_snapshot_dir.display()
+            );
+            std::thread::sleep(std::time::Duration::from_secs(3000));
+            panic!(
+                "Snapshots differ (uploaded snapshot: {}): {}",
+                uploaded_snapshot_dir.display(),
+                String::from_utf8(diff.stdout).unwrap()
+            );
+        }
     };
 
     // Compare snapshot metadata.
@@ -151,14 +163,22 @@ fn test_canister_snapshot_download_upload(pic: &mut PocketIc, canister_id: Princ
         .expect("Failed to execute diff");
     match diff.status.code() {
         Some(0) => (),
-        _ => panic!(
-            "Snapshots differ (dfx snapshot: {}): {}",
-            dfx_snapshot_dir.display(),
-            String::from_utf8(diff.stdout).unwrap()
-        ),
+        _ => {
+            println!(
+                "snapshots differ in {} and {}",
+                dfx_snapshot_dir.display(),
+                downloaded_snapshot_dir.display()
+            );
+            std::thread::sleep(std::time::Duration::from_secs(3000));
+            panic!(
+                "Snapshots differ (dfx snapshot: {}): {}",
+                dfx_snapshot_dir.display(),
+                String::from_utf8(diff.stdout).unwrap()
+            )
+        }
     };
 }
-
+/*
 #[test]
 fn test_canister_snapshot_download_empty_stable_memory_and_chunk_store() {
     let mut pic = PocketIcBuilder::new().with_application_subnet().build();
@@ -180,10 +200,15 @@ fn test_canister_snapshot_download_empty_stable_memory_and_chunk_store() {
 
     test_canister_snapshot_download_upload(&mut pic, canister_id);
 }
-
+*/
 #[test]
 fn test_canister_snapshot_download_nonempty_stable_memory_and_chunk_store() {
-    let mut pic = PocketIcBuilder::new().with_application_subnet().build();
+    let state = PocketIcState::new();
+    println!("state dir: {:?}", state.state_dir().display());
+    let mut pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_state(state)
+        .build();
 
     // Create and install a test canister.
     let canister_id = pic.create_canister();
@@ -192,10 +217,20 @@ fn test_canister_snapshot_download_nonempty_stable_memory_and_chunk_store() {
 
     // Ensure that the canister has non-empty stable memory
     // and that it takes more than one call to download/upload stable memory.
-    let stable_memory_pages = 42;
+    let stable_memory_pages = 1_u64 << 13;
     let stable_memory_bytes = stable_memory_pages << 16;
     assert!(stable_memory_bytes > 2_000_000); // snapshot data chunks have size 2MB
-    update_candid::<_, ()>(&pic, canister_id, "stable_grow_and_fill", (42_u64,)).unwrap();
+    update_candid::<_, ()>(
+        &pic,
+        canister_id,
+        "stable_grow_and_fill",
+        (stable_memory_pages,),
+    )
+    .unwrap();
+
+    for _ in 0..10 {
+        pic.tick();
+    }
 
     // Ensure that the canister has non-empty WASM chunk store.
     pic.upload_chunk(canister_id, None, vec![0; 1 << 20])

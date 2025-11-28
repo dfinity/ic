@@ -2885,6 +2885,7 @@ impl CanisterManager {
                     });
                 }
                 let mut buffer = Buffer::new(snapshot_inner.stable_memory().page_map.clone());
+                println!("writing stable memory chunk at offset: {}", offset);
                 buffer.write(&args.chunk, offset as usize);
                 let delta = buffer.dirty_pages().collect::<Vec<_>>();
                 snapshot_inner.stable_memory_mut().page_map.update(&delta);
