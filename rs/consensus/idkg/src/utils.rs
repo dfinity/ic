@@ -290,6 +290,11 @@ pub(super) fn build_signature_inputs<'a>(
                 callback_id,
                 height: args.height,
             };
+            debug_assert_eq!(
+                context.derivation_path.len(),
+                1,
+                "context's derivation path for vetKD must have single element"
+            );
             let inputs = ThresholdSigInputs::VetKd(VetKdArgs {
                 context: VetKdDerivationContextRef {
                     caller: context.request.sender.get_ref(),

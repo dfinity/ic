@@ -277,7 +277,7 @@ pub fn fake_signature_request_context_from_id(
     let context = SignWithThresholdContext {
         request: RequestBuilder::new().build(),
         args: fake_signature_request_args(key_id, height, Some(pre_sig_id), rv),
-        derivation_path: Arc::new(vec![]),
+        derivation_path: Arc::new(vec![vec![]]),
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [request_id.callback_id.get() as u8; 32],
         matched_pre_signature: Some((pre_sig_id, height)),
