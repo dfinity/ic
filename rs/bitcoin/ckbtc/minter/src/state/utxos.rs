@@ -115,6 +115,10 @@ where
         if Ordering::Equal == primary_result {
             return primary_result;
         }
-        self.0.secondary_key().cmp(other.0.secondary_key())
+        let secondary_result = self.0.secondary_key().cmp(other.0.secondary_key());
+        if Ordering::Equal == secondary_result {
+            return primary_result;
+        }
+        secondary_result
     }
 }

@@ -479,6 +479,26 @@ mod utxo_set {
     }
 
     #[test]
+    fn should_insert_different_utxos_with_same_value() {
+        let first = {
+            let mut utxo = utxo();
+            utxo.outpoint.vout = 1;
+            utxo
+        };
+        let second = {
+            let mut utxo = utxo();
+            utxo.outpoint.vout = 2;
+            utxo
+        };
+        assert_eq!(first.value, second.value);
+        assert_ne!(first, second);
+
+        let mut utxos = UtxoSet::default();
+        assert!(utxos.insert(first));
+        assert!(utxos.insert(second));
+    }
+
+    #[test]
     fn should_find_lower_bound() {
         let mut utxos = UtxoSet::default();
         let (small_utxo, medium_utxo, large_utxo) = three_utxos();
