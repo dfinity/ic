@@ -946,6 +946,37 @@ fn test_fc_107() {
             env.network_identifier.clone(),
         )
         .await;
+
+        let block3 = BlockBuilder::<Tokens>::new(3, 3)
+            .with_btype("107feecol".to_string())
+            .with_parent_hash(block2.hash().to_vec())
+            .fee_collector(None, None, None)
+            .build();
+
+        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block3)
+            .await
+            .expect("failed to add block");
+        assert_eq!(block_index, Nat::from(3u64));
+
+        let block4 = BlockBuilder::new(4, 4)
+            .with_parent_hash(block3.hash().to_vec())
+            .with_fee(Tokens::from(123))
+            .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
+            .build();
+
+        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block4)
+            .await
+            .expect("failed to add block");
+        assert_eq!(block_index, Nat::from(4u64));
+
+        assert_rosetta_balance(
+            fc_account,
+            4,
+            123u64,
+            &env.rosetta_client,
+            env.network_identifier.clone(),
+        )
+        .await;
     });
 }
 
