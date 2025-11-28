@@ -49,6 +49,8 @@ CONSTANTS
     \* Initial "supply" of BTC (all allocated to the user account initially)
     MAX_USER_BTC_TRANSFERS,
     \* @type: $value;
+    MAX_RETRIEVAL_AMOUNT,
+    \* @type: $value;
     BTC_SUPPLY,
     \* @type: $value;
     MINTER_INITIAL_SUPPLY,
@@ -68,8 +70,6 @@ CONSTANTS
     BTC_CANISTER_PROCESS_ID,
     \* @type: Set($pid);
     HEARTBEAT_PROCESS_IDS,
-    \* @type: $value;
-    RETRIEVE_BTC_FEE,
     \* @type: $ckbtcAddress -> $btcAddress;
     DEPOSIT_ADDRESS,
     \* @type: $value;
@@ -110,7 +110,7 @@ VARIABLES
     \* @type: Set($ledgerToMinterResponse);
     ledger_to_minter,
     \* @type: Int;
-    next_request_id,
+    burn_height,
     \* @type: $pc;
     pc,
     \* @type: $pid -> Seq($withdrawalReq);
@@ -192,7 +192,7 @@ vars == <<
     btc_canister_to_minter,
     minter_to_ledger,
     ledger_to_minter,
-    next_request_id,
+    burn_height,
     pc,
     submitted,
     submitted_ids,
@@ -430,7 +430,7 @@ Init == (* Global variables *)
     /\ btc_canister_to_minter = {}
     /\ minter_to_ledger = <<>>
     /\ ledger_to_minter = {}
-    /\ next_request_id = 1
+    /\ burn_height = 0
     /\ pc = [self \in ProcSet |-> CASE self = BTC_PROCESS_ID -> "BTC"
                                         [] self = BTC_CANISTER_PROCESS_ID -> "BTC_Canister"
                                         [] self = LEDGER_PROCESS_ID -> "Ledger"
@@ -438,7 +438,9 @@ Init == (* Global variables *)
                                         [] self \in RETRIEVE_BTC_PROCESS_IDS -> "Retrieve_BTC_Start"
                                         [] self \in HEARTBEAT_PROCESS_IDS -> "Heartbeat_Start"]
 
-retrieve_btc_local_vars == << amount, next_request_id >>
+
+\* @type: Seq($pid -> $value);
+retrieve_btc_local_vars == << amount >>
 timer_local_vars == << submitted, submitted_ids, spent, outputs, new_transaction >>
 environment_local_vars == << btc, btc_canister, balance, nr_user_transfers, btc_canister_to_btc >>
 update_balance_local_vars == << caller_account, utxos, utxo >>

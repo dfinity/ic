@@ -30,7 +30,6 @@ CONSTANTS
     BTC_CANISTER_PROCESS_ID,
     \* The ID of the PlusCal process simulating the heartbeat of the ckBTC Ledger
     HEARTBEAT_PROCESS_IDS,
-    RETRIEVE_BTC_FEE,
     DEPOSIT_ADDRESS
 
 No_Submission == Variant("NoSubmission", UNIT)
@@ -135,7 +134,6 @@ btc = {
     btc_canister_to_minter = {};
     minter_to_ledger = <<>>;
     ledger_to_minter = {};
-    next_request_id = 1;
 
 macro send_minter_to_btc_canister_submit(caller_id, submission) {
     minter_to_btc_canister := Append(minter_to_btc_canister,
@@ -276,20 +274,20 @@ variables
 }
 
 } *)
-\* BEGIN TRANSLATION (chksum(pcal) = "95f86447" /\ chksum(tla) = "af9ab10a")
+\* BEGIN TRANSLATION (chksum(pcal) = "a355c89" /\ chksum(tla) = "2e82fd33")
 VARIABLES pc, btc, btc_canister, utxos_state_addresses, available_utxos, 
           finalized_utxos, update_balance_locks, retrieve_btc_locks, locks, 
           pending, submitted_transactions, balance, btc_canister_to_btc, 
           minter_to_btc_canister, btc_canister_to_minter, minter_to_ledger, 
-          ledger_to_minter, next_request_id, submitted, submitted_ids, spent, 
-          outputs, new_transaction
+          ledger_to_minter, submitted, submitted_ids, spent, outputs, 
+          new_transaction
 
 vars == << pc, btc, btc_canister, utxos_state_addresses, available_utxos, 
            finalized_utxos, update_balance_locks, retrieve_btc_locks, locks, 
            pending, submitted_transactions, balance, btc_canister_to_btc, 
            minter_to_btc_canister, btc_canister_to_minter, minter_to_ledger, 
-           ledger_to_minter, next_request_id, submitted, submitted_ids, spent, 
-           outputs, new_transaction >>
+           ledger_to_minter, submitted, submitted_ids, spent, outputs, 
+           new_transaction >>
 
 ProcSet == (HEARTBEAT_PROCESS_IDS)
 
@@ -312,7 +310,6 @@ Init == (* Global variables *)
         /\ btc_canister_to_minter = {}
         /\ minter_to_ledger = <<>>
         /\ ledger_to_minter = {}
-        /\ next_request_id = 1
         (* Process Heartbeat *)
         /\ submitted = [self \in HEARTBEAT_PROCESS_IDS |-> <<>>]
         /\ submitted_ids = [self \in HEARTBEAT_PROCESS_IDS |-> <<>>]
@@ -366,8 +363,7 @@ Heartbeat_Start(self) == /\ pc[self] = "Heartbeat_Start"
                                          submitted_transactions, balance, 
                                          btc_canister_to_btc, 
                                          btc_canister_to_minter, 
-                                         minter_to_ledger, ledger_to_minter, 
-                                         next_request_id >>
+                                         minter_to_ledger, ledger_to_minter >>
 
 Conclude_Submission(self) == /\ pc[self] = "Conclude_Submission"
                              /\ \E response \in { r \in btc_canister_to_minter: Caller(r) = self }:
@@ -406,7 +402,7 @@ Conclude_Submission(self) == /\ pc[self] = "Conclude_Submission"
                                              balance, btc_canister_to_btc, 
                                              minter_to_btc_canister, 
                                              minter_to_ledger, 
-                                             ledger_to_minter, next_request_id >>
+                                             ledger_to_minter >>
 
 Finalize_Requests(self) == /\ pc[self] = "Finalize_Requests"
                            /\ minter_to_btc_canister' =                       Append(minter_to_btc_canister,
@@ -421,9 +417,8 @@ Finalize_Requests(self) == /\ pc[self] = "Finalize_Requests"
                                            btc_canister_to_btc, 
                                            btc_canister_to_minter, 
                                            minter_to_ledger, ledger_to_minter, 
-                                           next_request_id, submitted, 
-                                           submitted_ids, spent, outputs, 
-                                           new_transaction >>
+                                           submitted, submitted_ids, spent, 
+                                           outputs, new_transaction >>
 
 Receive_Change_Utxos(self) == /\ pc[self] = "Receive_Change_Utxos"
                               /\ \E response \in { r \in btc_canister_to_minter: Caller(r) = self }:
@@ -465,8 +460,7 @@ Receive_Change_Utxos(self) == /\ pc[self] = "Receive_Change_Utxos"
                                               btc_canister_to_btc, 
                                               minter_to_btc_canister, 
                                               minter_to_ledger, 
-                                              ledger_to_minter, 
-                                              next_request_id >>
+                                              ledger_to_minter >>
 
 Heartbeat(self) == Heartbeat_Start(self) \/ Conclude_Submission(self)
                       \/ Finalize_Requests(self)

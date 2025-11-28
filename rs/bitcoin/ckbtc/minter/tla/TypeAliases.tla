@@ -25,7 +25,7 @@ EXTENDS TLC
     caller_id: $pid, 
     request: $minterToLedgerRequestType 
 };
-@typeAlias: ledgerToMinterResponseType = OK(UNIT) | Err(UNIT) | SystemErr(UNIT);
+@typeAlias: ledgerToMinterResponseType = OK(UNIT) | Height($requestId) | Err(UNIT) | SystemErr(UNIT);
 @typeAlias: ledgerToMinterResponse = { 
     caller_id: $pid,
     status: $ledgerToMinterResponseType

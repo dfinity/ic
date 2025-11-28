@@ -30,7 +30,6 @@ CONSTANTS
     BTC_CANISTER_PROCESS_ID,
     \* The ID of the PlusCal process simulating the heartbeat of the ckBTC Ledger
     HEARTBEAT_PROCESS_IDS,
-    RETRIEVE_BTC_FEE,
     DEPOSIT_ADDRESS
 
 \* @type: $submission => Set($utxo);
@@ -195,6 +194,8 @@ while(TRUE) {
 \* transfer user ckBTC
 \**********************************************************************************************
 process (Ledger = LEDGER_PROCESS_ID)
+    variable
+        burn_height = 0;
 {
 Ledger_Loop:
     while(TRUE) {
@@ -228,7 +229,8 @@ Ledger_Loop:
                             with(burn_req = VariantGetUnsafe("Burn", req.request)) {
                                 if(burn_req.address \in DOMAIN balance /\ balance[burn_req.address] >= burn_req.amount) {
                                     balance := Remove_Balance_If_Zero(burn_req.address, [ balance EXCEPT ![burn_req.address] = @ - burn_req.amount]);
-                                    respond_ledger_to_minter(Caller(req), Status_Ok);
+                                    burn_height := burn_height + 1;
+                                    respond_ledger_to_minter(Caller(req), Height(burn_height));
                                 } else {
                                     respond_ledger_to_minter(Caller(req), Status_Err);
                                 }
@@ -247,14 +249,14 @@ Ledger_Loop:
 }
 
 } *)
-\* BEGIN TRANSLATION (chksum(pcal) = "6bd884dc" /\ chksum(tla) = "e77ad47b")
+\* BEGIN TRANSLATION (chksum(pcal) = "12c71112" /\ chksum(tla) = "3c283de8")
 VARIABLES btc, btc_canister, balance, btc_canister_to_btc, 
           minter_to_btc_canister, btc_canister_to_minter, minter_to_ledger, 
-          ledger_to_minter, nr_user_transfers
+          ledger_to_minter, nr_user_transfers, burn_height
 
 vars == << btc, btc_canister, balance, btc_canister_to_btc, 
            minter_to_btc_canister, btc_canister_to_minter, minter_to_ledger, 
-           ledger_to_minter, nr_user_transfers >>
+           ledger_to_minter, nr_user_transfers, burn_height >>
 
 ProcSet == {BTC_PROCESS_ID} \cup {BTC_CANISTER_PROCESS_ID} \cup {LEDGER_PROCESS_ID}
 
@@ -271,6 +273,8 @@ Init == (* Global variables *)
         /\ ledger_to_minter = {}
         (* Process BTC *)
         /\ nr_user_transfers = 0
+        (* Process Ledger *)
+        /\ burn_height = 0
 
 BTC == /\ \/ /\ (nr_user_transfers < MAX_USER_BTC_TRANSFERS)
              /\ \E user_utxos \in SUBSET Utxos_Owned_By(btc, USER_BTC_ADDRESSES):
@@ -288,7 +292,7 @@ BTC == /\ \/ /\ (nr_user_transfers < MAX_USER_BTC_TRANSFERS)
              /\ UNCHANGED nr_user_transfers
        /\ UNCHANGED << btc_canister, balance, minter_to_btc_canister, 
                        btc_canister_to_minter, minter_to_ledger, 
-                       ledger_to_minter >>
+                       ledger_to_minter, burn_height >>
 
 BTC_Canister == /\ \/ /\ btc_canister' = btc
                       /\ UNCHANGED <<btc_canister_to_btc, minter_to_btc_canister, btc_canister_to_minter>>
@@ -308,14 +312,15 @@ BTC_Canister == /\ \/ /\ btc_canister' = btc
                                                                                               ]
                                                                                           })
                                                   ELSE /\ Assert((FALSE), 
-                                                                 "Failure of assertion at line 180, column 13.")
+                                                                 "Failure of assertion at line 179, column 13.")
                                                        /\ UNCHANGED << btc_canister_to_btc, 
                                                                        btc_canister_to_minter >>
                               \/ /\ btc_canister_to_minter' = (btc_canister_to_minter \union { BTC_Canister_Error_Response((Caller(req))) })
                                  /\ UNCHANGED btc_canister_to_btc
                       /\ UNCHANGED btc_canister
                 /\ UNCHANGED << btc, balance, minter_to_ledger, 
-                                ledger_to_minter, nr_user_transfers >>
+                                ledger_to_minter, nr_user_transfers, 
+                                burn_height >>
 
 Ledger == /\ \/ /\ \E src_address \in DOMAIN balance \intersect CK_BTC_ADDRESSES:
                      \E dest_address \in CK_BTC_ADDRESSES
@@ -324,7 +329,7 @@ Ledger == /\ \/ /\ \E src_address \in DOMAIN balance \intersect CK_BTC_ADDRESSES
                        \E amnt \in 1..balance[src_address]:
                          LET balance_with_default == balance @@ (dest_address :> 0) IN
                            balance' = Remove_Balance_If_Zero(src_address, [ balance_with_default EXCEPT ![src_address] = @ - amnt, ![dest_address] = @ + amnt ])
-                /\ UNCHANGED <<minter_to_ledger, ledger_to_minter>>
+                /\ UNCHANGED <<minter_to_ledger, ledger_to_minter, burn_height>>
              \/ /\ (minter_to_ledger # <<>>)
                 /\ LET req == Head(minter_to_ledger) IN
                      /\ minter_to_ledger' = Tail(minter_to_ledger)
@@ -333,19 +338,23 @@ Ledger == /\ \/ /\ \E src_address \in DOMAIN balance \intersect CK_BTC_ADDRESSES
                                            /\ balance' = (       mint_req.to :> (With_Default(balance, mint_req.to, 0) + mint_req.amount)
                                                           @@ balance)
                                            /\ ledger_to_minter' = (ledger_to_minter \union { [ caller_id |-> (req.caller_id), status |-> Status_Ok ] })
+                                      /\ UNCHANGED burn_height
                                  ELSE /\ IF Is_Burn_Request(req)
                                             THEN /\ LET burn_req == VariantGetUnsafe("Burn", req.request) IN
                                                       IF burn_req.address \in DOMAIN balance /\ balance[burn_req.address] >= burn_req.amount
                                                          THEN /\ balance' = Remove_Balance_If_Zero(burn_req.address, [ balance EXCEPT ![burn_req.address] = @ - burn_req.amount])
-                                                              /\ ledger_to_minter' = (ledger_to_minter \union { [ caller_id |-> (Caller(req)), status |-> Status_Ok ] })
+                                                              /\ burn_height' = burn_height + 1
+                                                              /\ ledger_to_minter' = (ledger_to_minter \union { [ caller_id |-> (Caller(req)), status |-> (Height(burn_height')) ] })
                                                          ELSE /\ ledger_to_minter' = (ledger_to_minter \union { [ caller_id |-> (Caller(req)), status |-> Status_Err ] })
-                                                              /\ UNCHANGED balance
+                                                              /\ UNCHANGED << balance, 
+                                                                              burn_height >>
                                             ELSE /\ Assert((FALSE), 
-                                                           "Failure of assertion at line 237, column 29.")
+                                                           "Failure of assertion at line 239, column 29.")
                                                  /\ UNCHANGED << balance, 
-                                                                 ledger_to_minter >>
+                                                                 ledger_to_minter, 
+                                                                 burn_height >>
                         \/ /\ ledger_to_minter' = (ledger_to_minter \union { [ caller_id |-> (req.caller_id), status |-> Status_System_Err ] })
-                           /\ UNCHANGED balance
+                           /\ UNCHANGED <<balance, burn_height>>
           /\ UNCHANGED << btc, btc_canister, btc_canister_to_btc, 
                           minter_to_btc_canister, btc_canister_to_minter, 
                           nr_user_transfers >>

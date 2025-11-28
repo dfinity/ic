@@ -83,6 +83,9 @@ Status_System_Err == Variant("SystemErr", UNIT)
 Is_Ok(status) == VariantTag(status) = "OK"
 Is_System_Err(status) == VariantTag(status) = "SystemErr"
 
+Height(block_height) == Variant("Height", block_height)
+Is_Height(status) == VariantTag(status) = "Height"
+Get_Height(status) == VariantGetUnsafe("Height", status)
 
 
 \* Auxiliary definitions for specific kinds of messages (e.g., a get_utxos request)

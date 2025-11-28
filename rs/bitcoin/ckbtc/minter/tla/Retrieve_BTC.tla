@@ -11,8 +11,7 @@ CONSTANTS
     \**********************************************************************************************
     \* The set of "user-controlled" BTC addresses.
     USER_BTC_ADDRESSES,
-    BTC_SUPPLY,
-    RETRIEVE_BTC_FEE,
+    MAX_RETRIEVAL_AMOUNT,
     DEPOSIT_ADDRESS
 
 \* Put a submission at the end of the minter's "pending" queue
@@ -50,7 +49,6 @@ variables
     btc_canister_to_minter = {};
     minter_to_ledger = <<>>;
     ledger_to_minter = {};
-    next_request_id = 1;
 
 macro send_minter_to_ledger_burn(caller_id, address, amount) {
     minter_to_ledger := Append(minter_to_ledger, Burn_Request(caller_id, address, amount));
@@ -74,7 +72,7 @@ Retrieve_BTC_Start:
         \* that can fail in the implementation before we burn BTC.
         goto Done;
     } or {
-        with(user \in PRINCIPALS; amt \in 1..BTC_SUPPLY) {
+        with(user \in PRINCIPALS; amt \in 1..MAX_RETRIEVAL_AMOUNT) {
             amount := amt;
             send_minter_to_ledger_burn(self, BURN_ADDRESS(user), amount);
         };
@@ -86,9 +84,8 @@ Retrieve_BTC_Wait_Burn:
         destination \in Image(DEPOSIT_ADDRESS, CK_BTC_ADDRESSES) \union USER_BTC_ADDRESSES;
         ) {
         ledger_to_minter := ledger_to_minter \ {response};
-        if(Is_Ok(status)) {
-            pending := Queue_Pending(pending, next_request_id, destination, amount);
-            next_request_id := next_request_id + 1;
+        if(Is_Height(status)) {
+            pending := Queue_Pending(pending, Get_Height(status), destination, amount);
         } else {
             \* Just return an error to the user (not modelled here)
             skip;
@@ -101,18 +98,17 @@ Retrieve_BTC_Wait_Burn:
 
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "7b637f1a" /\ chksum(tla) = "9556f6a9")
+\* BEGIN TRANSLATION (chksum(pcal) = "10379051" /\ chksum(tla) = "36166bf1")
 VARIABLES pc, utxos_state_addresses, available_utxos, finalized_utxos, 
           update_balance_locks, retrieve_btc_locks, locks, pending, 
           submitted_transactions, minter_to_btc_canister, 
-          btc_canister_to_minter, minter_to_ledger, ledger_to_minter, 
-          next_request_id, amount
+          btc_canister_to_minter, minter_to_ledger, ledger_to_minter, amount
 
 vars == << pc, utxos_state_addresses, available_utxos, finalized_utxos, 
            update_balance_locks, retrieve_btc_locks, locks, pending, 
            submitted_transactions, minter_to_btc_canister, 
-           btc_canister_to_minter, minter_to_ledger, ledger_to_minter, 
-           next_request_id, amount >>
+           btc_canister_to_minter, minter_to_ledger, ledger_to_minter, amount
+        >>
 
 ProcSet == (RETRIEVE_BTC_PROCESS_IDS)
 
@@ -129,7 +125,6 @@ Init == (* Global variables *)
         /\ btc_canister_to_minter = {}
         /\ minter_to_ledger = <<>>
         /\ ledger_to_minter = {}
-        /\ next_request_id = 1
         (* Process Retrieve_BTC *)
         /\ amount = [self \in RETRIEVE_BTC_PROCESS_IDS |-> 0]
         /\ pc = [self \in ProcSet |-> "Retrieve_BTC_Start"]
@@ -138,7 +133,7 @@ Retrieve_BTC_Start(self) == /\ pc[self] = "Retrieve_BTC_Start"
                             /\ \/ /\ pc' = [pc EXCEPT ![self] = "Done"]
                                   /\ UNCHANGED <<minter_to_ledger, amount>>
                                \/ /\ \E user \in PRINCIPALS:
-                                       \E amt \in 1..BTC_SUPPLY:
+                                       \E amt \in 1..MAX_RETRIEVAL_AMOUNT:
                                          /\ amount' = [amount EXCEPT ![self] = amt]
                                          /\ minter_to_ledger' = Append(minter_to_ledger, Burn_Request(self, (BURN_ADDRESS(user)), amount'[self]))
                                   /\ pc' = [pc EXCEPT ![self] = "Retrieve_BTC_Wait_Burn"]
@@ -149,19 +144,17 @@ Retrieve_BTC_Start(self) == /\ pc[self] = "Retrieve_BTC_Start"
                                             submitted_transactions, 
                                             minter_to_btc_canister, 
                                             btc_canister_to_minter, 
-                                            ledger_to_minter, next_request_id >>
+                                            ledger_to_minter >>
 
 Retrieve_BTC_Wait_Burn(self) == /\ pc[self] = "Retrieve_BTC_Wait_Burn"
                                 /\ \E response \in { r \in ledger_to_minter: Caller(r) = self }:
                                      LET status == Status(response) IN
                                        \E destination \in Image(DEPOSIT_ADDRESS, CK_BTC_ADDRESSES) \union USER_BTC_ADDRESSES:
                                          /\ ledger_to_minter' = ledger_to_minter \ {response}
-                                         /\ IF Is_Ok(status)
-                                               THEN /\ pending' = Queue_Pending(pending, next_request_id, destination, amount[self])
-                                                    /\ next_request_id' = next_request_id + 1
+                                         /\ IF Is_Height(status)
+                                               THEN /\ pending' = Queue_Pending(pending, Get_Height(status), destination, amount[self])
                                                ELSE /\ TRUE
-                                                    /\ UNCHANGED << pending, 
-                                                                    next_request_id >>
+                                                    /\ UNCHANGED pending
                                          /\ amount' = [amount EXCEPT ![self] = 0]
                                 /\ pc' = [pc EXCEPT ![self] = "Done"]
                                 /\ UNCHANGED << utxos_state_addresses, 
@@ -189,8 +182,6 @@ Spec == Init /\ [][Next]_vars
 Termination == <>(\A self \in ProcSet: pc[self] = "Done")
 
 \* END TRANSLATION
-
-local_vars == << amount, next_request_id  >>
 
 Local_Init ==
     /\ amount = [self \in RETRIEVE_BTC_PROCESS_IDS |-> 0]
