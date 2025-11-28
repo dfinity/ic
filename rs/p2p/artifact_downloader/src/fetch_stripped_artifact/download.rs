@@ -22,7 +22,9 @@ use ic_types::{
         BlockPayload, ConsensusMessage,
         idkg::{IDkgArtifactId, IDkgMessage, IDkgObject},
     },
-    crypto::canister_threshold_sig::idkg::{IDkgTranscriptId, SignedIDkgDealing},
+    crypto::{
+        canister_threshold_sig::idkg::{IDkgTranscriptId, SignedIDkgDealing},
+    },
     messages::{SignedIngress, SignedRequestBytes},
 };
 use rand::{SeedableRng, rngs::SmallRng, seq::IteratorRandom};
@@ -287,7 +289,7 @@ async fn idkg_dealing_rpc_handler(
     Ok(bytes)
 }
 
-/// Downloads the missing ingress messages from a random peer.
+/// Downloads the missing messages from a random peer.
 pub(crate) async fn download_stripped_message<P: Peers>(
     transport: Arc<dyn Transport>,
     stripped_message_id: StrippedMessageId,
@@ -337,58 +339,27 @@ pub(crate) async fn download_stripped_message<P: Peers>(
         if let Some(peer) = { peer_rx.peers().into_iter().choose(&mut rng) } {
             match timeout_at(next_request_at, transport.rpc(&peer, request.clone())).await {
                 Ok(Ok(response)) if response.status() == StatusCode::OK => {
-                    match &stripped_message_id {
-                        StrippedMessageId::Ingress(signed_ingress_id) => {
-                            if let Some(ingress_message) =
-                                parse_ingress_response(response.into_body(), metrics)
-                            {
-                                let derived_ingress_id = SignedIngressId::from(&ingress_message);
-                                if derived_ingress_id == *signed_ingress_id {
-                                    metrics.report_finished_stripped_message_download(message_type);
-                                    return (
-                                        StrippedMessage::Ingress(
-                                            derived_ingress_id,
-                                            ingress_message,
-                                        ),
-                                        peer,
-                                    );
-                                } else {
-                                    metrics.report_download_error(
-                                        "mismatched_signed_ingress_id",
-                                        message_type,
-                                    );
-                                    warn!(
-                                        log,
-                                        "Peer {} responded with wrong ingress for advert", peer
-                                    );
-                                }
-                            }
+                    match parse_response(&stripped_message_id, response.into_body()) {
+                        Ok(stripped_message) => {
+                            metrics.report_finished_stripped_message_download(message_type);
+                            return (stripped_message, peer);
                         }
-                        StrippedMessageId::IDkgDealing(dealing_id, node_index) => {
-                            if let Some(dealing) =
-                                parse_dealing_response(response.into_body(), metrics)
-                            {
-                                let id = dealing.message_id();
-                                if id == *dealing_id {
-                                    metrics.report_finished_stripped_message_download(message_type);
-                                    return (
-                                        StrippedMessage::IDkgDealing(id, *node_index, dealing),
-                                        peer,
-                                    );
-                                } else {
-                                    metrics.report_download_error(
-                                        "mismatched_idkg_dealing_id",
-                                        message_type,
-                                    );
-                                    warn!(
-                                        log,
-                                        "Peer {} responded with wrong idkg dealing for advert",
-                                        peer
-                                    );
-                                }
-                            }
+                        Err(ParseResponseError::MessageIdMismatch) => {
+                            metrics.report_download_error(
+                                "mismatched_stripped_message_id",
+                                message_type,
+                            );
+                            warn!(
+                                log,
+                                "Peer {} responded with wrong {} message for advert",
+                                peer,
+                                message_type.as_str(),
+                            );
                         }
-                    }
+                        Err(ParseResponseError::ParsingError(reason)) => {
+                            metrics.report_download_error(reason, message_type);
+                        }
+                    };
                 }
                 Ok(Ok(_response)) => {
                     metrics.report_download_error("status_not_ok", message_type);
@@ -406,48 +377,57 @@ pub(crate) async fn download_stripped_message<P: Peers>(
     }
 }
 
-fn parse_ingress_response(
-    body: Bytes,
-    metrics: &FetchStrippedConsensusArtifactMetrics,
-) -> Option<SignedIngress> {
-    let Ok(response) = pb::GetIngressMessageInBlockResponse::proxy_decode(&body).and_then(
-        |proto: pb::GetIngressMessageInBlockResponse| {
-            GetIngressMessageInBlockResponse::try_from(proto)
-        },
-    ) else {
-        metrics.report_download_error(
-            "ingress_response_decoding_failed",
-            StrippedMessageType::Ingress,
-        );
-        return None;
-    };
-
-    let Ok(ingress) = SignedIngress::try_from(response.serialized_ingress_message) else {
-        metrics.report_download_error(
-            "ingress_deserialization_failed",
-            StrippedMessageType::Ingress,
-        );
-        return None;
-    };
-
-    Some(ingress)
+enum ParseResponseError {
+    MessageIdMismatch,
+    ParsingError(&'static str),
 }
 
-fn parse_dealing_response(
+fn parse_response(
+    message_id: &StrippedMessageId,
     body: Bytes,
-    metrics: &FetchStrippedConsensusArtifactMetrics,
-) -> Option<SignedIDkgDealing> {
-    let Ok(response) = pb::GetIDkgDealingInBlockResponse::proxy_decode(&body).and_then(
-        |proto: pb::GetIDkgDealingInBlockResponse| GetIDkgDealingInBlockResponse::try_from(proto),
-    ) else {
-        metrics.report_download_error(
-            "idkg_dealing_response_decoding_failed",
-            StrippedMessageType::IDkgDealing,
-        );
-        return None;
-    };
+) -> Result<StrippedMessage, ParseResponseError> {
+    match &message_id {
+        StrippedMessageId::Ingress(ingress_id) => {
+            let ingress = parse_ingress_response(body)?;
+            let derived_ingress_id = SignedIngressId::from(&ingress);
+            if derived_ingress_id == *ingress_id {
+                return Ok(StrippedMessage::Ingress(derived_ingress_id, ingress));
+            }
+        }
+        StrippedMessageId::IDkgDealing(dealing_id, node_index) => {
+            let dealing = parse_dealing_response(body)?;
+            let derived_dealing_id = dealing.message_id();
+            if derived_dealing_id == *dealing_id {
+                return Ok(StrippedMessage::IDkgDealing(
+                    derived_dealing_id,
+                    *node_index,
+                    dealing,
+                ));
+            }
+        }
+    }
+    Err(ParseResponseError::MessageIdMismatch)
+}
 
-    Some(response.signed_dealing)
+fn parse_ingress_response(body: Bytes) -> Result<SignedIngress, ParseResponseError> {
+    let response = pb::GetIngressMessageInBlockResponse::proxy_decode(&body)
+        .and_then(|proto: pb::GetIngressMessageInBlockResponse| {
+            GetIngressMessageInBlockResponse::try_from(proto)
+        })
+        .map_err(|_| ParseResponseError::ParsingError("ingress_response_decoding_failed"))?;
+
+    SignedIngress::try_from(response.serialized_ingress_message)
+        .map_err(|_| ParseResponseError::ParsingError("ingress_deserialization_failed"))
+}
+
+fn parse_dealing_response(body: Bytes) -> Result<SignedIDkgDealing, ParseResponseError> {
+    let response = pb::GetIDkgDealingInBlockResponse::proxy_decode(&body)
+        .and_then(|proto: pb::GetIDkgDealingInBlockResponse| {
+            GetIDkgDealingInBlockResponse::try_from(proto)
+        })
+        .map_err(|_| ParseResponseError::ParsingError("idkg_dealing_response_decoding_failed"))?;
+
+    Ok(response.signed_dealing)
 }
 
 #[cfg(test)]
