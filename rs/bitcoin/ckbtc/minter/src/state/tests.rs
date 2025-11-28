@@ -460,11 +460,44 @@ mod withdrawal_reimbursement {
 }
 
 mod utxo_set {
+    use ic_btc_interface::Utxo;
     use crate::state::utxos::UtxoSet;
     use crate::test_fixtures::utxo;
 
     #[test]
     fn should_be_sorted_by_value() {
+        let mut utxos = UtxoSet::default();
+        let (small_utxo, medium_utxo, large_utxo) = three_utxos();
+
+        assert!(utxos.insert(medium_utxo.clone()));
+        assert!(utxos.insert(large_utxo.clone()));
+        assert!(utxos.insert(small_utxo.clone()));
+
+        assert_eq!(utxos.len(), 3);
+        let iter: Vec<_> = utxos.iter().collect();
+        assert_eq!(iter, vec![&small_utxo, &medium_utxo, &large_utxo]);
+    }
+
+    #[test]
+    fn should_find_lower_bound() {
+        let mut utxos = UtxoSet::default();
+        let (small_utxo, medium_utxo, large_utxo) = three_utxos();
+        assert!(utxos.insert(medium_utxo.clone()));
+        assert!(utxos.insert(large_utxo.clone()));
+        assert!(utxos.insert(small_utxo.clone()));
+
+        assert_eq!(utxos.find_lower_bound(0), Some(&small_utxo));
+        assert_eq!(utxos.find_lower_bound(10), Some(&small_utxo));
+
+        assert_eq!(utxos.find_lower_bound(11), Some(&medium_utxo));
+        assert_eq!(utxos.find_lower_bound(100), Some(&medium_utxo));
+
+        assert_eq!(utxos.find_lower_bound(101), Some(&large_utxo));
+        assert_eq!(utxos.find_lower_bound(1_000), Some(&large_utxo));
+        assert_eq!(utxos.find_lower_bound(1_001), None);
+    }
+
+    fn three_utxos() -> (Utxo, Utxo, Utxo) {
         let small_utxo = {
             let mut utxo = utxo();
             utxo.outpoint.vout = 42;
@@ -483,14 +516,6 @@ mod utxo_set {
             utxo.value = 1_000;
             utxo
         };
-
-        let mut utxos = UtxoSet::default();
-        assert!(utxos.insert(medium_utxo.clone()));
-        assert!(utxos.insert(large_utxo.clone()));
-        assert!(utxos.insert(small_utxo.clone()));
-
-        assert_eq!(utxos.len(), 3);
-        let iter: Vec<_> = utxos.iter().collect();
-        assert_eq!(iter, vec![&small_utxo, &medium_utxo, &large_utxo]);
+        (small_utxo, medium_utxo, large_utxo)
     }
 }

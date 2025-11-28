@@ -15,11 +15,11 @@ impl<'a> UtxoSet<'a> {
     }
 
     pub fn insert(&mut self, utxo: Utxo) -> bool {
-        self.utxos.insert(SortByKey(Cow::Owned(utxo)))
+        self.utxos.insert(SortByKey::from(utxo))
     }
 
     pub fn remove(&mut self, utxo: &'a Utxo) -> bool {
-        self.utxos.remove(&SortByKey(Cow::Borrowed(utxo)))
+        self.utxos.remove(&SortByKey::from(utxo))
     }
 
     pub fn len(&self) -> usize {
@@ -30,13 +30,49 @@ impl<'a> UtxoSet<'a> {
         self.utxos.is_empty()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &Utxo> {
-        self.utxos.iter().map(|utxo| utxo.0.as_ref())
+    /// Find a UTXO with the smallest value being at least `value`.
+    pub fn find_lower_bound(&self, value: u64) -> Option<&Utxo> {
+        use ic_btc_interface::{OutPoint, Txid};
+
+        self.utxos.range(SortByKey::from(Utxo {
+            outpoint: OutPoint {
+                txid: Txid::from([0_u8; 32]),
+                vout: 0,
+            },
+            value,
+            height: 0,
+        })..).next().map(|utxo| utxo.as_ref())
+    }
+
+    pub fn last(&self) -> Option<&Utxo> {
+        self.utxos.last().map(|utxo| utxo.as_ref())
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item=&Utxo> {
+        self.utxos.iter().map(|utxo| utxo.as_ref())
     }
 }
 
 #[derive(Debug, PartialEq, Eq)]
 struct SortByKey<'a, T: Clone>(Cow<'a, T>);
+
+impl<'a, T: Clone> AsRef<T> for SortByKey<'a, T> {
+    fn as_ref(&self) -> &T {
+        self.0.as_ref()
+    }
+}
+
+impl<T: Clone> From<T> for SortByKey<'_, T> {
+    fn from(value: T) -> Self {
+        SortByKey(Cow::Owned(value))
+    }
+}
+
+impl<'a, T: Clone> From<&'a T> for SortByKey<'a, T> {
+    fn from(value: &'a T) -> Self {
+        SortByKey(Cow::Borrowed(value))
+    }
+}
 
 trait SecondaryKey {
     type Key;
@@ -54,7 +90,7 @@ impl SecondaryKey for Utxo {
 
 impl<'a, T, K> PartialOrd for SortByKey<'a, T>
 where
-    T: Clone + PartialOrd + SecondaryKey<Key = K>,
+    T: Clone + PartialOrd + SecondaryKey<Key=K>,
     K: PartialOrd,
 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -71,7 +107,7 @@ where
 
 impl<'a, T, K> Ord for SortByKey<'a, T>
 where
-    T: Clone + Ord + SecondaryKey<Key = K>,
+    T: Clone + Ord + SecondaryKey<Key=K>,
     K: Ord,
 {
     fn cmp(&self, other: &Self) -> Ordering {
