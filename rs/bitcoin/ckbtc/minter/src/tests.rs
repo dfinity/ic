@@ -1,16 +1,16 @@
-use crate::fees::{BitcoinFeeEstimator, FeeEstimator};
-use crate::test_fixtures::{bitcoin_fee_estimator, build_bitcoin_unsigned_transaction};
 use crate::{
     BuildTxError, CacheWithExpiration, Network,
     address::BitcoinAddress,
-    build_unsigned_transaction, estimate_retrieve_btc_fee, fake_sign, greedy,
+    build_unsigned_transaction, estimate_retrieve_btc_fee, fake_sign,
+    fees::{BitcoinFeeEstimator, FeeEstimator},
+    greedy,
     lifecycle::init::InitArgs,
     state::invariants::CheckInvariantsImpl,
     state::{
         ChangeOutput, CkBtcMinterState, Mode, RetrieveBtcRequest, RetrieveBtcStatus,
         SubmittedBtcTransaction,
     },
-    test_fixtures::arbitrary,
+    test_fixtures::{arbitrary, bitcoin_fee_estimator, build_bitcoin_unsigned_transaction},
     tx,
 };
 use bitcoin::network::constants::Network as BtcNetwork;

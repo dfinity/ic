@@ -4,7 +4,8 @@ use axum::{Extension, body::Body, extract::Request, middleware::Next, response::
 use bytes::Bytes;
 use candid::{Decode, Principal};
 use http::header::{CONTENT_TYPE, HeaderValue, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
-use ic_bn_lib::http::{Error as IcBnError, body::buffer_body, cache::CacheStatus, headers::*};
+use ic_bn_lib::http::{body::buffer_body, cache::CacheStatus, headers::*};
+use ic_bn_lib_common::types::http::Error as HttpError;
 use ic_types::messages::Blob;
 use serde::{Deserialize, Serialize};
 
@@ -48,9 +49,9 @@ pub async fn preprocess_request(
     let body = buffer_body(body, MAX_REQUEST_BODY_SIZE, Duration::from_secs(60))
         .await
         .map_err(|e| match e {
-            IcBnError::BodyReadingFailed(v) => ErrorCause::UnableToReadBody(v),
-            IcBnError::BodyTooBig => ErrorCause::PayloadTooLarge(MAX_REQUEST_BODY_SIZE),
-            IcBnError::BodyTimedOut => ErrorCause::BodyTimedOut,
+            HttpError::BodyReadingFailed(v) => ErrorCause::UnableToReadBody(v),
+            HttpError::BodyTooBig => ErrorCause::PayloadTooLarge(MAX_REQUEST_BODY_SIZE),
+            HttpError::BodyTimedOut => ErrorCause::BodyTimedOut,
             _ => ErrorCause::Other(e.to_string()),
         })?;
 

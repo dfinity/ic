@@ -1,10 +1,9 @@
 use std::{
     cell::{Cell, RefCell},
-    collections::HashSet,
-    hash::Hash,
     str::FromStr,
 };
 
+use ic_nervous_system_access_list::AccessList;
 #[cfg(any(test, feature = "canbench-rs"))]
 use ic_nervous_system_temporary::Temporary;
 use ic_types::{PrincipalId, SubnetId};
@@ -23,32 +22,9 @@ thread_local! {
     // These are needed for the phased rollout approach in order
     // allow granular rolling out of the feature to specific subnets
     // to specific subset of callers.
-    static NODE_SWAPPING_CALLERS_POLICY: RefCell<WhitelistFeatureAccessPolicy<PrincipalId>> = RefCell::new(WhitelistFeatureAccessPolicy::Only(
-        [
-            "xph6u-z3z2t-s7hh7-gtlxh-bbgbx-aatlm-eab4o-bsank-nqruh-3ub4q-sae",
-            "lgp6d-brhlv-35izu-khc6p-rfszo-zdwng-xbtkh-xyvjg-y3due-7ha7t-uae",
-            "byspq-73pbj-e44pb-5gq3o-a6sqa-p3p3l-blq2j-dtjup-77zyx-k26zh-aae",
-            "db7fe-oft52-pi5du-za72s-sh5oy-6wmnv-hje7y-i5k2l-txseu-anq6c-rqe",
-            "pi3wm-ofu73-5wyma-gec6p-lplqp-6euwt-c5jjb-pwaey-gxmlr-rzqmk-xqe",
-            "rzskv-pde6u-albub-bojhe-odunj-k3nnf-j2eag-akkjm-o3ydz-z5tcy-vae",
-            "s7dud-dfedw-dmrax-rjvop-5k4qw-htm4w-gj7ak-j2itz-txwwn-o5ymv-tae",
-            "vqe65-zvwhc-x7bw7-76c74-3dc6v-v6uzb-nyfvb-6wgnv-nhiew-fkoug-oqe",
-            "wqyl3-uvtrm-5lhi3-rjcas-ntrhs-bimkv-viu7b-2tff6-ervao-u2cjg-wqe",
-            "xcne4-m67do-bnrkt-ny5xy-gxepb-5jycf-kcuvt-bdmh6-w565c-fvmdo-oae",
-            "y4c7z-5wyt7-h4dtr-s77cd-t5pue-ajl7h-65ct4-ab5dr-fjaqa-x63kh-xqe",
-        ]
-        .iter()
-        .filter_map(|p| match PrincipalId::from_str(p) {
-            Ok(p) => Some(p),
-            Err(e) => {
-                println!("{LOG_PREFIX}Coudln't parse {p} as a PrincipalId due to error: {e:?}",);
-                None
-            }
-        })
-        .collect(),
-    ));
+    static NODE_SWAPPING_CALLERS_POLICY: RefCell<AccessList<PrincipalId>> = RefCell::new(AccessList::allow_all());
 
-    static NODE_SWAPPING_SUBNETS_POLICY: RefCell<WhitelistFeatureAccessPolicy<SubnetId>> = RefCell::new(WhitelistFeatureAccessPolicy::Only(
+    static NODE_SWAPPING_SUBNETS_POLICY: RefCell<AccessList<SubnetId>> = RefCell::new(AccessList::allow(
         [
             "2fq7c-slacv-26cgz-vzbx2-2jrcs-5edph-i5s2j-tck77-c3rlz-iobzx-mqe",
             "2zs4v-uoqha-xsuun-lveyr-i4ktc-5y3ju-aysud-niobd-gxnqa-ctqem-hae",
@@ -102,8 +78,7 @@ thread_local! {
                 println!("{LOG_PREFIX}Coudln't parse {p} as a SubnetId due to error: {e:?}",);
                 None
             }
-        })
-        .collect(),
+        }),
     ));
 }
 
@@ -144,12 +119,12 @@ pub mod temporary_overrides {
     }
 
     pub fn test_set_swapping_whitelisted_callers(override_callers: Vec<PrincipalId>) {
-        let policy = WhitelistFeatureAccessPolicy::Only(override_callers.into_iter().collect());
+        let policy = AccessList::allow(override_callers);
         NODE_SWAPPING_CALLERS_POLICY.replace(policy);
     }
 
     pub fn test_set_swapping_enabled_subnets(override_subnets: Vec<SubnetId>) {
-        let policy = WhitelistFeatureAccessPolicy::Only(override_subnets.into_iter().collect());
+        let policy = AccessList::allow(override_subnets);
         NODE_SWAPPING_SUBNETS_POLICY.replace(policy);
     }
 }
@@ -160,61 +135,4 @@ pub(crate) fn is_node_swapping_enabled_on_subnet(subnet_id: SubnetId) -> bool {
 
 pub(crate) fn is_node_swapping_enabled_for_caller(caller: PrincipalId) -> bool {
     NODE_SWAPPING_CALLERS_POLICY.with_borrow(|caller_policy| caller_policy.is_allowed(&caller))
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
-enum WhitelistFeatureAccessPolicy<T>
-where
-    T: Clone + Eq + Hash,
-{
-    Only(HashSet<T>),
-    All,
-}
-
-impl<T> WhitelistFeatureAccessPolicy<T>
-where
-    T: Clone + Eq + Hash,
-{
-    fn is_allowed(&self, item: &T) -> bool {
-        match &self {
-            WhitelistFeatureAccessPolicy::Only(items) => items.contains(item),
-            WhitelistFeatureAccessPolicy::All => true,
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_whitelist_allow_all() {
-        let policy = WhitelistFeatureAccessPolicy::All;
-
-        assert!(policy.is_allowed(&PrincipalId::new_user_test_id(1)));
-        assert!(policy.is_allowed(&PrincipalId::new_anonymous()));
-    }
-
-    #[test]
-    fn test_whitelist_deny_all() {
-        let policy = WhitelistFeatureAccessPolicy::Only(HashSet::new());
-
-        assert!(!policy.is_allowed(&PrincipalId::new_user_test_id(1)));
-        assert!(!policy.is_allowed(&PrincipalId::new_anonymous()));
-    }
-
-    #[test]
-    fn test_whitelist_allow_some() {
-        let user_1 = PrincipalId::new_user_test_id(1);
-        let policy = WhitelistFeatureAccessPolicy::Only(
-            [user_1, PrincipalId::new_user_test_id(2)]
-                .into_iter()
-                .collect(),
-        );
-
-        assert!(policy.is_allowed(&user_1));
-        assert!(!policy.is_allowed(&PrincipalId::new_user_test_id(999)));
-        assert!(!policy.is_allowed(&PrincipalId::new_anonymous()));
-    }
 }

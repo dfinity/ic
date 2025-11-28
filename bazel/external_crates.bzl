@@ -182,7 +182,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
         isolated = True,
         cargo_lockfile = cargo_lockfile,
         lockfile = lockfile,
-        cargo_config = "//:bazel/cargo.config",
         annotations = CRATE_ANNOTATIONS,
         packages = {
             "actix-rt": crate.spec(
@@ -253,7 +252,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 features = ["typed-header"],
             ),
             "axum-server": crate.spec(
-                version = "^0.7.2",
+                version = "^0.7.3",
                 features = [
                     "tls-rustls-no-provider",
                 ],
@@ -351,10 +350,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 default_features = False,
             ),
             "canbench": crate.spec(
-                version = "^0.2.1",
+                version = "^0.4.0",
             ),
             "canbench-rs": crate.spec(
-                version = "^0.2.1",
+                version = "^0.4.0",
             ),
             "candid": crate.spec(
                 version = "^0.10.20",
@@ -376,7 +375,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.10.0",
             ),
             "chrono": crate.spec(
-                version = "^0.4.38",
+                version = "^0.4.42",
                 default_features = False,
                 features = [
                     "alloc",
@@ -511,10 +510,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 features = ["serde"],
             ),
             "evm_rpc_client": crate.spec(
-                version = "^0.2.0",
+                version = "^0.3.0",
             ),
             "evm_rpc_types": crate.spec(
-                version = "^3.0.0",
+                version = "^3.1.0",
             ),
             "exec": crate.spec(
                 version = "^0.3.1",
@@ -634,11 +633,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 features = ["pem", "ring"],
             ),
             "ic-bn-lib": crate.spec(
-                git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "620fb49a238b3d8a2caa436b5742ed7ca7012098",
+                version = "0.1",
                 features = [
-                    "acme_alpn",
+                    "acme-alpn",
                 ],
+            ),
+            "ic-bn-lib-common": crate.spec(
+                version = "0.1",
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.3",
@@ -646,20 +647,24 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "ic-canister-log": crate.spec(
                 version = "^0.2.0",
             ),
+            "ic-canister-runtime": crate.spec(
+                version = "^0.1.0",
+            ),
             "ic-canister-sig-creation": crate.spec(
-                version = "^1.3.0",
+                git = "https://github.com/dfinity/ic-canister-sig-creation.git",
+                rev = "c790e58434be9bf30e656b418c14f7862353a476",
             ),
             "ic-cbor": crate.spec(
                 version = "3.0.3",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.18.7",
+                version = "^0.19.0",
             ),
             "ic-cdk-executor": crate.spec(
-                version = "^1.0.2",
+                version = "^2.0.0",
             ),
             "ic-cdk-timers": crate.spec(
-                version = "^0.12.2",
+                version = "^1.0.0",
             ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
@@ -676,14 +681,15 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "ic-gateway": crate.spec(
                 git = "https://github.com/dfinity/ic-gateway",
-                rev = "b78562340bd00f05f9c055dcba3ec0f74758c927",
+                rev = "92ee522a4514584ccf6de487ba40d92063effd9a",
                 default_features = False,
             ),
             "ic-http-certification": crate.spec(
                 version = "3.0.3",
             ),
             "ic-http-gateway": crate.spec(
-                version = "0.3.0",
+                git = "https://github.com/dfinity/http-gateway",
+                rev = "c17ad1b378df3a85441ce2c6853ec61b6f83f730",
             ),
             "ic-identity-hsm": crate.spec(
                 version = "^0.40.1",
@@ -692,7 +698,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^1.1.1",
             ),
             "ic-management-canister-types": crate.spec(
-                version = "0.3.1",
+                version = "^0.5.0",
             ),
             "ic_principal": crate.spec(
                 version = "^0.1.1",
@@ -737,7 +743,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 default_features = False,
             ),
             "ic-vetkeys": crate.spec(
-                version = "^0.4.0",
+                version = "^0.6.0",
             ),
             "ic-wasm": crate.spec(
                 version = "^0.8.4",
@@ -893,7 +899,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.13.0",
             ),
             "mockall": crate.spec(
-                version = "^0.13.0",
+                version = "^0.13.1",
             ),
             "mockito": crate.spec(
                 version = "^1.6.1",
@@ -1110,6 +1116,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "ratelimit": crate.spec(
                 version = "^0.9.1",
             ),
+            "ratatui": crate.spec(
+                version = "^0.29",
+            ),
             "rayon": crate.spec(
                 version = "^1.10.0",
             ),
@@ -1129,7 +1138,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.1.8",
             ),
             "reqwest": crate.spec(
-                version = "^0.12.15",
+                version = "^0.12.24",
                 default_features = False,
                 features = [
                     "blocking",
@@ -1402,6 +1411,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "textplots": crate.spec(
                 version = "^0.8",
+            ),
+            "tui-textarea": crate.spec(
+                version = "^0.7",
             ),
             "thiserror": crate.spec(
                 version = "^2.0.3",
