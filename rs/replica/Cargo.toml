@@ -65,6 +65,10 @@ tokio-util = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
+cggmp21 = { workspace = true }
+round-based = { workspace = true }
+futures = { workspace = true }
+
 [dev-dependencies]
 assert_cmd = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }

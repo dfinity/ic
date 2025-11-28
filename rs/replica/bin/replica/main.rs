@@ -20,6 +20,10 @@ use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::signal::unix::{SignalKind, signal};
 use tracing_subscriber::{Layer, filter::filter_fn, layer::SubscriberExt};
 
+use cggmp21::signing::msg::Msg;
+use futures::{Sink, Stream};
+use round_based::{Incoming, Outgoing};
+
 #[cfg(target_os = "linux")]
 mod jemalloc_metrics;
 
@@ -57,6 +61,11 @@ fn get_replica_binary_hash() -> Result<(PathBuf, String), String> {
 }
 
 fn main() -> io::Result<()> {
+    // Just some bogus code to ensure we depend on the vulnerable cggmp21 crate.
+    // See https://rustsec.org/advisories/RUSTSEC-2025-0127.html.
+    let _incoming: impl Stream<Item = Result<Incoming<Msg>>>;
+    let _outgoing: impl Sink<Outgoing<Msg>>;
+
     // We do not support 32 bits architectures and probably never will.
     #[cfg(not(target_pointer_width = "64"))]
     compile_error!("compilation is only allowed for 64-bit targets");

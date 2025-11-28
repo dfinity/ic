@@ -906,6 +906,10 @@ x509-parser = { version = "0.16.0" }
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
 zstd = "0.13.2"
 
+# The following is to check if actions/dependency-review-action detects the https://rustsec.org/advisories/RUSTSEC-2025-0127.html vulnerabilty.
+cggmp21 = "=0.6.2"
+round-based = "0.4.1"
+
 [workspace.dependencies.ic-wasm]
 default-features = false
 features = ["exe"]
