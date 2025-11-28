@@ -1,7 +1,8 @@
 use crate::Height;
 use crate::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet};
 use crate::crypto::vetkd::{
-    VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent,
+    VetKdArgs, VetKdDerivationContextRef, VetKdEncryptedKey, VetKdEncryptedKeyShare,
+    VetKdEncryptedKeyShareContent,
 };
 use ic_base_types::PrincipalId;
 use ic_base_types::SubnetId;
@@ -24,16 +25,20 @@ mod display_and_debug {
 
         let input = VetKdArgs {
             ni_dkg_id: &ni_dkg_id,
-            caller: &caller,
-            context: &context,
+            context: VetKdDerivationContextRef {
+                caller: &caller,
+                context: &context,
+            },
             input: &input,
             transport_public_key: &transport_public_key,
         };
         let output = "VetKdArgs { \
             ni_dkg_id: NiDkgId { start_block_height: 7, dealer_subnet: ot5wk-sbkaa-aaaaa-aaaap-yai, dkg_tag: HighThreshold, target_subnet: Remote(0x2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a) }, \
             input: 0x696e707574, \
-            caller: 7xzs3-rqraa-aaaaa-aaaap-2ai, \
-            context: 0x636f6e746578742d313233, \
+            context: VetKdDerivationContextRef { \
+                caller: 7xzs3-rqraa-aaaaa-aaaap-2ai, \
+                context: 0x636f6e746578742d313233 \
+            }, \
             transport_public_key: 0x74706b \
         }"
         .to_string();

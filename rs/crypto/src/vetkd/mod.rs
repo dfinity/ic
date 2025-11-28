@@ -241,8 +241,8 @@ fn create_encrypted_key_share_internal<S: CspSigner>(
             master_public_key.as_bytes().to_vec(),
             args.transport_public_key.clone(),
             VetKdDerivationContext {
-                caller: *args.caller,
-                context: args.context.clone(),
+                caller: *args.context.caller,
+                context: args.context.context.clone(),
             },
             args.input.clone(),
         )
@@ -384,7 +384,7 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
         .iter()
         .map(|(_node_id, node_index, clib_share)| (*node_index, clib_share.clone()))
         .collect();
-    let context = DerivationContext::new(args.caller.as_slice(), args.context);
+    let context = DerivationContext::new(args.context.caller.as_slice(), args.context.context);
 
     match ic_crypto_internal_bls12_381_vetkd::EncryptedKey::combine_all(
         &clib_shares_for_combine_all,
@@ -502,7 +502,7 @@ fn verify_encrypted_key_internal(
 
     match encrypted_key.is_valid(
         &master_public_key,
-        &DerivationContext::new(args.caller.as_slice(), args.context),
+        &DerivationContext::new(args.context.caller.as_slice(), args.context.context),
         args.input,
         &transport_public_key,
     ) {

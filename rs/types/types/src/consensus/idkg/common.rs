@@ -1180,7 +1180,7 @@ impl ThresholdSigInputs<'_> {
         match self {
             ThresholdSigInputs::Ecdsa(inputs) => inputs.caller(),
             ThresholdSigInputs::Schnorr(inputs) => inputs.caller(),
-            ThresholdSigInputs::VetKd(inputs) => inputs.caller,
+            ThresholdSigInputs::VetKd(inputs) => inputs.context.caller,
         }
     }
 

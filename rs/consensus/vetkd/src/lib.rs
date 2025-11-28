@@ -29,7 +29,9 @@ use ic_replicated_state::{
     ReplicatedState,
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
 };
-use ic_types::crypto::vetkd::{VetKdKeyShareCombinationError, VetKdKeyVerificationError};
+use ic_types::crypto::vetkd::{
+    VetKdDerivationContextRef, VetKdKeyShareCombinationError, VetKdKeyVerificationError,
+};
 use ic_types::{
     CountBytes, Height, NumBytes, SubnetId, Time,
     batch::{
@@ -240,10 +242,12 @@ impl VetKdPayloadBuilderImpl {
                         return None;
                     };
                     let args = VetKdArgs {
-                        caller: context.request.sender.get_ref(),
-                        context: context.derivation_path.as_ref().first().expect(
-                            "the context's derivation path for vetKD should have exactly one element",
-                        ), 
+                        context: VetKdDerivationContextRef {
+                            caller: context.request.sender.get_ref(),
+                            context: context.derivation_path.as_ref().first().expect(
+                                "the context's derivation path for vetKD should have exactly one element",
+                            ),
+                        },
                         ni_dkg_id: &ctxt_args.ni_dkg_id,
                         input: &ctxt_args.input,
                         transport_public_key: &ctxt_args.transport_public_key,
@@ -373,16 +377,17 @@ impl VetKdPayloadBuilderImpl {
         let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
             return invalid_artifact_err(InvalidVetKdPayloadReason::UnexpectedIDkgContext(id));
         };
-        let args =
-            VetKdArgs {
+        let args = VetKdArgs {
+            context: VetKdDerivationContextRef {
                 caller: context.request.sender.get_ref(),
                 context: context.derivation_path.as_ref().first().expect(
                     "the context's derivation path for vetKD should have exactly one element",
                 ),
-                ni_dkg_id: &ctxt_args.ni_dkg_id,
-                input: &ctxt_args.input,
-                transport_public_key: &ctxt_args.transport_public_key,
-            };
+            },
+            ni_dkg_id: &ctxt_args.ni_dkg_id,
+            input: &ctxt_args.input,
+            transport_public_key: &ctxt_args.transport_public_key,
+        };
         let reply = match VetKdDeriveKeyResult::decode(&data) {
             Ok(data) => data,
             Err(error) => {
