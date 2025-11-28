@@ -18,7 +18,7 @@ pub const MAX_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 pub const DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 
 /// The maximum size of a delta (per message) canister log buffer.
-const MAX_DELTA_LOG_MEMORY_LIMIT: usize = 2 * MiB;
+pub const MAX_DELTA_LOG_MEMORY_LIMIT: usize = 2 * MiB;
 
 // TODO(DSM-11): these metrics should be tracked in aggregate logs only,
 // remove after migration is done.
