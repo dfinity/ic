@@ -301,7 +301,6 @@ fn post_process_update_balance(
     let mut subaccounts = BTreeSet::new();
     let mut deposit_addresses = BTreeMap::new();
     let mut check_fee = None;
-    let mut user_btc_addresses = BTreeSet::new();
     let mut max_retrieval_amount: ::candid::Int = 0_u32.into();
 
     for pair in trace.iter_mut() {
@@ -492,19 +491,10 @@ fn post_process_update_balance(
                 let mapped: BTreeSet<_> = resps
                     .iter()
                     .filter_map(|resp| match resp {
-                        TlaValue::Record(r) => {
-                            if let Some(req) = r.get("request") {
-                                if let TlaValue::Variant { value, .. } = req {
-                                    if let TlaValue::Literal(addr) = &**value {
-                                        user_btc_addresses.insert(TlaValue::Literal(addr.clone()));
-                                    }
-                                }
-                            }
-                            Some(TlaValue::Record(BTreeMap::from([
-                                ("caller_id".to_string(), r.get("caller")?.clone()),
-                                ("status".to_string(), r.get("response")?.clone()),
-                            ])))
-                        }
+                        TlaValue::Record(r) => Some(TlaValue::Record(BTreeMap::from([
+                            ("caller_id".to_string(), r.get("caller")?.clone()),
+                            ("status".to_string(), r.get("response")?.clone()),
+                        ]))),
                         _ => None,
                     })
                     .collect();
@@ -546,10 +536,6 @@ fn post_process_update_balance(
     constants.insert(
         "DEPOSIT_ADDRESS".to_string(),
         TlaValue::Function(deposit_addresses),
-    );
-    constants.insert(
-        "USER_BTC_ADDRESSES".to_string(),
-        TlaValue::Set(user_btc_addresses),
     );
     constants.insert(
         "MAX_RETRIEVAL_AMOUNT".to_string(),
