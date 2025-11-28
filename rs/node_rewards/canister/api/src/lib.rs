@@ -5,7 +5,24 @@ pub mod providers_rewards;
 mod api_native_conversion;
 
 use chrono::{DateTime, Datelike, NaiveDate};
+use rewards_calculation::AlgorithmVersion;
+use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
 use std::fmt::Display;
+
+// This is the version of the rewards calculation algorithm that is used to calculate rewards.
+// Currently, RewardsCalculationV1::VERSION is the only algorithm version supported.
+#[derive(candid::CandidType, candid::Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RewardsCalculationAlgorithmVersion {
+    pub version: u32,
+}
+
+impl Default for RewardsCalculationAlgorithmVersion {
+    fn default() -> Self {
+        Self {
+            version: RewardsCalculationV1::VERSION,
+        }
+    }
+}
 
 // These are API-facing types with all fields wrapped in `Option`
 // to ensure deserialization always works
@@ -14,9 +31,9 @@ use std::fmt::Display;
     PartialOrd, Ord, Eq, candid::CandidType, candid::Deserialize, Clone, Copy, PartialEq, Debug,
 )]
 pub struct DateUtc {
-    pub day: Option<u32>,
-    pub month: Option<u32>,
     pub year: Option<u32>,
+    pub month: Option<u32>,
+    pub day: Option<u32>,
 }
 
 impl Display for DateUtc {

@@ -15,16 +15,16 @@ env:
   CI_RUN_ID: ${{ github.run_id }}
 
 jobs:
-  # This job is not run, but just used to set anchor references for other jobs
-  anchor-setup:
-    if: false
-    name: Anchor Setup
+  fi-tests-nightly:
+    name: Bazel Test FI Nightly
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:19aa596f49db34ece26a1a2903e6fabcd8766025b3dc543546fbef341ef910a2
+      image: ghcr.io/dfinity/ic-build@sha256:86c24b5b717519527920d3b720906f91723514d63acddcbaeb27ecf4144aeb37
       options: >-
         -e NODE_NAME --privileged --cgroupns host
+    timeout-minutes: 720 # 12 hours
+    environment: Nightly Tests
     steps:
       - &checkout
         name: Checkout
@@ -45,6 +45,17 @@ jobs:
           mkdir -p ~/.ssh
           chmod 0700 ~/.ssh
           echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
+      - name: Run FI Tests Nightly
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            bazel test \
+              --config=stamped \
+              --test_tag_filters=fi_tests_nightly \
+              //rs/ledger_suite/... \
+              --test_env=SSH_AUTH_SOCK \
+              --keep_going --test_timeout=43200
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   bazel-test-bare-metal:
     name: Bazel Test Bare Metal
@@ -74,39 +85,18 @@ jobs:
           }
 
           # Run bare metal installation test
-          launch_bare_metal "${{ fromJSON(steps.gen-uuids.outputs.output).hsm_test_id }}" --hsm
+          launch_bare_metal --hsm
 
           # Run bare metal node performance benchmarks
-          launch_bare_metal "${{ fromJSON(steps.gen-uuids.outputs.output).benchmark_id }}" --benchmark
+          launch_bare_metal --benchmark
 
           # Run bare metal node hostOS metrics check
-          launch_bare_metal "${{ fromJSON(steps.gen-uuids.outputs.output).hostos_metrics_id }}" --check_hostos_metrics
+          launch_bare_metal --check_hostos_metrics
 
           bazel clean
         env:
           ZH2_DLL01_CSV_SECRETS: "${{ secrets.ZH2_DLL01_CSV_SECRETS }}"
           ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
-
-  fi-tests-nightly:
-    name: Bazel Test FI Nightly
-    runs-on: *dind-large-setup
-    container: *container-setup
-    timeout-minutes: 720 # 12 hours
-    environment: Nightly Tests
-    steps:
-      - *checkout
-      - *backup-pod-access
-      - name: Run FI Tests Nightly
-        uses: ./.github/actions/bazel
-        with:
-          run: |
-            bazel test \
-              --config=stamped \
-              --test_tag_filters=fi_tests_nightly \
-              //rs/ledger_suite/... \
-              --test_env=SSH_AUTH_SOCK \
-              --keep_going --test_timeout=43200
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   nns-tests-nightly:
     name: Bazel Test NNS Nightly
@@ -227,3 +217,8 @@ jobs:
           compression-level: 9
           path: |
             cov_html.zip
+
+  pocket-ic-tests-windows:
+    uses: ./.github/workflows/pocket-ic-tests-windows.yml
+    with:
+      commit-sha: ${{ github.sha }}

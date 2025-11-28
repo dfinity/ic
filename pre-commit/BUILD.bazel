@@ -7,12 +7,12 @@ sh_test(
     srcs = ["ruff-lint.sh"],
     data = [
         "//:WORKSPACE.bazel",
-        "@ruff",
+        "//:ruff",
     ],
     env = {
         # Hack to escape the sandbox and grep on the actual repository
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "ruff_path": "$(rootpath @ruff//:ruff)",
+        "ruff_path": "$(rootpath //:ruff)",
     },
     tags = [
         "external",  # force test to be unconditionally executed.
@@ -26,12 +26,12 @@ sh_binary(
     srcs = ["ruff-format.sh"],
     data = [
         "//:WORKSPACE.bazel",
-        "@ruff",
+        "//:ruff",
     ],
     env = {
         # Hack to escape the sandbox and grep on the actual repository
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "ruff_path": "$(rootpath @ruff//:ruff)",
+        "ruff_path": "$(rootpath //:ruff)",
     },
     tags = [
         "external",  # force test to be unconditionally executed.
@@ -48,12 +48,12 @@ sh_test(
     data = [
         "//:WORKSPACE.bazel",
         "//:buf.yaml",
-        "@buf",
+        "@rules_buf_toolchains//:buf",
     ],
     env = {
         # Hack to escape the sandbox and grep on the actual repository
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "buf_path": "$(rootpath @buf//:buf)",
+        "buf_path": "$(rootpath @rules_buf_toolchains//:buf)",
         "buf_config": "$(rootpath //:buf.yaml)",
     },
     tags = [
@@ -69,12 +69,12 @@ sh_test(
     srcs = ["protobuf-format-check.sh"],
     data = [
         "//:WORKSPACE.bazel",
-        "@buf",
+        "@rules_buf_toolchains//:buf",
     ],
     env = {
         # Hack to escape the sandbox and grep on the actual repository
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "buf_path": "$(rootpath @buf//:buf)",
+        "buf_path": "$(rootpath @rules_buf_toolchains//:buf)",
     },
     tags = [
         "external",  # force test to be unconditionally executed.
@@ -88,12 +88,12 @@ sh_binary(
     srcs = ["protobuf-format.sh"],
     data = [
         "//:WORKSPACE.bazel",
-        "@buf",
+        "@rules_buf_toolchains//:buf",
     ],
     env = {
         # Hack to escape the sandbox and grep on the actual repository
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "buf_path": "$(rootpath @buf//:buf)",
+        "buf_path": "$(rootpath @rules_buf_toolchains//:buf)",
     },
     tags = [
         "external",  # force test to be unconditionally executed.
@@ -110,12 +110,12 @@ sh_test(
     args = ["$(rootpath //:WORKSPACE.bazel)"],
     data = [
         "//:WORKSPACE.bazel",
-        "@shfmt",
+        "//:shfmt",
     ],
     env = {
         # Hack to get a path to the actual checkout
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "shfmt_path": "$(rootpath @shfmt//:shfmt)",
+        "shfmt_path": "$(rootpath //:shfmt)",
         # read by our script to differentiate between write & check
         "SHFMT_CHECK": "1",
     },
@@ -131,12 +131,12 @@ sh_binary(
     srcs = ["shfmt-format.sh"],
     data = [
         "//:WORKSPACE.bazel",
-        "@shfmt",
+        "//:shfmt",
     ],
     env = {
         # Hack to get a path to the actual checkout
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "shfmt_path": "$(rootpath @shfmt//:shfmt)",
+        "shfmt_path": "$(rootpath //:shfmt)",
     },
     tags = [
         "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
@@ -181,58 +181,18 @@ sh_test(
 )
 
 sh_test(
-    name = "ormolu-lint",
-    size = "small",
-    srcs = ["ormolu-lint.sh"],
-    data = [
-        "//:WORKSPACE.bazel",
-        "@ormolu",
-    ],
-    env = {
-        # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "ormolu_path": "$(rootpath @ormolu//:ormolu)",
-    },
-    tags = [
-        "external",  # force test to be unconditionally executed.
-        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
-        "smoke",  # it should be run before committing code changes into the version control system.
-    ],
-)
-
-sh_binary(
-    name = "ormolu-format",
-    srcs = ["ormolu-format.sh"],
-    data = [
-        "//:WORKSPACE.bazel",
-        "@ormolu",
-    ],
-    env = {
-        # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "ormolu_path": "$(rootpath @ormolu//:ormolu)",
-    },
-    tags = [
-        "external",  # force test to be unconditionally executed.
-        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
-        "smoke",  # it should be run before committing code changes into the version control system.
-    ],
-    visibility = ["//visibility:public"],
-)
-
-sh_test(
     name = "buf-breaking",
     srcs = ["check-incompatibilities.sh"],
     data = [
         "//:WORKSPACE.bazel",
         "//:buf.yaml",
-        "@buf",
+        "@rules_buf_toolchains//:buf",
     ],
     env = {
         # Hack to escape the sandbox and grep on the actual repository
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
         "buf_config": "$(rootpath //:buf.yaml)",
-        "buf_path": "$(rootpath @buf//:buf)",
+        "buf_path": "$(rootpath @rules_buf_toolchains//:buf)",
     },
     env_inherit = [
         "MERGE_BASE_SHA",

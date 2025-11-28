@@ -1,6 +1,6 @@
 use ic_metrics::{
     MetricsRegistry,
-    buckets::{decimal_buckets, exponential_buckets},
+    buckets::{decimal_buckets, decimal_buckets_with_zero, exponential_buckets},
 };
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 
@@ -31,6 +31,7 @@ impl ServiceMetrics {
 pub struct GetSuccessorMetrics {
     pub processed_block_hashes: Histogram,
     pub response_blocks: Histogram,
+    pub prune_headers_anchor_height: IntGauge,
 }
 
 impl GetSuccessorMetrics {
@@ -47,6 +48,10 @@ impl GetSuccessorMetrics {
                 "Number of blocks returned in response",
                 // 1, 10, 100, 1000
                 exponential_buckets(1.0, 10.0, 3),
+            ),
+            prune_headers_anchor_height: metrics_registry.int_gauge(
+                "prune_headers_anchor_height",
+                "Anchor height used to prune headers",
             ),
         }
     }
@@ -118,6 +123,7 @@ pub struct HeaderCacheMetrics {
     pub on_disk_db_size: IntGauge,
     pub on_disk_elements: IntGauge,
     pub in_memory_elements: IntGauge,
+    pub headers_pruned_from_memory: Histogram,
 }
 
 impl HeaderCacheMetrics {
@@ -138,6 +144,12 @@ impl HeaderCacheMetrics {
             in_memory_elements: metrics_registry.int_gauge(
                 "header_cache_in_memory_elements",
                 "Number of headers currently stored in the in-memory header cache.",
+            ),
+            headers_pruned_from_memory: metrics_registry.histogram(
+                "headers_pruned_from_memory",
+                "Number of headers pruned from memory each time",
+                // 0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000
+                decimal_buckets_with_zero(0, 3),
             ),
         }
     }

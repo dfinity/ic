@@ -165,6 +165,11 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
     adduser admin vsock && \
     adduser admin sudo
 
+# The "limited-console" account for restricted console access
+RUN adduser --system --disabled-password --home /var/lib/limited-console --shell /sbin/nologin limited-console && \
+    chown limited-console:nogroup /var/lib/limited-console && \
+    adduser limited-console systemd-journal
+
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.
 RUN addgroup node_exporter && \
@@ -194,7 +199,9 @@ RUN chown root:root /opt
 RUN find /opt -type d -exec chmod 0755 {} \+ && \
     find /opt -type f -exec chmod 0644 {} \+ && \
     chmod 0755 /opt/ic/bin/* && \
+    chmod 0755 /opt/ic/bin/rbash/bash && \
     chmod 0644 /opt/ic/share/*
+
 
 # ------ DEV VARIANT ---------------------------------------------
 

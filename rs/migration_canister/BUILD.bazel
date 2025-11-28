@@ -1,7 +1,28 @@
-load("@rules_rust//rust:defs.bzl", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "ic_migration_canister",
+    srcs = glob(["src/**/*.rs"]),
+    proc_macro_deps = [
+        "@crate_index//:strum_macros",
+    ],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic-management-canister-types",
+        "@crate_index//:ic_stable_structures_next",
+        "@crate_index//:itertools",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:strum",
+    ],
+)
 
 rust_canister(
     name = "migration-canister",
@@ -29,12 +50,14 @@ rust_canister(
 rust_test(
     name = "mc_tests",
     srcs = glob(["src/**/*.rs"]),
+    compile_data = [":migration_canister.did"],
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
     deps = [
         # Keep sorted.
         "@crate_index//:candid",
+        "@crate_index//:candid_parser",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-cdk-timers",
@@ -49,17 +72,20 @@ rust_test(
 
 rust_test(
     name = "migration_canister_test",
+    timeout = "long",
     srcs = ["tests/tests.rs"],
     data = [
         # Keep sorted
         "//rs/migration_canister:migration-canister",
         "//rs/pocket_ic_server:pocket-ic-server",
         "//rs/registry/canister:registry-canister",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = {
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
         "MIGRATION_CANISTER_WASM_PATH": "$(rootpath //rs/migration_canister:migration-canister)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     proc_macro_deps = [
         "@crate_index//:strum_macros",
@@ -74,6 +100,8 @@ rust_test(
         "//rs/registry/canister",
         "//rs/rust_canisters/canister_test",
         "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "//rs/universal_canister/lib",
         "@crate_index//:candid",
         "@crate_index//:futures",
         "@crate_index//:ic-agent",

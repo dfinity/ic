@@ -27,13 +27,13 @@ use crate::{
 };
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, InstanceStats, OutOfInstructionsHandler,
+    HypervisorError, HypervisorResult, InstanceStats, MessageMemoryUsage, OutOfInstructionsHandler,
     SubnetAvailableMemory, SystemApi, SystemApiCallCounters, WasmExecutionOutput,
 };
 use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
-use ic_replicated_state::{EmbedderCache, ExecutionState, MessageMemoryUsage};
+use ic_replicated_state::{EmbedderCache, ExecutionState};
 use ic_sys::{PAGE_SIZE, PageBytes, PageIndex, page_bytes_from_ptr};
 use ic_types::ExecutionRound;
 use ic_types::{CanisterId, NumBytes, NumInstructions};
@@ -478,6 +478,8 @@ pub fn wasm_execution_error(
             num_instructions_left,
             allocated_bytes: NumBytes::new(0),
             allocated_guaranteed_response_message_bytes: NumBytes::new(0),
+            new_memory_usage: None,
+            new_message_memory_usage: None,
             instance_stats: InstanceStats::default(),
             system_api_call_counters: SystemApiCallCounters::default(),
         },
@@ -645,6 +647,8 @@ pub fn process(
                     num_instructions_left: message_instruction_limit,
                     allocated_bytes: NumBytes::new(0),
                     allocated_guaranteed_response_message_bytes: NumBytes::new(0),
+                    new_memory_usage: None,
+                    new_message_memory_usage: None,
                     instance_stats: InstanceStats::default(),
                     system_api_call_counters: SystemApiCallCounters::default(),
                 },
@@ -702,6 +706,8 @@ pub fn process(
                         num_instructions_left: message_instructions_left,
                         allocated_bytes: NumBytes::new(0),
                         allocated_guaranteed_response_message_bytes: NumBytes::new(0),
+                        new_memory_usage: None,
+                        new_message_memory_usage: None,
                         instance_stats,
                         system_api_call_counters,
                     },
@@ -742,6 +748,8 @@ pub fn process(
 
     let mut allocated_bytes = NumBytes::new(0);
     let mut allocated_guaranteed_response_message_bytes = NumBytes::new(0);
+    let mut new_memory_usage = None;
+    let mut new_message_memory_usage = None;
 
     let wasm_state_changes = match run_result {
         Ok(run_result) => {
@@ -767,6 +775,8 @@ pub fn process(
                     allocated_bytes = sys_api.get_allocated_bytes();
                     allocated_guaranteed_response_message_bytes =
                         sys_api.get_allocated_guaranteed_response_message_bytes();
+                    new_memory_usage = Some(sys_api.get_current_memory_usage());
+                    new_message_memory_usage = Some(sys_api.get_current_message_memory_usage());
 
                     Some(WasmStateChanges::new(
                         wasm_memory_delta,
@@ -799,6 +809,8 @@ pub fn process(
             num_instructions_left: message_instructions_left,
             allocated_bytes,
             allocated_guaranteed_response_message_bytes,
+            new_memory_usage,
+            new_message_memory_usage,
             instance_stats,
             system_api_call_counters,
         },

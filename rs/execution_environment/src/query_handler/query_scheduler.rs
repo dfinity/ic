@@ -17,14 +17,6 @@ mod thread_pool;
 #[cfg(test)]
 mod tests;
 
-// This flag selects between the new and the old scheduling algorithms.
-// It will be removed once the new scheduling algorithm is rolled out.
-pub(crate) enum QuerySchedulerFlag {
-    UseNewSchedulingAlgorithm,
-    #[allow(dead_code)]
-    UseOldSchedulingAlgorithm,
-}
-
 /// The query scheduler accepts and executes non-replicated queries (user
 /// queries, system queries, and ingress filter queries). It currently
 /// schedules each canister that has queries in a round-robin fashion.
@@ -34,16 +26,11 @@ pub(crate) enum QuerySchedulerFlag {
 /// `max_threads_per_canister` threads, which is necessary to avoid performance
 /// regression due to the memory bottleneck in the sandbox process.
 #[derive(Clone)]
-pub(crate) enum QueryScheduler {
-    NewScheduler {
-        scheduler: QuerySchedulerInternal,
-        // This field is not actually used. Its only purpose is to keep the
-        // thread-pool alive.
-        _thread_pool: Arc<Mutex<QueryThreadPool>>,
-    },
-    OldScheduler {
-        thread_pool: Arc<Mutex<threadpool::ThreadPool>>,
-    },
+pub(crate) struct QueryScheduler {
+    scheduler: QuerySchedulerInternal,
+    // This field is not actually used. Its only purpose is to keep the
+    // thread-pool alive.
+    _thread_pool: Arc<Mutex<QueryThreadPool>>,
 }
 
 impl QueryScheduler {
@@ -58,30 +45,17 @@ impl QueryScheduler {
         max_threads_per_canister: usize,
         time_slice_per_canister: Duration,
         metrics_registry: &MetricsRegistry,
-        flag: QuerySchedulerFlag,
     ) -> Self {
-        match flag {
-            QuerySchedulerFlag::UseNewSchedulingAlgorithm => {
-                let scheduler = QuerySchedulerInternal::new(
-                    max_threads_per_canister,
-                    time_slice_per_canister,
-                    metrics_registry,
-                );
-                let thread_pool =
-                    QueryThreadPool::new(num_threads, time_slice_per_canister, scheduler.clone());
-                Self::NewScheduler {
-                    scheduler,
-                    _thread_pool: Arc::new(Mutex::new(thread_pool)),
-                }
-            }
-            QuerySchedulerFlag::UseOldSchedulingAlgorithm => {
-                let thread_pool = threadpool::Builder::new()
-                    .num_threads(num_threads)
-                    .thread_name("query_execution".into())
-                    .build();
-                let thread_pool = Arc::new(Mutex::new(thread_pool));
-                Self::OldScheduler { thread_pool }
-            }
+        let scheduler = QuerySchedulerInternal::new(
+            max_threads_per_canister,
+            time_slice_per_canister,
+            metrics_registry,
+        );
+        let thread_pool =
+            QueryThreadPool::new(num_threads, time_slice_per_canister, scheduler.clone());
+        Self {
+            scheduler,
+            _thread_pool: Arc::new(Mutex::new(thread_pool)),
         }
     }
 
@@ -93,16 +67,6 @@ impl QueryScheduler {
     where
         F: FnOnce() -> Duration + Send + 'static,
     {
-        match &self {
-            QueryScheduler::NewScheduler { scheduler, .. } => {
-                scheduler.push(canister_id, Query(Box::new(query)));
-            }
-            QueryScheduler::OldScheduler { thread_pool } => {
-                let thread_pool = thread_pool.lock().unwrap().clone();
-                thread_pool.execute(move || {
-                    query();
-                });
-            }
-        }
+        self.scheduler.push(canister_id, Query(Box::new(query)));
     }
 }

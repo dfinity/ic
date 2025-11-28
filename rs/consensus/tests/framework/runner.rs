@@ -159,6 +159,7 @@ impl<'a> ConsensusRunner<'a> {
             dkg_key_manager.clone(),
             deps.message_routing.clone(),
             deps.state_manager.clone(),
+            deps.thread_pool.clone(),
             Arc::clone(&self.time) as Arc<_>,
             0,
             malicious_flags.clone(),

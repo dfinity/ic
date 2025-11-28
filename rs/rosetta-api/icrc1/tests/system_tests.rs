@@ -865,8 +865,9 @@ fn test_error_backoff() {
         assert_eq!(block_index, Nat::from(1u64));
 
         let mut found_backoff_message = false;
+        let mut log_contents = String::new();
         for _ in 0..10 {
-            let mut log_contents = String::new();
+            log_contents = String::new();
             log_file
                 .read_to_string(&mut log_contents)
                 .expect("failed to read log file");
@@ -877,7 +878,84 @@ fn test_error_backoff() {
             std::thread::sleep(std::time::Duration::from_secs(1));
         }
         assert!(found_backoff_message);
+        assert!(log_contents.contains("Failed to parse block at index 1"));
     });
+}
+
+const NUM_BLOCKS: u64 = 6;
+async fn verify_unrecognized_block_handling(setup: &Setup, bad_block_index: u64) {
+    let mut log_file = NamedTempFile::new().expect("failed to create a temp file");
+
+    let env = RosettaTestingEnvironmentBuilder::new(setup)
+        .with_log_file_path(log_file.path().to_str().unwrap().to_string())
+        .build()
+        .await;
+
+    let agent = get_custom_agent(Arc::new(test_identity()), setup.port).await;
+
+    let mut parent_hash = None;
+    for i in 0..NUM_BLOCKS {
+        let block = if let Some(parent_hash) = parent_hash {
+            BlockBuilder::new(i, i)
+                .with_parent_hash(parent_hash)
+                .mint(*TEST_ACCOUNT, Tokens::from(1u64))
+                .build()
+        } else {
+            BlockBuilder::new(i, i)
+                .mint(*TEST_ACCOUNT, Tokens::from(1u64))
+                .build()
+        };
+        let block = if i == bad_block_index {
+            let mut bad_block = match block {
+                ICRC3Value::Map(btree_map) => btree_map,
+                _ => panic!("block should be a map"),
+            };
+            bad_block.insert("unknown_key".to_string(), ICRC3Value::Nat(Nat::from(0u64)));
+            ICRC3Value::Map(bad_block)
+        } else {
+            block
+        };
+
+        parent_hash = Some(block.clone().hash().to_vec());
+        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block)
+            .await
+            .expect("failed to add block");
+        assert_eq!(block_index, Nat::from(i));
+    }
+
+    let mut found_backoff_message = false;
+    for _ in 0..10 {
+        let mut log_contents = String::new();
+        log_file
+            .read_to_string(&mut log_contents)
+            .expect("failed to read log file");
+        if log_contents.contains(&format!("Invalid block at index {bad_block_index}")) {
+            found_backoff_message = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+    assert!(found_backoff_message);
+}
+
+#[test]
+fn test_unrecognized_fields_error_middle_block() {
+    let rt = Runtime::new().unwrap();
+    let setup = Setup::builder()
+        .with_custom_ledger_wasm(icrc3_test_ledger())
+        .build();
+
+    rt.block_on(verify_unrecognized_block_handling(&setup, 3));
+}
+
+#[test]
+fn test_unrecognized_fields_error_last_block() {
+    let rt = Runtime::new().unwrap();
+    let setup = Setup::builder()
+        .with_custom_ledger_wasm(icrc3_test_ledger())
+        .build();
+
+    rt.block_on(verify_unrecognized_block_handling(&setup, NUM_BLOCKS - 1));
 }
 
 #[test]
@@ -1243,6 +1321,7 @@ fn test_construction_submit() {
                             ic_icrc1::Operation::Approve { fee, .. } => fee,
                             ic_icrc1::Operation::Mint { .. } => None,
                             ic_icrc1::Operation::Burn { .. } => None,
+                            ic_icrc1::Operation::FeeCollector { .. } => None,
                         };
 
                         // Rosetta does not support mint and burn operations

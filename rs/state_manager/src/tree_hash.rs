@@ -258,6 +258,7 @@ mod tests {
                     message_test_id(i),
                     IngressStatus::Unknown,
                     NumBytes::from(u64::MAX),
+                    |_| {},
                 );
             }
 
@@ -273,6 +274,7 @@ mod tests {
                     time: Time::from_nanos_since_unix_epoch(12345),
                 },
                 NumBytes::from(u64::MAX),
+                |_| {},
             );
 
             state.metadata.node_public_keys = btreemap! {

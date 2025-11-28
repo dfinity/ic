@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 load("//bazel:defs.bzl", "rust_bench", "rust_test_with_binary")
 
 package(default_visibility = ["//visibility:public"])
@@ -69,8 +69,9 @@ rust_library(
     }),
 )
 
-rust_binary(
+rust_bench(
     name = "replicated_state_allocator_bench",
+    testonly = True,
     srcs = [
         "benches/bench_allocator.rs",
     ],

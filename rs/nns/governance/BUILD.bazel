@@ -61,6 +61,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/common/validation",
     "//rs/nervous_system/governance",
     "//rs/nervous_system/linear_map",
+    "//rs/nervous_system/lock",
     "//rs/nervous_system/long_message",
     "//rs/nervous_system/neurons_fund",
     "//rs/nervous_system/proto",
@@ -94,6 +95,7 @@ DEPENDENCIES = [
     "@crate_index//:build-info",
     "@crate_index//:bytes",
     "@crate_index//:candid",
+    "@crate_index//:chrono_canisters",
     "@crate_index//:comparable",
     "@crate_index//:dyn-clone",
     "@crate_index//:futures",
@@ -287,6 +289,7 @@ rust_canister(
     compile_data = [":test_did"],
     crate_features = test_with_tla(),
     crate_root = "canister/canister.rs",
+    did_check = False,  # we don't check in the did so can't meaningfully check
     proc_macro_deps = MACRO_DEPENDENCIES + [
         "//rs/tla_instrumentation:proc_macros",
     ],

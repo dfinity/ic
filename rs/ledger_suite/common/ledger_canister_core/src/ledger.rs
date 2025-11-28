@@ -187,6 +187,10 @@ pub trait LedgerData: LedgerContext {
     fn on_purged_transaction(&mut self, height: BlockIndex);
 
     fn fee_collector_mut(&mut self) -> Option<&mut FeeCollector<Self::AccountId>>;
+
+    fn increment_archiving_failure_metric(&mut self);
+
+    fn get_archiving_failure_metric(&self) -> u64;
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -432,6 +436,10 @@ pub async fn archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone, max_messa
         max_message_size,
     )
     .await;
+
+    if result.is_err() {
+        LA::with_ledger_mut(|ledger| ledger.increment_archiving_failure_metric());
+    }
 
     remove_archived_blocks::<LA>(archiving_guard, num_blocks, &sink, result)
 }

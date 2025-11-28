@@ -47,6 +47,12 @@ pub type TransactionCount = CheckedAmountOf<TransactionCountTag>;
 pub enum BlockNumberTag {}
 pub type BlockNumber = CheckedAmountOf<BlockNumberTag>;
 
+impl From<BlockNumber> for evm_rpc_types::BlockTag {
+    fn from(value: BlockNumber) -> Self {
+        evm_rpc_types::BlockTag::Number(evm_rpc_types::Nat256::from(value))
+    }
+}
+
 pub enum GasUnit {}
 /// The number of gas units attached to a transaction for execution.
 pub type GasAmount = CheckedAmountOf<GasUnit>;

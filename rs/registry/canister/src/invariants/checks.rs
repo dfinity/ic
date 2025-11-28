@@ -9,6 +9,7 @@ use crate::{
         firewall::check_firewall_invariants,
         hostos_version::check_hostos_version_invariants,
         node_operator::check_node_operator_invariants,
+        node_record::check_node_record_invariants,
         replica_version::check_replica_version_invariants,
         routing_table::{check_canister_migrations_invariants, check_routing_table_invariants},
         subnet::check_subnet_invariants,
@@ -112,6 +113,9 @@ impl Registry {
 
         // Unassigned node invariants
         result = result.and(check_unassigned_nodes_config_invariants(&snapshot));
+
+        // NodeRecord invariants.
+        result = result.and(check_node_record_invariants(&snapshot));
 
         if let Err(e) = result {
             panic!(

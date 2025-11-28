@@ -87,16 +87,6 @@ pub enum RpcError {
     AddressNotAvailable,
 }
 
-impl RpcError {
-    pub fn is_resource_temporarily_unavailable(&self) -> bool {
-        if let RpcError::JsonRpc(jsonrpc::error::Error::Transport(err)) = self {
-            err.to_string().contains("Resource temporarily unavailable")
-        } else {
-            false
-        }
-    }
-}
-
 impl From<BtcAddressParseError> for RpcError {
     fn from(e: BtcAddressParseError) -> Self {
         Self::InvalidBtcAddress(e)
@@ -248,8 +238,16 @@ impl<T: RpcClientType> RpcClient<T> {
     /// Create a RPC client using the given [Network], url and [Auth].
     pub fn new(network: T, url: &str, auth: Auth) -> Result<Self> {
         let (user, pass) = auth.get_user_pass()?;
-        let client = jsonrpc::client::Client::simple_http(url, user, pass)
+        let transport = jsonrpc::simple_http::Builder::new()
+            .timeout(std::time::Duration::from_secs(60))
+            .url(url)
             .map_err(|e| RpcError::JsonRpc(e.into()))?;
+        let transport = if let Some(user) = user {
+            transport.auth(user, pass)
+        } else {
+            transport
+        };
+        let client = jsonrpc::client::Client::with_transport(transport.build());
         let client = Arc::new(client);
         Ok(RpcClient {
             network,

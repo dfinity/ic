@@ -1,8 +1,15 @@
 // Represents an account on the ckBTC ledger.
 type Account = record { owner : principal; subaccount : opt blob };
 
+type environment_variable = record { 
+    name: text; 
+    value: text;
+};
+
 type CanisterStatusResponse = record {
   status : CanisterStatusType;
+  ready_for_migration : bool;
+  version : nat64;
   memory_size : nat;
   cycles : nat;
   settings : DefiniteCanisterSettings;
@@ -42,6 +49,7 @@ type DefiniteCanisterSettings = record {
   log_visibility: LogVisibility;
   wasm_memory_limit : nat;
   wasm_memory_threshold : nat;
+  environment_variables : vec environment_variable;
 };
 
 type LogVisibility = variant {

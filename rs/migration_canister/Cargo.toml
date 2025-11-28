@@ -6,9 +6,6 @@ edition.workspace = true
 name = "ic-migration-canister"
 version.workspace = true
 
-[lib]
-crate-type = ["cdylib"]
-
 [dependencies]
 candid = { workspace = true }
 futures = { workspace = true }
@@ -23,6 +20,7 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 
 [dev-dependencies]
+candid_parser = { workspace = true }
 pocket-ic = { path = "../../packages/pocket-ic" }
 tempfile = { workspace = true }
 tokio = { workspace = true }
@@ -31,3 +29,5 @@ ic-management-canister-types = { workspace = true }
 ic-nns-test-utils = { path = "../nns/test_utils" }
 registry-canister = { path = "../registry/canister" }
 canister-test = { path = "../rust_canisters/canister_test" }
+ic-universal-canister = { path = "../universal_canister/lib" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }

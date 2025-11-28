@@ -10,8 +10,8 @@ use cycles_minting_canister::{
     UpdateSubnetTypeArgs,
 };
 use helpers::{
-    get_proposer_and_sender, get_subnet_ids, get_subnet_record_with_details, parse_proposal_url,
-    shortened_pid_string, shortened_subnet_string,
+    get_node_record_pb, get_proposer_and_sender, get_subnet_ids, get_subnet_record_with_details,
+    parse_proposal_url, shortened_pid_string, shortened_subnet_string,
 };
 use ic_btc_interface::{Fees, Flag, SetConfigRequest};
 use ic_canister_client::{Agent, Sender};
@@ -135,6 +135,9 @@ use registry_canister::mutations::{
     do_remove_node_operators::RemoveNodeOperatorsPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
     do_set_firewall_config::SetFirewallConfigPayload,
+    do_set_subnet_operational_level::{
+        NodeSshAccess, SetSubnetOperationalLevelPayload, operational_level,
+    },
     do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload,
     do_update_api_boundary_nodes_version::DeployGuestosToSomeApiBoundaryNodes,
     do_update_elected_hostos_versions::ReviseElectedHostosVersionsPayload,
@@ -390,6 +393,19 @@ enum SubCommand {
     /// canister.
     ProposeToAddWasmToSnsWasm(ProposeToAddWasmToSnsWasmCmd),
 
+    /// Sets three things:
+    ///
+    ///     1. In SubnetRecord:
+    ///         1. is_halted = false
+    ///         2. ssh_readonly_access = vec![]
+    ///     2. In NodeRecord:
+    ///         1. ssh_node_state_write_access = vec![]
+    ///
+    /// This is done at the end of subnet recovery. See also
+    /// propose-to-take-subnet-offline-for-repairs. This generally rolls back
+    /// the changes made by that command.
+    ProposeToBringSubnetBackOnlineAfterRepairs(ProposeToBringSubnetBackOnlineAfterRepairsCmd),
+
     /// Submits a proposal to change an existing canister on NNS.
     ProposeToChangeNnsCanister(ProposeToChangeNnsCanisterCmd),
 
@@ -480,6 +496,20 @@ enum SubCommand {
 
     /// Propose to stop a canister managed by the governance.
     ProposeToStopCanister(StopCanisterCmd),
+
+    /// Sets three things:
+    ///
+    ///     1. is_halted = true
+    ///     2. ssh_readonly_access
+    ///     3. ssh_node_state_write_access
+    ///
+    /// This is the first step of subnet recovery. Previously the first step was
+    /// done using propose-to-update-subnet. However, that does not support
+    /// changing ssn_node_state_write_access, which is needed when a subnet has
+    /// SEV enabled everywhere (or the subnet has no DFINITY node).
+    ///
+    /// At the end of subnet recovery, run propose-to-bring-subnet-back-online.
+    ProposeToTakeSubnetOfflineForRepairs(ProposeToTakeSubnetOfflineForRepairsCmd),
 
     /// Submits a proposal to uninstall code of a canister.
     ProposeToUninstallCode(ProposeToUninstallCodeCmd),
@@ -774,6 +804,179 @@ impl ProposalPayload<DeployGuestosToAllUnassignedNodesPayload>
     async fn payload(&self, _: &Agent) -> DeployGuestosToAllUnassignedNodesPayload {
         DeployGuestosToAllUnassignedNodesPayload {
             elected_replica_version: self.guestos_version_id.clone(),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to take a subnet offline for repairs.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToTakeSubnetOfflineForRepairsCmd {
+    /// Which subnet is being taken offline.
+    #[clap(long)]
+    pub subnet: PrincipalId,
+
+    /// List of public keys who (will) have ssh "readonly" access to VMs of the
+    /// subnet. Note that this overwrites the entire list. Therefore, be aware
+    /// of who is currently in the list to make sure you are not clobbering
+    /// anything you don't want to clobber.
+    ///
+    /// This usually isn't a problem, because the list is typically empty when
+    /// this proposal is used as part of subnet recovery.
+    #[clap(long, num_args(1..))]
+    pub ssh_readonly_access: Vec<String>,
+
+    /// Similar to the --ssh-readonly-access flag, but there are some important
+    /// differences:
+    ///
+    ///     1. This gives different privileges to the VM(s). As the name
+    ///        suggests, this allows private key holders to (read and) write
+    ///        files to where node state (which primarily consists of the memory
+    ///        contents of canisters in the subnet) is kept in the VM.
+    ///
+    ///     2. This only targets ONE node VM at a time. Therefore, you have to
+    ///        ALSO specify which node you want to affect. Therefore, the format
+    ///        here is similar but different: "${NODE_ID}":"${SSH_PUBLIC_KEY}".
+    ///        That is, you must prefix with node ID and a semicolon to
+    ///        separate.
+    ///
+    /// Note that this clobbers the entire ssh_node_state_write_access field of
+    /// whatever node is specified, similar to --ssh-readonly-access. Therefore,
+    /// similarly be aware of what the field holds prior to this proposal to
+    /// make sure that you are not clobbering anything that you do not want to
+    /// clobber. However, in practice, it would probably be empty to begin with,
+    /// so most likely, this won't be an issue.
+    #[clap(long, value_parser, num_args(1..))]
+    pub ssh_node_state_write_access: Vec<NodeSshAccessFlagValue>,
+}
+
+impl ProposalTitle for ProposeToTakeSubnetOfflineForRepairsCmd {
+    fn title(&self) -> String {
+        let subnet_id = self.subnet.to_string();
+        let subnet_id = subnet_id.split('-').next().unwrap();
+        format!("Take Subnet {subnet_id} Offline for Repairs")
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<SetSubnetOperationalLevelPayload> for ProposeToTakeSubnetOfflineForRepairsCmd {
+    async fn payload(&self, _agent: &Agent) -> SetSubnetOperationalLevelPayload {
+        let ssh_node_state_write_access = self
+            .ssh_node_state_write_access
+            .clone()
+            .into_iter()
+            .map(NodeSshAccess::from)
+            .collect();
+
+        SetSubnetOperationalLevelPayload {
+            subnet_id: Some(SubnetId::from(self.subnet)),
+            operational_level: Some(operational_level::DOWN_FOR_REPAIRS),
+            ssh_readonly_access: Some(self.ssh_readonly_access.clone()),
+            ssh_node_state_write_access: Some(ssh_node_state_write_access),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct NodeSshAccessFlagValue {
+    pub node_id: NodeId,
+    pub public_keys: Vec<String>,
+}
+
+impl FromStr for NodeSshAccessFlagValue {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, String> {
+        // Split s into two pieces using ':'.
+        let mut parts = s.splitn(2, ':');
+        let node_id = parts.next().ok_or("Missing node ID.")?;
+        let public_keys = parts
+            .next()
+            .ok_or("Missing semicolon separating node ID and SSH public key.")?
+            .to_string();
+
+        // Parse node_id.
+        let node_id = PrincipalId::from_str(node_id).map_err(|err| format!("{err}"))?;
+        let node_id = NodeId::from(node_id);
+
+        // Parse public_keys, by simply splitting on ','.<
+        let public_keys = public_keys
+            .split(',')
+            .map(|public_key| public_key.to_string())
+            .collect();
+
+        Ok(Self {
+            node_id,
+            public_keys,
+        })
+    }
+}
+
+impl From<NodeSshAccessFlagValue> for NodeSshAccess {
+    fn from(src: NodeSshAccessFlagValue) -> Self {
+        let NodeSshAccessFlagValue {
+            node_id,
+            public_keys,
+        } = src;
+
+        Self {
+            node_id: Some(node_id),
+            public_keys: Some(public_keys),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to bring a subnet back online after repairs.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToBringSubnetBackOnlineAfterRepairsCmd {
+    /// Which subnet is being brought back online.
+    #[clap(long)]
+    pub subnet: PrincipalId,
+}
+
+impl ProposalTitle for ProposeToBringSubnetBackOnlineAfterRepairsCmd {
+    fn title(&self) -> String {
+        let subnet_id = self.subnet.to_string();
+        let subnet_id = subnet_id.split('-').next().unwrap();
+        format!("Bring Subnet {subnet_id} Back Online After Repairs")
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<SetSubnetOperationalLevelPayload>
+    for ProposeToBringSubnetBackOnlineAfterRepairsCmd
+{
+    async fn payload(&self, agent: &Agent) -> SetSubnetOperationalLevelPayload {
+        let registry_canister = RegistryCanister::new_with_agent(agent.clone());
+
+        let subnet_id = SubnetId::from(self.subnet);
+        let subnet_record = get_subnet_record(&registry_canister, subnet_id).await;
+
+        // Clear the ssh_node_state_write_access field in NodeRecords that
+        // belong to the subnet (but only on nodes where it is currently
+        // actually set).
+        let mut ssh_node_state_write_access = vec![];
+        for node_id in subnet_record.membership {
+            let node_id = NodeId::from(PrincipalId::from_str(&node_id).unwrap());
+            let node_record = get_node_record_pb(&registry_canister, node_id).await;
+            if !node_record.ssh_node_state_write_access.is_empty() {
+                // The current NodeRecord has a non-empty
+                // ssh_node_state_write_access, so clear that field for the
+                // current node in the set_subnet_operational_level request that
+                // we are currently building.
+                ssh_node_state_write_access.push(NodeSshAccess {
+                    node_id: Some(node_id),
+                    public_keys: Some(vec![]),
+                });
+            }
+        }
+
+        SetSubnetOperationalLevelPayload {
+            subnet_id: Some(subnet_id),
+            operational_level: Some(operational_level::NORMAL),
+            ssh_readonly_access: Some(vec![]),
+            ssh_node_state_write_access: Some(ssh_node_state_write_access),
         }
     }
 }
@@ -1996,9 +2199,10 @@ struct ProposeToAddNodeOperatorCmd {
     /// The principal id of the node operator
     pub node_operator_principal_id: PrincipalId,
 
-    #[clap(long, required = true)]
+    #[clap(long, hide = true)]
+    /// Deprecated, will be removed in the future.
     /// The remaining number of nodes that could be added by this node operator
-    pub node_allowance: u64,
+    pub node_allowance: Option<u64>,
 
     //// The principal id of this node operator's provider
     pub node_provider_principal_id: PrincipalId,
@@ -2024,7 +2228,7 @@ struct ProposeToAddNodeOperatorCmd {
     ///
     /// Example:
     /// '{ "type1.1": 10, "type3.1": 24 }'
-    #[clap(long)]
+    #[clap(long, required = true)]
     max_rewardable_nodes: Option<String>,
 }
 
@@ -2050,6 +2254,15 @@ impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
             .map(|s| parse_rewardable_nodes(s))
             .unwrap_or_default();
 
+        // TODO(DRE-583): Remove the `--node-allowance` flag after callers of `ic-admin`
+        // have migrated to `--max-rewardable-nodes`.
+        let node_allowance = self.node_allowance.map(|allowance| {
+            if allowance != 0 {
+                eprintln!("WARNING: node allowance is deprecated and will be removed in the future. Overriding value to 0");
+            }
+            0
+        }).unwrap_or_default();
+
         let max_rewardable_nodes = self
             .max_rewardable_nodes
             .as_ref()
@@ -2057,7 +2270,7 @@ impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
 
         AddNodeOperatorPayload {
             node_operator_principal_id: Some(self.node_operator_principal_id),
-            node_allowance: self.node_allowance,
+            node_allowance,
             node_provider_principal_id: Some(self.node_provider_principal_id),
             dc_id: self
                 .dc_id
@@ -3780,6 +3993,7 @@ async fn main() {
             SubCommand::ProposeToSetFirewallConfig(_) => (),
             SubCommand::ProposeToStartCanister(_) => (),
             SubCommand::ProposeToStopCanister(_) => (),
+            SubCommand::ProposeToTakeSubnetOfflineForRepairs(_) => (),
             SubCommand::ProposeToUninstallCode(_) => (),
             SubCommand::ProposeToUpdateCanisterSettings(_) => (),
             SubCommand::ProposeToUpdateFirewallRules(_) => (),
@@ -4041,7 +4255,13 @@ async fn main() {
             .await;
         }
         SubCommand::GetRoutingTable => {
-            print_routing_table(reachable_nns_urls);
+            let (routing_table, version) = get_routing_table(reachable_nns_urls);
+            if opts.json {
+                let routing_table_json = serde_json::to_string_pretty(&routing_table).unwrap();
+                println!("{}", routing_table_json);
+            } else {
+                print_routing_table(&routing_table, version);
+            }
         }
         SubCommand::GetEcdsaSigningSubnets => {
             let registry_client = make_registry_client(
@@ -5026,6 +5246,36 @@ async fn main() {
             );
             propose_action_from_command(cmd, canister_client, proposer).await;
         }
+        SubCommand::ProposeToTakeSubnetOfflineForRepairs(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::SetSubnetOperationalLevel,
+                make_canister_client(
+                    reachable_nns_urls,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToBringSubnetBackOnlineAfterRepairs(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::SetSubnetOperationalLevel,
+                make_canister_client(
+                    reachable_nns_urls,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
     }
 }
 
@@ -5768,7 +6018,7 @@ fn get_api_boundary_node_ids(nns_url: Vec<Url>) -> Vec<String> {
         .collect::<Vec<_>>()
 }
 
-fn print_routing_table(nns_urls: Vec<Url>) -> Vec<(SubnetId, CanisterIdRange)> {
+fn get_routing_table(nns_urls: Vec<Url>) -> (Vec<(CanisterIdRange, SubnetId)>, RegistryVersion) {
     let registry_client = RegistryClientImpl::new(
         Arc::new(NnsDataProvider::new(
             tokio::runtime::Handle::current(),
@@ -5783,44 +6033,12 @@ fn print_routing_table(nns_urls: Vec<Url>) -> Vec<(SubnetId, CanisterIdRange)> {
 
     let latest_version = registry_client.get_latest_version();
 
-    println!("Routing table. Most recent version is {latest_version}");
-
     let keys = registry_client
         .get_key_family(CANISTER_RANGES_PREFIX, latest_version)
         .unwrap();
 
-    for routing_table_key in keys.iter() {
-        let routing_table_value = registry_client
-            .get_versioned_value(routing_table_key, latest_version)
-            .unwrap()
-            .value
-            .unwrap();
-        let routing_table = RoutingTable::decode(&routing_table_value[..]).unwrap();
-
-        for RoutingTableEntry { range, subnet_id } in routing_table.entries {
-            let subnet_id = subnet_id_try_from_protobuf(
-                subnet_id.expect("subnet_id is missing from routing table entry"),
-            )
-            .unwrap();
-            println!("Subnet: {subnet_id}");
-            let range = CanisterIdRange::try_from(
-                range.expect("range is missing from routing table entry"),
-            )
-            .expect("failed to parse range");
-            println!(
-                "    Range start: {} (0x{})",
-                range.start,
-                hex::encode(range.start.get_ref().as_slice())
-            );
-            println!(
-                "    Range end:   {} (0x{})",
-                range.end,
-                hex::encode(range.end.get_ref().as_slice())
-            );
-        }
-    }
-
-    keys.iter()
+    let routing_table = keys
+        .iter()
         .flat_map(|key| {
             let value = registry_client
                 .get_versioned_value(key, latest_version)
@@ -5839,9 +6057,28 @@ fn print_routing_table(nns_urls: Vec<Url>) -> Vec<(SubnetId, CanisterIdRange)> {
                 range.expect("range is missing from routing table entry"),
             )
             .expect("failed to parse range");
-            (subnet_id, range)
+            (range, subnet_id)
         })
-        .collect()
+        .collect();
+    (routing_table, latest_version)
+}
+
+fn print_routing_table(routing_table: &Vec<(CanisterIdRange, SubnetId)>, version: RegistryVersion) {
+    println!("Routing table. Most recent version is {version}");
+
+    for (range, subnet_id) in routing_table {
+        println!("Subnet: {subnet_id}");
+        println!(
+            "    Range start: {} (0x{})",
+            range.start,
+            hex::encode(range.start.get_ref().as_slice())
+        );
+        println!(
+            "    Range end:   {} (0x{})",
+            range.end,
+            hex::encode(range.end.get_ref().as_slice())
+        );
+    }
 }
 
 /// Writes a threshold signing public key to the given path.

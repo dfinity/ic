@@ -508,6 +508,24 @@ pub fn get_canister_info(
     }
 }
 
+pub fn get_logs(env: &StateMachine, canister_id: CanisterId) -> Vec<u8> {
+    let request = HttpRequest {
+        method: "".to_string(),
+        url: "/logs".to_string(),
+        headers: vec![],
+        body: serde_bytes::ByteBuf::new(),
+    };
+    let response = Decode!(
+        &assert_reply(
+            env.execute_ingress(canister_id, "http_request", Encode!(&request).unwrap(),)
+                .expect("failed to get index-ng info")
+        ),
+        HttpResponse
+    )
+    .unwrap();
+    response.body.to_vec()
+}
+
 pub fn get_transactions(
     env: &StateMachine,
     archive: Principal,
@@ -624,12 +642,7 @@ pub fn retrieve_metrics(env: &StateMachine, canister_id: CanisterId) -> Vec<Stri
             Encode!(&request).expect("failed to encode HTTP request"),
         )
         .expect("should successfully query canister for metrics");
-    let reply = match result {
-        WasmResult::Reply(bytes) => bytes,
-        WasmResult::Reject(reject) => {
-            panic!("expected a successful reply, got a reject: {reject}")
-        }
-    };
+    let reply = assert_reply(result);
     let response = Decode!(&reply, HttpResponse).expect("should successfully decode HttpResponse");
     assert_eq!(response.status_code, 200_u16);
     String::from_utf8_lossy(response.body.as_slice())
@@ -781,6 +794,15 @@ pub fn wait_ledger_ready(env: &StateMachine, ledger: CanisterId, num_waits: u16)
     }
     if !is_ledger_ready() {
         panic!("canister not ready!");
+    }
+}
+
+fn assert_reply(result: WasmResult) -> Vec<u8> {
+    match result {
+        WasmResult::Reply(bytes) => bytes,
+        WasmResult::Reject(reject) => {
+            panic!("Expected a successful reply, got a reject: {}", reject)
+        }
     }
 }
 

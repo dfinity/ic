@@ -4,7 +4,6 @@ exports_files(glob(["**"]))
 
 exports_files([
     "Dockerfile.base",
-    "allow_console_root",
     "boot_args.template",
 ])
 

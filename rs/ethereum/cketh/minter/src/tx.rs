@@ -1,15 +1,21 @@
 #[cfg(test)]
 mod tests;
 
-use crate::eth_rpc::Hash;
-use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
-use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
-use crate::guard::TimerGuard;
-use crate::logs::{DEBUG, INFO};
-use crate::numeric::{BlockNumber, GasAmount, TransactionNonce, Wei, WeiPerGas};
-use crate::state::{TaskType, lazy_call_ecdsa_public_key, mutate_state, read_state};
+use crate::{
+    eth_rpc::Hash,
+    eth_rpc_client::{
+        MIN_ATTACHED_CYCLES, MultiCallError, StrictMajorityByKey, ToReducedWithStrategy,
+        responses::{TransactionReceipt, TransactionStatus},
+        rpc_client,
+    },
+    guard::TimerGuard,
+    logs::{DEBUG, INFO},
+    numeric::{BlockNumber, GasAmount, TransactionNonce, Wei, WeiPerGas},
+    state::{TaskType, lazy_call_ecdsa_public_key, mutate_state, read_state},
+};
+use candid::Nat;
 use ethnum::u256;
-use evm_rpc_types::{BlockTag, FeeHistory, FeeHistoryArgs};
+use evm_rpc_types::{BlockTag, FeeHistory};
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use ic_management_canister_types_private::DerivationPath;
@@ -358,8 +364,12 @@ impl SignedEip1559TransactionRequest {
         }
     }
 
-    pub fn raw_transaction_hex(&self) -> String {
-        format!("0x{}", hex::encode(self.inner.raw_bytes()))
+    pub fn raw_transaction_hex(&self) -> Vec<u8> {
+        self.inner.raw_bytes()
+    }
+
+    pub fn raw_transaction_hex_string(&self) -> String {
+        format!("0x{}", hex::encode(self.raw_transaction_hex()))
     }
 
     /// If included in a block, this hash value is used as reference to this transaction.
@@ -648,13 +658,15 @@ pub async fn lazy_refresh_gas_fee_estimate() -> Option<GasFeeEstimate> {
     }
 
     async fn eth_fee_history() -> Result<FeeHistory, MultiCallError<FeeHistory>> {
-        read_state(EthRpcClient::from_state)
-            .eth_fee_history(FeeHistoryArgs {
-                block_count: 5_u8.into(),
-                newest_block: BlockTag::Latest,
-                reward_percentiles: Some(vec![20]),
-            })
+        read_state(rpc_client)
+            .fee_history((5_u8, BlockTag::Latest))
+            .with_reward_percentiles(vec![20])
+            .with_cycles(MIN_ATTACHED_CYCLES)
+            .send()
             .await
+            .reduce_with_strategy(StrictMajorityByKey::new(|fee_history: &FeeHistory| {
+                Nat::from(fee_history.oldest_block.clone())
+            }))
     }
 
     let now_ns = ic_cdk::api::time();

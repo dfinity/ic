@@ -43,9 +43,14 @@ rust_test(
     env = {
         "TEST_VECTORS": "$(locations :test_vectors)",
     },
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:test-strategy",
+    ],
     deps = [
         # Keep sorted.
         "@crate_index//:assert_matches",
+        "@crate_index//:proptest",
         "@crate_index//:serde_json",
     ],
 )
@@ -67,6 +72,7 @@ rust_test(
         deps = [
             # Keep sorted.
             ":ckdoge_minter_lib",
+            "//packages/ic-http-types",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
             "@crate_index//:candid",
             "@crate_index//:ic-cdk",

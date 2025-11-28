@@ -143,7 +143,7 @@
         <model name='isa-serial'/>
       </target>
       <alias name='serial0'/>
-      <log file='/var/log/libvirt/qemu/upgrade-guestos-serial.log' append='off'/>
+      <log file='/var/serial/console.txt' append='off'/>
     </serial>
     <console type='pty' tty='/dev/pts/3'>
       <source path='/dev/pts/3'/>

@@ -6,7 +6,7 @@ use ic_protobuf::{
         canister_state_bits::v1 as pb_canister_state_bits,
     },
 };
-use ic_types::default_log_memory_limit;
+use ic_types::DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT;
 
 impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
     fn from(item: CanisterStateBits) -> Self {
@@ -25,7 +25,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             )
             .into(),
             execution_state_bits: item.execution_state_bits.as_ref().map(|v| v.into()),
-            memory_allocation: item.memory_allocation.bytes().get(),
+            memory_allocation: item.memory_allocation.pre_allocated_bytes().get(),
             wasm_memory_threshold: Some(item.wasm_memory_threshold.get()),
             freeze_threshold: item.freeze_threshold.get(),
             cycles_balance: Some(item.cycles_balance.into()),
@@ -195,8 +195,8 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .unwrap_or_default(),
             // TODO(EXC-2118): remove this temporary code of setting the log memory limit to default value,
             // read properly from `NumBytes::from(value.log_memory_limit)`.
-            log_memory_limit: default_log_memory_limit(),
-            canister_log: CanisterLog::new(
+            log_memory_limit: NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64),
+            canister_log: CanisterLog::new_aggregate(
                 value.next_canister_log_record_idx,
                 value
                     .canister_log_records

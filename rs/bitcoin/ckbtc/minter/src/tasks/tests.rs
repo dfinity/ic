@@ -57,6 +57,9 @@ async fn test_reschedule<T, G: FnOnce() -> T>(
     let mut runtime = MockCanisterRuntime::new();
     runtime.expect_time().return_const(0_u64);
     runtime.expect_global_timer_set().return_const(());
+    runtime
+        .expect_refresh_fee_percentiles_frequency()
+        .return_const(Duration::from_secs(60 * 60));
     schedule_now(task_type.clone(), &runtime);
 
     let _guard_mocking_already_running_task = guard();
