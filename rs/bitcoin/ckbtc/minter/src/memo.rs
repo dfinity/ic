@@ -1,7 +1,9 @@
 #![allow(deprecated)]
 use crate::state::LedgerBurnIndex;
+use candid::CandidType;
 use minicbor::Encoder;
 use minicbor::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 
 /// Encodes minter memo as a binary blob.
 pub fn encode<T: minicbor::Encode<()>>(t: &T) -> Vec<u8> {
@@ -10,7 +12,7 @@ pub fn encode<T: minicbor::Encode<()>>(t: &T) -> Vec<u8> {
     encoder.into_writer()
 }
 
-#[derive(Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Eq, PartialEq, Debug, Decode, Encode, CandidType, Serialize, Deserialize)]
 #[cbor(index_only)]
 pub enum Status {
     #[n(0)]

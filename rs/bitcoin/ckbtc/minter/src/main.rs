@@ -3,7 +3,10 @@ use ic_btc_interface::Utxo;
 use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
-use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
+use ic_ckbtc_minter::queries::{
+    DecodeLedgerMemoArgs, DecodeLedgerMemoResult, EstimateFeeArg, RetrieveBtcStatusRequest,
+    WithdrawalFee,
+};
 use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
 use ic_ckbtc_minter::state::eventlog::Event;
 use ic_ckbtc_minter::state::{
@@ -243,6 +246,11 @@ fn get_minter_info() -> MinterInfo {
 #[query]
 fn get_deposit_fee() -> u64 {
     read_state(|s| s.check_fee)
+}
+
+#[query]
+fn decode_ledger_memo(arg: DecodeLedgerMemoArgs) -> DecodeLedgerMemoResult {
+    ic_ckbtc_minter::queries::decode_ledger_memo(arg)
 }
 
 #[query(hidden = true)]

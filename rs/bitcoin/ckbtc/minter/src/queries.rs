@@ -1,6 +1,7 @@
 use crate::address::BitcoinAddress;
 use crate::dashboard::build_dashboard;
 use crate::fees::FeeEstimator;
+use crate::memo;
 use crate::metrics::encode_metrics;
 use crate::state::read_state;
 use crate::updates::update_balance::UpdateBalanceArgs;
@@ -164,4 +165,127 @@ pub fn http_request(req: HttpRequest) -> HttpResponse {
         }
         _ => HttpResponseBuilder::not_found().build(),
     }
+}
+
+#[derive(Debug, CandidType, Serialize, Deserialize)]
+pub struct DecodeLedgerMemoArgs {
+    pub memo: EncodedMemo,
+}
+
+#[derive(Debug, CandidType, Serialize, Deserialize)]
+pub enum EncodedMemo {
+    Hex(String),
+    Blob(Vec<u8>),
+}
+
+pub use crate::memo::Status;
+
+#[derive(Debug, CandidType, Serialize, Deserialize)]
+pub enum MintMemo {
+    Convert {
+        txid: Option<Vec<u8>>,
+        vout: Option<u32>,
+        kyt_fee: Option<u64>,
+    },
+    Kyt,
+    KytFail {
+        kyt_fee: Option<u64>,
+        status: Option<Status>,
+        associated_burn_index: Option<u64>,
+    },
+    ReimburseWithdrawal {
+        withdrawal_id: u64,
+    },
+}
+
+impl<'a> From<memo::MintMemo<'a>> for MintMemo {
+    fn from(m: memo::MintMemo<'a>) -> Self {
+        match m {
+            memo::MintMemo::Convert {
+                txid,
+                vout,
+                kyt_fee,
+            } => MintMemo::Convert {
+                txid: txid.map(|t| t.to_vec()),
+                vout,
+                kyt_fee,
+            },
+            #[allow(deprecated)]
+            memo::MintMemo::Kyt => MintMemo::Kyt,
+            #[allow(deprecated)]
+            memo::MintMemo::KytFail {
+                kyt_fee,
+                status,
+                associated_burn_index,
+            } => MintMemo::KytFail {
+                kyt_fee,
+                status,
+                associated_burn_index,
+            },
+            memo::MintMemo::ReimburseWithdrawal { withdrawal_id } => {
+                MintMemo::ReimburseWithdrawal { withdrawal_id }
+            }
+        }
+    }
+}
+
+#[derive(Debug, CandidType, Serialize, Deserialize)]
+pub enum BurnMemo {
+    Convert {
+        address: Option<String>,
+        kyt_fee: Option<u64>,
+        status: Option<Status>,
+    },
+}
+
+impl<'a> From<memo::BurnMemo<'a>> for BurnMemo {
+    fn from(m: memo::BurnMemo<'a>) -> Self {
+        match m {
+            memo::BurnMemo::Convert {
+                address,
+                kyt_fee,
+                status,
+            } => BurnMemo::Convert {
+                address: address.map(|a| a.to_string()),
+                kyt_fee,
+                status,
+            },
+        }
+    }
+}
+
+#[derive(Debug, CandidType, Serialize, Deserialize)]
+pub enum DecodedMemo {
+    Mint(MintMemo),
+    Burn(BurnMemo),
+}
+
+#[derive(Debug, CandidType, Serialize, Deserialize)]
+pub enum DecodeLedgerMemoError {
+    InvalidMemo(String),
+}
+
+pub type DecodeLedgerMemoResult = Result<DecodedMemo, DecodeLedgerMemoError>;
+
+pub fn decode_ledger_memo(args: DecodeLedgerMemoArgs) -> DecodeLedgerMemoResult {
+    let bytes = match args.memo {
+        EncodedMemo::Hex(hex_string) => hex::decode(&hex_string).map_err(|e| {
+            DecodeLedgerMemoError::InvalidMemo(format!("Invalid hex string: {}", e))
+        })?,
+        EncodedMemo::Blob(blob) => blob,
+    };
+
+    // Try to decode as MintMemo first
+    if let Ok(mint_memo) = minicbor::decode::<memo::MintMemo>(&bytes) {
+        return Ok(DecodedMemo::Mint(mint_memo.into()));
+    }
+
+    // Try to decode as BurnMemo
+    if let Ok(burn_memo) = minicbor::decode::<memo::BurnMemo>(&bytes) {
+        return Ok(DecodedMemo::Burn(burn_memo.into()));
+    }
+
+    Err(DecodeLedgerMemoError::InvalidMemo(
+        "Could not decode as MintMemo or BurnMemo".to_string(),
+    ))
 }
