@@ -22,9 +22,7 @@ use ic_types::{
         BlockPayload, ConsensusMessage,
         idkg::{IDkgArtifactId, IDkgMessage, IDkgObject},
     },
-    crypto::{
-        canister_threshold_sig::idkg::{IDkgTranscriptId, SignedIDkgDealing},
-    },
+    crypto::canister_threshold_sig::idkg::{IDkgTranscriptId, SignedIDkgDealing},
     messages::{SignedIngress, SignedRequestBytes},
 };
 use rand::{SeedableRng, rngs::SmallRng, seq::IteratorRandom};
