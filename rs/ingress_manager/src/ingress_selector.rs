@@ -5,6 +5,7 @@
 use crate::{CustomRandomState, IngressManager};
 use ic_cycles_account_manager::IngressInductionCost;
 use ic_interfaces::{
+    consensus::PayloadWithSizeEstimate,
     execution_environment::{IngressHistoryError, IngressHistoryReader},
     ingress_manager::{
         IngressPayloadValidationError, IngressPayloadValidationFailure, IngressSelector,
@@ -50,7 +51,7 @@ impl IngressSelector for IngressManager {
         past_ingress: &dyn IngressSetQuery,
         context: &ValidationContext,
         byte_limit: NumBytes,
-    ) -> IngressPayload {
+    ) -> PayloadWithSizeEstimate<IngressPayload> {
         let _timer = self.metrics.ingress_selector_get_payload_time.start_timer();
         let certified_height = context.certified_height;
         let past_ingress_set = match IngressSetChain::new(context.time, past_ingress, || {
@@ -65,7 +66,10 @@ impl IngressSelector for IngressManager {
                     certified_height,
                     err
                 );
-                return IngressPayload::default();
+                return PayloadWithSizeEstimate {
+                    payload: IngressPayload::default(),
+                    wire_size_estimate: NumBytes::new(0),
+                };
             }
         };
 
@@ -77,7 +81,10 @@ impl IngressSelector for IngressManager {
                     self.log,
                     "StateManager doesn't have state for height {}: {:?}", certified_height, err
                 );
-                return IngressPayload::default();
+                return PayloadWithSizeEstimate {
+                    payload: IngressPayload::default(),
+                    wire_size_estimate: NumBytes::new(0),
+                };
             }
         }
         .take();
@@ -141,8 +148,13 @@ impl IngressSelector for IngressManager {
         // messages to fill the quota, the quota increases proportionally for subsequent
         // canisters.
         let mut quota = match canister_count {
-            0 => return IngressPayload::default(),
-            canister_count => byte_limit.get() as usize / canister_count,
+            0 => {
+                return PayloadWithSizeEstimate {
+                    payload: IngressPayload::default(),
+                    wire_size_estimate: NumBytes::new(0),
+                };
+            }
+            canister_count @ 1.. => byte_limit.get() as usize / canister_count,
         };
 
         let mut messages_in_payload = vec![];
@@ -266,7 +278,12 @@ impl IngressSelector for IngressManager {
         let payload_size = payload.count_bytes();
         debug_assert!(payload_size <= byte_limit.get() as usize);
 
-        payload
+        PayloadWithSizeEstimate {
+            payload,
+            // NOTE: this is actually incorrect with the hashes-in-blocks feature and will be fixed
+            // in a subsequent PR
+            wire_size_estimate: NumBytes::from(payload_size as u64),
+        }
     }
 
     fn validate_ingress_payload(
@@ -274,7 +291,7 @@ impl IngressSelector for IngressManager {
         payload: &IngressPayload,
         past_ingress: &dyn IngressSetQuery,
         context: &ValidationContext,
-    ) -> ValidationResult<IngressPayloadValidationError> {
+    ) -> Result<NumBytes, IngressPayloadValidationError> {
         let _timer = self
             .metrics
             .ingress_selector_validate_payload_time
@@ -366,7 +383,7 @@ impl IngressSelector for IngressManager {
             )?;
         }
 
-        Ok(())
+        Ok(NumBytes::from(payload.count_bytes() as u64))
     }
 
     fn filter_past_payloads(
@@ -712,7 +729,7 @@ mod tests {
                 },
                 MAX_SIZE_AS_NUM_BYTES,
             );
-            assert_eq!(ingress_msgs.message_count(), 0);
+            assert_eq!(ingress_msgs.payload.message_count(), 0);
         })
     }
 
@@ -832,8 +849,8 @@ mod tests {
                     &validation_context,
                     MAX_SIZE_AS_NUM_BYTES,
                 );
-                assert_eq!(payload.message_count(), 1);
-                let msgs: Vec<SignedIngress> = payload.try_into().unwrap();
+                assert_eq!(payload.payload.message_count(), 1);
+                let msgs: Vec<SignedIngress> = payload.payload.try_into().unwrap();
                 assert!(msgs.contains(&m1));
             },
         )
@@ -1011,7 +1028,7 @@ mod tests {
                     &validation_context,
                     MAX_SIZE_AS_NUM_BYTES,
                 );
-                assert_eq!(first_ingress_payload.message_count(), 1);
+                assert_eq!(first_ingress_payload.payload.message_count(), 1);
             },
         )
     }
@@ -1061,17 +1078,18 @@ mod tests {
                     &validation_context,
                     MAX_SIZE_AS_NUM_BYTES,
                 );
-                assert_eq!(first_ingress_payload.message_count(), 1);
+                assert_eq!(first_ingress_payload.payload.message_count(), 1);
 
                 // we should not get it again because it is part of past payloads
-                let hash_set = HashSet::from_iter(first_ingress_payload.message_ids().cloned());
+                let hash_set =
+                    HashSet::from_iter(first_ingress_payload.payload.message_ids().cloned());
 
                 let second_ingress_payload = ingress_manager.get_ingress_payload(
                     &hash_set,
                     &validation_context,
                     MAX_SIZE_AS_NUM_BYTES,
                 );
-                assert_eq!(second_ingress_payload.message_count(), 0);
+                assert_eq!(second_ingress_payload.payload.message_count(), 0);
             },
         )
     }
@@ -1138,7 +1156,7 @@ mod tests {
                     &validation_context,
                     MAX_SIZE_AS_NUM_BYTES,
                 );
-                assert_eq!(ingress_payload.message_count(), 2);
+                assert_eq!(ingress_payload.payload.message_count(), 2);
             },
         )
     }
@@ -1209,7 +1227,7 @@ mod tests {
                     &validation_context,
                     NumBytes::new(MAX_SIZE as u64),
                 );
-                assert_eq!(ingress_payload.message_count(), 1);
+                assert_eq!(ingress_payload.payload.message_count(), 1);
             },
         )
     }
@@ -1378,8 +1396,8 @@ mod tests {
                     MAX_SIZE_AS_NUM_BYTES,
                 );
 
-                assert_eq!(ingress_payload.message_count(), 1);
-                let messages: Vec<_> = ingress_payload.try_into().unwrap();
+                assert_eq!(ingress_payload.payload.message_count(), 1);
+                let messages: Vec<_> = ingress_payload.payload.try_into().unwrap();
                 assert!(messages.contains(&ingress_msg2));
             },
         )
@@ -1555,8 +1573,8 @@ mod tests {
                     &validation_context,
                     MAX_SIZE_AS_NUM_BYTES,
                 );
-                assert_eq!(payload.message_count(), 1);
-                let msgs: Vec<SignedIngress> = payload.try_into().unwrap();
+                assert_eq!(payload.payload.message_count(), 1);
+                let msgs: Vec<SignedIngress> = payload.payload.try_into().unwrap();
                 // either m1 or m2, could be random. But not both.
                 assert!(msgs.contains(&m1) || msgs.contains(&m2));
             },
@@ -1812,7 +1830,7 @@ mod tests {
         validation_context: ValidationContext,
         ingress_history_response: Result<(), IngressHistoryError>,
         state_manager_response: StateManagerResult<ReplicatedState>,
-    ) -> ValidationResult<IngressPayloadValidationError> {
+    ) -> Result<NumBytes, IngressPayloadValidationError> {
         with_test_replica_logger(|log| {
             with_test_pool_config(|pool_config| {
                 let mut ingress_hist_reader = MockIngressHistory::new();
@@ -1898,7 +1916,7 @@ mod tests {
             /*state_manager_response=*/ Ok(ReplicatedStateBuilder::default().build()),
         );
 
-        assert_eq!(validation_result, Ok(()),);
+        assert_eq!(validation_result, Ok(NumBytes::new(0)));
     }
 
     #[test]
@@ -2202,7 +2220,7 @@ mod tests {
                     &validation_context,
                     NumBytes::new(MAX_SIZE as u64),
                 );
-                let msgs: Vec<SignedIngress> = payload.try_into().unwrap();
+                let msgs: Vec<SignedIngress> = payload.payload.try_into().unwrap();
 
                 assert_eq!(
                     2,
