@@ -458,3 +458,39 @@ mod withdrawal_reimbursement {
         }
     }
 }
+
+mod utxo_set {
+    use crate::state::utxos::UtxoSet;
+    use crate::test_fixtures::utxo;
+
+    #[test]
+    fn should_be_sorted_by_value() {
+        let small_utxo = {
+            let mut utxo = utxo();
+            utxo.outpoint.vout = 42;
+            utxo.value = 10;
+            utxo
+        };
+        let medium_utxo = {
+            let mut utxo = utxo();
+            utxo.outpoint.vout = 2;
+            utxo.value = 100;
+            utxo
+        };
+        let large_utxo = {
+            let mut utxo = utxo();
+            utxo.outpoint.vout = 2_000;
+            utxo.value = 1_000;
+            utxo
+        };
+
+        let mut utxos = UtxoSet::default();
+        assert!(utxos.insert(medium_utxo.clone()));
+        assert!(utxos.insert(large_utxo.clone()));
+        assert!(utxos.insert(small_utxo.clone()));
+
+        assert_eq!(utxos.len(), 3);
+        let iter: Vec<_> = utxos.iter().collect();
+        assert_eq!(iter, vec![&small_utxo, &medium_utxo, &large_utxo]);
+    }
+}
