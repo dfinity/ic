@@ -102,9 +102,26 @@ fn fix_node_operators_corrupted(registry: &Registry) -> Vec<RegistryMutation> {
         get_key_family::<NodeOperatorRecord>(registry, NODE_OPERATOR_RECORD_KEY_PREFIX).into_iter()
     {
         let mut affected = false;
-        let node_operator_id_k = PrincipalId::from_str(&k).unwrap();
-        let node_operator_id_v = PrincipalId::try_from(&record.node_operator_principal_id).unwrap();
-
+        let node_operator_id_k = match PrincipalId::from_str(&k) {
+            Ok(node_operator_id_k) => node_operator_id_k,
+            _ => {
+                ic_cdk::println!(
+                    "Failed to parse NodeOperatorRecord key {} into PrincipalId. Skipping.",
+                    k
+                );
+                continue;
+            }
+        };
+        let node_operator_id_v = match PrincipalId::try_from(&record.node_operator_principal_id) {
+            Ok(node_operator_id_k) => node_operator_id_k,
+            _ => {
+                ic_cdk::println!(
+                    "Failed to parse NodeOperatorRecord principal ID {:?} into PrincipalId. Skipping.",
+                    record.node_operator_principal_id
+                );
+                continue;
+            }
+        };
         // This fixes the principal ID mismatch issue on all instances.
         if node_operator_id_k != node_operator_id_v {
             ic_cdk::println!(
@@ -479,16 +496,12 @@ mod test {
         ));
 
         // spsu4 is corrupted and should be fixed
-        let node_operator_spsu4_k = PrincipalId::from_str(
-            "spsu4-5hl4t-bfubp-qvoko-jprw4-wt7ou-nlnbk-gb5ib-aqnoo-g4gl6-kae",
-        )
-        .unwrap();
-        let node_operator_spsu4_v = PrincipalId::from_str(
+        let node_operator_spsu4 = PrincipalId::from_str(
             "spsu4-5hl4t-bfubp-qvoko-jprw4-wt7ou-nlnbk-gb5ib-aqnoo-g4gl6-kae",
         )
         .unwrap();
         let record_spsu4 = NodeOperatorRecord {
-            node_operator_principal_id: node_operator_spsu4_v.to_vec(),
+            node_operator_principal_id: node_operator_spsu4.to_vec(),
             dc_id: "dummy_dc_id_spsu4".to_string(),
             ipv6: Some("dummy_ipv6_spsu4".to_string()),
             // wrong rewardable nodes, should be fixed by the migration
@@ -497,14 +510,33 @@ mod test {
             ..NodeOperatorRecord::default()
         };
         node_operator_additions.push(insert(
-            make_node_operator_record_key(node_operator_spsu4_k),
+            make_node_operator_record_key(node_operator_spsu4),
             record_spsu4.encode_to_vec(),
+        ));
+
+        // ujq4k is corrupted and should be fixed
+        let node_operator_ujq4k = PrincipalId::from_str(
+            "ujq4k-55epc-pg2bt-jt2f5-6vaq3-diru7-edprm-42rd2-j7zzd-yjaai-2qe",
+        )
+        .unwrap();
+        let record_ujq4k = NodeOperatorRecord {
+            node_operator_principal_id: node_operator_ujq4k.to_vec(),
+            dc_id: "dummy_dc_id_ujq4k".to_string(),
+            ipv6: Some("dummy_ipv6_ujq4k".to_string()),
+            // wrong rewardable nodes, should be fixed by the migration
+            rewardable_nodes: btreemap! {"type1.1".to_string() => 19},
+            max_rewardable_nodes: btreemap! {"type1.1".to_string() => 9},
+            ..NodeOperatorRecord::default()
+        };
+        node_operator_additions.push(insert(
+            make_node_operator_record_key(node_operator_ujq4k),
+            record_ujq4k.encode_to_vec(),
         ));
 
         registry.apply_mutations_for_test(node_operator_additions);
         let mutations = fix_node_operators_corrupted(&registry);
         // We expect 2 fixes, one for each corrupted record
-        assert_eq!(mutations.len(), 2);
+        assert_eq!(mutations.len(), 3);
         registry.apply_mutations_for_test(mutations);
 
         // Good record should be left untouched
@@ -528,14 +560,26 @@ mod test {
         );
 
         // spsu4 should be fixed
-        let record_spsu4_got = registry.get_node_operator_or_panic(node_operator_spsu4_k);
+        let record_spsu4_got = registry.get_node_operator_or_panic(node_operator_spsu4);
         let expected_record_spsu4 = NodeOperatorRecord {
-            node_operator_principal_id: node_operator_spsu4_k.to_vec(),
+            node_operator_principal_id: node_operator_spsu4.to_vec(),
             rewardable_nodes: btreemap! {"type1.1".to_string() => 14},
             ..record_spsu4
         };
         assert_eq!(
             record_spsu4_got, expected_record_spsu4,
+            "Assertion for NodeOperator {node_operator_3nu7r_k} failed"
+        );
+
+        // ujq4k should be fixed
+        let record_ujq4k_got = registry.get_node_operator_or_panic(node_operator_ujq4k);
+        let expected_record_ujq4k = NodeOperatorRecord {
+            node_operator_principal_id: node_operator_ujq4k.to_vec(),
+            rewardable_nodes: btreemap! {"type1.1".to_string() => 9},
+            ..record_ujq4k
+        };
+        assert_eq!(
+            record_ujq4k_got, expected_record_ujq4k,
             "Assertion for NodeOperator {node_operator_3nu7r_k} failed"
         );
     }
