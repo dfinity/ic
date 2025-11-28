@@ -7,7 +7,7 @@ use std::str::FromStr;
 
 lazy_static! {
     // TODO(DRE-625): Remove one-off migration
-    pub static ref MAX_REWARDABLE_NODES_MAPPING: BTreeMap<PrincipalId, BTreeMap<NodeRewardType, u32>> =
+    pub static ref MAX_REWARDABLE_NODES_SWISS_SUBNET_NO: BTreeMap<PrincipalId, BTreeMap<NodeRewardType, u32>> =
         btreemap! {
             "q4gds-li2kf-dhmi6-vmtxg-zrgep-3te7r-2a4ji-nszwv-66biu-dkl6k-eqe" => btreemap! {"type3.1" => 1},
             "u7afs-z2fqh-zbqyo-jufwe-3vqqs-chc7f-k2fe4-rt66w-l4qia-keuuj-qqe" => btreemap! {"type3.1" => 1},
