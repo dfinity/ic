@@ -204,7 +204,10 @@ impl NodeRegistration {
             // agent will use the mainnet public key hardcoded in the agent library.
             let message = "Failed to get NNS public key";
             warn!(self.log, "{}", message);
-            UtilityCommand::notify_host(message, 1);
+            UtilityCommand::notify_host(
+                format!("node-id {}: {}", self.node_id, message).as_str(),
+                1,
+            );
         }
 
         let add_node_encoded = Encode!(add_node_payload)
