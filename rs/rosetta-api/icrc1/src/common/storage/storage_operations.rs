@@ -911,10 +911,10 @@ where
         // Return the fee collector if only one was found
         Ok(Some(fcs[0].clone()))
     } else if fcs.is_empty() {
-        // Return None if no block was found
+        // Return None if no fee collector was found
         Ok(None)
     } else {
-        // If more than one block was found return an error
+        // If more than one fee collector was found return an error
         bail!("Multiple fee collectors found with given parameters".to_owned(),)
     }
 }
