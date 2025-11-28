@@ -17,6 +17,7 @@ show_menu() {
     echo "  view-logs               - View service logs (usage: view-logs <service-name>)"
     echo "  config-json             - Show /boot/config/config.json"
     echo "  network-config-settings - Show network settings from config"
+    echo "  manual-recovery         - Manual node recovery (ONLY FOR EMERGENCY USE)"
     echo "  rbash-console           - Drop into restricted bash console"
     echo "  clear                   - Clear the console"
     echo "  exit                    - Exit console"
@@ -74,6 +75,29 @@ execute_command() {
                 echo "$network_settings" | jq . 2>/dev/null || echo "$network_settings"
             else
                 echo "No network settings found in config"
+            fi
+            ;;
+        "manual-recovery")
+            echo "=== Manual Node Recovery ==="
+            echo "This will perform a manual node recovery. Do not attempt this unless you are certain it is appropriate."
+            echo "Manual node recovery should only occur in the event of a critical IC failure."
+            echo "In such cases, the process will be coordinated by reputable IC community leaders"
+            echo "and actively discussed publicly with node providers."
+            echo ""
+            echo "Are you sure you want to proceed? (y/n)"
+            read -r confirm
+            if [ "$confirm" == "y" ]; then
+                # Launch the NNS recovery TUI tool via hostos_tool
+
+                # Fix for serial console where size might be reported as 0 0
+                if size=$(stty size 2>/dev/null); then
+                     read -r rows cols <<< "$size"
+                     if [ "${rows:-0}" -eq 0 ] || [ "${cols:-0}" -eq 0 ]; then
+                         stty rows 36 cols 120
+                     fi
+                fi
+
+                /opt/ic/bin/hostos_tool manual-recovery
             fi
             ;;
         "rbash-console")
