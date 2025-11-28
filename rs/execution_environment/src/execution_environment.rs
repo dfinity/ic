@@ -1626,11 +1626,12 @@ impl ExecutionEnvironment {
                 Ok(args) => {
                     let canister_id = args.get_canister_id();
                     let (result, instructions_used) = self.take_canister_snapshot(
-                        *msg.sender(),
+                        msg.canister_change_origin(args.get_sender_canister_version()),
                         &mut state,
                         args,
                         registry_settings.subnet_size,
                         round_limits,
+                        &self.metrics.canister_not_found_error,
                     );
                     let msg_result = ExecuteSubnetMessageResult::Finished {
                         response: result.map(|res| (res, Some(canister_id))),
@@ -2495,11 +2496,12 @@ impl ExecutionEnvironment {
     /// Creates a new canister snapshot and inserts it into `ReplicatedState`.
     fn take_canister_snapshot(
         &self,
-        sender: PrincipalId,
+        origin: CanisterChangeOrigin,
         state: &mut ReplicatedState,
         args: TakeCanisterSnapshotArgs,
         subnet_size: usize,
         round_limits: &mut RoundLimits,
+        canister_not_found_error: &IntCounter,
     ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
         let canister_id = args.get_canister_id();
         // Take canister out.
@@ -2519,14 +2521,17 @@ impl ExecutionEnvironment {
         let resource_saturation =
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
         let replace_snapshot = args.replace_snapshot();
+        let uninstall_code = args.uninstall_code().unwrap_or_default();
         let result = self.canister_manager.take_canister_snapshot(
             subnet_size,
-            sender,
+            origin,
             &mut canister,
             replace_snapshot,
+            uninstall_code,
             state,
             round_limits,
             &resource_saturation,
+            canister_not_found_error,
         );
         // Put canister back.
         state.put_canister_state(canister);
