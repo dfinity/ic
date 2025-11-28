@@ -22,6 +22,12 @@ const MAX_CHECK_TRANSACTION_RETRY: usize = 10;
 
 use super::get_btc_address::init_ecdsa_public_key;
 
+#[cfg(feature = "tla")]
+use crate::tla::{
+    Destination, InstrumentationState, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY,
+    TLA_TRACES_MUTEX, TlaValue, ToTla, UPDATE_BALANCE_DESC, account_to_tla, btc_address_to_tla,
+    dummy_utxo, tla_update_method, utxo_set_to_tla, utxo_to_tla,
+};
 use crate::{
     CanisterRuntime, Timestamp,
     guard::{GuardError, balance_update_guard},
@@ -30,18 +36,7 @@ use crate::{
     state,
     tx::{DisplayAmount, DisplayOutpoint},
 };
-#[cfg(feature = "tla")]
-use crate::{
-    tla::{
-        TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX, UPDATE_BALANCE_DESC,
-        account_to_tla, btc_address_to_tla, dummy_utxo, utxo_set_to_tla, utxo_to_tla,
-    },
-    tla_log_locals, tla_log_request, tla_log_response, tla_snapshotter,
-};
-#[cfg(feature = "tla")]
-use tla_instrumentation::{Destination, InstrumentationState, TlaValue, ToTla};
-#[cfg(feature = "tla")]
-use tla_instrumentation_proc_macros::tla_update_method;
+use crate::{tla_log_locals, tla_log_request, tla_log_response, tla_snapshotter};
 
 /// The argument of the [update_balance] endpoint.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -189,21 +184,18 @@ pub async fn update_balance<R: CanisterRuntime>(
     let (btc_network, min_confirmations) =
         state::read_state(|s| (s.btc_network, s.min_confirmations));
 
-    #[cfg(feature = "tla")]
-    {
-        tla_log_locals! {
-            caller_account: account_to_tla(&caller_account),
-            btc_address: btc_address_to_tla(&address),
-            utxo: dummy_utxo(),
-            utxos: std::collections::BTreeSet::<u32>::new()
-        };
-        tla_log_request!(
-            "Update_Balance_Receive_Utxos",
-            Destination::new("btc_canister"),
-            "GetUtxos",
-            btc_address_to_tla(&address)
-        );
-    }
+    tla_log_locals! {
+        caller_account: account_to_tla(&caller_account),
+        btc_address: btc_address_to_tla(&address),
+        utxo: dummy_utxo(),
+        utxos: std::collections::BTreeSet::<u32>::new()
+    };
+    tla_log_request!(
+        "Update_Balance_Receive_Utxos",
+        Destination::new("btc_canister"),
+        "GetUtxos",
+        btc_address_to_tla(&address)
+    );
 
     let utxos = get_utxos(
         btc_network,
@@ -214,7 +206,6 @@ pub async fn update_balance<R: CanisterRuntime>(
     )
     .await
     .inspect_err(|_| {
-        #[cfg(feature = "tla")]
         tla_log_response!(
             Destination::new("btc_canister"),
             TlaValue::Variant {
@@ -225,16 +216,13 @@ pub async fn update_balance<R: CanisterRuntime>(
     })?
     .utxos;
 
-    #[cfg(feature = "tla")]
-    {
-        tla_log_response!(
-            Destination::new("btc_canister"),
-            TlaValue::Variant {
-                tag: "GetUtxosOk".to_string(),
-                value: Box::new(utxo_set_to_tla(&utxos, &address)),
-            }
-        );
-    }
+    tla_log_response!(
+        Destination::new("btc_canister"),
+        TlaValue::Variant {
+            tag: "GetUtxosOk".to_string(),
+            value: Box::new(utxo_set_to_tla(&utxos, &address)),
+        }
+    );
 
     let now = Timestamp::from(runtime.time());
     let (processable_utxos, suspended_utxos) =
@@ -324,9 +312,7 @@ pub async fn update_balance<R: CanisterRuntime>(
             // Skip utxos that are already checked but has unknown mint status
             UtxoCheckStatus::CleanButMintUnknown => {
                 #[cfg(feature = "tla")]
-                {
-                    utxos_shadow.retain(|u| u != &utxo);
-                }
+                utxos_shadow.retain(|u| u != &utxo);
                 continue;
             }
             UtxoCheckStatus::Clean => {
@@ -363,30 +349,27 @@ pub async fn update_balance<R: CanisterRuntime>(
         });
 
         #[cfg(feature = "tla")]
-        {
-            utxos_shadow.retain(|u| u != &utxo);
-            tla_log_locals! {
-                utxo: utxo_to_tla(&utxo, &address),
-                utxos: utxo_set_to_tla(&utxos_shadow, &address),
-                caller_account: account_to_tla(&caller_account)
-            };
-            tla_log_request!(
-                "Update_Balance_Mark_Minted",
-                Destination::new("ledger"),
-                "Mint",
-                TlaValue::Record(BTreeMap::from([
-                    ("to".to_string(), account_to_tla(&caller_account)),
-                    ("amount".to_string(), amount.to_tla_value()),
-                ]))
-            );
-        }
+        utxos_shadow.retain(|u| u != &utxo);
+        tla_log_locals! {
+            utxo: utxo_to_tla(&utxo, &address),
+            utxos: utxo_set_to_tla(&utxos_shadow, &address),
+            caller_account: account_to_tla(&caller_account)
+        };
+        tla_log_request!(
+            "Update_Balance_Mark_Minted",
+            Destination::new("ledger"),
+            "Mint",
+            TlaValue::Record(BTreeMap::from([
+                ("to".to_string(), account_to_tla(&caller_account)),
+                ("amount".to_string(), amount.to_tla_value()),
+            ]))
+        );
 
         match runtime
             .mint_ckbtc(amount, caller_account, crate::memo::encode(&memo).into())
             .await
         {
             Ok(block_index) => {
-                #[cfg(feature = "tla")]
                 tla_log_response!(
                     Destination::new("ledger"),
                     TlaValue::Variant {
@@ -416,7 +399,6 @@ pub async fn update_balance<R: CanisterRuntime>(
                 });
             }
             Err(err) => {
-                #[cfg(feature = "tla")]
                 tla_log_response!(
                     Destination::new("ledger"),
                     TlaValue::Variant {

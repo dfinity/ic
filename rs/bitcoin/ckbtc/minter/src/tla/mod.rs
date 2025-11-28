@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 use std::thread;
 use tla_instrumentation::{
-    GlobalState, ResolvedStatePair, TlaConstantAssignment, TlaValue, ToTla, Update, VarAssignment,
+    GlobalState, ResolvedStatePair, TlaConstantAssignment, Update, VarAssignment,
 };
 
 use crate::state::{self, CkBtcMinterState};
@@ -17,7 +17,10 @@ mod store;
 
 pub use store::{TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX};
 pub use tla_instrumentation::checker::{PredicateDescription, check_tla_code_link};
-pub use tla_instrumentation::{UpdateTrace, disable_tla, enable_tla};
+pub use tla_instrumentation::{
+    Destination, InstrumentationState, TlaValue, ToTla, UpdateTrace, disable_tla, enable_tla,
+};
+pub use tla_instrumentation_proc_macros::{tla_function, tla_update_method};
 
 const UPDATE_BALANCE_PROCESS_ID: &str = "Update_Balance";
 pub const UPDATE_BALANCE_START: &str = "Update_Balance_Start";
@@ -38,26 +41,18 @@ lazy_static! {
             post_process: |trace| post_process_update_balance(trace),
         }
     };
-}
-
-pub fn update_balance_desc() -> Update {
-    UPDATE_BALANCE_DESC.clone()
-}
-
-pub fn retrieve_btc_desc() -> Update {
-    let default_locals = VarAssignment::new()
-        .add("caller_account", default_ckbtc_address())
-        .add("utxos", TlaValue::Set(BTreeSet::new()))
-        .add("utxo", dummy_utxo());
-    Update {
-        default_start_locals: default_locals.clone(),
-        default_end_locals: default_locals,
-        start_label: tla_instrumentation::Label::new("Retrieve_BTC_Start"),
-        end_label: tla_instrumentation::Label::new("Retrieve_BTC_Start"),
-        process_id: "Retrieve_BTC".to_string(),
-        canister_name: "minter".to_string(),
-        post_process: |trace| post_process_update_balance(trace),
-    }
+    pub static ref RETRIEVE_BTC_DESC: Update = {
+        let default_locals = VarAssignment::new().add("amount", 0_u32.to_tla_value());
+        Update {
+            default_start_locals: default_locals.clone(),
+            default_end_locals: default_locals,
+            start_label: tla_instrumentation::Label::new("Retrieve_BTC_Start"),
+            end_label: tla_instrumentation::Label::new("Done"),
+            process_id: "Retrieve_BTC".to_string(),
+            canister_name: "minter".to_string(),
+            post_process: |trace| post_process_update_balance(trace),
+        }
+    };
 }
 
 pub fn account_to_tla(account: &Account) -> TlaValue {
@@ -246,13 +241,13 @@ pub fn perform_trace_check(traces: Vec<UpdateTrace>) {
             ).map_err(|e| {
                 if e.apalache_error.is_likely_mismatch() {
                     ic_cdk::println!("Possible divergence from the TLA model detected when interacting with the ledger!");
-                    ic_cdk::println!("If you did not expect to change the interaction between governance and the ledger, reconsider whether your change is safe. You can find additional data on the step that triggered the error below.");
-                    ic_cdk::println!("If you are confident that your change is correct, please contact the #formal-models Slack channel and describe the problem.");
+                    ic_cdk::println!("If you did not expect to change the interaction between the minter and the ledger, reconsider whether your change is safe. You can find additional data on the step that triggered the error below.");
+                    ic_cdk::println!("If you are confident that your change is correct, you can disable the TLA instrumentation. The TLA model should be updated, though");
                 } else {
                     ic_cdk::println!("An error detected while checking the TLA model.");
-                    ic_cdk::println!("The types may have diverged, or there might be something wrong with the TLA/Apalache setup");
+                    ic_cdk::println!("This is most likely a problem with the instrumentation. The types may have diverged, or there might be something wrong with the TLA/Apalache setup");
                 }
-                ic_cdk::println!("You can edit nns/governance/feature_flags.bzl to disable TLA checks in the CI and get on with your business.");
+                ic_cdk::println!("You can edit minter/feature_flags.bzl to disable TLA checks in the CI and get on with your business.");
                 ic_cdk::println!("-------------------");
                 ic_cdk::println!("Error occured in TLA model {:?} and state pair:\n{:#?}\nwith constants:\n{:#?}", e.model, e.pair, e.constants);
                 let diff = e.pair.diff();
@@ -296,7 +291,6 @@ fn snapshot_state(state: &CkBtcMinterState) -> GlobalState {
     gs.add("available_utxos", available_utxos_to_tla(state));
     gs.add("finalized_utxos", finalized_utxos_to_tla(state));
     gs.add("check_fee", state.check_fee.to_tla_value());
-
     gs
 }
 
@@ -307,6 +301,8 @@ fn post_process_update_balance(
     let mut subaccounts = BTreeSet::new();
     let mut deposit_addresses = BTreeMap::new();
     let mut check_fee = None;
+    let mut user_btc_addresses = BTreeSet::new();
+    let mut max_retrieval_amount: ::candid::Int = 0_u32.into();
 
     for pair in trace.iter_mut() {
         for state in [&mut pair.start, &mut pair.end] {
@@ -332,6 +328,15 @@ fn post_process_update_balance(
             if let Some(fee) = state.0.0.remove("check_fee") {
                 check_fee = Some(fee);
             }
+
+            if let Some(TlaValue::Function(map)) = state.get("amount") {
+                for value in map.values() {
+                    if let TlaValue::Int(amt) = value {
+                        max_retrieval_amount = max_retrieval_amount.max(amt.clone());
+                    }
+                }
+            }
+
             state.0.0.remove("btc_address");
             // If locals were missing, infer deposit address from any recorded utxos.
             if let Some(TlaValue::Function(addrs)) = state.get("utxos_state_addresses") {
@@ -487,10 +492,19 @@ fn post_process_update_balance(
                 let mapped: BTreeSet<_> = resps
                     .iter()
                     .filter_map(|resp| match resp {
-                        TlaValue::Record(r) => Some(TlaValue::Record(BTreeMap::from([
-                            ("caller_id".to_string(), r.get("caller")?.clone()),
-                            ("status".to_string(), r.get("response")?.clone()),
-                        ]))),
+                        TlaValue::Record(r) => {
+                            if let Some(req) = r.get("request") {
+                                if let TlaValue::Variant { value, .. } = req {
+                                    if let TlaValue::Literal(addr) = &**value {
+                                        user_btc_addresses.insert(TlaValue::Literal(addr.clone()));
+                                    }
+                                }
+                            }
+                            Some(TlaValue::Record(BTreeMap::from([
+                                ("caller_id".to_string(), r.get("caller")?.clone()),
+                                ("status".to_string(), r.get("response")?.clone()),
+                            ])))
+                        }
                         _ => None,
                     })
                     .collect();
@@ -524,8 +538,22 @@ fn post_process_update_balance(
         TlaValue::Set(BTreeSet::from([UPDATE_BALANCE_PROCESS_ID.to_tla_value()])),
     );
     constants.insert(
+        "RETRIEVE_BTC_PROCESS_IDS".to_string(),
+        TlaValue::Set(BTreeSet::from([TlaValue::Literal(
+            "Retrieve_BTC".to_string(),
+        )])),
+    );
+    constants.insert(
         "DEPOSIT_ADDRESS".to_string(),
         TlaValue::Function(deposit_addresses),
+    );
+    constants.insert(
+        "USER_BTC_ADDRESSES".to_string(),
+        TlaValue::Set(user_btc_addresses),
+    );
+    constants.insert(
+        "MAX_RETRIEVAL_AMOUNT".to_string(),
+        max_retrieval_amount.to_tla_value(),
     );
     constants.insert(
         "TX_HASH_OP".to_string(),
