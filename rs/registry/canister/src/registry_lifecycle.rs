@@ -1,5 +1,5 @@
 use crate::certification::recertify_registry;
-use crate::max_rewardable_nodes_mapping::MAX_REWARDABLE_NODES_SWISS_SUBNET_NO;
+use crate::max_rewardable_nodes_mapping::MAX_REWARDABLE_NODES_MAPPING;
 use crate::mutations::node_management::common::get_key_family;
 use crate::{pb::v1::RegistryCanisterStableStorage, registry::Registry};
 use ic_base_types::PrincipalId;
@@ -153,7 +153,7 @@ fn fill_swiss_subnet_node_operators_max_rewardable_nodes(
 ) -> Vec<RegistryMutation> {
     let mut mutations = Vec::new();
 
-    for (operator, max_rewardable_nodes) in MAX_REWARDABLE_NODES_SWISS_SUBNET_NO.iter() {
+    for (operator, max_rewardable_nodes) in MAX_REWARDABLE_NODES_MAPPING.iter() {
         let registry_value = match registry.get(
             make_node_operator_record_key(*operator).as_bytes(),
             registry.latest_version(),
