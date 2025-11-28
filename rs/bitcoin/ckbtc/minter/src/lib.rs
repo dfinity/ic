@@ -964,7 +964,7 @@ fn utxos_selection(
 /// PROPERTY: sum(u.value for u in available_set) ≥ target ⇒ !solution.is_empty()
 /// POSTCONDITION: !solution.is_empty() ⇒ sum(u.value for u in solution) ≥ target
 /// POSTCONDITION:  solution.is_empty() ⇒ available_utxos did not change.
-fn greedy(target: u64, available_utxos: &mut BTreeSet<Utxo>) -> Vec<Utxo> {
+pub fn greedy(target: u64, available_utxos: &mut BTreeSet<Utxo>) -> Vec<Utxo> {
     #[cfg(feature = "canbench-rs")]
     let _scope = canbench_rs::bench_scope("greedy");
 
@@ -997,9 +997,9 @@ fn greedy(target: u64, available_utxos: &mut BTreeSet<Utxo>) -> Vec<Utxo> {
     solution
 }
 
-fn greedy2<'a>(target: u64, available_utxos: &mut UtxoSet<'a>) -> Vec<Utxo> {
+pub fn greedy2<'a>(target: u64, available_utxos: &mut UtxoSet<'a>) -> Vec<Utxo> {
     #[cfg(feature = "canbench-rs")]
-    let _scope = canbench_rs::bench_scope("greedy");
+    let _scope = canbench_rs::bench_scope("greedy2");
 
     let mut solution = vec![];
     let mut goal = target;

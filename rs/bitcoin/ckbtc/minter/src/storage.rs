@@ -111,7 +111,7 @@ pub fn decode_event(buf: &[u8]) -> Event {
 }
 
 /// Returns an iterator over all minter events.
-pub fn events() -> impl Iterator<Item = Event> {
+pub fn events() -> impl Iterator<Item=Event> {
     EventIterator {
         buf: vec![],
         pos: 0,
@@ -204,8 +204,9 @@ mod benches {
     use crate::state::eventlog::replay;
     use crate::state::replace_state;
     use crate::state::{CkBtcMinterState, invariants::CheckInvariants};
-    use crate::{IC_CANISTER_RUNTIME, state};
+    use crate::{IC_CANISTER_RUNTIME, state, greedy, greedy2};
     use canbench_rs::bench;
+    use crate::state::utxos::UtxoSet;
 
     #[bench(raw)]
     fn build_unsigned_transaction_1_50k_sats() -> canbench_rs::BenchResult {
@@ -237,6 +238,36 @@ mod benches {
         bench_build_unsigned_transaction(1_000_000_000)
     }
 
+    #[bench(raw)]
+    fn greedy_1_50k_sats() -> canbench_rs::BenchResult {
+        bench_greedy(50_000) // minimum withdrawal amount
+    }
+
+    #[bench(raw)]
+    fn greedy_2_100k_sats() -> canbench_rs::BenchResult {
+        bench_greedy(100_000)
+    }
+
+    #[bench(raw)]
+    fn greedy_3_1m_sats() -> canbench_rs::BenchResult {
+        bench_greedy(1_000_000)
+    }
+
+    #[bench(raw)]
+    fn greedy_4_10m_sats() -> canbench_rs::BenchResult {
+        bench_greedy(10_000_000)
+    }
+
+    #[bench(raw)]
+    fn greedy_5_1_btc() -> canbench_rs::BenchResult {
+        bench_greedy(100_000_000)
+    }
+
+    #[bench(raw)]
+    fn greedy_6_10_btc() -> canbench_rs::BenchResult {
+        bench_greedy(1_000_000_000)
+    }
+
     fn bench_build_unsigned_transaction(withdrawal_amount: u64) -> canbench_rs::BenchResult {
         rebuild_mainnet_state();
         state::read_state(|s| {
@@ -263,7 +294,35 @@ mod benches {
                     median_fee_millisatoshi_per_vbyte,
                     &fee_estimator,
                 )
-                .unwrap()
+                    .unwrap()
+            });
+        })
+    }
+
+    fn bench_greedy(withdrawal_amount: u64) -> canbench_rs::BenchResult {
+        rebuild_mainnet_state();
+        state::read_state(|s| {
+            // The distribution of UTXOs is a key factor in the complexity of building a transaction,
+            // the more UTXOs with small values there are, the more instructions will be required to build a transaction for a large amount
+            // because more UTXOs are needed to cover that amount.
+            // NOTE: Those benchmarks reflect the performance of the minter on **mainnet**.
+            // Changing the number of available of UTXOs is unavoidable when updating the retrieved mainnet events used for testing,
+            // so that fluctuations in performance is acceptable, but large degradation would indicate a regression.
+            assert_eq!(s.available_utxos.len(), 66_212);
+        });
+
+        let mut utxo2 = state::read_state(|s| {
+            let mut utxo_set = UtxoSet::new();
+            for utxo in s.available_utxos.iter() {
+                assert!(utxo_set.insert(utxo.clone()), "Failed to insert UTXO {utxo:?} into set {utxo_set:?}");
+            }
+            utxo_set
+        });
+
+        canbench_rs::bench_fn(|| {
+            greedy2(withdrawal_amount, &mut utxo2);
+            state::mutate_state(|s| {
+                greedy(withdrawal_amount, &mut s.available_utxos);
             });
         })
     }
@@ -279,7 +338,7 @@ mod benches {
                     m.borrow().get(V1_LOG_INDEX_MEMORY_ID),
                     m.borrow().get(V1_LOG_DATA_MEMORY_ID),
                 )
-                .expect("failed to initialize stable log")
+                    .expect("failed to initialize stable log")
             })
         });
         assert_eq!(count_events(), 768_723);
