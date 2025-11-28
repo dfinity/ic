@@ -61,7 +61,7 @@ pub fn convert_timestamp_to_millis(timestamp_nanos: u64) -> anyhow::Result<u64> 
     ))
 }
 
-pub fn get_rosetta_block_from_block_identifier(
+pub async fn get_rosetta_block_from_block_identifier(
     block_identifier: BlockIdentifier,
     storage_client: &StorageClient,
 ) -> anyhow::Result<RosettaBlock> {
@@ -69,9 +69,10 @@ pub fn get_rosetta_block_from_block_identifier(
         &PartialBlockIdentifier::from(block_identifier),
         storage_client,
     )
+    .await
 }
 
-pub fn get_rosetta_block_from_partial_block_identifier(
+pub async fn get_rosetta_block_from_partial_block_identifier(
     partial_block_identifier: &PartialBlockIdentifier,
     storage_client: &StorageClient,
 ) -> anyhow::Result<RosettaBlock> {
@@ -86,17 +87,20 @@ pub fn get_rosetta_block_from_partial_block_identifier(
                 let hash_buf = ByteBuf::from(hash_bytes);
                 storage_client
                     .get_block_by_hash(hash_buf.clone())
+                    .await
                     .with_context(|| format!("Unable to retrieve block with hash: {hash_buf:?}"))?
                     .with_context(|| format!("Block with hash {hash} could not be found"))?
             }
 
             (Some(block_idx), None) => storage_client
                 .get_block_at_idx(block_idx)
+                .await
                 .with_context(|| format!("Unable to retrieve block with idx: {block_idx}"))?
                 .with_context(|| format!("Block at index {block_idx} could not be found"))?,
             (Some(block_idx), Some(hash)) => {
                 let rosetta_block = storage_client
                     .get_block_at_idx(block_idx)
+                    .await
                     .with_context(|| format!("Unable to retrieve block with idx: {block_idx}"))?
                     .with_context(|| format!("Block at index {block_idx} could not be found"))?;
                 if &hex::encode(rosetta_block.clone().get_block_hash()) != hash {
@@ -112,6 +116,7 @@ pub fn get_rosetta_block_from_partial_block_identifier(
             }
             (None, None) => storage_client
                 .get_block_with_highest_block_idx()
+                .await
                 .with_context(|| "Unable to retrieve the latest block".to_string())?
                 .with_context(|| {
                     "Latest block could not be found, the blockchain is empty".to_string()
