@@ -12,6 +12,7 @@ use ic_btc_interface::{OutPoint, Satoshi, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeSet;
 use std::time::Duration;
+use crate::state::utxos::UtxoSet;
 
 pub const NOW: Timestamp = Timestamp::new(1733145560 * 1_000_000_000);
 pub const DAY: Duration = Duration::from_secs(24 * 60 * 60);
@@ -65,7 +66,7 @@ pub fn ledger_account() -> Account {
         owner: Principal::from_text(
             "hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe",
         )
-        .unwrap(),
+            .unwrap(),
         subaccount: Some([42; 32]),
     }
 }
@@ -141,7 +142,7 @@ pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
 }
 
 pub fn build_bitcoin_unsigned_transaction(
-    available_utxos: &mut BTreeSet<Utxo>,
+    available_utxos: &mut UtxoSet,
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: BitcoinAddress,
     fee_per_vbyte: u64,
@@ -244,6 +245,7 @@ pub mod arbitrary {
         prop_oneof,
     };
     use serde_bytes::ByteBuf;
+    use crate::state::utxos::UtxoSet;
 
     // Macro to simplify writing strategies that generate structs.
     macro_rules! prop_struct {
@@ -257,29 +259,29 @@ pub mod arbitrary {
         };
     }
 
-    fn amount() -> impl Strategy<Value = Satoshi> {
+    fn amount() -> impl Strategy<Value=Satoshi> {
         1..10_000_000_000u64
     }
 
-    fn txid() -> impl Strategy<Value = Txid> {
+    fn txid() -> impl Strategy<Value=Txid> {
         uniform32(any::<u8>()).prop_map(Txid::from)
     }
 
-    fn outpoint() -> impl Strategy<Value = OutPoint> {
+    fn outpoint() -> impl Strategy<Value=OutPoint> {
         prop_struct!(OutPoint {
             txid: txid(),
             vout: any::<u32>(),
         })
     }
 
-    fn canister_id() -> impl Strategy<Value = CanisterId> {
+    fn canister_id() -> impl Strategy<Value=CanisterId> {
         any::<u64>().prop_map(CanisterId::from_u64)
     }
 
     pub fn retrieve_btc_requests(
-        amount: impl Strategy<Value = Satoshi>,
+        amount: impl Strategy<Value=Satoshi>,
         num: impl Into<SizeRange>,
-    ) -> impl Strategy<Value = Vec<RetrieveBtcRequest>> {
+    ) -> impl Strategy<Value=Vec<RetrieveBtcRequest>> {
         pvec(retrieve_btc_request(amount), num).prop_map(|mut reqs| {
             reqs.sort_by_key(|req| req.received_at);
             for (i, req) in reqs.iter_mut().enumerate() {
@@ -289,14 +291,14 @@ pub mod arbitrary {
         })
     }
 
-    fn principal() -> impl Strategy<Value = Principal> {
+    fn principal() -> impl Strategy<Value=Principal> {
         pvec(any::<u8>(), 1..=Principal::MAX_LENGTH_IN_BYTES)
             .prop_map(|bytes| Principal::from_slice(bytes.as_slice()))
     }
 
     fn retrieve_btc_request(
-        amount: impl Strategy<Value = Satoshi>,
-    ) -> impl Strategy<Value = RetrieveBtcRequest> {
+        amount: impl Strategy<Value=Satoshi>,
+    ) -> impl Strategy<Value=RetrieveBtcRequest> {
         prop_struct!(RetrieveBtcRequest {
             amount: amount,
             address: address(),
@@ -307,7 +309,7 @@ pub mod arbitrary {
         })
     }
 
-    fn reimbursement_reason() -> impl Strategy<Value = ReimbursementReason> {
+    fn reimbursement_reason() -> impl Strategy<Value=ReimbursementReason> {
         prop_oneof![
             (principal(), any::<u64>()).prop_map(|(kyt_provider, kyt_fee)| {
                 ReimbursementReason::TaintedDestination {
@@ -319,21 +321,21 @@ pub mod arbitrary {
         ]
     }
 
-    fn suspended_reason() -> impl Strategy<Value = SuspendedReason> {
+    fn suspended_reason() -> impl Strategy<Value=SuspendedReason> {
         prop_oneof![
             Just(SuspendedReason::ValueTooSmall),
             Just(SuspendedReason::Quarantined),
         ]
     }
 
-    fn withdrawal_fee() -> impl Strategy<Value = WithdrawalFee> {
+    fn withdrawal_fee() -> impl Strategy<Value=WithdrawalFee> {
         (any::<u64>(), any::<u64>()).prop_map(|(bitcoin_fee, minter_fee)| WithdrawalFee {
             bitcoin_fee,
             minter_fee,
         })
     }
 
-    fn withdrawal_reimbursement_reason() -> impl Strategy<Value = WithdrawalReimbursementReason> {
+    fn withdrawal_reimbursement_reason() -> impl Strategy<Value=WithdrawalReimbursementReason> {
         (0..2000usize, 500..1000usize).prop_map(|(n, m)| {
             WithdrawalReimbursementReason::InvalidTransaction(
                 InvalidTransactionError::TooManyInputs {
@@ -344,7 +346,7 @@ pub mod arbitrary {
         })
     }
 
-    fn replaced_reason() -> impl Strategy<Value = ReplacedReason> {
+    fn replaced_reason() -> impl Strategy<Value=ReplacedReason> {
         prop_oneof![
             Just(ReplacedReason::ToRetry),
             withdrawal_reimbursement_reason()
@@ -352,11 +354,11 @@ pub mod arbitrary {
         ]
     }
 
-    fn change_output() -> impl Strategy<Value = ChangeOutput> {
+    fn change_output() -> impl Strategy<Value=ChangeOutput> {
         (any::<u32>(), any::<u64>()).prop_map(|(vout, value)| ChangeOutput { vout, value })
     }
 
-    fn mode() -> impl Strategy<Value = Mode> {
+    fn mode() -> impl Strategy<Value=Mode> {
         prop_oneof![
             Just(Mode::ReadOnly),
             pvec(principal(), 0..10_000).prop_map(Mode::RestrictedTo),
@@ -365,13 +367,13 @@ pub mod arbitrary {
         ]
     }
 
-    fn encoded_signature() -> impl Strategy<Value = EncodedSignature> {
+    fn encoded_signature() -> impl Strategy<Value=EncodedSignature> {
         pvec(1u8..0xff, 64).prop_map(|bytes| EncodedSignature::from_sec1(bytes.as_slice()))
     }
 
     pub fn unsigned_input(
-        value: impl Strategy<Value = Satoshi>,
-    ) -> impl Strategy<Value = UnsignedInput> {
+        value: impl Strategy<Value=Satoshi>,
+    ) -> impl Strategy<Value=UnsignedInput> {
         prop_struct!(UnsignedInput {
             previous_output: outpoint(),
             value: value,
@@ -379,7 +381,7 @@ pub mod arbitrary {
         })
     }
 
-    pub fn signed_input() -> impl Strategy<Value = SignedInput> {
+    pub fn signed_input() -> impl Strategy<Value=SignedInput> {
         prop_struct!(SignedInput {
             previous_output: outpoint(),
             sequence: any::<u32>(),
@@ -388,7 +390,7 @@ pub mod arbitrary {
         })
     }
 
-    pub fn address() -> impl Strategy<Value = BitcoinAddress> {
+    pub fn address() -> impl Strategy<Value=BitcoinAddress> {
         prop_oneof![
             uniform20(any::<u8>()).prop_map(BitcoinAddress::P2wpkhV0),
             uniform32(any::<u8>()).prop_map(BitcoinAddress::P2wshV0),
@@ -398,14 +400,14 @@ pub mod arbitrary {
         ]
     }
 
-    pub fn tx_out() -> impl Strategy<Value = TxOut> {
+    pub fn tx_out() -> impl Strategy<Value=TxOut> {
         prop_struct!(TxOut {
             value: amount(),
             address: address(),
         })
     }
 
-    pub fn utxo(amount: impl Strategy<Value = Satoshi>) -> impl Strategy<Value = Utxo> {
+    pub fn utxo(amount: impl Strategy<Value=Satoshi>) -> impl Strategy<Value=Utxo> {
         prop_struct!(Utxo {
             outpoint: outpoint(),
             value: amount,
@@ -413,14 +415,20 @@ pub mod arbitrary {
         })
     }
 
-    pub fn account() -> impl Strategy<Value = Account> {
+    pub fn utxo_set(amount: impl Strategy<Value=Satoshi>, size: impl Into<SizeRange>) -> impl Strategy<Value=UtxoSet> {
+        (proptest::collection::btree_set(utxo(amount), size)).prop_map(|utxos| {
+            UtxoSet::from_iter(utxos)
+        })
+    }
+
+    pub fn account() -> impl Strategy<Value=Account> {
         prop_struct!(Account {
             owner: principal(),
             subaccount: option::of(uniform32(any::<u8>())),
         })
     }
 
-    pub fn event() -> impl Strategy<Value = Event> {
+    pub fn event() -> impl Strategy<Value=Event> {
         (any::<Option<u64>>(), event_type())
             .prop_map(|(timestamp, payload)| Event { timestamp, payload })
     }
@@ -434,7 +442,7 @@ pub mod arbitrary {
         use crate::Network;
         use crate::lifecycle::{init::InitArgs, upgrade::UpgradeArgs};
 
-        fn btc_network() -> impl Strategy<Value = Network> {
+        fn btc_network() -> impl Strategy<Value=Network> {
             prop_oneof![
                 Just(Network::Mainnet),
                 Just(Network::Testnet),
@@ -442,7 +450,7 @@ pub mod arbitrary {
             ]
         }
 
-        fn init_args() -> impl Strategy<Value = InitArgs> {
+        fn init_args() -> impl Strategy<Value=InitArgs> {
             prop_struct!(InitArgs {
                 btc_network: btc_network(),
                 ecdsa_key_name: ".*",
@@ -459,7 +467,7 @@ pub mod arbitrary {
             })
         }
 
-        fn upgrade_args() -> impl Strategy<Value = UpgradeArgs> {
+        fn upgrade_args() -> impl Strategy<Value=UpgradeArgs> {
             prop_struct!(UpgradeArgs {
                 retrieve_btc_min_amount: option::of(any::<u64>()),
                 min_confirmations: option::of(any::<u32>()),
@@ -473,7 +481,7 @@ pub mod arbitrary {
             })
         }
 
-        pub fn event_type() -> impl Strategy<Value = EventType> {
+        pub fn event_type() -> impl Strategy<Value=EventType> {
             prop_oneof![
                 init_args().prop_map(EventType::Init),
                 upgrade_args().prop_map(EventType::Upgrade),

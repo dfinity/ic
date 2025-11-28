@@ -1,142 +1,59 @@
 use ic_btc_interface::Utxo;
-use std::borrow::Cow;
-use std::cmp::Ordering;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Set of UTXOs sorted by value.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct UtxoSet<'a> {
-    utxos: BTreeSet<SortByKey<'a, Utxo>>,
+pub struct UtxoSet {
+    utxos: BTreeMap<u64, BTreeSet<Utxo>>,
 }
 
-impl<'a> UtxoSet<'a> {
+impl UtxoSet {
     pub fn new() -> Self {
         Self::default()
     }
 
     pub fn insert(&mut self, utxo: Utxo) -> bool {
-        self.utxos.insert(SortByKey::from(utxo))
+        self.utxos.entry(utxo.value).or_insert_with(BTreeSet::new).insert(utxo)
     }
 
-    pub fn remove(&mut self, utxo: &'a Utxo) -> bool {
-        self.utxos.remove(&SortByKey::from(utxo))
+    pub fn contains(&self, utxo: &Utxo) -> bool {
+       self.utxos.get(&utxo.value).map(|utxos|utxos.contains(utxo)).unwrap_or(false)
     }
 
-    pub fn take(&mut self, utxo: Utxo) -> Option<Utxo> {
-        self.utxos.take(&SortByKey::from(utxo)).map(|u| u.0.into_owned())
-    }
-
-    pub fn len(&self) -> usize {
-        self.utxos.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.utxos.is_empty()
+    pub fn remove(&mut self, utxo: &Utxo) -> Option<Utxo> {
+        self.utxos.get_mut(&utxo.value).and_then(|utxos| utxos.take(utxo))
     }
 
     /// Find a UTXO with the smallest value being at least `value`.
     pub fn find_lower_bound(&self, value: u64) -> Option<&Utxo> {
-        use ic_btc_interface::{OutPoint, Txid};
-
-        self.utxos.range(SortByKey::from(Utxo {
-            outpoint: OutPoint {
-                txid: Txid::from([0_u8; 32]),
-                vout: 0,
-            },
-            value,
-            height: 0,
-        })..).next().map(|utxo| utxo.as_ref())
+        self.utxos.range(value..).next().and_then(|(_value, utxos)| utxos.first())
     }
 
+    /// Remove a UTXO with the smallest value.
     pub fn pop_first(&mut self) -> Option<Utxo> {
-        self.utxos.pop_first().map(|utxo| utxo.0.into_owned())
+        self.utxos.first_entry().and_then(|mut utxos| utxos.get_mut().pop_first())
     }
 
+    /// A UTXO with the largest value.
     pub fn last(&self) -> Option<&Utxo> {
-        self.utxos.last().map(|utxo| utxo.as_ref())
+        self.utxos.last_key_value().and_then(|(_value, utxos)|utxos.last())
+    }
+
+    pub fn len(&self) -> usize {
+        self.utxos.values().map(|utxos| utxos.len()).sum()
     }
 
     pub fn iter(&self) -> impl Iterator<Item=&Utxo> {
-        self.utxos.iter().map(|utxo| utxo.as_ref())
+        self.utxos.values().flat_map(|utxos| utxos.iter())
     }
 }
 
-impl FromIterator<Utxo> for UtxoSet<'_> {
-    fn from_iter<T: IntoIterator<Item=Utxo>>(iter: T) -> Self {
+impl FromIterator<Utxo> for UtxoSet {
+    fn from_iter<T: IntoIterator<Item=Utxo>>(utxos: T) -> Self {
         let mut set = UtxoSet::default();
-        for utxo in iter {
+        for utxo in utxos {
             set.insert(utxo);
         }
         set
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct SortByKey<'a, T: Clone>(Cow<'a, T>);
-
-impl<'a, T: Clone> AsRef<T> for SortByKey<'a, T> {
-    fn as_ref(&self) -> &T {
-        self.0.as_ref()
-    }
-}
-
-impl<T: Clone> From<T> for SortByKey<'_, T> {
-    fn from(value: T) -> Self {
-        SortByKey(Cow::Owned(value))
-    }
-}
-
-impl<'a, T: Clone> From<&'a T> for SortByKey<'a, T> {
-    fn from(value: &'a T) -> Self {
-        SortByKey(Cow::Borrowed(value))
-    }
-}
-
-trait SecondaryKey {
-    type Key;
-
-    fn secondary_key(&self) -> &Self::Key;
-}
-
-impl SecondaryKey for Utxo {
-    type Key = u64;
-
-    fn secondary_key(&self) -> &Self::Key {
-        &self.value
-    }
-}
-
-impl<'a, T, K> PartialOrd for SortByKey<'a, T>
-where
-    T: Clone + PartialOrd + SecondaryKey<Key=K>,
-    K: PartialOrd,
-{
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        let primary_result = self.0.partial_cmp(&other.0);
-        if Some(Ordering::Equal) == primary_result {
-            return primary_result;
-        }
-        self.0
-            .secondary_key()
-            .partial_cmp(other.0.secondary_key())
-            .or(primary_result)
-    }
-}
-
-impl<'a, T, K> Ord for SortByKey<'a, T>
-where
-    T: Clone + Ord + SecondaryKey<Key=K>,
-    K: Ord,
-{
-    fn cmp(&self, other: &Self) -> Ordering {
-        let primary_result = self.0.cmp(&other.0);
-        if Ordering::Equal == primary_result {
-            return primary_result;
-        }
-        let secondary_result = self.0.secondary_key().cmp(other.0.secondary_key());
-        if Ordering::Equal == secondary_result {
-            return primary_result;
-        }
-        secondary_result
     }
 }

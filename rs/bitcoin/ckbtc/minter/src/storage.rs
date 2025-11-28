@@ -311,14 +311,6 @@ mod benches {
             assert_eq!(s.available_utxos.len(), 66_212);
         });
 
-        let mut utxo2 = state::read_state(|s| {
-            let mut utxo_set = UtxoSet::new();
-            for utxo in s.available_utxos.iter() {
-                assert!(utxo_set.insert(utxo.clone()), "Failed to insert UTXO {utxo:?} into set {utxo_set:?}");
-            }
-            utxo_set
-        });
-
         canbench_rs::bench_fn(|| {
             state::mutate_state(|s| {
                 greedy(withdrawal_amount, &mut s.available_utxos);

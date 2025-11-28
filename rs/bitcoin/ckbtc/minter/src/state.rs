@@ -403,7 +403,7 @@ pub struct CkBtcMinterState {
     pub btc_checker_principal: Option<CanisterId>,
 
     /// The set of UTXOs unused in pending transactions.
-    pub available_utxos: UtxoSet<'_>,
+    pub available_utxos: UtxoSet,
 
     /// The mapping from output points to the ledger accounts to which they
     /// belong.
