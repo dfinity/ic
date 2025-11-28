@@ -929,10 +929,7 @@ impl Drop for StateMachineStateManager {
     fn drop(&mut self) {
         if let Some(state_manager) = self.inner.take() {
             // Finish any asynchronous state manager operations before dropping the state manager.
-            state_manager.flush_tip_channel();
-            state_manager
-                .state_layout()
-                .flush_checkpoint_removal_channel();
+            state_manager.flush_all();
         }
     }
 }
@@ -2281,10 +2278,7 @@ impl StateMachine {
 
     fn into_components(self) -> (Box<dyn StateMachineStateDir>, u64, Time, u64) {
         // Finish any asynchronous state manager operations first.
-        self.state_manager.flush_tip_channel();
-        self.state_manager
-            .state_layout()
-            .flush_checkpoint_removal_channel();
+        self.state_manager.flush_all();
 
         let mut state_manager = self.state_manager.clone();
         let (nonce, time, checkpoint_interval_length) = self.into_components_inner();
@@ -2429,10 +2423,7 @@ impl StateMachine {
         let checkpoint_interval_length = if enabled { 0 } else { u64::MAX };
         self.set_checkpoint_interval_length(checkpoint_interval_length);
         // Finish any asynchronous state manager operations.
-        self.state_manager.flush_tip_channel();
-        self.state_manager
-            .state_layout()
-            .flush_checkpoint_removal_channel();
+        self.state_manager.flush_all();
     }
 
     /// Set current interval length. The typical interval length
