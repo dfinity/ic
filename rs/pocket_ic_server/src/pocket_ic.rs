@@ -3843,7 +3843,7 @@ impl Operation for CanisterSnapshotDownload {
             self.sender,
             self.canister_id,
             self.snapshot_id,
-            self.snapshot_dir.display()
+            base64::encode(self.snapshot_dir.display().to_string())
         ))
     }
 }
@@ -4020,7 +4020,7 @@ impl Operation for CanisterSnapshotUpload {
             "canister_snapshot_upload(sender={},canister_id={},snapshot_dir='{}')",
             self.sender,
             self.canister_id,
-            self.snapshot_dir.display()
+            base64::encode(self.snapshot_dir.display().to_string())
         ))
     }
 }
