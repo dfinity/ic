@@ -101,6 +101,7 @@ fn fix_node_operators_corrupted(registry: &Registry) -> Vec<RegistryMutation> {
     for (k, mut record) in
         get_key_family::<NodeOperatorRecord>(registry, NODE_OPERATOR_RECORD_KEY_PREFIX).into_iter()
     {
+        let mut affected = false;
         let node_operator_id_k = PrincipalId::from_str(&k).unwrap();
         let node_operator_id_v = PrincipalId::try_from(&record.node_operator_principal_id).unwrap();
 
@@ -111,28 +112,37 @@ fn fix_node_operators_corrupted(registry: &Registry) -> Vec<RegistryMutation> {
                 node_operator_id_k
             );
             record.node_operator_principal_id = node_operator_id_k.to_vec();
+            affected = true;
         }
 
-        // 3nu7r missed the update to max_rewardable_nodes during migration  because
+        // 3nu7r missed the update to max_rewardable_nodes during migration because
         // not present in node_operator_id_v.
         if node_operator_id_k == no_3nu7r {
             ic_cdk::println!("Fix max_rewardable_nodes for 3nu7r");
             record.max_rewardable_nodes = btreemap! { NodeRewardType::Type1dot1.to_string() => 19 };
+            affected = true;
         }
 
+        // ujq4k got ovewritten by 3nu7r value and now has wrong rewardable_nodes.
         if node_operator_id_k == no_ujq4k {
             ic_cdk::println!("Fix rewardable_nodes for ujq4k");
             record.rewardable_nodes = btreemap! { NodeRewardType::Type1dot1.to_string() => 9 };
+            affected = true;
         }
+
+        // spsu4 got ovewritten by bmlhw value and now has wrong rewardable_nodes.
         if node_operator_id_k == no_spsu4 {
             ic_cdk::println!("Fix rewardable_nodes for spsu4");
             record.rewardable_nodes = btreemap! { NodeRewardType::Type1dot1.to_string() => 14 };
+            affected = true;
         }
 
-        mutations.push(update(
-            make_node_operator_record_key(node_operator_id_k),
-            record.encode_to_vec(),
-        ));
+        if affected {
+            mutations.push(update(
+                make_node_operator_record_key(node_operator_id_k),
+                record.encode_to_vec(),
+            ));
+        }
     }
 
     mutations
@@ -430,33 +440,33 @@ mod test {
         let mut node_operator_additions = Vec::new();
 
         // This is a good record that should be left untouched
-        let no_good = PrincipalId::from_str(
+        let node_operator_good = PrincipalId::from_str(
             "2aemz-63apz-bds45-nypax-oj52g-fyl6i-sjhtv-ysu5t-hqvve-ygtcr-yae",
         )
         .unwrap();
         let record_good = NodeOperatorRecord {
-            node_operator_principal_id: no_good.to_vec(),
+            node_operator_principal_id: node_operator_good.to_vec(),
             dc_id: "dummy_dc_id_1".to_string(),
             ipv6: Some("dummy_ipv6_1".to_string()),
             max_rewardable_nodes: btreemap! { "type3.1".to_string() => 6},
             ..NodeOperatorRecord::default()
         };
         node_operator_additions.push(insert(
-            make_node_operator_record_key(no_good),
+            make_node_operator_record_key(node_operator_good),
             record_good.encode_to_vec(),
         ));
 
         // 3nu7r is corrupted and should be fixed
-        let no_3nu7r_k = PrincipalId::from_str(
+        let node_operator_3nu7r_k = PrincipalId::from_str(
             "3nu7r-l6i5c-jlmhi-fmmhm-4wcw4-ndlwb-yovrx-o3wxh-suzew-hvbbo-7qe",
         )
         .unwrap();
-        let no_3nu7r_v = PrincipalId::from_str(
+        let node_operator_3nu7r_v = PrincipalId::from_str(
             "ujq4k-55epc-pg2bt-jt2f5-6vaq3-diru7-edprm-42rd2-j7zzd-yjaai-2qe",
         )
         .unwrap();
         let record_3nu7r = NodeOperatorRecord {
-            node_operator_principal_id: no_3nu7r_v.to_vec(),
+            node_operator_principal_id: node_operator_3nu7r_v.to_vec(),
             dc_id: "dummy_dc_id_3nu7r".to_string(),
             ipv6: Some("dummy_ipv6_3nu7r".to_string()),
             // Empty max rewardable nodes, should be filled in by the migration
@@ -464,21 +474,21 @@ mod test {
             ..NodeOperatorRecord::default()
         };
         node_operator_additions.push(insert(
-            make_node_operator_record_key(no_3nu7r_k),
+            make_node_operator_record_key(node_operator_3nu7r_k),
             record_3nu7r.encode_to_vec(),
         ));
 
         // spsu4 is corrupted and should be fixed
-        let no_spsu4_k = PrincipalId::from_str(
+        let node_operator_spsu4_k = PrincipalId::from_str(
             "spsu4-5hl4t-bfubp-qvoko-jprw4-wt7ou-nlnbk-gb5ib-aqnoo-g4gl6-kae",
         )
         .unwrap();
-        let no_spsu4_v = PrincipalId::from_str(
+        let node_operator_spsu4_v = PrincipalId::from_str(
             "spsu4-5hl4t-bfubp-qvoko-jprw4-wt7ou-nlnbk-gb5ib-aqnoo-g4gl6-kae",
         )
         .unwrap();
         let record_spsu4 = NodeOperatorRecord {
-            node_operator_principal_id: no_spsu4_v.to_vec(),
+            node_operator_principal_id: node_operator_spsu4_v.to_vec(),
             dc_id: "dummy_dc_id_spsu4".to_string(),
             ipv6: Some("dummy_ipv6_spsu4".to_string()),
             // wrong rewardable nodes, should be fixed by the migration
@@ -487,17 +497,18 @@ mod test {
             ..NodeOperatorRecord::default()
         };
         node_operator_additions.push(insert(
-            make_node_operator_record_key(no_spsu4_k),
+            make_node_operator_record_key(node_operator_spsu4_k),
             record_spsu4.encode_to_vec(),
         ));
 
         registry.apply_mutations_for_test(node_operator_additions);
         let mutations = fix_node_operators_corrupted(&registry);
+        // We expect 2 fixes, one for each corrupted record
         assert_eq!(mutations.len(), 2);
         registry.apply_mutations_for_test(mutations);
 
         // Good record should be left untouched
-        let record_good_got = registry.get_node_operator_or_panic(no_good);
+        let record_good_got = registry.get_node_operator_or_panic(node_operator_good);
         let expected_record_good = record_good;
         assert_eq!(
             record_good_got, expected_record_good,
@@ -505,27 +516,27 @@ mod test {
         );
 
         // 3nu7r should be fixed
-        let record_3nu7r_got = registry.get_node_operator_or_panic(no_3nu7r_k);
+        let record_3nu7r_got = registry.get_node_operator_or_panic(node_operator_3nu7r_k);
         let expected_record_3nu7r = NodeOperatorRecord {
-            node_operator_principal_id: no_3nu7r_k.to_vec(),
+            node_operator_principal_id: node_operator_3nu7r_k.to_vec(),
             max_rewardable_nodes: btreemap! {"type1.1".to_string() => 19},
             ..record_3nu7r
         };
         assert_eq!(
             record_3nu7r_got, expected_record_3nu7r,
-            "Assertion for NodeOperator {no_3nu7r_k} failed"
+            "Assertion for NodeOperator {node_operator_3nu7r_k} failed"
         );
 
         // spsu4 should be fixed
-        let record_spsu4_got = registry.get_node_operator_or_panic(no_spsu4_k);
+        let record_spsu4_got = registry.get_node_operator_or_panic(node_operator_spsu4_k);
         let expected_record_spsu4 = NodeOperatorRecord {
-            node_operator_principal_id: no_spsu4_k.to_vec(),
+            node_operator_principal_id: node_operator_spsu4_k.to_vec(),
             rewardable_nodes: btreemap! {"type1.1".to_string() => 14},
             ..record_spsu4
         };
         assert_eq!(
             record_spsu4_got, expected_record_spsu4,
-            "Assertion for NodeOperator {no_3nu7r_k} failed"
+            "Assertion for NodeOperator {node_operator_3nu7r_k} failed"
         );
     }
 }
