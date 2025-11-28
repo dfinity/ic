@@ -51,19 +51,78 @@ pub(crate) fn input_with_default(text: &str, default: &str) -> Result<String> {
 pub(crate) fn open_webpage(url: &Url) -> Result<()> {
     println!("Opening webpage: {url}");
 
+    #[cfg(target_os = "macos")]
     let command = "open";
+    #[cfg(target_os = "linux")]
+    let command = "xdg-open";
+    #[cfg(target_os = "windows")]
+    let command = "start";
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    let command = "open";
+
     Command::new(command).arg(url.to_string()).spawn()?.wait()?;
 
     Ok(())
 }
 
 pub(crate) fn copy(text: &[u8]) -> Result<()> {
-    let mut copy = Command::new("pbcopy").stdin(Stdio::piped()).spawn()?;
-    copy.stdin
-        .take()
-        .ok_or(anyhow::anyhow!("Failed to take stdin"))?
-        .write_all(text)?;
-    copy.wait()?;
+    #[cfg(target_os = "macos")]
+    {
+        let mut copy = Command::new("pbcopy").stdin(Stdio::piped()).spawn()?;
+        copy.stdin
+            .take()
+            .ok_or(anyhow::anyhow!("Failed to take stdin"))?
+            .write_all(text)?;
+        copy.wait()?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        // Try xclip first, then xsel as fallback
+        let mut copy = if Command::new("xclip")
+            .arg("-version")
+            .output()
+            .is_ok_and(|o| o.status.success())
+        {
+            Command::new("xclip")
+                .arg("-selection")
+                .arg("clipboard")
+                .stdin(Stdio::piped())
+                .spawn()?
+        } else if Command::new("xsel")
+            .arg("--version")
+            .output()
+            .is_ok_and(|o| o.status.success())
+        {
+            Command::new("xsel")
+                .arg("--clipboard")
+                .arg("--input")
+                .stdin(Stdio::piped())
+                .spawn()?
+        } else {
+            println!("{}", "Warning: Neither xclip nor xsel is installed. Text will not be copied to clipboard.".bright_yellow());
+            println!("Please install xclip or xsel, or manually copy the text.");
+            return Ok(());
+        };
+        copy.stdin
+            .take()
+            .ok_or(anyhow::anyhow!("Failed to take stdin"))?
+            .write_all(text)?;
+        copy.wait()?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        // On Windows, we can use clip.exe
+        let mut copy = Command::new("clip").stdin(Stdio::piped()).spawn()?;
+        copy.stdin
+            .take()
+            .ok_or(anyhow::anyhow!("Failed to take stdin"))?
+            .write_all(text)?;
+        copy.wait()?;
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        println!("{}", "Warning: Clipboard copy not supported on this platform. Please manually copy the text.".bright_yellow());
+    }
 
     Ok(())
 }
@@ -95,27 +154,53 @@ pub(crate) fn press_enter_to_continue() -> Result<()> {
 }
 
 pub(crate) fn ensure_coreutils_setup() -> Result<()> {
-    let output = Command::new("brew").arg("list").output()?;
-    if !output.status.success() {
-        // If they don't even have brew installed, we can't ensure anything. Let's just ask them if they want to continue.
+    #[cfg(target_os = "macos")]
+    {
+        let output = Command::new("brew").arg("list").output()?;
+        if !output.status.success() {
+            // If they don't even have brew installed, we can't ensure anything. Let's just ask them if they want to continue.
+            println!(
+                "{}",
+                "brew is not installed. This is not necessarily a problem, but it is suspicious."
+                    .bright_yellow()
+            );
+            press_enter_to_continue()?;
+            return Ok(());
+        }
+
+        // If they do have brew installed, let's make sure coreutils is installed.
+        let stdout = String::from_utf8(output.stdout)?;
+        if !stdout.contains("coreutils") {
+            bail!(
+                "'coreutils' is not installed. This is not necessarily a problem, but you may encounter issues running some of the bash scripts which are written by developers that generally will have coreutils installed. Try running `brew install coreutils`."
+            )
+        }
+
+        println!("{}", "brew and coreutils installed ✓".bright_green());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        // On Linux, coreutils is typically installed by default
+        // Check if coreutils commands are available
+        let output = Command::new("which").arg("cp").output();
+        if output.is_err() || !output.unwrap().status.success() {
+            println!(
+                "{}",
+                "Warning: coreutils may not be installed. This is unusual on Linux."
+                    .bright_yellow()
+            );
+            press_enter_to_continue()?;
+        } else {
+            println!("{}", "coreutils available ✓".bright_green());
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
         println!(
             "{}",
-            "brew is not installed. This is not necessarily a problem, but it is suspicious."
-                .bright_yellow()
+            "Skipping coreutils check on this platform.".bright_yellow()
         );
-        press_enter_to_continue()?;
-        return Ok(());
     }
-
-    // If they do have brew installed, let's make sure coreutils is installed.
-    let stdout = String::from_utf8(output.stdout)?;
-    if !stdout.contains("coreutils") {
-        bail!(
-            "'coreutils' is not installed. This is not necessarily a problem, but you may encounter issues running some of the bash scripts which are written by developers that generally will have coreutils installed. Try running `brew install coreutils`."
-        )
-    }
-
-    println!("{}", "brew and coreutils installed ✓".bright_green());
 
     Ok(())
 }
@@ -141,7 +226,14 @@ pub(crate) fn ensure_gh_setup() -> Result<()> {
     // Check if gh is installed
     let output = Command::new("gh").arg("--version").output()?;
     if !output.status.success() {
-        bail!("gh is not installed. Try installing with `brew install gh`")
+        #[cfg(target_os = "macos")]
+        bail!("gh is not installed. Try installing with `brew install gh`");
+        #[cfg(target_os = "linux")]
+        bail!(
+            "gh is not installed. Try installing with your package manager (e.g., `sudo apt install gh` or `sudo dnf install gh`)"
+        );
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        bail!("gh is not installed. Please install the GitHub CLI for your platform.");
     }
 
     // Check if the user is logged in to gh
