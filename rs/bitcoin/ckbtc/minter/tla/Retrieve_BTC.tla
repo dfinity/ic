@@ -9,8 +9,8 @@ CONSTANTS
     \**********************************************************************************************
     \* Other constants
     \**********************************************************************************************
-    \* The "user-controlled" BTC address; we assume just one such address in this model.
-    USER_BTC_ADDRESS,
+    \* The set of "user-controlled" BTC addresses.
+    USER_BTC_ADDRESSES,
     BTC_SUPPLY,
     RETRIEVE_BTC_FEE,
     DEPOSIT_ADDRESS
@@ -83,7 +83,7 @@ Retrieve_BTC_Wait_Burn:
     \* Receive the ledger response
     with(response \in { r \in ledger_to_minter: Caller(r) = self }; status = Status(response);
         \* Disable transfers to the minter BTC address when doing liveness checking
-        destination \in Image(DEPOSIT_ADDRESS, CK_BTC_ADDRESSES) \union { (* MINTER_CKBTC_ADDRESS , *) USER_BTC_ADDRESS};
+        destination \in Image(DEPOSIT_ADDRESS, CK_BTC_ADDRESSES) \union USER_BTC_ADDRESSES;
         ) {
         ledger_to_minter := ledger_to_minter \ {response};
         if(Is_Ok(status)) {
@@ -101,7 +101,7 @@ Retrieve_BTC_Wait_Burn:
 
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "979d11e9" /\ chksum(tla) = "2c4acb19")
+\* BEGIN TRANSLATION (chksum(pcal) = "7b637f1a" /\ chksum(tla) = "9556f6a9")
 VARIABLES pc, utxos_state_addresses, available_utxos, finalized_utxos, 
           update_balance_locks, retrieve_btc_locks, locks, pending, 
           submitted_transactions, minter_to_btc_canister, 
@@ -154,7 +154,7 @@ Retrieve_BTC_Start(self) == /\ pc[self] = "Retrieve_BTC_Start"
 Retrieve_BTC_Wait_Burn(self) == /\ pc[self] = "Retrieve_BTC_Wait_Burn"
                                 /\ \E response \in { r \in ledger_to_minter: Caller(r) = self }:
                                      LET status == Status(response) IN
-                                       \E destination \in Image(DEPOSIT_ADDRESS, CK_BTC_ADDRESSES) \union {                              USER_BTC_ADDRESS}:
+                                       \E destination \in Image(DEPOSIT_ADDRESS, CK_BTC_ADDRESSES) \union USER_BTC_ADDRESSES:
                                          /\ ledger_to_minter' = ledger_to_minter \ {response}
                                          /\ IF Is_Ok(status)
                                                THEN /\ pending' = Queue_Pending(pending, next_request_id, destination, amount[self])

@@ -20,8 +20,8 @@ CONSTANTS
     \**********************************************************************************************
     \* Other constants
     \**********************************************************************************************
-    \* The "user-controlled" BTC address; we assume just one such address in this model.
-    USER_BTC_ADDRESS,
+    \* The "user-controlled" BTC addresses.
+    USER_BTC_ADDRESSES,
     \* The ID of the PlusCal process simulating the BTC network
     BTC_PROCESS_ID,
     \* The ID of the PlusCal process simulating the ckBTC Ledger
@@ -82,8 +82,8 @@ variables
     \* The "current state" of the BTC network, as just a set of UTXOs. Of course, this
     \* is a simplification, as the BTC network doesn't have a notion of current state.
     \* We don't attempt to define a precise mapping onto the state of the BTC network here.
-    btc = { 
-        [ id |-> << "GENESIS", 0 >>, owner |-> USER_BTC_ADDRESS, value |-> BTC_SUPPLY - MINTER_INITIAL_SUPPLY], 
+btc = { 
+        [ id |-> << "GENESIS", 0 >>, owner |-> CHOOSE addr \in USER_BTC_ADDRESSES: TRUE, value |-> BTC_SUPPLY - MINTER_INITIAL_SUPPLY], 
         [ id |-> << "GENESIS", 1 >>, owner |-> DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS], value |-> MINTER_INITIAL_SUPPLY] };
     \**********************************************************************************************
     \* BTC Canister
@@ -276,7 +276,7 @@ variables
 }
 
 } *)
-\* BEGIN TRANSLATION (chksum(pcal) = "12a8aa6d" /\ chksum(tla) = "2adae1c7")
+\* BEGIN TRANSLATION (chksum(pcal) = "95f86447" /\ chksum(tla) = "af9ab10a")
 VARIABLES pc, btc, btc_canister, utxos_state_addresses, available_utxos, 
           finalized_utxos, update_balance_locks, retrieve_btc_locks, locks, 
           pending, submitted_transactions, balance, btc_canister_to_btc, 
@@ -294,9 +294,9 @@ vars == << pc, btc, btc_canister, utxos_state_addresses, available_utxos,
 ProcSet == (HEARTBEAT_PROCESS_IDS)
 
 Init == (* Global variables *)
-        /\ btc =   {
-                 [ id |-> << "GENESIS", 0 >>, owner |-> USER_BTC_ADDRESS, value |-> BTC_SUPPLY - MINTER_INITIAL_SUPPLY],
-                 [ id |-> << "GENESIS", 1 >>, owner |-> DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS], value |-> MINTER_INITIAL_SUPPLY] }
+        /\ btc = {
+                   [ id |-> << "GENESIS", 0 >>, owner |-> CHOOSE addr \in USER_BTC_ADDRESSES: TRUE, value |-> BTC_SUPPLY - MINTER_INITIAL_SUPPLY],
+                   [ id |-> << "GENESIS", 1 >>, owner |-> DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS], value |-> MINTER_INITIAL_SUPPLY] }
         /\ btc_canister = {}
         /\ utxos_state_addresses \in Empty_Funs
         /\ available_utxos = {}

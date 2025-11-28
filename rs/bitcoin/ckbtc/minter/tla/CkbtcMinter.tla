@@ -58,8 +58,8 @@ CONSTANTS
     RETRIEVE_BTC_PROCESS_IDS,
     \* @type: Set($pid);
     RESUBMIT_RETRIEVE_BTC_PROCESS_IDS,
-    \* @type: $btcAddress;
-    USER_BTC_ADDRESS,
+    \* @type: Set($btcAddress);
+    USER_BTC_ADDRESSES,
     \* @type: $pid;
     BTC_PROCESS_ID,
     \* @type: $pid;
@@ -260,12 +260,12 @@ Sanity_Inv_Just_One_Response_From_BTC_Canister == Cardinality(btc_canister_to_mi
 BTC_Balance_Of(addresses) == Sum_Utxos(Utxos_Owned_By(btc, addresses))
 
 Sanity_No_Simultaneous_Minter_And_User_Owned_BTC ==
-    BTC_Balance_Of({DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS]}) # 0 <=> BTC_Balance_Of({USER_BTC_ADDRESS}) = 0
+    BTC_Balance_Of({DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS]}) # 0 <=> BTC_Balance_Of(USER_BTC_ADDRESSES) = 0
 
 \* TODO: For some reason this is not falsified, even though I can find a counterexample
 \* using the TLA graph explorer?
 Sanity_User_Stays_At_0 ==  LET
-    user_btc_balance == BTC_Balance_Of({USER_BTC_ADDRESS})
+    user_btc_balance == BTC_Balance_Of(USER_BTC_ADDRESSES)
   IN
     user_btc_balance = 0 => [](user_btc_balance = 0)
 
@@ -390,7 +390,7 @@ Fairness_Condition ==
 Prevent_External_Transfers_To_Change_Address ==
     \* Either this was not a user-initiated BTC transfer (because all of the previously
     \* user-owned UTXOs are intact)...
-    \/ Utxos_Owned_By(btc, {USER_BTC_ADDRESS}) \subseteq Utxos_Owned_By(btc', {USER_BTC_ADDRESS})
+    \/ Utxos_Owned_By(btc, USER_BTC_ADDRESSES) \subseteq Utxos_Owned_By(btc', USER_BTC_ADDRESSES)
     \* ...or no new UTXOs were added to the change address
     \/ Utxos_Owned_By(btc', {DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS]}) \subseteq Utxos_Owned_By(btc, {DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS]})
 
