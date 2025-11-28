@@ -1909,7 +1909,7 @@ fn delete_canister_updates_subnet_available_memory_for_memory_allocation(memory_
     .unwrap();
 
     // Take canister snapshot => ~1 GiB of snapshot memory.
-    let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
     test.subnet_message(
         Method::TakeCanisterSnapshot,
         take_canister_snapshot_args.encode(),
@@ -6726,6 +6726,8 @@ fn cannot_rename_with_snapshots() {
     env2.take_canister_snapshot(TakeCanisterSnapshotArgs {
         canister_id: canister_id2.into(),
         replace_snapshot: None,
+        uninstall_code: None,
+        sender_canister_version: None,
     })
     .unwrap();
 

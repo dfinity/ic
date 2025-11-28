@@ -3933,19 +3933,29 @@ impl Payload<'_> for StoredChunksReply {}
 /// record {
 ///   canister_id : principal;
 ///   replace_snapshot : opt blob;
+///   uninstall_code : opt bool;
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct TakeCanisterSnapshotArgs {
     pub canister_id: PrincipalId,
     pub replace_snapshot: Option<SnapshotId>,
+    pub uninstall_code: Option<bool>,
+    pub sender_canister_version: Option<u64>,
 }
 
 impl TakeCanisterSnapshotArgs {
-    pub fn new(canister_id: CanisterId, replace_snapshot: Option<SnapshotId>) -> Self {
+    pub fn new(
+        canister_id: CanisterId,
+        replace_snapshot: Option<SnapshotId>,
+        uninstall_code: Option<bool>,
+        sender_canister_version: Option<u64>,
+    ) -> Self {
         Self {
             canister_id: canister_id.get(),
             replace_snapshot,
+            uninstall_code,
+            sender_canister_version,
         }
     }
 
@@ -3955,6 +3965,14 @@ impl TakeCanisterSnapshotArgs {
 
     pub fn replace_snapshot(&self) -> Option<SnapshotId> {
         self.replace_snapshot
+    }
+
+    pub fn uninstall_code(&self) -> Option<bool> {
+        self.uninstall_code
+    }
+
+    pub fn get_sender_canister_version(&self) -> Option<u64> {
+        self.sender_canister_version
     }
 }
 impl Payload<'_> for TakeCanisterSnapshotArgs {}
