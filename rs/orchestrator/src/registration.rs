@@ -126,16 +126,7 @@ impl NodeRegistration {
     /// If the node has not been registered, retries registering the node using
     /// one of the nns nodes in `nns_node_list`.
     pub(crate) async fn register_node(&mut self) {
-        let latest_version = self.registry_client.get_latest_version();
-        let key_handler = self.key_handler.clone();
-        if let Err(e) = tokio::task::spawn_blocking(move || {
-            key_handler.check_keys_with_registry(latest_version)
-        })
-        .await
-        .unwrap()
-        {
-            warn!(self.log, "Node keys are not setup: {:?}", e);
-            UtilityCommand::notify_host(format!("Node keys are not setup: {e:?}").as_str(), 1);
+        if !self.is_node_registered().await {
             self.retry_register_node().await;
         }
         // postcondition: node keys are registered
