@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
 /// Set of UTXOs sorted by value.
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct UtxoSet<'a> {
     utxos: BTreeSet<SortByKey<'a, Utxo>>,
 }
@@ -18,7 +18,11 @@ impl<'a> UtxoSet<'a> {
         self.utxos.insert(SortByKey::from(utxo))
     }
 
-    pub fn remove(&mut self, utxo: Utxo) -> Option<Utxo> {
+    pub fn remove(&mut self, utxo: &'a Utxo) -> bool {
+        self.utxos.remove(&SortByKey::from(utxo))
+    }
+
+    pub fn take(&mut self, utxo: Utxo) -> Option<Utxo> {
         self.utxos.take(&SortByKey::from(utxo)).map(|u| u.0.into_owned())
     }
 
@@ -44,6 +48,10 @@ impl<'a> UtxoSet<'a> {
         })..).next().map(|utxo| utxo.as_ref())
     }
 
+    pub fn pop_first(&mut self) -> Option<Utxo> {
+        self.utxos.pop_first().map(|utxo| utxo.0.into_owned())
+    }
+
     pub fn last(&self) -> Option<&Utxo> {
         self.utxos.last().map(|utxo| utxo.as_ref())
     }
@@ -53,7 +61,17 @@ impl<'a> UtxoSet<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+impl FromIterator<Utxo> for UtxoSet<'_> {
+    fn from_iter<T: IntoIterator<Item=Utxo>>(iter: T) -> Self {
+        let mut set = UtxoSet::default();
+        for utxo in iter {
+            set.insert(utxo);
+        }
+        set
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct SortByKey<'a, T: Clone>(Cow<'a, T>);
 
 impl<'a, T: Clone> AsRef<T> for SortByKey<'a, T> {

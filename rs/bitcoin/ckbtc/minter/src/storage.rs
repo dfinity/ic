@@ -204,7 +204,7 @@ mod benches {
     use crate::state::eventlog::replay;
     use crate::state::replace_state;
     use crate::state::{CkBtcMinterState, invariants::CheckInvariants};
-    use crate::{IC_CANISTER_RUNTIME, state, greedy, greedy2};
+    use crate::{IC_CANISTER_RUNTIME, state, greedy};
     use canbench_rs::bench;
     use crate::state::utxos::UtxoSet;
 
@@ -320,7 +320,6 @@ mod benches {
         });
 
         canbench_rs::bench_fn(|| {
-            greedy2(withdrawal_amount, &mut utxo2);
             state::mutate_state(|s| {
                 greedy(withdrawal_amount, &mut s.available_utxos);
             });
