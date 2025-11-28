@@ -16,7 +16,7 @@ use ic_config::{
     transport::TransportConfig,
 };
 use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, threshold_sig_public_key_to_der};
-use ic_interfaces::crypto::IDkgKeyRotationResult;
+use ic_interfaces::crypto::{CheckKeysWithRegistryError, IDkgKeyRotationResult};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
@@ -126,7 +126,7 @@ impl NodeRegistration {
     /// If the node has not been registered, retries registering the node using
     /// one of the nns nodes in `nns_node_list`.
     pub(crate) async fn register_node(&mut self) {
-        if !self.is_node_registered().await {
+        if self.check_node_registered().await.is_err() {
             self.retry_register_node().await;
         }
         // postcondition: node keys are registered
@@ -143,11 +143,14 @@ impl NodeRegistration {
                 .nns_registry_replicator
                 .poll_delay_duration_ms,
         );
-        while !self.is_node_registered().await {
-            let message = "Node registration not complete. Trying to register it".to_string();
-            warn!(self.log, "{}", message);
+        while let Err(e) = self.check_node_registered().await {
+            warn!(self.log, "Node keys are not setup: {:?}", e);
             UtilityCommand::notify_host(
-                format!("node-id {}: {}", self.node_id, message).as_str(),
+                format!(
+                    "node-id {}: Node registration not complete. Trying to register it",
+                    self.node_id,
+                )
+                .as_str(),
                 1,
             );
 
@@ -611,22 +614,12 @@ impl NodeRegistration {
         }
     }
 
-    async fn is_node_registered(&self) -> bool {
+    async fn check_node_registered(&self) -> Result<(), CheckKeysWithRegistryError> {
         let latest_version = self.registry_client.get_latest_version();
         let key_handler = self.key_handler.clone();
-        match tokio::task::spawn_blocking(move || {
-            key_handler.check_keys_with_registry(latest_version)
-        })
-        .await
-        .unwrap()
-        {
-            Ok(_) => true,
-            Err(e) => {
-                warn!(self.log, "Node keys are not setup: {:?}", e);
-                UtilityCommand::notify_host(format!("Node keys are not setup: {e:?}").as_str(), 1);
-                false
-            }
-        }
+        tokio::task::spawn_blocking(move || key_handler.check_keys_with_registry(latest_version))
+            .await
+            .unwrap()
     }
 }
 
