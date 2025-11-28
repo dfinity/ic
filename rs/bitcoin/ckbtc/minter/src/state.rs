@@ -15,6 +15,7 @@ use std::{
 pub mod audit;
 pub mod eventlog;
 pub mod invariants;
+pub mod utxos;
 
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
