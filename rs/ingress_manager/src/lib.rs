@@ -114,6 +114,9 @@ pub struct IngressManager {
     /// A determinism flag for testing. Used for making hashmaps in the ingress selector
     /// deterministic. Set to `RandomStateKind::Random` in production.
     random_state: RandomStateKind,
+    /// Used to test the behavior of ingress manager when the `HASHES_IN_BLOCKS` feature is disabled.
+    #[cfg(test)]
+    hashes_in_blocks_enabled_in_tests: bool,
 }
 
 impl IngressManager {
@@ -168,6 +171,8 @@ impl IngressManager {
             state_reader,
             cycles_account_manager,
             random_state,
+            #[cfg(test)]
+            hashes_in_blocks_enabled_in_tests: ic_consensus_features::HASHES_IN_BLOCKS_ENABLED,
         }
     }
 
@@ -216,6 +221,19 @@ impl IngressManager {
         registry_version: RegistryVersion,
     ) -> RegistryRootOfTrustProvider {
         RegistryRootOfTrustProvider::new(Arc::clone(&self.registry_client), registry_version)
+    }
+
+    /// Returns `true` iff the hashes-the-blocks feature is enabled.
+    /// This function exists only for testing purposes.
+    fn hashes_in_blocks_enabled(&self) -> bool {
+        #[cfg(not(test))]
+        {
+            ic_consensus_features::HASHES_IN_BLOCKS_ENABLED
+        }
+        #[cfg(test)]
+        {
+            self.hashes_in_blocks_enabled_in_tests
+        }
     }
 }
 
