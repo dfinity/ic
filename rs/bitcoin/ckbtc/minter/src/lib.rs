@@ -25,6 +25,7 @@ use crate::updates::retrieve_btc::BtcAddressCheckStatus;
 pub use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_checker::{CheckAddressArgs, CheckAddressResponse};
 pub use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
+use crate::state::utxos::UtxoSet;
 
 pub mod address;
 pub mod dashboard;
@@ -194,7 +195,7 @@ async fn fetch_main_utxos<R: CanisterRuntime>(
         management::CallSource::Minter,
         runtime,
     )
-    .await
+        .await
     {
         Ok(response) => response.utxos,
         Err(e) => {
@@ -304,10 +305,10 @@ pub fn confirm_transaction<R: CanisterRuntime>(
     runtime: &R,
 ) {
     if let Some(state::WithdrawalCancellation {
-        reason,
-        requests,
-        fee,
-    }) = state::audit::confirm_transaction(state, txid, runtime)
+                    reason,
+                    requests,
+                    fee,
+                }) = state::audit::confirm_transaction(state, txid, runtime)
     {
         reimburse_canceled_requests(state, requests, reason, fee, runtime)
     }
@@ -471,7 +472,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             req.unsigned_tx,
             runtime,
         )
-        .await
+            .await
         {
             Ok(signed_tx) => {
                 state::mutate_state(|s| {
@@ -681,7 +682,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
         management::CallSource::Minter,
         runtime,
     )
-    .await
+        .await
     {
         Ok(response) => response.utxos,
         Err(e) => {
@@ -746,7 +747,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
         runtime,
         &fee_estimator,
     )
-    .await
+        .await
 }
 
 pub async fn resubmit_transactions<
@@ -856,7 +857,7 @@ pub async fn resubmit_transactions<
             unsigned_tx,
             runtime,
         )
-        .await;
+            .await;
 
         let signed_tx = match maybe_signed_tx {
             Ok(tx) => tx,
@@ -996,6 +997,36 @@ fn greedy(target: u64, available_utxos: &mut BTreeSet<Utxo>) -> Vec<Utxo> {
     solution
 }
 
+fn greedy2<'a>(target: u64, available_utxos: &mut UtxoSet<'a>) -> Vec<Utxo> {
+    #[cfg(feature = "canbench-rs")]
+    let _scope = canbench_rs::bench_scope("greedy");
+
+    let mut solution = vec![];
+    let mut goal = target;
+    while goal > 0 {
+        let option = available_utxos.find_lower_bound(goal).or_else(|| available_utxos.last()).cloned();
+        match option {
+            Some(utxo) => {
+                let utxo = available_utxos.remove(utxo).expect("BUG: missing UTXO");
+                goal = goal.saturating_sub(utxo.value);
+                solution.push(utxo);
+            }
+            None => {
+                // Not enough available UTXOs to satisfy the request.
+                for u in solution {
+                    available_utxos.insert(u);
+                }
+                return vec![];
+            }
+        }
+
+    }
+
+    debug_assert!(solution.is_empty() || solution.iter().map(|u| u.value).sum::<u64>() >= target);
+
+    solution
+}
+
 /// Gathers ECDSA signatures for all the inputs in the specified unsigned
 /// transaction.
 ///
@@ -1033,7 +1064,7 @@ pub async fn sign_transaction<R: CanisterRuntime, F: Fn(&tx::OutPoint) -> Option
             sighash,
             runtime,
         )
-        .await?;
+            .await?;
 
         signed_inputs.push(tx::SignedInput {
             signature: signature::EncodedSignature::from_sec1(&sec1_signature),
@@ -1508,9 +1539,9 @@ impl CanisterRuntime for IcCanisterRuntime {
                 name: key_name.clone(),
             },
         })
-        .await
-        .map(|result| result.signature)
-        .map_err(CallError::from_sign_error)
+            .await
+            .map(|result| result.signature)
+            .map_err(CallError::from_sign_error)
     }
 
     async fn send_transaction(

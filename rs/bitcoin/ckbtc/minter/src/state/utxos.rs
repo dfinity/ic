@@ -18,8 +18,8 @@ impl<'a> UtxoSet<'a> {
         self.utxos.insert(SortByKey::from(utxo))
     }
 
-    pub fn remove(&mut self, utxo: &'a Utxo) -> bool {
-        self.utxos.remove(&SortByKey::from(utxo))
+    pub fn remove(&mut self, utxo: Utxo) -> Option<Utxo> {
+        self.utxos.take(&SortByKey::from(utxo)).map(|u| u.0.into_owned())
     }
 
     pub fn len(&self) -> usize {
