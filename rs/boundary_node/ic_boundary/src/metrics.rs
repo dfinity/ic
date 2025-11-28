@@ -623,11 +623,8 @@ pub async fn metrics_middleware(
         let sender_hashed = hash_fn(&sender);
 
         let method_name = ctx.method_name.as_ref().map(|name| {
-            if name.len() > MAX_LOGGING_METHOD_NAME_LENGTH {
-                name[..MAX_LOGGING_METHOD_NAME_LENGTH].to_string()
-            } else {
-                name.clone()
-            }
+            let truncated_len = name.len().min(MAX_LOGGING_METHOD_NAME_LENGTH);
+            name[..truncated_len].to_string()
         });
 
         // Log

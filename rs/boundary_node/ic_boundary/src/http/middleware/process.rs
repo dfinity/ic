@@ -53,8 +53,7 @@ where
         && val.len() > MAX_METHOD_NAME_LENGTH
     {
         return Err(D::Error::custom(format!(
-            "Method name exceeds maximum allowed length of {}",
-            MAX_METHOD_NAME_LENGTH
+            "Method name exceeds maximum allowed length of {MAX_METHOD_NAME_LENGTH}"
         )));
     }
 
@@ -265,10 +264,7 @@ mod tests {
         let serialized = serde_cbor::to_vec(&envelope).unwrap();
         let deserialized: ICRequestEnvelope = serde_cbor::from_slice(&serialized).unwrap();
 
-        assert_eq!(
-            deserialized.content.method_name.unwrap(),
-            "short".to_string()
-        );
+        assert_eq!(deserialized.content.method_name.unwrap(), "short");
     }
 
     #[test]
