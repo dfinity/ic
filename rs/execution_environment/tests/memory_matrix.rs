@@ -962,6 +962,41 @@ fn test_memory_suite_replace_snapshot() {
 }
 
 #[test]
+fn test_memory_suite_replace_snapshot_and_uninstall_code() {
+    let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        setup_universal_canister_with_much_memory(test, canister_id);
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
+        let res = test.subnet_message(
+            Method::TakeCanisterSnapshot,
+            take_canister_snapshot_args.encode(),
+        );
+        let snapshot_id = CanisterSnapshotResponse::decode(&get_reply(res))
+            .unwrap()
+            .id;
+        test.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+            .unwrap();
+        snapshot_id
+    };
+    let op = |test: &mut ExecutionTest, canister_id, snapshot_id| {
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id), Some(true), None);
+        test.subnet_message(
+            Method::TakeCanisterSnapshot,
+            take_canister_snapshot_args.encode(),
+        )
+        .err()
+    };
+    let params = ScenarioParams {
+        scenario: Scenario::OtherManagement,
+        memory_usage_change: MemoryUsageChange::Decrease,
+        setup,
+        op,
+    };
+    test_memory_suite(params);
+}
+
+#[test]
 fn test_memory_suite_load_snapshot_growing_memory_usage() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister(test, canister_id);
