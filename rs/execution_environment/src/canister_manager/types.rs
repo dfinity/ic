@@ -316,12 +316,6 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
     }
 }
 
-/// Indicates whether `uninstall_canister` should push a canister change (with a given change origin) to canister history.
-pub enum AddCanisterChangeToHistory {
-    Yes(CanisterChangeOrigin),
-    No,
-}
-
 pub(crate) struct UploadChunkResult {
     pub(crate) reply: UploadChunkReply,
     pub(crate) heap_delta_increase: NumBytes,

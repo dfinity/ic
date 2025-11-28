@@ -1,9 +1,9 @@
 use crate::{
     IngressHistoryWriterImpl, RoundLimits, as_num_instructions,
     canister_manager::{
-        AddCanisterChangeToHistory, CanisterManager, CanisterManagerError, CanisterMgrConfig,
-        DtsInstallCodeResult, InstallCodeContext, MAX_SLICE_SIZE_BYTES, StopCanisterResult,
-        WasmSource, uninstall_canister,
+        CanisterManager, CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult,
+        InstallCodeContext, MAX_SLICE_SIZE_BYTES, StopCanisterResult, WasmSource,
+        uninstall_canister,
     },
     canister_settings::CanisterSettings,
     execution_environment::{CompilationCostHandling, RoundCounters, as_round_instructions},
@@ -2286,7 +2286,6 @@ fn uninstall_canister_doesnt_respond_to_responded_call_contexts() {
                 .build(),
             None,
             UNIX_EPOCH,
-            AddCanisterChangeToHistory::No,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
         ),
         Vec::new()
@@ -2313,7 +2312,6 @@ fn uninstall_canister_responds_to_unresponded_call_contexts() {
                 .build(),
             None,
             UNIX_EPOCH,
-            AddCanisterChangeToHistory::No,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
         )[0],
         Response::Ingress(IngressResponse {
