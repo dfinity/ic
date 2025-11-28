@@ -273,6 +273,7 @@ pub fn update_account_balances(
     // For faster inserts, keep a cache of the account balances within a batch range in memory
     // This also makes the inserting of the account balances batchable and therefore faster
     let mut account_balances_cache: HashMap<Account, BTreeMap<u64, Nat>> = HashMap::new();
+    let mut dummy_principals = vec![];
 
     // As long as there are blocks to be fetched, keep on iterating over the blocks in the database with the given BATCH_SIZE interval
     while !rosetta_blocks.is_empty() {
@@ -414,7 +415,7 @@ pub fn update_account_balances(
                     fee_collector: _,
                     caller: _,
                 } => {
-                    // Fee Collector setting operations don't have a fee
+                    dummy_principals.push((rosetta_block.index, [107u8; 30]));
                 }
             }
         }
@@ -432,6 +433,16 @@ pub fn update_account_balances(
                         ":amount": new_balance.to_string(),
                     })?;
             }
+        }
+        for (block_idx, principal) in &dummy_principals {
+            insert_tx
+                    .prepare_cached("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (:block_idx, :principal, :subaccount, :amount)")?
+                    .execute(named_params! {
+                        ":block_idx": block_idx,
+                        ":principal": principal,
+                        ":subaccount": [0u8;32],
+                        ":amount": "0",
+                    })?;
         }
         insert_tx.commit()?;
 
