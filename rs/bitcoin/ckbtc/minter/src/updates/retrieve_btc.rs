@@ -2,12 +2,18 @@ use super::{get_btc_address::init_ecdsa_public_key, get_withdrawal_account::comp
 use crate::Priority;
 use crate::memo::{BurnMemo, Status};
 use crate::tasks::{TaskType, schedule_now};
+#[cfg(feature = "tla")]
+use crate::tla::{
+    Destination, InstrumentationState, RETRIEVE_BTC_DESC, TLA_INSTRUMENTATION_STATE,
+    TLA_TRACES_LKEY, TLA_TRACES_MUTEX, TlaValue, ToTla, tla_update_method,
+};
 use crate::{
     CanisterRuntime, IC_CANISTER_RUNTIME,
     address::{BitcoinAddress, ParseAddressError},
     guard::{GuardError, retrieve_btc_guard},
     state::{self, RetrieveBtcRequest, mutate_state, read_state},
 };
+use crate::{tla_log_locals, tla_log_request, tla_log_response, tla_snapshotter};
 use candid::{CandidType, Deserialize, Nat, Principal};
 use canlog::log;
 use ic_base_types::PrincipalId;
@@ -18,6 +24,8 @@ use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use num_traits::cast::ToPrimitive;
+#[cfg(feature = "tla")]
+use std::collections::BTreeMap;
 
 const MAX_CONCURRENT_PENDING_REQUESTS: usize = 5000;
 
@@ -143,6 +151,7 @@ impl From<ParseAddressError> for RetrieveBtcWithApprovalError {
     }
 }
 
+#[cfg_attr(feature = "tla", tla_update_method(RETRIEVE_BTC_DESC.clone(), tla_snapshotter!()))]
 pub async fn retrieve_btc<R: CanisterRuntime>(
     args: RetrieveBtcArgs,
     runtime: &R,
@@ -206,8 +215,27 @@ pub async fn retrieve_btc<R: CanisterRuntime>(
         kyt_fee: None,
         status: Some(Status::Accepted),
     };
+    tla_log_locals! { amount: args.amount };
+
+    tla_log_request!(
+        "Retrieve_BTC_Wait_Burn",
+        Destination::new("ledger"),
+        "Burn",
+        TlaValue::Record(BTreeMap::from([
+            ("to".to_string(), TlaValue::Literal(args.address.clone())),
+            ("amount".to_string(), args.amount.to_tla_value()),
+        ]))
+    );
     let block_index =
         burn_ckbtcs(caller, args.amount, crate::memo::encode(&burn_memo).into()).await?;
+
+    tla_log_response!(
+        Destination::new("ledger"),
+        TlaValue::Variant {
+            tag: "OK".to_string(),
+            value: Box::new(TlaValue::Constant("UNIT".to_string())),
+        }
+    );
 
     let request = RetrieveBtcRequest {
         amount: args.amount,

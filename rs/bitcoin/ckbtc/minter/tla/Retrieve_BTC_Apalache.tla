@@ -55,8 +55,6 @@ VARIABLES
           minter_to_ledger,
           \* @type: Set($ledgerToMinterResponse);
           ledger_to_minter,
-          \* @type: Int;
-          next_request_id,
           \* @type: $pid -> $value;
           amount
 
