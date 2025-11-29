@@ -40,7 +40,7 @@ impl NnsCanisterUpgradePBREnabled {
         #[rustfmt::skip]
         let (canister_id, environment_variable_name) = match nns_canister_name {
             // Using test canister for Governance because PBR is enabled there.
-            "governance"     => (GOVERNANCE_CANISTER_ID, "GOVERNANCE_CANISTER_TEST_WASM_PATH"),
+            "governance"     => (GOVERNANCE_CANISTER_ID, "GOVERNANCE_CANISTER_WASM_PATH"),
 
             // Using test canister for Node Rewards because state-machine does not support
             // multiple subnets yet, and Node Rewards PBR depends on multiple subnets to daily
@@ -275,16 +275,16 @@ mod sanity_check {
         state_machine: &StateMachine,
         before: Metrics,
     ) {
-        let last_rewards_timestamp_seconds = before
+        let target_rewards_distribution_timestamp_seconds = before
             .governance_most_recent_monthly_node_provider_rewards
-            .timestamp;
+            .timestamp
+            + NODE_PROVIDER_REWARD_PERIOD_SECONDS;
 
-        let target_rewards_distribution_timestamp_seconds =
-            last_rewards_timestamp_seconds + NODE_PROVIDER_REWARD_PERIOD_SECONDS;
+        let now = state_machine.get_time().as_secs_since_unix_epoch();
 
-        let seconds_to_next_distribution = target_rewards_distribution_timestamp_seconds
-            .saturating_sub(last_rewards_timestamp_seconds);
-        state_machine.advance_time(std::time::Duration::from_secs(seconds_to_next_distribution));
+        state_machine.advance_time(std::time::Duration::from_secs(
+            target_rewards_distribution_timestamp_seconds - now - 1,
+        ));
         for _ in 0..100 {
             state_machine.advance_time(std::time::Duration::from_secs(1));
             state_machine.tick();
@@ -296,7 +296,7 @@ mod sanity_check {
             .timestamp;
 
         assert_eq!(
-            last_rewards_timestamp_seconds + NODE_PROVIDER_REWARD_PERIOD_SECONDS,
+            target_rewards_distribution_timestamp_seconds,
             current_rewards_timestamp_seconds
         );
         MetricsBeforeAndAfter { before, after }.check_all();
