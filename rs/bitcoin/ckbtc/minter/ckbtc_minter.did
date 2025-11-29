@@ -495,6 +495,81 @@ type MinterArg = variant {
     Upgrade : opt UpgradeArgs;
 };
 
+type DecodeLedgerMemoArgs = record {
+    // The encoded memo from a minter transaction on the ledger
+    memo : EncodedMemo;
+};
+
+type EncodedMemo = variant {
+    // The memo bytes as a hex encoded string.
+    Hex : text;
+    // The memo bytes as a blob.
+    Blob : blob;
+};
+
+type Status = variant {
+    // The minter accepted a retrieve_btc request.
+    Accepted;
+    // The minter rejected a retrieve_btc due to a failed Bitcoin check.
+    Rejected;
+    CallFailed;
+};
+
+type MintMemo = variant {
+    // The minter converted a single UTXO to ckBTC.
+    Convert : record {
+        // The transaction ID of the accepted UTXO.
+        txid : opt blob;
+        // UTXO's output index within the BTC transaction.
+        vout : opt nat32;
+        // The Bitcoin check fee.
+        kyt_fee : opt nat64;
+    };
+    // [deprecated] The minter minted accumulated check fees to the KYT provider.
+    Kyt;
+    // [deprecated] The minter failed to check retrieve btc destination address
+    // or the destination address is tainted.
+    KytFail : record {
+        // The Bitcoin check fee.
+        kyt_fee : opt nat64;
+        // The status of the Bitcoin check.
+        status : opt Status;
+        associated_burn_index : opt nat64;
+    };
+    ReimburseWithdrawal : record {
+        // The id corresponding to the withdrawal request,
+        // which corresponds to the ledger burn index.
+        withdrawal_id : nat64;
+    };
+};
+
+type BurnMemo = variant {
+    // The minter processed a retrieve_btc request.
+    Convert : record {
+        // The destination of the retrieve BTC request.
+        address : opt text;
+        // The check fee for the burn.
+        kyt_fee : opt nat64;
+        // The status of the Bitcoin check.
+        status : opt Status;
+    };
+};
+
+type DecodedMemo = variant {
+    Mint : MintMemo;
+    Burn : BurnMemo;
+};
+
+type DecodeLedgerMemoError = variant {
+    // The provided memo could not be decoded.
+    InvalidMemo : text;
+};
+
+type DecodeLedgerMemoResult = variant {
+    Ok : DecodedMemo;
+    Err : DecodeLedgerMemoError;
+}
+
 service : (minter_arg : MinterArg) -> {
     // Section "Convert BTC to ckBTC" {{{
 
@@ -605,4 +680,9 @@ service : (minter_arg : MinterArg) -> {
     // The ckBTC minter authors do not guarantee backward compatibility for this method.
     get_events : (record { start: nat64; length : nat64 }) -> (vec Event) query;
     // }}} Section "Event log"
+
+    // Section "Transaction Information" {{{
+    // Returns information related to minter transactions.
+    decode_ledger_memo : (DecodeLedgerMemoArgs) -> (DecodeLedgerMemoResult) query;
+    // }}}
 }
