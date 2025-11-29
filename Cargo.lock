@@ -2738,6 +2738,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
+ "ic_consensus_system_test_node_registration_test_common",
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
  "registry-canister",
@@ -15864,6 +15865,24 @@ dependencies = [
  "rand_chacha 0.3.1",
  "slog",
  "tokio",
+]
+
+[[package]]
+name = "ic_consensus_system_test_node_registration_test_common"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "canister-test",
+ "ic-base-types",
+ "ic-nns-constants",
+ "ic-nns-governance-api",
+ "ic-protobuf",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "registry-canister",
+ "slog",
 ]
 
 [[package]]

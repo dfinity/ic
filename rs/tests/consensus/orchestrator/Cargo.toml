@@ -23,6 +23,7 @@ ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
+ic_consensus_system_test_node_registration_test_common = { path = "../node_registration_test_common" }
 ic_consensus_system_test_utils = { path = "../utils" }
 ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
 registry-canister = { path = "../../../registry/canister" }
@@ -45,8 +46,12 @@ name = "ic-systest-ssh-access-to-nodes-test"
 path = "ssh_access_to_nodes_test.rs"
 
 [[bin]]
-name = "ic-systest-node-registration-test"
-path = "node_registration_test.rs"
+name = "ic-systest-node-registration-test-with-node-allowance"
+path = "node_registration_with_node_allowance_test.rs"
+
+[[bin]]
+name = "ic-systest-node-registration-test-with-max-rewardable-nodes"
+path = "node_registration_with_max_rewardable_nodes_test.rs"
 
 [[bin]]
 name = "ic-systest-rotate-ecdsa-idkg-key"

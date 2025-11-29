@@ -5,6 +5,28 @@ load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 rust_library(
+    name = "node_registration_test_common",
+    testonly = True,
+    srcs = ["node_registration_test_common/src/lib.rs"],
+    crate_name = "ic_consensus_system_test_node_registration_test_common",
+    deps = [
+        # Keep sorted.
+        "//rs/nns/constants",
+        "//rs/nns/governance/api",
+        "//rs/protobuf",
+        "//rs/registry/canister",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
+
+rust_library(
     name = "catch_up_test_common",
     testonly = True,
     srcs = ["catch_up_test_common/src/lib.rs"],
