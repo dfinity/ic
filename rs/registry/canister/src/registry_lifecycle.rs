@@ -66,25 +66,39 @@ pub fn canister_post_upgrade(
     }
 }
 
-/*
-Three node operators had corrupted NodeOperatorRecords which caused issues during migration (https://dashboard.internetcomputer.org/proposal/139210).
-
-1- record - node_operator_k: 3nu7r node_operator_v: ujq4k
-   As result:
-   * 3nu7r missed the update to max_rewardable_nodes during migration
-   * ujq4k got ovewritten by 3nu7r value.
-
-2- record - node_operator_k: bmlhw node_operator_v: spsu4
-   As result:
-   * same as above
-
-2- record - node_operator_k: redpf node_operator_v: 2rqo7
-   As result:
-   * same as above
-
-This function fixes those corrupted records.
-We will be fixing just the used fields, i.e., node_allowance is excluded from the fix.
-*/
+// Three node operators had corrupted NodeOperatorRecords which caused issues during the migration
+// executed as part of NNS proposal 139210 (https://dashboard.internetcomputer.org/proposal/139210).
+// The migration executed the following method https://github.com/dfinity/ic/blob/1bc0a59539613f6ec273a59a172ae43dfabb1ce0/rs/registry/canister/src/registry_lifecycle.rs#L105-L131
+// For the following three node operators the PrincipalId in the record did not match the PrincipalId in the key:
+//
+// 1- Record: 3nu7r-l6i5c-jlmhi-fmmhm-4wcw4-ndlwb-yovrx-o3wxh-suzew-hvbbo-7qe
+//    Key: ujq4k-55epc-pg2bt-jt2f5-6vaq3-diru7-edprm-42rd2-j7zzd-yjaai-2qe
+//
+// 2- Record: bmlhw-kinr6-7cyv5-3o3v6-ic6tw-pnzk3-jycod-6d7sw-owaft-3b6k3-kqe
+//    Key: spsu4-5hl4t-bfubp-qvoko-jprw4-wt7ou-nlnbk-gb5ib-aqnoo-g4gl6-kae
+//
+// 3- Record: redpf-rrb5x-sa2it-zhbh7-q2fsp-bqlwz-4mf4y-tgxmj-g5y7p-ezjtj-5qe
+//    Key: 2rqo7-ot2kv-upof3-odw3y-sjckb-qeibt-n56vj-7b4pt-bvrtg-zay53-4qe
+//
+// This leads to the following problems during the migration:
+//
+// in the key, causing the following issues:
+//
+// 1- record - node_operator_k: 3nu7r node_operator_v: ujq4k
+//    As result:
+//    * 3nu7r missed the update to max_rewardable_nodes during migration
+//    * ujq4k got ovewritten by 3nu7r value.
+//
+// 2- record - node_operator_k: bmlhw node_operator_v: spsu4
+//    As result:
+//    * same as above
+//
+// 2- record - node_operator_k: redpf node_operator_v: 2rqo7
+//    As result:
+//    * same as above
+//
+// This function fixes those corrupted records.
+// We will be fixing just the used fields, i.e., node_allowance is excluded from the fix.
 fn fix_node_operators_corrupted(registry: &Registry) -> Vec<RegistryMutation> {
     let mut mutations = Vec::new();
 
