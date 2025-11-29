@@ -89,6 +89,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils/ni-dkg",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/test_utils/tls",
+    "//rs/crypto/test_utils/vetkd",
     "//rs/crypto/tree_hash",
     "//rs/interfaces/registry/mocks",
     "//rs/registry/client",

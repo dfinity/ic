@@ -2516,8 +2516,12 @@ impl StateMachine {
         if let Some(SignatureSecretKey::VetKD(k)) =
             self.chain_key_subnet_secret_keys.get(&context.key_id())
         {
-            let vetkd_context: Vec<u8> =
-                context.derivation_path.iter().flatten().cloned().collect();
+            assert_eq!(context.derivation_path.len(), 1);
+            let vetkd_context: Vec<u8> = context
+                .derivation_path
+                .first()
+                .cloned()
+                .expect("context's derivation path for vetKD must have single element");
             let encrypted_key = k.vetkd_protocol(
                 context.request.sender.get().as_slice(),
                 &vetkd_context,
