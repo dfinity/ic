@@ -1,10 +1,15 @@
 use crate::certification::recertify_registry;
 use crate::max_rewardable_nodes_mapping::MAX_REWARDABLE_NODES_MAPPING;
+use crate::mutations::node_management::common::get_key_family;
 use crate::{pb::v1::RegistryCanisterStableStorage, registry::Registry};
+use ic_base_types::PrincipalId;
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-use ic_registry_keys::make_node_operator_record_key;
+use ic_registry_keys::{NODE_OPERATOR_RECORD_KEY_PREFIX, make_node_operator_record_key};
 use ic_registry_transport::{pb::v1::RegistryMutation, update};
+use maplit::btreemap;
 use prost::Message;
+use std::str::FromStr;
 
 pub fn canister_post_upgrade(
     registry: &mut Registry,
@@ -22,7 +27,10 @@ pub fn canister_post_upgrade(
 
     // Registry data migrations should be implemented as follows:
     let mutation_batches_due_to_data_migrations = {
-        let mutations = fill_swiss_subnet_node_operators_max_rewardable_nodes(registry);
+        let mut mutations = fix_node_operators_corrupted(registry);
+        mutations.extend(fill_swiss_subnet_node_operators_max_rewardable_nodes(
+            registry,
+        ));
         if mutations.is_empty() {
             0 // No mutations required for this data migration.
         } else {
@@ -56,6 +64,119 @@ pub fn canister_post_upgrade(
             registry.latest_version()
         );
     }
+}
+
+// Three node operators had corrupted NodeOperatorRecords which caused issues during the migration
+// executed as part of NNS proposal 139210 (https://dashboard.internetcomputer.org/proposal/139210).
+// The migration executed the following method https://github.com/dfinity/ic/blob/1bc0a59539613f6ec273a59a172ae43dfabb1ce0/rs/registry/canister/src/registry_lifecycle.rs#L105-L131
+// For the following three node operators the PrincipalId in the record did not match the PrincipalId in the key:
+//
+// 1- Record: 3nu7r-l6i5c-jlmhi-fmmhm-4wcw4-ndlwb-yovrx-o3wxh-suzew-hvbbo-7qe
+//    Key: ujq4k-55epc-pg2bt-jt2f5-6vaq3-diru7-edprm-42rd2-j7zzd-yjaai-2qe
+//
+// 2- Record: bmlhw-kinr6-7cyv5-3o3v6-ic6tw-pnzk3-jycod-6d7sw-owaft-3b6k3-kqe
+//    Key: spsu4-5hl4t-bfubp-qvoko-jprw4-wt7ou-nlnbk-gb5ib-aqnoo-g4gl6-kae
+//
+// 3- Record: redpf-rrb5x-sa2it-zhbh7-q2fsp-bqlwz-4mf4y-tgxmj-g5y7p-ezjtj-5qe
+//    Key: 2rqo7-ot2kv-upof3-odw3y-sjckb-qeibt-n56vj-7b4pt-bvrtg-zay53-4qe
+//
+// This leads to the following problems during the migration:
+//
+// in the key, causing the following issues:
+//
+// 1- record - node_operator_k: 3nu7r node_operator_v: ujq4k
+//    As result:
+//    * 3nu7r missed the update to max_rewardable_nodes during migration
+//    * ujq4k got ovewritten by 3nu7r value.
+//
+// 2- record - node_operator_k: bmlhw node_operator_v: spsu4
+//    As result:
+//    * same as above
+//
+// 2- record - node_operator_k: redpf node_operator_v: 2rqo7
+//    As result:
+//    * same as above
+//
+// This function fixes those corrupted records.
+// We will be fixing just the used fields, i.e., node_allowance is excluded from the fix.
+fn fix_node_operators_corrupted(registry: &Registry) -> Vec<RegistryMutation> {
+    let mut mutations = Vec::new();
+
+    let no_3nu7r =
+        PrincipalId::from_str("3nu7r-l6i5c-jlmhi-fmmhm-4wcw4-ndlwb-yovrx-o3wxh-suzew-hvbbo-7qe")
+            .unwrap();
+    let no_spsu4 =
+        PrincipalId::from_str("spsu4-5hl4t-bfubp-qvoko-jprw4-wt7ou-nlnbk-gb5ib-aqnoo-g4gl6-kae")
+            .unwrap();
+    let no_ujq4k =
+        PrincipalId::from_str("ujq4k-55epc-pg2bt-jt2f5-6vaq3-diru7-edprm-42rd2-j7zzd-yjaai-2qe")
+            .unwrap();
+
+    for (k, mut record) in
+        get_key_family::<NodeOperatorRecord>(registry, NODE_OPERATOR_RECORD_KEY_PREFIX).into_iter()
+    {
+        let mut affected = false;
+        let node_operator_id_k = match PrincipalId::from_str(&k) {
+            Ok(node_operator_id_k) => node_operator_id_k,
+            _ => {
+                ic_cdk::println!(
+                    "Failed to parse NodeOperatorRecord key {} into PrincipalId. Skipping.",
+                    k
+                );
+                continue;
+            }
+        };
+        let node_operator_id_v = match PrincipalId::try_from(&record.node_operator_principal_id) {
+            Ok(node_operator_id_k) => node_operator_id_k,
+            _ => {
+                ic_cdk::println!(
+                    "Failed to parse NodeOperatorRecord principal ID {:?} into PrincipalId. Skipping.",
+                    record.node_operator_principal_id
+                );
+                continue;
+            }
+        };
+        // This fixes the principal ID mismatch issue on all instances.
+        if node_operator_id_k != node_operator_id_v {
+            ic_cdk::println!(
+                "Found corrupted NodeOperatorRecord for operator {}. Fixing principal ID mismatch.",
+                node_operator_id_k
+            );
+            record.node_operator_principal_id = node_operator_id_k.to_vec();
+            affected = true;
+        }
+
+        // 3nu7r missed the update to max_rewardable_nodes during migration because
+        // not present in node_operator_id_v.
+        if node_operator_id_k == no_3nu7r {
+            ic_cdk::println!("Fix max_rewardable_nodes for 3nu7r");
+            record.max_rewardable_nodes = btreemap! { NodeRewardType::Type1dot1.to_string() => 19 };
+            affected = true;
+        }
+
+        // ujq4k got ovewritten by 3nu7r value and now has wrong rewardable_nodes.
+        if node_operator_id_k == no_ujq4k {
+            ic_cdk::println!("Fix rewardable_nodes for ujq4k");
+            record.rewardable_nodes = btreemap! { NodeRewardType::Type1dot1.to_string() => 9 };
+            affected = true;
+        }
+
+        // spsu4 got ovewritten by bmlhw value and now has wrong rewardable_nodes.
+        if node_operator_id_k == no_spsu4 {
+            ic_cdk::println!("Fix rewardable_nodes for spsu4");
+            record.rewardable_nodes = btreemap! { NodeRewardType::Type1dot1.to_string() => 14 };
+            affected = true;
+        }
+
+        if affected {
+            mutations.push(update(
+                make_node_operator_record_key(node_operator_id_k),
+                record.encode_to_vec(),
+            ));
+        }
+    }
+
+    mutations
 }
 
 fn fill_swiss_subnet_node_operators_max_rewardable_nodes(
@@ -342,5 +463,138 @@ mod test {
         registry.apply_mutations_for_test(node_operator_additions);
         let mutations = fill_swiss_subnet_node_operators_max_rewardable_nodes(&registry);
         assert_eq!(mutations.len(), 0);
+    }
+
+    #[test]
+    fn test_fix_all_and_only_node_operators_corrupted() {
+        let mut registry = invariant_compliant_registry(0);
+        let mut node_operator_additions = Vec::new();
+
+        // This is a good record that should be left untouched
+        let node_operator_good = PrincipalId::from_str(
+            "2aemz-63apz-bds45-nypax-oj52g-fyl6i-sjhtv-ysu5t-hqvve-ygtcr-yae",
+        )
+        .unwrap();
+        let record_good = NodeOperatorRecord {
+            node_operator_principal_id: node_operator_good.to_vec(),
+            dc_id: "dummy_dc_id_1".to_string(),
+            ipv6: Some("dummy_ipv6_1".to_string()),
+            max_rewardable_nodes: btreemap! { "type3.1".to_string() => 6},
+            ..NodeOperatorRecord::default()
+        };
+        node_operator_additions.push(insert(
+            make_node_operator_record_key(node_operator_good),
+            record_good.encode_to_vec(),
+        ));
+
+        // 3nu7r is corrupted and should be fixed
+        let node_operator_3nu7r_k = PrincipalId::from_str(
+            "3nu7r-l6i5c-jlmhi-fmmhm-4wcw4-ndlwb-yovrx-o3wxh-suzew-hvbbo-7qe",
+        )
+        .unwrap();
+        let node_operator_3nu7r_v = PrincipalId::from_str(
+            "ujq4k-55epc-pg2bt-jt2f5-6vaq3-diru7-edprm-42rd2-j7zzd-yjaai-2qe",
+        )
+        .unwrap();
+        let record_3nu7r = NodeOperatorRecord {
+            node_operator_principal_id: node_operator_3nu7r_v.to_vec(),
+            dc_id: "dummy_dc_id_3nu7r".to_string(),
+            ipv6: Some("dummy_ipv6_3nu7r".to_string()),
+            // Empty max rewardable nodes, should be filled in by the migration
+            max_rewardable_nodes: btreemap! {},
+            ..NodeOperatorRecord::default()
+        };
+        node_operator_additions.push(insert(
+            make_node_operator_record_key(node_operator_3nu7r_k),
+            record_3nu7r.encode_to_vec(),
+        ));
+
+        // spsu4 is corrupted and should be fixed
+        let node_operator_spsu4 = PrincipalId::from_str(
+            "spsu4-5hl4t-bfubp-qvoko-jprw4-wt7ou-nlnbk-gb5ib-aqnoo-g4gl6-kae",
+        )
+        .unwrap();
+        let record_spsu4 = NodeOperatorRecord {
+            node_operator_principal_id: node_operator_spsu4.to_vec(),
+            dc_id: "dummy_dc_id_spsu4".to_string(),
+            ipv6: Some("dummy_ipv6_spsu4".to_string()),
+            // wrong rewardable nodes, should be fixed by the migration
+            rewardable_nodes: btreemap! {"type1".to_string() => 14},
+            max_rewardable_nodes: btreemap! {"type1.1".to_string() => 14},
+            ..NodeOperatorRecord::default()
+        };
+        node_operator_additions.push(insert(
+            make_node_operator_record_key(node_operator_spsu4),
+            record_spsu4.encode_to_vec(),
+        ));
+
+        // ujq4k is corrupted and should be fixed
+        let node_operator_ujq4k = PrincipalId::from_str(
+            "ujq4k-55epc-pg2bt-jt2f5-6vaq3-diru7-edprm-42rd2-j7zzd-yjaai-2qe",
+        )
+        .unwrap();
+        let record_ujq4k = NodeOperatorRecord {
+            node_operator_principal_id: node_operator_ujq4k.to_vec(),
+            dc_id: "dummy_dc_id_ujq4k".to_string(),
+            ipv6: Some("dummy_ipv6_ujq4k".to_string()),
+            // wrong rewardable nodes, should be fixed by the migration
+            rewardable_nodes: btreemap! {"type1.1".to_string() => 19},
+            max_rewardable_nodes: btreemap! {"type1.1".to_string() => 9},
+            ..NodeOperatorRecord::default()
+        };
+        node_operator_additions.push(insert(
+            make_node_operator_record_key(node_operator_ujq4k),
+            record_ujq4k.encode_to_vec(),
+        ));
+
+        registry.apply_mutations_for_test(node_operator_additions);
+        let mutations = fix_node_operators_corrupted(&registry);
+        // We expect 2 fixes, one for each corrupted record
+        assert_eq!(mutations.len(), 3);
+        registry.apply_mutations_for_test(mutations);
+
+        // Good record should be left untouched
+        let record_good_got = registry.get_node_operator_or_panic(node_operator_good);
+        let expected_record_good = record_good;
+        assert_eq!(
+            record_good_got, expected_record_good,
+            "Assertion for NodeOperator good failed"
+        );
+
+        // 3nu7r should be fixed
+        let record_3nu7r_got = registry.get_node_operator_or_panic(node_operator_3nu7r_k);
+        let expected_record_3nu7r = NodeOperatorRecord {
+            node_operator_principal_id: node_operator_3nu7r_k.to_vec(),
+            max_rewardable_nodes: btreemap! {"type1.1".to_string() => 19},
+            ..record_3nu7r
+        };
+        assert_eq!(
+            record_3nu7r_got, expected_record_3nu7r,
+            "Assertion for NodeOperator {node_operator_3nu7r_k} failed"
+        );
+
+        // spsu4 should be fixed
+        let record_spsu4_got = registry.get_node_operator_or_panic(node_operator_spsu4);
+        let expected_record_spsu4 = NodeOperatorRecord {
+            node_operator_principal_id: node_operator_spsu4.to_vec(),
+            rewardable_nodes: btreemap! {"type1.1".to_string() => 14},
+            ..record_spsu4
+        };
+        assert_eq!(
+            record_spsu4_got, expected_record_spsu4,
+            "Assertion for NodeOperator {node_operator_3nu7r_k} failed"
+        );
+
+        // ujq4k should be fixed
+        let record_ujq4k_got = registry.get_node_operator_or_panic(node_operator_ujq4k);
+        let expected_record_ujq4k = NodeOperatorRecord {
+            node_operator_principal_id: node_operator_ujq4k.to_vec(),
+            rewardable_nodes: btreemap! {"type1.1".to_string() => 9},
+            ..record_ujq4k
+        };
+        assert_eq!(
+            record_ujq4k_got, expected_record_ujq4k,
+            "Assertion for NodeOperator {node_operator_3nu7r_k} failed"
+        );
     }
 }
