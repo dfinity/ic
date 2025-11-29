@@ -65,6 +65,11 @@ tokio-util = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
+# The following is to check if actions/dependency-review-action detects the https://rustsec.org/advisories/RUSTSEC-2025-0127.html vulnerabilty.
+cggmp21 = "=0.6.2"
+round-based = "0.4.1"
+futures = { workspace = true }
+
 [dev-dependencies]
 assert_cmd = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }

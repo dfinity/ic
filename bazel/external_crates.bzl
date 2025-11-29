@@ -1666,6 +1666,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "zstd": crate.spec(
                 version = "^0.13.2",
             ),
+            "cggmp21": crate.spec(
+                version = "=0.6.2",
+            ),
+            "round-based": crate.spec(
+                version = "^0.4.1",
+            ),
         },
         splicing_config = splicing_config(
             resolver_version = "2",

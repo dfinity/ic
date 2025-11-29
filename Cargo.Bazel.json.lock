@@ -1,5 +1,5 @@
 {
-  "checksum": "1801115abcaab6af041774387bb5b3174738a76794a7f8bc30cfcdaaf275d3a0",
+  "checksum": "43ebaf80eb4498ced4c4d45f78cd3c2439d0da7d4799cd8b3e9a17a96b3dd42b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3418,7 +3418,7 @@
               "target": "asn1_rs_impl"
             },
             {
-              "id": "displaydoc 0.2.4",
+              "id": "displaydoc 0.2.5",
               "target": "displaydoc"
             }
           ],
@@ -3508,7 +3508,7 @@
               "target": "asn1_rs_impl"
             },
             {
-              "id": "displaydoc 0.2.4",
+              "id": "displaydoc 0.2.5",
               "target": "displaydoc"
             }
           ],
@@ -6095,6 +6095,77 @@
         "MIT"
       ],
       "license_file": "LICENSE"
+    },
+    "az 1.2.1": {
+      "name": "az",
+      "version": "1.2.1",
+      "package_url": "https://gitlab.com/tspiteri/az",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/az/1.2.1/download",
+          "sha256": "7b7e4c2464d97fe331d41de9d5db0def0a96f4d823b8b32a2efd503578988973"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "az",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "az",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "az 1.2.1",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.2.1"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
     },
     "backoff 0.4.0": {
       "name": "backoff",
@@ -10692,8 +10763,81 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "bytemuck_derive",
+            "derive"
+          ],
+          "selects": {}
+        },
         "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "bytemuck_derive 1.10.2",
+              "target": "bytemuck_derive"
+            }
+          ],
+          "selects": {}
+        },
         "version": "1.13.1"
+      },
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT",
+        "Zlib"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "bytemuck_derive 1.10.2": {
+      "name": "bytemuck_derive",
+      "version": "1.10.2",
+      "package_url": "https://github.com/Lokathor/bytemuck",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/bytemuck_derive/1.10.2/download",
+          "sha256": "f9abbd1bc6865053c427f7198e6af43bfdedc55ab791faed4fbd361d789575ff"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "bytemuck_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "bytemuck_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.103",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.42",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.110",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.10.2"
       },
       "license": "Zlib OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -12669,7 +12813,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "displaydoc 0.2.4",
+              "id": "displaydoc 0.2.5",
               "target": "displaydoc"
             }
           ],
@@ -12885,6 +13029,223 @@
         "MIT"
       ],
       "license_file": "LICENSE"
+    },
+    "cggmp21 0.6.2": {
+      "name": "cggmp21",
+      "version": "0.6.2",
+      "package_url": "https://github.com/LFDT-Lockness/cggmp21",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/cggmp21/0.6.2/download",
+          "sha256": "12dd75b62802d2460cb44b7dcdbb600d2976129a6e126630ffedb2613403242f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "cggmp21",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "cggmp21",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cggmp21-keygen 0.5.0",
+              "target": "cggmp21_keygen"
+            },
+            {
+              "id": "digest 0.10.7",
+              "target": "digest"
+            },
+            {
+              "id": "futures 0.3.31",
+              "target": "futures"
+            },
+            {
+              "id": "generic-ec 0.4.5",
+              "target": "generic_ec"
+            },
+            {
+              "id": "generic-ec-zkp 0.4.4",
+              "target": "generic_ec_zkp"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "key-share 0.6.1",
+              "target": "key_share"
+            },
+            {
+              "id": "paillier-zk 0.4.3",
+              "target": "paillier_zk"
+            },
+            {
+              "id": "rand_core 0.6.4",
+              "target": "rand_core"
+            },
+            {
+              "id": "rand_hash 0.1.1",
+              "target": "rand_hash"
+            },
+            {
+              "id": "round-based 0.4.1",
+              "target": "round_based"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "serde_with 2.3.3",
+              "target": "serde_with"
+            },
+            {
+              "id": "sha2 0.10.9",
+              "target": "sha2"
+            },
+            {
+              "id": "thiserror 1.0.68",
+              "target": "thiserror"
+            },
+            {
+              "id": "udigest 0.2.4",
+              "target": "udigest"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.2"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "cggmp21-keygen 0.5.0": {
+      "name": "cggmp21-keygen",
+      "version": "0.5.0",
+      "package_url": "https://github.com/LFDT-Lockness/cggmp21",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/cggmp21-keygen/0.5.0/download",
+          "sha256": "aaa8c850290c494f951abe0350e56c31e4f5664863490197490ff48cb825447d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "cggmp21_keygen",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "cggmp21_keygen",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std",
+            "thiserror"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "digest 0.10.7",
+              "target": "digest"
+            },
+            {
+              "id": "generic-ec 0.4.5",
+              "target": "generic_ec"
+            },
+            {
+              "id": "generic-ec-zkp 0.4.4",
+              "target": "generic_ec_zkp"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "key-share 0.6.1",
+              "target": "key_share"
+            },
+            {
+              "id": "rand_core 0.6.4",
+              "target": "rand_core"
+            },
+            {
+              "id": "round-based 0.4.1",
+              "target": "round_based"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "serde_with 2.3.3",
+              "target": "serde_with"
+            },
+            {
+              "id": "sha2 0.10.9",
+              "target": "sha2"
+            },
+            {
+              "id": "thiserror 1.0.68",
+              "target": "thiserror"
+            },
+            {
+              "id": "udigest 0.2.4",
+              "target": "udigest"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "displaydoc 0.2.5",
+              "target": "displaydoc"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.5.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
     },
     "chacha20 0.9.1": {
       "name": "chacha20",
@@ -20012,7 +20373,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "displaydoc 0.2.4",
+              "id": "displaydoc 0.2.5",
               "target": "displaydoc"
             }
           ],
@@ -20094,7 +20455,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "displaydoc 0.2.4",
+              "id": "displaydoc 0.2.5",
               "target": "displaydoc"
             }
           ],
@@ -21374,6 +21735,10 @@
               "target": "cfg_if"
             },
             {
+              "id": "cggmp21 0.6.2",
+              "target": "cggmp21"
+            },
+            {
               "id": "chacha20poly1305 0.10.1",
               "target": "chacha20poly1305"
             },
@@ -22167,6 +22532,10 @@
             {
               "id": "rolling-file 0.2.0",
               "target": "rolling_file"
+            },
+            {
+              "id": "round-based 0.4.1",
+              "target": "round_based"
             },
             {
               "id": "rsa 0.9.6",
@@ -23098,14 +23467,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "displaydoc 0.2.4": {
+    "displaydoc 0.2.5": {
       "name": "displaydoc",
-      "version": "0.2.4",
+      "version": "0.2.5",
       "package_url": "https://github.com/yaahc/displaydoc",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/displaydoc/0.2.4/download",
-          "sha256": "487585f4d0c6655fe74905e2504d8ad6908e4db67f744eb140876906c2f3175d"
+          "url": "https://static.crates.io/crates/displaydoc/0.2.5/download",
+          "sha256": "97369cbbc041bc366949bc74d34658d6cda5621039731c6310521892a3a20ae0"
         }
       },
       "targets": [
@@ -23151,8 +23520,8 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.2.4"
+        "edition": "2021",
+        "version": "0.2.5"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -26939,6 +27308,76 @@
       ],
       "license_file": "LICENSE"
     },
+    "fast-paillier 0.1.1": {
+      "name": "fast-paillier",
+      "version": "0.1.1",
+      "package_url": "https://github.com/LFDT-Lockness/fast-paillier",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/fast-paillier/0.1.1/download",
+          "sha256": "d1108d991b54d8e3aa3eb155c07863306cbceafb713ab1ebcef085e19f3cb84c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "fast_paillier",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "fast_paillier",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "serde"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bytemuck 1.13.1",
+              "target": "bytemuck"
+            },
+            {
+              "id": "rand_core 0.6.4",
+              "target": "rand_core"
+            },
+            {
+              "id": "rug 1.28.0",
+              "target": "rug"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "thiserror 1.0.68",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "fastrand 1.9.0": {
       "name": "fastrand",
       "version": "1.9.0",
@@ -29536,6 +29975,7 @@
         "crate_features": {
           "common": [
             "more_lengths",
+            "serde",
             "zeroize"
           ],
           "selects": {}
@@ -29545,6 +29985,10 @@
             {
               "id": "generic-array 0.14.7",
               "target": "build_script_build"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
             },
             {
               "id": "typenum 1.17.0",
@@ -29585,6 +30029,258 @@
         "MIT"
       ],
       "license_file": "LICENSE"
+    },
+    "generic-ec 0.4.5": {
+      "name": "generic-ec",
+      "version": "0.4.5",
+      "package_url": "https://github.com/LFDT-Lockness/generic-ec",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/generic-ec/0.4.5/download",
+          "sha256": "8de1099ac0b4d87261d67ff5d4ed400af617a1da40b58908d759b9cf5fd8ed27"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "generic_ec",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "generic_ec",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default",
+            "hash-to-scalar",
+            "hex",
+            "serde",
+            "serde_with",
+            "std",
+            "udigest"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "digest 0.10.7",
+              "target": "digest"
+            },
+            {
+              "id": "generic-ec-core 0.2.3",
+              "target": "generic_ec_core"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "phantom-type 0.4.2",
+              "target": "phantom_type"
+            },
+            {
+              "id": "rand_core 0.6.4",
+              "target": "rand_core"
+            },
+            {
+              "id": "rand_hash 0.1.1",
+              "target": "rand_hash"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "serde_with 2.3.3",
+              "target": "serde_with"
+            },
+            {
+              "id": "subtle 2.6.1",
+              "target": "subtle"
+            },
+            {
+              "id": "udigest 0.2.4",
+              "target": "udigest"
+            },
+            {
+              "id": "zeroize 1.8.1",
+              "target": "zeroize"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.4.5"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "generic-ec-core 0.2.3": {
+      "name": "generic-ec-core",
+      "version": "0.2.3",
+      "package_url": "https://github.com/LFDT-Lockness/generic-ec",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/generic-ec-core/0.2.3/download",
+          "sha256": "dcba5fdf70cc3ce5805c487f8523b4ceeb32e8ec5237c71ffd93c1ca47a97fee"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "generic_ec_core",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "generic_ec_core",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "serde"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "generic-array 0.14.7",
+              "target": "generic_array"
+            },
+            {
+              "id": "rand_core 0.6.4",
+              "target": "rand_core"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "subtle 2.6.1",
+              "target": "subtle"
+            },
+            {
+              "id": "zeroize 1.8.1",
+              "target": "zeroize"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.2.3"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "generic-ec-zkp 0.4.4": {
+      "name": "generic-ec-zkp",
+      "version": "0.4.4",
+      "package_url": "https://github.com/LFDT-Lockness/generic-ec",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/generic-ec-zkp/0.4.4/download",
+          "sha256": "bd3945c585fdddba3f86bda4e4cfba22d5e255001b3e145c9db305ad096c6d88"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "generic_ec_zkp",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "generic_ec_zkp",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "serde",
+            "udigest"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "digest 0.10.7",
+              "target": "digest"
+            },
+            {
+              "id": "generic-array 0.14.7",
+              "target": "generic_array"
+            },
+            {
+              "id": "generic-ec 0.4.5",
+              "target": "generic_ec"
+            },
+            {
+              "id": "rand_core 0.6.4",
+              "target": "rand_core"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "subtle 2.6.1",
+              "target": "subtle"
+            },
+            {
+              "id": "udigest 0.2.4",
+              "target": "udigest"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.4.4"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
     },
     "get_if_addrs 0.5.3": {
       "name": "get_if_addrs",
@@ -30264,6 +30960,92 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "gmp-mpfr-sys 1.6.8": {
+      "name": "gmp-mpfr-sys",
+      "version": "1.6.8",
+      "package_url": "https://gitlab.com/tspiteri/gmp-mpfr-sys",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/gmp-mpfr-sys/1.6.8/download",
+          "sha256": "60f8970a75c006bb2f8ae79c6768a116dd215fa8346a87aed99bf9d82ca43394"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "gmp_mpfr_sys",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "gmp_mpfr_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "gmp-mpfr-sys 1.6.8",
+              "target": "build_script_build"
+            },
+            {
+              "id": "libc 0.2.172",
+              "target": "libc"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.6.8"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(target_os = \"windows\")": [
+              {
+                "id": "windows-sys 0.60.2",
+                "target": "windows_sys"
+              }
+            ]
+          }
+        },
+        "links": "gmp"
+      },
+      "license": "LGPL-3.0+",
+      "license_ids": [
+        "LGPL-3.0"
+      ],
+      "license_file": "LICENSE-GPL.md"
     },
     "goldenfile 1.8.0": {
       "name": "goldenfile",
@@ -39255,7 +40037,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "displaydoc 0.2.4",
+              "id": "displaydoc 0.2.5",
               "target": "displaydoc"
             }
           ],
@@ -39329,7 +40111,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "displaydoc 0.2.4",
+              "id": "displaydoc 0.2.5",
               "target": "displaydoc"
             }
           ],
@@ -39407,7 +40189,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "displaydoc 0.2.4",
+              "id": "displaydoc 0.2.5",
               "target": "displaydoc"
             }
           ],
@@ -39540,7 +40322,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "displaydoc 0.2.4",
+              "id": "displaydoc 0.2.5",
               "target": "displaydoc"
             }
           ],
@@ -39661,7 +40443,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "displaydoc 0.2.4",
+              "id": "displaydoc 0.2.5",
               "target": "displaydoc"
             }
           ],
@@ -39785,7 +40567,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "displaydoc 0.2.4",
+              "id": "displaydoc 0.2.5",
               "target": "displaydoc"
             },
             {
@@ -43107,6 +43889,92 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "key-share 0.6.1": {
+      "name": "key-share",
+      "version": "0.6.1",
+      "package_url": "https://github.com/LFDT-Lockness/cggmp21",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/key-share/0.6.1/download",
+          "sha256": "206b4474f861dedc6fc38e06f7c52c52f1e01180d5284aa62b58844a044fad7d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "key_share",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "key_share",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "hex",
+            "serde",
+            "serde_with",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "generic-ec 0.4.5",
+              "target": "generic_ec"
+            },
+            {
+              "id": "generic-ec-zkp 0.4.4",
+              "target": "generic_ec_zkp"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "serde_with 2.3.3",
+              "target": "serde_with"
+            },
+            {
+              "id": "thiserror 1.0.68",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "displaydoc 0.2.5",
+              "target": "displaydoc"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.6.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
     },
     "keyring 3.4.0": {
       "name": "keyring",
@@ -55033,6 +55901,97 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "paillier-zk 0.4.3": {
+      "name": "paillier-zk",
+      "version": "0.4.3",
+      "package_url": "https://github.com/LFDT-Lockness/paillier-zk",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/paillier-zk/0.4.3/download",
+          "sha256": "d9963224009a2fd339cffd8f6c5c35fc9a91732b89acd4b0ed34c30afe70a193"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "paillier_zk",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "paillier_zk",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "serde"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "digest 0.10.7",
+              "target": "digest"
+            },
+            {
+              "id": "fast-paillier 0.1.1",
+              "target": "fast_paillier"
+            },
+            {
+              "id": "generic-ec 0.4.5",
+              "target": "generic_ec"
+            },
+            {
+              "id": "rand_core 0.6.4",
+              "target": "rand_core"
+            },
+            {
+              "id": "rand_hash 0.1.1",
+              "target": "rand_hash"
+            },
+            {
+              "id": "rug 1.28.0",
+              "target": "rug"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "serde_with 3.16.0",
+              "target": "serde_with"
+            },
+            {
+              "id": "thiserror 1.0.68",
+              "target": "thiserror"
+            },
+            {
+              "id": "udigest 0.2.4",
+              "target": "udigest"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.4.3"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "pairing 0.23.0": {
       "name": "pairing",
       "version": "0.23.0",
@@ -56824,6 +57783,102 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "phantom-type 0.3.1": {
+      "name": "phantom-type",
+      "version": "0.3.1",
+      "package_url": "https://github.com/A1-Triard/phantom-type",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/phantom-type/0.3.1/download",
+          "sha256": "f710afd11c9711b04f97ab61bb9747d5a04562fdf0f9f44abc3de92490084982"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "phantom_type",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "phantom_type",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "educe 0.4.22",
+              "target": "educe"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.3.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "phantom-type 0.4.2": {
+      "name": "phantom-type",
+      "version": "0.4.2",
+      "package_url": "https://github.com/A1-Triard/phantom-type",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/phantom-type/0.4.2/download",
+          "sha256": "e68f5dc797c2a743e024e1c53215474598faf0408826a90249569ad7f47adeaa"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "phantom_type",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "phantom_type",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "educe 0.4.22",
+              "target": "educe"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.4.2"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
     },
     "phf 0.10.1": {
       "name": "phf",
@@ -63716,6 +64771,61 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "rand_hash 0.1.1": {
+      "name": "rand_hash",
+      "version": "0.1.1",
+      "package_url": "https://github.com/LFDT-Lockness/rand_hash",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rand_hash/0.1.1/download",
+          "sha256": "16bc1dd921383c6564eb0b8252f5b3f6622b84d40c6e35f5e6790e1fd7abb7a9"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rand_hash",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "rand_hash",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "digest 0.10.7",
+              "target": "digest"
+            },
+            {
+              "id": "rand_core 0.6.4",
+              "target": "rand_core"
+            },
+            {
+              "id": "udigest 0.2.4",
+              "target": "udigest"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.1"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "rand_hc 0.1.0": {
       "name": "rand_hc",
       "version": "0.1.0",
@@ -67645,6 +68755,139 @@
       ],
       "license_file": "LICENSE"
     },
+    "round-based 0.4.1": {
+      "name": "round-based",
+      "version": "0.4.1",
+      "package_url": "https://github.com/LFDT-Lockness/round-based",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/round-based/0.4.1/download",
+          "sha256": "da76edf50de0a9d6911fc79261bb04cc9f3f3a375e0201799f5edf58499af341"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "round_based",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "round_based",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "derive",
+            "round-based-derive"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "futures-util 0.3.31",
+              "target": "futures_util"
+            },
+            {
+              "id": "phantom-type 0.3.1",
+              "target": "phantom_type"
+            },
+            {
+              "id": "thiserror 2.0.17",
+              "target": "thiserror"
+            },
+            {
+              "id": "tracing 0.1.41",
+              "target": "tracing"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "round-based-derive 0.2.2",
+              "target": "round_based_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.4.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "round-based-derive 0.2.2": {
+      "name": "round-based-derive",
+      "version": "0.2.2",
+      "package_url": "https://github.com/LFDT-Lockness/round-based",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/round-based-derive/0.2.2/download",
+          "sha256": "4afa4d5b318bcafae8a7ebc57c1cb7d4b2db7358293e34d71bfd605fd327cc13"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "round_based_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "round_based_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.103",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.42",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.2.2"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
     "rsa 0.9.6": {
       "name": "rsa",
       "version": "0.9.6",
@@ -67938,6 +69181,115 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "rug 1.28.0": {
+      "name": "rug",
+      "version": "1.28.0",
+      "package_url": "https://gitlab.com/tspiteri/rug",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rug/1.28.0/download",
+          "sha256": "58ad2e973fe3c3214251a840a621812a4f40468da814b1a3d6947d433c2af11f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rug",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "rug",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "gmp-mpfr-sys",
+            "integer",
+            "rand",
+            "serde",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "az 1.2.1",
+              "target": "az"
+            },
+            {
+              "id": "gmp-mpfr-sys 1.6.8",
+              "target": "gmp_mpfr_sys"
+            },
+            {
+              "id": "libc 0.2.172",
+              "target": "libc"
+            },
+            {
+              "id": "libm 0.2.7",
+              "target": "libm"
+            },
+            {
+              "id": "rug 1.28.0",
+              "target": "build_script_build"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "1.28.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "gmp-mpfr-sys 1.6.8",
+              "target": "gmp_mpfr_sys"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "LGPL-3.0+",
+      "license_ids": [
+        "LGPL-3.0"
+      ],
+      "license_file": "LICENSE-GPL.md"
     },
     "rusb 0.9.3": {
       "name": "rusb",
@@ -79384,7 +80736,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.60.2",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ],
@@ -81247,7 +82599,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "displaydoc 0.2.4",
+              "id": "displaydoc 0.2.5",
               "target": "displaydoc"
             }
           ],
@@ -85812,6 +87164,129 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "udigest 0.2.4": {
+      "name": "udigest",
+      "version": "0.2.4",
+      "package_url": "https://github.com/LFDT-Lockness/udigest",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/udigest/0.2.4/download",
+          "sha256": "19ff079a60bd5dc98b364ce7b5a633a8937bf558f5d19c9a390f5ae1973cf07e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "udigest",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "udigest",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "derive",
+            "digest",
+            "inline-struct",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "digest 0.10.7",
+              "target": "digest"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "udigest-derive 0.3.2",
+              "target": "udigest_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.2.4"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "udigest-derive 0.3.2": {
+      "name": "udigest-derive",
+      "version": "0.3.2",
+      "package_url": "https://github.com/LFDT-Lockness/udigest",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/udigest-derive/0.3.2/download",
+          "sha256": "25fd5248861b973cd5d1da5604b0ce22a35fa77f015d9f7ed9ab57078205bb86"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "udigest_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "udigest_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.103",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.42",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.110",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.3.2"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
     },
     "uint 0.9.5": {
       "name": "uint",
@@ -97573,6 +99048,7 @@
     "cc 1.2.22",
     "cddl 0.9.4",
     "cfg-if 1.0.0",
+    "cggmp21 0.6.2",
     "chacha20poly1305 0.10.1",
     "chrono 0.4.41",
     "chrono 0.4.42",
@@ -97778,6 +99254,7 @@
     "rlp 0.5.2",
     "rocksdb 0.22.0",
     "rolling-file 0.2.0",
+    "round-based 0.4.1",
     "rsa 0.9.6",
     "rstest 0.19.0",
     "rusb 0.9.3",
