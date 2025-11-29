@@ -85,7 +85,11 @@ pub(crate) fn update_signature_request_contexts(
             let max_stash_size = registry_settings
                 .chain_key_settings
                 .get(&key_id)
-                .map(|setting| setting.pre_signatures_to_create_in_advance)
+                .map(|setting| {
+                    setting
+                        .pre_signatures_to_create_in_advance
+                        .unwrap_or_default()
+                })
                 .unwrap_or_default() as usize;
             let exceeding = stash.pre_signatures.len().saturating_sub(max_stash_size);
             if exceeding > 0 {
@@ -127,7 +131,11 @@ pub(crate) fn update_signature_request_contexts(
             let max_ongoing_signatures = registry_settings
                 .chain_key_settings
                 .get(&key_id)
-                .map(|setting| setting.pre_signatures_to_create_in_advance)
+                .map(|setting| {
+                    setting
+                        .pre_signatures_to_create_in_advance
+                        .unwrap_or_default()
+                })
                 .unwrap_or_default() as usize;
 
             match_delivered_pre_signatures_by_key_id(
@@ -633,7 +641,9 @@ mod tests {
             .map(|key_id| {
                 let settings = ChainKeySettings {
                     max_queue_size: 20,
-                    pre_signatures_to_create_in_advance: max_stash_size,
+                    pre_signatures_to_create_in_advance: key_id
+                        .requires_pre_signatures()
+                        .then_some(max_stash_size),
                 };
                 (key_id.inner().clone(), settings)
             })

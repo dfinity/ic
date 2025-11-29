@@ -358,7 +358,7 @@ impl From<KeyConfigInternal> for KeyConfig {
 
         Self {
             key_id: Some(key_id),
-            pre_signatures_to_create_in_advance: Some(pre_signatures_to_create_in_advance),
+            pre_signatures_to_create_in_advance,
             max_queue_size: Some(max_queue_size),
         }
     }
@@ -378,10 +378,15 @@ impl TryFrom<KeyConfig> for KeyConfigInternal {
             return Err("KeyConfig.key_id must be specified.".to_string());
         };
 
-        let Some(pre_signatures_to_create_in_advance) = pre_signatures_to_create_in_advance else {
+        if key_id.requires_pre_signatures() && pre_signatures_to_create_in_advance.is_none() {
             return Err(
                 "KeyConfig.pre_signatures_to_create_in_advance must be specified.".to_string(),
             );
+        };
+        if !key_id.requires_pre_signatures() && pre_signatures_to_create_in_advance.is_some() {
+            return Err(format!(
+                "KeyConfig.pre_signatures_to_create_in_advance must not be specified for key {key_id} because it does not require pre-signatures."
+            ));
         };
 
         let Some(max_queue_size) = max_queue_size else {
@@ -517,7 +522,7 @@ mod test {
         let chain_key_config = ChainKeyConfig {
             key_configs: vec![KeyConfigInternal {
                 key_id: MasterPublicKeyId::Ecdsa(key_id.clone()),
-                pre_signatures_to_create_in_advance: 1,
+                pre_signatures_to_create_in_advance: Some(1),
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             }],
             signature_request_timeout_ns: None,
