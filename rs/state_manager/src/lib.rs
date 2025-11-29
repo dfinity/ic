@@ -885,7 +885,7 @@ impl Drop for StateManagerImpl {
         // Make sure the tip thread didn't panic. Otherwise we may be blind to it in tests.
         // If the tip thread panics after the latest communication with tip_channel the test returns
         // success.
-        self.flush_tip_channel();
+        self.flush_all();
     }
 }
 
@@ -1222,6 +1222,12 @@ impl StateManagerImpl {
     /// Finish all asynchronous checkpointing operations, including checkpoint verification and manifest computation.
     pub fn flush_tip_channel(&self) {
         flush_tip_channel(&self.tip_channel)
+    }
+
+    /// Finish all asynchronous operations.
+    pub fn flush_all(&self) {
+        self.flush_tip_channel();
+        self.state_layout().flush_checkpoint_removal_channel();
     }
 
     /// Height for the initial default state.
