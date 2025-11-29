@@ -196,10 +196,13 @@ impl CanisterAccess {
         if let Some(a) = a
             && a != start
         {
-            warn!("Requested for {} ignoring queries at {}.", start, a);
+            debug!(
+                "Detected stale queries at {} while requesting {}. Clearing and continuing.",
+                a, start
+            );
             drop(ongoing);
             self.clear_outstanding_queries().await;
-            return Err("Removed stale block queries".to_string());
+            ongoing = self.ongoing_block_queries.lock().await;
         }
 
         let (a, b, jh) = {
