@@ -1500,6 +1500,9 @@ fn handle_compute_manifest_request(
         ..bundled_manifest
     };
 
+    // Removing or changing the log below could make upgrade system tests fail, as they check for
+    // their existence before a reboot. Information about the computed root hash in logs is useful
+    // in certain recovery scenarios and should be kept.
     info!(
         log,
         "Computed root hash {:?} of state @{}",
