@@ -20,6 +20,8 @@ All node operators can now swap nodes on non-system subnets; later, swapping wil
 
 ## Changed
 
+* When performing subnet creation, subnet update, or subnet recovery, it is now allowed to omit the `KeyConfig`'s `pre_signatures_to_create_in_advance` field for keys that do not have pre-signatures. Currently only vetKD keys do not have pre-signatures (unlike Ecdsa/Schnorr keys). When the field is omitted, it is automatically set to zero.
+
 ## Deprecated
 
 ## Removed
