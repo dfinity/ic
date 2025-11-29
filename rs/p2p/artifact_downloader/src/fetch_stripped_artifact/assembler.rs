@@ -16,7 +16,7 @@ use ic_types::{
     CountBytes, NodeId,
     artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId},
     batch::IngressPayload,
-    consensus::{BlockProposal, ConsensusMessage},
+    consensus::{BlockProposal, ConsensusMessage, idkg::IDkgMessage},
     messages::SignedIngress,
 };
 
@@ -24,7 +24,9 @@ use crate::FetchArtifact;
 
 use super::{
     download::download_ingress,
-    metrics::{FetchStrippedConsensusArtifactMetrics, IngressMessageSource, IngressSenderMetrics},
+    metrics::{
+        FetchStrippedConsensusArtifactMetrics, IngressMessageSource, StrippedMessageSenderMetrics,
+    },
     stripper::Strippable,
     types::{
         SignedIngressId,
@@ -94,6 +96,7 @@ impl FetchStrippedConsensusArtifact {
         rt: tokio::runtime::Handle,
         consensus_pool: Arc<RwLock<Pool>>,
         ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
+        idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
         bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessageId, Pool>>,
         metrics_registry: MetricsRegistry,
         node_id: NodeId,
@@ -104,7 +107,8 @@ impl FetchStrippedConsensusArtifact {
         let router = super::download::build_axum_router(super::download::Pools {
             consensus_pool: consensus_pool_clone,
             ingress_pool: ingress_pool_clone,
-            metrics: IngressSenderMetrics::new(&metrics_registry),
+            idkg_pool,
+            metrics: StrippedMessageSenderMetrics::new(&metrics_registry),
         });
 
         let (fetch_stripped_fn, subrouter) = FetchArtifact::new(
@@ -580,6 +584,7 @@ mod tests {
         }
 
         let consensus_pool = MockValidatedPoolReader::<ConsensusMessage>::default();
+        let idkg_pool = MockValidatedPoolReader::<IDkgMessage>::default();
         let mut mock_bouncer_factory = MockBouncerFactory::default();
         mock_bouncer_factory
             .expect_new_bouncer()
@@ -590,6 +595,7 @@ mod tests {
             tokio::runtime::Handle::current(),
             Arc::new(RwLock::new(consensus_pool)),
             Arc::new(RwLock::new(ingress_pool)),
+            Arc::new(RwLock::new(idkg_pool)),
             Arc::new(mock_bouncer_factory),
             MetricsRegistry::new(),
             NODE_1,
