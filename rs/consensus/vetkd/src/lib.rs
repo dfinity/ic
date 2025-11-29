@@ -241,6 +241,11 @@ impl VetKdPayloadBuilderImpl {
                     let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
                         return None;
                     };
+                    debug_assert_eq!(
+                        context.derivation_path.len(),
+                        1,
+                        "context's derivation path for vetKD must have single element"
+                    );
                     let args = VetKdArgs {
                         context: VetKdDerivationContextRef {
                             caller: context.request.sender.get_ref(),
@@ -377,6 +382,11 @@ impl VetKdPayloadBuilderImpl {
         let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
             return invalid_artifact_err(InvalidVetKdPayloadReason::UnexpectedIDkgContext(id));
         };
+        debug_assert_eq!(
+            context.derivation_path.len(),
+            1,
+            "context's derivation path for vetKD must have single element"
+        );
         let args = VetKdArgs {
             context: VetKdDerivationContextRef {
                 caller: context.request.sender.get_ref(),
