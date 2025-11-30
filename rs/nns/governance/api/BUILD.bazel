@@ -12,6 +12,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/common/validation",
     "//rs/nervous_system/proto",
     "//rs/nns/common",
+    "//rs/node_rewards/canister/api",
     "//rs/protobuf",
     "//rs/sns/root",
     "//rs/sns/swap:swap",

@@ -12151,6 +12151,7 @@ dependencies = [
  "ic-nervous-system-common-validation",
  "ic-nervous-system-proto",
  "ic-nns-common",
+ "ic-node-rewards-canister-api",
  "ic-protobuf",
  "ic-sns-root",
  "ic-sns-swap",

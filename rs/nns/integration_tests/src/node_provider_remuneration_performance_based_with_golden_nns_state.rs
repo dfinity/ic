@@ -244,12 +244,24 @@ fn test_performance_based_rewards_remuneration() {
         canisters.update(&state_machine, neuron_controller, neuron_id);
     });
 
-    sanity_check::fetch_and_check_metrics_after_advancing_time(&state_machine, metrics_before);
+    sanity_check::advance_time_and_check_december_distribution(&state_machine, metrics_before);
 }
 
 mod sanity_check {
     use super::*;
+    use candid::{Decode, Encode};
+    use chrono::DateTime;
+    use ic_nervous_system_common::ONE_DAY_SECONDS;
     use ic_nns_governance::governance::NODE_PROVIDER_REWARD_PERIOD_SECONDS;
+    use ic_nns_test_utils::state_test_helpers::query;
+    use ic_node_rewards_canister_api::DateUtc;
+    use ic_node_rewards_canister_api::provider_rewards_calculation::{
+        DailyResults, GetNodeProvidersRewardsCalculationRequest,
+        GetNodeProvidersRewardsCalculationResponse,
+    };
+    use maplit::btreemap;
+    use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
+    use std::collections::BTreeMap;
 
     /// Metrics fetched from canisters either before or after testing.
     pub struct Metrics {
@@ -271,16 +283,25 @@ mod sanity_check {
 
     /// Fetches metrics from canisters after advancing time and checks that they are as expected,
     /// comparing them to the metrics fetched before the upgrade.
-    pub fn fetch_and_check_metrics_after_advancing_time(
+    pub fn advance_time_and_check_december_distribution(
         state_machine: &StateMachine,
         before: Metrics,
     ) {
+        let test_date = DateTime::from_timestamp(
+            state_machine.get_time().as_secs_since_unix_epoch() as i64,
+            0,
+        )
+        .unwrap()
+        .date_naive();
+
         let target_rewards_distribution_timestamp_seconds = before
             .governance_most_recent_monthly_node_provider_rewards
             .timestamp
             + NODE_PROVIDER_REWARD_PERIOD_SECONDS;
 
         let now = state_machine.get_time().as_secs_since_unix_epoch();
+
+        // NOW WE ADVANCE TIME TO JUST BEFORE THE NEXT REWARDS DISTRIBUTION TIME
 
         state_machine.advance_time(std::time::Duration::from_secs(
             target_rewards_distribution_timestamp_seconds - now - 1,
@@ -290,16 +311,149 @@ mod sanity_check {
             state_machine.tick();
         }
 
+        // Now we assess how many rewards with penalties have been calculated up to yesterday.
+        let start_date = DateTime::from_timestamp(
+            before
+                .governance_most_recent_monthly_node_provider_rewards
+                .timestamp as i64,
+            0,
+        )
+        .unwrap()
+        .date_naive();
+
+        // Up to test_date in the state machine, node-rewards-canister already hold the real
+        // failure rates for each node, so we can just sum up the daily rewards with penalties
+        let mut rewards_with_penalties: BTreeMap<PrincipalId, u64> = BTreeMap::new();
+
+        for date in start_date.iter_days().take_while(|d| *d < test_date) {
+            let daily_rewards = daily_rewards(state_machine, date.into());
+
+            for (provider_id, daily_result) in daily_rewards.provider_results {
+                *rewards_with_penalties.entry(provider_id).or_default() +=
+                    daily_result.total_adjusted_rewards_xdr_permyriad.unwrap();
+            }
+        }
+
+        // For each day missing from
+        // now up to the next distribution time, we get the daily rewards without penalties. given the
+        // canister is assigning to each node failure rate = 0%. These rewards should be equal to the base
+        // rewards provided by the node-rewards-canister on the last day.
+        let rewards_no_penalties: BTreeMap<PrincipalId, u64> =
+            daily_rewards(state_machine, test_date.into())
+                .provider_results
+                .into_iter()
+                .map(|(provider_id, daily_result)| {
+                    (
+                        provider_id,
+                        daily_result.total_adjusted_rewards_xdr_permyriad.unwrap(),
+                    )
+                })
+                .collect();
+
         let after = fetch_metrics(state_machine);
-        let current_rewards_timestamp_seconds = after
+
+        let performance_based_rewards = after
             .governance_most_recent_monthly_node_provider_rewards
-            .timestamp;
+            .clone();
+        ic_cdk::println!(
+            "before: {:?}",
+            before.governance_most_recent_monthly_node_provider_rewards
+        );
+        ic_cdk::println!("after: {:?}", performance_based_rewards);
+
+        let rewards_distribution_timestamp: u64 = 1765672700;
+        let rewards_distribution_date =
+            DateTime::from_timestamp(rewards_distribution_timestamp as i64, 0)
+                .unwrap()
+                .date_naive();
+        let expected_start_date = start_date;
+        let expected_end_date = rewards_distribution_date.pred_opt().unwrap();
+
+        let diff = rewards_distribution_timestamp.abs_diff(performance_based_rewards.timestamp);
+        // 2 minutes = 120 seconds
+        assert!(diff <= 120,);
 
         assert_eq!(
-            target_rewards_distribution_timestamp_seconds,
-            current_rewards_timestamp_seconds
+            DateUtc::from(expected_end_date),
+            DateUtc::from(performance_based_rewards.end_date.unwrap())
         );
+
+        assert_eq!(
+            DateUtc::from(expected_start_date),
+            DateUtc::from(performance_based_rewards.start_date.unwrap())
+        );
+
+        assert_eq!(performance_based_rewards.algorithm_version, Some(1));
+
+        let days_with_no_penalties = (expected_end_date - test_date).num_days() as u64 + 1;
+
+        let xdr_permyriad_distributed = {
+            let xdr_permyriad_per_icp = performance_based_rewards
+                .xdr_conversion_rate
+                .unwrap()
+                .xdr_permyriad_per_icp
+                .unwrap();
+
+            performance_based_rewards
+                .rewards
+                .into_iter()
+                .map(|reward| {
+                    let total_xdr_permyriad =
+                        (reward.amount_e8s as f64 * xdr_permyriad_per_icp as f64
+                            / 10_u64.pow(8) as f64) as u64
+                            + 1;
+                    (
+                        reward.node_provider.unwrap().id.unwrap(),
+                        total_xdr_permyriad,
+                    )
+                })
+                .collect::<BTreeMap<PrincipalId, u64>>()
+        };
+
+        let upper_bound_rewards_per_provider = rewards_with_penalties
+            .into_iter()
+            .map(|(provider, rewards_with_penalties)| {
+                let rewards_total = rewards_with_penalties
+                    + rewards_no_penalties.get(&provider).unwrap() * days_with_no_penalties;
+                (provider, rewards_total)
+            })
+            .collect::<BTreeMap<PrincipalId, u64>>();
+
+        for (provider_id, _) in upper_bound_rewards_per_provider.iter() {
+            assert!(
+                xdr_permyriad_distributed.contains_key(provider_id),
+                "Provider {provider_id:?} is missing from the distributed rewards.",
+            );
+        }
+
+        for (provider_id, total_xdr_distributed) in xdr_permyriad_distributed {
+            let expected_total_xdr_permyriad = *upper_bound_rewards_per_provider
+                .get(&provider_id)
+                .unwrap_or(&0);
+
+            assert_eq!(
+                expected_total_xdr_permyriad, total_xdr_distributed,
+                "For provider {provider_id:?}, expected total XDR permyriad distributed: {expected_total_xdr_permyriad}, actual: {total_xdr_distributed}"
+            );
+        }
+
         MetricsBeforeAndAfter { before, after }.check_all();
+    }
+
+    fn daily_rewards(state_machine: &StateMachine, day: DateUtc) -> DailyResults {
+        let request = GetNodeProvidersRewardsCalculationRequest {
+            day,
+            algorithm_version: None,
+        };
+        query(
+            state_machine,
+            NODE_REWARDS_CANISTER_ID,
+            "get_node_providers_rewards_calculation",
+            Encode!(&request).unwrap(),
+        )
+        .map(|result| Decode!(&result, GetNodeProvidersRewardsCalculationResponse).unwrap())
+        .unwrap()
+        .unwrap()
     }
 
     struct MetricsBeforeAndAfter {

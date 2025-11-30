@@ -21,6 +21,7 @@ ic-nervous-system-clients = { path = "../../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../../nervous_system/common" }
 ic-nervous-system-common-validation = { path = "../../../nervous_system/common/validation" }
 ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
+ic-node-rewards-canister-api = { path = "../../../node_rewards/canister/api" }
 ic-nns-common = { path = "../../common" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-sns-root = { path = "../../../sns/root" }                                                 # This is just for a couple of PB definitions.

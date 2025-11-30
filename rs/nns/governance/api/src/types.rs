@@ -3117,6 +3117,17 @@ pub struct DateUtc {
     pub month: u32,
     pub day: u32,
 }
+
+impl From<DateUtc> for ic_node_rewards_canister_api::DateUtc {
+    fn from(item: DateUtc) -> Self {
+        Self {
+            year: Some(item.year),
+            month: Some(item.month),
+            day: Some(item.day),
+        }
+    }
+}
+
 /// The monthly Node Provider rewards, representing the distribution of rewards for a specific time period.
 ///
 /// Prior to the introduction of the performance-based reward algorithm, rewards were computed from a
