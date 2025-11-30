@@ -1,0 +1,24 @@
+# support for aliasing crates: https://github.com/bazelbuild/rules_rust/issues/3742
+diff --git a/crate_universe/extensions.bzl b/crate_universe/extensions.bzl
+index da2830f08..b7665652e 100644
+--- a/crate_universe/extensions.bzl
++++ b/crate_universe/extensions.bzl
+@@ -1153,7 +1153,7 @@ def _crate_impl(module_ctx):
+                 manifests = {str(module_ctx.path(m)): str(m) for m in cfg.manifests}
+
+             packages = {
+-                p.package: _package_to_json(p)
++                p.package_alias or p.package: _package_to_json(p)
+                 for p in common_specs + repo_specific_specs.get(cfg.name, [])
+             }
+
+@@ -1409,6 +1409,9 @@ _spec = tag_class(
+             doc = "The explicit name of the package.",
+             mandatory = True,
+         ),
++        "package_alias": attr.string(
++            doc = "The explicit name of the package.",
++        ),
+         "path": attr.string(
+             doc = "The local path of the remote crate. Cannot be used with `version` or `git`.",
+         ),
