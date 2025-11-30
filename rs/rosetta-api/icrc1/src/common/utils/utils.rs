@@ -608,6 +608,12 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 ));
             }
         }
+        crate::common::storage::types::IcrcOperation::FeeCollector { .. } => {
+            // There is no fee crediting operation at his moment so we might not need to do anything here
+            // Below in icrc1_rosetta_block_to_rosetta_core_operations we create an operation that credits
+            // the fee to the legacy fee collector. This needs to be adapted to not do anything if the
+            // new fee collector is present.
+        }
     };
 
     Ok(operations)
@@ -714,6 +720,7 @@ pub fn rosetta_core_block_to_icrc1_block(
             )
         },
         fee_collector_block_index: block_metadata.fee_collector_block_index,
+        btype: None, // TODO: implement panic!("FeeCollector107 not implemented")
     })
 }
 
