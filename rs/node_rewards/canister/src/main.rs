@@ -84,11 +84,11 @@ async fn get_node_providers_monthly_xdr_rewards(
 }
 
 #[update]
-fn get_node_providers_rewards(
+async fn get_node_providers_rewards(
     request: GetNodeProvidersRewardsRequest,
 ) -> GetNodeProvidersRewardsResponse {
     panic_if_caller_not_governance();
-    NodeRewardsCanister::get_node_providers_rewards(&CANISTER, request)
+    NodeRewardsCanister::get_node_providers_rewards(&CANISTER, request).await
 }
 
 #[query]

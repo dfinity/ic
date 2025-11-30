@@ -312,7 +312,6 @@ fn test_get_node_providers_rewards() {
 
     let (fake_registry, metrics_manager) = setup_thread_local_canister_for_test();
     setup_data_for_test_rewards_calculation(fake_registry, metrics_manager);
-    NodeRewardsCanister::schedule_registry_sync(&CANISTER_TEST).now_or_never();
     let from = to_native_date("2024-01-01");
     let to = to_native_date("2024-01-02");
 
@@ -322,7 +321,8 @@ fn test_get_node_providers_rewards() {
         algorithm_version: None,
     };
     let result_endpoint =
-        NodeRewardsCanister::get_node_providers_rewards(&CANISTER_TEST, request.clone());
+        NodeRewardsCanister::get_node_providers_rewards(&CANISTER_TEST, request.clone())
+            .now_or_never();
 
     let expected = NodeProvidersRewards {
         algorithm_version: RewardsCalculationAlgorithmVersion::default(),

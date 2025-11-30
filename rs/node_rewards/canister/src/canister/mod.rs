@@ -2,6 +2,7 @@ use crate::chrono_utils::last_unix_timestamp_nanoseconds;
 use crate::metrics::MetricsManager;
 use crate::registry_querier::RegistryQuerier;
 use crate::storage::{NaiveDateStorable, VM};
+use crate::telemetry;
 use chrono::{DateTime, NaiveDate};
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_node_rewards_canister_api::RewardsCalculationAlgorithmVersion;
@@ -129,6 +130,36 @@ impl NodeRewardsCanister {
         });
 
         Ok(())
+    }
+
+    pub async fn sync(canister: &'static LocalKey<RefCell<NodeRewardsCanister>>) {
+        let instruction_counter = telemetry::InstructionCounter::default();
+
+        telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_start());
+
+        match NodeRewardsCanister::schedule_registry_sync(canister).await {
+            Ok(_) => {
+                ic_cdk::println!("Successfully synced local registry");
+                match NodeRewardsCanister::schedule_metrics_sync(canister).await {
+                    Ok(_) => {
+                        telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| {
+                            m.mark_last_sync_success();
+                            m.record_last_sync_instructions(instruction_counter.sum());
+                        });
+                        ic_cdk::println!("Successfully synced subnets metrics");
+                    }
+                    Err(e) => {
+                        telemetry::PROMETHEUS_METRICS
+                            .with_borrow_mut(|m| m.mark_last_sync_failure());
+                        ic_cdk::println!("Failed to sync subnets metrics: {:?}", e)
+                    }
+                }
+            }
+            Err(e) => {
+                telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_failure());
+                ic_cdk::println!("Failed to sync local registry: {:?}", e)
+            }
+        };
     }
 
     fn validate_reward_period(
@@ -291,10 +322,12 @@ impl NodeRewardsCanister {
         }
     }
 
-    pub fn get_node_providers_rewards(
+    pub async fn get_node_providers_rewards(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersRewardsRequest,
     ) -> GetNodeProvidersRewardsResponse {
+        Self::sync(canister).await;
+
         let result = canister.with_borrow(|canister| canister.calculate_rewards(request))?;
 
         let rewards_xdr_permyriad = result

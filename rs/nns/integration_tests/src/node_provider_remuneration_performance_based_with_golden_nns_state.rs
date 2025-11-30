@@ -397,6 +397,7 @@ mod sanity_check {
             performance_based_rewards
                 .rewards
                 .into_iter()
+                .filter(|reward| reward.amount_e8s > 0)
                 .map(|reward| {
                     let total_xdr_permyriad =
                         (reward.amount_e8s as f64 * xdr_permyriad_per_icp as f64
@@ -419,18 +420,9 @@ mod sanity_check {
             })
             .collect::<BTreeMap<PrincipalId, u64>>();
 
-        for (provider_id, _) in upper_bound_rewards_per_provider.iter() {
-            assert!(
-                xdr_permyriad_distributed.contains_key(provider_id),
-                "Provider {provider_id:?} is missing from the distributed rewards.",
-            );
-        }
-
         for (provider_id, total_xdr_distributed) in xdr_permyriad_distributed {
-            let expected_total_xdr_permyriad = *upper_bound_rewards_per_provider
-                .get(&provider_id)
-                .unwrap_or(&0);
-
+            let expected_total_xdr_permyriad =
+                *upper_bound_rewards_per_provider.get(&provider_id).unwrap();
             assert_eq!(
                 expected_total_xdr_permyriad, total_xdr_distributed,
                 "For provider {provider_id:?}, expected total XDR permyriad distributed: {expected_total_xdr_permyriad}, actual: {total_xdr_distributed}"

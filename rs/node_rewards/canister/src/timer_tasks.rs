@@ -1,8 +1,9 @@
 use crate::canister::{NodeRewardsCanister, current_time};
 use crate::telemetry;
+use async_trait::async_trait;
 use chrono::{DateTime, Days, NaiveDate};
 use ic_nervous_system_common::ONE_DAY_SECONDS;
-use ic_nervous_system_timer_task::RecurringSyncTask;
+use ic_nervous_system_timer_task::{RecurringAsyncTask, RecurringSyncTask};
 use ic_node_rewards_canister_api::DateUtc;
 use ic_node_rewards_canister_api::providers_rewards::GetNodeProvidersRewardsRequest;
 use std::cell::RefCell;
@@ -42,35 +43,7 @@ impl HourlySyncTask {
 
 impl RecurringSyncTask for HourlySyncTask {
     fn execute(self) -> (Duration, Self) {
-        let instruction_counter = telemetry::InstructionCounter::default();
-
-        telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_start());
-        ic_cdk::futures::spawn_017_compat(async move {
-            match NodeRewardsCanister::schedule_registry_sync(self.canister).await {
-                Ok(_) => {
-                    ic_cdk::println!("Successfully synced local registry");
-                    match NodeRewardsCanister::schedule_metrics_sync(self.canister).await {
-                        Ok(_) => {
-                            telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| {
-                                m.mark_last_sync_success();
-                                m.record_last_sync_instructions(instruction_counter.sum());
-                            });
-                            ic_cdk::println!("Successfully synced subnets metrics");
-                        }
-                        Err(e) => {
-                            telemetry::PROMETHEUS_METRICS
-                                .with_borrow_mut(|m| m.mark_last_sync_failure());
-                            ic_cdk::println!("Failed to sync subnets metrics: {:?}", e)
-                        }
-                    }
-                }
-                Err(e) => {
-                    telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_failure());
-                    ic_cdk::println!("Failed to sync local registry: {:?}", e)
-                }
-            };
-        });
-
+        ic_cdk::futures::spawn_017_compat(NodeRewardsCanister::sync(self.canister));
         (Self::default_delay(), self)
     }
 
@@ -103,8 +76,10 @@ impl GetNodeProvidersRewardsInstructionsExporter {
         Duration::from_secs(next_sync_target_secs - now_secs)
     }
 }
-impl RecurringSyncTask for GetNodeProvidersRewardsInstructionsExporter {
-    fn execute(self) -> (Duration, Self) {
+
+#[async_trait]
+impl RecurringAsyncTask for GetNodeProvidersRewardsInstructionsExporter {
+    async fn execute(self) -> (Duration, Self) {
         // Yesterday
         let to_day = yesterday().pred_opt().unwrap();
         // Yesterday - 35 days
@@ -117,7 +92,9 @@ impl RecurringSyncTask for GetNodeProvidersRewardsInstructionsExporter {
         };
 
         let instruction_counter = telemetry::InstructionCounter::default();
-        if let Err(e) = NodeRewardsCanister::get_node_providers_rewards(self.canister, request) {
+        if let Err(e) =
+            NodeRewardsCanister::get_node_providers_rewards(self.canister, request).await
+        {
             ic_cdk::println!("Failed to get node providers rewards: {:?}", e);
         }
 
