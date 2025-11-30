@@ -1,4 +1,3 @@
-use candid::CandidType;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
@@ -40,7 +39,7 @@ impl NnsCanisterUpgradePBREnabled {
         #[rustfmt::skip]
         let (canister_id, environment_variable_name) = match nns_canister_name {
             // Using test canister for Governance because PBR is enabled there.
-            "governance"     => (GOVERNANCE_CANISTER_ID, "GOVERNANCE_CANISTER_WASM_PATH"),
+            "governance"     => (GOVERNANCE_CANISTER_ID, "GOVERNANCE_CANISTER_TEST_PBR_WASM_PATH"),
 
             // Using test canister for Node Rewards because state-machine does not support
             // multiple subnets yet, and Node Rewards PBR depends on multiple subnets to daily
@@ -175,12 +174,6 @@ fn get_well_known_public_neurons() -> Vec<(NeuronId, PrincipalId)> {
     .collect()
 }
 
-/// Votes yes on the proposal with the given ID using well-known public neurons. Note that this is
-/// needed because we should no longer be able to create a neuron with a huge stake and pass
-/// proposals using this new neuron, as voting power spikes are automatically detected and a defense
-/// mechanism is in place to prevent this exact situation. Instead, here we use the super power
-/// given by the StateMachine test framework where any principal can be impersonated, which is
-/// clearly unavailable on the mainnet.
 fn vote_yes_with_well_known_public_neurons(state_machine: &StateMachine, proposal_id: u64) {
     for (voter_neuron_id, voter_controller) in get_well_known_public_neurons() {
         // Note that the voting can fail if the proposal already reaches absolute
@@ -251,7 +244,6 @@ mod sanity_check {
     use super::*;
     use candid::{Decode, Encode};
     use chrono::DateTime;
-    use ic_nervous_system_common::ONE_DAY_SECONDS;
     use ic_nns_governance::governance::NODE_PROVIDER_REWARD_PERIOD_SECONDS;
     use ic_nns_test_utils::state_test_helpers::query;
     use ic_node_rewards_canister_api::DateUtc;
@@ -259,7 +251,6 @@ mod sanity_check {
         DailyResults, GetNodeProvidersRewardsCalculationRequest,
         GetNodeProvidersRewardsCalculationResponse,
     };
-    use maplit::btreemap;
     use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
     use std::collections::BTreeMap;
 
@@ -299,10 +290,8 @@ mod sanity_check {
             .timestamp
             + NODE_PROVIDER_REWARD_PERIOD_SECONDS;
 
+        // Advance time in the state machine to just before the next rewards distribution time.
         let now = state_machine.get_time().as_secs_since_unix_epoch();
-
-        // NOW WE ADVANCE TIME TO JUST BEFORE THE NEXT REWARDS DISTRIBUTION TIME
-
         state_machine.advance_time(std::time::Duration::from_secs(
             target_rewards_distribution_timestamp_seconds - now - 1,
         ));
@@ -312,6 +301,8 @@ mod sanity_check {
         }
 
         // Now we assess how many rewards with penalties have been calculated up to yesterday.
+        // Up to test_date in the state machine, node-rewards-canister already hold the real
+        // failure rates for each node, so we can just sum up the daily rewards with penalties
         let start_date = DateTime::from_timestamp(
             before
                 .governance_most_recent_monthly_node_provider_rewards
@@ -321,12 +312,9 @@ mod sanity_check {
         .unwrap()
         .date_naive();
 
-        // Up to test_date in the state machine, node-rewards-canister already hold the real
-        // failure rates for each node, so we can just sum up the daily rewards with penalties
         let mut rewards_with_penalties: BTreeMap<PrincipalId, u64> = BTreeMap::new();
-
         for date in start_date.iter_days().take_while(|d| *d < test_date) {
-            let daily_rewards = daily_rewards(state_machine, date.into());
+            let daily_rewards = nrc_daily_rewards(state_machine, date.into());
 
             for (provider_id, daily_result) in daily_rewards.provider_results {
                 *rewards_with_penalties.entry(provider_id).or_default() +=
@@ -334,12 +322,11 @@ mod sanity_check {
             }
         }
 
-        // For each day missing from
-        // now up to the next distribution time, we get the daily rewards without penalties. given the
-        // canister is assigning to each node failure rate = 0%. These rewards should be equal to the base
-        // rewards provided by the node-rewards-canister on the last day.
+        // For each day missing from now up to the next distribution time, we get the daily rewards
+        // without penalties. Given the canister is assigning to each node failure rate = 0% these
+        // rewards should be equal to the base rewards provided by the node-rewards-canister on the last day.
         let rewards_no_penalties: BTreeMap<PrincipalId, u64> =
-            daily_rewards(state_machine, test_date.into())
+            nrc_daily_rewards(state_machine, test_date.into())
                 .provider_results
                 .into_iter()
                 .map(|(provider_id, daily_result)| {
@@ -355,11 +342,6 @@ mod sanity_check {
         let performance_based_rewards = after
             .governance_most_recent_monthly_node_provider_rewards
             .clone();
-        ic_cdk::println!(
-            "before: {:?}",
-            before.governance_most_recent_monthly_node_provider_rewards
-        );
-        ic_cdk::println!("after: {:?}", performance_based_rewards);
 
         let rewards_distribution_timestamp: u64 = 1765672700;
         let rewards_distribution_date =
@@ -369,9 +351,10 @@ mod sanity_check {
         let expected_start_date = start_date;
         let expected_end_date = rewards_distribution_date.pred_opt().unwrap();
 
-        let diff = rewards_distribution_timestamp.abs_diff(performance_based_rewards.timestamp);
         // 2 minutes = 120 seconds
-        assert!(diff <= 120,);
+        assert!(
+            rewards_distribution_timestamp.abs_diff(performance_based_rewards.timestamp) <= 120,
+        );
 
         assert_eq!(
             DateUtc::from(expected_end_date),
@@ -438,22 +421,6 @@ mod sanity_check {
         }
 
         MetricsBeforeAndAfter { before, after }.check_all();
-    }
-
-    fn daily_rewards(state_machine: &StateMachine, day: DateUtc) -> DailyResults {
-        let request = GetNodeProvidersRewardsCalculationRequest {
-            day,
-            algorithm_version: None,
-        };
-        query(
-            state_machine,
-            NODE_REWARDS_CANISTER_ID,
-            "get_node_providers_rewards_calculation",
-            Encode!(&request).unwrap(),
-        )
-        .map(|result| Decode!(&result, GetNodeProvidersRewardsCalculationResponse).unwrap())
-        .unwrap()
-        .unwrap()
     }
 
     struct MetricsBeforeAndAfter {
@@ -604,5 +571,21 @@ mod sanity_check {
             after > before,
             "After upgrading and advancing time, {name} did not increase. Before: {before}, After: {after}"
         );
+    }
+
+    fn nrc_daily_rewards(state_machine: &StateMachine, day: DateUtc) -> DailyResults {
+        let request = GetNodeProvidersRewardsCalculationRequest {
+            day,
+            algorithm_version: None,
+        };
+        query(
+            state_machine,
+            NODE_REWARDS_CANISTER_ID,
+            "get_node_providers_rewards_calculation",
+            Encode!(&request).unwrap(),
+        )
+        .map(|result| Decode!(&result, GetNodeProvidersRewardsCalculationResponse).unwrap())
+        .unwrap()
+        .unwrap()
     }
 }

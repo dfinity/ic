@@ -302,6 +302,26 @@ rust_canister(
     ],
 )
 
+rust_canister(
+    name = "governance-canister-test-pbr",
+    testonly = True,
+    srcs = [
+        "canister/canister.rs",
+    ],
+    aliases = ALIASES,
+    compile_data = [":test_did"],
+    crate_features = ["performance-based-rewards"],
+    crate_root = "canister/canister.rs",
+    did_check = False,  # we don't check in the did so can't meaningfully check
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":test_did",
+    visibility = ["//visibility:public"],
+    deps = DEPENDENCIES + [
+        ":build_script",
+        ":governance",
+    ],
+)
+
 generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
