@@ -873,7 +873,8 @@ fn test_memory_suite_grow_memory_cleanup_callback() {
 #[test]
 fn test_memory_suite_take_snapshot_growing_memory_usage() {
     let op = |test: &mut ExecutionTest, canister_id, ()| {
-        let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
         test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -894,7 +895,8 @@ fn test_memory_suite_take_snapshot_shrinking_memory_usage() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister_with_much_memory(test, canister_id);
         // Take a "large" canister snapshot.
-        let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
         let res = test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -911,7 +913,7 @@ fn test_memory_suite_take_snapshot_shrinking_memory_usage() {
     };
     let op = |test: &mut ExecutionTest, canister_id, snapshot_id| {
         let take_canister_snapshot_args =
-            TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id));
+            TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id), None, None);
         test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -931,7 +933,8 @@ fn test_memory_suite_take_snapshot_shrinking_memory_usage() {
 fn test_memory_suite_replace_snapshot() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister(test, canister_id);
-        let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
         let res = test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -942,7 +945,7 @@ fn test_memory_suite_replace_snapshot() {
     };
     let op = |test: &mut ExecutionTest, canister_id, snapshot_id| {
         let take_canister_snapshot_args =
-            TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id));
+            TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id), None, None);
         test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -962,7 +965,8 @@ fn test_memory_suite_replace_snapshot() {
 fn test_memory_suite_load_snapshot_growing_memory_usage() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister(test, canister_id);
-        let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
         let res = test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -996,7 +1000,8 @@ fn test_memory_suite_load_snapshot_shrinking_memory_usage() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister(test, canister_id);
         // Take a "small" snapshot.
-        let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
         let res = test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -1035,7 +1040,8 @@ fn test_memory_suite_load_snapshot_shrinking_memory_usage() {
 fn test_memory_suite_delete_snapshot() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister_with_much_memory(test, canister_id);
-        let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
         let res = test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -1259,7 +1265,7 @@ fn take_snapshot_and_read_metadata(
     test: &mut ExecutionTest,
     canister_id: CanisterId,
 ) -> (SnapshotId, ReadCanisterSnapshotMetadataResponse) {
-    let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
     let res = test.subnet_message(
         Method::TakeCanisterSnapshot,
         take_canister_snapshot_args.encode(),

@@ -1030,8 +1030,13 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             || method == Method::ReadCanisterSnapshotMetadata
             || method == Method::ReadCanisterSnapshotData
         {
-            env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(aborted_canister_id, None))
-                .unwrap();
+            env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(
+                aborted_canister_id,
+                None,
+                None,
+                None,
+            ))
+            .unwrap();
         }
 
         if method == Method::UploadCanisterSnapshotData {
@@ -1226,6 +1231,8 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                 let args = TakeCanisterSnapshotArgs {
                     canister_id: aborted_canister_id.get(),
                     replace_snapshot: None,
+                    uninstall_code: None,
+                    sender_canister_version: None,
                 }
                 .encode();
                 (method, call_args().other_side(args))

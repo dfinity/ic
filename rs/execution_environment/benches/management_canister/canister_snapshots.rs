@@ -48,7 +48,7 @@ fn env_and_canister(canister_size: u64) -> (StateMachine, CanisterId) {
 fn env_and_canister_snapshot(canister_size: u64) -> (StateMachine, CanisterId, SnapshotId) {
     let (env, canister_id) = env_and_canister(canister_size);
     let snapshot_id = env
-        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None, None, None))
         .expect("Error taking canister snapshot")
         .snapshot_id();
     (env, canister_id, snapshot_id)
@@ -124,8 +124,13 @@ fn take_canister_snapshot_bench<M: criterion::measurement::Measurement>(
         b.iter_batched(
             || env_and_canister(canister_size),
             |(env, canister_id)| {
-                env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
-                    .expect("Error taking canister snapshot");
+                env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(
+                    canister_id,
+                    None,
+                    None,
+                    None,
+                ))
+                .expect("Error taking canister snapshot");
                 env
             },
             BatchSize::SmallInput,
@@ -135,8 +140,13 @@ fn take_canister_snapshot_bench<M: criterion::measurement::Measurement>(
         b.iter_batched(
             || env_and_canister(canister_size),
             |(env, canister_id)| {
-                env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
-                    .expect("Error taking canister snapshot");
+                env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(
+                    canister_id,
+                    None,
+                    None,
+                    None,
+                ))
+                .expect("Error taking canister snapshot");
                 env.checkpointed_tick();
                 env
             },
@@ -157,6 +167,8 @@ fn replace_canister_snapshot_bench<M: criterion::measurement::Measurement>(
                 env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(
                     canister_id,
                     Some(snapshot_id),
+                    None,
+                    None,
                 ))
                 .expect("Error replacing canister snapshot");
                 env
@@ -171,6 +183,8 @@ fn replace_canister_snapshot_bench<M: criterion::measurement::Measurement>(
                 env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(
                     canister_id,
                     Some(snapshot_id),
+                    None,
+                    None,
                 ))
                 .expect("Error replacing canister snapshot");
                 env.checkpointed_tick();

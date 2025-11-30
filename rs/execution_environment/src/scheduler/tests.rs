@@ -1371,7 +1371,8 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
         .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
 
     // Take a snapshot of the canister.
-    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let args: TakeCanisterSnapshotArgs =
+        TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
     test.inject_call_to_ic00(
         Method::TakeCanisterSnapshot,
         args.encode(),
@@ -1484,7 +1485,8 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
         .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
 
     // Take a snapshot of the canister.
-    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let args: TakeCanisterSnapshotArgs =
+        TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
     test.inject_call_to_ic00(
         Method::TakeCanisterSnapshot,
         args.encode(),
