@@ -277,6 +277,7 @@ members = [
     "rs/nervous_system/timestamp",
     "rs/nervous_system/tools/neuron-subaccount",
     "rs/nervous_system/tools/release-runscript",
+    "rs/nervous_system/tools/signed-canister-reply",
     "rs/nervous_system/tools/submit-motion-proposal",
     "rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
     "rs/nns/cmc",
