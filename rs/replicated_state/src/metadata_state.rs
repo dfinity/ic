@@ -369,11 +369,13 @@ impl SystemMetadata {
             node_public_keys: Default::default(),
             api_boundary_nodes: Default::default(),
             split_from: None,
+
             // StateManager populates proper values of these fields before
             // committing each state.
             prev_state_hash: Default::default(),
             state_sync_version: CURRENT_STATE_SYNC_VERSION,
             certification_version: CURRENT_CERTIFICATION_VERSION,
+
             heap_delta_estimate: NumBytes::from(0),
             subnet_metrics: Default::default(),
             expected_compiled_wasms: BTreeSet::new(),
@@ -630,7 +632,7 @@ impl SystemMetadata {
         // Destructure `self` in order for the compiler to enforce an explicit decision
         // whenever new fields are added.
         //
-        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS A `match`!
         let &mut SystemMetadata {
             ref mut ingress_history,
             streams: _,
@@ -642,8 +644,8 @@ impl SystemMetadata {
             // Overwritten as soon as the round begins, no explicit action needed.
             network_topology: _,
             ref own_subnet_id,
-            // `own_subnet_type` has been set by `load_checkpoint()` based on the subnet
-            // registry record of B, do not touch it.
+            // `own_subnet_type` has been set by `load_checkpoint()` based on the respective
+            // subnet registry record, do not touch it.
             own_subnet_type: _,
             // Overwritten as soon as the round begins, no explicit action needed.
             own_subnet_features: _,
@@ -662,6 +664,7 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: _,
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
+            // Overwritten as soon as the round begins, no explicit action needed.
             cost_schedule: _,
         } = self;
 
@@ -683,62 +686,253 @@ impl SystemMetadata {
 
         // Reject in-progress subnet messages that cannot be handled on this
         // subnet.
-        self.reject_in_progress_management_calls_after_split(&is_local_canister, subnet_queues);
+        let time = self.time();
+        Self::reject_in_progress_management_calls_after_split(
+            &mut self.subnet_call_context_manager,
+            &is_local_canister,
+            time,
+            subnet_queues,
+            &mut self.ingress_history,
+        );
     }
 
-    /// Creates rejects for all in-progress management messages that cannot or should
-    /// not be handled on this subnet in the second phase of a subnet split.
-    /// Enqueues reject responses into the provided `subnet_queues` for calls originating
-    /// from canisters; and records a `Failed` state in `self.ingress_history` for calls
-    /// originating from ingress messages. The rejects are created for:
-    ///     - All in-progress subnet messages whose target canisters are no longer
-    ///     on this subnet.
-    ///       On the other subnet (which must be *subnet B*), the execution of these same
-    ///     messages, now without matching subnet call contexts, will be silently
-    ///     aborted / rolled back (without producing a response). This is the only way
-    ///     to ensure consistency for a message that would otherwise be executing on one
-    ///     subnet, but for which a response may only be produced by another subnet.
-    ///     - Specific requests that must be entirely handled by the local subnet where
-    ///    the originator canister exists.
-    fn reject_in_progress_management_calls_after_split<F>(
-        &mut self,
+    /// Splits the `MetadataState` in a special DSM round.
+    ///
+    /// A subnet split starts with a subnet A and results in two subnets, A' and B.
+    /// For the sake of clarity, comments refer to the two resulting subnets as
+    /// *subnet A'* and *subnet B*. And to the original subnet as *subnet A*.
+    /// Because subnet A' retains the subnet ID of subnet A, it is identified by
+    /// having `new_subnet_id == self.own_subnet_id`. Conversely, subnet B has
+    /// `new_subnet_id != self.own_subnet_id`.
+    ///
+    /// On subnet A':
+    ///  * Prunes the ingress history.
+    ///  * Rejects management canister calls targeting canisters that have migrated
+    ///    (subnet B will silently drop the corresponding executions from its
+    ///    canisters).
+    ///
+    /// On subnet B:
+    ///  * Updates `own_subnet_id` to `subnet_id`.
+    ///  * Drops the streams and subnet call context manager.
+    ///  * Prunes the ingress history.
+    ///  * Retains most other fields. Many of these will be overwritten by Message
+    ///    Routing at the beginning of the next round.
+    ///
+    /// Notes:
+    ///  * `prev_state_hash` will be set by `take_tip()`.
+    ///  * `own_subnet_type` will be set during `load_checkpoint()`, based on
+    ///    the registry subnet record.
+    ///  * `batch_time`, `network_topology` and `own_subnet_features` will be set
+    ///    by Message Routing before the start of the next round.
+    ///  * `state_sync_version` and `certification_version` will be set by
+    ///    `commit_and_certify()` at the end of the round; and not used before.
+    ///  * `heap_delta_estimate` and `expected_compiled_wasms` are expected to be
+    ///    empty/zero.
+    ///  * `unflushed_checkpoint_ops` contains both arbitrary pending operations;
+    ///    and delete operations for the snapshots of non-local canisters. It is
+    ///    therefore preserved untouched.
+    pub fn online_split<F>(
+        self,
+        subnet_id: SubnetId,
         is_local_canister: F,
         subnet_queues: &mut CanisterQueues,
+    ) -> Result<Self, String>
+    where
+        F: Fn(CanisterId) -> bool,
+    {
+        // Destructure `self` in order for the compiler to enforce an explicit decision
+        // whenever new fields are added.
+        //
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS A `match`!
+        let Self {
+            mut ingress_history,
+            mut streams,
+            mut canister_allocation_ranges,
+            mut last_generated_canister_id,
+            prev_state_hash,
+            batch_time,
+            network_topology,
+            own_subnet_id,
+            own_subnet_type,
+            own_subnet_features,
+            node_public_keys,
+            api_boundary_nodes,
+            split_from,
+            mut subnet_call_context_manager,
+            state_sync_version,
+            certification_version,
+            heap_delta_estimate,
+            mut subnet_metrics,
+            expected_compiled_wasms,
+            mut bitcoin_get_successors_follow_up_responses,
+            mut blockmaker_metrics_time_series,
+            unflushed_checkpoint_ops,
+            cost_schedule,
+        } = self;
+
+        assert_eq!(None, split_from);
+        assert_eq!(0, heap_delta_estimate.get());
+        assert!(expected_compiled_wasms.is_empty());
+
+        // Set the split marker to the original subnet ID (that of subnet A).
+        // split_from = Some(own_subnet_id);
+
+        if own_subnet_id == subnet_id {
+            //
+            // Subnet A'.
+            //
+
+            // Prune the ingress history, retaining only messages addressed to local
+            // canisters or the management canister; and messages in terminal states.
+            ingress_history.prune_after_split(|canister_id: CanisterId| {
+                is_local_canister(canister_id) || canister_id == IC_00
+            });
+
+            // Reject in-progress management canister calls targeting canisters that are no
+            // longer hosted by *subnet A'*. This ensures that the responses to these calls
+            // will originate, as expected, from the management canister of *subnet A'*
+            // (that they were issued to).
+            //
+            // On all canister states migrated to *subnet B*, the corresponding message
+            // executions, now without matching subnet call contexts, are silently aborted.
+            Self::reject_in_progress_management_calls_after_split(
+                &mut subnet_call_context_manager,
+                &is_local_canister,
+                batch_time,
+                subnet_queues,
+                &mut ingress_history,
+            );
+        } else {
+            //
+            // Subnet B.
+            //
+
+            // Prune the ingress history, retaining only messages addressed to local
+            // canisters and messages in terminal states.
+            ingress_history.prune_after_split(is_local_canister);
+
+            // No streams.
+            streams = Default::default();
+
+            // To be initialized in the first round after the split.
+            canister_allocation_ranges = Default::default();
+            last_generated_canister_id = None;
+
+            // No previous state.
+            //
+            // FIXME: What should happen here?
+            // prev_state_hash = None;
+
+            // No in-progress subnet calls on subnet B.
+            subnet_call_context_manager = Default::default();
+
+            // FIXME: Recompute `num_canisters` and `canister_state_bytes` based on the
+            // canisters now hosted by the subnet. Also for subnet A'.
+            subnet_metrics = Default::default();
+            // FIXME: What about this? Also for subnet A'.
+            bitcoin_get_successors_follow_up_responses = Default::default();
+            // FIXME: Should these be split? Also for subnet A'.
+            blockmaker_metrics_time_series = Default::default();
+        }
+
+        Ok(Self {
+            ingress_history,
+            streams,
+            canister_allocation_ranges,
+            last_generated_canister_id,
+            prev_state_hash,
+            batch_time,
+            network_topology,
+            // New subnet ID.
+            own_subnet_id: subnet_id,
+            own_subnet_type,
+            own_subnet_features,
+            // FIXME: Only preserve keys for nodes that are part of the new subnet?
+            node_public_keys,
+            api_boundary_nodes,
+            split_from,
+            // No in-progress subnet calls on subnet B.
+            subnet_call_context_manager,
+            state_sync_version,
+            certification_version,
+            heap_delta_estimate,
+            // FIXME: Recompute `num_canisters` and `canister_state_bytes` based on the
+            // canisters now hosted by the subnet. Also for subnet A'.
+            subnet_metrics,
+            expected_compiled_wasms,
+            // FIXME: What about this? Also for subnet A'.
+            bitcoin_get_successors_follow_up_responses,
+            // FIXME: Should these be split? Also for subnet A'.
+            blockmaker_metrics_time_series,
+            unflushed_checkpoint_ops,
+            cost_schedule,
+        })
+    }
+
+    /// Creates rejects for all in-progress management messages that can no longer
+    /// be handled on *subnet A'* following a subnet split.
+    ///
+    /// Enqueues reject responses into the provided `subnet_queues` for canister
+    /// calls; and records a `Failed` state in `ingress_history` for calls
+    /// originating from ingress messages.
+    ///
+    /// Rejects are created for:
+    ///
+    ///  * All in-progress subnet messages whose target canisters are no longer
+    ///    on this subnet (e.g. install, stop).
+    ///
+    ///    On *subnet B*, the execution of these same messages, now without matching
+    ///    subnet call contexts, will be silently aborted / rolled back (without
+    ///    producing a response). This is the only way to ensure consistency for a
+    ///    message that would otherwise be executing on *subnet B*, but for which a
+    ///    only a response from *subnet A'* could be inducted.
+    ///
+    ///  * Specific requests that must be entirely handled by the local subnet where
+    ///    the originator canister exists (e.g. `raw_rand`).
+    fn reject_in_progress_management_calls_after_split<F>(
+        subnet_call_context_manager: &mut SubnetCallContextManager,
+        is_local_canister: F,
+        time: Time,
+        subnet_queues: &mut CanisterQueues,
+        ingress_history: &mut IngressHistoryState,
     ) where
         F: Fn(CanisterId) -> bool,
     {
-        for install_code_call in self
-            .subnet_call_context_manager
-            .remove_non_local_install_code_calls(&is_local_canister)
+        for install_code_call in
+            subnet_call_context_manager.remove_non_local_install_code_calls(&is_local_canister)
         {
-            self.reject_management_call_after_split(
+            Self::reject_management_call_after_split(
                 install_code_call.call,
                 install_code_call.effective_canister_id,
+                time,
                 subnet_queues,
+                ingress_history,
             );
         }
 
-        for stop_canister_call in self
-            .subnet_call_context_manager
-            .remove_non_local_stop_canister_calls(&is_local_canister)
+        for stop_canister_call in
+            subnet_call_context_manager.remove_non_local_stop_canister_calls(&is_local_canister)
         {
-            self.reject_management_call_after_split(
+            Self::reject_management_call_after_split(
                 stop_canister_call.call,
                 stop_canister_call.effective_canister_id,
+                time,
                 subnet_queues,
+                ingress_history,
             );
         }
 
         // Management `RawRand` requests are rejected if the sender has migrated to another subnet.
-        for raw_rand_context in self
-            .subnet_call_context_manager
-            .remove_non_local_raw_rand_calls(&is_local_canister)
+        for raw_rand_context in
+            subnet_call_context_manager.remove_non_local_raw_rand_calls(&is_local_canister)
         {
             let migrated_canister_id = raw_rand_context.request.sender();
-            self.reject_management_call_after_split(
+            Self::reject_management_call_after_split(
                 CanisterCall::Request(Arc::new(raw_rand_context.request)),
                 migrated_canister_id,
+                time,
                 subnet_queues,
+                ingress_history,
             );
         }
     }
@@ -751,10 +945,11 @@ impl SystemMetadata {
     /// * If the call originated from an ingress message, sets its ingress state in
     ///   `self.ingress_history` to `Failed`.
     fn reject_management_call_after_split(
-        &mut self,
         call: CanisterCall,
         canister_id: CanisterId,
+        time: Time,
         subnet_queues: &mut CanisterQueues,
+        ingress_history: &mut IngressHistoryState,
     ) {
         match call {
             CanisterCall::Request(request) => {
@@ -776,14 +971,14 @@ impl SystemMetadata {
                 let status = IngressStatus::Known {
                     receiver: ingress.receiver.get(),
                     user_id: ingress.source,
-                    time: self.time(),
+                    time,
                     state: IngressState::Failed(UserError::new(
                         ErrorCode::CanisterNotFound,
                         format!("Canister {canister_id} migrated during a subnet split"),
                     )),
                 };
 
-                if let Some(current_status) = self.ingress_history.get(&ingress.message_id) {
+                if let Some(current_status) = ingress_history.get(&ingress.message_id) {
                     assert!(
                         current_status.is_valid_state_transition(&status),
                         "message (id='{}', current_status='{:?}') cannot be transitioned to '{:?}'",
@@ -792,10 +987,10 @@ impl SystemMetadata {
                         status
                     );
                 }
-                self.ingress_history.insert(
+                ingress_history.insert(
                     ingress.message_id.clone(),
                     status,
-                    self.time(),
+                    time,
                     u64::MAX.into(), // No need to enforce ingress memory limits,
                     |_| {},
                 );

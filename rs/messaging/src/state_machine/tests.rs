@@ -26,11 +26,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 mock! {
     pub Scheduler {}
+
     impl Scheduler for Scheduler {
         type State = ReplicatedState;
         fn execute_round(
             &self,
-            state: ic_replicated_state::ReplicatedState,
+            state: ReplicatedState,
             randomness: ic_types::Randomness,
             chain_key_data: ChainKeyData,
             replica_version: &ReplicaVersion,
@@ -39,6 +40,8 @@ mock! {
             current_round_type: ExecutionRoundType,
             registry_settings: &RegistryExecutionSettings,
         ) -> ReplicatedState;
+
+        fn checkpoint_round_with_no_execution(&self, state: &mut ReplicatedState);
     }
 }
 
