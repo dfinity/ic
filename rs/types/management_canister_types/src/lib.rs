@@ -3524,8 +3524,8 @@ impl Payload<'_> for NodeMetricsHistoryResponse {}
 /// If `end` is below `start`, the range is considered empty.
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 pub struct FetchCanisterLogsRange {
-    start: u64, // Inclusive.
-    end: u64,   // Exclusive, values below `start` are ignored.
+    pub start: u64, // Inclusive.
+    pub end: u64,   // Exclusive, values below `start` are ignored.
 }
 
 impl Payload<'_> for FetchCanisterLogsRange {}
