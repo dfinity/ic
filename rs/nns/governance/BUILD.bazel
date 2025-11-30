@@ -195,6 +195,19 @@ rust_library(
 )
 
 rust_library(
+    name = "governance--pbr_feature",
+    srcs = LIB_SRCS,
+    aliases = ALIASES,
+    crate_features = ["performance-based-rewards"],
+    crate_name = "ic_nns_governance",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES + [
+        ":build_script",
+    ],
+)
+
+rust_library(
     name = "governance--test_feature",
     srcs = LIB_SRCS,
     aliases = ALIASES,
@@ -265,6 +278,20 @@ rust_canister(
 )
 
 rust_canister(
+    name = "governance-canister-pbr",
+    srcs = ["canister/canister.rs"],
+    aliases = ALIASES,
+    compile_data = ["canister/governance.did"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":canister/governance.did",
+    visibility = ["//visibility:public"],
+    deps = DEPENDENCIES + [
+        ":build_script",
+        ":governance--pbr_feature",
+    ],
+)
+
+rust_canister(
     name = "governance-canister",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
@@ -299,26 +326,6 @@ rust_canister(
         ":build_script",
         ":governance--test_feature",
         "//rs/tla_instrumentation",
-    ],
-)
-
-rust_canister(
-    name = "governance-canister-test-pbr",
-    testonly = True,
-    srcs = [
-        "canister/canister.rs",
-    ],
-    aliases = ALIASES,
-    compile_data = [":test_did"],
-    crate_features = ["performance-based-rewards"],
-    crate_root = "canister/canister.rs",
-    did_check = False,  # we don't check in the did so can't meaningfully check
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    service_file = ":test_did",
-    visibility = ["//visibility:public"],
-    deps = DEPENDENCIES + [
-        ":build_script",
-        ":governance",
     ],
 )
 

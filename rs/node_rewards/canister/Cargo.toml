@@ -44,7 +44,9 @@ chrono = { workspace = true }
 [dev-dependencies]
 candid_parser = { workspace = true }
 futures-util = { workspace = true }
-ic-nervous-system-agent = { path = "../../nervous_system/agent", features = ["test"] }
+ic-nervous-system-agent = { path = "../../nervous_system/agent", features = [
+    "test",
+] }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 maplit = "1.0.2"
