@@ -9,9 +9,9 @@ rust_library(
         "src/deploy.rs",
         "src/lib.rs",
     ],
-    compile_data = ["//ic-os/testing:reload_hostos_cmd"],
+    compile_data = ["//ic-os/testing:reload_icos_cmd"],
     rustc_env = {
-        "RELOAD_HOSTOS_CMD": "$(execpath //ic-os/testing:reload_hostos_cmd)",
+        "RELOAD_ICOS_CMD": "$(execpath //ic-os/testing:reload_icos_cmd)",
     },
     target_compatible_with = ["@platforms//os:linux"],  # requires Linux-specific dependencies
     visibility = [
@@ -26,12 +26,17 @@ rust_library(
         "@crate_index//:rexpect",
         "@crate_index//:slog",
         "@crate_index//:ssh2",
+        "@crate_index//:thiserror",
     ],
 )
 
 cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
+    build_script_env = {
+        "RELOAD_ICOS_CMD": "$(execpath //ic-os/testing:reload_icos_cmd)",
+    },
+    data = ["//ic-os/testing:reload_icos_cmd"],
 )
 
 rust_binary(

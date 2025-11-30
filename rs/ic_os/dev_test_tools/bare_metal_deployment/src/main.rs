@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, bail, ensure};
-use bare_metal_deployment::deploy::{DeploymentConfig, ImageSource, deploy_to_bare_metal};
-use bare_metal_deployment::{BareMetalIpmiSession, parse_login_info_from_csv};
+use bare_metal_deployment::deploy::{DeploymentConfig, ImageSource, deploy_to_bare_metal, DeploymentError, establish_ssh_connection};
+use bare_metal_deployment::{BareMetalIpmiSession, LoginInfo, parse_login_info_from_csv};
 use clap::Parser;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
@@ -9,7 +9,7 @@ use std::{env, fs};
 
 #[derive(Parser, Debug)]
 #[command(
-    about = "Deploy HostOS and GuestOS images to bare metal hosts. If no images are specified, only injects SSH key via IPMI."
+    about = "Deploy HostOS and GuestOS images to bare metal hosts. If no images are specified, checks SSH connection and injects key via IPMI if needed."
 )]
 struct Args {
     /// Path to CSV file with baremetal login info (host,username,password,guest_ipv6), e.g. zh2-dll01.csv.
@@ -129,62 +129,94 @@ fn get_or_build_image(os_type: OsType, env: &str, build: bool) -> Result<PathBuf
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    // If running via bazel run, set the current directory to the "main" directory.
     if let Some(working_dir) = env::var_os("BUILD_WORKING_DIRECTORY") {
         env::set_current_dir(working_dir)?;
     }
 
-    if args.hostos.is_none() && args.guestos.is_none() {
-        println!("Neither --hostos nor --guestos specified; will only inject SSH key via IPMI.");
-    }
-
-    let hostos_image = args
-        .hostos
-        .map(|env| get_or_build_image(OsType::HostOs, &env, !args.nobuild))
-        .transpose()?;
-    let guestos_image = args
-        .guestos
-        .map(|env| get_or_build_image(OsType::GuestOs, &env, !args.nobuild))
-        .transpose()?;
-
     let config = DeploymentConfig {
-        hostos_upgrade_image: hostos_image.map(ImageSource::File),
-        guestos_image: guestos_image.map(ImageSource::File),
-        // TODO: Maybe in the future we could support injecting config via this tool.
+        hostos_upgrade_image: args
+            .hostos
+            .map(|env| get_or_build_image(OsType::HostOs, &env, !args.nobuild))
+            .transpose()?
+            .map(ImageSource::File),
+        guestos_image: args
+            .guestos
+            .map(|env| get_or_build_image(OsType::GuestOs, &env, !args.nobuild))
+            .transpose()?
+            .map(ImageSource::File),
         setupos_config_image: None,
     };
 
-    // Read login info from CSV file
+    println!("Loading SSH keys...");
+    let (ssh_public_key, ssh_private_key_path) = get_default_ssh_keys()?;
+    println!("Using SSH key: {:?}.pub", ssh_private_key_path);
+
     println!("Reading login info from {:?}", args.login_info);
     let login_csv = fs::read_to_string(&args.login_info)
         .with_context(|| format!("Failed to read login info from {:?}", args.login_info))?;
     let login_info = parse_login_info_from_csv(&login_csv)?;
 
-    // Get SSH keys
-    println!("Loading SSH keys...");
-    let (ssh_public_key, ssh_private_key_path) = get_default_ssh_keys()?;
-    println!("Using SSH key: {:?}.pub", ssh_private_key_path);
+    let host_ip = login_info.hostos_address();
 
-    // Inject SSH key via IPMI
-    println!("Connecting to bare metal host via IPMI...");
-    let mut ipmi_session = BareMetalIpmiSession::start(&login_info)?;
-    let host_ip = ipmi_session.host_address();
-    println!("Connected to bare metal host. HostOS IP: {host_ip}");
-    ipmi_session.inject_ssh_key(&ssh_public_key)?;
-    println!("SSH key injected successfully");
+    // Check if we need to deploy or just verify SSH connection
+    let has_images = config.hostos_upgrade_image.is_some()
+        || config.guestos_image.is_some()
+        || config.setupos_config_image.is_some();
 
-    if config.guestos_image.is_some() || config.hostos_upgrade_image.is_some() {
+    let final_host_ip = if has_images {
         println!("Deploying to bare metal host at {host_ip}");
-        deploy_to_bare_metal(&config, host_ip.into(), &ssh_private_key_path)?;
-        if config.hostos_upgrade_image.is_some() {
-            println!("You'll need to wait 1-2 minutes for the host to reboot.");
-        }
+        let ip = execute_with_ssh_recovery(
+            |ip| deploy_to_bare_metal(&config, ip.into(), &ssh_private_key_path),
+            &login_info,
+            &ssh_public_key,
+        )?;
+        println!("Deployment completed successfully");
+        ip
     } else {
-        println!("Skipping deployment (--hostos or --guestos not specified)");
+        println!("No images specified. Checking SSH connection to {host_ip}...");
+        let ip = execute_with_ssh_recovery(
+            |ip| establish_ssh_connection(ip.into(), &ssh_private_key_path).map(|_| ()),
+            &login_info,
+            &ssh_public_key,
+        )?;
+        println!("SSH connection successful");
+        ip
+    };
+    if config.hostos_upgrade_image.is_some() {
+        println!("You'll need to wait 1-2 minutes for the host to reboot.");
     }
 
     println!("You can SSH into the host using the following command:");
-    println!("ssh admin@{host_ip}");
+    println!("ssh admin@{final_host_ip}");
 
     Ok(())
+}
+
+/// Executes an SSH operation with automatic error recovery via IPMI:
+/// - If SSH connection or authentication fails: Connects via IPMI, injects SSH key, uses IPMI's host IP, and retries
+/// Returns the final host IP address used (may differ from initial IP if recovery was needed)
+fn execute_with_ssh_recovery<F>(
+    mut operation: F,
+    login_info: &LoginInfo,
+    ssh_public_key: &str,
+) -> Result<std::net::Ipv6Addr>
+where
+    F: FnMut(std::net::Ipv6Addr) -> Result<(), DeploymentError>,
+{
+    match operation(login_info.hostos_address()) {
+        Ok(_) => Ok(login_info.hostos_address()),
+        Err(DeploymentError::SshAuthFailed) | Err(DeploymentError::SshConnectionFailed(_)) => {
+            println!("SSH failed. Connecting via IPMI to inject key and get current host IP...");
+            let mut ipmi_session = BareMetalIpmiSession::start(login_info)?;
+            ipmi_session.inject_ssh_key(ssh_public_key)?;
+            let ipmi_host_ip = ipmi_session.hostos_address();
+            println!("SSH key injected. Using host IP from IPMI: {ipmi_host_ip}");
+            drop(ipmi_session);
+
+            println!("Retrying...");
+            operation(ipmi_host_ip)?;
+            Ok(ipmi_host_ip)
+        }
+        Err(DeploymentError::Other(e)) => Err(e),
+    }
 }
