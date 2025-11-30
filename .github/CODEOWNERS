@@ -263,9 +263,6 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/node/                                         @dfinity/node
 /rs/tests/query_stats/                                  @dfinity/team-dsm @dfinity/consensus
 /rs/tests/sdk/                                          @dfinity/sdk
-/rs/tests/src/ledger_tests/                             @dfinity/defi-team
-/rs/tests/src/rosetta_test.rs                           @dfinity/defi-team
-/rs/tests/src/rosetta_tests/                            @dfinity/defi-team
 /rs/tla_instrumentation/                                @dfinity/research @dfinity/formal-models
 /rs/tools/                                              @dfinity/ic-interface-owners
 /rs/tools/check_did/                                    @dfinity/defi-team
