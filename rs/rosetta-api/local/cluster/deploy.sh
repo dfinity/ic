@@ -15,6 +15,7 @@ set -e
 #   --no-icp-latest                  Don't deploy ICP Rosetta latest image
 #   --no-icrc1-latest                Don't deploy ICRC1 Rosetta latest image
 #   --use-persistent-volumes         Use persistent volumes for /data partition
+#   --external-ports                 Forward external connections to TCP/3000 (Grafana), TCP/8080 (ICP) and TCP/8888 (ICRC) for latest Rosetta instances
 #   --clean                          Clean up Minikube cluster and Helm chart before deploying
 #   --stop                           Stop the Minikube cluster
 #   --help                           Display this help message
@@ -31,6 +32,7 @@ LOCAL_ICRC1_IMAGE_TAR=""
 DEPLOY_ICP_LATEST=true
 DEPLOY_ICRC1_LATEST=true
 USE_PERSISTENT_VOLUMES=false
+EXTERNAL_PORTS=false
 CLEAN=false
 STOP=false
 MINIKUBE_PROFILE="local-rosetta"
@@ -78,10 +80,13 @@ while [[ "$#" -gt 0 ]]; do
         --use-persistent-volumes)
             USE_PERSISTENT_VOLUMES=true
             ;;
+        --external-ports)
+            EXTERNAL_PORTS=true
+            ;;
         --clean) CLEAN=true ;;
         --stop) STOP=true ;;
         --help)
-            sed -n '5,20p' "$0"
+            sed -n '5,21p' "$0"
             exit 0
             ;;
         *)
@@ -324,8 +329,10 @@ fi
 echo "Waiting for Grafana server to be ready..."
 wait_for_ready pod app.kubernetes.io/name=grafana monitoring 300
 
-# Forward Grafana port if not already forwarded
-port_forward monitoring kube-prometheus-grafana 3000:80
+# Forward Grafana port if not already forwarded (skip if external-ports is enabled, as it will be handled later)
+if [[ "$EXTERNAL_PORTS" != true ]]; then
+    port_forward monitoring kube-prometheus-grafana 3000:80
+fi
 
 # Function to check if a service exists and print its URL
 print_service_url() {
@@ -355,6 +362,48 @@ for service in icp-rosetta-local icp-rosetta-latest icrc-rosetta-local icrc-rose
     fi
 done
 
+# Kill any existing external port forwards on 3000, 8080 and 8888 if they exist
+if pgrep -f "kubectl port-forward.*--address 0.0.0.0.*3000:80" &>/dev/null \
+    || pgrep -f "kubectl port-forward.*--address 0.0.0.0.*8080:3000" &>/dev/null \
+    || pgrep -f "kubectl port-forward.*--address 0.0.0.0.*8888:3000" &>/dev/null; then
+    echo ""
+    echo "Cleaning up external port forwards (3000, 8080, 8888)..."
+    pkill -f "kubectl port-forward.*--address 0.0.0.0.*3000:80" 2>/dev/null || true
+    pkill -f "kubectl port-forward.*--address 0.0.0.0.*8080:3000" 2>/dev/null || true
+    pkill -f "kubectl port-forward.*--address 0.0.0.0.*8888:3000" 2>/dev/null || true
+    echo "External port forwards removed."
+fi
+
+# Set up external port forwarding if --external-ports flag is set
+if [[ "$EXTERNAL_PORTS" == true ]]; then
+    echo ""
+    echo "Setting up external port forwarding..."
+
+    # Kill any localhost-only Grafana forward on port 3000 (to avoid conflicts)
+    pkill -f "kubectl port-forward.*-n monitoring svc/kube-prometheus-grafana 3000:80.*--context=$MINIKUBE_PROFILE" 2>/dev/null || true
+
+    # Forward ICP Rosetta to external port 8080
+    if kubectl get -n rosetta-api svc icp-rosetta-latest --context="$MINIKUBE_PROFILE" &>/dev/null; then
+        echo "Forwarding icp-rosetta-latest to 0.0.0.0:8080..."
+        kubectl port-forward --address 0.0.0.0 -n rosetta-api svc/icp-rosetta-latest 8080:3000 --context="$MINIKUBE_PROFILE" &>/dev/null &
+        sleep 1
+    fi
+
+    # Forward ICRC Rosetta to external port 8888
+    if kubectl get -n rosetta-api svc icrc-rosetta-latest --context="$MINIKUBE_PROFILE" &>/dev/null; then
+        echo "Forwarding icrc-rosetta-latest to 0.0.0.0:8888..."
+        kubectl port-forward --address 0.0.0.0 -n rosetta-api svc/icrc-rosetta-latest 8888:3000 --context="$MINIKUBE_PROFILE" &>/dev/null &
+        sleep 1
+    fi
+
+    # Forward Grafana to external port 3000
+    if kubectl get -n monitoring svc kube-prometheus-grafana --context="$MINIKUBE_PROFILE" &>/dev/null; then
+        echo "Forwarding Grafana to 0.0.0.0:3000..."
+        kubectl port-forward --address 0.0.0.0 -n monitoring svc/kube-prometheus-grafana 3000:80 --context="$MINIKUBE_PROFILE" &>/dev/null &
+        sleep 1
+    fi
+fi
+
 # Print the URLs
 echo ""
 echo "************************************"
@@ -365,4 +414,13 @@ print_service_url rosetta-api icrc-rosetta-local
 print_service_url rosetta-api icrc-rosetta-latest
 echo "Prometheus: http://localhost:9090"
 echo "Grafana: http://localhost:3000"
+
+if [[ "$EXTERNAL_PORTS" == true ]]; then
+    echo ""
+    echo "External access enabled:"
+    echo "  ICP Rosetta:  <your-hostname>:8080"
+    echo "  ICRC Rosetta: <your-hostname>:8888"
+    echo "  Grafana:      <your-hostname>:3000"
+fi
+
 echo "************************************"

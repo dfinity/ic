@@ -27,6 +27,15 @@ commonResources: &commonResources
     memory: "512Mi"
     cpu: "500m"
 
+replicaCount: 1
+
+volumes:
+  - name: data
+
+volumeMounts:
+  - name: data
+    mountPath: /data
+
 icrcConfig:
   networkType: mainnet
   # Comma-separated list of ledger IDs for multi-token support (e.g., "ledger1,ledger2")
