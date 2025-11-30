@@ -50,7 +50,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
-            NnsInstallationBuilder, SubnetSnapshot, TopologySnapshot,
+            NnsInstallationBuilder, SshSession, SubnetSnapshot, TopologySnapshot,
             find_subnet_that_hosts_canister_id, new_subnet_runtime,
         },
     },

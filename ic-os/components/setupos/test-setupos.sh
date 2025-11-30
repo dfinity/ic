@@ -4,6 +4,7 @@ set -euo pipefail
 
 CHECK_NETWORK_SCRIPT="${1:-./check-network.sh}"
 CHECK_HARDWARE_SCRIPT="${2:-./check-hardware.sh}"
+FUNCTIONS_SCRIPT="${3:-./functions.sh}"
 
 # ------------------------------------------------------------------------------
 # Override "source" for test environment.
@@ -14,17 +15,6 @@ function source() {
         return
     fi
     builtin source "$1"
-}
-
-# ------------------------------------------------------------------------------
-# Mocked Functions
-# ------------------------------------------------------------------------------
-
-function log_and_halt_installation_on_error() {
-    if [ "$1" != "0" ]; then
-        echo "ERROR encountered: $2"
-        exit 1
-    fi
 }
 
 # ------------------------------------------------------------------------------
@@ -212,9 +202,39 @@ function test_verify_deployment_path_warning() {
 }
 
 # ------------------------------------------------------------------------------
+# Unit tests for functions.sh
+# ------------------------------------------------------------------------------
+
+function test_check_cmdline_var() {
+    # Test parameter set to 1.
+    check_cmdline_var testparm /dev/fd/3 3<<<'otherparm_quoted="abc def" testparm=1' || {
+        echo "  FAIL: expected check_cmdline_var to be true with testparm=1"
+        exit 1
+    }
+
+    # Test parameter set to 0.
+    ! check_cmdline_var testparm /dev/fd/3 3<<<'otherparm_quoted="abc def" testparm=0' || {
+        echo "  FAIL: expected check_cmdline_var to be false with testparm=0"
+        exit 1
+    }
+
+    # Test parameter set (equivalent to 1).
+    check_cmdline_var testparm /dev/fd/3 3<<<'otherparm_quoted="abc def" testparm' || {
+        echo "  FAIL: expected check_cmdline_var to be true with testparm"
+        exit 1
+    }
+
+    # Test parameter absent.
+    check_cmdline_var testparm /dev/fd/3 3<<<'otherparm_quoted="abc def" notestparm' || {
+        echo "  FAIL: expected check_cmdline_var to be true without testparm"
+        exit 1
+    }
+}
+
+# ------------------------------------------------------------------------------
 # Load scripts WITHOUT executing main() function.
 # ------------------------------------------------------------------------------
-for script in "${CHECK_NETWORK_SCRIPT}" "${CHECK_HARDWARE_SCRIPT}"; do
+for script in "${CHECK_NETWORK_SCRIPT}" "${CHECK_HARDWARE_SCRIPT}" "${FUNCTIONS_SCRIPT}"; do
     if [[ -f "${script}" ]]; then
         tmpfile=$(mktemp)
         sed '/^main$/d' "${script}" >"${tmpfile}"
@@ -222,6 +242,17 @@ for script in "${CHECK_NETWORK_SCRIPT}" "${CHECK_HARDWARE_SCRIPT}"; do
         rm "${tmpfile}"
     fi
 done
+
+# ------------------------------------------------------------------------------
+# Mocked Functions
+# ------------------------------------------------------------------------------
+
+function log_and_halt_installation_on_error() {
+    if [ "$1" != "0" ]; then
+        echo "ERROR encountered: $2"
+        exit 1
+    fi
+}
 
 # ------------------------------------------------------------------------------
 # Run all tests
@@ -241,6 +272,13 @@ test_verify_memory
 test_verify_deployment_path_warning
 echo
 echo "PASSED check-hardware unit tests"
+echo
+
+echo
+echo "Running functions.sh unit tests..."
+test_check_cmdline_var
+echo
+echo "PASSED functions unit tests"
 echo
 
 echo

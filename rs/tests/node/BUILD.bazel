@@ -76,6 +76,8 @@ system_test(
 )
 
 # ict testnet create launch_single_guest --lifetime-mins 3600
+# Or, to measure startup time:
+# bazel run //rs/tests/node:launch_single_guest -- --quiet
 system_test(
     name = "launch_single_guest",
     tags = [
@@ -87,10 +89,13 @@ system_test(
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
+        "@crate_index//:slog",
     ],
 )
 
 # ict testnet create launch_single_host --lifetime-mins 3600
+# Or, to measure startup time:
+# bazel run //rs/tests/node:launch_single_host -- --quiet
 system_test(
     name = "launch_single_host",
     tags = [
@@ -103,6 +108,7 @@ system_test(
         # Keep sorted.
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
+        "@crate_index//:slog",
     ],
 )
 
