@@ -1,9 +1,8 @@
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use crate::exes::mcopy;
 use anyhow::{Context, Result, anyhow, ensure};
-use async_trait::async_trait;
-use tokio::process::Command;
 
 use crate::Partition;
 use crate::gpt;
@@ -13,11 +12,10 @@ pub struct FatPartition {
     original: PathBuf,
 }
 
-#[async_trait]
 impl Partition for FatPartition {
     /// Open a fat3 partition for writing, via mtools. There is nothing to do
     /// here, as mtools works in place.
-    async fn open(image: PathBuf, index: Option<u32>) -> Result<Self> {
+    fn open(image: PathBuf, index: Option<u32>) -> Result<Self> {
         let _ = mcopy().context("mcopy is needed to open FAT partitions")?;
         let mut offset = None;
         if let Some(index) = index {
@@ -29,7 +27,7 @@ impl Partition for FatPartition {
         })
     }
 
-    async fn open_range(image: PathBuf, offset_bytes: u64, _length_bytes: u64) -> Result<Self> {
+    fn open_range(image: PathBuf, offset_bytes: u64, _length_bytes: u64) -> Result<Self> {
         Ok(Self {
             offset_bytes: Some(offset_bytes),
             original: image,
@@ -38,12 +36,12 @@ impl Partition for FatPartition {
 
     /// Close a fat32 partition. There is nothing to do here, as mtools works
     /// in place.
-    async fn close(self) -> Result<()> {
+    fn close(self) -> Result<()> {
         Ok(())
     }
 
     /// Copy a file into place
-    async fn write_file(&mut self, input: &Path, output: &Path) -> Result<()> {
+    fn write_file(&mut self, input: &Path, output: &Path) -> Result<()> {
         let mcopy = mcopy().context("mcopy is needed to write files")?;
         let out = if let Some(offset) = self.offset_bytes {
             Command::new(mcopy)
@@ -55,7 +53,6 @@ impl Partition for FatPartition {
                     &format!("::{}", output.display()),
                 ])
                 .output()
-                .await
                 .context("failed to run mcopy")?
         } else {
             Command::new(mcopy)
@@ -67,7 +64,6 @@ impl Partition for FatPartition {
                     &format!("::{}", output.display()),
                 ])
                 .output()
-                .await
                 .context("failed to run mcopy")?
         };
 
@@ -79,11 +75,11 @@ impl Partition for FatPartition {
     }
 
     /// Read a file from a given partition
-    async fn read_file(&mut self, input: &Path) -> Result<Vec<u8>> {
-        self.copy_file_inner(input, Path::new("-")).await
+    fn read_file(&mut self, input: &Path) -> Result<Vec<u8>> {
+        self.copy_file_inner(input, Path::new("-"))
     }
 
-    async fn copy_files_to(&mut self, output: &Path) -> Result<()> {
+    fn copy_files_to(&mut self, output: &Path) -> Result<()> {
         let mcopy = mcopy().context("mcopy is needed to extract contents")?;
 
         ensure!(
@@ -102,7 +98,6 @@ impl Partition for FatPartition {
                     &output.display().to_string(),
                 ])
                 .output()
-                .await
                 .context("failed to run mcopy")?
         } else {
             Command::new(mcopy)
@@ -115,7 +110,6 @@ impl Partition for FatPartition {
                     &output.display().to_string(),
                 ])
                 .output()
-                .await
                 .context("failed to run mcopy")?
         };
 
@@ -126,7 +120,7 @@ impl Partition for FatPartition {
         Ok(())
     }
 
-    async fn copy_file_to(&mut self, from: &Path, to: &Path) -> Result<()> {
+    fn copy_file_to(&mut self, from: &Path, to: &Path) -> Result<()> {
         let file_name = from.file_name().expect("`from` must reference a file");
 
         // When extracting to a directory, use the from filename.
@@ -148,7 +142,7 @@ impl Partition for FatPartition {
             "the path to `to` must already exist"
         );
 
-        let _stdout = self.copy_file_inner(from, dest).await?;
+        let _stdout = self.copy_file_inner(from, dest)?;
 
         Ok(())
     }
@@ -156,7 +150,7 @@ impl Partition for FatPartition {
 
 impl FatPartition {
     // Capture and return stdout, which may be used to "read" the file directly
-    async fn copy_file_inner(&mut self, from: &Path, to: &Path) -> Result<Vec<u8>> {
+    fn copy_file_inner(&mut self, from: &Path, to: &Path) -> Result<Vec<u8>> {
         let mcopy = mcopy().context("mcopy is needed to read files")?;
 
         let out = if let Some(offset) = self.offset_bytes {
@@ -169,7 +163,6 @@ impl FatPartition {
                     &format!("{}", to.display()),
                 ])
                 .output()
-                .await
                 .context("failed to run mcopy")?
         } else {
             Command::new(mcopy)
@@ -181,7 +174,6 @@ impl FatPartition {
                     &format!("{}", to.display()),
                 ])
                 .output()
-                .await
                 .context("failed to run mcopy")?
         };
 
@@ -197,9 +189,9 @@ impl FatPartition {
 mod test {
     use super::*;
     use tempfile::{TempDir, tempdir};
-    use tokio::fs;
+    use std::fs;
 
-    async fn create_empty_partition_img(path: &Path) -> Result<()> {
+    fn create_empty_partition_img(path: &Path) -> Result<()> {
         Command::new("/usr/bin/dd")
             .args([
                 "if=/dev/zero",
@@ -207,40 +199,32 @@ mod test {
                 "bs=1K",
                 "count=256",
             ])
-            .spawn()
-            .unwrap()
-            .wait()
-            .await?;
+            .status()?;
 
         Command::new("/usr/sbin/mkfs.fat")
             .args(["-F", "32", "-i", "0"])
             .arg(path.as_os_str())
-            .spawn()
-            .unwrap()
-            .wait()
-            .await?;
+            .status()?;
 
         Ok(())
     }
 
-    #[tokio::test]
-    async fn write_read_test() {
+    #[test]
+    fn write_read_test() {
         let dir = tempdir().unwrap();
         let img_path = dir.path().join("empty_fat32.img");
         create_empty_partition_img(&img_path)
-            .await
             .expect("Could not create test partition image");
 
         let input_file1 = dir.path().join("input.txt");
         let contents1 = b"Hello World!";
-        fs::write(input_file1.clone(), contents1).await.unwrap();
+        fs::write(input_file1.clone(), contents1).unwrap();
 
         let input_file2 = dir.path().join("input2.txt");
         let contents2 = b"Foo Bar";
-        fs::write(input_file2.clone(), contents2).await.unwrap();
+        fs::write(input_file2.clone(), contents2).unwrap();
 
         let mut partition = FatPartition::open(img_path.to_path_buf(), None)
-            .await
             .expect("Could not open partition");
 
         // Copy a file to the partition.
@@ -252,11 +236,9 @@ mod test {
 
         partition
             .write_file(&input_file1, target_path)
-            .await
             .expect("Could not write file to partition");
         let read = partition
             .read_file(target_path)
-            .await
             .expect("Could not read file from partition");
 
         assert_eq!(read, contents1);
@@ -264,11 +246,9 @@ mod test {
         // Overwrite the file that we just created.
         partition
             .write_file(&input_file2, target_path)
-            .await
             .unwrap();
         let read = partition
             .read_file(target_path)
-            .await
             .expect("Could not read file from partition");
 
         assert_eq!(read, contents2);
@@ -277,38 +257,34 @@ mod test {
         assert!(
             partition
                 .read_file(Path::new("/does/not/exist.txt"))
-                .await
                 .expect_err("Expected reading non-existing file to fail")
                 .to_string()
                 .contains("not found")
         );
     }
 
-    #[tokio::test]
-    async fn copy_files_test() {
+    #[test]
+    fn copy_files_test() {
         let dir = tempdir().unwrap();
         let img_path = dir.path().join("empty_fat32.img");
         create_empty_partition_img(&img_path)
-            .await
             .expect("Could not create test partition image");
 
         let mut partition = FatPartition::open(img_path.to_path_buf(), None)
-            .await
             .expect("Could not open partition");
 
         let input_file_names = ["input.txt", "input2.txt"];
         for file in input_file_names {
             let input_path = dir.path().join(file);
             let output_path = Path::new("/").join(file);
-            fs::write(input_path.clone(), b"").await.unwrap();
+            fs::write(input_path.clone(), b"").unwrap();
             partition
                 .write_file(&input_path, &output_path)
-                .await
                 .expect("Could not write file in partition");
         }
 
         let output_dir = TempDir::new().expect("Could not create temp dir");
-        partition.copy_files_to(output_dir.path()).await.unwrap();
+        partition.copy_files_to(output_dir.path()).unwrap();
 
         let mut actual_file_names = std::fs::read_dir(output_dir.path())
             .expect("read_dir failed")
@@ -327,26 +303,23 @@ mod test {
         assert_eq!(actual_file_names, ["input.txt", "input2.txt"]);
     }
 
-    #[tokio::test]
-    async fn copy_file_test() {
+    #[test]
+    fn copy_file_test() {
         let dir = tempdir().unwrap();
         let img_path = dir.path().join("empty_fat32.img");
         create_empty_partition_img(&img_path)
-            .await
             .expect("Could not create test partition image");
 
         let mut partition = FatPartition::open(img_path.to_path_buf(), None)
-            .await
             .expect("Could not open partition");
 
         let input_file_names = ["input.txt", "input2.txt"];
         for file in input_file_names {
             let input_path = dir.path().join(file);
             let output_path = Path::new("/").join(file);
-            fs::write(input_path.clone(), b"").await.unwrap();
+            fs::write(input_path.clone(), b"").unwrap();
             partition
                 .write_file(&input_path, &output_path)
-                .await
                 .expect("Could not write file in partition");
         }
 
@@ -355,7 +328,6 @@ mod test {
         // Copy with assumed name (from input).
         partition
             .copy_file_to(Path::new("/input.txt"), output_dir.path())
-            .await
             .unwrap();
 
         let mut actual_file_names = std::fs::read_dir(output_dir.path())
@@ -380,7 +352,6 @@ mod test {
                 Path::new("/input2.txt"),
                 &output_dir.path().join("different.txt"),
             )
-            .await
             .unwrap();
 
         let mut actual_file_names = std::fs::read_dir(output_dir.path())
