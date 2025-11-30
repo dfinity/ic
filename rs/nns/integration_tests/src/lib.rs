@@ -31,7 +31,7 @@ mod cycles_minting_canister_with_exchange_rate_canister;
 mod node_provider_remuneration;
 
 #[cfg(test)]
-mod node_provider_remuneration_performance_based_with_golden_nns_state;
+mod node_provider_remuneration_oneoff_pbr_with_golden_nns_state;
 
 #[cfg(test)]
 mod governance_get_build_metadata_test;
