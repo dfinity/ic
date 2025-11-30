@@ -237,12 +237,14 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
             Operation::FeeCollector {
                 fee_collector,
                 caller,
+                op,
             } => {
                 tx.kind = "107set_fee_collector".to_string();
                 tx.fee_collector = Some(FeeCollector {
                     fee_collector,
                     caller,
                     ts: created_at_time,
+                    op,
                 });
             }
         }

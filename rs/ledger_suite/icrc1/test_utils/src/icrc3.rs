@@ -121,19 +121,21 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
         fee_collector: Option<Account>,
         caller: Option<Principal>,
         ts: Option<u64>,
+        op_name: Option<String>,
     ) -> FeeCollectorBuilder<Tokens> {
         FeeCollectorBuilder {
             builder: self,
             fee_collector,
             caller,
             ts,
+            op: op_name,
         }
     }
 
     /// Build the final ICRC3Value block
     fn build_with_operation(
         self,
-        op_name: &str,
+        op_name: Option<&str>,
         tx_fields: BTreeMap<String, ICRC3Value>,
     ) -> ICRC3Value {
         let mut block_map = BTreeMap::new();
@@ -143,7 +145,9 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
 
         // Create transaction
         let mut tx_map = BTreeMap::new();
-        tx_map.insert("op".to_string(), ICRC3Value::Text(op_name.to_string()));
+        if let Some(op_name) = op_name {
+            tx_map.insert("op".to_string(), ICRC3Value::Text(op_name.to_string()));
+        }
 
         // Add operation-specific fields
         for (key, value) in tx_fields {
@@ -215,7 +219,7 @@ impl<Tokens: TokensType> TransferBuilder<Tokens> {
             tx_fields.insert("spender".to_string(), account_to_icrc3_value(spender));
         }
 
-        self.builder.build_with_operation("xfer", tx_fields)
+        self.builder.build_with_operation(Some("xfer"), tx_fields)
     }
 }
 
@@ -233,7 +237,7 @@ impl<Tokens: TokensType> MintBuilder<Tokens> {
         tx_fields.insert("to".to_string(), account_to_icrc3_value(&self.to));
         tx_fields.insert("amt".to_string(), ICRC3Value::Nat(self.amount.into()));
 
-        self.builder.build_with_operation("mint", tx_fields)
+        self.builder.build_with_operation(Some("mint"), tx_fields)
     }
 }
 
@@ -262,7 +266,7 @@ impl<Tokens: TokensType> BurnBuilder<Tokens> {
             tx_fields.insert("spender".to_string(), account_to_icrc3_value(spender));
         }
 
-        self.builder.build_with_operation("burn", tx_fields)
+        self.builder.build_with_operation(Some("burn"), tx_fields)
     }
 }
 
@@ -310,7 +314,8 @@ impl<Tokens: TokensType> ApproveBuilder<Tokens> {
             );
         }
 
-        self.builder.build_with_operation("approve", tx_fields)
+        self.builder
+            .build_with_operation(Some("approve"), tx_fields)
     }
 }
 
@@ -320,6 +325,7 @@ pub struct FeeCollectorBuilder<Tokens: TokensType> {
     fee_collector: Option<Account>,
     caller: Option<Principal>,
     ts: Option<u64>,
+    op: Option<String>,
 }
 
 impl<Tokens: TokensType> FeeCollectorBuilder<Tokens> {
@@ -339,7 +345,7 @@ impl<Tokens: TokensType> FeeCollectorBuilder<Tokens> {
             tx_fields.insert("ts".to_string(), ICRC3Value::Nat(Nat::from(ts)));
         }
         self.builder
-            .build_with_operation("107set_fee_collector", tx_fields)
+            .build_with_operation(self.op.as_deref(), tx_fields)
     }
 }
 
