@@ -2949,6 +2949,9 @@ impl CanisterManager {
             canister.scheduler_state.heap_delta_debit += NumBytes::new(bytes_written);
         }
         round_limits.instructions -= as_round_instructions(instructions);
+
+        state.record_snapshot_data_upload(snapshot_id);
+
         // Return the instructions needed to write the chunk to the destination.
         Ok(instructions)
     }

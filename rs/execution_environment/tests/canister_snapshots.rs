@@ -612,11 +612,23 @@ fn upload_snapshot_with_checkpoint() {
         chunk_1.clone(),
     ))
     .unwrap();
-    // spread stable memory upload over a checkpoint event
+    // spread stable memory upload over sevaral checkpoints, covering three types of uploads:
+    // 1. In the same checkpoint interval as the metadata upload
+    // 2. In a checkpoint interval of its own
+    // 3. In the same checkpoint interval as the eventual download.
     env.upload_snapshot_stable_memory(canister_id, snapshot_id, &stable_memory_dl, None, Some(1))
         .unwrap();
     env.checkpointed_tick();
-    env.upload_snapshot_stable_memory(canister_id, snapshot_id, &stable_memory_dl, Some(1), None)
+    env.upload_snapshot_stable_memory(
+        canister_id,
+        snapshot_id,
+        &stable_memory_dl,
+        Some(1),
+        Some(2),
+    )
+    .unwrap();
+    env.checkpointed_tick();
+    env.upload_snapshot_stable_memory(canister_id, snapshot_id, &stable_memory_dl, Some(2), None)
         .unwrap();
     // upload second chunk after checkpoint
     env.upload_canister_snapshot_data(&UploadCanisterSnapshotDataArgs::new(
