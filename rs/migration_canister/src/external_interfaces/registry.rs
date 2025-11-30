@@ -51,13 +51,7 @@ pub async fn get_subnet_for_canister(canister_id: Principal) -> Result<Principal
                     canister_id, e
                 );
                 println!("{}", msg);
-                if e.contains("is not assigned to any subnet") {
-                    Err(ValidationError::CanisterNotFound {
-                        canister: canister_id,
-                    })
-                } else {
-                    Err(ValidationError::CallFailed { reason: msg })
-                }
+                Err(ValidationError::CallFailed { reason: msg })
             }
             Err(e) => {
                 let msg = format!(
@@ -94,7 +88,7 @@ pub async fn migrate_canister(
         target_subnet_id: target_subnet,
     };
 
-    match Call::bounded_wait(
+    match Call::unbounded_wait(
         Principal::from_text(REGISTRY_CANISTER_ID).unwrap(),
         "migrate_canisters",
     )
