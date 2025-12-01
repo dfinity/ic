@@ -113,7 +113,7 @@ impl RecurringAsyncTaskNonSend for HourlySyncTask {
             m.record_last_sync_instructions(instruction_counter.sum());
         });
 
-        ic_cdk::println!("Successfully synced subnets metrics");
+        ic_cdk::println!("Successfully synced registry and subnets metrics");
 
         (Self::default_delay(), self)
     }
