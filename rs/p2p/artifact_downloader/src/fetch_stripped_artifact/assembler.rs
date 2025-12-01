@@ -232,7 +232,9 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             if let Err(err) = assembler.try_insert_stripped_message(message) {
                 warn!(
                     self.log,
-                    "Failed to insert stripped message {}. This is a bug.", err
+                    "Failed to insert stripped message of type {}: {}. This is a bug.",
+                    message_type.as_str(),
+                    err
                 );
 
                 return AssembleResult::Unwanted;

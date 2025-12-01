@@ -95,6 +95,13 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
             )));
         }
 
+        // TODO(CON-1618): Allow stripped IDKG dealings.
+        if !value.stripped_dealings.is_empty() {
+            return Err(ProxyDecodeError::Other(String::from(
+                "IDKG dealings should not be stripped yet",
+            )));
+        }
+
         Ok(Self {
             block_proposal_without_ingresses_proto,
             stripped_ingress_payload: StrippedIngressPayload {
@@ -246,6 +253,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn serialize_deserialize_stripped_block_proposal_ingress_test() {
+        let ingress_1_id = fake_ingress_message("fake_1").id();
+        let ingress_2_id = fake_ingress_message("fake_2").id();
+        let stripped_block_proposal =
+            fake_stripped_block_proposal_with_messages(vec![ingress_1_id, ingress_2_id]);
+        let original_consensus_message =
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped_block_proposal);
+
+        let proto = pb::StrippedConsensusMessage::from(original_consensus_message.clone());
+        let consensus_message = MaybeStrippedConsensusMessage::try_from(proto)
+            .expect("Should deserialize a valid proto");
+
+        assert_eq!(consensus_message, original_consensus_message);
+    }
+
+    #[test]
     fn serialize_deserialize_stripped_block_proposal_test() {
         let ingress_1_id = fake_ingress_message("fake_1").id();
         let ingress_2_id = fake_ingress_message("fake_2").id();
@@ -261,10 +284,11 @@ mod tests {
             MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped_block_proposal);
 
         let proto = pb::StrippedConsensusMessage::from(original_consensus_message.clone());
-        let consensus_message = MaybeStrippedConsensusMessage::try_from(proto)
-            .expect("Should deserialize a valid proto");
-
-        assert_eq!(consensus_message, original_consensus_message);
+        let result = MaybeStrippedConsensusMessage::try_from(proto);
+        assert_matches!(
+            result,
+            Err(ProxyDecodeError::Other(msg)) if msg.contains("IDKG dealings should not be stripped yet")
+        );
     }
 
     #[test]
@@ -298,7 +322,7 @@ mod tests {
         let result = MaybeStrippedConsensusMessage::try_from(proto);
         assert_matches!(
             result,
-            Err(ProxyDecodeError::Other(msg)) if msg.contains("is NOT for a dealing")
+            Err(ProxyDecodeError::Other(msg)) if msg.contains("IDKG dealings should not be stripped yet")
         );
     }
 }

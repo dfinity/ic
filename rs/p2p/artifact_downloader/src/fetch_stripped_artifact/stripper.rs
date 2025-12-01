@@ -47,6 +47,7 @@ impl Strippable for ConsensusMessage {
                     stripped_ingress_payload,
                     unstripped_consensus_message_id,
                     stripped_idkg_dealings: StrippedIDkgDealings {
+                        // TODO(CON-1618): Strip IDKG dealings.
                         stripped_dealings: vec![],
                     },
                 })
