@@ -184,7 +184,9 @@ impl<'a> GenericIdentity<'a> {
             GenericIdentityInner::Ed25519(sk) => sk.sign_message(bytes).to_vec(),
             GenericIdentityInner::K256(sk) => sk.sign_message_with_ecdsa(bytes).to_vec(),
             GenericIdentityInner::P256(sk) => sk.sign_message(bytes).to_vec(),
-            GenericIdentityInner::WebAuthnEcdsaSecp256r1(sk) => webauthn_sign_ecdsa_secp256r1(sk, bytes),
+            GenericIdentityInner::WebAuthnEcdsaSecp256r1(sk) => {
+                webauthn_sign_ecdsa_secp256r1(sk, bytes)
+            }
             GenericIdentityInner::Canister(canister_signer) => {
                 let sign_future = canister_signer.sign(bytes);
                 // We are in a sync method and need to call the async `CanisterSigner::sign`,
@@ -1168,8 +1170,7 @@ fn webauthn_cose_wrap_ecdsa_secp256r1_key(pk: &ic_secp256r1::PublicKey) -> Vec<u
         const COSE_PARAM_ALG_ES256: serde_cbor::Value = serde_cbor::Value::Integer(-7);
 
         const COSE_PARAM_EC2_CRV: serde_cbor::Value = serde_cbor::Value::Integer(-1);
-        const COSE_PARAM_EC2_CRV_P256: serde_cbor::Value =
-            serde_cbor::Value::Integer(1);
+        const COSE_PARAM_EC2_CRV_P256: serde_cbor::Value = serde_cbor::Value::Integer(1);
 
         const COSE_PARAM_EC2_X: serde_cbor::Value = serde_cbor::Value::Integer(-2);
         const COSE_PARAM_EC2_Y: serde_cbor::Value = serde_cbor::Value::Integer(-3);
@@ -1222,10 +1223,6 @@ fn webauthn_sign_ecdsa_secp256r1(sk: &ic_secp256r1::PrivateKey, msg: &[u8]) -> V
         sm
     };
     let signature = Blob(sk.sign_message_with_der_encoded_sig(&signed_message));
-    let sig = WebAuthnSignature::new(
-        authenticator_data,
-        Blob(client_data_json),
-        signature,
-    );
+    let sig = WebAuthnSignature::new(authenticator_data, Blob(client_data_json), signature);
     serde_cbor::to_vec(&sig).unwrap()
 }
