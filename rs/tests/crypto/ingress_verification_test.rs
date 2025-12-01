@@ -78,8 +78,8 @@ impl<'a> GenericIdentityType<'a> {
             0 => Self::EcdsaSecp256k1,
             1 => Self::EcdsaSecp256r1,
             2 => Self::Canister(canister),
-            4 => Self::WebAuthnEcdsaSecp256r1,
-            5 => Self::WebAuthnRsaPkcs1,
+            3 => Self::WebAuthnEcdsaSecp256r1,
+            4 => Self::WebAuthnRsaPkcs1,
             _ => Self::Ed25519,
         }
     }
