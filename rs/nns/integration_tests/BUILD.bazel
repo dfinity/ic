@@ -273,13 +273,13 @@ rust_ic_test_suite_with_extra_srcs(
         ["src/**/*.rs"],
         exclude = [
             "src/lib.rs",
-        # Tests that are broken out into their own rules below,
-        # mostly due to long running times.
-        "src/canister_playground.rs",
-        "src/upgrade_canisters_with_golden_nns_state.rs",
-        "src/node_provider_remuneration_oneoff_pbr_with_golden_nns_state.rs",
-    ],
-),
+            # Tests that are broken out into their own rules below,
+            # mostly due to long running times.
+            "src/canister_playground.rs",
+            "src/upgrade_canisters_with_golden_nns_state.rs",
+            "src/node_provider_remuneration_oneoff_pbr_with_golden_nns_state.rs",
+        ],
+    ),
     aliases = ALIASES,
     crate_features = select({
         "//rs/nns/governance:tla_disabled": [],

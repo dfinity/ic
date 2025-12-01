@@ -223,13 +223,7 @@ thread_local! {
 }
 
 pub(crate) fn are_performance_based_rewards_enabled() -> bool {
-    if ARE_PERFORMANCE_BASED_REWARDS_ENABLED.get() {
-        ic_cdk::println!("pbr true");
-        true
-    } else {
-        ic_cdk::println!("pbr false");
-        false
-    }
+    ARE_PERFORMANCE_BASED_REWARDS_ENABLED.get()
 }
 
 pub fn are_nf_fund_proposals_disabled() -> bool {
