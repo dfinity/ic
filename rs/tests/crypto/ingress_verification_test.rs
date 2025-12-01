@@ -1221,6 +1221,10 @@ fn webauthn_sign_ecdsa_secp256r1(sk: &ic_secp256r1::PrivateKey, msg: &[u8]) -> V
         sm
     };
     let signature = Blob(sk.sign_message_with_der_encoded_sig(&signed_message));
-    let sig = ic_types::messages::WebAuthnSignature::new(authenticator_data, Blob(client_data_json), signature);
+    let sig = ic_types::messages::WebAuthnSignature::new(
+        authenticator_data,
+        Blob(client_data_json),
+        signature,
+    );
     serde_cbor::to_vec(&sig).unwrap()
 }
