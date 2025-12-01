@@ -477,6 +477,8 @@ mod tests {
         let mut registry = Registry::new();
 
         let _temp = temporarily_enable_node_swapping();
+        test_set_swapping_whitelisted_callers(vec![]);
+        test_set_swapping_enabled_subnets(vec![]);
 
         let payload = valid_payload();
 
@@ -643,6 +645,7 @@ mod tests {
         let (old_node_id, new_node_id, subnet_id, node_operator_id, mut registry) =
             setup_registry_for_test(false);
         test_set_swapping_enabled_subnets(vec![subnet_id]);
+        test_set_swapping_whitelisted_callers(vec![]);
 
         let payload = SwapNodeInSubnetDirectlyPayload {
             new_node_id: Some(new_node_id.get()),
