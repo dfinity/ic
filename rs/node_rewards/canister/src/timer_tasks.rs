@@ -1,8 +1,13 @@
 use crate::canister::{NodeRewardsCanister, current_time};
 use crate::telemetry;
+use async_trait::async_trait;
 use chrono::{DateTime, Days, NaiveDate};
+#[cfg(not(target_arch = "wasm32"))]
+use futures_util::FutureExt;
+#[cfg(target_arch = "wasm32")]
+use ic_cdk::futures::spawn;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
-use ic_nervous_system_timer_task::RecurringSyncTask;
+use ic_nervous_system_timer_task::{RecurringSyncTask, set_timer};
 use ic_node_rewards_canister_api::DateUtc;
 use ic_node_rewards_canister_api::providers_rewards::GetNodeProvidersRewardsRequest;
 use std::cell::RefCell;
@@ -14,6 +19,45 @@ const SECS_PER_HOUR: u64 = 3600;
 // This offset makes sure that the first sync of the day happens at 00:05, times that guarantees
 // All the subnets have collected metrics for the previous day
 const SYNC_OFFSET: u64 = 5 * 60; // 5 minutes in seconds
+
+const RETRY_FAILED_SYNC_SECS: u64 = 60;
+
+fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        spawn(future);
+    }
+    // This is needed for tests
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        future
+            .now_or_never()
+            .expect("Future could not execute in non-WASM environment");
+    }
+}
+
+#[async_trait(?Send)]
+pub trait RecurringAsyncTaskNonSend: Sized + 'static {
+    async fn execute(self) -> (Duration, Self);
+    fn initial_delay(&self) -> Duration;
+
+    fn schedule_with_delay(self, delay: Duration) {
+        set_timer(delay, async move {
+            spawn_in_canister_env(async move {
+                let (new_delay, new_task) = self.execute().await;
+
+                new_task.schedule_with_delay(new_delay);
+            });
+        });
+    }
+
+    fn schedule(self) {
+        let initial_delay = self.initial_delay();
+        self.schedule_with_delay(initial_delay);
+    }
+
+    const NAME: &'static str;
+}
 
 #[derive(Copy, Clone)]
 pub struct HourlySyncTask {
@@ -40,36 +84,35 @@ impl HourlySyncTask {
     }
 }
 
-impl RecurringSyncTask for HourlySyncTask {
-    fn execute(self) -> (Duration, Self) {
+// TODO: Make this task Send once MetricsManager and StableCanisterRegistryClient are Send.
+#[async_trait(?Send)]
+impl RecurringAsyncTaskNonSend for HourlySyncTask {
+    async fn execute(self) -> (Duration, Self) {
         let instruction_counter = telemetry::InstructionCounter::default();
-
         telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_start());
-        ic_cdk::futures::spawn_017_compat(async move {
-            match NodeRewardsCanister::schedule_registry_sync(self.canister).await {
-                Ok(_) => {
-                    ic_cdk::println!("Successfully synced local registry");
-                    match NodeRewardsCanister::schedule_metrics_sync(self.canister).await {
-                        Ok(_) => {
-                            telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| {
-                                m.mark_last_sync_success();
-                                m.record_last_sync_instructions(instruction_counter.sum());
-                            });
-                            ic_cdk::println!("Successfully synced subnets metrics");
-                        }
-                        Err(e) => {
-                            telemetry::PROMETHEUS_METRICS
-                                .with_borrow_mut(|m| m.mark_last_sync_failure());
-                            ic_cdk::println!("Failed to sync subnets metrics: {:?}", e)
-                        }
-                    }
-                }
-                Err(e) => {
-                    telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_failure());
-                    ic_cdk::println!("Failed to sync local registry: {:?}", e)
-                }
-            };
+
+        // First sync the local registry
+        if let Err(e) = NodeRewardsCanister::schedule_registry_sync(self.canister).await {
+            telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_failure());
+            ic_cdk::println!("Failed to sync local registry: {:?}", e);
+
+            return (Duration::from_secs(RETRY_FAILED_SYNC_SECS), self);
+        }
+
+        // Then sync the subnets metrics
+        if let Err(e) = NodeRewardsCanister::schedule_metrics_sync(self.canister).await {
+            telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_failure());
+            ic_cdk::println!("Failed to sync subnets metrics: {:?}", e);
+
+            return (Duration::from_secs(RETRY_FAILED_SYNC_SECS), self);
+        }
+
+        telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| {
+            m.mark_last_sync_success();
+            m.record_last_sync_instructions(instruction_counter.sum());
         });
+
+        ic_cdk::println!("Successfully synced subnets metrics");
 
         (Self::default_delay(), self)
     }
