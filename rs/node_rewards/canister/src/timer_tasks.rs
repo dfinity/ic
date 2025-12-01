@@ -3,7 +3,7 @@ use crate::telemetry;
 use async_trait::async_trait;
 use chrono::{DateTime, Days, NaiveDate};
 #[cfg(not(target_arch = "wasm32"))]
-use futures_util::FutureExt;
+use futures::FutureExt;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::futures::spawn;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
@@ -11,6 +11,7 @@ use ic_nervous_system_timer_task::{RecurringSyncTask, set_timer};
 use ic_node_rewards_canister_api::DateUtc;
 use ic_node_rewards_canister_api::providers_rewards::GetNodeProvidersRewardsRequest;
 use std::cell::RefCell;
+use std::future::Future;
 use std::thread::LocalKey;
 use std::time::Duration;
 
