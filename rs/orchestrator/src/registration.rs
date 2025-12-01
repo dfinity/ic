@@ -144,13 +144,13 @@ impl NodeRegistration {
                 .poll_delay_duration_ms,
         );
         while let Err(e) = self.check_node_registered().await {
-            warn!(self.log, "Node keys are not setup: {:?}", e);
+            let message = format!(
+                "Node registration not complete: {:?}. Trying to register it.",
+                e
+            );
+            warn!(self.log, "{}", message);
             UtilityCommand::notify_host(
-                format!(
-                    "node-id {}: Node registration not complete. Trying to register it",
-                    self.node_id,
-                )
-                .as_str(),
+                format!("node-id {}: {}", self.node_id, message).as_str(),
                 1,
             );
 
