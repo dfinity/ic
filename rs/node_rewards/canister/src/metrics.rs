@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use crate::KeyRange;
 use crate::chrono_utils::{first_unix_timestamp_nanoseconds, last_unix_timestamp_nanoseconds};
 use crate::pb::v1::{SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue};
@@ -6,7 +5,7 @@ use async_trait::async_trait;
 use candid::Principal;
 use chrono::{DateTime, NaiveDate};
 use ic_base_types::{NodeId, SubnetId};
-use ic_cdk::api::call::CallResult;
+use ic_cdk::call::CallResult;
 use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
 use ic_stable_structures::StableBTreeMap;
 use itertools::Itertools;
@@ -35,14 +34,11 @@ impl ManagementCanisterClient for ICCanisterClient {
         &self,
         args: NodeMetricsHistoryArgs,
     ) -> CallResult<Vec<NodeMetricsHistoryRecord>> {
-        ic_cdk::api::call::call_with_payment128::<_, (Vec<NodeMetricsHistoryRecord>,)>(
-            Principal::management_canister(),
-            "node_metrics_history",
-            (args,),
-            0_u128,
-        )
-        .await
-        .map(|(response,)| response)
+        ic_cdk::call::Call::bounded_wait(Principal::management_canister(), "node_metrics_history")
+            .with_arg(args)
+            .await?
+            .candid()
+            .map_err(Into::into)
     }
 }
 
@@ -158,7 +154,7 @@ where
                         );
                     }
                 }
-                Err((_, e)) => {
+                Err(e) => {
                     success = false;
                     ic_cdk::println!(
                         "Error fetching metrics for subnet {}: ERROR: {}",
