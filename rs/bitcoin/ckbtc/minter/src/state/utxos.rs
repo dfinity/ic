@@ -1,5 +1,5 @@
 use ic_btc_interface::Utxo;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{btree_map, BTreeMap, BTreeSet};
 
 /// Set of UTXOs sorted by value.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -17,11 +17,14 @@ impl UtxoSet {
     }
 
     pub fn contains(&self, utxo: &Utxo) -> bool {
-       self.utxos.get(&utxo.value).map(|utxos|utxos.contains(utxo)).unwrap_or(false)
+        self.utxos.get(&utxo.value).map(|utxos| utxos.contains(utxo)).unwrap_or(false)
     }
 
     pub fn remove(&mut self, utxo: &Utxo) -> Option<Utxo> {
-        self.utxos.get_mut(&utxo.value).and_then(|utxos| utxos.take(utxo))
+        if let btree_map::Entry::Occupied(entry) = self.utxos.entry(utxo.value) {
+            return UtxoSet::mutate_utxo_set(entry, |utxos| utxos.take(utxo));
+        }
+        None
     }
 
     /// Find a UTXO with the smallest value being at least `value`.
@@ -31,12 +34,15 @@ impl UtxoSet {
 
     /// Remove a UTXO with the smallest value.
     pub fn pop_first(&mut self) -> Option<Utxo> {
-        self.utxos.first_entry().and_then(|mut utxos| utxos.get_mut().pop_first())
+        if let Some(entry) = self.utxos.first_entry() {
+            return UtxoSet::mutate_utxo_set(entry, |utxos| utxos.pop_first());
+        }
+        None
     }
 
     /// A UTXO with the largest value.
     pub fn last(&self) -> Option<&Utxo> {
-        self.utxos.last_key_value().and_then(|(_value, utxos)|utxos.last())
+        self.utxos.last_key_value().and_then(|(_value, utxos)| utxos.last())
     }
 
     pub fn len(&self) -> usize {
@@ -45,6 +51,17 @@ impl UtxoSet {
 
     pub fn iter(&self) -> impl Iterator<Item=&Utxo> {
         self.utxos.values().flat_map(|utxos| utxos.iter())
+    }
+
+    // Helper method to change an entry in `UtxoSet`.
+    // It ensures the map entry will be removed if its values are empty.
+    fn mutate_utxo_set<R, F: FnOnce(&mut BTreeSet<Utxo>) -> R>(mut entry: btree_map::OccupiedEntry<u64, BTreeSet<Utxo>>, mutator: F) -> R {
+        let mut utxos = entry.get_mut();
+        let result = mutator(&mut utxos);
+        if entry.get().is_empty() {
+            entry.remove_entry();
+        }
+        result
     }
 }
 
