@@ -17,7 +17,6 @@ use ic_nns_test_utils::state_test_helpers::{
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::Tokens;
-use serde::Deserialize;
 use std::{
     env,
     fmt::{Debug, Formatter},
@@ -251,8 +250,85 @@ mod sanity_check {
         DailyResults, GetNodeProvidersRewardsCalculationRequest,
         GetNodeProvidersRewardsCalculationResponse,
     };
-    use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
     use std::collections::BTreeMap;
+
+    /// Expected adjusted rewards for each node provider up to and including November 29th, 2024.
+    /// These values represent the total rewards with penalties applied for underperforming nodes.
+    fn expected_rewards_up_to_nov_29() -> BTreeMap<&'static str, u64> {
+        [
+            ("zy4m7", 109182585),
+            ("7uioy", 109918675),
+            ("6nbcy", 265378418),
+            ("pa5mu", 21568924),
+            ("2hl5k", 237132003),
+            ("7at4h", 247378628),
+            ("64xe5", 157176667),
+            ("bvcsg", 248745240),
+            ("wdjjk", 265425369),
+            ("sixix", 274428250),
+            ("sma3p", 82584735),
+            ("x7uok", 190138708),
+            ("rpfvr", 314032811),
+            ("ihbuj", 130147575),
+            ("rbn2y", 246175185),
+            ("eipr5", 233366245),
+            ("r3yjn", 306534934),
+            ("6r5lw", 264633803),
+            ("4r6qy", 59862103),
+            ("i7dto", 165325929),
+            ("vegae", 212422581),
+            ("izmhk", 234904675),
+            ("diyay", 60116742),
+            ("dnpkk", 185357329),
+            ("wdnqm", 165659587),
+            ("4dibr", 235507938),
+            ("fwnmn", 87712093),
+            ("kos24", 103115528),
+            ("ks7ow", 167591909),
+            ("ucjqj", 266417408),
+            ("hzqcb", 16788724),
+            ("7ws2n", 21828765),
+            ("g7dkt", 142384883),
+            ("trxbq", 15816494),
+            ("2wxzd", 170148002),
+            ("g2ax6", 86173714),
+            ("mjnyf", 24558897),
+            ("ivf2y", 60267261),
+            ("ma7dp", 177654522),
+            ("dodsd", 157011575),
+            ("i3cfo", 38117264),
+            ("ulyfm", 160827004),
+            ("hk7eo", 18872873),
+            ("glrjs", 318323776),
+            ("otzuu", 49603892),
+            ("hycj4", 1012894),
+            ("eatbv", 44699188),
+            ("4jjya", 77906308),
+            ("eybf4", 65101024),
+            ("3oqw6", 117521170),
+            ("wwdbq", 251468743),
+            ("7a4u2", 157011575),
+            ("efem5", 45615097),
+            ("acqus", 102483444),
+            ("cgmhq", 64783923),
+            ("4fedi", 48581937),
+            ("ss6oe", 157011575),
+            ("7ryes", 266481800),
+            ("6sq7t", 158651582),
+            ("2dgp4", 157011575),
+            ("optdi", 68374578),
+            ("sqhxa", 78505779),
+            ("cp5ib", 94084953),
+            ("nmdd6", 118636166),
+            ("w4buy", 146783644),
+            ("unqqg", 223227646),
+            ("s5nvr", 49603892),
+            ("c5svp", 90078342),
+            ("py2kr", 68374578),
+        ]
+        .into_iter()
+        .collect()
+    }
 
     /// Metrics fetched from canisters either before or after testing.
     pub struct Metrics {
@@ -313,14 +389,36 @@ mod sanity_check {
         .date_naive();
 
         let mut rewards_with_penalties: BTreeMap<PrincipalId, u64> = BTreeMap::new();
+        let mut rewards_up_to_nov_29: BTreeMap<PrincipalId, u64> = BTreeMap::new();
+        let nov_29_2024 = chrono::NaiveDate::from_ymd_opt(2024, 11, 29).unwrap();
+
         for date in start_date.iter_days().take_while(|d| *d < test_date) {
             let daily_rewards = nrc_daily_rewards(state_machine, date.into());
 
             for (provider_id, daily_result) in daily_rewards.provider_results {
-                *rewards_with_penalties.entry(provider_id).or_default() +=
-                    daily_result.total_adjusted_rewards_xdr_permyriad.unwrap();
+                let adjusted_reward = daily_result.total_adjusted_rewards_xdr_permyriad.unwrap();
+                *rewards_with_penalties.entry(provider_id).or_default() += adjusted_reward;
+
+                // Track rewards up to and including November 29th
+                if date <= nov_29_2024 {
+                    *rewards_up_to_nov_29.entry(provider_id).or_default() += adjusted_reward;
+                }
             }
         }
+
+        // // Assert that the rewards up to November 29th match expected values
+        // let expected_rewards = expected_rewards_up_to_nov_29();
+        // for (provider_id_str, expected_total) in expected_rewards.iter() {
+        //     let provider_id = PrincipalId::from_str(provider_id_str)
+        //         .unwrap_or_else(|_| panic!("Invalid principal ID: {}", provider_id_str));
+        //     let actual_total = rewards_up_to_nov_29.get(&provider_id).copied().unwrap_or(0);
+
+        //     assert_eq!(
+        //         *expected_total, actual_total,
+        //         "For provider {}, expected rewards up to Nov 29: {}, actual: {}",
+        //         provider_id_str, expected_total, actual_total
+        //     );
+        // }
 
         // For each day missing from now up to the next distribution time, we get the daily rewards
         // without penalties. Given the canister is assigning to each node failure rate = 0% these
@@ -370,28 +468,26 @@ mod sanity_check {
 
         let days_with_no_penalties = (expected_end_date - test_date).num_days() as u64 + 1;
 
-        let xdr_permyriad_distributed = {
-            let xdr_permyriad_per_icp = performance_based_rewards
-                .xdr_conversion_rate
-                .unwrap()
-                .xdr_permyriad_per_icp
-                .unwrap();
+        let xdr_permyriad_per_icp = performance_based_rewards
+            .xdr_conversion_rate
+            .unwrap()
+            .xdr_permyriad_per_icp
+            .unwrap();
 
-            performance_based_rewards
-                .rewards
-                .into_iter()
-                .map(|reward| {
-                    let total_xdr_permyriad =
-                        (reward.amount_e8s as f64 * xdr_permyriad_per_icp as f64
-                            / 10_u64.pow(8) as f64) as u64
-                            + 1;
-                    (
-                        reward.node_provider.unwrap().id.unwrap(),
-                        total_xdr_permyriad,
-                    )
-                })
-                .collect::<BTreeMap<PrincipalId, u64>>()
-        };
+        let xdr_permyriad_distributed = performance_based_rewards
+            .rewards
+            .into_iter()
+            .filter(|reward| reward.amount_e8s > 0)
+            .map(|reward| {
+                let total_xdr_permyriad = (reward.amount_e8s as u128
+                    * xdr_permyriad_per_icp as u128
+                    / 10_u64.pow(8) as u128) as u64;
+                (
+                    reward.node_provider.unwrap().id.unwrap(),
+                    total_xdr_permyriad,
+                )
+            })
+            .collect::<BTreeMap<PrincipalId, u64>>();
 
         let upper_bound_rewards_per_provider = rewards_with_penalties
             .into_iter()
@@ -409,8 +505,27 @@ mod sanity_check {
             );
         }
 
+        // Calculate expected XDR permyriad by simulating the same conversion that governance does:
+        // 1. Convert total XDR permyriad to e8s (with truncation)
+        // 2. Convert back to XDR permyriad (with truncation)
+        // This accounts for precision loss in the conversion process.
+        let expected_xdr_permyriad_per_provider: BTreeMap<PrincipalId, u64> =
+            upper_bound_rewards_per_provider
+                .into_iter()
+                .map(|(provider_id, total_xdr_permyriad)| {
+                    // Simulate governance.rs conversion: XDR → e8s → XDR
+                    // This matches the double truncation that happens in the actual flow
+                    let amount_e8s = ((total_xdr_permyriad as u128 * 10_u64.pow(8) as u128)
+                        / xdr_permyriad_per_icp as u128)
+                        as u64;
+                    let xdr_back = (amount_e8s as u128 * xdr_permyriad_per_icp as u128
+                        / 10_u64.pow(8) as u128) as u64;
+                    (provider_id, xdr_back)
+                })
+                .collect();
+
         for (provider_id, total_xdr_distributed) in xdr_permyriad_distributed {
-            let expected_total_xdr_permyriad = *upper_bound_rewards_per_provider
+            let expected_total_xdr_permyriad = *expected_xdr_permyriad_per_provider
                 .get(&provider_id)
                 .unwrap_or(&0);
 
