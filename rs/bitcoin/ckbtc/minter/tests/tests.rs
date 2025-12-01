@@ -2015,37 +2015,51 @@ fn test_ledger_memo() {
         panic!("Expected Burn memo, got something else");
     }
 
-    // Step 3: test decoding an invalid memo (bogus bytes)
+    // Step 3: test decoding invalid memos
 
-    let invalid_memo_bytes = vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF]; // Random invalid bytes
-    let decode_args = DecodeLedgerMemoArgs {
-        memo: EncodedMemo::Blob(invalid_memo_bytes),
-    };
-    let decoded_result = Decode!(
-        &assert_reply(
-            ckbtc
-                .env
-                .query(
-                    ckbtc.minter_id,
-                    "decode_ledger_memo",
-                    Encode!(&decode_args).unwrap()
-                )
-                .expect("failed to call decode_ledger_memo")
-        ),
-        DecodeLedgerMemoResult
-    )
-    .unwrap();
+    for decode_args in &[
+        DecodeLedgerMemoArgs {
+            memo: EncodedMemo::Blob(vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF]),
+        },
+        DecodeLedgerMemoArgs {
+            memo: EncodedMemo::Blob(vec![0xFF; 85]),
+        },
+        DecodeLedgerMemoArgs {
+            memo: EncodedMemo::Hex("F".to_string()),
+        },
+        DecodeLedgerMemoArgs {
+            memo: EncodedMemo::Hex("00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFFDEADBEEF".to_string()),
+        },
+        DecodeLedgerMemoArgs {
+            memo: EncodedMemo::Hex("NotAHexString!".to_string()),
+        },
+    ] {
+        let decoded_result = Decode!(
+            &assert_reply(
+                ckbtc
+                    .env
+                    .query(
+                        ckbtc.minter_id,
+                        "decode_ledger_memo",
+                        Encode!(&decode_args).unwrap()
+                    )
+                    .expect("failed to call decode_ledger_memo")
+            ),
+            DecodeLedgerMemoResult
+        )
+        .unwrap();
 
-    assert!(
-        decoded_result.is_err(),
-        "Expected error when decoding invalid memo"
-    );
-    if let Err(Some(err)) = decoded_result {
-        // Verify that the error message indicates the memo couldn't be decoded
-        assert_matches!(
-            err,
-            ic_ckbtc_minter::queries::DecodeLedgerMemoError::InvalidMemo(_)
+        assert!(
+            decoded_result.is_err(),
+            "Expected error when decoding invalid memo"
         );
+        if let Err(Some(err)) = decoded_result {
+            // Verify that the error message indicates the memo couldn't be decoded
+            assert_matches!(
+                err,
+                ic_ckbtc_minter::queries::DecodeLedgerMemoError::InvalidMemo(_)
+            );
+        }
     }
 }
 
