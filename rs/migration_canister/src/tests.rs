@@ -1,5 +1,5 @@
 //! Unit tests
-use crate::migration_canister::{ListEventsArgs, MigrationCanisterInitArgs};
+use crate::migration_canister::MigrationCanisterInitArgs;
 use crate::privileged::MigrationCanisterError;
 use crate::{MigrateCanisterArgs, MigrationStatus, ValidationError};
 use candid::Principal;

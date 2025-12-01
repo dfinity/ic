@@ -1,4 +1,7 @@
-use ic_types::{CanisterId, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64};
+use ic_types::{
+    CanisterId,
+    messages::{EXPECTED_MESSAGE_ID_LENGTH, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64},
+};
 use messaging_test::{Call, CallMessage, Reply, ReplyMessage, decode, encode};
 use proptest::prelude::*;
 use std::ops::RangeInclusive;
@@ -142,7 +145,10 @@ pub fn to_encoded_ingress(call: Call) -> (CanisterId, Vec<u8>) {
             reply_bytes: call.reply_bytes,
             downstream_calls: call.downstream_calls,
         },
-        call.call_bytes as usize,
+        // Ingress message size is payload size + message ID length. Avoid exceeding
+        // the limit.
+        (call.call_bytes as usize)
+            .min(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize - EXPECTED_MESSAGE_ID_LENGTH),
     );
     (into_canister_id(call.receiver), payload)
 }

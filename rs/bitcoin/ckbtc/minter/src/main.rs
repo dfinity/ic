@@ -198,7 +198,7 @@ async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusRes
 #[update]
 async fn upload_events(events: Vec<Event>) {
     for event in events {
-        storage::record_event_v0(event.payload, &IC_CANISTER_RUNTIME);
+        storage::record_event(event.payload, &IC_CANISTER_RUNTIME);
     }
 }
 

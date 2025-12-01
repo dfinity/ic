@@ -27,8 +27,10 @@ sha2 = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 ic-ckdoge-minter-test-utils = { path = "../test_utils" }
-pocket-ic = {path = "../../../../packages/pocket-ic"}
+pocket-ic = { path = "../../../../packages/pocket-ic" }
+proptest = { workspace = true }
 serde_json = { workspace = true }
+test-strategy = "0.4.0"
 
 [features]
 self_check = []

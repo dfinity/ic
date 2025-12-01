@@ -116,11 +116,6 @@ pub mod events {
         HISTORY.with_borrow_mut(|h| h.insert(event, ()));
     }
 
-    pub fn list_events(_page_index: u64, _page_size: u64) -> Vec<Event> {
-        // TODO: implement pagination
-        HISTORY.with_borrow(|h| h.keys().collect())
-    }
-
     pub fn num_successes_in_past_24_h() -> u64 {
         let now = time();
         let nanos_in_24_h = 24 * 60 * 60 * 1_000_000_000;
