@@ -194,9 +194,7 @@ impl<'a> GenericIdentity<'a> {
             GenericIdentityInner::WebAuthnEcdsaSecp256r1(sk) => {
                 webauthn_sign_ecdsa_secp256r1(sk, bytes)
             }
-            GenericIdentityInner::WebAuthnRsaPkcs1(sk) => {
-                webauthn_sign_rsa_pkcs1(sk, bytes)
-            }
+            GenericIdentityInner::WebAuthnRsaPkcs1(sk) => webauthn_sign_rsa_pkcs1(sk, bytes),
             GenericIdentityInner::Canister(canister_signer) => {
                 let sign_future = canister_signer.sign(bytes);
                 // We are in a sync method and need to call the async `CanisterSigner::sign`,
@@ -1286,7 +1284,13 @@ fn webauthn_sign_ecdsa_secp256r1(sk: &ic_secp256r1::PrivateKey, msg: &[u8]) -> V
 fn webauthn_sign_rsa_pkcs1(sk: &rsa::PrivateKey, msg: &[u8]) -> Vec<u8> {
     let sign_fn = |to_sign: &[u8]| -> Vec<u8> {
         let digest = ic_crypto_sha2::Sha256::hash(to_sign);
-        let pkcs1 = rsa::Pkcs1v15Sign::new::<sha2::Sha256>();
+        let pkcs1 = rsa::Pkcs1v15Sign {
+            hash_len: Some(32),
+            prefix: Box::<u8>::from([
+                0x30, 0x31, 0x30, 0x0D, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02,
+                0x01, 0x05, 0x00, 0x04, 0x20,
+            ]),
+        };
         sk.sign(pkcs1, &digest[..]).expect("RSA signing failed")
     };
     webauthn_sign_message(msg, sign_fn)
