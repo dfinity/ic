@@ -92,7 +92,7 @@ enum GenericIdentityInner<'a> {
     Ed25519(ic_ed25519::PrivateKey),
     Canister(CanisterSigner<'a>),
     WebAuthnEcdsaSecp256r1(ic_secp256r1::PrivateKey),
-    WebAuthnRsaPkcs1(rsa::PrivateKey),
+    WebAuthnRsaPkcs1(rsa::RsaPrivateKey),
 }
 
 #[derive(Clone)]
@@ -132,9 +132,9 @@ impl<'a> GenericIdentity<'a> {
                 (GenericIdentityInner::WebAuthnEcdsaSecp256r1(sk), pk)
             }
             GenericIdentityType::WebAuthnRsaPkcs1 => {
-                let sk = rsa::PrivateKey::new(rng, 1024);
-                let pk = webauthn_cose_wrap_rsa_pkcs1_key(rsa::PublicKey::from(&sk));
-                (GenericIdentityInner::WebAuthnEcdsaSecp256r1(sk), pk)
+                let sk = rsa::RsaPrivateKey::new(rng, 1024).expect("RSA keygen failed");
+                let pk = webauthn_cose_wrap_rsa_pkcs1_key(&rsa::RsaPublicKey::from(&sk));
+                (GenericIdentityInner::WebAuthnRsaPkcs1(sk), pk)
             }
         };
 
@@ -1169,8 +1169,8 @@ fn wrap_cose_key_in_der_spki(cose: &serde_cbor::Value) -> Vec<u8> {
     subject_public_key_info_der(webauthn_key_oid, &pk_cose).unwrap()
 }
 
-fn webauthn_cose_wrap_rsa_pkcs1_key(pk: &rsa::PublicKey) -> Vec<u8> {
-    use rsa::PublicKeyParts;
+fn webauthn_cose_wrap_rsa_pkcs1_key(pk: &rsa::RsaPublicKey) -> Vec<u8> {
+    use rsa::traits::PublicKeyParts;
 
     let n = pk.n();
     let e = pk.e();
@@ -1194,7 +1194,7 @@ fn webauthn_cose_wrap_rsa_pkcs1_key(pk: &rsa::PublicKey) -> Vec<u8> {
     const COSE_PARAM_KTY_RSA: serde_cbor::Value = serde_cbor::Value::Integer(3);
 
     const COSE_PARAM_ALG: serde_cbor::Value = serde_cbor::Value::Integer(3);
-    const COSE_PARAM_ALG_RSA256: serde_cbor::Value = serde_cbor::Value::Integer(-257);
+    const COSE_PARAM_ALG_RS256: serde_cbor::Value = serde_cbor::Value::Integer(-257);
 
     const COSE_PARAM_RSA_N: serde_cbor::Value = serde_cbor::Value::Integer(-1);
     const COSE_PARAM_RSA_E: serde_cbor::Value = serde_cbor::Value::Integer(-2);
@@ -1281,12 +1281,12 @@ fn webauthn_sign_ecdsa_secp256r1(sk: &ic_secp256r1::PrivateKey, msg: &[u8]) -> V
     webauthn_sign_message(msg, sign_fn)
 }
 
-fn webauthn_sign_rsa_pkcs1(sk: &rsa::PrivateKey, msg: &[u8]) -> Vec<u8> {
+fn webauthn_sign_rsa_pkcs1(sk: &rsa::RsaPrivateKey, msg: &[u8]) -> Vec<u8> {
     let sign_fn = |to_sign: &[u8]| -> Vec<u8> {
         let digest = ic_crypto_sha2::Sha256::hash(to_sign);
         let pkcs1 = rsa::Pkcs1v15Sign {
             hash_len: Some(32),
-            prefix: Box::<u8>::from([
+            prefix: Box::<[u8]>::from([
                 0x30, 0x31, 0x30, 0x0D, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02,
                 0x01, 0x05, 0x00, 0x04, 0x20,
             ]),
