@@ -1187,14 +1187,12 @@ fn webauthn_cose_wrap_ecdsa_secp256r1_key(pk: &ic_secp256r1::PublicKey) -> Vec<u
         serde_cbor::to_vec(&Value::Map(map)).expect("cbor encoding failed")
     };
 
-    let pk_der = {
-        use ic_crypto_internal_basic_sig_der_utils::subject_public_key_info_der;
-        use simple_asn1::oid;
-        // OID 1.3.6.1.4.1.56387.1.1
-        // See https://internetcomputer.org/docs/current/references/ic-interface-spec#signatures
-        let webauthn_key_oid = oid!(1, 3, 6, 1, 4, 1, 56387, 1, 1);
-        subject_public_key_info_der(webauthn_key_oid, &pk_cose).unwrap()
-    };
+    use ic_crypto_internal_basic_sig_der_utils::subject_public_key_info_der;
+    use simple_asn1::oid;
+    // OID 1.3.6.1.4.1.56387.1.1
+    // See https://internetcomputer.org/docs/current/references/ic-interface-spec#signatures
+    let webauthn_key_oid = oid!(1, 3, 6, 1, 4, 1, 56387, 1, 1);
+    subject_public_key_info_der(webauthn_key_oid, &pk_cose).unwrap()
 }
 
 fn webauthn_sign_ecdsa_secp256r1(sk: &ic_secp256r1::PrivateKey, msg: &[u8]) -> Vec<u8> {
@@ -1209,7 +1207,7 @@ fn webauthn_sign_ecdsa_secp256r1(sk: &ic_secp256r1::PrivateKey, msg: &[u8]) -> V
 
     let client_data = ClientData {
         r#type: "webauthn.get".to_string(),
-        challenge: base64::encode(msg),
+        challenge: base64::encode_config(msg, base64::URL_SAFE_NO_PAD),
         origin: "ic-ingress-verification-test".to_string(),
     };
 
@@ -1223,6 +1221,6 @@ fn webauthn_sign_ecdsa_secp256r1(sk: &ic_secp256r1::PrivateKey, msg: &[u8]) -> V
         sm
     };
     let signature = Blob(sk.sign_message_with_der_encoded_sig(&signed_message));
-    let sig = WebAuthnSignature::new(authenticator_data, Blob(client_data_json), signature);
+    let sig = ic_types::messages::WebAuthnSignature::new(authenticator_data, Blob(client_data_json), signature);
     serde_cbor::to_vec(&sig).unwrap()
 }
