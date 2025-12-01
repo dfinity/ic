@@ -20,6 +20,7 @@ use std::{collections::HashMap, sync::Arc};
 
 pub mod call_canister;
 pub mod create_service_nervous_system;
+mod decode_candid_args_to_self_describing_value;
 pub mod deregister_known_neuron;
 pub mod execute_nns_function;
 pub mod fulfill_subnet_rental_request;
