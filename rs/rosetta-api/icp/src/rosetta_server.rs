@@ -275,6 +275,7 @@ pub struct RosettaApiServer {
     server: Mutex<ServerState>,
     server_handle: ServerHandle,
     watchdog_timeout_seconds: u64,
+    initial_sync_complete: Arc<AtomicBool>,
 }
 
 impl RosettaApiServer {
@@ -285,6 +286,7 @@ impl RosettaApiServer {
         listen_port_file: Option<PathBuf>,
         expose_metrics: bool,
         watchdog_timeout_seconds: u64,
+        initial_sync_complete: Arc<AtomicBool>,
     ) -> io::Result<Self> {
         let stopped = Arc::new(AtomicBool::new(false));
         let http_metrics_wrapper = RosettaMetrics::http_metrics_wrapper(expose_metrics);
@@ -348,6 +350,7 @@ impl RosettaApiServer {
             server_handle: server.handle(),
             server: Mutex::new(ServerState::Unstarted(server)),
             watchdog_timeout_seconds,
+            initial_sync_complete,
         })
     }
 
@@ -390,10 +393,12 @@ impl RosettaApiServer {
                 let server_handle = self.server_handle.clone();
                 let ledger = self.ledger.clone();
                 let stopped = self.stopped.clone();
+                let initial_sync_complete = self.initial_sync_complete.clone();
                 watchdog_thread.start(move |heartbeat| {
                     let ledger = ledger.clone();
                     let stopped = stopped.clone();
                     let server_handle = server_handle.clone();
+                    let initial_sync_complete = initial_sync_complete.clone();
                     start_sync_thread(
                         ledger,
                         stopped,
@@ -402,6 +407,7 @@ impl RosettaApiServer {
                         not_whitelisted,
                         exit_on_sync,
                         heartbeat,
+                        initial_sync_complete,
                     )
                 });
                 server.await?;
@@ -428,6 +434,7 @@ fn start_sync_thread(
     not_whitelisted: bool,
     exit_on_sync: bool,
     heartbeat_fn: Box<dyn Fn() + Send + Sync>,
+    initial_sync_complete: Arc<AtomicBool>,
 ) -> tokio::task::JoinHandle<()> {
     // Every second start downloading new blocks, when that's done update the index
     tokio::task::spawn(async move {
@@ -454,6 +461,7 @@ fn start_sync_thread(
                 rosetta_metrics.set_out_of_sync_time(t);
                 synced_at = std::time::Instant::now();
                 first_sync_successful = true;
+                initial_sync_complete.store(true, SeqCst);
             }
 
             // Only call heartbeat after the first successful sync
