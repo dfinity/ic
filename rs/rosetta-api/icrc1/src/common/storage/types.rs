@@ -389,7 +389,8 @@ impl TryFrom<BTreeMap<String, Value>> for IcrcOperation {
                 Ok(Self::Burn {
                     from,
                     spender,
-                    amount: amount.ok_or_else(|| anyhow!("Missing field 'amt' for Burn operation"))?,
+                    amount: amount
+                        .ok_or_else(|| anyhow!("Missing field 'amt' for Burn operation"))?,
                     fee,
                 })
             }
@@ -397,7 +398,8 @@ impl TryFrom<BTreeMap<String, Value>> for IcrcOperation {
                 let to: Account = get_field(&map, FIELD_PREFIX, "to")?;
                 Ok(Self::Mint {
                     to,
-                    amount: amount.ok_or_else(|| anyhow!("Missing field 'amt' for Mint operation"))?,
+                    amount: amount
+                        .ok_or_else(|| anyhow!("Missing field 'amt' for Mint operation"))?,
                     fee,
                 })
             }
@@ -409,7 +411,8 @@ impl TryFrom<BTreeMap<String, Value>> for IcrcOperation {
                     from,
                     to,
                     spender,
-                    amount: amount.ok_or_else(|| anyhow!("Missing field 'amt' for Transfer operation"))?,
+                    amount: amount
+                        .ok_or_else(|| anyhow!("Missing field 'amt' for Transfer operation"))?,
                     fee,
                 })
             }
@@ -422,7 +425,8 @@ impl TryFrom<BTreeMap<String, Value>> for IcrcOperation {
                 Ok(Self::Approve {
                     from,
                     spender,
-                    amount: amount.ok_or_else(|| anyhow!("Missing field 'amt' for Approve operation"))?,
+                    amount: amount
+                        .ok_or_else(|| anyhow!("Missing field 'amt' for Approve operation"))?,
                     fee,
                     expected_allowance,
                     expires_at,

@@ -126,7 +126,7 @@ pub fn create_indexes(connection: &Connection) -> Result<()> {
         ON blocks(operation_type)
         "#,
         [],
-    )?;    
+    )?;
 
     Ok(())
 }
