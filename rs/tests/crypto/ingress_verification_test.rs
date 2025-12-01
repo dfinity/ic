@@ -132,7 +132,7 @@ impl<'a> GenericIdentity<'a> {
                 (GenericIdentityInner::WebAuthnEcdsaSecp256r1(sk), pk)
             }
             GenericIdentityType::WebAuthnRsaPkcs1 => {
-                let sk = rsa::RsaPrivateKey::new(rng, 1024).expect("RSA keygen failed");
+                let sk = rsa::RsaPrivateKey::new(rng, 2048).expect("RSA keygen failed");
                 let pk = webauthn_cose_wrap_rsa_pkcs1_key(&rsa::RsaPublicKey::from(&sk));
                 (GenericIdentityInner::WebAuthnRsaPkcs1(sk), pk)
             }
