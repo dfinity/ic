@@ -1,9 +1,11 @@
 use crate::canister::Wasm;
 use cargo_metadata::MetadataCommand;
 use escargot::CargoBuild;
+use std::collections::BTreeMap;
 use std::env;
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::time::SystemTime;
 
 /// This allows you to write multi canister tests by building multiple wasm
@@ -136,16 +138,19 @@ impl Project {
     /// generally don't play well with the WASM linker.
     fn compile_cargo_bin(&self, package: Option<&str>, bin_name: &str, features: &[&str]) -> Wasm {
         // Cache compiled canisters to avoid running `cargo build` repeatedly.
-        #[allow(clippy::type_complexity)]
-        static COMPILED_CANISTERS: std::sync::Mutex<
-            std::collections::BTreeMap<(Option<String>, String, Vec<String>), PathBuf>,
-        > = std::sync::Mutex::new(std::collections::BTreeMap::new());
+        #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+        struct WasmKey {
+            package: Option<String>,
+            bin_name: String,
+            features: Vec<String>,
+        }
+        static COMPILED_CANISTERS: Mutex<BTreeMap<WasmKey, PathBuf>> = Mutex::new(BTreeMap::new());
 
-        let key = (
-            package.map(|s| s.to_string()),
-            bin_name.to_string(),
-            features.iter().map(|s| s.to_string()).collect(),
-        );
+        let key = WasmKey {
+            package: package.map(|s| s.to_string()),
+            bin_name: bin_name.to_string(),
+            features: features.iter().map(|s| s.to_string()).collect(),
+        };
         // There is a race condition here, but we don't really care.
         let path = if let Some(path) = COMPILED_CANISTERS.lock().unwrap().get(&key) {
             path.clone()
@@ -155,6 +160,8 @@ impl Project {
             path
         };
 
+        // Strip debug info to reduce Wasm binary size. We want to avoid unnecessary
+        // test failures due to oversized canister binaries.
         Wasm::from_file(path).strip_debug_info()
     }
 
