@@ -260,7 +260,6 @@ where
 
 #[cfg(feature = "test")]
 pub mod management_canister_client_test {
-    #![allow(deprecated)]
     use crate::chrono_utils::last_unix_timestamp_nanoseconds;
     use crate::metrics::ManagementCanisterClient;
     use crate::storage::RegistryStoreStableMemoryBorrower;
@@ -268,7 +267,7 @@ pub mod management_canister_client_test {
     use candid::Principal;
     use chrono::DateTime;
     use ic_base_types::SubnetId;
-    use ic_cdk::api::call::CallResult;
+    use ic_cdk::call::CallResult;
     use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
     use ic_nervous_system_canisters::registry::RegistryCanister;
     use ic_registry_canister_client::StableCanisterRegistryClient;
@@ -357,7 +356,7 @@ pub mod management_canister_client_test {
                 node_metrics_history.push(date_result);
             }
 
-            CallResult::Ok(node_metrics_history)
+            Ok(node_metrics_history)
         }
     }
 }
