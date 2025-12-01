@@ -912,7 +912,7 @@ where
     let fcs: Vec<Option<Account>> = read_fee_collectors_107(stmt, params)?;
     if fcs.len() == 1 {
         // Return the fee collector if only one was found
-        Ok(Some(fcs[0].clone()))
+        Ok(Some(fcs[0]))
     } else if fcs.is_empty() {
         // Return None if no fee collector was found
         Ok(None)
