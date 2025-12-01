@@ -1,8 +1,7 @@
 use canister_test::Canister;
 use ic_base_types::PrincipalId;
 use ic_consensus_system_test_utils::{
-    rw_message::install_nns_with_customizations_and_check_progress,
-    ssh_access::execute_bash_command,
+    rw_message::install_nns_and_check_progress, ssh_access::execute_bash_command,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::NnsFunction;
@@ -34,10 +33,7 @@ pub fn setup(env: TestEnv) {
         .with_node_operator(principal)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
-    install_nns_with_customizations_and_check_progress(
-        env.topology_snapshot(),
-        NnsCustomizations::default(),
-    );
+    install_nns_and_check_progress(env.topology_snapshot());
 }
 
 enum TestConfig {
@@ -88,20 +84,23 @@ fn test(env: TestEnv, config: TestConfig) {
     });
 
     info!(&logger, "Make sure we have no unassigned nodes anymore");
-    let num_unassigned_nodes = block_on(
+    let mut topology = block_on(
         env.topology_snapshot()
-            .block_for_min_registry_version(ic_types::RegistryVersion::from(2)),
+            .block_for_min_registry_version(RegistryVersion::from(2)),
     )
-    .unwrap()
-    .unassigned_nodes()
-    .count();
+    .unwrap();
+    let num_unassigned_nodes = topology.unassigned_nodes().count();
     assert_eq!(num_unassigned_nodes, 0);
 
     if config.is_max_rewardable_nodes() {
         info!(&logger, "Adding reward table and rewardable node");
-        block_on(add_node_reward_table_and_rewardable_node(
-            &governance_canister,
-        ))
+        topology = block_on(async {
+            add_node_reward_table_and_rewardable_node(&governance_canister).await;
+            topology
+                .block_for_min_registry_version(RegistryVersion::from(4))
+                .await
+                .unwrap()
+        });
     }
 
     let s = unassigned_node
@@ -138,16 +137,8 @@ EOT
     // Wait until the node registers itself and updates the registry, then check that we have
     // exactly 1 unassigned node.
     info!(&logger, "Make sure we have 1 unassigned node again");
-    let num_unassigned_nodes = block_on(env.topology_snapshot().block_for_min_registry_version(
-        RegistryVersion::from(if config.is_max_rewardable_nodes() {
-            5
-        } else {
-            3
-        }),
-    ))
-    .unwrap()
-    .unassigned_nodes()
-    .count();
+    topology = block_on(topology.block_for_newer_registry_version()).unwrap();
+    let num_unassigned_nodes = topology.unassigned_nodes().count();
     assert_eq!(num_unassigned_nodes, 1);
 }
 
