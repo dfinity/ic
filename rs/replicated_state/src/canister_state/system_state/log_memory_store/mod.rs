@@ -1,9 +1,9 @@
-pub(crate) mod header;
-pub(crate) mod index_table;
-pub(crate) mod log_record;
-pub(crate) mod memory;
-pub(crate) mod ring_buffer;
-pub(crate) mod struct_io;
+mod header;
+mod index_table;
+mod log_record;
+mod memory;
+mod ring_buffer;
+mod struct_io;
 
 use crate::canister_state::system_state::log_memory_store::{
     memory::MemorySize, ring_buffer::RingBuffer,

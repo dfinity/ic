@@ -86,7 +86,7 @@ impl RingBuffer {
     }
 
     #[cfg(test)]
-    pub fn append(&mut self, record: &CanisterLogRecord) {
+    fn append(&mut self, record: &CanisterLogRecord) {
         self.append_log(vec![record.clone()]);
     }
 
