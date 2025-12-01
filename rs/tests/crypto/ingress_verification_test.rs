@@ -79,7 +79,7 @@ impl<'a> GenericIdentityType<'a> {
             1 => Self::EcdsaSecp256r1,
             2 => Self::Canister(canister),
             4 => Self::WebAuthnEcdsaSecp256r1,
-            //5 => Self::WebAuthnRsaPkcs1, // skip for now...
+            5 => Self::WebAuthnRsaPkcs1,
             _ => Self::Ed25519,
         }
     }
