@@ -300,7 +300,7 @@ pub mod internal {
                     .expect("Failed to build a vault client");
                 Arc::new(remote_vault)
             } else {
-                Arc::clone(&local_vault) as _
+                local_vault
             };
             let csp = Csp::new_from_vault(
                 Arc::clone(&vault),
