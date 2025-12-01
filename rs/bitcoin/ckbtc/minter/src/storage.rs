@@ -204,7 +204,7 @@ mod benches {
     use crate::state::eventlog::replay;
     use crate::state::replace_state;
     use crate::state::{CkBtcMinterState, invariants::CheckInvariants};
-    use crate::{IC_CANISTER_RUNTIME, greedy, state};
+    use crate::{IC_CANISTER_RUNTIME, state};
     use canbench_rs::bench;
 
     #[bench(raw)]
@@ -237,36 +237,6 @@ mod benches {
         bench_build_unsigned_transaction(1_000_000_000)
     }
 
-    #[bench(raw)]
-    fn greedy_1_50k_sats() -> canbench_rs::BenchResult {
-        bench_greedy(50_000) // minimum withdrawal amount
-    }
-
-    #[bench(raw)]
-    fn greedy_2_100k_sats() -> canbench_rs::BenchResult {
-        bench_greedy(100_000)
-    }
-
-    #[bench(raw)]
-    fn greedy_3_1m_sats() -> canbench_rs::BenchResult {
-        bench_greedy(1_000_000)
-    }
-
-    #[bench(raw)]
-    fn greedy_4_10m_sats() -> canbench_rs::BenchResult {
-        bench_greedy(10_000_000)
-    }
-
-    #[bench(raw)]
-    fn greedy_5_1_btc() -> canbench_rs::BenchResult {
-        bench_greedy(100_000_000)
-    }
-
-    #[bench(raw)]
-    fn greedy_6_10_btc() -> canbench_rs::BenchResult {
-        bench_greedy(1_000_000_000)
-    }
-
     fn bench_build_unsigned_transaction(withdrawal_amount: u64) -> canbench_rs::BenchResult {
         rebuild_mainnet_state();
         state::read_state(|s| {
@@ -294,25 +264,6 @@ mod benches {
                     &fee_estimator,
                 )
                 .unwrap()
-            });
-        })
-    }
-
-    fn bench_greedy(withdrawal_amount: u64) -> canbench_rs::BenchResult {
-        rebuild_mainnet_state();
-        state::read_state(|s| {
-            // The distribution of UTXOs is a key factor in the complexity of building a transaction,
-            // the more UTXOs with small values there are, the more instructions will be required to build a transaction for a large amount
-            // because more UTXOs are needed to cover that amount.
-            // NOTE: Those benchmarks reflect the performance of the minter on **mainnet**.
-            // Changing the number of available of UTXOs is unavoidable when updating the retrieved mainnet events used for testing,
-            // so that fluctuations in performance is acceptable, but large degradation would indicate a regression.
-            assert_eq!(s.available_utxos.len(), 66_212);
-        });
-
-        canbench_rs::bench_fn(|| {
-            state::mutate_state(|s| {
-                greedy(withdrawal_amount, &mut s.available_utxos);
             });
         })
     }

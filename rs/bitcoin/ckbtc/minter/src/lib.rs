@@ -961,7 +961,7 @@ fn utxos_selection(target: u64, available_utxos: &mut UtxoSet, output_count: usi
 /// POSTCONDITION:  solution.is_empty() ⇒ available_utxos did not change.
 pub fn greedy(target: u64, available_utxos: &mut UtxoSet) -> Vec<Utxo> {
     #[cfg(feature = "canbench-rs")]
-    let _scope = canbench_rs::bench_scope("greedy2");
+    let _scope = canbench_rs::bench_scope("greedy");
 
     let mut solution = vec![];
     let mut goal = target;
