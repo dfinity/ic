@@ -415,6 +415,9 @@ pub fn update_account_balances(
                     fee_collector: _,
                     caller: _,
                 } => {
+                    // Since we use the account_balances table to determine the synced height
+                    // and since there is no credit or debit operation for the fee collector block,
+                    // we have to add a dummy principal with the block index, to indicate the synced height
                     dummy_principals.push((rosetta_block.index, [107u8; 30]));
                 }
             }
@@ -651,7 +654,7 @@ pub fn get_fee_collector_107_for_idx(
     block_idx: u64,
 ) -> anyhow::Result<Option<Option<Account>>> {
     let command = format!(
-        "SELECT to_principal,to_subaccount FROM blocks WHERE idx < {block_idx} AND operation_type = '107feecol' ORDER BY idx DESC LIMIT 1"
+        "SELECT to_principal,to_subaccount FROM blocks WHERE idx <= {block_idx} AND operation_type = '107feecol' ORDER BY idx DESC LIMIT 1"
     );
     let mut stmt = connection.prepare_cached(&command)?;
     read_single_fee_collector_107(&mut stmt, params![])

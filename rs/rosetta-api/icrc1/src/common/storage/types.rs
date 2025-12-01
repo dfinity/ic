@@ -695,14 +695,15 @@ mod tests {
     use serde_bytes::ByteBuf;
     use std::collections::BTreeMap;
 
+    fn arb_principal() -> impl Strategy<Value = Principal> {
+        (vec(any::<u8>(), 0..30)).prop_map(|principal| Principal::from_slice(principal.as_slice()))
+    }
+
     fn arb_account() -> impl Strategy<Value = Account> {
-        (vec(any::<u8>(), 0..30), option::of(vec(any::<u8>(), 32))).prop_map(
-            |(owner, subaccount)| {
-                let owner = Principal::from_slice(owner.as_slice());
-                let subaccount = subaccount.map(|v| v.try_into().unwrap());
-                Account { owner, subaccount }
-            },
-        )
+        (arb_principal(), option::of(vec(any::<u8>(), 32))).prop_map(|(owner, subaccount)| {
+            let subaccount = subaccount.map(|v| v.try_into().unwrap());
+            Account { owner, subaccount }
+        })
     }
 
     fn arb_nat() -> impl Strategy<Value = Nat> {
@@ -773,8 +774,25 @@ mod tests {
             })
     }
 
+    fn arb_fee_collector() -> impl Strategy<Value = IcrcOperation> {
+        (
+            option::of(arb_account()),   // fee_collector
+            option::of(arb_principal()), // caller
+        )
+            .prop_map(|(fee_collector, caller)| IcrcOperation::FeeCollector {
+                fee_collector,
+                caller,
+            })
+    }
+
     fn arb_op() -> impl Strategy<Value = IcrcOperation> {
-        prop_oneof![arb_approve(), arb_burn(), arb_mint(), arb_transfer(),]
+        prop_oneof![
+            arb_approve(),
+            arb_burn(),
+            arb_mint(),
+            arb_transfer(),
+            arb_fee_collector(),
+        ]
     }
 
     fn arb_memo() -> impl Strategy<Value = Memo> {
@@ -810,12 +828,18 @@ mod tests {
                     fee_collector_block_index,
                 )| IcrcBlock {
                     parent_hash,
-                    transaction,
+                    transaction: transaction.clone(),
                     effective_fee,
                     timestamp,
                     fee_collector,
                     fee_collector_block_index,
-                    btype: None, // panic!("FeeCollector107 not implemented")
+                    btype: match transaction.operation {
+                        IcrcOperation::FeeCollector {
+                            fee_collector: _,
+                            caller: _,
+                        } => Some("107feecol".to_string()),
+                        _ => None,
+                    },
                 },
             )
     }

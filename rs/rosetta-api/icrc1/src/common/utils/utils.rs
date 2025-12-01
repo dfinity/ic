@@ -606,11 +606,11 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 ));
             }
         }
-        crate::common::storage::types::IcrcOperation::FeeCollector { .. } => {
-            // There is no fee crediting operation at his moment so we might not need to do anything here
-            // Below in icrc1_rosetta_block_to_rosetta_core_operations we create an operation that credits
-            // the fee to the legacy fee collector. This needs to be adapted to not do anything if the
-            // new fee collector is present.
+        crate::common::storage::types::IcrcOperation::FeeCollector {
+            fee_collector: _,
+            caller: _,
+        } => {
+            // We don't support rosetta core fee collector operations
         }
     };
 
