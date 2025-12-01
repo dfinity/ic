@@ -432,6 +432,8 @@ fn subnet_splitting_smoke_test(
         .prop_flat_map(|canisters| {
             let config = CallConfig {
                 receivers: canisters.clone(),
+                call_bytes_range: 0..=0,
+                reply_bytes_range: 0..=0,
                 call_tree_size: 10,
                 ..CallConfig::default()
             };
@@ -502,6 +504,138 @@ fn subnet_splitting_smoke_test(
     msg_ids3.append(&mut inject_calls(&mut calls3, 0, &subnet2));
 
     while !msg_ids1.is_empty() || !msg_ids2.is_empty() || !msg_ids3.is_empty() {
+        subnet1.execute_round();
+        subnet2.execute_round();
+        subnet3.execute_round();
+
+        msg_ids1 = subnet1.check_and_drop_completed(msg_ids1, &check_for_traps);
+        msg_ids2 = subnet3.check_and_drop_completed(msg_ids2, &check_for_traps);
+        msg_ids3 = subnet2.check_and_drop_completed(msg_ids3, &check_for_traps);
+    }
+
+    // All calls have concluded without trapping; we should be able to stop them now.
+    subnet1.env.stop_canister(canister1).unwrap();
+    subnet2.env.stop_canister(canister3).unwrap();
+    subnet3.env.stop_canister(canister2).unwrap();
+}
+
+/// Tests that all calls are concluded successfully during subnet splitting,
+/// whilst upholding ordering guarantees.
+///
+/// The setup is one subnet with two canisters; this is the subnet that will
+/// undergo the split; and another subnet with one canister. All canisters
+/// produce random traffic to all the other canisters.
+///
+/// The registry changes reflecting the subnet split are made up front, but the
+/// registry on either subnet is only updated later, in a random round through
+/// the split of `subnet1`; and in a different random round through a regular
+/// registry update to the newest version on `subnet2`.
+///
+/// These two random rounds produce all the cases relevant for subnet splitting:
+///
+///  - `subnet1` splits before `subnet2` observes the changes in the registry.
+///  - `subnet2` observes the changes on the registry before `subnet1` splits,
+///    i.e. before the new `subnet3` even exists (but is referred to in the
+///    routing table).
+///  - The two events happen concurrently.
+///
+/// After both these events have occurred, a few more calls are made. If after
+/// some more rounds all calls conclude (without any canister trapping, which
+/// would indicate a sequencing error) and the canisters can be stopped, correct
+/// routing is implied because hanging calls would prevent stopping at least one
+/// canister and no sequencing errors have occurred.
+#[test_strategy::proptest(ProptestConfig::with_cases(3), max_shrink_iters = 0)]
+fn test_subnet_split(
+    #[strategy(arb_test_subnets(
+        TestSubnetConfig { canisters_count: 2, ..TestSubnetConfig::default() },
+        TestSubnetConfig::default()
+    ))]
+    setup: TestSubnetSetup,
+
+    #[strategy(
+        Just(#setup.canisters)
+        .prop_flat_map(|canisters| {
+            let config = CallConfig {
+                receivers: canisters.clone(),
+                call_bytes_range: 0..=0,
+                reply_bytes_range: 0..=0,
+                call_tree_size: 10,
+                ..CallConfig::default()
+            };
+            (
+                proptest::collection::vec(arb_call(canisters[0], config.clone()), 5),
+                proptest::collection::vec(arb_call(canisters[1], config.clone()), 5),
+                proptest::collection::vec(arb_call(canisters[2], config.clone()), 5),
+            )
+        })
+    )]
+    calls: (Vec<Call>, Vec<Call>, Vec<Call>),
+
+    #[strategy(1..=5_usize)] subnet1_split_round: usize,
+
+    #[strategy(1..=5_usize)] subnet2_routing_table_update_round: usize,
+) {
+    const SEED: [u8; 32] = [123; 32];
+
+    let (subnet1, subnet2, _) = setup.into_parts();
+    let (mut calls1, mut calls2, mut calls3) = calls;
+    let [canister1, canister2] = subnet1.canisters()[..] else {
+        unreachable!("{:?}", subnet1.canisters());
+    };
+    let canister3 = subnet2.principal_canister();
+
+    // Inject triggers into the ingress pool; keep 2 for after the split / routing table update.
+    let inject_calls =
+        |calls: &mut Vec<Call>, retain: usize, subnet: &TestSubnet| -> Vec<MessageId> {
+            calls
+                .split_off(retain)
+                .into_iter()
+                .map(|call| subnet.submit_call_as_ingress(call).unwrap())
+                .collect()
+        };
+    let mut msg_ids1 = inject_calls(&mut calls1, 2, &subnet1);
+    let mut msg_ids2 = inject_calls(&mut calls2, 2, &subnet1);
+    let mut msg_ids3 = inject_calls(&mut calls3, 2, &subnet2);
+
+    // Make the registry changes for the split in the data provider; Not yet visible on either subnet.
+    subnet1
+        .env
+        .make_registry_entries_for_subnet_split(SEED, canister2..=canister2);
+
+    // Execute rounds; split / update the routing table at the given index.
+    let mut subnet3: Option<TestSubnet> = None;
+    for round in 0..=10 {
+        if round == subnet1_split_round {
+            subnet3 = Some(subnet1.online_split(SEED).unwrap());
+            assert_matches!(subnet1.canisters()[..], [c] if c == canister1);
+            assert_matches!(subnet3.as_ref().unwrap().canisters()[..], [c] if c == canister2);
+        } else {
+            subnet1.execute_round();
+        }
+        if round == subnet2_routing_table_update_round {
+            subnet2.env.reload_registry();
+            subnet2.env.registry_client.update_to_latest_version();
+        }
+
+        subnet2.execute_round();
+        if let Some(ref subnet3) = subnet3 {
+            subnet3.execute_round();
+        }
+    }
+
+    // Inject the rest of the calls; note that `canister2` is now on `subnet3`.
+    let subnet3 = subnet3.unwrap();
+    msg_ids1.append(&mut inject_calls(&mut calls1, 0, &subnet1));
+    msg_ids2.append(&mut inject_calls(&mut calls2, 0, &subnet3));
+    msg_ids3.append(&mut inject_calls(&mut calls3, 0, &subnet2));
+
+    while !msg_ids1.is_empty()
+        || !msg_ids2.is_empty()
+        || !msg_ids3.is_empty()
+        || subnet1.has_inflight_messages()
+        || subnet2.has_inflight_messages()
+        || subnet3.has_inflight_messages()
+    {
         subnet1.execute_round();
         subnet2.execute_round();
         subnet3.execute_round();
