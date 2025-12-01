@@ -77,7 +77,7 @@ impl NnsCanisterUpgradePBREnabled {
         // actually change the code in the canister. (This is "just" a
         // pre-flight check).
         let status_result = get_canister_status(
-            &state_machine,
+            state_machine,
             controller,
             self.canister_id,
             CanisterId::ic_00(), // callee: management (virtual) canister.
@@ -98,7 +98,7 @@ impl NnsCanisterUpgradePBREnabled {
         println!("Proposing to upgrade NNS {}", self.nns_canister_name);
 
         let proposal_id = nns_propose_upgrade_nns_canister(
-            &state_machine,
+            state_machine,
             neuron_controller,
             neuron_id,
             self.canister_id,
@@ -114,7 +114,7 @@ impl NnsCanisterUpgradePBREnabled {
         // Step 3: Verify result(s): In a short while, the canister should
         // be running the new code.
         wait_for_canister_upgrade_to_succeed(
-            &state_machine,
+            state_machine,
             self.canister_id,
             &self.wasm_hash,
             controller,
