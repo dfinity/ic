@@ -16067,6 +16067,7 @@ dependencies = [
  "p256",
  "rand 0.8.5",
  "reqwest 0.12.24",
+ "rsa",
  "serde",
  "serde_bytes",
  "serde_cbor",
