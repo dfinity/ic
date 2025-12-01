@@ -415,9 +415,18 @@ pub mod arbitrary {
         })
     }
 
-    pub fn utxo_set(amount: impl Strategy<Value=Satoshi>, size: impl Into<SizeRange>) -> impl Strategy<Value=UtxoSet> {
-        (proptest::collection::btree_set(utxo(amount), size)).prop_map(|utxos| {
-            UtxoSet::from_iter(utxos)
+    pub fn utxo_set(amount: impl Strategy<Value=Satoshi> + Clone, size: impl Into<SizeRange>) -> impl Strategy<Value=UtxoSet> {
+        (proptest::collection::btree_set(outpoint(), size))
+            .prop_flat_map(move |outpoints| {
+                let num_utxos = outpoints.len();
+                (Just(outpoints), proptest::collection::vec(amount.clone(), num_utxos), proptest::collection::vec(any::<u32>(), num_utxos))
+            }).prop_map(|(outpoints, amounts, heights)| {
+            outpoints.into_iter().zip(amounts).zip(heights).map(|((outpoint, amount), height)|
+                Utxo {
+                    outpoint,
+                    value: amount,
+                    height,
+                }).collect::<UtxoSet>()
         })
     }
 
