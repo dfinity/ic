@@ -65,8 +65,8 @@ enum GenericIdentityType<'a> {
     EcdsaSecp256k1,
     EcdsaSecp256r1,
     Canister(&'a UniversalCanister<'a>),
+    WebAuthnEcdsaSecp256r1,
     // TODO webauthn RSA
-    // TODO webauthn EC
 }
 
 impl<'a> GenericIdentityType<'a> {
@@ -74,10 +74,11 @@ impl<'a> GenericIdentityType<'a> {
         canister: &'a UniversalCanister<'a>,
         rng: &mut R,
     ) -> Self {
-        match rng.r#gen::<usize>() % 4 {
+        match rng.r#gen::<usize>() % 5 {
             0 => Self::EcdsaSecp256k1,
             1 => Self::EcdsaSecp256r1,
             2 => Self::Canister(canister),
+            4 => Self::WebAuthnEcdsaSecp256r1,
             _ => Self::Ed25519,
         }
     }
@@ -89,6 +90,7 @@ enum GenericIdentityInner<'a> {
     P256(ic_secp256r1::PrivateKey),
     Ed25519(ic_ed25519::PrivateKey),
     Canister(CanisterSigner<'a>),
+    WebAuthnEcdsaSecp256r1(ic_secp256r1::PrivateKey),
 }
 
 #[derive(Clone)]
@@ -121,6 +123,11 @@ impl<'a> GenericIdentity<'a> {
                 let signer = CanisterSigner::new(canister, seed);
                 let pk = signer.public_key_der();
                 (GenericIdentityInner::Canister(signer), pk)
+            }
+            GenericIdentityType::WebAuthnEcdsaSecp256r1 => {
+                let sk = ic_secp256r1::PrivateKey::generate_using_rng(rng);
+                let pk = webauthn_cose_wrap_ecdsa_secp256r1_key(&sk.public_key());
+                (GenericIdentityInner::WebAuthnEcdsaSecp256r1(sk), pk)
             }
         };
 
@@ -177,6 +184,7 @@ impl<'a> GenericIdentity<'a> {
             GenericIdentityInner::Ed25519(sk) => sk.sign_message(bytes).to_vec(),
             GenericIdentityInner::K256(sk) => sk.sign_message_with_ecdsa(bytes).to_vec(),
             GenericIdentityInner::P256(sk) => sk.sign_message(bytes).to_vec(),
+            GenericIdentityInner::WebAuthnEcdsaSecp256r1(sk) => webauthn_sign_ecdsa_secp256r1(sk, bytes),
             GenericIdentityInner::Canister(canister_signer) => {
                 let sign_future = canister_signer.sign(bytes);
                 // We are in a sync method and need to call the async `CanisterSigner::sign`,
@@ -1139,4 +1147,85 @@ fn resign_certificate_with_random_signature<R: Rng + CryptoRng>(
     serializer.self_describe().unwrap();
     certificate.serialize(&mut serializer).unwrap();
     serializer.into_inner()
+}
+
+fn webauthn_cose_wrap_ecdsa_secp256r1_key(pk: &ic_secp256r1::PublicKey) -> Vec<u8> {
+    let sec1 = pk.serialize_sec1(false);
+
+    let pk_cose = {
+        let mut map = std::collections::BTreeMap::new();
+
+        use serde_cbor::Value;
+
+        /*
+        See RFC 8152 ("CBOR Object Signing and Encryption (COSE)"), sections 8.1
+        and 13.1 for these constants
+         */
+        const COSE_PARAM_KTY: serde_cbor::Value = serde_cbor::Value::Integer(1);
+        const COSE_PARAM_KTY_EC2: serde_cbor::Value = serde_cbor::Value::Integer(2);
+
+        const COSE_PARAM_ALG: serde_cbor::Value = serde_cbor::Value::Integer(3);
+        const COSE_PARAM_ALG_ES256: serde_cbor::Value = serde_cbor::Value::Integer(-7);
+
+        const COSE_PARAM_EC2_CRV: serde_cbor::Value = serde_cbor::Value::Integer(-1);
+        const COSE_PARAM_EC2_CRV_P256: serde_cbor::Value =
+            serde_cbor::Value::Integer(1);
+
+        const COSE_PARAM_EC2_X: serde_cbor::Value = serde_cbor::Value::Integer(-2);
+        const COSE_PARAM_EC2_Y: serde_cbor::Value = serde_cbor::Value::Integer(-3);
+
+        let x = &sec1[1..33];
+        let y = &sec1[33..];
+
+        map.insert(COSE_PARAM_KTY, COSE_PARAM_KTY_EC2);
+        map.insert(COSE_PARAM_EC2_CRV, COSE_PARAM_EC2_CRV_P256);
+        map.insert(COSE_PARAM_ALG, COSE_PARAM_ALG_ES256);
+        map.insert(COSE_PARAM_EC2_X, Value::Bytes(x.to_vec()));
+        map.insert(COSE_PARAM_EC2_Y, Value::Bytes(y.to_vec()));
+
+        serde_cbor::to_vec(&Value::Map(map)).expect("cbor encoding failed")
+    };
+
+    let pk_der = {
+        use ic_crypto_internal_basic_sig_der_utils::subject_public_key_info_der;
+        use simple_asn1::oid;
+        // OID 1.3.6.1.4.1.56387.1.1
+        // See https://internetcomputer.org/docs/current/references/ic-interface-spec#signatures
+        let webauthn_key_oid = oid!(1, 3, 6, 1, 4, 1, 56387, 1, 1);
+        subject_public_key_info_der(webauthn_key_oid, &pk_cose).unwrap()
+    };
+}
+
+fn webauthn_sign_ecdsa_secp256r1(sk: &ic_secp256r1::PrivateKey, msg: &[u8]) -> Vec<u8> {
+    use serde::Serialize;
+
+    #[derive(Debug, Serialize)]
+    struct ClientData {
+        r#type: String,
+        challenge: String,
+        origin: String,
+    }
+
+    let client_data = ClientData {
+        r#type: "webauthn.get".to_string(),
+        challenge: base64::encode(msg),
+        origin: "ic-ingress-verification-test".to_string(),
+    };
+
+    let authenticator_data = Blob(b"arbitrary".to_vec());
+    let client_data_json = serde_json::to_vec(&client_data).unwrap();
+
+    let signed_message = {
+        let mut sm = vec![];
+        sm.extend_from_slice(&authenticator_data.0);
+        sm.extend_from_slice(&ic_crypto_sha2::Sha256::hash(&client_data_json));
+        sm
+    };
+    let signature = Blob(sk.sign_message_with_der_encoded_sig(&signed_message));
+    let sig = WebAuthnSignature::new(
+        authenticator_data,
+        Blob(client_data_json),
+        signature,
+    );
+    serde_cbor::to_vec(&sig).unwrap()
 }
