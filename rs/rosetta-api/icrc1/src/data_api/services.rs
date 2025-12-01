@@ -1557,6 +1557,7 @@ mod test {
                 timestamp: 1000,
                 fee_collector: None,
                 fee_collector_block_index: None,
+                btype: None,
             },
             0,
         )];
@@ -1625,6 +1626,7 @@ mod test {
                     timestamp: 1000,
                     fee_collector: None,
                     fee_collector_block_index: None,
+                    btype: None,
                 },
                 0,
             ),
@@ -1644,6 +1646,7 @@ mod test {
                     timestamp: 2000,
                     fee_collector: None,
                     fee_collector_block_index: None,
+                    btype: None,
                 },
                 1,
             ),
@@ -1794,6 +1797,7 @@ mod test {
                     timestamp: 1000,
                     fee_collector: None,
                     fee_collector_block_index: None,
+                    btype: None,
                 },
             },
             // Block 1: Transfer 300 from main account to subaccount1
@@ -1816,6 +1820,7 @@ mod test {
                     timestamp: 2000,
                     fee_collector: None,
                     fee_collector_block_index: None,
+                    btype: None,
                 },
             },
             // Block 2: Transfer 200 from main account to subaccount2
@@ -1838,6 +1843,7 @@ mod test {
                     timestamp: 3000,
                     fee_collector: None,
                     fee_collector_block_index: None,
+                    btype: None,
                 },
             },
             // Block 3: Transfer 150 from subaccount1 to other_account
@@ -1860,6 +1866,7 @@ mod test {
                     timestamp: 4000,
                     fee_collector: None,
                     fee_collector_block_index: None,
+                    btype: None,
                 },
             },
         ];
@@ -2150,6 +2157,7 @@ mod test {
                     timestamp: 1,
                     fee_collector: None,
                     fee_collector_block_index: None,
+                    btype: None,
                 },
                 0,
             ),
@@ -2170,6 +2178,7 @@ mod test {
                     timestamp: 2,
                     fee_collector: None,
                     fee_collector_block_index: None,
+                    btype: None,
                 },
                 1,
             ),
@@ -2190,6 +2199,7 @@ mod test {
                     timestamp: 3,
                     fee_collector: None,
                     fee_collector_block_index: None,
+                    btype: None,
                 },
                 2,
             ),
@@ -2302,6 +2312,7 @@ mod test {
                         timestamp: 1,
                         fee_collector: None,
                         fee_collector_block_index: None,
+                        btype: None,
                     },
                     block_id,
                 )];
@@ -2329,6 +2340,7 @@ mod test {
                         timestamp: 1,
                         fee_collector: None,
                         fee_collector_block_index: None,
+                        btype: None,
                     },
                     block_id,
                 )];

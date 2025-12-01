@@ -374,8 +374,6 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                 )?;
                 icrc1_operation_builder.with_spender_accountidentifier(spender)
             }
-            // We do not have to convert this Operation on the icrc1 side as the crate::common::storage::types::IcrcOperation does not know anything about the FeeCollector
-            OperationType::FeeCollector => icrc1_operation_builder,
         };
     }
     icrc1_operation_builder.build()
@@ -628,32 +626,12 @@ pub fn icrc1_rosetta_block_to_rosetta_core_operations(
 ) -> anyhow::Result<Vec<rosetta_core::objects::Operation>> {
     let icrc1_transaction = rosetta_block.get_transaction();
 
-    let mut operations = icrc1_operation_to_rosetta_core_operations(
+    let operations = icrc1_operation_to_rosetta_core_operations(
         icrc1_transaction.operation,
         currency.clone(),
         rosetta_block.get_fee_paid()?,
     )?;
 
-    if let Some(fee_collector) = rosetta_block.get_fee_collector()
-        && let Some(_fee_payed) = rosetta_block.get_fee_paid()?
-    {
-        operations.push(rosetta_core::objects::Operation::new(
-            operations.len().try_into().unwrap(),
-            OperationType::FeeCollector.to_string(),
-            Some(fee_collector.into()),
-            Some(rosetta_core::objects::Amount::new(
-                BigInt::from(
-                    rosetta_block
-                        .get_fee_paid()?
-                        .context("Fee payed needs to be populated for FeeCollector operation")?
-                        .0,
-                ),
-                currency.clone(),
-            )),
-            None,
-            None,
-        ));
-    }
     Ok(operations)
 }
 

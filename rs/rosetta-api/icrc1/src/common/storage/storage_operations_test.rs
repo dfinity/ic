@@ -54,6 +54,7 @@ fn create_test_rosetta_block(
         effective_fee: None,
         fee_collector: None,
         fee_collector_block_index: None,
+        btype: None,
     };
 
     RosettaBlock {
@@ -108,6 +109,7 @@ fn create_test_approve_block(
         effective_fee: None,
         fee_collector: None,
         fee_collector_block_index: None,
+        btype: None,
     };
 
     RosettaBlock {
