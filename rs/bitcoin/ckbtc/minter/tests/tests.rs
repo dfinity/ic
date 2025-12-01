@@ -1438,6 +1438,22 @@ impl CkBtcSetup {
             "memo not found in mint"
         );
     }
+
+    pub fn decode_ledger_memo(&self, encoded_memo: Vec<u8>) -> DecodeLedgerMemoResult {
+        Decode!(
+            &assert_reply(
+                self.env
+                    .query(
+                        self.minter_id,
+                        "decode_ledger_memo",
+                        Encode!(&DecodeLedgerMemoArgs { encoded_memo }).unwrap()
+                    )
+                    .expect("failed to call decode_ledger_memo")
+            ),
+            DecodeLedgerMemoResult
+        )
+        .unwrap()
+    }
 }
 
 impl CanisterHttpQuery<UserError> for CkBtcSetup {
@@ -1932,23 +1948,7 @@ fn test_ledger_memo() {
     let memo = res.transactions[0].mint.clone().unwrap().memo.unwrap();
 
     // Test decoding the Mint memo using the decode_ledger_memo endpoint
-    let decode_args = DecodeLedgerMemoArgs {
-        encoded_memo: memo.0.to_vec(),
-    };
-    let decoded_result = Decode!(
-        &assert_reply(
-            ckbtc
-                .env
-                .query(
-                    ckbtc.minter_id,
-                    "decode_ledger_memo",
-                    Encode!(&decode_args).unwrap()
-                )
-                .expect("failed to call decode_ledger_memo")
-        ),
-        DecodeLedgerMemoResult
-    )
-    .unwrap();
+    let decoded_result = ckbtc.decode_ledger_memo(memo.0.to_vec());
 
     assert!(decoded_result.is_ok(), "Failed to decode mint memo");
     if let Ok(Some(DecodedMemo::Mint(Some(mint_memo)))) = decoded_result {
@@ -1983,23 +1983,7 @@ fn test_ledger_memo() {
     let memo = res.transactions[0].burn.clone().unwrap().memo.unwrap();
 
     // Test decoding the Burn memo using the decode_ledger_memo endpoint
-    let decode_args = DecodeLedgerMemoArgs {
-        encoded_memo: memo.0.to_vec(),
-    };
-    let decoded_result = Decode!(
-        &assert_reply(
-            ckbtc
-                .env
-                .query(
-                    ckbtc.minter_id,
-                    "decode_ledger_memo",
-                    Encode!(&decode_args).unwrap()
-                )
-                .expect("failed to call decode_ledger_memo")
-        ),
-        DecodeLedgerMemoResult
-    )
-    .unwrap();
+    let decoded_result = ckbtc.decode_ledger_memo(memo.0.to_vec());
 
     assert!(decoded_result.is_ok(), "Failed to decode burn memo");
     if let Ok(Some(DecodedMemo::Burn(Some(burn_memo)))) = decoded_result {
@@ -2017,28 +2001,8 @@ fn test_ledger_memo() {
 
     // Step 3: test decoding invalid memos
 
-    for decode_args in &[
-        DecodeLedgerMemoArgs {
-            encoded_memo: vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF],
-        },
-        DecodeLedgerMemoArgs {
-            encoded_memo: vec![0xFF; 85],
-        },
-    ] {
-        let decoded_result = Decode!(
-            &assert_reply(
-                ckbtc
-                    .env
-                    .query(
-                        ckbtc.minter_id,
-                        "decode_ledger_memo",
-                        Encode!(&decode_args).unwrap()
-                    )
-                    .expect("failed to call decode_ledger_memo")
-            ),
-            DecodeLedgerMemoResult
-        )
-        .unwrap();
+    for encoded_memo in [vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF], vec![0xFF; 85]] {
+        let decoded_result = ckbtc.decode_ledger_memo(encoded_memo);
 
         assert!(
             decoded_result.is_err(),
