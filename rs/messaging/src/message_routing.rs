@@ -34,7 +34,7 @@ use ic_replicated_state::metadata_state::ApiBoundaryNodeEntry;
 use ic_replicated_state::{
     DroppedMessageMetrics, NetworkTopology, ReplicatedState, SubnetTopology,
 };
-use ic_types::batch::{Batch, BatchSummary, CanisterCyclesCostSchedule};
+use ic_types::batch::{Batch, BatchContent, BatchSummary, CanisterCyclesCostSchedule};
 use ic_types::crypto::{KeyPurpose, threshold_sig::ThresholdSigPublicKey};
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::registry::RegistryClientError;
@@ -101,6 +101,7 @@ const METRIC_SHED_MESSAGE_BYTES_TOTAL: &str = "mr_shed_message_bytes_total";
 const METRIC_SUBNET_SPLIT_HEIGHT: &str = "mr_subnet_split_height";
 const BLOCKS_PROPOSED_TOTAL: &str = "mr_blocks_proposed_total";
 const BLOCKS_NOT_PROPOSED_TOTAL: &str = "mr_blocks_not_proposed_total";
+const BLOCKS_NOT_PROPOSED_BY_BLOCKMAKER_TOTAL: &str = "mr_blocks_not_proposed_by_blockmaker_total";
 const METRIC_NEXT_CHECKPOINT_HEIGHT: &str = "mr_next_checkpoint_height";
 const METRIC_REMOTE_CERTIFIED_HEIGHTS: &str = "mr_remote_certified_heights";
 
@@ -312,6 +313,8 @@ pub(crate) struct MessageRoutingMetrics {
     pub(crate) blocks_proposed_total: IntCounter,
     /// Number of blocks not proposed.
     pub(crate) blocks_not_proposed_total: IntCounter,
+    /// Number of blocks not proposed by blockmaker ID.
+    pub(crate) blocks_not_proposed_by_blockmaker_total: IntCounterVec,
 
     /// The memory footprint of all the canisters on this subnet. Note that this
     /// counter is from the perspective of the canisters and does not account
@@ -445,6 +448,11 @@ impl MessageRoutingMetrics {
             blocks_not_proposed_total: metrics_registry.int_counter(
                 BLOCKS_NOT_PROPOSED_TOTAL,
                 "Failures to propose a block (when the node was block maker rank R but the subnet accepted the block from the block maker with rank S > R)."
+            ),
+            blocks_not_proposed_by_blockmaker_total: metrics_registry.int_counter_vec(
+                BLOCKS_NOT_PROPOSED_BY_BLOCKMAKER_TOTAL,
+                "Failures to propose a block (when the node was block maker rank R but the subnet accepted the block from the block maker with rank S > R).",
+                &["blockmaker_id"],
             ),
             canisters_memory_usage_bytes: metrics_registry.int_gauge(
                 "canister_memory_usage_bytes",
@@ -1322,6 +1330,13 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         self.metrics
             .blocks_not_proposed_total
             .inc_by(batch.blockmaker_metrics.failed_blockmakers.len() as u64);
+        for failed_blockmaker in &batch.blockmaker_metrics.failed_blockmakers {
+            self.metrics
+                .blocks_not_proposed_by_blockmaker_total
+                .with_label_values(&[&failed_blockmaker.to_string()])
+                .inc();
+        }
+
         state
             .metadata
             .blockmaker_metrics_time_series
@@ -1427,7 +1442,10 @@ impl BatchProcessor for FakeBatchProcessorImpl {
         state.metadata.batch_time = time;
 
         // Get only ingress out of the batch_messages
-        let signed_ingress_msgs = batch.messages.signed_ingress_msgs;
+        let signed_ingress_msgs = match batch.content {
+            BatchContent::Data { batch_messages, .. } => batch_messages.signed_ingress_msgs,
+            BatchContent::Splitting { .. } => unimplemented!("Subnet splitting is not yet enabled"),
+        };
 
         // Treat all ingress messages as already executed.
         let all_ingress_execution_results = signed_ingress_msgs.into_iter().map(|ingress| {

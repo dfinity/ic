@@ -1,11 +1,14 @@
 use ic_cdk::{init, post_upgrade, query, update};
+use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
+use ic_ckbtc_minter::{BuildTxError, CanisterRuntime};
+use ic_ckdoge_minter::candid_api::EstimateWithdrawalFeeError;
 use ic_ckdoge_minter::{
-    DOGECOIN_CANISTER_RUNTIME, Event, EventType, GetEventsArg, UpdateBalanceArgs,
+    DOGECOIN_CANISTER_RUNTIME, EstimateFeeArg, Event, EventType, GetEventsArg, UpdateBalanceArgs,
     UpdateBalanceError, Utxo, UtxoStatus,
     candid_api::{
         GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeStatusRequest,
-        RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
+        RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError, WithdrawalFee,
     },
     lifecycle::init::MinterArg,
     updates,
@@ -40,7 +43,7 @@ fn timer() {
     // ic_ckbtc_minter::timer invokes ic_cdk::spawn
     // which must be wrapped in in_executor_context
     // as required by the new ic-cdk-executor.
-    ic_cdk::futures::in_executor_context(|| {
+    ic_cdk::futures::internals::in_executor_context(|| {
         #[cfg(feature = "self_check")]
         ok_or_die(check_invariants());
 
@@ -70,6 +73,35 @@ async fn update_balance(args: UpdateBalanceArgs) -> Result<Vec<UtxoStatus>, Upda
         ic_ckbtc_minter::updates::update_balance::update_balance(args, &DOGECOIN_CANISTER_RUNTIME)
             .await,
     )
+}
+
+#[query]
+fn estimate_withdrawal_fee(
+    arg: EstimateFeeArg,
+) -> Result<WithdrawalFee, EstimateWithdrawalFeeError> {
+    ic_ckbtc_minter::state::read_state(|s| {
+        let fee_estimator = DOGECOIN_CANISTER_RUNTIME.fee_estimator(s);
+        let withdrawal_amount = arg.amount.unwrap_or(s.fee_based_retrieve_btc_min_amount);
+
+        ic_ckdoge_minter::fees::estimate_retrieve_doge_fee(
+            &s.available_utxos,
+            withdrawal_amount,
+            s.last_median_fee_per_vbyte
+                .expect("Bitcoin current fee percentiles not retrieved yet."),
+            &fee_estimator,
+        )
+        .map_err(|e| match e {
+            BuildTxError::NotEnoughFunds
+            | BuildTxError::InvalidTransaction(InvalidTransactionError::TooManyInputs { .. }) => {
+                EstimateWithdrawalFeeError::AmountTooHigh
+            }
+            BuildTxError::AmountTooLow | BuildTxError::DustOutput { .. } => {
+                EstimateWithdrawalFeeError::AmountTooLow {
+                    min_amount: s.fee_based_retrieve_btc_min_amount,
+                }
+            }
+        })
+    })
 }
 
 #[update]

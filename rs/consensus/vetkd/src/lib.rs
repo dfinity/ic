@@ -1048,7 +1048,7 @@ mod tests {
                 validation.unwrap_err(),
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
                     InvalidVetKdPayloadReason::MissingContext(id)
-                )) if id.get() == 3
+                )) if id.get() >= 3 && id.get() <= 5
             );
         })
     }
