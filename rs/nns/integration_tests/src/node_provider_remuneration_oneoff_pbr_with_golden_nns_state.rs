@@ -108,7 +108,7 @@ impl NnsCanisterUpgradePBREnabled {
         // Impersonate some public neurons to vote on the proposal. Note that we do not
         // check whether votes succeed, as the governance upgrade can start at any point
         // which will make the canister unresponsive.
-        vote_yes_with_well_known_public_neurons(&state_machine, proposal_id.id);
+        vote_yes_with_well_known_public_neurons(state_machine, proposal_id.id);
 
         // Verify result(s): In a short while, the canister should
         // be running the new code.
