@@ -192,7 +192,7 @@ jobs:
           filters: |
             depcheck:
               - '.github/workflows/ci-pr-only.yml'
-              - 'bazel/external_crates.bzl'
+              - 'bazel/rust.MODULE.bazel'
               - '**/*.lock'
               - '**/*.toml'
       - name: Set up Python
