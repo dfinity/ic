@@ -66,7 +66,7 @@ enum GenericIdentityType<'a> {
     EcdsaSecp256r1,
     Canister(&'a UniversalCanister<'a>),
     WebAuthnEcdsaSecp256r1,
-    // TODO webauthn RSA
+    WebAuthnRsaPkcs1,
 }
 
 impl<'a> GenericIdentityType<'a> {
@@ -74,11 +74,12 @@ impl<'a> GenericIdentityType<'a> {
         canister: &'a UniversalCanister<'a>,
         rng: &mut R,
     ) -> Self {
-        match rng.r#gen::<usize>() % 5 {
+        match rng.r#gen::<usize>() % 6 {
             0 => Self::EcdsaSecp256k1,
             1 => Self::EcdsaSecp256r1,
             2 => Self::Canister(canister),
             4 => Self::WebAuthnEcdsaSecp256r1,
+            //5 => Self::WebAuthnRsaPkcs1, // skip for now...
             _ => Self::Ed25519,
         }
     }
@@ -91,6 +92,7 @@ enum GenericIdentityInner<'a> {
     Ed25519(ic_ed25519::PrivateKey),
     Canister(CanisterSigner<'a>),
     WebAuthnEcdsaSecp256r1(ic_secp256r1::PrivateKey),
+    WebAuthnRsaPkcs1(rsa::PrivateKey),
 }
 
 #[derive(Clone)]
@@ -127,6 +129,11 @@ impl<'a> GenericIdentity<'a> {
             GenericIdentityType::WebAuthnEcdsaSecp256r1 => {
                 let sk = ic_secp256r1::PrivateKey::generate_using_rng(rng);
                 let pk = webauthn_cose_wrap_ecdsa_secp256r1_key(&sk.public_key());
+                (GenericIdentityInner::WebAuthnEcdsaSecp256r1(sk), pk)
+            }
+            GenericIdentityType::WebAuthnRsaPkcs1 => {
+                let sk = rsa::PrivateKey::new(rng, 1024);
+                let pk = webauthn_cose_wrap_rsa_pkcs1_key(rsa::PublicKey::from(&sk));
                 (GenericIdentityInner::WebAuthnEcdsaSecp256r1(sk), pk)
             }
         };
@@ -1151,7 +1158,7 @@ fn resign_certificate_with_random_signature<R: Rng + CryptoRng>(
     serializer.into_inner()
 }
 
-fn wrap_cose_key_in_der_spki(cose: &serde_cbor::Value::Map) -> Vec<u8> {
+fn wrap_cose_key_in_der_spki(cose: &serde_cbor::Value) -> Vec<u8> {
     use ic_crypto_internal_basic_sig_der_utils::subject_public_key_info_der;
     use simple_asn1::oid;
     // OID 1.3.6.1.4.1.56387.1.1
@@ -1159,6 +1166,44 @@ fn wrap_cose_key_in_der_spki(cose: &serde_cbor::Value::Map) -> Vec<u8> {
     let webauthn_key_oid = oid!(1, 3, 6, 1, 4, 1, 56387, 1, 1);
     let pk_cose = serde_cbor::to_vec(cose).unwrap();
     subject_public_key_info_der(webauthn_key_oid, &pk_cose).unwrap()
+}
+
+fn webauthn_cose_wrap_rsa_pkcs1_key(pk: &rsa::PublicKey) -> Vec<u8> {
+    use rsa::PublicKeyParts;
+
+    let n = pk.n();
+    let e = pk.e();
+
+    let mut map = std::collections::BTreeMap::new();
+
+    use serde_cbor::Value;
+
+    /*
+    Reference
+
+    - RFC 8152 "CBOR Object Signing and Encryption (COSE)"
+
+    - RFC 8230 "Using RSA Algorithms with CBOR Object Signing and Encryption (COSE) Messages"
+
+    - RFC 8812 "CBOR Object Signing and Encryption (COSE) and JSON
+      Object Signing and Encryption (JOSE) Registrations for Web
+      Authentication (WebAuthn) Algorithms"
+     */
+    const COSE_PARAM_KTY: serde_cbor::Value = serde_cbor::Value::Integer(1);
+    const COSE_PARAM_KTY_RSA: serde_cbor::Value = serde_cbor::Value::Integer(3);
+
+    const COSE_PARAM_ALG: serde_cbor::Value = serde_cbor::Value::Integer(3);
+    const COSE_PARAM_ALG_RSA256: serde_cbor::Value = serde_cbor::Value::Integer(-257);
+
+    const COSE_PARAM_RSA_N: serde_cbor::Value = serde_cbor::Value::Integer(-1);
+    const COSE_PARAM_RSA_E: serde_cbor::Value = serde_cbor::Value::Integer(-2);
+
+    map.insert(COSE_PARAM_KTY, COSE_PARAM_KTY_RSA);
+    map.insert(COSE_PARAM_ALG, COSE_PARAM_ALG_RS256);
+    map.insert(COSE_PARAM_RSA_E, Value::Bytes(e.to_bytes_be()));
+    map.insert(COSE_PARAM_RSA_N, Value::Bytes(n.to_bytes_be()));
+
+    wrap_cose_key_in_der_spki(&Value::Map(map))
 }
 
 fn webauthn_cose_wrap_ecdsa_secp256r1_key(pk: &ic_secp256r1::PublicKey) -> Vec<u8> {
@@ -1196,7 +1241,7 @@ fn webauthn_cose_wrap_ecdsa_secp256r1_key(pk: &ic_secp256r1::PublicKey) -> Vec<u
     wrap_cose_key_in_der_spki(&Value::Map(map))
 }
 
-fn webauthn_sign_message(msg: &[u8], sign_fn: FnOnce(&[u8]) -> Vec<u8>) -> Vec<u8> {
+fn webauthn_sign_message<F: FnOnce(&[u8]) -> Vec<u8>>(msg: &[u8], sign_fn: F) -> Vec<u8> {
     use serde::Serialize;
 
     #[derive(Debug, Serialize)]

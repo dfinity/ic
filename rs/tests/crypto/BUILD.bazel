@@ -32,6 +32,7 @@ DEPENDENCIES = [
     "@crate_index//:p256",
     "@crate_index//:rand",
     "@crate_index//:reqwest",
+    "@crate_index//:rsa",
     "@crate_index//:simple_asn1",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
