@@ -7617,10 +7617,6 @@ impl Governance {
         let end_date_timestamp_seconds = now.saturating_sub(ONE_DAY_SECONDS);
         let end_date = DateUtc::from_unix_timestamp_seconds(end_date_timestamp_seconds);
 
-        println!(
-            "Fetching performance based node provider rewards from NRC for period {:?} - {:?}",
-            start_date, end_date
-        );
         // Maps node providers to their rewards in XDR
         let (rewards_per_node_provider, algorithm_version) = self
             .get_node_providers_xdr_permyriad_rewards(start_date, end_date)
