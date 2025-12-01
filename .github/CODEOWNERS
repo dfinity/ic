@@ -77,6 +77,7 @@ go_deps.bzl               @dfinity/idx
 # [GitHub-Ci]
 /.github/                                                                @dfinity/idx
 /.github/workflows/                                                      @dfinity/idx
+/.github/workflows/ledger-suite-release.yml                              @dfinity/defi-team @dfinity/idx
 /.github/workflows/rosetta-release.yml                                   @dfinity/defi-team @dfinity/idx
 /.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
 .github/repo_policies/EXTERNAL_CONTRIB_BLACKLIST                         @dfinity/idx @dfinity/infrasec
@@ -262,9 +263,6 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/node/                                         @dfinity/node
 /rs/tests/query_stats/                                  @dfinity/team-dsm @dfinity/consensus
 /rs/tests/sdk/                                          @dfinity/sdk
-/rs/tests/src/ledger_tests/                             @dfinity/defi-team
-/rs/tests/src/rosetta_test.rs                           @dfinity/defi-team
-/rs/tests/src/rosetta_tests/                            @dfinity/defi-team
 /rs/tla_instrumentation/                                @dfinity/research @dfinity/formal-models
 /rs/tools/                                              @dfinity/ic-interface-owners
 /rs/tools/check_did/                                    @dfinity/defi-team

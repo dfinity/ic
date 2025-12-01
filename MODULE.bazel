@@ -56,6 +56,10 @@ archive_override(
 
 bazel_dep(name = "pigz", version = "2.8")  # (parallel) gzip
 
+# Rust
+
+include("//bazel:rust.MODULE.bazel")
+
 # Python dependencies
 
 bazel_dep(name = "rules_python", version = "0.35.0")
@@ -683,8 +687,8 @@ http_file(
     # ci/container/container-run.sh
     # bazel build //publish/binaries:pocket-ic.gz
     # sha256sum bazel-bin/publish/binaries/pocket-ic.gz
-    sha256 = "237272216498074e5250a0685813b96632963ff9abbc51a7030d9b625985028d",
-    url = "https://github.com/dfinity/pocketic/releases/download/9.0.1/pocket-ic-x86_64-linux.gz",
+    sha256 = "dd8a95dd5a784e9b7c8c79fc4fa3a5c97d449f9666afe57aefa960aef0d68b8c",
+    url = "https://github.com/dfinity/pocketic/releases/download/10.0.0/pocket-ic-x86_64-linux.gz",
 )
 
 ## Rosetta CLI

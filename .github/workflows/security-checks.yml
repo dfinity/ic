@@ -1,0 +1,13 @@
+name: Security Checks
+
+on:
+  pull_request_target:
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate

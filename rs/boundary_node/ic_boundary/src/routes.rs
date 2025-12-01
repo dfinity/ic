@@ -12,7 +12,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use candid::{CandidType, Principal};
-use ic_bn_lib::http::{Client as HttpClient, proxy};
+use ic_bn_lib::http::proxy;
+use ic_bn_lib_common::traits::http::Client as HttpClient;
 use ic_types::{CanisterId, SubnetId, messages::ReplicaHealthStatus};
 use serde::Deserialize;
 use url::Url;
@@ -261,13 +262,11 @@ pub(crate) mod test {
         StatusCode,
         header::{CONTENT_TYPE, HeaderName, HeaderValue, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS},
     };
-    use ic_bn_lib::{
-        http::headers::{
-            X_IC_CANISTER_ID, X_IC_METHOD_NAME, X_IC_NODE_ID, X_IC_REQUEST_TYPE, X_IC_SENDER,
-            X_IC_SUBNET_ID, X_IC_SUBNET_TYPE,
-        },
-        principal,
+    use ic_bn_lib::http::headers::{
+        X_IC_CANISTER_ID, X_IC_METHOD_NAME, X_IC_NODE_ID, X_IC_REQUEST_TYPE, X_IC_SENDER,
+        X_IC_SUBNET_ID, X_IC_SUBNET_TYPE,
     };
+    use ic_bn_lib_common::principal;
     use ic_types::{
         PrincipalId,
         messages::{

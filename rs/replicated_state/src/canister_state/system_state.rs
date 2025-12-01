@@ -36,8 +36,8 @@ use ic_types::methods::Callback;
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::CoarseTime;
 use ic_types::{
-    CanisterId, CanisterLog, CanisterTimer, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    PrincipalId, Time, default_log_memory_limit,
+    CanisterId, CanisterLog, CanisterTimer, Cycles, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
+    MemoryAllocation, NumBytes, NumInstructions, PrincipalId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -516,8 +516,11 @@ impl SystemState {
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: Default::default(),
-            log_memory_limit: default_log_memory_limit(),
-            canister_log: Default::default(),
+            log_memory_limit: NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64),
+            // TODO(EXC-2118): CanisterLog does not store log records efficiently,
+            // therefore it should not scale to memory limit from above.
+            // Remove this field after migration is done.
+            canister_log: CanisterLog::default_aggregate(),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
             snapshots_memory_usage: NumBytes::new(0),
@@ -2214,8 +2217,11 @@ pub mod testing {
             canister_history: Default::default(),
             wasm_chunk_store: WasmChunkStore::new_for_testing(),
             log_visibility: Default::default(),
-            log_memory_limit: default_log_memory_limit(),
-            canister_log: Default::default(),
+            log_memory_limit: NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64),
+            // TODO(EXC-2118): CanisterLog does not store log records efficiently,
+            // therefore it should not scale to memory limit from above.
+            // Remove this field after migration is done.
+            canister_log: CanisterLog::default_aggregate(),
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),
             snapshots_memory_usage: Default::default(),

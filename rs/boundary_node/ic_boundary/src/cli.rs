@@ -1,12 +1,12 @@
 use candid::Principal;
 use clap::{Args, Parser};
 use humantime::parse_duration;
-use ic_bn_lib::{
-    http::{
-        self,
-        shed::cli::{ShedSharded, ShedSystem},
-    },
+use ic_bn_lib_common::{
     parse_size, parse_size_usize,
+    types::{
+        http::{HttpClientCli, HttpServerCli},
+        shed::{ShedShardedCli, ShedSystemCli},
+    },
 };
 use ic_config::crypto::CryptoConfig;
 use ic_types::CanisterId;
@@ -30,10 +30,10 @@ pub struct Cli {
     pub network: Network,
 
     #[command(flatten, next_help_heading = "HTTP Server")]
-    pub http_server: http::server::cli::HttpServer,
+    pub http_server: HttpServerCli,
 
     #[command(flatten, next_help_heading = "HTTP Client")]
-    pub http_client: http::client::cli::HttpClient,
+    pub http_client: HttpClientCli,
 
     #[command(flatten, next_help_heading = "TLS settings")]
     pub tls: Tls,
@@ -63,10 +63,10 @@ pub struct Cli {
     pub nftables: NfTables,
 
     #[command(flatten, next_help_heading = "Shedding System")]
-    pub shed_system: ShedSystem,
+    pub shed_system: ShedSystemCli,
 
     #[command(flatten, next_help_heading = "Shedding Latency")]
-    pub shed_latency: ShedSharded<RequestType>,
+    pub shed_latency: ShedShardedCli<RequestType>,
 
     #[command(flatten, next_help_heading = "Firewall Bouncer")]
     pub bouncer: Bouncer,

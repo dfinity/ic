@@ -16,15 +16,20 @@ use ic_types::{
     CountBytes, NodeId,
     artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId},
     batch::IngressPayload,
-    consensus::{BlockProposal, ConsensusMessage},
+    consensus::{BlockProposal, ConsensusMessage, idkg::IDkgMessage},
     messages::SignedIngress,
 };
 
-use crate::FetchArtifact;
+use crate::{
+    FetchArtifact,
+    fetch_stripped_artifact::types::{StrippedMessage, StrippedMessageId},
+};
 
 use super::{
-    download::download_ingress,
-    metrics::{FetchStrippedConsensusArtifactMetrics, IngressMessageSource, IngressSenderMetrics},
+    download::download_stripped_message,
+    metrics::{
+        FetchStrippedConsensusArtifactMetrics, IngressMessageSource, StrippedMessageSenderMetrics,
+    },
     stripper::Strippable,
     types::{
         SignedIngressId,
@@ -82,6 +87,7 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>>
 pub struct FetchStrippedConsensusArtifact {
     log: ReplicaLogger,
     ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
+    idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
     fetch_stripped: FetchArtifact<MaybeStrippedConsensusMessage>,
     transport: Arc<dyn Transport>,
     node_id: NodeId,
@@ -94,17 +100,20 @@ impl FetchStrippedConsensusArtifact {
         rt: tokio::runtime::Handle,
         consensus_pool: Arc<RwLock<Pool>>,
         ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
+        idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
         bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessageId, Pool>>,
         metrics_registry: MetricsRegistry,
         node_id: NodeId,
     ) -> (impl Fn(Arc<dyn Transport>) -> Self, axum::Router) {
         let ingress_pool_clone = ingress_pool.clone();
+        let idkg_pool_clone = idkg_pool.clone();
         let consensus_pool_clone = consensus_pool.clone();
 
         let router = super::download::build_axum_router(super::download::Pools {
             consensus_pool: consensus_pool_clone,
             ingress_pool: ingress_pool_clone,
-            metrics: IngressSenderMetrics::new(&metrics_registry),
+            idkg_pool: idkg_pool_clone,
+            metrics: StrippedMessageSenderMetrics::new(&metrics_registry),
         });
 
         let (fetch_stripped_fn, subrouter) = FetchArtifact::new(
@@ -123,6 +132,7 @@ impl FetchStrippedConsensusArtifact {
             Self {
                 log: log.clone(),
                 ingress_pool: ingress_pool.clone(),
+                idkg_pool: idkg_pool.clone(),
                 fetch_stripped,
                 transport,
                 node_id,
@@ -175,17 +185,18 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
 
         let timer = self
             .metrics
-            .download_missing_ingress_messages_duration
+            .download_missing_stripped_messages_duration
             .start_timer();
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
-        let stripped_ingress_ids = assembler.missing_ingress_messages();
+        let stripped_message_ids = assembler.missing_stripped_messages();
         // For each stripped object in the message, try to fetch it either from the local pools
         // or from a random peer who is advertising it.
-        for stripped_ingress_id in stripped_ingress_ids {
+        for stripped_message_id in stripped_message_ids {
             join_set.spawn(get_or_fetch(
-                stripped_ingress_id,
+                stripped_message_id,
                 self.ingress_pool.clone(),
+                self.idkg_pool.clone(),
                 self.transport.clone(),
                 id.as_ref().clone(),
                 self.log.clone(),
@@ -199,7 +210,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
         let mut ingress_messages_from_peers = 0;
 
         while let Some(join_result) = join_set.join_next().await {
-            let Ok((ingress, peer_id)) = join_result else {
+            let Ok((StrippedMessage::Ingress(ingress_id, ingress), peer_id)) = join_result else {
                 return AssembleResult::Unwanted;
             };
 
@@ -212,7 +223,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
                 ingress_messages_from_peers += 1;
             }
 
-            if let Err(err) = assembler.try_insert_ingress_message(ingress) {
+            if let Err(err) = assembler.try_insert_ingress_message(ingress, ingress_id) {
                 warn!(
                     self.log,
                     "Failed to ingress message {}. This is a bug.", err
@@ -257,8 +268,9 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
 /// Tries to get the missing object either from the pool(s) or from the peers who are advertising
 /// it.
 async fn get_or_fetch<P: Peers>(
-    signed_ingress_id: SignedIngressId,
+    stripped_message_id: StrippedMessageId,
     ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
+    idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
     transport: Arc<dyn Transport>,
     // Id of the *full* artifact which should contain the missing data
     full_consensus_message_id: ConsensusMessageId,
@@ -266,23 +278,42 @@ async fn get_or_fetch<P: Peers>(
     metrics: Arc<FetchStrippedConsensusArtifactMetrics>,
     node_id: NodeId,
     peer_rx: P,
-) -> (SignedIngress, NodeId) {
-    // First check if the ingress message exists in the Ingress Pool.
-    if let Some(ingress_message) = ingress_pool
-        .read()
-        .unwrap()
-        .get(&signed_ingress_id.ingress_message_id)
-    {
-        // Make sure that this is the correct ingress message. [`IngressMessageId`] does _not_
-        // uniquely identify ingress messages, we thus need to perform an extra check.
-        if SignedIngressId::from(&ingress_message) == signed_ingress_id {
-            return (ingress_message, node_id);
+) -> (StrippedMessage, NodeId) {
+    let stripped_message_id = match stripped_message_id {
+        StrippedMessageId::Ingress(signed_ingress_id) => {
+            // First check if the ingress message exists in the Ingress Pool.
+            if let Some(ingress_message) = ingress_pool
+                .read()
+                .unwrap()
+                .get(&signed_ingress_id.ingress_message_id)
+            {
+                // Make sure that this is the correct ingress message. [`IngressMessageId`] does _not_
+                // uniquely identify ingress messages, we thus need to perform an extra check.
+                if SignedIngressId::from(&ingress_message) == signed_ingress_id {
+                    return (
+                        StrippedMessage::Ingress(signed_ingress_id, ingress_message),
+                        node_id,
+                    );
+                }
+            }
+            StrippedMessageId::Ingress(signed_ingress_id)
         }
-    }
-
-    download_ingress(
+        StrippedMessageId::IDkgDealing(dealing_id, node_index) => {
+            // First check if the dealing exists in the IDKG Pool.
+            if let Some(IDkgMessage::Dealing(signed_dealing)) =
+                idkg_pool.read().unwrap().get(&dealing_id)
+            {
+                return (
+                    StrippedMessage::IDkgDealing(dealing_id, node_index, signed_dealing),
+                    node_id,
+                );
+            }
+            StrippedMessageId::IDkgDealing(dealing_id, node_index)
+        }
+    };
+    download_stripped_message(
         transport,
-        signed_ingress_id,
+        stripped_message_id,
         full_consensus_message_id,
         &log,
         &metrics,
@@ -325,8 +356,8 @@ impl BlockProposalAssembler {
         }
     }
 
-    /// Returns the list of ingress messages which have been stripped from the block.
-    pub(crate) fn missing_ingress_messages(&self) -> Vec<SignedIngressId> {
+    /// Returns the list of messages which have been stripped from the block.
+    pub(crate) fn missing_stripped_messages(&self) -> Vec<StrippedMessageId> {
         self.ingress_messages
             .iter()
             .filter_map(|(signed_ingress_id, maybe_ingress)| {
@@ -337,6 +368,7 @@ impl BlockProposalAssembler {
                 }
             })
             .cloned()
+            .map(StrippedMessageId::Ingress)
             .collect()
     }
 
@@ -344,9 +376,8 @@ impl BlockProposalAssembler {
     pub(crate) fn try_insert_ingress_message(
         &mut self,
         ingress_message: SignedIngress,
+        signed_ingress_id: SignedIngressId,
     ) -> Result<(), InsertionError> {
-        let signed_ingress_id = SignedIngressId::from(&ingress_message);
-
         // We can have at most 1000 elements in the vector, so it should be reasonably fast to do a
         // linear scan here.
         let (_, ingress) = self
@@ -376,13 +407,15 @@ impl BlockProposalAssembler {
             .ingress_messages
             .into_iter()
             .map(|(id, message)| {
-                message.ok_or_else(|| AssemblyError::Missing(id.ingress_message_id))
+                message
+                    .ok_or_else(|| AssemblyError::Missing(id.ingress_message_id.clone()))
+                    .map(|message| (id.ingress_message_id, message))
             })
             .collect::<Result<Vec<_>, _>>()?;
         let reconstructed_ingress_payload = IngressPayload::from(ingresses);
 
         let reconstructed_ingress_payload_proto =
-            pb::IngressPayload::from(&reconstructed_ingress_payload);
+            pb::IngressPayload::from(reconstructed_ingress_payload);
 
         if let Some(block) = reconstructed_block_proposal_proto.value.as_mut() {
             block.ingress_payload = Some(reconstructed_ingress_payload_proto);
@@ -415,8 +448,8 @@ mod tests {
 
     #[test]
     fn strip_assemble_roundtrip_test() {
-        let (ingress_1, _ingress_id_1) = fake_ingress_message_with_arg_size("fake_1", 1024);
-        let (ingress_2, _ingress_id_2) = fake_ingress_message_with_arg_size("fake_2", 1024);
+        let (ingress_1, ingress_id_1) = fake_ingress_message_with_arg_size("fake_1", 1024);
+        let (ingress_2, ingress_id_2) = fake_ingress_message_with_arg_size("fake_2", 1024);
         let block_proposal =
             fake_block_proposal_with_ingresses(vec![ingress_1.clone(), ingress_2.clone()]);
         let consensus_message = ConsensusMessage::BlockProposal(block_proposal.clone());
@@ -431,8 +464,12 @@ mod tests {
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         // insert back the missing messages
-        assembler.try_insert_ingress_message(ingress_1).unwrap();
-        assembler.try_insert_ingress_message(ingress_2).unwrap();
+        assembler
+            .try_insert_ingress_message(ingress_1, ingress_id_1)
+            .unwrap();
+        assembler
+            .try_insert_ingress_message(ingress_2, ingress_id_2)
+            .unwrap();
 
         // try to reassemble the block
         let assembled_block = assembler.try_assemble().unwrap();
@@ -442,7 +479,7 @@ mod tests {
 
     #[test]
     fn strip_assemble_fails_when_still_missing_ingress_test() {
-        let (ingress_1, _ingress_id_1) = fake_ingress_message_with_arg_size("fake_1", 1024);
+        let (ingress_1, ingress_id_1) = fake_ingress_message_with_arg_size("fake_1", 1024);
         let (ingress_2, _ingress_id_2) = fake_ingress_message_with_arg_size("fake_2", 1024);
         let block_proposal =
             fake_block_proposal_with_ingresses(vec![ingress_1.clone(), ingress_2.clone()]);
@@ -458,7 +495,9 @@ mod tests {
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         // insert back only one missing messages
-        assembler.try_insert_ingress_message(ingress_1).unwrap();
+        assembler
+            .try_insert_ingress_message(ingress_1, ingress_id_1)
+            .unwrap();
 
         // try to reassemble the block
         let assembly_error = assembler.try_assemble().unwrap_err();
@@ -481,8 +520,11 @@ mod tests {
         let assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         assert_eq!(
-            assembler.missing_ingress_messages(),
-            vec![ingress_1_id, ingress_2_id]
+            assembler.missing_stripped_messages(),
+            vec![
+                StrippedMessageId::Ingress(ingress_1_id),
+                StrippedMessageId::Ingress(ingress_2_id)
+            ]
         );
     }
 
@@ -495,10 +537,10 @@ mod tests {
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         assembler
-            .try_insert_ingress_message(ingress_2)
+            .try_insert_ingress_message(ingress_2, ingress_2_id.clone())
             .expect("Should successfully insert the missing ingress");
 
-        assert!(assembler.missing_ingress_messages().is_empty());
+        assert!(assembler.missing_stripped_messages().is_empty());
     }
 
     #[test]
@@ -510,18 +552,18 @@ mod tests {
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         assembler
-            .try_insert_ingress_message(ingress_2.clone())
+            .try_insert_ingress_message(ingress_2.clone(), ingress_2_id.clone())
             .expect("Should successfully insert the missing ingress");
 
         assert_eq!(
-            assembler.try_insert_ingress_message(ingress_2),
+            assembler.try_insert_ingress_message(ingress_2, ingress_2_id),
             Err(InsertionError::AlreadyInserted)
         );
     }
 
     #[test]
     fn ingress_payload_insertion_unknown_fails_test() {
-        let (ingress_1, _ingress_1_id) = fake_ingress_message("fake_1");
+        let (ingress_1, ingress_1_id) = fake_ingress_message("fake_1");
         let (_ingress_2, ingress_2_id) = fake_ingress_message("fake_2");
         let stripped_block_proposal =
             fake_stripped_block_proposal_with_ingresses(vec![ingress_2_id.clone()]);
@@ -529,7 +571,7 @@ mod tests {
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         assert_eq!(
-            assembler.try_insert_ingress_message(ingress_1),
+            assembler.try_insert_ingress_message(ingress_1, ingress_1_id),
             Err(InsertionError::NotNeeded)
         );
     }
@@ -571,6 +613,7 @@ mod tests {
         }
 
         let consensus_pool = MockValidatedPoolReader::<ConsensusMessage>::default();
+        let idkg_pool = MockValidatedPoolReader::<IDkgMessage>::default();
         let mut mock_bouncer_factory = MockBouncerFactory::default();
         mock_bouncer_factory
             .expect_new_bouncer()
@@ -581,6 +624,7 @@ mod tests {
             tokio::runtime::Handle::current(),
             Arc::new(RwLock::new(consensus_pool)),
             Arc::new(RwLock::new(ingress_pool)),
+            Arc::new(RwLock::new(idkg_pool)),
             Arc::new(mock_bouncer_factory),
             MetricsRegistry::new(),
             NODE_1,

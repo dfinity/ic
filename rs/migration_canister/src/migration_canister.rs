@@ -122,23 +122,3 @@ fn migration_status(args: MigrateCanisterArgs) -> Vec<MigrationStatus> {
     active.extend(events);
     active
 }
-
-#[derive(Clone, CandidType, Deserialize)]
-pub(crate) struct ListEventsArgs {
-    page_index: u64,
-    page_size: u64,
-}
-
-#[query]
-fn list_events(args: ListEventsArgs) -> Vec<MigrationStatus> {
-    crate::canister_state::events::list_events(args.page_index, args.page_size)
-        .into_iter()
-        .map(|e| match e.event {
-            crate::EventType::Succeeded { .. } => MigrationStatus::Succeeded { time: e.time },
-            crate::EventType::Failed { reason, .. } => MigrationStatus::Failed {
-                reason,
-                time: e.time,
-            },
-        })
-        .collect()
-}

@@ -12,6 +12,7 @@ use ic_btc_checker::{
 use ic_btc_interface::{
     GetCurrentFeePercentilesRequest, MillisatoshiPerByte, NetworkInRequest, Txid,
 };
+use ic_ckbtc_minter::fees::{BitcoinFeeEstimator, FeeEstimator};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::logs::Priority;
@@ -28,9 +29,8 @@ use ic_ckbtc_minter::updates::update_balance::{
     PendingUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
 };
 use ic_ckbtc_minter::{
-    CKBTC_LEDGER_MEMO_SIZE, MAX_NUM_INPUTS_IN_TRANSACTION, MIN_RELAY_FEE_PER_VBYTE,
-    MIN_RESUBMISSION_DELAY, MinterInfo, Network, REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS,
-    UTXOS_COUNT_THRESHOLD,
+    CKBTC_LEDGER_MEMO_SIZE, MAX_NUM_INPUTS_IN_TRANSACTION, MIN_RESUBMISSION_DELAY, MinterInfo,
+    Network, UTXOS_COUNT_THRESHOLD,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
@@ -167,7 +167,7 @@ fn assert_replacement_transaction(old: &bitcoin::Transaction, new: &bitcoin::Tra
 
     let new_out_value = new.output.iter().map(|out| out.value).sum::<u64>();
     let prev_out_value = old.output.iter().map(|out| out.value).sum::<u64>();
-    let relay_cost = new.vsize() as u64 * MIN_RELAY_FEE_PER_VBYTE / 1000;
+    let relay_cost = new.vsize() as u64 * BitcoinFeeEstimator::MIN_RELAY_FEE_RATE_INCREASE / 1000;
 
     assert!(
         new_out_value + relay_cost <= prev_out_value,
@@ -2392,8 +2392,7 @@ fn should_cancel_and_reimburse_large_withdrawal() {
     );
 
     let reimbursement_block_index = block_index + 1;
-    let reimbursement_amount =
-        withdrawal_amount - REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS;
+    let reimbursement_amount = withdrawal_amount - BitcoinFeeEstimator::COST_OF_ONE_BILLION_CYCLES;
 
     assert_matches!(
         ckbtc.retrieve_btc_status_v2(block_index),
@@ -2441,6 +2440,6 @@ fn should_cancel_and_reimburse_large_withdrawal() {
     ckbtc.assert_ledger_transaction_reimbursement_correct(block_index, reimbursement_block_index);
     assert_eq!(
         ckbtc.balance_of(user_account),
-        balance_before_withdrawal.clone() - REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS
+        balance_before_withdrawal.clone() - BitcoinFeeEstimator::COST_OF_ONE_BILLION_CYCLES
     );
 }
