@@ -120,5 +120,13 @@ pub fn create_indexes(connection: &Connection) -> Result<()> {
         [],
     )?;
 
+    connection.execute(
+        r#"
+        CREATE INDEX IF NOT EXISTS block_operation_type
+        ON blocks(operation_type)
+        "#,
+        [],
+    )?;    
+
     Ok(())
 }
