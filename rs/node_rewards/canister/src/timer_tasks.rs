@@ -21,7 +21,7 @@ const SECS_PER_HOUR: u64 = 3600;
 // All the subnets have collected metrics for the previous day
 const SYNC_OFFSET: u64 = 5 * 60; // 5 minutes in seconds
 
-const RETRY_FAILED_SYNC_SECS: u64 = 60;
+const RETRY_FAILED_SYNC_SECS: u64 = 5 * 60; // 5 minutes in seconds
 
 fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
     #[cfg(target_arch = "wasm32")]
