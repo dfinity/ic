@@ -1672,8 +1672,6 @@ impl Scheduler for SchedulerImpl {
                 .metadata
                 .subnet_metrics
                 .update_transactions_total += root_measurement_scope.messages().get();
-            final_state.metadata.subnet_metrics.num_canisters =
-                final_state.canister_states.len() as u64;
             final_state
         }
     }
