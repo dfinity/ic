@@ -7,6 +7,7 @@ use crate::canister_state::system_state::log_memory_store::{
 /// This is the in-memory representation of the header.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Header {
+    // Validation and compatibility.
     pub magic: [u8; 3],
     pub version: u8,
 
@@ -20,7 +21,10 @@ pub struct Header {
     pub data_size: MemorySize,
     pub data_head: MemoryPosition,
     pub data_tail: MemoryPosition,
+
+    // Monotonicity.
     pub next_idx: u64,
+    pub seen_timestamp: u64,
 }
 
 impl Header {
@@ -38,6 +42,7 @@ impl Header {
             data_tail: MemoryPosition::new(0),
             data_size: MemorySize::new(0),
             next_idx: 0,
+            seen_timestamp: 0,
         }
     }
 
@@ -95,6 +100,7 @@ mod tests {
         assert_eq!(h.data_tail, MemoryPosition::new(0));
         assert_eq!(h.data_size, MemorySize::new(0));
         assert_eq!(h.next_idx, 0);
+        assert_eq!(h.seen_timestamp, 0);
     }
 
     #[test]

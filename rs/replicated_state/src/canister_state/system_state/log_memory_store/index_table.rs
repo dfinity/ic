@@ -109,14 +109,18 @@ impl IndexTable {
         }
     }
 
-    /// Records the most recent log entry associated with the segment that contains `position`.
+    /// Records the most recent log entry associated with the segment that
+    /// contains `position`.
     ///
-    /// This operation assumes that log records arrive strictly in increasing `idx` order —
-    /// meaning each update corresponds to a newer record than any previously stored one.
-    /// Because segments keep only the newest record, providing an out-of-order record would
-    /// silently overwrite newer data and corrupt segment ordering.
+    /// This operation assumes that log records arrive in strictly increasing
+    /// `idx` and non-decreasing `timestamp` order — meaning each update
+    /// corresponds to a newer record than any previously stored one.
+    /// Because segments keep only the newest record, providing an
+    /// out-of-order record would silently overwrite newer data and corrupt
+    /// segment ordering.
     ///
-    /// IMPORTANT: callers must guarantee monotonic `idx` progression.
+    /// IMPORTANT: callers must guarantee monotonic `idx` and `timestamp`
+    /// progression.
     pub fn update(&mut self, position: MemoryPosition, record: &LogRecord) {
         if self.front.is_none() {
             // First record being added, initialize front.

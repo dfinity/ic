@@ -98,14 +98,18 @@ impl RingBuffer {
             // Check that records are added in order, otherwise it breaks the index.
             let h = self.io.load_header();
             if record.idx < h.next_idx {
-                debug_assert!(false, "log records must be appended in order");
+                debug_assert!(false, "Log record idx must be >= than next idx");
+                continue;
+            }
+            if record.timestamp < h.seen_timestamp {
+                debug_assert!(false, "Log record timestamp must be >= than seen timestamp");
                 continue;
             }
 
             let added_size = MemorySize::new(record.bytes_len() as u64);
             let capacity = MemorySize::new(self.byte_capacity() as u64);
             if added_size > capacity {
-                debug_assert!(false, "log record size exceeds ring buffer capacity",);
+                debug_assert!(false, "Log record size exceeds ring buffer capacity");
                 return;
             }
             self.make_free_space(added_size);
@@ -119,6 +123,7 @@ impl RingBuffer {
             h.data_tail = h.advance_position(position, added_size);
             h.data_size = h.data_size.saturating_add(added_size);
             h.next_idx = record.idx + 1;
+            h.seen_timestamp = record.timestamp;
             self.io.save_header(&h);
 
             // Update the index table with the latest record position.
