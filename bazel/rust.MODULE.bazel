@@ -719,7 +719,6 @@ crate.spec(
     package = "ic-stable-structures",
     version = "^0.6.8",
 )
-
 crate.spec(
     package = "ic-stable-structures",
     package_alias = "ic_stable_structures_next",
