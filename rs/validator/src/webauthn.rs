@@ -175,7 +175,8 @@ mod tests {
                     const COSE_PARAM_ALG_ES256: serde_cbor::Value = serde_cbor::Value::Integer(-7);
 
                     const COSE_PARAM_EC2_CRV: serde_cbor::Value = serde_cbor::Value::Integer(-1);
-                    const COSE_PARAM_EC2_CRV_P256: serde_cbor::Value = serde_cbor::Value::Integer(1);
+                    const COSE_PARAM_EC2_CRV_P256: serde_cbor::Value =
+                        serde_cbor::Value::Integer(1);
 
                     const COSE_PARAM_EC2_X: serde_cbor::Value = serde_cbor::Value::Integer(-2);
                     const COSE_PARAM_EC2_Y: serde_cbor::Value = serde_cbor::Value::Integer(-3);
