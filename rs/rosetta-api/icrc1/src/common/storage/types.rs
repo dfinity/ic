@@ -371,7 +371,6 @@ pub enum IcrcOperation {
     FeeCollector {
         fee_collector: Option<Account>,
         caller: Option<Principal>,
-        // ts: Option<u64>, panic!("FeeCollector107 not implemented")
     },
 }
 
