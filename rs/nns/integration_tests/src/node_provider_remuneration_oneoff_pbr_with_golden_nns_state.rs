@@ -73,7 +73,7 @@ impl NnsCanisterUpgradePBREnabled {
 
         let controller = PrincipalId::from(ROOT_CANISTER_ID);
 
-        // Step 1.3: Assert that the upgrade we are about to perform would
+        // Assert that the upgrade we are about to perform would
         // actually change the code in the canister. (This is "just" a
         // pre-flight check).
         let status_result = get_canister_status(
@@ -93,8 +93,6 @@ impl NnsCanisterUpgradePBREnabled {
             &self.wasm_hash,
             "Current code is the same as what is running in mainnet?!\n{status_result:#?}",
         );
-
-        // Step 2: Call code under test: Upgrade the (current) canister.
         println!("Proposing to upgrade NNS {}", self.nns_canister_name);
 
         let proposal_id = nns_propose_upgrade_nns_canister(
@@ -111,7 +109,7 @@ impl NnsCanisterUpgradePBREnabled {
         // which will make the canister unresponsive.
         vote_yes_with_well_known_public_neurons(&state_machine, proposal_id.id);
 
-        // Step 3: Verify result(s): In a short while, the canister should
+        // Verify result(s): In a short while, the canister should
         // be running the new code.
         wait_for_canister_upgrade_to_succeed(
             state_machine,
