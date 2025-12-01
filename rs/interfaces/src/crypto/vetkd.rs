@@ -9,10 +9,6 @@ pub trait VetKdProtocol {
     #[allow(clippy::result_large_err)]
     fn create_encrypted_key_share(
         &self,
-        ////////////////////////////////////////
-        ////////////////////////////////////////
-        // TODO: turnn this into reference!?
-        ////////////////////////////////////////
         args: VetKdArgs,
     ) -> Result<VetKdEncryptedKeyShare, VetKdKeyShareCreationError>;
 
