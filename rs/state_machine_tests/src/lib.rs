@@ -906,7 +906,7 @@ enum SignatureSecretKey {
 }
 
 pub struct StateMachineStateManager {
-    inner: Option<StateManagerImpl>,
+    inner: StateManagerImpl,
     // This field must be the last one so that the temporary directory is deleted at the very end.
     state_dir: Option<Box<dyn StateMachineStateDir>>,
     // DO NOT PUT ANY FIELDS AFTER `state_dir`!!!
@@ -921,16 +921,16 @@ impl StateMachineStateManager {
     }
 
     fn into_state_dir(mut self) -> Box<dyn StateMachineStateDir> {
-        self.state_dir.take().unwrap()
+        self.state_dir
+            .take()
+            .expect("StateMachineStateManager uninitialized")
     }
 }
 
 impl Drop for StateMachineStateManager {
     fn drop(&mut self) {
-        if let Some(state_manager) = self.inner.take() {
-            // Finish any asynchronous state manager operations before dropping the state manager.
-            state_manager.flush_all();
-        }
+        // Finish any asynchronous state manager operations before dropping the state manager.
+        self.inner.flush_all();
     }
 }
 
@@ -938,9 +938,7 @@ impl Deref for StateMachineStateManager {
     type Target = StateManagerImpl;
 
     fn deref(&self) -> &Self::Target {
-        self.inner
-            .as_ref()
-            .expect("StateMachineStateManager uninitialized")
+        &self.inner
     }
 }
 
@@ -1951,7 +1949,7 @@ impl StateMachine {
             malicious_flags.clone(),
         );
         let state_manager = Arc::new(StateMachineStateManager {
-            inner: Some(state_manager_impl),
+            inner: state_manager_impl,
             state_dir: Some(state_dir),
         });
 
