@@ -830,7 +830,7 @@ impl SystemMetadata {
         Ok(Self {
             ingress_history,
             streams,
-            // Already populated from the registry.
+            // Already populated from the registry for subnet B.
             canister_allocation_ranges,
             last_generated_canister_id,
             prev_state_hash,
@@ -845,7 +845,6 @@ impl SystemMetadata {
             node_public_keys,
             api_boundary_nodes,
             split_from,
-            // No in-progress subnet calls on subnet B.
             subnet_call_context_manager,
             state_sync_version,
             certification_version,
