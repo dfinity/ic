@@ -167,118 +167,58 @@ impl IndexTable {
         entries
     }
 
-    /// Returns a [start, end] index entry pair that defines a safe, scannable range of log records
-    /// while respecting the maximum allowed result size.
+    /// Returns the maximum allowed result size.
+    pub fn result_max_size(&self) -> MemorySize {
+        self.result_max_size
+    }
+
+    /// Returns an approximate [start, end] range of index entries when no filter is provided.
     ///
-    /// Behavior:
-    /// - **No filter**: returns the most recent records (tail), trimming older ones from the start.
-    ///   The range size is ≤ `result_max_size + segment_size`.
-    ///
-    /// - **With filter**: starts at the earliest record matching the filter and includes as many
-    ///   subsequent records as possible without exceeding the size limit. May trim the end.
-    ///   The range size is ≤ `result_max_size + 2 * segment_size`.
-    ///
-    /// The extra segment allowance ensures correctness in the presence of ring-buffer segmentation
-    /// and guarantees the actual scanned range remains bounded and efficient.
-    pub fn bounded_scan_range(
-        &self,
-        filter: Option<FetchCanisterLogsFilter>,
-    ) -> Option<(IndexEntry, IndexEntry)> {
+    /// Returns only the most recent records (tail), trimming the older ones from the start.
+    /// The range size is ≤ `result_max_size + segment_size`.
+    pub fn no_filter_approx_range(&self) -> Option<(IndexEntry, IndexEntry)> {
         let entries = self.valid_sorted_entries();
         if entries.is_empty() {
             return None;
         }
-
-        if entries.len() == 1 {
-            // Only one valid entry means only one record (the front) is in the buffer.
-            return Some((entries[0], entries[0]));
+        let end_inclusive = entries.last().unwrap();
+        let mut start_inclusive = end_inclusive;
+        let threshold = self.result_max_size() + self.segment_size;
+        for entry in entries.iter().rev() {
+            if self.range_size(entry, end_inclusive) > threshold {
+                break;
+            }
+            start_inclusive = entry;
         }
-
-        // Below this line there's always at least 2 unique entries covering the full valid range
-        // from the oldest to the latest log record.
-
-        // Left fallback for start: exact match or previous entry.
-        let find_start_by_key = |key: u64, key_fn: fn(&IndexEntry) -> u64| -> IndexEntry {
-            match entries.binary_search_by_key(&key, key_fn) {
-                Ok(idx) => entries[idx],      // Exact match.
-                Err(0) => entries[0],         // Below range, return first.
-                Err(idx) => entries[idx - 1], // Left fallback.
-            }
-        };
-
-        // Right fallback for end: exact match or next entry.
-        let find_end_by_key = |key: u64, key_fn: fn(&IndexEntry) -> u64| -> IndexEntry {
-            match entries.binary_search_by_key(&key, key_fn) {
-                Ok(idx) => entries[idx],                         // Exact match.
-                Err(idx) if idx < entries.len() => entries[idx], // Right fallback.
-                _ => *entries.last().unwrap(),                   // Above range, return last.
-            }
-        };
-
-        let filter_by_idx =
-            |entries: &Vec<IndexEntry>, start_idx: u64, end_idx: u64| -> Vec<IndexEntry> {
-                entries
-                    .iter()
-                    .filter(|e| start_idx <= e.idx && e.idx <= end_idx)
-                    .cloned()
-                    .collect()
-            };
-
-        let clamp_end_by_size = |entries: &[IndexEntry], limit: MemorySize| -> IndexEntry {
-            let start = entries[0];
-            let mut new_end = start;
-            for &entry in entries {
-                if self.range_size(&start, &entry) >= limit {
-                    break;
-                }
-                new_end = entry;
-            }
-            new_end
-        };
-
-        let filter_size_limit = self.result_max_size + 2 * self.segment_size;
-        let no_filter_size_limit = self.result_max_size + self.segment_size;
-        let (start, end) = match filter {
-            Some(FetchCanisterLogsFilter::ByIdx(range)) => {
-                let start = find_start_by_key(range.start, |e| e.idx);
-                let end = find_end_by_key(range.end, |e| e.idx);
-                let subset = filter_by_idx(&entries, start.idx, end.idx);
-                if subset.is_empty() {
-                    (start, end)
-                } else {
-                    (start, clamp_end_by_size(&subset, filter_size_limit))
-                }
-            }
-            Some(FetchCanisterLogsFilter::ByTimestampNanos(range)) => {
-                let start = find_start_by_key(range.start, |e| e.timestamp);
-                let end = find_end_by_key(range.end, |e| e.timestamp);
-                let subset = filter_by_idx(&entries, start.idx, end.idx);
-                if subset.is_empty() {
-                    (start, end)
-                } else {
-                    (start, clamp_end_by_size(&subset, filter_size_limit))
-                }
-            }
-            None => {
-                let end = entries.last().unwrap();
-                let mut new_start = end;
-                for entry in entries.iter().rev() {
-                    if self.range_size(entry, end) >= no_filter_size_limit {
-                        break;
-                    }
-                    new_start = entry;
-                }
-                (*new_start, *end)
-            }
-        };
-
-        Some((start, end))
+        Some((*start_inclusive, *end_inclusive))
     }
 
-    pub fn advance(&self, position: MemoryPosition, distance: MemorySize) -> MemoryPosition {
-        debug_assert!(self.data_capacity.get() > 0);
-        debug_assert!(distance.get() > 0);
-        (position + distance) % self.data_capacity
+    /// Returns an approximate start of the range when filter is provided.
+    ///
+    /// The value might be `segment_size` away from the actual start.
+    pub fn find_approx_start(&self, filter: FetchCanisterLogsFilter) -> Option<IndexEntry> {
+        match filter {
+            FetchCanisterLogsFilter::ByIdx(range) => self.find_start_by_key(range.start, |e| e.idx),
+            FetchCanisterLogsFilter::ByTimestampNanos(range) => {
+                self.find_start_by_key(range.start, |e| e.timestamp)
+            }
+        }
+    }
+
+    /// Returns an approximate start of the range when filter is provided.
+    ///
+    /// The value might be `segment_size` away from the actual start.
+    fn find_start_by_key(&self, key: u64, key_fn: fn(&IndexEntry) -> u64) -> Option<IndexEntry> {
+        let entries = self.valid_sorted_entries();
+        if entries.is_empty() {
+            return None;
+        }
+        let start = match entries.binary_search_by_key(&key, key_fn) {
+            Ok(idx) => entries[idx],      // Exact match.
+            Err(0) => entries[0],         // No match, below range, return first.
+            Err(idx) => entries[idx - 1], // No match, left fallback.
+        };
+        Some(start)
     }
 
     /// Returns the total byte size of the range from the start of `from`
@@ -294,14 +234,10 @@ impl IndexTable {
         }
     }
 
-    #[cfg(test)]
-    fn segment_size(&self) -> MemorySize {
-        self.segment_size
-    }
-
-    #[cfg(test)]
-    fn result_max_size(&self) -> MemorySize {
-        self.result_max_size
+    fn advance(&self, position: MemoryPosition, distance: MemorySize) -> MemoryPosition {
+        debug_assert!(self.data_capacity.get() > 0);
+        debug_assert!(distance.get() > 0);
+        (position + distance) % self.data_capacity
     }
 }
 
@@ -388,17 +324,12 @@ mod tests {
         table
     }
 
-    fn filter_by_idx(start: u64, end: u64) -> Option<FetchCanisterLogsFilter> {
-        Some(FetchCanisterLogsFilter::ByIdx(FetchCanisterLogsRange {
-            start,
-            end,
-        }))
+    fn filter_by_idx(start: u64, end: u64) -> FetchCanisterLogsFilter {
+        FetchCanisterLogsFilter::ByIdx(FetchCanisterLogsRange { start, end })
     }
 
-    fn filter_by_timestamp(start: u64, end: u64) -> Option<FetchCanisterLogsFilter> {
-        Some(FetchCanisterLogsFilter::ByTimestampNanos(
-            FetchCanisterLogsRange { start, end },
-        ))
+    fn filter_by_timestamp(start: u64, end: u64) -> FetchCanisterLogsFilter {
+        FetchCanisterLogsFilter::ByTimestampNanos(FetchCanisterLogsRange { start, end })
     }
 
     fn records_count(start: &IndexEntry, end: &IndexEntry) -> u64 {
@@ -414,7 +345,17 @@ mod tests {
             TEST_RESULT_MAX_SIZE,
             vec![],
         );
-        assert!(table.bounded_scan_range(None).is_none());
+        assert!(table.no_filter_approx_range().is_none());
+        assert!(
+            table
+                .find_approx_start(filter_by_idx(0, u64::MAX))
+                .is_none()
+        );
+        assert!(
+            table
+                .find_approx_start(filter_by_timestamp(0, u64::MAX))
+                .is_none()
+        );
     }
 
     #[test]
@@ -431,11 +372,30 @@ mod tests {
                 start_position,
                 start_idx,
             );
-            let (start, end) = table.bounded_scan_range(None).expect("range present");
+
+            let (start, end) = table.no_filter_approx_range().expect("range present");
             // Assert start and end point to the same single record at start_idx.
             assert_eq!(start.idx, start_idx);
             assert_eq!(start, end);
             assert_eq!(records_count(&start, &end), 1);
+
+            let start = table
+                .find_approx_start(FetchCanisterLogsFilter::ByIdx(FetchCanisterLogsRange {
+                    start: 0,
+                    end: u64::MAX,
+                }))
+                .expect("start present");
+            assert_eq!(start.idx, start_idx);
+
+            let start = table
+                .find_approx_start(FetchCanisterLogsFilter::ByTimestampNanos(
+                    FetchCanisterLogsRange {
+                        start: 0,
+                        end: u64::MAX,
+                    },
+                ))
+                .expect("start present");
+            assert_eq!(start.idx, start_idx);
         }
     }
 
@@ -452,9 +412,27 @@ mod tests {
                 start_position,
                 start_idx,
             );
-            let (start, end) = table.bounded_scan_range(None).expect("range present");
+            let (start, end) = table.no_filter_approx_range().expect("range present");
             assert_eq!(start.idx, start_idx); // Beginning is not trimmed.
             assert_eq!(records_count(&start, &end), TEST_SMALL_LOG_RECORDS_COUNT);
+
+            let start = table
+                .find_approx_start(FetchCanisterLogsFilter::ByIdx(FetchCanisterLogsRange {
+                    start: 0,
+                    end: u64::MAX,
+                }))
+                .expect("start present");
+            assert_eq!(start.idx, start_idx); // Beginning is not trimmed.
+
+            let start = table
+                .find_approx_start(FetchCanisterLogsFilter::ByTimestampNanos(
+                    FetchCanisterLogsRange {
+                        start: 0,
+                        end: u64::MAX,
+                    },
+                ))
+                .expect("start present");
+            assert_eq!(start.idx, start_idx); // Beginning is not trimmed.
         }
     }
 
@@ -471,18 +449,16 @@ mod tests {
                 0,
             );
             let (no_filter_start, no_filter_end) =
-                table.bounded_scan_range(None).expect("range present");
-            let (start, end) = table
-                .bounded_scan_range(filter_by_idx(10, 20))
-                .expect("range present");
+                table.no_filter_approx_range().expect("range present");
+            let start = table
+                .find_approx_start(FetchCanisterLogsFilter::ByIdx(FetchCanisterLogsRange {
+                    start: 10,
+                    end: 20,
+                }))
+                .expect("start present");
             // Assert filtered range is within no-filter range.
             assert!(no_filter_start.idx <= start.idx);
-            assert!(end.idx <= no_filter_end.idx);
-            assert!(
-                table.range_size(&start, &end)
-                    <= table.range_size(&no_filter_start, &no_filter_end)
-            );
-            assert!(records_count(&start, &end) <= TEST_SMALL_LOG_RECORDS_COUNT);
+            assert!(start.idx <= no_filter_end.idx);
         }
     }
 
@@ -499,18 +475,18 @@ mod tests {
                 0,
             );
             let (no_filter_start, no_filter_end) =
-                table.bounded_scan_range(None).expect("range present");
-            let (start, end) = table
-                .bounded_scan_range(filter_by_timestamp(10_000_000, 20_000_000))
-                .expect("range present");
+                table.no_filter_approx_range().expect("range present");
+            let start = table
+                .find_approx_start(FetchCanisterLogsFilter::ByTimestampNanos(
+                    FetchCanisterLogsRange {
+                        start: 10_000_000,
+                        end: 20_000_000,
+                    },
+                ))
+                .expect("start present");
             // Assert filtered range is within no-filter range.
             assert!(no_filter_start.idx <= start.idx);
-            assert!(end.idx <= no_filter_end.idx);
-            assert!(
-                table.range_size(&start, &end)
-                    <= table.range_size(&no_filter_start, &no_filter_end)
-            );
-            assert!(records_count(&start, &end) <= TEST_SMALL_LOG_RECORDS_COUNT);
+            assert!(start.idx <= no_filter_end.idx);
         }
     }
 
@@ -527,13 +503,13 @@ mod tests {
                 start_position,
                 start_idx,
             );
-            let (start, end) = table.bounded_scan_range(None).expect("range present");
+            let (start, end) = table.no_filter_approx_range().expect("range present");
             assert_ne!(start.idx, start_idx); // Beginning is trimmed.
             assert!(start.idx < end.idx);
             // Assert distance is above max result size but within one segment size.
             let distance = table.range_size(&start, &end);
             assert!(distance >= table.result_max_size());
-            assert!(distance <= table.result_max_size() + table.segment_size());
+            assert!(distance <= table.result_max_size() + table.segment_size);
             assert!(records_count(&start, &end) < TEST_BIG_LOG_RECORDS_COUNT);
         }
     }
@@ -542,6 +518,7 @@ mod tests {
     fn big_log_filter_by_idx() {
         for start_position in [TEST_NO_WRAP_POSITION, TEST_WRAP_POSITION] {
             let start_idx = 0;
+            let filter_start_idx = 10;
             let table = make_table_with_config(
                 TEST_DATA_CAPACITY,
                 TEST_INDEX_TABLE_PAGES,
@@ -553,22 +530,24 @@ mod tests {
             );
 
             // Short range query within max result size.
-            let (start, end) = table
-                .bounded_scan_range(filter_by_idx(10, 190))
-                .expect("range present");
-            assert!(start.idx < end.idx);
-            let distance = table.range_size(&start, &end);
-            assert!(distance <= table.result_max_size());
+            // 180 records * 10 KB < 2 MB limit
+            let start = table
+                .find_approx_start(FetchCanisterLogsFilter::ByIdx(FetchCanisterLogsRange {
+                    start: filter_start_idx,
+                    end: filter_start_idx + 180,
+                }))
+                .expect("start present");
+            assert!(start.idx <= filter_start_idx); // Beginning is not trimmed.
 
             // Long range query exceeding max result size.
-            let (start, end) = table
-                .bounded_scan_range(filter_by_idx(10, 230)) // 230 records * 10 KB > 2 MB limit
-                .expect("range present");
-            assert!(start.idx < end.idx);
-            let distance = table.range_size(&start, &end);
-            assert!(distance >= table.result_max_size());
-            assert!(distance <= table.result_max_size() + 2 * table.segment_size());
-            assert!(records_count(&start, &end) < TEST_BIG_LOG_RECORDS_COUNT);
+            // 220 records * 10 KB > 2 MB limit
+            let start = table
+                .find_approx_start(FetchCanisterLogsFilter::ByIdx(FetchCanisterLogsRange {
+                    start: filter_start_idx,
+                    end: filter_start_idx + 220,
+                }))
+                .expect("start present");
+            assert!(start.idx <= filter_start_idx); // Beginning is not trimmed.
         }
     }
 }
