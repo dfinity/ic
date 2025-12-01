@@ -284,7 +284,6 @@ crate.spec(
 )
 
 # Required because chrono uses canisters incompatible features
-# TODO: alias
 crate.spec(
     default_features = False,
     features = [
@@ -721,7 +720,6 @@ crate.spec(
     version = "^0.6.8",
 )
 
-# TODO: alias
 crate.spec(
     package = "ic-stable-structures",
     package_alias = "ic_stable_structures_next",
