@@ -1,3 +1,4 @@
+use crate::state::utxos::UtxoSet;
 use crate::{
     BuildTxError, CacheWithExpiration, Network,
     address::BitcoinAddress,
@@ -19,18 +20,14 @@ use candid::Principal;
 use ic_base_types::CanisterId;
 use ic_btc_interface::{OutPoint, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
-use maplit::btreeset;
 use proptest::{
-    array::uniform20,
-    collection::{btree_set, vec as pvec},
-    prelude::any,
-    prop_assert, prop_assert_eq, prop_assume, proptest,
+    array::uniform20, collection::vec as pvec, prelude::any, prop_assert, prop_assert_eq,
+    prop_assume, proptest,
 };
 use std::cmp::max;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 use std::time::Duration;
-use crate::state::utxos::UtxoSet;
 
 #[allow(deprecated)]
 fn default_init_args() -> InitArgs {

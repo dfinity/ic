@@ -1,5 +1,5 @@
 use ic_btc_interface::Utxo;
-use std::collections::{btree_map, BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, btree_map};
 
 /// Set of UTXOs sorted by value.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -13,11 +13,14 @@ impl UtxoSet {
     }
 
     pub fn insert(&mut self, utxo: Utxo) -> bool {
-        self.utxos.entry(utxo.value).or_insert_with(BTreeSet::new).insert(utxo)
+        self.utxos.entry(utxo.value).or_default().insert(utxo)
     }
 
     pub fn contains(&self, utxo: &Utxo) -> bool {
-        self.utxos.get(&utxo.value).map(|utxos| utxos.contains(utxo)).unwrap_or(false)
+        self.utxos
+            .get(&utxo.value)
+            .map(|utxos| utxos.contains(utxo))
+            .unwrap_or(false)
     }
 
     pub fn remove(&mut self, utxo: &Utxo) -> Option<Utxo> {
@@ -29,7 +32,10 @@ impl UtxoSet {
 
     /// Find a UTXO with the smallest value being at least `value`.
     pub fn find_lower_bound(&self, value: u64) -> Option<&Utxo> {
-        self.utxos.range(value..).next().and_then(|(_value, utxos)| utxos.first())
+        self.utxos
+            .range(value..)
+            .next()
+            .and_then(|(_value, utxos)| utxos.first())
     }
 
     /// Remove a UTXO with the smallest value.
@@ -42,22 +48,31 @@ impl UtxoSet {
 
     /// A UTXO with the largest value.
     pub fn last(&self) -> Option<&Utxo> {
-        self.utxos.last_key_value().and_then(|(_value, utxos)| utxos.last())
+        self.utxos
+            .last_key_value()
+            .and_then(|(_value, utxos)| utxos.last())
     }
 
     pub fn len(&self) -> usize {
         self.utxos.values().map(|utxos| utxos.len()).sum()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item=&Utxo> {
+    pub fn is_empty(&self) -> bool {
+        self.utxos.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Utxo> {
         self.utxos.values().flat_map(|utxos| utxos.iter())
     }
 
     // Helper method to change an entry in `UtxoSet`.
     // It ensures the map entry will be removed if its values are empty.
-    fn mutate_utxo_set<R, F: FnOnce(&mut BTreeSet<Utxo>) -> R>(mut entry: btree_map::OccupiedEntry<u64, BTreeSet<Utxo>>, mutator: F) -> R {
-        let mut utxos = entry.get_mut();
-        let result = mutator(&mut utxos);
+    fn mutate_utxo_set<R, F: FnOnce(&mut BTreeSet<Utxo>) -> R>(
+        mut entry: btree_map::OccupiedEntry<u64, BTreeSet<Utxo>>,
+        mutator: F,
+    ) -> R {
+        let utxos = entry.get_mut();
+        let result = mutator(utxos);
         if entry.get().is_empty() {
             entry.remove_entry();
         }
@@ -66,7 +81,7 @@ impl UtxoSet {
 }
 
 impl FromIterator<Utxo> for UtxoSet {
-    fn from_iter<T: IntoIterator<Item=Utxo>>(utxos: T) -> Self {
+    fn from_iter<T: IntoIterator<Item = Utxo>>(utxos: T) -> Self {
         let mut set = UtxoSet::default();
         for utxo in utxos {
             set.insert(utxo);

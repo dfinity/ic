@@ -19,13 +19,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
 use crate::fees::{BitcoinFeeEstimator, FeeEstimator};
+use crate::state::utxos::UtxoSet;
 use crate::state::{CkBtcMinterState, mutate_state, read_state};
 use crate::updates::get_btc_address;
 use crate::updates::retrieve_btc::BtcAddressCheckStatus;
 pub use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_checker::{CheckAddressArgs, CheckAddressResponse};
 pub use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
-use crate::state::utxos::UtxoSet;
 
 pub mod address;
 pub mod dashboard;
@@ -195,7 +195,7 @@ async fn fetch_main_utxos<R: CanisterRuntime>(
         management::CallSource::Minter,
         runtime,
     )
-        .await
+    .await
     {
         Ok(response) => response.utxos,
         Err(e) => {
@@ -305,10 +305,10 @@ pub fn confirm_transaction<R: CanisterRuntime>(
     runtime: &R,
 ) {
     if let Some(state::WithdrawalCancellation {
-                    reason,
-                    requests,
-                    fee,
-                }) = state::audit::confirm_transaction(state, txid, runtime)
+        reason,
+        requests,
+        fee,
+    }) = state::audit::confirm_transaction(state, txid, runtime)
     {
         reimburse_canceled_requests(state, requests, reason, fee, runtime)
     }
@@ -472,7 +472,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             req.unsigned_tx,
             runtime,
         )
-            .await
+        .await
         {
             Ok(signed_tx) => {
                 state::mutate_state(|s| {
@@ -682,7 +682,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
         management::CallSource::Minter,
         runtime,
     )
-        .await
+    .await
     {
         Ok(response) => response.utxos,
         Err(e) => {
@@ -747,7 +747,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
         runtime,
         &fee_estimator,
     )
-        .await
+    .await
 }
 
 pub async fn resubmit_transactions<
@@ -857,7 +857,7 @@ pub async fn resubmit_transactions<
             unsigned_tx,
             runtime,
         )
-            .await;
+        .await;
 
         let signed_tx = match maybe_signed_tx {
             Ok(tx) => tx,
@@ -928,11 +928,7 @@ pub async fn resubmit_transactions<
 /// PROPERTY: sum(u.value for u in available_set) ≥ target ⇒ !solution.is_empty()
 /// POSTCONDITION: !solution.is_empty() ⇒ sum(u.value for u in solution) ≥ target
 /// POSTCONDITION:  solution.is_empty() ⇒ available_utxos did not change.
-fn utxos_selection(
-    target: u64,
-    available_utxos: &mut UtxoSet,
-    output_count: usize,
-) -> Vec<Utxo> {
+fn utxos_selection(target: u64, available_utxos: &mut UtxoSet, output_count: usize) -> Vec<Utxo> {
     #[cfg(feature = "canbench-rs")]
     let _scope = canbench_rs::bench_scope("utxos_selection");
 
@@ -970,7 +966,10 @@ pub fn greedy(target: u64, available_utxos: &mut UtxoSet) -> Vec<Utxo> {
     let mut solution = vec![];
     let mut goal = target;
     while goal > 0 {
-        let option = available_utxos.find_lower_bound(goal).or_else(|| available_utxos.last()).cloned();
+        let option = available_utxos
+            .find_lower_bound(goal)
+            .or_else(|| available_utxos.last())
+            .cloned();
         match option {
             Some(utxo) => {
                 let utxo = available_utxos.remove(&utxo).expect("BUG: missing UTXO");
@@ -1029,7 +1028,7 @@ pub async fn sign_transaction<R: CanisterRuntime, F: Fn(&tx::OutPoint) -> Option
             sighash,
             runtime,
         )
-            .await?;
+        .await?;
 
         signed_inputs.push(tx::SignedInput {
             signature: signature::EncodedSignature::from_sec1(&sec1_signature),
@@ -1504,9 +1503,9 @@ impl CanisterRuntime for IcCanisterRuntime {
                 name: key_name.clone(),
             },
         })
-            .await
-            .map(|result| result.signature)
-            .map_err(CallError::from_sign_error)
+        .await
+        .map(|result| result.signature)
+        .map_err(CallError::from_sign_error)
     }
 
     async fn send_transaction(

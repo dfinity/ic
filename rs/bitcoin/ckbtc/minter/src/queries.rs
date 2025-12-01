@@ -3,6 +3,7 @@ use crate::dashboard::build_dashboard;
 use crate::fees::FeeEstimator;
 use crate::metrics::encode_metrics;
 use crate::state::read_state;
+use crate::state::utxos::UtxoSet;
 use crate::updates::update_balance::UpdateBalanceArgs;
 use crate::{BuildTxError, build_unsigned_transaction_from_inputs, utxos_selection};
 use candid::CandidType;
@@ -10,7 +11,6 @@ use ic_btc_interface::Utxo;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
-use crate::state::utxos::UtxoSet;
 
 #[derive(CandidType, Deserialize)]
 pub struct RetrieveBtcStatusRequest {

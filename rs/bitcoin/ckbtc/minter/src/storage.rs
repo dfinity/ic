@@ -111,7 +111,7 @@ pub fn decode_event(buf: &[u8]) -> Event {
 }
 
 /// Returns an iterator over all minter events.
-pub fn events() -> impl Iterator<Item=Event> {
+pub fn events() -> impl Iterator<Item = Event> {
     EventIterator {
         buf: vec![],
         pos: 0,
@@ -204,9 +204,8 @@ mod benches {
     use crate::state::eventlog::replay;
     use crate::state::replace_state;
     use crate::state::{CkBtcMinterState, invariants::CheckInvariants};
-    use crate::{IC_CANISTER_RUNTIME, state, greedy};
+    use crate::{IC_CANISTER_RUNTIME, greedy, state};
     use canbench_rs::bench;
-    use crate::state::utxos::UtxoSet;
 
     #[bench(raw)]
     fn build_unsigned_transaction_1_50k_sats() -> canbench_rs::BenchResult {
@@ -294,7 +293,7 @@ mod benches {
                     median_fee_millisatoshi_per_vbyte,
                     &fee_estimator,
                 )
-                    .unwrap()
+                .unwrap()
             });
         })
     }
@@ -329,7 +328,7 @@ mod benches {
                     m.borrow().get(V1_LOG_INDEX_MEMORY_ID),
                     m.borrow().get(V1_LOG_DATA_MEMORY_ID),
                 )
-                    .expect("failed to initialize stable log")
+                .expect("failed to initialize stable log")
             })
         });
         assert_eq!(count_events(), 768_723);

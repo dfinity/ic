@@ -460,9 +460,9 @@ mod withdrawal_reimbursement {
 }
 
 mod utxo_set {
-    use ic_btc_interface::Utxo;
     use crate::state::utxos::UtxoSet;
     use crate::test_fixtures::utxo;
+    use ic_btc_interface::Utxo;
 
     #[test]
     fn should_be_sorted_by_value() {

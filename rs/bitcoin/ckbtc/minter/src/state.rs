@@ -24,6 +24,7 @@ use crate::reimbursement::{
     ReimbursedWithdrawalResult, WithdrawalReimbursementReason,
 };
 use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
+use crate::state::utxos::UtxoSet;
 use crate::updates::update_balance::SuspendedUtxo;
 use crate::{
     ECDSAPublicKey, GetUtxosCache, Network, Timestamp, WithdrawalFee, address::BitcoinAddress,
@@ -39,7 +40,6 @@ use std::collections::btree_map::Entry;
 use std::collections::btree_set;
 use std::iter::Chain;
 use std::time::Duration;
-use crate::state::utxos::UtxoSet;
 
 /// The maximum number of finalized BTC retrieval requests that we keep in the
 /// history.
