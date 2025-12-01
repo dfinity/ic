@@ -16045,6 +16045,7 @@ name = "ic_crypto_system_tests"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "base64 0.13.1",
  "candid",
  "ic-agent 0.40.1",
  "ic-certification 3.0.3",
@@ -16069,6 +16070,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
+ "serde_json",
  "simple_asn1",
  "slog",
  "tokio",
