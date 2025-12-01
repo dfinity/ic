@@ -241,6 +241,7 @@ rust_ic_test_suite_with_extra_srcs(
             # Keep sorted.
             "tests/check_generated_files.rs",
             "tests/mod.rs",
+            "tests/data_migration_test.rs",
         ],
     ),
     data = [
@@ -257,6 +258,25 @@ rust_ic_test_suite_with_extra_srcs(
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath :registry-canister)",
         "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath :registry-canister-test)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    } | POCKET_IC_ENV,
+    extra_srcs = glob(["tests/common/*.rs"]),
+    proc_macro_deps = DEV_MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":canister",
+        "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
+        "//rs/state_machine_tests",
+    ] + POCKET_IC_DEPS,
+)
+
+rust_ic_test_suite_with_extra_srcs(
+    name = "registry_canister_data_migration_test",
+    srcs = glob(["tests/data_migration_test.rs"]),
+    data = [
+        ":registry-canister",
+    ] + POCKET_IC_DATA,
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/registry/canister",
+        "REGISTRY_CANISTER_WASM_PATH": "$(rootpath :registry-canister)",
     } | POCKET_IC_ENV,
     extra_srcs = glob(["tests/common/*.rs"]),
     proc_macro_deps = DEV_MACRO_DEPENDENCIES,
