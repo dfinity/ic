@@ -273,8 +273,8 @@ impl<'a> From<memo::BurnMemo<'a>> for BurnMemo {
 
 #[derive(Debug, CandidType, Serialize, Deserialize)]
 pub enum DecodedMemo {
-    Mint(MintMemo),
-    Burn(BurnMemo),
+    Mint(Option<MintMemo>),
+    Burn(Option<BurnMemo>),
 }
 
 #[derive(Debug, CandidType, Serialize, Deserialize)]
@@ -294,12 +294,12 @@ pub fn decode_ledger_memo(args: DecodeLedgerMemoArgs) -> DecodeLedgerMemoResult 
 
     // Try to decode as MintMemo first
     if let Ok(mint_memo) = minicbor::decode::<memo::MintMemo>(&bytes) {
-        return Ok(Some(DecodedMemo::Mint(mint_memo.into())));
+        return Ok(Some(DecodedMemo::Mint(Some(MintMemo::from(mint_memo)))));
     }
 
     // Try to decode as BurnMemo
     if let Ok(burn_memo) = minicbor::decode::<memo::BurnMemo>(&bytes) {
-        return Ok(Some(DecodedMemo::Burn(burn_memo.into())));
+        return Ok(Some(DecodedMemo::Burn(Some(BurnMemo::from(burn_memo)))));
     }
 
     Err(Some(DecodeLedgerMemoError::InvalidMemo(

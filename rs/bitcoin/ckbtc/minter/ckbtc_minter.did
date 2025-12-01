@@ -556,8 +556,10 @@ type BurnMemo = variant {
 };
 
 type DecodedMemo = variant {
-    Mint : MintMemo;
-    Burn : BurnMemo;
+    // The decoded MintMemo - `opt` since other variants of `MintMemo` could be added in the future.
+    Mint : opt MintMemo;
+    // The decoded BurnMemo - `opt` since other variants of `BurnMemo` could be added in the future.
+    Burn : opt BurnMemo;
 };
 
 type DecodeLedgerMemoError = variant {

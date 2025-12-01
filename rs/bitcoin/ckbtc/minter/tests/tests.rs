@@ -1951,7 +1951,7 @@ fn test_ledger_memo() {
     .unwrap();
 
     assert!(decoded_result.is_ok(), "Failed to decode mint memo");
-    if let Ok(Some(DecodedMemo::Mint(mint_memo))) = decoded_result {
+    if let Ok(Some(DecodedMemo::Mint(Some(mint_memo)))) = decoded_result {
         assert_matches!(
             mint_memo,
             ic_ckbtc_minter::queries::MintMemo::Convert {
@@ -2002,7 +2002,7 @@ fn test_ledger_memo() {
     .unwrap();
 
     assert!(decoded_result.is_ok(), "Failed to decode burn memo");
-    if let Ok(Some(DecodedMemo::Burn(burn_memo))) = decoded_result {
+    if let Ok(Some(DecodedMemo::Burn(Some(burn_memo)))) = decoded_result {
         assert_matches!(
             burn_memo,
             ic_ckbtc_minter::queries::BurnMemo::Convert {
