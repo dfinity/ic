@@ -915,7 +915,7 @@ fn test_sync_to_fee_collector_107_block() {
 
         let block1 = BlockBuilder::new(2, 2)
             .with_parent_hash(block0.hash().to_vec())
-            .with_fee(Tokens::from(123))
+            .with_fee(Tokens::from(123u64))
             .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
             .build();
 
@@ -984,7 +984,7 @@ fn test_fee_collector_107_smoke() {
 
         let block2 = BlockBuilder::new(2, 2)
             .with_parent_hash(block1.hash().to_vec())
-            .with_fee(Tokens::from(123))
+            .with_fee(Tokens::from(123u64))
             .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
             .build();
 
@@ -1019,7 +1019,7 @@ fn test_fee_collector_107_smoke() {
 
         let block4 = BlockBuilder::new(4, 4)
             .with_parent_hash(block3.hash().to_vec())
-            .with_fee(Tokens::from(123))
+            .with_fee(Tokens::from(123u64))
             .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
             .build();
 

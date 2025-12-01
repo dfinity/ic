@@ -1174,8 +1174,8 @@ mod test {
                                 IcrcOperation::Burn { from, .. } => from,
                                 IcrcOperation::Approve { from, .. } => from,
                                 IcrcOperation::FeeCollector {
-                                    fee_collector,
-                                    caller,
+                                    fee_collector: _,
+                                    caller: _,
                                 } => {
                                     panic!("FeeCollector107 not implemented")
                                 }
@@ -1226,8 +1226,8 @@ mod test {
                                             .unwrap(),
                                     ),
                                 IcrcOperation::FeeCollector {
-                                    fee_collector,
-                                    caller,
+                                    fee_collector: _,
+                                    caller: _,
                                 } => {
                                     panic!("FeeCollector107 not implemented")
                                 }
