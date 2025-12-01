@@ -102,7 +102,7 @@ impl RingBuffer {
                 continue;
             }
             if record.timestamp < h.max_timestamp {
-                debug_assert!(false, "Log record timestamp must be >= than seen timestamp");
+                debug_assert!(false, "Log record timestamp must be >= than max timestamp");
                 continue;
             }
 
