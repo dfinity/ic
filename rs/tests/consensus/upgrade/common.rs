@@ -270,8 +270,6 @@ pub fn upgrade(
 /// - Checking that at least n - f nodes produced a log displaying the latest computed root hash.
 ///   This is useful for recoveries, in case we need to know the latest state hash but it is
 ///   impossible to provision SSH keys.
-/// - After reboot, checking that the state hash from the local CUP matches the one extracted from
-///   the logs before reboot, for the nodes that logged that hash.
 /// - Checking that all nodes have the target version assigned after the upgrade.
 async fn upgrade_to(
     nns_node: &IcNodeSnapshot,
