@@ -589,7 +589,12 @@ where
             // Randomly sample some inventory to be requested from the peer.
             let mut selected_inventory = vec![];
             for _ in 0..num_requests_to_be_sent {
-                match get_next_block_hash_to_sync(&mut retry_queue, &mut self.block_sync_queue) {
+                match get_next_block_hash_to_sync(
+                    &mut retry_queue,
+                    &mut self.block_sync_queue,
+                    peer.height,
+                    &self.blockchain,
+                ) {
                     Some(hash) => {
                         selected_inventory.push(hash);
                     }
@@ -766,11 +771,26 @@ where
 // Only returns a block if the cache is not full.
 // Prioritzes new blocks that are in the sync queue over the ones in the retry queue, as
 // blocks in the retry queue are most likely not part of the main chain. See more in CON-1464.
-fn get_next_block_hash_to_sync(
+fn get_next_block_hash_to_sync<Network: BlockchainNetwork>(
     retry_queue: &mut LinkedHashSet<BlockHash>,
     sync_queue: &mut LinkedHashSet<BlockHash>,
+    peer_height: BlockHeight,
+    blockchain: &BlockchainState<Network>,
 ) -> Option<BlockHash> {
-    sync_queue.pop_front().or_else(|| retry_queue.pop_front())
+    let find_and_remove = |queue: &mut LinkedHashSet<BlockHash>| {
+        let found = queue.iter().find(|&hash| {
+            blockchain
+                .get_cached_header(hash)
+                .map_or(false, |h| h.data.height <= peer_height)
+        });
+        let hash = found.cloned();
+        if let Some(h) = hash {
+            queue.remove(&h);
+        }
+        hash
+    };
+
+    find_and_remove(sync_queue).or_else(|| find_and_remove(retry_queue))
 }
 
 #[cfg(test)]
@@ -1578,8 +1598,9 @@ pub mod test {
     }
 
     /// Test to check that the retry queue is always used to retrieve the next block hash.
-    #[test]
-    fn test_get_next_block_hash_to_sync_retrieves_from_sync_queue_first_only_if_cahce_not_full() {
+    #[tokio::test]
+    async fn test_get_next_block_hash_to_sync_retrieves_from_sync_queue_first_only_if_cahce_not_full()
+     {
         let genesis_block = genesis_block(Network::Regtest);
         let headers = generate_headers(
             genesis_block.block_hash(),
@@ -1598,12 +1619,20 @@ pub mod test {
             .take(1)
             .collect();
 
+        let (_, blockchain_manager) = create_blockchain_manager(Network::Regtest);
+        blockchain_manager.blockchain.add_headers(&headers).await.0;
+
         // Try with `is_cache_full` set to false.
         let first_hash = sync_queue
             .front()
             .copied()
             .expect("Sync queue queue should have 2 items.");
-        let result = get_next_block_hash_to_sync(&mut retry_queue, &mut sync_queue);
+        let result = get_next_block_hash_to_sync(
+            &mut retry_queue,
+            &mut sync_queue,
+            100,
+            &blockchain_manager.blockchain,
+        );
         // The result is part of sync queue, and now sync queue only has one item
         assert!(matches!(result, Some(block_hash) if block_hash == first_hash));
         assert_eq!(retry_queue.len(), 1);
@@ -1612,8 +1641,8 @@ pub mod test {
 
     /// Tests that the sync queue is used last only if the cache is not full and the retry queue
     /// is empty.
-    #[test]
-    fn test_get_next_block_hash_to_sync_cache_is_not_full_and_empty_retry_queue() {
+    #[tokio::test]
+    async fn test_get_next_block_hash_to_sync_cache_is_not_full_and_empty_retry_queue() {
         let genesis_block = genesis_block(Network::Regtest);
         let headers = generate_headers(
             genesis_block.block_hash(),
@@ -1624,11 +1653,20 @@ pub mod test {
         let mut retry_queue = LinkedHashSet::new();
         let mut sync_queue: LinkedHashSet<BlockHash> =
             headers.iter().map(|h| h.block_hash()).collect();
+
+        let (_, blockchain_manager) = create_blockchain_manager(Network::Regtest);
+        blockchain_manager.blockchain.add_headers(&headers).await.0;
+
         let first_hash = sync_queue
             .front()
             .copied()
             .expect("Sync queue should have 1 item.");
-        let result = get_next_block_hash_to_sync(&mut retry_queue, &mut sync_queue);
+        let result = get_next_block_hash_to_sync(
+            &mut retry_queue,
+            &mut sync_queue,
+            100,
+            &blockchain_manager.blockchain,
+        );
         assert!(matches!(result, Some(block_hash) if block_hash == first_hash));
         assert_eq!(sync_queue.len(), 0);
         assert_eq!(retry_queue.len(), 0);
