@@ -441,4 +441,32 @@ mod tests {
         // Verify recent records are preserved.
         assert_eq!(next_idx_before, store.next_id());
     }
+
+    #[test]
+    fn test_small_capacity_indexing() {
+        let mut store = LogMemoryStore::new_for_testing();
+        // Set a very small capacity, smaller than 146 bytes (INDEX_ENTRY_COUNT_MAX).
+        // 146 entries. If capacity is 100. 100 / 146 = 0.
+        store.set_byte_capacity(100);
+
+        let mut delta = CanisterLog::new_delta_with_next_index(0, 100);
+        // Add multiple records.
+        // Header overhead is 8+8+4 = 20 bytes.
+        // Content "a" is 1 byte.
+        // Total 21 bytes per record.
+        delta.add_record(0, b"a".to_vec());
+        delta.add_record(1, b"b".to_vec());
+
+        store.append_delta_log(&mut delta);
+
+        assert!(!store.is_empty());
+        // 21 * 2 = 42 bytes used.
+        assert_eq!(store.bytes_used(), 42);
+
+        // Try to read it back.
+        let records = store.records(None);
+        assert_eq!(records.len(), 2, "Should return 2 records");
+        assert_eq!(records[0].content, b"a");
+        assert_eq!(records[1].content, b"b");
+    }
 }

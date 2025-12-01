@@ -90,7 +90,9 @@ impl IndexTable {
         debug_assert!(entry_size > 0);
         let entries_count = total_size_max / entry_size;
         debug_assert!(entries_count > 0);
-        let segment_size = data_capacity.get() as usize / entries_count;
+        // Use ceiling division to ensure segment_size is at least 1, even if data_capacity < entries_count.
+        // This prevents a segment size of 0 which would break indexing.
+        let segment_size = (data_capacity.get() as usize + entries_count - 1) / entries_count;
         debug_assert!(entries_count * entry_size <= total_size_max);
 
         let entries = if entries.is_empty() {
