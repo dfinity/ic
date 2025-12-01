@@ -369,6 +369,8 @@ impl TryFrom<KeyConfig> for KeyConfigInternal {
             return Err("KeyConfig.key_id must be specified.".to_string());
         };
 
+        // Ensure presence of `pre_signatures_to_create_in_advance` for keys that require pre-signatures.
+        // Note that an invariant ensures that this field is not zero for keys that require pre-signatures.
         if key_id.requires_pre_signatures() && pre_signatures_to_create_in_advance.is_none() {
             return Err(format!(
                 "KeyConfig.pre_signatures_to_create_in_advance must be specified for key {key_id}."
