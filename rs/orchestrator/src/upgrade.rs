@@ -202,6 +202,7 @@ impl Upgrade {
     pub(crate) async fn check(&mut self) -> UpgradeCheckResult {
         let latest_registry_version = self.registry.get_latest_version();
 
+        // Determine the subnet_id using the local CUP.
         let maybe_local_cup_proto = self.cup_provider.get_local_cup_proto();
         let (subnet_id, maybe_local_cup) = 'block: {
             let Some(cup_proto) = maybe_local_cup_proto.as_ref() else {
