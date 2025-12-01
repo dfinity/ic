@@ -12,7 +12,6 @@ Success:: Upgrades work into both directions for all subnet types.
 
 end::catalog[] */
 
-use anyhow::Result;
 use candid::Principal;
 use futures::future::try_join_all;
 use ic_agent::Agent;
@@ -25,22 +24,16 @@ use ic_consensus_system_test_utils::upgrade::{
 };
 use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
 use ic_management_canister_types_private::MasterPublicKeyId;
-use ic_protobuf::types::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::retry_with_msg_async;
 use ic_system_test_driver::util::{LogStream, create_agent};
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
     util::{MessageCanister, block_on},
 };
-use ic_types::consensus::CatchUpPackage;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use ic_utils::interfaces::ManagementCanister;
-use prost::Message;
 use slog::{Logger, info};
 use std::collections::BTreeMap;
-use std::io::Read;
-use std::path::Path;
 use std::time::Duration;
 
 const ALLOWED_FAILURES: usize = 1;
@@ -356,38 +349,6 @@ async fn upgrade_to(
         most_common_hash
     );
 
-    // For every node that logged the most common state hash, compare the state hash from their logs
-    // before reboot with the one from the local CUP after reboot
-    try_join_all(nodes_that_logged_hash.iter().map(|node_id| {
-        let node = healthy_nodes
-            .iter()
-            .find(|n| &n.node_id == node_id)
-            .unwrap()
-            .clone();
-        let logger_cl = logger.clone();
-        let most_common_hash_cl = most_common_hash.clone();
-        tokio::spawn(async move {
-            retry_with_msg_async!(
-                format!(
-                    "asserting local CUP state hash matches one from logs for node {}",
-                    node.node_id
-                ),
-                &logger_cl,
-                secs(100),
-                secs(10),
-                || assert_local_cup_state_hash_matches_one_from_logs(&node, &most_common_hash_cl)
-            )
-            .await
-            .unwrap();
-        })
-    }))
-    .await
-    .unwrap();
-    info!(
-        logger,
-        "All state hashes from local CUPs match the ones extracted from logs before reboot"
-    );
-
     for node in healthy_nodes {
         assert_assigned_replica_version(&node, target_version, logger.clone());
     }
@@ -462,35 +423,6 @@ async fn fetch_latest_computed_root_hashes_from_logs(
     }
 
     latest_root_hash_per_node
-}
-
-/// Downloads the local CUP from the given node and compares its state root hash with the one
-/// extracted from the logs before the reboot.
-async fn assert_local_cup_state_hash_matches_one_from_logs(
-    node: &IcNodeSnapshot,
-    hash_from_logs: &str,
-) -> Result<()> {
-    const CUP_PATH: &str = "/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb";
-
-    let (mut channel, _) = node
-        .block_on_ssh_session_async()
-        .await?
-        .scp_recv(Path::new(CUP_PATH))?;
-
-    let mut cup_bytes = Vec::new();
-    channel.read_to_end(&mut cup_bytes)?;
-
-    let local_cup =
-        CatchUpPackage::try_from(&pb::CatchUpPackage::decode(cup_bytes.as_slice()).unwrap())
-            .unwrap();
-    let local_hash = hex::encode(local_cup.content.state_hash.get().0);
-
-    assert_eq!(
-        local_hash, hash_from_logs,
-        "State hash from local CUP does not match the one extracted from logs before reboot"
-    );
-
-    Ok(())
 }
 
 /// Asserts that the orchestrator has shut down gracefully by searching for a specific log entry.

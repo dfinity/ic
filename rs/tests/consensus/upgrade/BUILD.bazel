@@ -11,7 +11,6 @@ rust_library(
     crate_name = "ic_consensus_system_test_upgrade_common",
     deps = [
         # Keep sorted.
-        "//rs/protobuf",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/consensus/utils",
@@ -21,10 +20,8 @@ rust_library(
         "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:futures",
-        "@crate_index//:hex",
         "@crate_index//:ic-agent",
         "@crate_index//:ic-utils",
-        "@crate_index//:prost",
         "@crate_index//:regex",
         "@crate_index//:slog",
         "@crate_index//:tokio",
