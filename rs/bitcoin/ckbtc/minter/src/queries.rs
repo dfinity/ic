@@ -178,7 +178,24 @@ pub enum EncodedMemo {
     Blob(Vec<u8>),
 }
 
-pub use crate::memo::Status;
+#[derive(Debug, CandidType, Serialize, Deserialize)]
+pub enum Status {
+    /// The minter accepted a retrieve_btc request.
+    Accepted,
+    /// The minter rejected a retrieve_btc due to a failed Bitcoin check.
+    Rejected,
+    CallFailed,
+}
+
+impl From<memo::Status> for Status {
+    fn from(value: memo::Status) -> Self {
+        match value {
+            memo::Status::Accepted => Self::Accepted,
+            memo::Status::Rejected => Self::Rejected,
+            memo::Status::CallFailed => Self::CallFailed,
+        }
+    }
+}
 
 #[derive(Debug, CandidType, Serialize, Deserialize)]
 pub enum MintMemo {
@@ -219,7 +236,7 @@ impl<'a> From<memo::MintMemo<'a>> for MintMemo {
                 associated_burn_index,
             } => MintMemo::KytFail {
                 kyt_fee,
-                status,
+                status: status.map(Status::from),
                 associated_burn_index,
             },
             memo::MintMemo::ReimburseWithdrawal { withdrawal_id } => {
@@ -248,7 +265,7 @@ impl<'a> From<memo::BurnMemo<'a>> for BurnMemo {
             } => BurnMemo::Convert {
                 address: address.map(|a| a.to_string()),
                 kyt_fee,
-                status,
+                status: status.map(Status::from),
             },
         }
     }
@@ -265,7 +282,7 @@ pub enum DecodeLedgerMemoError {
     InvalidMemo(String),
 }
 
-pub type DecodeLedgerMemoResult = Result<DecodedMemo, DecodeLedgerMemoError>;
+pub type DecodeLedgerMemoResult = Result<Option<DecodedMemo>, Option<DecodeLedgerMemoError>>;
 
 pub fn decode_ledger_memo(args: DecodeLedgerMemoArgs) -> DecodeLedgerMemoResult {
     let bytes = match args.memo {
@@ -277,15 +294,15 @@ pub fn decode_ledger_memo(args: DecodeLedgerMemoArgs) -> DecodeLedgerMemoResult 
 
     // Try to decode as MintMemo first
     if let Ok(mint_memo) = minicbor::decode::<memo::MintMemo>(&bytes) {
-        return Ok(DecodedMemo::Mint(mint_memo.into()));
+        return Ok(Some(DecodedMemo::Mint(mint_memo.into())));
     }
 
     // Try to decode as BurnMemo
     if let Ok(burn_memo) = minicbor::decode::<memo::BurnMemo>(&bytes) {
-        return Ok(DecodedMemo::Burn(burn_memo.into()));
+        return Ok(Some(DecodedMemo::Burn(burn_memo.into())));
     }
 
-    Err(DecodeLedgerMemoError::InvalidMemo(
+    Err(Some(DecodeLedgerMemoError::InvalidMemo(
         "Could not decode as MintMemo or BurnMemo".to_string(),
-    ))
+    )))
 }

@@ -16,7 +16,6 @@ use ic_ckbtc_minter::fees::{BitcoinFeeEstimator, FeeEstimator};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::logs::Priority;
-use ic_ckbtc_minter::memo::Status;
 use ic_ckbtc_minter::queries::{
     DecodeLedgerMemoArgs, DecodeLedgerMemoResult, DecodedMemo, EncodedMemo, EstimateFeeArg,
     RetrieveBtcStatusRequest, WithdrawalFee,
@@ -1952,7 +1951,7 @@ fn test_ledger_memo() {
     .unwrap();
 
     assert!(decoded_result.is_ok(), "Failed to decode mint memo");
-    if let Ok(DecodedMemo::Mint(mint_memo)) = decoded_result {
+    if let Ok(Some(DecodedMemo::Mint(mint_memo))) = decoded_result {
         assert_matches!(
             mint_memo,
             ic_ckbtc_minter::queries::MintMemo::Convert {
@@ -2003,13 +2002,13 @@ fn test_ledger_memo() {
     .unwrap();
 
     assert!(decoded_result.is_ok(), "Failed to decode burn memo");
-    if let Ok(DecodedMemo::Burn(burn_memo)) = decoded_result {
+    if let Ok(Some(DecodedMemo::Burn(burn_memo))) = decoded_result {
         assert_matches!(
             burn_memo,
             ic_ckbtc_minter::queries::BurnMemo::Convert {
                 address: Some(_),
                 kyt_fee: None,
-                status: Some(Status::Accepted),
+                status: Some(ic_ckbtc_minter::queries::Status::Accepted),
             }
         );
     } else {
@@ -2041,7 +2040,7 @@ fn test_ledger_memo() {
         decoded_result.is_err(),
         "Expected error when decoding invalid memo"
     );
-    if let Err(err) = decoded_result {
+    if let Err(Some(err)) = decoded_result {
         // Verify that the error message indicates the memo couldn't be decoded
         assert_matches!(
             err,
