@@ -91,19 +91,6 @@ pub fn create_tables(connection: &Connection) -> Result<()> {
         [],
     )?;
 
-    // Fee Collectors 107 table
-    connection.execute(
-        r#"
-        CREATE TABLE IF NOT EXISTS fee_collectors_107 (
-            block_idx INTEGER NOT NULL PRIMARY KEY,
-            caller_principal BLOB,
-            fee_collector_principal BLOB,
-            fee_collector_subaccount BLOB
-        )
-        "#,
-        [],
-    )?;
-
     create_indexes(connection)
 }
 
