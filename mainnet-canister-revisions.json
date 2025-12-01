@@ -84,12 +84,12 @@
     "sha256": "bce508df3db43b47b158c0aab9a7c9a3709a78e055a7ced76d5ff89832f9e778"
   },
   "governance": {
-    "rev": "36ceffe4c47f4c3a881e75951178f5413f777f6c",
-    "sha256": "2c74f2cf07d56ffc91be51d6b4a97ba60b0e5f530d7b11d0474db6a228190fc6"
+    "rev": "724ae4101bfdd8d4443126a6a8b1ec5ca9b68a12",
+    "sha256": "f00255c9e776ee375c2846e310031219f154b75bc6bd6e1b1e3bb62e59a50b97"
   },
   "governance-canister_test": {
-    "rev": "36ceffe4c47f4c3a881e75951178f5413f777f6c",
-    "sha256": "da2b036d259d0e2326f841b17021de49cd1990b544d346b1bb1f3722c129e3fd"
+    "rev": "724ae4101bfdd8d4443126a6a8b1ec5ca9b68a12",
+    "sha256": "6069543d0fdcb35f1a757542844b811b1a5cffc1fe12d03986e49fc1adde12a1"
   },
   "index": {
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
