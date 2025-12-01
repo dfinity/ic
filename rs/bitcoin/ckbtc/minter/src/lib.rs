@@ -959,18 +959,18 @@ fn utxos_selection(target: u64, available_utxos: &mut UtxoSet, output_count: usi
 /// PROPERTY: sum(u.value for u in available_set) ≥ target ⇒ !solution.is_empty()
 /// POSTCONDITION: !solution.is_empty() ⇒ sum(u.value for u in solution) ≥ target
 /// POSTCONDITION:  solution.is_empty() ⇒ available_utxos did not change.
-pub fn greedy(target: u64, available_utxos: &mut UtxoSet) -> Vec<Utxo> {
+fn greedy(target: u64, available_utxos: &mut UtxoSet) -> Vec<Utxo> {
     #[cfg(feature = "canbench-rs")]
     let _scope = canbench_rs::bench_scope("greedy");
 
     let mut solution = vec![];
     let mut goal = target;
     while goal > 0 {
-        let option = available_utxos
+        let candidate_utxo = available_utxos
             .find_lower_bound(goal)
             .or_else(|| available_utxos.last())
             .cloned();
-        match option {
+        match candidate_utxo {
             Some(utxo) => {
                 let utxo = available_utxos.remove(&utxo).expect("BUG: missing UTXO");
                 goal = goal.saturating_sub(utxo.value);
