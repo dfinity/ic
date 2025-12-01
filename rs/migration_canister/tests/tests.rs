@@ -5,6 +5,8 @@ use ic_management_canister_types::{CanisterLogRecord, CanisterSettings};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, Payload as _,
 };
+use ic_transport_types::Envelope;
+use ic_transport_types::EnvelopeContent::Call;
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
 use itertools::Itertools;
 use pocket_ic::{
@@ -12,7 +14,7 @@ use pocket_ic::{
     common::rest::{IcpFeatures, IcpFeaturesConfig},
     nonblocking::PocketIc,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
     time::Duration,
@@ -415,7 +417,7 @@ async fn migration_succeeds() {
     let mut logs = Logs::default();
 
     for _ in 0..100 {
-        // advance time by a lot such that the task which waits 5m can succeed quickly.
+        // advance time by a lot such that the task which waits 6m can succeed quickly.
         pic.advance_time(Duration::from_secs(250)).await;
         pic.tick().await;
 
@@ -498,6 +500,116 @@ async fn migration_succeeds() {
         }
         _ => panic!("Unexpected canister history entry: {:?}", rename_details),
     };
+}
+
+async fn call_request(
+    pic: &PocketIc,
+    ingress_expiry: u64,
+    canister_id: Principal,
+) -> (reqwest::Response, [u8; 32]) {
+    let content = Call {
+        nonce: None,
+        ingress_expiry,
+        sender: Principal::anonymous(),
+        canister_id,
+        method_name: "update".to_string(),
+        arg: wasm().reply().build(),
+    };
+    let envelope = Envelope {
+        content: std::borrow::Cow::Borrowed(&content),
+        sender_pubkey: None,
+        sender_sig: None,
+        sender_delegation: None,
+    };
+
+    let mut serialized_bytes = Vec::new();
+    let mut serializer = serde_cbor::Serializer::new(&mut serialized_bytes);
+    serializer.self_describe().unwrap();
+    envelope.serialize(&mut serializer).unwrap();
+
+    let endpoint = format!(
+        "instances/{}/api/v2/canister/{}/call",
+        pic.instance_id,
+        canister_id.to_text()
+    );
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(pic.get_server_url().join(&endpoint).unwrap())
+        .header(reqwest::header::CONTENT_TYPE, "application/cbor")
+        .body(serialized_bytes)
+        .send()
+        .await
+        .unwrap();
+    (resp, *content.to_request_id())
+}
+
+#[tokio::test]
+async fn replay_call_after_migration() {
+    let Setup {
+        pic,
+        sources,
+        targets,
+        source_controllers,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = source_controllers[0];
+    let source = sources[0];
+    let target = targets[0];
+
+    // We deploy the universal canister WASM
+    // to both the "source" and "target" canisters
+    // so that we can call the "source" canister ID
+    // both before and after renaming.
+    for canister_id in [source, target] {
+        pic.add_cycles(canister_id, 1_000_000_000_000).await;
+        pic.install_canister(
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            Some(sender),
+        )
+        .await;
+    }
+
+    // We restart the "source" canister for a moment so that
+    // we can send an update call to it.
+    pic.start_canister(source, Some(sender)).await.unwrap();
+
+    // We manually submit an update call so that
+    // we can replay the exact same HTTP request later.
+    let ingress_expiry = pic.get_time().await.as_nanos_since_unix_epoch() + 330_000_000_000;
+    let (resp, _) = call_request(&pic, ingress_expiry, source).await;
+    assert_eq!(resp.status(), reqwest::StatusCode::ACCEPTED);
+
+    // We stop the "source" canister again so that
+    // we can kick off canister migration.
+    pic.stop_canister(source, Some(sender)).await.unwrap();
+
+    let args = MigrateCanisterArgs {
+        canister_id: source,
+        replace_canister_id: target,
+    };
+    migrate_canister(&pic, sender, &args).await.unwrap();
+
+    loop {
+        let status = get_status(&pic, sender, &args).await;
+        if let MigrationStatus::Succeeded { .. } = status[0] {
+            break;
+        }
+        // We proceed in small steps here so that
+        // we reply the update call as soon as possible.
+        pic.advance_time(Duration::from_secs(1)).await;
+        pic.tick().await;
+    }
+
+    // We restart the "source" canister right away.
+    pic.start_canister(source, Some(sender)).await.unwrap();
+
+    // Replaying the update call from before should fail.
+    let (resp, _) = call_request(&pic, ingress_expiry, source).await;
+    assert_eq!(resp.status(), reqwest::StatusCode::BAD_REQUEST);
+    let message = String::from_utf8(resp.bytes().await.unwrap().to_vec()).unwrap();
+    assert!(message.contains("Invalid request expiry"));
 }
 
 async fn concurrent_migration(
@@ -1103,7 +1215,7 @@ async fn status_correct() {
             status: "SourceDeleted".to_string()
         }
     );
-    pic.advance_time(Duration::from_secs(310)).await;
+    pic.advance_time(Duration::from_secs(360)).await;
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     assert_eq!(
@@ -1313,7 +1425,7 @@ async fn success_controllers_restored() {
     for _ in 0..10 {
         advance(&pic).await;
     }
-    pic.advance_time(Duration::from_secs(300)).await;
+    pic.advance_time(Duration::from_secs(360)).await;
     for _ in 0..10 {
         advance(&pic).await;
     }
