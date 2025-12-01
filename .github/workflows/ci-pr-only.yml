@@ -83,6 +83,7 @@ jobs:
         id: filter
         with:
           ref: ${{ inputs.commit-sha }}
+          base: ${{ inputs.base-ref }}
           filters: |
             fuzzers:
               - '.github/workflows/ci-pr-only.yml'
@@ -118,6 +119,7 @@ jobs:
         id: filter
         with:
           ref: ${{ inputs.commit-sha }}
+          base: ${{ inputs.base-ref }}
           filters: |
             lock-generate:
               - '.github/workflows/ci-pr-only.yml'
@@ -155,6 +157,7 @@ jobs:
         id: filter
         with:
           ref: ${{ inputs.commit-sha }}
+          base: ${{ inputs.base-ref }}
           filters: |
             generate-config-fixtures:
               - '.github/workflows/ci-pr-only.yml'
