@@ -497,7 +497,7 @@ type MinterArg = variant {
 
 type DecodeLedgerMemoArgs = record {
     // The encoded memo from a minter transaction on the ledger
-    memo : EncodedMemo;
+    encoded_memo : blob;
 };
 
 type EncodedMemo = variant {

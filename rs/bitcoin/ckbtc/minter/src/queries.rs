@@ -169,40 +169,18 @@ pub fn http_request(req: HttpRequest) -> HttpResponse {
 
 #[derive(Debug, CandidType, Serialize, Deserialize)]
 pub struct DecodeLedgerMemoArgs {
-    pub memo: EncodedMemo,
+    pub encoded_memo: Vec<u8>,
 }
 
-#[derive(Debug, CandidType, Serialize, Deserialize)]
-pub enum EncodedMemo {
-    Hex(String),
-    Blob(Vec<u8>),
-}
-
-impl EncodedMemo {
-    fn validate_input_and_get_memo_bytes(self) -> Result<Vec<u8>, String> {
-        match self {
-            EncodedMemo::Hex(hex) => {
-                if hex.len() / 2 > CKBTC_LEDGER_MEMO_SIZE as usize {
-                    Err(format!(
-                        "Hex-formatted memo longer than permitted length {}",
-                        CKBTC_LEDGER_MEMO_SIZE * 2
-                    ))
-                } else if hex.len() % 2 != 0 {
-                    Err("Hex-formatted memo length should be a multiple of 2".to_string())
-                } else {
-                    Ok(hex::decode(&hex).map_err(|e| format!("Invalid hex string: {}", e))?)
-                }
-            }
-            EncodedMemo::Blob(blob) => {
-                if blob.len() > CKBTC_LEDGER_MEMO_SIZE as usize {
-                    Err(format!(
-                        "Memo longer than permitted length {}",
-                        CKBTC_LEDGER_MEMO_SIZE
-                    ))
-                } else {
-                    Ok(blob)
-                }
-            }
+impl DecodeLedgerMemoArgs {
+    fn validate_input(&self) -> Result<(), String> {
+        if self.encoded_memo.len() > CKBTC_LEDGER_MEMO_SIZE as usize {
+            Err(format!(
+                "Memo longer than permitted length {}",
+                CKBTC_LEDGER_MEMO_SIZE
+            ))
+        } else {
+            Ok(())
         }
     }
 }
@@ -314,18 +292,16 @@ pub enum DecodeLedgerMemoError {
 pub type DecodeLedgerMemoResult = Result<Option<DecodedMemo>, Option<DecodeLedgerMemoError>>;
 
 pub fn decode_ledger_memo(args: DecodeLedgerMemoArgs) -> DecodeLedgerMemoResult {
-    let bytes = args
-        .memo
-        .validate_input_and_get_memo_bytes()
+    args.validate_input()
         .map_err(DecodeLedgerMemoError::InvalidMemo)?;
 
     // Try to decode as MintMemo first
-    if let Ok(mint_memo) = minicbor::decode::<memo::MintMemo>(&bytes) {
+    if let Ok(mint_memo) = minicbor::decode::<memo::MintMemo>(&args.encoded_memo) {
         return Ok(Some(DecodedMemo::Mint(Some(MintMemo::from(mint_memo)))));
     }
 
     // Try to decode as BurnMemo
-    if let Ok(burn_memo) = minicbor::decode::<memo::BurnMemo>(&bytes) {
+    if let Ok(burn_memo) = minicbor::decode::<memo::BurnMemo>(&args.encoded_memo) {
         return Ok(Some(DecodedMemo::Burn(Some(BurnMemo::from(burn_memo)))));
     }
 

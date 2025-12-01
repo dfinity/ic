@@ -17,7 +17,7 @@ use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterAr
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::logs::Priority;
 use ic_ckbtc_minter::queries::{
-    DecodeLedgerMemoArgs, DecodeLedgerMemoResult, DecodedMemo, EncodedMemo, EstimateFeeArg,
+    DecodeLedgerMemoArgs, DecodeLedgerMemoResult, DecodedMemo, EstimateFeeArg,
     RetrieveBtcStatusRequest, WithdrawalFee,
 };
 use ic_ckbtc_minter::reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason};
@@ -1933,7 +1933,7 @@ fn test_ledger_memo() {
 
     // Test decoding the Mint memo using the decode_ledger_memo endpoint
     let decode_args = DecodeLedgerMemoArgs {
-        memo: EncodedMemo::Blob(memo.0.to_vec()),
+        encoded_memo: memo.0.to_vec(),
     };
     let decoded_result = Decode!(
         &assert_reply(
@@ -1984,7 +1984,7 @@ fn test_ledger_memo() {
 
     // Test decoding the Burn memo using the decode_ledger_memo endpoint
     let decode_args = DecodeLedgerMemoArgs {
-        memo: EncodedMemo::Blob(memo.0.to_vec()),
+        encoded_memo: memo.0.to_vec(),
     };
     let decoded_result = Decode!(
         &assert_reply(
@@ -2019,19 +2019,10 @@ fn test_ledger_memo() {
 
     for decode_args in &[
         DecodeLedgerMemoArgs {
-            memo: EncodedMemo::Blob(vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF]),
+            encoded_memo: vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF],
         },
         DecodeLedgerMemoArgs {
-            memo: EncodedMemo::Blob(vec![0xFF; 85]),
-        },
-        DecodeLedgerMemoArgs {
-            memo: EncodedMemo::Hex("F".to_string()),
-        },
-        DecodeLedgerMemoArgs {
-            memo: EncodedMemo::Hex("00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFFDEADBEEF".to_string()),
-        },
-        DecodeLedgerMemoArgs {
-            memo: EncodedMemo::Hex("NotAHexString!".to_string()),
+            encoded_memo: vec![0xFF; 85],
         },
     ] {
         let decoded_result = Decode!(
