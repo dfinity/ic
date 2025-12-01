@@ -135,6 +135,34 @@ impl Project {
     /// We also ignore linker arguments during this compilation because they
     /// generally don't play well with the WASM linker.
     fn compile_cargo_bin(&self, package: Option<&str>, bin_name: &str, features: &[&str]) -> Wasm {
+        // Cache compiled canisters to avoid running `cargo build` repeatedly.
+        static COMPILED_CANISTERS: std::sync::Mutex<
+            std::collections::BTreeMap<(Option<String>, String, Vec<String>), PathBuf>,
+        > = std::sync::Mutex::new(std::collections::BTreeMap::new());
+
+        let key = (
+            package.map(|s| s.to_string()),
+            bin_name.to_string(),
+            features.iter().map(|s| s.to_string()).collect(),
+        );
+        // There is a race condition here, but we don't really care.
+        let path = if let Some(path) = COMPILED_CANISTERS.lock().unwrap().get(&key) {
+            path.clone()
+        } else {
+            let path = self.compile_cargo_bin_impl(package, bin_name, features);
+            COMPILED_CANISTERS.lock().unwrap().insert(key, path.clone());
+            path
+        };
+
+        Wasm::from_file(path).strip_debug_info()
+    }
+
+    fn compile_cargo_bin_impl(
+        &self,
+        package: Option<&str>,
+        bin_name: &str,
+        features: &[&str],
+    ) -> PathBuf {
         let since_start_secs = {
             let s = SystemTime::now();
             move || (SystemTime::now().duration_since(s).unwrap()).as_secs_f32()
@@ -178,8 +206,7 @@ impl Project {
             .run()
             .expect("Cargo failed to compile the wasm binary");
 
-        let wasm = Wasm::from_file(binary.path()).strip_debug_info();
         eprintln!("Compiling {} took {:.1} s", bin_name, since_start_secs());
-        wasm
+        binary.path().to_path_buf()
     }
 }
