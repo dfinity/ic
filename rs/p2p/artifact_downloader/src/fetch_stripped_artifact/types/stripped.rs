@@ -25,9 +25,13 @@ pub(crate) struct StrippedIDkgDealings {
 /// Stripped version of the [`BlockProposal`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct StrippedBlockProposal {
+    /// The original block proposal proto but all [`Strippable`] data is removed.
     pub(crate) pruned_block_proposal_proto: pb::BlockProposal,
-    pub(crate) stripped_ingress_payload: StrippedIngressPayload,
+    /// The consensus message ID of the original (unstripped) block proposal, including the [`Strippable`] data.
     pub(crate) unstripped_consensus_message_id: ConsensusMessageId,
+    /// The stripped ingress messages, i.e. the IDs of ingress messages that were pruned from the block proposal.
+    pub(crate) stripped_ingress_payload: StrippedIngressPayload,
+    /// The stripped IDKG dealings, i.e. the IDs of IDKG dealings that were pruned from the block proposal.
     pub(crate) stripped_idkg_dealings: StrippedIDkgDealings,
 }
 
