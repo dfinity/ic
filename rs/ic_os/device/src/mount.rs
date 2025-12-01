@@ -384,7 +384,7 @@ mod tests {
         write!(File::create(temp_dir.path().join("foo.txt"))?, "hello")?;
 
         ensure!(
-            Command::new("mkfs.ext4")
+            Command::new("/usr/sbin/mkfs.ext4")
                 .arg(out.path())
                 .arg("-d")
                 .arg(temp_dir.path())
