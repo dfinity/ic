@@ -164,19 +164,31 @@ mod tests {
 
                     use serde_cbor::Value;
 
-                    map.insert(Value::Integer(1), Value::Integer(2));
-                    map.insert(Value::Integer(-1), Value::Integer(1));
-                    map.insert(Value::Integer(3), Value::Integer(-7));
+                    /*
+                    See RFC 8152 ("CBOR Object Signing and Encryption (COSE)"), sections 8.1
+                    and 13.1 for these constants
+                    */
+                    const COSE_PARAM_KTY: serde_cbor::Value = serde_cbor::Value::Integer(1);
+                    const COSE_PARAM_KTY_EC2: serde_cbor::Value = serde_cbor::Value::Integer(2);
+
+                    const COSE_PARAM_ALG: serde_cbor::Value = serde_cbor::Value::Integer(3);
+                    const COSE_PARAM_ALG_ES256: serde_cbor::Value = serde_cbor::Value::Integer(-7);
+
+                    const COSE_PARAM_EC2_CRV: serde_cbor::Value = serde_cbor::Value::Integer(-1);
+                    const COSE_PARAM_EC2_CRV_P256: serde_cbor::Value = serde_cbor::Value::Integer(1);
+
+                    const COSE_PARAM_EC2_X: serde_cbor::Value = serde_cbor::Value::Integer(-2);
+                    const COSE_PARAM_EC2_Y: serde_cbor::Value = serde_cbor::Value::Integer(-3);
 
                     let sec1 = sk.public_key().serialize_sec1(false);
                     let x = &sec1[1..33];
                     let y = &sec1[33..];
 
-                    // x coordinate -2
-                    map.insert(Value::Integer(-2), Value::Bytes(x.to_vec()));
-
-                    // y coordinate -3
-                    map.insert(Value::Integer(-3), Value::Bytes(y.to_vec()));
+                    map.insert(COSE_PARAM_KTY, COSE_PARAM_KTY_EC2);
+                    map.insert(COSE_PARAM_EC2_CRV, COSE_PARAM_EC2_CRV_P256);
+                    map.insert(COSE_PARAM_ALG, COSE_PARAM_ALG_ES256);
+                    map.insert(COSE_PARAM_EC2_X, Value::Bytes(x.to_vec()));
+                    map.insert(COSE_PARAM_EC2_Y, Value::Bytes(y.to_vec()));
 
                     serde_cbor::to_vec(&Value::Map(map)).expect("cbor encoding failed")
                 };
