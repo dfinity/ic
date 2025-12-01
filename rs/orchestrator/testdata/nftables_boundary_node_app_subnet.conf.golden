@@ -87,6 +87,7 @@ table ip6 filter {
     icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept
     ct state { invalid } drop
     ct state { established, related } accept
+    ip6 saddr { ::/64 } ct state { new } tcp dport { 7070, 9091, 9100, 9324, 19531, 19100, 19522 } accept
     ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport 443 accept
 
     ip6 saddr {3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e5} ct state { new } tcp dport {1080} accept # nodes for SOCKS proxy

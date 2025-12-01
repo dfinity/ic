@@ -22,29 +22,7 @@ thread_local! {
     // These are needed for the phased rollout approach in order
     // allow granular rolling out of the feature to specific subnets
     // to specific subset of callers.
-    static NODE_SWAPPING_CALLERS_POLICY: RefCell<AccessList<PrincipalId>> = RefCell::new(AccessList::allow(
-        [
-            "xph6u-z3z2t-s7hh7-gtlxh-bbgbx-aatlm-eab4o-bsank-nqruh-3ub4q-sae",
-            "lgp6d-brhlv-35izu-khc6p-rfszo-zdwng-xbtkh-xyvjg-y3due-7ha7t-uae",
-            "byspq-73pbj-e44pb-5gq3o-a6sqa-p3p3l-blq2j-dtjup-77zyx-k26zh-aae",
-            "db7fe-oft52-pi5du-za72s-sh5oy-6wmnv-hje7y-i5k2l-txseu-anq6c-rqe",
-            "pi3wm-ofu73-5wyma-gec6p-lplqp-6euwt-c5jjb-pwaey-gxmlr-rzqmk-xqe",
-            "rzskv-pde6u-albub-bojhe-odunj-k3nnf-j2eag-akkjm-o3ydz-z5tcy-vae",
-            "s7dud-dfedw-dmrax-rjvop-5k4qw-htm4w-gj7ak-j2itz-txwwn-o5ymv-tae",
-            "vqe65-zvwhc-x7bw7-76c74-3dc6v-v6uzb-nyfvb-6wgnv-nhiew-fkoug-oqe",
-            "wqyl3-uvtrm-5lhi3-rjcas-ntrhs-bimkv-viu7b-2tff6-ervao-u2cjg-wqe",
-            "xcne4-m67do-bnrkt-ny5xy-gxepb-5jycf-kcuvt-bdmh6-w565c-fvmdo-oae",
-            "y4c7z-5wyt7-h4dtr-s77cd-t5pue-ajl7h-65ct4-ab5dr-fjaqa-x63kh-xqe",
-        ]
-        .iter()
-        .filter_map(|p| match PrincipalId::from_str(p) {
-            Ok(p) => Some(p),
-            Err(e) => {
-                println!("{LOG_PREFIX}Coudln't parse {p} as a PrincipalId due to error: {e:?}",);
-                None
-            }
-        }),
-    ));
+    static NODE_SWAPPING_CALLERS_POLICY: RefCell<AccessList<PrincipalId>> = RefCell::new(AccessList::allow_all());
 
     static NODE_SWAPPING_SUBNETS_POLICY: RefCell<AccessList<SubnetId>> = RefCell::new(AccessList::allow(
         [

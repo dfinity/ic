@@ -2738,6 +2738,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
+ "ic_consensus_system_test_node_registration_test_common",
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
  "registry-canister",
@@ -6557,6 +6558,7 @@ dependencies = [
 name = "ic-artifact-downloader"
 version = "0.9.0"
 dependencies = [
+ "assert_matches",
  "axum 0.8.4",
  "backoff",
  "bytes",
@@ -6566,6 +6568,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-client-sender",
  "ic-consensus-manager",
+ "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-interfaces",
  "ic-logger",
  "ic-metrics",
@@ -7701,9 +7704,11 @@ dependencies = [
  "ic-secp256k1 0.3.0",
  "icrc-ledger-types",
  "pocket-ic",
+ "proptest",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "test-strategy 0.4.0",
 ]
 
 [[package]]
@@ -15860,6 +15865,24 @@ dependencies = [
  "rand_chacha 0.3.1",
  "slog",
  "tokio",
+]
+
+[[package]]
+name = "ic_consensus_system_test_node_registration_test_common"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "canister-test",
+ "ic-base-types",
+ "ic-nns-constants",
+ "ic-nns-governance-api",
+ "ic-protobuf",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "registry-canister",
+ "slog",
 ]
 
 [[package]]
