@@ -2,6 +2,8 @@ use ic_btc_interface::Utxo;
 use std::collections::{BTreeMap, BTreeSet, btree_map};
 
 /// Set of UTXOs sorted by value.
+///
+/// From outside, this should behave like a `BTreeSet<>`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct UtxoSet {
     utxos: BTreeMap<u64, BTreeSet<Utxo>>,
