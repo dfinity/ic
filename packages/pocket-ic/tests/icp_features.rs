@@ -69,6 +69,7 @@ fn all_icp_features() -> IcpFeatures {
         ii: Some(IcpFeaturesConfig::DefaultConfig),
         nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
         bitcoin: Some(IcpFeaturesConfig::DefaultConfig),
+        dogecoin: Some(IcpFeaturesConfig::DefaultConfig),
         canister_migration: Some(IcpFeaturesConfig::DefaultConfig),
     }
 }
@@ -1054,6 +1055,7 @@ async fn with_all_icp_features_and_nns_subnet_state() {
         icp_config: None,
         log_level: None,
         bitcoind_addr: None,
+        dogecoind_addr: None,
         icp_features: Some(all_icp_features()),
         incomplete_state: None,
         initial_time: None,

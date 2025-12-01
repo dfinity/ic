@@ -1,0 +1,647 @@
+# Create GitHub releases for the ICP and ICRC ledger suite canisters.
+#
+# This workflow automatically triggers when a tag matching "ledger-suite-*" is pushed.
+# It parses the tag to extract release type and date, uses the tag's commit to download
+# artifacts from the IC mainnet build system, and creates a GitHub release with
+# verification instructions and change log.
+#
+# The release is created as a draft and can be published later. The Features part of the
+# release body is marked as "TODO" and should be filled in before publishing.
+#
+# Tag format: ledger-suite-{type}-{date}[.rcX]
+# - {type}: Either 'icrc' or 'icp'
+# - {date}: Date in YYYY-MM-DD format
+# - .rcX: Optional release candidate suffix (X = 1, 2, 3, etc.)
+#
+# Examples:
+#   Production: ledger-suite-icrc-2025-05-22, ledger-suite-icp-2025-05-22
+#   Release Candidates: ledger-suite-icrc-2025-05-22.rc1, ledger-suite-icp-2025-05-22.rc2
+#
+# Release Workflow:
+# 1. Pick a commit on the master branch for which the FI nightly test passed, and verify that artifacts are available in
+#    the CDN (e.g., verify that https://download.dfinity.systems/ic/${commit}/canisters/ic-icrc1-ledger.wasm.gz exists).
+# 2. Create a release candidate tag: ledger-suite-{type}-YYYY-MM-DD.rc1
+#    - This creates a prerelease for testing
+#    - If issues are found, create .rc2, .rc3, etc. with fixes
+# 3. Once the release candidate is validated, create the production tag:
+#    ledger-suite-{type}-YYYY-MM-DD (without .rcX suffix)
+#    - This creates the final release (still as draft for manual publishing)
+#
+# The workflow automatically creates releases using the tag's commit for both the
+# release and the mainnet artifact downloads.
+name: Ledger Suite Release
+
+on:
+  push:
+    tags:
+      - 'ledger-suite-*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+
+      - name: Parse tag and set release variables
+        id: parse_tag
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Get the tag name and commit from the GitHub event context
+            const tagName = context.ref.replace('refs/tags/', '');
+            const tagCommit = context.sha;
+
+            console.log(`Triggered by tag push: ${tagName}`);
+            console.log(`Tag commit: ${tagCommit}`);
+
+            // Parse tag format: ledger-suite-{type}-{date}[.rcX]
+            const tagRegex = /^ledger-suite-(icrc|icp)-([0-9]{4}-[0-9]{2}-[0-9]{2})(\.rc[0-9]+)?$/;
+            const match = tagName.match(tagRegex);
+
+            if (!match) {
+              console.error('Error: Invalid tag format. Expected: ledger-suite-{icrc|icp}-YYYY-MM-DD[.rcX]');
+              console.error(`Received: ${tagName}`);
+              throw new Error(`Invalid tag format: ${tagName}`);
+            }
+
+            const releaseType = match[1];
+            const releaseDate = match[2];
+
+            // Set outputs
+            core.setOutput('release_type', releaseType);
+            core.setOutput('release_date', releaseDate);
+            core.setOutput('tag_name', tagName);
+            core.setOutput('tag_commit', tagCommit);
+
+            console.log('Parsed tag information:');
+            console.log(`  Tag: ${tagName}`);
+            console.log(`  Tag commit: ${tagCommit}`);
+            console.log(`  Release type: ${releaseType}`);
+            console.log(`  Release date: ${releaseDate}`);
+
+      - name: Set variables
+        id: variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Set paths, upgrade requirements, and human-readable title for different release types
+            const releaseType = '${{ steps.parse_tag.outputs.release_type }}';
+            const releaseDate = '${{ steps.parse_tag.outputs.release_date }}';
+
+            if (releaseType === 'icrc') {
+              const logPaths = [
+                'rs/ledger_suite/common',
+                'rs/ledger_suite/icrc1',
+                'packages/icrc-ledger-types'
+              ];
+
+              const wasmFiles = [
+                'ic-icrc1-archive-u256.wasm.gz',
+                'ic-icrc1-archive.wasm.gz',
+                'ic-icrc1-index-ng-u256.wasm.gz',
+                'ic-icrc1-index-ng.wasm.gz',
+                'ic-icrc1-ledger-u256.wasm.gz',
+                'ic-icrc1-ledger.wasm.gz'
+              ];
+
+              // DID file mappings: (only non-u256 versions - the did is the same for u64 and u256)
+              const didMappings = [
+                { source: 'ic-icrc1-archive.wasm.gz.did', target: 'archive.did' },
+                { source: 'ic-icrc1-ledger.wasm.gz.did', target: 'ledger.did' },
+                { source: 'ic-icrc1-index-ng.wasm.gz.did', target: 'index-ng.did' }
+              ];
+
+              core.setOutput('log_paths_string', logPaths.join(' '));
+              core.setOutput('wasm_files', JSON.stringify(wasmFiles));
+              core.setOutput('did_mappings', JSON.stringify(didMappings));
+              core.setOutput('upgrade_from', 'ledger-suite-icrc-2024-10-17');
+              core.setOutput('human_title', `ICRC Ledger Suite release ${releaseDate}`);
+            } else {
+              const logPaths = [
+                'rs/ledger_suite/common',
+                'rs/ledger_suite/icp',
+                'packages/icrc-ledger-types'
+              ];
+
+              const wasmFiles = [
+                'ledger-canister_notify-method.wasm.gz',
+                'ledger-canister.wasm.gz',
+                'ledger-archive-node-canister.wasm.gz',
+                'ic-icp-index-canister.wasm.gz'
+              ];
+
+              // DID file mappings
+              const didMappings = [
+                { source: 'ledger-canister_notify-method.wasm.gz.did', target: 'ledger.did' },
+                { source: 'ledger-archive-node-canister.wasm.gz.did', target: 'ledger_archive.did' },
+                { source: 'ic-icp-index-canister.wasm.gz.did', target: 'index.did' }
+              ];
+
+              core.setOutput('log_paths_string', logPaths.join(' '));
+              core.setOutput('wasm_files', JSON.stringify(wasmFiles));
+              core.setOutput('did_mappings', JSON.stringify(didMappings));
+              core.setOutput('human_title', `ICP Ledger Suite release ${releaseDate}`);
+            }
+
+            console.log(`Set variables for ${releaseType} release: ${{ steps.parse_tag.outputs.tag_name }}`);
+
+      - name: Download artifacts and SHA256SUMS
+        id: download
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const os = require('os');
+
+            // Create temporary directory
+            const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-'));
+            console.log(`Created temporary directory: ${tempDir}`);
+            core.setOutput('temp_dir_artifacts', tempDir);
+
+            // Get configuration
+            const tagCommit = '${{ steps.parse_tag.outputs.tag_commit }}';
+            const releaseType = '${{ steps.parse_tag.outputs.release_type }}';
+            const baseUrl = `https://download.dfinity.systems/ic/${tagCommit}/canisters`;
+            const sha256SumsUrl = `${baseUrl}/SHA256SUMS`;
+
+            console.log(`Downloading artifacts from: ${baseUrl}`);
+            console.log(`Tag commit: ${tagCommit}`);
+            console.log(`Release type: ${releaseType}`);
+
+            // Parse file lists from step outputs
+            const wasmFiles = JSON.parse('${{ steps.variables.outputs.wasm_files }}');
+            const didMappings = JSON.parse('${{ steps.variables.outputs.did_mappings }}');
+
+            console.log(`WASM files (${wasmFiles.length}):`, wasmFiles);
+            console.log(`DID mappings (${didMappings.length}):`, didMappings.map(m => `${m.source} -> ${m.target}`));
+
+            // Helper function to escape filename for regex
+            function escapeForRegex(filename) {
+              return filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            }
+
+            async function downloadFile(url, targetPath, description) {
+              try {
+                console.log(`  Downloading ${description}...`);
+                const response = await fetch(url);
+                if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const buffer = await response.arrayBuffer();
+                fs.writeFileSync(targetPath, new Uint8Array(buffer));
+                console.log(`  Downloaded: ${description}`);
+                return true;
+              } catch (error) {
+                console.error(`  Failed to download ${description}: ${error.message}`);
+                return false;
+              }
+            }
+
+            // Download WASM files
+            console.log("Downloading WASM files...");
+            const downloadedFiles = [];
+            for (const wasmFile of wasmFiles) {
+              const url = `${baseUrl}/${wasmFile}`;
+              const targetPath = path.join(tempDir, wasmFile);
+              if (await downloadFile(url, targetPath, wasmFile)) {
+                downloadedFiles.push(wasmFile);
+              } else {
+                throw new Error(`Failed to download required WASM file: ${wasmFile}`);
+              }
+            }
+
+            // Download and rename DID files
+            console.log("Downloading and renaming DID files...");
+            const renamedDidFiles = [];
+            for (const mapping of didMappings) {
+              const url = `${baseUrl}/${mapping.source}`;
+              const targetPath = path.join(tempDir, mapping.target);
+              if (await downloadFile(url, targetPath, `${mapping.source} -> ${mapping.target}`)) {
+                downloadedFiles.push(mapping.target);
+                renamedDidFiles.push(mapping);
+              } else {
+                throw new Error(`Failed to download required DID file: ${mapping.source}`);
+              }
+            }
+
+            // Download SHA256SUMS file
+            console.log(`Downloading official SHA256SUMS from: ${sha256SumsUrl}`);
+            const sha256SumsPath = path.join(tempDir, 'SHA256SUMS.full');
+            if (!await downloadFile(sha256SumsUrl, sha256SumsPath, 'SHA256SUMS')) {
+              throw new Error(`Failed to download SHA256SUMS from ${sha256SumsUrl}`);
+            }
+
+            // Process SHA256SUMS
+            console.log("Pruning SHA256SUMS to include only downloaded files...");
+            const fullSha256Sums = fs.readFileSync(sha256SumsPath, 'utf8');
+            const lines = fullSha256Sums.split('\n').filter(line => line.trim());
+
+            let prunedSha256Sums = [];
+            let foundCount = 0;
+
+            // Process WASM files
+            for (const wasmFile of wasmFiles) {
+              const pattern = new RegExp(`\\s+${escapeForRegex(wasmFile)}$`);
+              const matchingLine = lines.find(line => pattern.test(line));
+              if (matchingLine) {
+                console.log(`  Found checksum for: ${wasmFile}`);
+                prunedSha256Sums.push(matchingLine);
+                foundCount++;
+              } else {
+                console.error(`  Error: No checksum found for required file: ${wasmFile}`);
+                console.error(`  Available checksums:`, lines.slice(0, 10));
+                throw new Error(`Missing checksum for ${wasmFile}`);
+              }
+            }
+
+            // Process DID files (with renaming)
+            for (const mapping of renamedDidFiles) {
+              const pattern = new RegExp(`\\s+${escapeForRegex(mapping.source)}$`);
+              const matchingLine = lines.find(line => pattern.test(line));
+              if (matchingLine) {
+                const checksum = matchingLine.split(/\s+/)[0];
+                const renamedLine = `${checksum}  ${mapping.target}`;
+                console.log(`  Found checksum for: ${mapping.source} -> updating to ${mapping.target}`);
+                prunedSha256Sums.push(renamedLine);
+                foundCount++;
+              } else {
+                console.error(`  Error: No checksum found for required DID file: ${mapping.source}`);
+                console.error(`  Available checksums:`, lines.slice(0, 10));
+                throw new Error(`Missing checksum for ${mapping.source}`);
+              }
+            }
+
+            // Write pruned SHA256SUMS
+            const finalSha256SumsPath = path.join(tempDir, 'SHA256SUMS');
+            fs.writeFileSync(finalSha256SumsPath, prunedSha256Sums.join('\n') + '\n');
+
+            console.log(`Pruned SHA256SUMS contains ${foundCount} checksums:`);
+            console.log(prunedSha256Sums.map(line => `  ${line}`).join('\n'));
+
+            // Verify checksum count
+            const wasmFileCount = wasmFiles.length;
+            const didFileCount = didMappings.length;
+            const expectedTotal = wasmFileCount + didFileCount;
+            console.log(`Verification: Found ${foundCount} checksums (Expected: ${wasmFileCount} WASM + ${didFileCount} DID = ${expectedTotal} total)`);
+
+            if (foundCount !== expectedTotal) {
+              throw new Error(`Checksum count mismatch! Expected: ${expectedTotal} checksums (${wasmFileCount} WASM + ${didFileCount} DID), Found: ${foundCount} checksums`);
+            }
+
+            console.log(`Checksum verification passed: Found checksums for all ${expectedTotal} files`);
+
+            // List downloaded files
+            console.log("Downloaded files:");
+            const files = fs.readdirSync(tempDir);
+            files.forEach(file => {
+              const stats = fs.statSync(path.join(tempDir, file));
+              console.log(`  ${file} (${stats.size} bytes)`);
+            });
+
+            // Clean up full SHA256SUMS file
+            fs.unlinkSync(sha256SumsPath);
+
+      - name: Get previous release tag
+        id: prev_tag
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const currentTag = '${{ steps.parse_tag.outputs.tag_name }}';
+            const releaseType = '${{ steps.parse_tag.outputs.release_type }}';
+
+            console.log(`Searching for previous ledger-suite-${releaseType} release (excluding ${currentTag})...`);
+
+            try {
+              // Paginate through releases to find the latest previous release.
+              // If there are no ledger-suite releases for a while, but e.g., replica releases keep being
+              // created on a weekly basis, we may need to go through multiple pages.
+              let page = 1;
+              const perPage = 100;
+              const maxPages = 50;
+              let prevTag = '';
+              let prevTagValid = false;
+              let foundMatch = false;
+
+              while (!foundMatch && page <= maxPages) {
+                console.log(`Fetching page ${page} (up to ${perPage} releases per page)...`);
+
+                const response = await github.rest.repos.listReleases({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  page: page,
+                  per_page: perPage,
+                });
+
+                const releases = response.data;
+                console.log(`Page ${page} returned ${releases.length} releases`);
+
+                // Check if we've reached the end (empty page)
+                if (releases.length === 0) {
+                  console.log(`Reached end of releases (empty page ${page})`);
+                  break;
+                }
+
+                // Filter releases to find matching ones on this page:
+                // 1. Must start with "ledger-suite-{releaseType}-"
+                // 2. Must not be the current tag
+                // 3. Must not be a release candidate (no .rcX suffix)
+                const matchingReleases = releases.filter(release => {
+                  const tagName = release.tag_name;
+                  const prefix = `ledger-suite-${releaseType}-`;
+
+                  return tagName.startsWith(prefix) &&
+                         tagName !== currentTag &&
+                         !tagName.match(/\.rc[0-9]+$/);
+                });
+
+                if (matchingReleases.length > 0) {
+                  console.log(`Found matching releases on page ${page}:`);
+                  matchingReleases.forEach(release => {
+                    console.log(`  - ${release.tag_name}`);
+                  });
+
+                  // Since releases are returned in reverse chronological order (newest first),
+                  // the first matching release we find is the latest one
+                  const latestPrevious = matchingReleases[0];
+                  prevTag = latestPrevious.tag_name;
+                  foundMatch = true;
+
+                  console.log(`Found latest previous release: ${prevTag}`);
+                  break;
+                }
+
+                page++;
+              }
+
+              if (page > maxPages) {
+                console.log(`Warning: Reached maximum page limit (${maxPages}) - stopping pagination`);
+              }
+
+              if (prevTag) {
+                // Validate the release exists and is accessible
+                console.log(`Validating previous release: ${prevTag}`);
+                try {
+                  const releaseCheck = await github.rest.repos.getReleaseByTag({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    tag: prevTag
+                  });
+
+                  console.log(`Previous release validated: ${prevTag}`);
+                  prevTagValid = true;
+                } catch (error) {
+                  if (error.status === 404) {
+                    console.log(`Warning: Previous release tag ${prevTag} exists but release not found`);
+                    prevTag = '';
+                    prevTagValid = false;
+                  } else {
+                    throw error;
+                  }
+                }
+              } else {
+                console.log(`No previous release found for type: ${releaseType}`);
+              }
+
+              core.setOutput('prev_tag', prevTag);
+              core.setOutput('prev_tag_valid', prevTagValid.toString());
+
+            } catch (error) {
+              console.error(`Error fetching releases: ${error.message}`);
+              // Set empty outputs on error
+              core.setOutput('prev_tag', '');
+              core.setOutput('prev_tag_valid', 'false');
+              throw error;
+            }
+
+      - name: Generate git log
+        id: git_log
+        run: |
+          # github-script does not support formatting for the `git log` command, so this step is in shell script.
+
+          # Only use previous tag if it exists and is valid
+          if [[ -n "${{ steps.prev_tag.outputs.prev_tag }}" && "${{ steps.prev_tag.outputs.prev_tag_valid }}" == "true" ]]; then
+            LOG_RANGE="${{ steps.prev_tag.outputs.prev_tag }}..${{ steps.parse_tag.outputs.tag_name }}"
+            GIT_COMMAND="git log --format=\"%C(auto) %h %s\" $LOG_RANGE -- \"${{ steps.variables.outputs.log_paths_string }}\""
+            echo "Generating git log from ${{ steps.prev_tag.outputs.prev_tag }} to ${{ steps.parse_tag.outputs.tag_name }}"
+          else
+            # If no previous tag or invalid previous tag, get all commits
+            LOG_RANGE=""
+            GIT_COMMAND="git log --format=\"%C(auto) %h %s\" -- \"${{ steps.variables.outputs.log_paths_string }}\""
+            echo "Generating git log for all commits (no valid previous release found)"
+          fi
+
+          if [[ -n "$LOG_RANGE" ]]; then
+            GIT_LOG=$(git log --format="%C(auto) %h %s" $LOG_RANGE -- "${{ steps.variables.outputs.log_paths_string }}")
+          else
+            GIT_LOG=$(git log --format="%C(auto) %h %s" -- "${{ steps.variables.outputs.log_paths_string }}")
+          fi
+
+          # Create temporary directory for metadata
+          TEMP_DIR_METADATA=$(mktemp -d)
+          echo "Created temporary directory for metadata: $TEMP_DIR_METADATA"
+          echo "temp_dir_metadata=$TEMP_DIR_METADATA" >> $GITHUB_OUTPUT
+          # Store git log and command in files to handle multiline output
+          echo "$GIT_LOG" > "$TEMP_DIR_METADATA/git_log.txt"
+          echo "$GIT_COMMAND" > "$TEMP_DIR_METADATA/git_command.txt"
+          echo "git_log_file=$TEMP_DIR_METADATA/git_log.txt" >> $GITHUB_OUTPUT
+          echo "git_command_file=$TEMP_DIR_METADATA/git_command.txt" >> $GITHUB_OUTPUT
+
+      - name: Create release body
+        id: release_body
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const tempDirMetadata = '${{ steps.git_log.outputs.temp_dir_metadata }}';
+            const releaseType = '${{ steps.parse_tag.outputs.release_type }}';
+            const humanTitle = '${{ steps.variables.outputs.human_title }}';
+            const tagName = '${{ steps.parse_tag.outputs.tag_name }}';
+            const upgradeFrom = '${{ steps.variables.outputs.upgrade_from }}';
+            const repository = '${{ github.repository }}';
+            const tempDirArtifacts = '${{ steps.download.outputs.temp_dir_artifacts }}';
+
+            // Parse WASM files from JSON array
+            const wasmFiles = JSON.parse('${{ steps.variables.outputs.wasm_files }}');
+
+            // Build dynamic parts
+
+            // 1. Upgrade notes (conditional for ICRC)
+            let upgradeNotes = '';
+            if (releaseType === 'icrc') {
+              upgradeNotes = `- For upgrading the ledger to this release, the installed ledger shall be running [${upgradeFrom}](https://github.com/${repository}/releases/tag/${upgradeFrom}) or later\n`;
+            }
+
+            // 2. WASM verification commands
+            const wasmCommands = wasmFiles
+              .map(wasmFile => `sha256sum ./artifacts/canisters/${wasmFile}`)
+              .join('\n') + '\n';
+
+            // 3. Git command and log
+            let gitCommand = '';
+            const gitCommandFile = path.join(tempDirMetadata, 'git_command.txt');
+            if (fs.existsSync(gitCommandFile)) {
+              gitCommand = fs.readFileSync(gitCommandFile, 'utf8').trim() + '\n\n';
+            }
+
+            let gitLog = '';
+            const gitLogFile = path.join(tempDirMetadata, 'git_log.txt');
+            if (fs.existsSync(gitLogFile)) {
+              gitLog = fs.readFileSync(gitLogFile, 'utf8').replace(/\n+$/, '');
+            }
+
+            // 4. Hash table
+            let hashTable = '';
+            const sha256SumsFile = path.join(tempDirArtifacts, 'SHA256SUMS');
+            if (fs.existsSync(sha256SumsFile)) {
+              const sha256Content = fs.readFileSync(sha256SumsFile, 'utf8');
+              const lines = sha256Content.split('\n').filter(line => line.trim());
+
+              const hashRows = [];
+              for (const line of lines) {
+                const parts = line.trim().split(/\s+/);
+                if (parts.length >= 2) {
+                  const hash = parts[0];
+                  const filePath = parts.slice(1).join(' '); // Handle filenames with spaces
+                  const filename = path.basename(filePath);
+
+                  // Skip the SHA256SUMS file itself in the table
+                  if (filename !== 'SHA256SUMS') {
+                    hashRows.push(`| [${filename}](https://github.com/${repository}/releases/download/${tagName}/${filename}) | \`${hash}\` |`);
+                  }
+                }
+              }
+              hashTable = hashRows.join('\n');
+            }
+
+            // Create release body using template literal with string interpolation
+            // Create release body using template literal with string interpolation
+            const releaseBody = `### ${humanTitle}
+
+            #### Features
+            **⚠️ TODO: Replace this section with actual feature descriptions before publishing! ⚠️**
+
+            #### Upgrade and Downgrade Notes
+            ${upgradeNotes}- It is recommended to have all ledger suite canisters running at the same version.
+            - Upgrading the ledger suite canisters shall be done in the following order:
+              1. The index first.
+              2. The ledger second.
+              3. Any archives third.
+
+            #### WASM Verification
+            \`\`\`
+            git fetch
+            git checkout ${tagName}
+            ./ci/container/build-ic.sh -c
+            ${wasmCommands}\`\`\`
+            The hashes should match the values included in the \`SHA256SUMS\` file. For convenience, the filenames and corresponding hashes are also included in the table below.
+
+            #### Change Log
+
+            \`\`\`
+            ${gitCommand}${gitLog}
+            \`\`\`
+
+            #### Files and Hashes
+
+            | Filename  | SHA256  |
+            | --- | --- |
+            ${hashTable}`;
+
+            // Write the release body to file
+            const releaseBodyFile = path.join(tempDirMetadata, 'release_body.md');
+            fs.writeFileSync(releaseBodyFile, releaseBody);
+
+            // Set output
+            core.setOutput('release_body_file', releaseBodyFile);
+
+            console.log('Release body written to: ' + releaseBodyFile);
+            console.log('Release body length: ' + releaseBody.length + ' characters');
+
+      - name: Verify release files
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const { execSync } = require('child_process');
+
+            const tempDirArtifacts = '${{ steps.download.outputs.temp_dir_artifacts }}';
+
+            console.log(`Verifying all required files are present in ${tempDirArtifacts}...`);
+
+            // Parse WASM files from variables
+            const requiredWasmFiles = JSON.parse('${{ steps.variables.outputs.wasm_files }}');
+
+            // Parse DID file mappings to verify renamed DID files
+            const didMappings = JSON.parse('${{ steps.variables.outputs.did_mappings }}');
+
+            // Verify WASM files exist
+            console.log('Checking WASM files...');
+            for (const wasmFile of requiredWasmFiles) {
+              const filePath = path.join(tempDirArtifacts, wasmFile);
+              if (fs.existsSync(filePath)) {
+                console.log(`  Found: ${wasmFile}`);
+              } else {
+                console.error(`  Missing: ${wasmFile}`);
+                throw new Error(`Missing required WASM file: ${wasmFile}`);
+              }
+            }
+
+            // Verify renamed DID files exist
+            console.log('Checking DID files...');
+            for (const mapping of didMappings) {
+              const filePath = path.join(tempDirArtifacts, mapping.target);
+              if (fs.existsSync(filePath)) {
+                console.log(`  Found: ${mapping.target} (renamed from ${mapping.source})`);
+              } else {
+                console.error(`  Missing: ${mapping.target} (should be renamed from ${mapping.source})`);
+                throw new Error(`Missing required DID file: ${mapping.target}`);
+              }
+            }
+
+            // Verify SHA256SUMS exists
+            console.log('Checking SHA256SUMS...');
+            const sha256SumsPath = path.join(tempDirArtifacts, 'SHA256SUMS');
+            if (fs.existsSync(sha256SumsPath)) {
+              console.log('  Found: SHA256SUMS');
+            } else {
+              console.error('  Missing: SHA256SUMS');
+              throw new Error('Missing SHA256SUMS file');
+            }
+
+            console.log('All required files verified. Ready for release!');
+
+            // List final files
+            console.log('Final file list:');
+            try {
+              const fileList = execSync(`ls -la "${tempDirArtifacts}"`, { encoding: 'utf8' });
+              const indentedList = fileList.split('\n')
+                .map(line => line ? `  ${line}` : line)
+                .join('\n');
+              console.log(indentedList);
+            } catch (error) {
+              console.error(`Error listing files: ${error.message}`);
+            }
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@5be0e66d93ac7ed76da52eca8bb058f665c3a5fe # v2.4.2
+        with:
+          tag_name: ${{ steps.parse_tag.outputs.tag_name }}
+          name: ${{ steps.parse_tag.outputs.tag_name }}
+          body_path: ${{ steps.release_body.outputs.release_body_file }}
+          files: ${{ steps.download.outputs.temp_dir_artifacts }}/*
+          draft: true
+          prerelease: true
+          make_latest: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

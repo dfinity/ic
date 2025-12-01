@@ -391,6 +391,7 @@ mod tests {
     use ic_types::{NodeId, PrincipalId, SubnetId};
     use itertools::Itertools;
 
+    use crate::flags::{is_node_swapping_enabled_for_caller, is_node_swapping_enabled_on_subnet};
     use crate::{
         common::test_helpers::{
             get_invariant_compliant_subnet_record, invariant_compliant_registry,
@@ -476,6 +477,8 @@ mod tests {
         let mut registry = Registry::new();
 
         let _temp = temporarily_enable_node_swapping();
+        test_set_swapping_whitelisted_callers(vec![]);
+        test_set_swapping_enabled_subnets(vec![]);
 
         let payload = valid_payload();
 
@@ -642,6 +645,7 @@ mod tests {
         let (old_node_id, new_node_id, subnet_id, node_operator_id, mut registry) =
             setup_registry_for_test(false);
         test_set_swapping_enabled_subnets(vec![subnet_id]);
+        test_set_swapping_whitelisted_callers(vec![]);
 
         let payload = SwapNodeInSubnetDirectlyPayload {
             new_node_id: Some(new_node_id.get()),
@@ -1074,5 +1078,38 @@ mod tests {
 
         assert!(members.contains(&new_node_id));
         assert!(!members.contains(&old_node_id));
+    }
+
+    #[test]
+    fn feature_flag_subnet_test() {
+        let subnet_1 = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let subnet_2 = SubnetId::new(PrincipalId::new_subnet_test_id(2));
+
+        // Ensure that no subnets are whitelisted
+        test_set_swapping_enabled_subnets(vec![]);
+
+        assert!(!is_node_swapping_enabled_on_subnet(subnet_1));
+
+        // Now add the subnet to the whitelisted ones
+        test_set_swapping_enabled_subnets(vec![subnet_1]);
+        assert!(is_node_swapping_enabled_on_subnet(subnet_1));
+        assert!(!is_node_swapping_enabled_on_subnet(subnet_2));
+    }
+
+    #[test]
+    fn feature_flag_node_operator_test() {
+        let node_operator_1 = PrincipalId::new_user_test_id(1);
+        let node_operator_2 = PrincipalId::new_user_test_id(2);
+
+        // Ensure that no callers are whitelisted
+        test_set_swapping_whitelisted_callers(vec![]);
+
+        assert!(!is_node_swapping_enabled_for_caller(node_operator_1));
+        assert!(!is_node_swapping_enabled_for_caller(node_operator_2));
+
+        // Now add the node operator to the whitelisted ones
+        test_set_swapping_whitelisted_callers(vec![node_operator_1]);
+        assert!(is_node_swapping_enabled_for_caller(node_operator_1));
+        assert!(!is_node_swapping_enabled_for_caller(node_operator_2));
     }
 }

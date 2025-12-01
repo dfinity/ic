@@ -472,6 +472,7 @@ table ip6 filter {\n\
     icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept\n\
     ct state { invalid } drop\n\
     ct state { established, related } accept\n\
+    ip6 saddr { {{ ipv6_prefix }} } ct state { new } tcp dport { 7070, 9091, 9100, 9324, 19531, 19100, 19522 } accept\n\
     ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport 443 accept\n\
 \n\
     <<IPv6_TCP_RULES>>\n\
@@ -488,7 +489,7 @@ table ip6 filter {\n\
     icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-solicit, nd-neighbor-solicit, nd-neighbor-advert } accept\n\
     ct state invalid drop\n\
     ct state { established, related } accept\n\
-    ct state new tcp dport { 53, 80, 443, 8080 } accept\n\
+    ct state new tcp dport { 53, 80, 443, 4460, 8080 } accept\n\
     ct state new udp dport { 53, 123 } accept\n\
   }\n\
 }\n",

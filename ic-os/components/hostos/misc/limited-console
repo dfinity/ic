@@ -17,6 +17,7 @@ show_menu() {
     echo "  view-logs               - View service logs (usage: view-logs <service-name>)"
     echo "  config-json             - Show /boot/config/config.json"
     echo "  network-config-settings - Show network settings from config"
+    echo "  manual-recovery         - Manual node recovery (ONLY FOR EMERGENCY USE)"
     echo "  rbash-console           - Drop into restricted bash console"
     echo "  clear                   - Clear the console"
     echo "  exit                    - Exit console"
@@ -35,7 +36,12 @@ execute_command() {
             ;;
         "service-status")
             if [ -n "${2:-}" ]; then
-                systemctl status "$2"
+                # Only allow sane unit names, e.g. letters, digits, `-_.@`
+                if [[ "$2" =~ ^[a-zA-Z0-9_.@-]+$ ]]; then
+                    systemctl status "$2"
+                else
+                    echo "Invalid service name"
+                fi
             else
                 echo "Usage: service-status <service-name>"
                 echo "Example: service-status guestos"
@@ -43,7 +49,12 @@ execute_command() {
             ;;
         "view-logs")
             if [ -n "${2:-}" ]; then
-                journalctl -u "$2" --no-pager -n 50
+                # Only allow sane unit names, e.g. letters, digits, `-_.@`
+                if [[ "$2" =~ ^[a-zA-Z0-9_.@-]+$ ]]; then
+                    journalctl -u "$2" --no-pager -n 50
+                else
+                    echo "Invalid service name"
+                fi
             else
                 echo "Usage: view-logs <service-name>"
                 echo "Example: view-logs guestos"
@@ -51,7 +62,11 @@ execute_command() {
             ;;
         "config-json")
             echo "=== /boot/config/config.json ==="
-            PATH="$RESTRICTED_PATH" /bin/rbash -c "less /boot/config/config.json"
+            env -i \
+                TERM="$TERM" \
+                LESSSECURE=1 \
+                PATH="$RESTRICTED_PATH" \
+                /usr/bin/less /boot/config/config.json
             ;;
         "network-config-settings")
             echo "=== Network Settings from Config ==="
@@ -60,6 +75,29 @@ execute_command() {
                 echo "$network_settings" | jq . 2>/dev/null || echo "$network_settings"
             else
                 echo "No network settings found in config"
+            fi
+            ;;
+        "manual-recovery")
+            echo "=== Manual Node Recovery ==="
+            echo "This will perform a manual node recovery. Do not attempt this unless you are certain it is appropriate."
+            echo "Manual node recovery should only occur in the event of a critical IC failure."
+            echo "In such cases, the process will be coordinated by reputable IC community leaders"
+            echo "and actively discussed publicly with node providers."
+            echo ""
+            echo "Are you sure you want to proceed? (y/n)"
+            read -r confirm
+            if [ "$confirm" == "y" ]; then
+                # Launch the NNS recovery TUI tool via hostos_tool
+
+                # Fix for serial console where size might be reported as 0 0
+                if size=$(stty size 2>/dev/null); then
+                     read -r rows cols <<< "$size"
+                     if [ "${rows:-0}" -eq 0 ] || [ "${cols:-0}" -eq 0 ]; then
+                         stty rows 36 cols 120
+                     fi
+                fi
+
+                /opt/ic/bin/hostos_tool manual-recovery
             fi
             ;;
         "rbash-console")
@@ -100,7 +138,17 @@ while true; do
         continue
     fi
 
-    # Parse command and arguments
-    read -r cmd args <<< "$command"
-    execute_command "$cmd" $args
+    # Parse command and arguments safely using array to prevent command injection
+    # This safely splits the input while preserving quoted arguments
+    read -ra cmd_array <<< "$command"
+
+    # If parsing produced no tokens, skip
+    if [ "${#cmd_array[@]}" -eq 0 ]; then
+        continue
+    fi
+
+    cmd="${cmd_array[0]}"
+    # Pass remaining arguments as separate array elements to prevent injection
+    execute_command "$cmd" "${cmd_array[@]:1}"
+
 done

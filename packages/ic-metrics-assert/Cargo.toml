@@ -1,6 +1,6 @@
 [package]
 name = "ic-metrics-assert"
-version = "0.1.1"
+version = "0.2.0"
 description = "Fluent assertions for metrics"
 license = "Apache-2.0"
 readme = "README.md"
@@ -15,7 +15,7 @@ async-trait = { workspace = true }
 candid = { workspace = true }
 ic-http-types = { version = "0.1.0", path = "../ic-http-types" }
 ic-management-canister-types = { workspace = true, optional = true }
-pocket-ic = { path = "../../packages/pocket-ic", optional = true }
+pocket-ic = { version = "10.0.0", path = "../../packages/pocket-ic", optional = true }
 regex = "1.11.0"
 serde = { workspace = true }
 serde_bytes = { workspace = true }

@@ -116,7 +116,6 @@ impl Finalizer {
     }
 
     /// Write logs, report metrics depending on the batch deliver result.
-    #[allow(clippy::too_many_arguments)]
     fn process_batch_delivery_result(
         &self,
         result: &Result<(), MessageRoutingError>,

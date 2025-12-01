@@ -8,28 +8,29 @@ use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1 as pb;
 use ic_nns_governance_api as pb_api;
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
-use maplit::btreemap;
 use test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
 
 #[test]
 fn proposal_passes_if_not_too_many_nf_neurons_can_occur() {
     let proposal_id = ProposalId { id: 123 };
     let create_service_nervous_system = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone();
-    let mut governance_init = GovernanceCanisterInitPayloadBuilder::new()
+    let governance_init = GovernanceCanisterInitPayloadBuilder::new()
         .with_test_neurons_fund_neurons(500_000 * E8)
         .build();
-    governance_init.proposals = btreemap! {
-        123_u64 => ProposalData {
-            id: Some(proposal_id),
-            ..ProposalData::default()
-        }.into()
-    };
     let mut governance = Governance::new(
         governance_init,
         Arc::<MockEnvironment>::default(),
         Arc::new(StubIcpLedger {}),
         Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
+    );
+
+    governance.heap_data.proposals.insert(
+        proposal_id.id,
+        ProposalData {
+            id: Some(proposal_id),
+            ..ProposalData::default()
+        },
     );
     // Run code under test
     governance
@@ -61,7 +62,7 @@ fn proposal_fails_if_too_many_nf_neurons_can_occur() {
             ..create_service_nervous_system
         }
     };
-    let mut governance_init = {
+    let governance_init = {
         let proto_neuron = GovernanceCanisterInitPayloadBuilder::new()
             .with_test_neurons_fund_neurons(maturity_equivalent_icp_e8s)
             .build()
@@ -85,18 +86,19 @@ fn proposal_fails_if_too_many_nf_neurons_can_occur() {
             .with_additional_neurons(neurons)
             .build()
     };
-    governance_init.proposals = btreemap! {
-        123_u64 => ProposalData {
-            id: Some(proposal_id),
-            ..ProposalData::default()
-        }.into()
-    };
     let mut governance = Governance::new(
         governance_init,
         Arc::<MockEnvironment>::default(),
         Arc::new(StubIcpLedger {}),
         Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
+    );
+    governance.heap_data.proposals.insert(
+        proposal_id.id,
+        ProposalData {
+            id: Some(proposal_id),
+            ..ProposalData::default()
+        },
     );
     // Run code under test
     let err = governance
@@ -123,19 +125,20 @@ fn proposal_fails_if_too_many_nf_neurons_can_occur() {
 fn proposal_fails_if_no_nf_neurons_exist() {
     let proposal_id = ProposalId { id: 123 };
     let create_service_nervous_system = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone();
-    let mut governance_init = GovernanceCanisterInitPayloadBuilder::new().build();
-    governance_init.proposals = btreemap! {
-        123_u64 => ProposalData {
-            id: Some(proposal_id),
-            ..ProposalData::default()
-        }.into()
-    };
+    let governance_init = GovernanceCanisterInitPayloadBuilder::new().build();
     let mut governance = Governance::new(
         governance_init,
         Arc::<MockEnvironment>::default(),
         Arc::new(StubIcpLedger {}),
         Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
+    );
+    governance.heap_data.proposals.insert(
+        proposal_id.id,
+        ProposalData {
+            id: Some(proposal_id),
+            ..ProposalData::default()
+        },
     );
     // Run code under test
     let err = governance

@@ -292,7 +292,7 @@ async fn get_or_fetch<P: Peers>(
     node_id: NodeId,
     peer_rx: P,
 ) -> (StrippedMessage, NodeId) {
-    match stripped_message_id {
+    let stripped_message_id = match stripped_message_id {
         StrippedMessageId::Ingress(signed_ingress_id) => {
             // First check if the ingress message exists in the Ingress Pool.
             if let Some(ingress_message) = ingress_pool
@@ -309,18 +309,10 @@ async fn get_or_fetch<P: Peers>(
                     );
                 }
             }
-            download_stripped_message(
-                transport,
-                StrippedMessageId::Ingress(signed_ingress_id),
-                full_consensus_message_id,
-                &log,
-                &metrics,
-                peer_rx,
-            )
-            .await
+            StrippedMessageId::Ingress(signed_ingress_id)
         }
         StrippedMessageId::IDkgDealing(dealing_id, node_index) => {
-            // First check if the ingress message exists in the idkg Pool.
+            // First check if the dealing exists in the IDKG Pool.
             if let Some(IDkgMessage::Dealing(signed_dealing)) =
                 idkg_pool.read().unwrap().get(&dealing_id)
             {
@@ -329,17 +321,18 @@ async fn get_or_fetch<P: Peers>(
                     node_id,
                 );
             }
-            download_stripped_message(
-                transport,
-                StrippedMessageId::IDkgDealing(dealing_id, node_index),
-                full_consensus_message_id,
-                &log,
-                &metrics,
-                peer_rx,
-            )
-            .await
+            StrippedMessageId::IDkgDealing(dealing_id, node_index)
         }
-    }
+    };
+    download_stripped_message(
+        transport,
+        stripped_message_id,
+        full_consensus_message_id,
+        &log,
+        &metrics,
+        peer_rx,
+    )
+    .await
 }
 
 #[derive(Debug, PartialEq, Error)]

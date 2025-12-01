@@ -15,6 +15,7 @@ candid = { workspace = true }
 futures = { workspace = true }
 ic-cdk = { workspace = true }
 ic-management-canister-types = { workspace = true }
+ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for-wasm" }
 rand = { workspace = true }
 rand_pcg = "0.3"
 serde = { workspace = true }

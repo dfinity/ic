@@ -33,17 +33,16 @@ impl PublicCoefficients {
 
     /// Deserializes a `PublicCoefficients` from a *trusted* source.
     ///
-    /// # Security Notice
-    /// This uses the "unchecked" G2 deserialization (no subgroup check),
-    /// so should only be used on `InternalPublicCoefficients` obtained
-    /// from a known, trusted source.
-    pub fn from_trusted_bytes(
+    /// # Note
+    /// This caches the deserialized points with the expectation that
+    /// at least some of the points will be seen again.
+    pub fn deserialize_cached(
         bytes: &InternalPublicCoefficients,
     ) -> Result<PublicCoefficients, CryptoError> {
         let coefficients: Result<Vec<PublicKey>, ThresholdSigPublicKeyBytesConversionError> = bytes
             .coefficients
             .iter()
-            .map(PublicKey::from_trusted_bytes)
+            .map(PublicKey::deserialize_cached)
             .collect();
         let coefficients = coefficients?;
         Ok(PublicCoefficients { coefficients })
@@ -78,11 +77,8 @@ impl PublicCoefficients {
     ) -> Result<G1Projective, ThresholdError> {
         let all_x: Vec<NodeIndex> = samples.iter().map(|(x, _)| *x).collect();
         let coefficients = Self::lagrange_coefficients_at_zero(&all_x)?;
-        let mut result = G1Projective::identity();
-        for (coefficient, sample) in coefficients.iter().zip(samples.iter().map(|(_, y)| y)) {
-            result += sample * coefficient;
-        }
-        Ok(result)
+        let pts: Vec<_> = samples.iter().map(|(_, pt)| pt.clone()).collect();
+        Ok(G1Projective::muln_vartime(&pts, &coefficients))
     }
 
     /// Given a list of samples `(x, f(x) * g)` for a polynomial `f` in the scalar field, and a generator g of G2 returns
@@ -97,11 +93,8 @@ impl PublicCoefficients {
     ) -> Result<G2Projective, ThresholdError> {
         let all_x: Vec<NodeIndex> = samples.iter().map(|(x, _)| *x).collect();
         let coefficients = Self::lagrange_coefficients_at_zero(&all_x)?;
-        let mut result = G2Projective::identity();
-        for (coefficient, sample) in coefficients.iter().zip(samples.iter().map(|(_, y)| y)) {
-            result += sample * coefficient;
-        }
-        Ok(result)
+        let pts: Vec<_> = samples.iter().map(|(_, pt)| pt.clone()).collect();
+        Ok(G2Projective::muln_vartime(&pts, &coefficients))
     }
 
     /// Compute the Lagrange coefficients at x=0.

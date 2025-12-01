@@ -213,16 +213,7 @@ pub(crate) fn fake_idkg_payload_with_dealing(
     dealing: SignedIDkgDealing,
     node_index: NodeIndex,
 ) -> IDkgPayload {
-    let IDkgArtifactId::Dealing(prefix, data) = dealing.message_id() else {
-        panic!("Expected dealing artifact id");
-    };
-
-    let transcript_id = IDkgTranscriptId::new(
-        data.get_ref().subnet_id,
-        prefix.get_ref().group_tag(),
-        data.get_ref().height,
-    );
-
+    let transcript_id = dealing.idkg_dealing().transcript_id;
     let mut verified_dealings = BTreeMap::new();
     verified_dealings.insert(
         node_index,

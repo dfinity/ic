@@ -55,7 +55,9 @@ pub trait CanisterSigVerifier<T: Signable> {
 
 /// A Crypto Component interface to verify ingress messages.
 pub trait IngressSigVerifier:
-    BasicSigVerifierByPublicKey<WebAuthnEnvelope>
+    Send
+    + Sync
+    + BasicSigVerifierByPublicKey<WebAuthnEnvelope>
     + BasicSigVerifierByPublicKey<MessageId>
     + BasicSigVerifierByPublicKey<Delegation>
     + CanisterSigVerifier<Delegation>
@@ -64,7 +66,9 @@ pub trait IngressSigVerifier:
 }
 
 impl<T> IngressSigVerifier for T where
-    T: BasicSigVerifierByPublicKey<WebAuthnEnvelope>
+    T: Send
+        + Sync
+        + BasicSigVerifierByPublicKey<WebAuthnEnvelope>
         + BasicSigVerifierByPublicKey<MessageId>
         + BasicSigVerifierByPublicKey<Delegation>
         + CanisterSigVerifier<Delegation>
