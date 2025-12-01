@@ -1,3 +1,4 @@
+// TODO(DRE-6385): Remove this test once PBR is fully rolled out to mainnet.
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
