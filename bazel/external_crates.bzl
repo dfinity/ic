@@ -365,7 +365,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.1.2",
             ),
             "cc": crate.spec(
-                version = "=1.2.22",
+                version = "=1.2.48",
             ),
             "cddl": crate.spec(
                 version = "^0.9.4",
@@ -1601,7 +1601,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.240.0",
             ),
             "wasmtime": crate.spec(
-                version = "^38.0.3",
+                version = "^39.0.1",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1612,7 +1612,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^38.0.3",
+                version = "^39.0.1",
             ),
             "wast": crate.spec(
                 version = "^240.0.0",
