@@ -170,7 +170,7 @@ pub(crate) fn fake_stripped_block_proposal_with_messages(
         })
         .collect::<Vec<_>>();
     StrippedBlockProposal {
-        block_proposal_without_ingresses_proto: pb::BlockProposal::default(),
+        pruned_block_proposal_proto: pb::BlockProposal::default(),
         stripped_ingress_payload: StrippedIngressPayload { ingress_messages },
         unstripped_consensus_message_id: fake_consensus_message_id(),
         stripped_idkg_dealings: StrippedIDkgDealings { stripped_dealings },

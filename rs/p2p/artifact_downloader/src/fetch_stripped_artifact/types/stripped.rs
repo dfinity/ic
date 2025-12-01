@@ -25,7 +25,7 @@ pub(crate) struct StrippedIDkgDealings {
 /// Stripped version of the [`BlockProposal`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct StrippedBlockProposal {
-    pub(crate) block_proposal_without_ingresses_proto: pb::BlockProposal,
+    pub(crate) pruned_block_proposal_proto: pb::BlockProposal,
     pub(crate) stripped_ingress_payload: StrippedIngressPayload,
     pub(crate) unstripped_consensus_message_id: ConsensusMessageId,
     pub(crate) stripped_idkg_dealings: StrippedIDkgDealings,
@@ -64,13 +64,11 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
     type Error = ProxyDecodeError;
 
     fn try_from(value: pb::StrippedBlockProposal) -> Result<Self, Self::Error> {
-        let block_proposal_without_ingresses_proto = value
-            .block_proposal_without_ingress_payload
-            .ok_or_else(|| {
-            ProxyDecodeError::MissingField("block_proposal_without_ingress_payload")
-        })?;
+        let pruned_block_proposal_proto = value
+            .pruned_block_proposal
+            .ok_or_else(|| ProxyDecodeError::MissingField("pruned_block_proposal"))?;
 
-        if block_proposal_without_ingresses_proto
+        if pruned_block_proposal_proto
             .value
             .as_ref()
             .is_some_and(|block| block.ingress_payload.is_some())
@@ -96,14 +94,14 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
         }
 
         // TODO(CON-1618): Allow stripped IDKG dealings.
-        if !value.stripped_dealings.is_empty() {
+        if !value.stripped_idkg_dealings.is_empty() {
             return Err(ProxyDecodeError::Other(String::from(
                 "IDKG dealings should not be stripped yet",
             )));
         }
 
         Ok(Self {
-            block_proposal_without_ingresses_proto,
+            pruned_block_proposal_proto,
             stripped_ingress_payload: StrippedIngressPayload {
                 ingress_messages: value
                     .ingress_messages
@@ -114,7 +112,7 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
             unstripped_consensus_message_id,
             stripped_idkg_dealings: StrippedIDkgDealings {
                 stripped_dealings: value
-                    .stripped_dealings
+                    .stripped_idkg_dealings
                     .into_iter()
                     .map(|dealing| {
                         let idkg_artifact_id: IDkgArtifactId = try_from_option_field(
@@ -138,9 +136,7 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
 impl From<StrippedBlockProposal> for pb::StrippedBlockProposal {
     fn from(value: StrippedBlockProposal) -> Self {
         Self {
-            block_proposal_without_ingress_payload: Some(
-                value.block_proposal_without_ingresses_proto,
-            ),
+            pruned_block_proposal: Some(value.pruned_block_proposal_proto),
             ingress_messages: value
                 .stripped_ingress_payload
                 .ingress_messages
@@ -151,11 +147,11 @@ impl From<StrippedBlockProposal> for pb::StrippedBlockProposal {
                 })
                 .collect(),
             unstripped_consensus_message_id: Some(value.unstripped_consensus_message_id.into()),
-            stripped_dealings: value
+            stripped_idkg_dealings: value
                 .stripped_idkg_dealings
                 .stripped_dealings
                 .into_iter()
-                .map(|(dealer_index, dealing_id)| pb::StrippedDealing {
+                .map(|(dealer_index, dealing_id)| pb::StrippedIDkgDealing {
                     dealer_index,
                     dealing_id: Some(dealing_id.into()),
                 })

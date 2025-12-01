@@ -476,9 +476,8 @@ impl BlockProposalAssembler {
     /// Fails if there are still some ingress messages missing,
     /// or the assembled proposal can't be deserialized.
     pub(crate) fn try_assemble(self) -> Result<BlockProposal, AssemblyError> {
-        let mut reconstructed_block_proposal_proto = self
-            .stripped_block_proposal
-            .block_proposal_without_ingresses_proto;
+        let mut reconstructed_block_proposal_proto =
+            self.stripped_block_proposal.pruned_block_proposal_proto;
 
         let ingresses = self
             .ingress_messages

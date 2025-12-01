@@ -43,7 +43,7 @@ impl Strippable for ConsensusMessage {
                 let stripped_ingress_payload = data_payload.batch.ingress.strip();
 
                 MaybeStrippedConsensusMessage::StrippedBlockProposal(StrippedBlockProposal {
-                    block_proposal_without_ingresses_proto: proto,
+                    pruned_block_proposal_proto: proto,
                     stripped_ingress_payload,
                     unstripped_consensus_message_id,
                     stripped_idkg_dealings: StrippedIDkgDealings {
