@@ -102,17 +102,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Create GitHub App Token
-        uses: actions/create-github-app-token@v1
-        id: app-token
-        with:
-          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
-          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || inputs.commit-sha }}
-          token: ${{ steps.app-token.outputs.token }}
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
@@ -128,6 +117,19 @@ jobs:
               - '**/*.lock'
               - '**/*.rs'
               - '**/*.toml'
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        if: steps.filter.outputs.lock-generate == 'true'
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
+      - name: Checkout
+        uses: actions/checkout@v4
+        if: steps.filter.outputs.lock-generate == 'true'
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || inputs.commit-sha }}
+          token: ${{ steps.app-token.outputs.token }}
       - name: Run Lock Generate
         id: lock-generate
         if: steps.filter.outputs.lock-generate == 'true'
@@ -139,17 +141,6 @@ jobs:
     container: *container-setup
     timeout-minutes: 30
     steps:
-      - name: Create GitHub App Token
-        uses: actions/create-github-app-token@v1
-        id: app-token
-        with:
-          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
-          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || inputs.commit-sha }}
-          token: ${{ steps.app-token.outputs.token }}
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
@@ -159,6 +150,19 @@ jobs:
             generate-config-fixtures:
               - '.github/workflows/ci-pr-only.yml'
               - 'rs/ic_os/config_types/**'
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        if: steps.filter.outputs.lock-generate == 'true'
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
+      - name: Checkout
+        uses: actions/checkout@v4
+        if: steps.filter.outputs.lock-generate == 'true'
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || inputs.commit-sha }}
+          token: ${{ steps.app-token.outputs.token }}
       - name: Run Generate Config Fixtures
         id: generate-config-fixtures
         if: steps.filter.outputs.generate-config-fixtures == 'true'
