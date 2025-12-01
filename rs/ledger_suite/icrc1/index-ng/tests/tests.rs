@@ -1391,6 +1391,14 @@ fn test_large_transfers_and_approvals() {
     // Test initial mint block.
     wait_until_sync_is_completed(env, index_id, ledger_id);
     assert_ledger_index_parity(env, ledger_id, index_id);
+    let balance = Decode!(
+        &env.execute_ingress(index_id, "icrc1_balance_of", Encode!(&account1).unwrap())
+            .expect("Failed to send icrc1_balance_of")
+            .bytes(),
+        Nat
+    )
+    .expect("Failed to decode icrc1_balance_of response");
+    assert_eq!(balance, max_amount);
 
     // Approve a huge amount
     let req = ApproveArgs {
