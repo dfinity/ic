@@ -136,6 +136,7 @@ impl Project {
     /// generally don't play well with the WASM linker.
     fn compile_cargo_bin(&self, package: Option<&str>, bin_name: &str, features: &[&str]) -> Wasm {
         // Cache compiled canisters to avoid running `cargo build` repeatedly.
+        #[allow(clippy::type_complexity)]
         static COMPILED_CANISTERS: std::sync::Mutex<
             std::collections::BTreeMap<(Option<String>, String, Vec<String>), PathBuf>,
         > = std::sync::Mutex::new(std::collections::BTreeMap::new());
