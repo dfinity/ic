@@ -33,7 +33,7 @@ impl StructIO {
         let (data_head, addr) = self.read_raw_u64(addr);
         let (data_tail, addr) = self.read_raw_u64(addr);
         let (next_idx, addr) = self.read_raw_u64(addr);
-        let (seen_timestamp, _addr) = self.read_raw_u64(addr);
+        let (max_timestamp, _addr) = self.read_raw_u64(addr);
         Header {
             magic,
             version,
@@ -45,7 +45,7 @@ impl StructIO {
             data_head: MemoryPosition::new(data_head),
             data_tail: MemoryPosition::new(data_tail),
             next_idx,
-            seen_timestamp,
+            max_timestamp,
         }
     }
 
@@ -61,7 +61,7 @@ impl StructIO {
         addr = self.write_raw_u64(addr, header.data_head.get());
         addr = self.write_raw_u64(addr, header.data_tail.get());
         addr = self.write_raw_u64(addr, header.next_idx);
-        _ = self.write_raw_u64(addr, header.seen_timestamp);
+        _ = self.write_raw_u64(addr, header.max_timestamp);
     }
 
     pub fn load_index_table(&self) -> IndexTable {
@@ -365,7 +365,7 @@ mod tests {
             data_head: MemoryPosition::new(7),
             data_tail: MemoryPosition::new(8),
             next_idx: 9,
-            seen_timestamp: 10,
+            max_timestamp: 10,
         };
 
         let mut io = StructIO::new(PageMap::new_for_testing());

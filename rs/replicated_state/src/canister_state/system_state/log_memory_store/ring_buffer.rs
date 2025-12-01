@@ -101,7 +101,7 @@ impl RingBuffer {
                 debug_assert!(false, "Log record idx must be >= than next idx");
                 continue;
             }
-            if record.timestamp < h.seen_timestamp {
+            if record.timestamp < h.max_timestamp {
                 debug_assert!(false, "Log record timestamp must be >= than seen timestamp");
                 continue;
             }
@@ -123,7 +123,7 @@ impl RingBuffer {
             h.data_tail = h.advance_position(position, added_size);
             h.data_size = h.data_size.saturating_add(added_size);
             h.next_idx = record.idx + 1;
-            h.seen_timestamp = record.timestamp;
+            h.max_timestamp = record.timestamp;
             self.io.save_header(&h);
 
             // Update the index table with the latest record position.
