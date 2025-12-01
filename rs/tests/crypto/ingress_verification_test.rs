@@ -1151,51 +1151,52 @@ fn resign_certificate_with_random_signature<R: Rng + CryptoRng>(
     serializer.into_inner()
 }
 
-fn webauthn_cose_wrap_ecdsa_secp256r1_key(pk: &ic_secp256r1::PublicKey) -> Vec<u8> {
-    let sec1 = pk.serialize_sec1(false);
-
-    let pk_cose = {
-        let mut map = std::collections::BTreeMap::new();
-
-        use serde_cbor::Value;
-
-        /*
-        See RFC 8152 ("CBOR Object Signing and Encryption (COSE)"), sections 8.1
-        and 13.1 for these constants
-         */
-        const COSE_PARAM_KTY: serde_cbor::Value = serde_cbor::Value::Integer(1);
-        const COSE_PARAM_KTY_EC2: serde_cbor::Value = serde_cbor::Value::Integer(2);
-
-        const COSE_PARAM_ALG: serde_cbor::Value = serde_cbor::Value::Integer(3);
-        const COSE_PARAM_ALG_ES256: serde_cbor::Value = serde_cbor::Value::Integer(-7);
-
-        const COSE_PARAM_EC2_CRV: serde_cbor::Value = serde_cbor::Value::Integer(-1);
-        const COSE_PARAM_EC2_CRV_P256: serde_cbor::Value = serde_cbor::Value::Integer(1);
-
-        const COSE_PARAM_EC2_X: serde_cbor::Value = serde_cbor::Value::Integer(-2);
-        const COSE_PARAM_EC2_Y: serde_cbor::Value = serde_cbor::Value::Integer(-3);
-
-        let x = &sec1[1..33];
-        let y = &sec1[33..];
-
-        map.insert(COSE_PARAM_KTY, COSE_PARAM_KTY_EC2);
-        map.insert(COSE_PARAM_EC2_CRV, COSE_PARAM_EC2_CRV_P256);
-        map.insert(COSE_PARAM_ALG, COSE_PARAM_ALG_ES256);
-        map.insert(COSE_PARAM_EC2_X, Value::Bytes(x.to_vec()));
-        map.insert(COSE_PARAM_EC2_Y, Value::Bytes(y.to_vec()));
-
-        serde_cbor::to_vec(&Value::Map(map)).expect("cbor encoding failed")
-    };
-
+fn wrap_cose_key_in_der_spki(cose: &serde_cbor::Value::Map) -> Vec<u8> {
     use ic_crypto_internal_basic_sig_der_utils::subject_public_key_info_der;
     use simple_asn1::oid;
     // OID 1.3.6.1.4.1.56387.1.1
     // See https://internetcomputer.org/docs/current/references/ic-interface-spec#signatures
     let webauthn_key_oid = oid!(1, 3, 6, 1, 4, 1, 56387, 1, 1);
+    let pk_cose = serde_cbor::to_vec(cose).unwrap();
     subject_public_key_info_der(webauthn_key_oid, &pk_cose).unwrap()
 }
 
-fn webauthn_sign_ecdsa_secp256r1(sk: &ic_secp256r1::PrivateKey, msg: &[u8]) -> Vec<u8> {
+fn webauthn_cose_wrap_ecdsa_secp256r1_key(pk: &ic_secp256r1::PublicKey) -> Vec<u8> {
+    let sec1 = pk.serialize_sec1(false);
+
+    let mut map = std::collections::BTreeMap::new();
+
+    use serde_cbor::Value;
+
+    /*
+    See RFC 8152 ("CBOR Object Signing and Encryption (COSE)"), sections 8.1
+    and 13.1 for these constants
+     */
+    const COSE_PARAM_KTY: serde_cbor::Value = serde_cbor::Value::Integer(1);
+    const COSE_PARAM_KTY_EC2: serde_cbor::Value = serde_cbor::Value::Integer(2);
+
+    const COSE_PARAM_ALG: serde_cbor::Value = serde_cbor::Value::Integer(3);
+    const COSE_PARAM_ALG_ES256: serde_cbor::Value = serde_cbor::Value::Integer(-7);
+
+    const COSE_PARAM_EC2_CRV: serde_cbor::Value = serde_cbor::Value::Integer(-1);
+    const COSE_PARAM_EC2_CRV_P256: serde_cbor::Value = serde_cbor::Value::Integer(1);
+
+    const COSE_PARAM_EC2_X: serde_cbor::Value = serde_cbor::Value::Integer(-2);
+    const COSE_PARAM_EC2_Y: serde_cbor::Value = serde_cbor::Value::Integer(-3);
+
+    let x = &sec1[1..33];
+    let y = &sec1[33..];
+
+    map.insert(COSE_PARAM_KTY, COSE_PARAM_KTY_EC2);
+    map.insert(COSE_PARAM_EC2_CRV, COSE_PARAM_EC2_CRV_P256);
+    map.insert(COSE_PARAM_ALG, COSE_PARAM_ALG_ES256);
+    map.insert(COSE_PARAM_EC2_X, Value::Bytes(x.to_vec()));
+    map.insert(COSE_PARAM_EC2_Y, Value::Bytes(y.to_vec()));
+
+    wrap_cose_key_in_der_spki(&Value::Map(map))
+}
+
+fn webauthn_sign_message(msg: &[u8], sign_fn: FnOnce(&[u8]) -> Vec<u8>) -> Vec<u8> {
     use serde::Serialize;
 
     #[derive(Debug, Serialize)]
@@ -1220,11 +1221,16 @@ fn webauthn_sign_ecdsa_secp256r1(sk: &ic_secp256r1::PrivateKey, msg: &[u8]) -> V
         sm.extend_from_slice(&ic_crypto_sha2::Sha256::hash(&client_data_json));
         sm
     };
-    let signature = Blob(sk.sign_message_with_der_encoded_sig(&signed_message));
+    let signature = Blob(sign_fn(&signed_message));
     let sig = ic_types::messages::WebAuthnSignature::new(
         authenticator_data,
         Blob(client_data_json),
         signature,
     );
     serde_cbor::to_vec(&sig).unwrap()
+}
+
+fn webauthn_sign_ecdsa_secp256r1(sk: &ic_secp256r1::PrivateKey, msg: &[u8]) -> Vec<u8> {
+    let sign_fn = |to_sign: &[u8]| -> Vec<u8> { sk.sign_message_with_der_encoded_sig(to_sign) };
+    webauthn_sign_message(msg, sign_fn)
 }
