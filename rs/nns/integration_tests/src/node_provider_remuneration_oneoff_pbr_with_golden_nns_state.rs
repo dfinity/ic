@@ -406,19 +406,23 @@ mod sanity_check {
             }
         }
 
-        // // Assert that the rewards up to November 29th match expected values
-        // let expected_rewards = expected_rewards_up_to_nov_29();
-        // for (provider_id_str, expected_total) in expected_rewards.iter() {
-        //     let provider_id = PrincipalId::from_str(provider_id_str)
-        //         .unwrap_or_else(|_| panic!("Invalid principal ID: {}", provider_id_str));
-        //     let actual_total = rewards_up_to_nov_29.get(&provider_id).copied().unwrap_or(0);
+        // Assert that the rewards up to November 29th match expected values
+        let expected_rewards = expected_rewards_up_to_nov_29();
 
-        //     assert_eq!(
-        //         *expected_total, actual_total,
-        //         "For provider {}, expected rewards up to Nov 29: {}, actual: {}",
-        //         provider_id_str, expected_total, actual_total
-        //     );
-        // }
+        for (provider_id, actual_total) in rewards_up_to_nov_29.iter() {
+            let provider_string = provider_id.to_string();
+            let short_provider_id = provider_string.split('-').next().unwrap();
+
+            let expected_total = expected_rewards.get(short_provider_id).unwrap_or_else(|| {
+                panic!("No expected rewards for provider {}", short_provider_id)
+            });
+
+            assert_eq!(
+                *expected_total, *actual_total,
+                "For provider {} (short: {}), expected rewards up to Nov 29: {}, actual: {}",
+                provider_id, short_provider_id, expected_total, actual_total
+            );
+        }
 
         // For each day missing from now up to the next distribution time, we get the daily rewards
         // without penalties. Given the canister is assigning to each node failure rate = 0% these
