@@ -256,6 +256,7 @@ members = [
     "rs/nervous_system/humanize",
     "rs/nervous_system/initial_supply",
     "rs/nervous_system/instruction_stats",
+    "rs/nervous_system/instruction_stats_update_attribute",
     "rs/nervous_system/integration_tests",
     "rs/nervous_system/linear_map",
     "rs/nervous_system/lock",
