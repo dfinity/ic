@@ -413,11 +413,13 @@ impl TryFrom<KeyConfig> for KeyConfigInternal {
         let Some(key_id) = key_id else {
             return Err("KeyConfig.key_id must be specified.".to_string());
         };
+
         if key_id.requires_pre_signatures() && pre_signatures_to_create_in_advance.is_none() {
             return Err(format!(
                 "KeyConfig.pre_signatures_to_create_in_advance must be specified for key {key_id}."
             ));
         };
+
         let Some(max_queue_size) = max_queue_size else {
             return Err("KeyConfig.max_queue_size must be specified.".to_string());
         };
