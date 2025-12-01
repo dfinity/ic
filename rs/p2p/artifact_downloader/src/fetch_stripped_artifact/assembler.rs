@@ -20,10 +20,13 @@ use ic_types::{
     messages::SignedIngress,
 };
 
-use crate::FetchArtifact;
+use crate::{
+    FetchArtifact,
+    fetch_stripped_artifact::types::{StrippedMessage, StrippedMessageId},
+};
 
 use super::{
-    download::download_ingress,
+    download::download_stripped_message,
     metrics::{
         FetchStrippedConsensusArtifactMetrics, IngressMessageSource, StrippedMessageSenderMetrics,
     },
@@ -84,6 +87,7 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>>
 pub struct FetchStrippedConsensusArtifact {
     log: ReplicaLogger,
     ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
+    idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
     fetch_stripped: FetchArtifact<MaybeStrippedConsensusMessage>,
     transport: Arc<dyn Transport>,
     node_id: NodeId,
@@ -102,12 +106,13 @@ impl FetchStrippedConsensusArtifact {
         node_id: NodeId,
     ) -> (impl Fn(Arc<dyn Transport>) -> Self, axum::Router) {
         let ingress_pool_clone = ingress_pool.clone();
+        let idkg_pool_clone = idkg_pool.clone();
         let consensus_pool_clone = consensus_pool.clone();
 
         let router = super::download::build_axum_router(super::download::Pools {
             consensus_pool: consensus_pool_clone,
             ingress_pool: ingress_pool_clone,
-            idkg_pool,
+            idkg_pool: idkg_pool_clone,
             metrics: StrippedMessageSenderMetrics::new(&metrics_registry),
         });
 
@@ -127,6 +132,7 @@ impl FetchStrippedConsensusArtifact {
             Self {
                 log: log.clone(),
                 ingress_pool: ingress_pool.clone(),
+                idkg_pool: idkg_pool.clone(),
                 fetch_stripped,
                 transport,
                 node_id,
@@ -179,17 +185,18 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
 
         let timer = self
             .metrics
-            .download_missing_ingress_messages_duration
+            .download_missing_stripped_messages_duration
             .start_timer();
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
-        let stripped_ingress_ids = assembler.missing_ingress_messages();
+        let stripped_message_ids = assembler.missing_stripped_messages();
         // For each stripped object in the message, try to fetch it either from the local pools
         // or from a random peer who is advertising it.
-        for stripped_ingress_id in stripped_ingress_ids {
+        for stripped_message_id in stripped_message_ids {
             join_set.spawn(get_or_fetch(
-                stripped_ingress_id,
+                stripped_message_id,
                 self.ingress_pool.clone(),
+                self.idkg_pool.clone(),
                 self.transport.clone(),
                 id.as_ref().clone(),
                 self.log.clone(),
@@ -203,7 +210,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
         let mut ingress_messages_from_peers = 0;
 
         while let Some(join_result) = join_set.join_next().await {
-            let Ok((ingress, ingress_id, peer_id)) = join_result else {
+            let Ok((StrippedMessage::Ingress(ingress_id, ingress), peer_id)) = join_result else {
                 return AssembleResult::Unwanted;
             };
 
@@ -261,8 +268,9 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
 /// Tries to get the missing object either from the pool(s) or from the peers who are advertising
 /// it.
 async fn get_or_fetch<P: Peers>(
-    signed_ingress_id: SignedIngressId,
+    stripped_message_id: StrippedMessageId,
     ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
+    idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
     transport: Arc<dyn Transport>,
     // Id of the *full* artifact which should contain the missing data
     full_consensus_message_id: ConsensusMessageId,
@@ -270,31 +278,48 @@ async fn get_or_fetch<P: Peers>(
     metrics: Arc<FetchStrippedConsensusArtifactMetrics>,
     node_id: NodeId,
     peer_rx: P,
-) -> (SignedIngress, SignedIngressId, NodeId) {
-    // First check if the ingress message exists in the Ingress Pool.
-    if let Some(ingress_message) = ingress_pool
-        .read()
-        .unwrap()
-        .get(&signed_ingress_id.ingress_message_id)
-    {
-        // Make sure that this is the correct ingress message. [`IngressMessageId`] does _not_
-        // uniquely identify ingress messages, we thus need to perform an extra check.
-        if SignedIngressId::from(&ingress_message) == signed_ingress_id {
-            return (ingress_message, signed_ingress_id, node_id);
+) -> (StrippedMessage, NodeId) {
+    let stripped_message_id = match stripped_message_id {
+        StrippedMessageId::Ingress(signed_ingress_id) => {
+            // First check if the ingress message exists in the Ingress Pool.
+            if let Some(ingress_message) = ingress_pool
+                .read()
+                .unwrap()
+                .get(&signed_ingress_id.ingress_message_id)
+            {
+                // Make sure that this is the correct ingress message. [`IngressMessageId`] does _not_
+                // uniquely identify ingress messages, we thus need to perform an extra check.
+                if SignedIngressId::from(&ingress_message) == signed_ingress_id {
+                    return (
+                        StrippedMessage::Ingress(signed_ingress_id, ingress_message),
+                        node_id,
+                    );
+                }
+            }
+            StrippedMessageId::Ingress(signed_ingress_id)
         }
-    }
-
-    let (ingress_message, peer_id) = download_ingress(
+        StrippedMessageId::IDkgDealing(dealing_id, node_index) => {
+            // First check if the dealing exists in the IDKG Pool.
+            if let Some(IDkgMessage::Dealing(signed_dealing)) =
+                idkg_pool.read().unwrap().get(&dealing_id)
+            {
+                return (
+                    StrippedMessage::IDkgDealing(dealing_id, node_index, signed_dealing),
+                    node_id,
+                );
+            }
+            StrippedMessageId::IDkgDealing(dealing_id, node_index)
+        }
+    };
+    download_stripped_message(
         transport,
-        &signed_ingress_id,
+        stripped_message_id,
         full_consensus_message_id,
         &log,
         &metrics,
         peer_rx,
     )
-    .await;
-
-    (ingress_message, signed_ingress_id, peer_id)
+    .await
 }
 
 #[derive(Debug, PartialEq, Error)]
@@ -331,8 +356,8 @@ impl BlockProposalAssembler {
         }
     }
 
-    /// Returns the list of ingress messages which have been stripped from the block.
-    pub(crate) fn missing_ingress_messages(&self) -> Vec<SignedIngressId> {
+    /// Returns the list of messages which have been stripped from the block.
+    pub(crate) fn missing_stripped_messages(&self) -> Vec<StrippedMessageId> {
         self.ingress_messages
             .iter()
             .filter_map(|(signed_ingress_id, maybe_ingress)| {
@@ -343,6 +368,7 @@ impl BlockProposalAssembler {
                 }
             })
             .cloned()
+            .map(StrippedMessageId::Ingress)
             .collect()
     }
 
@@ -494,8 +520,11 @@ mod tests {
         let assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         assert_eq!(
-            assembler.missing_ingress_messages(),
-            vec![ingress_1_id, ingress_2_id]
+            assembler.missing_stripped_messages(),
+            vec![
+                StrippedMessageId::Ingress(ingress_1_id),
+                StrippedMessageId::Ingress(ingress_2_id)
+            ]
         );
     }
 
@@ -511,7 +540,7 @@ mod tests {
             .try_insert_ingress_message(ingress_2, ingress_2_id.clone())
             .expect("Should successfully insert the missing ingress");
 
-        assert!(assembler.missing_ingress_messages().is_empty());
+        assert!(assembler.missing_stripped_messages().is_empty());
     }
 
     #[test]
