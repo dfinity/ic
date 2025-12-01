@@ -277,14 +277,11 @@ fn malformed_http_request(env: TestEnv) {
             for (request_type, version, content, wrong_request_type) in [
                 ("call", "v2", call_content.clone(), "query"),
                 ("call", "v3", call_content.clone(), "query"),
-                // TODO(CON-1586): uncomment once API BN support is added.
-                // ("call", "v4", call_content.clone(), "query"),
+                ("call", "v4", call_content.clone(), "query"),
                 ("query", "v2", call_content.clone(), "call"),
-                // TODO(CON-1586): uncomment once API BN support is added.
-                // ("query", "v3", call_content.clone(), "call"),
+                ("query", "v3", call_content.clone(), "call"),
                 ("read_state", "v2", read_state_content.clone(), "query"),
-                // TODO(CON-1586): uncomment once API BN support is added.
-                // ("read state", "v3", read_state_content.clone(), "query"),
+                ("read state", "v3", read_state_content.clone(), "query"),
             ] {
                 let mut request_url = url.clone();
                 request_url.set_path(&format!(
@@ -325,7 +322,11 @@ fn malformed_http_request(env: TestEnv) {
                     .send()
                     .await
                     .unwrap();
-                assert!(resp.status().is_success());
+                assert!(
+                    resp.status().is_success(),
+                    "Expected success but got {} for {request_type} {version}",
+                    resp.status()
+                );
 
                 let assert_bad_request =
                     |logger: Logger,
