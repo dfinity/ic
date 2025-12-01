@@ -3,7 +3,7 @@ use crate::metrics::{MetricsManager, UnixTsNanos};
 use crate::pb::v1::SubnetMetricsKey;
 use chrono::{Days, NaiveDate};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
-use ic_cdk::call::{CallResult, Error as CallError, RejectCode};
+use ic_cdk::call::{CallPerformFailed, CallResult, Error as CallError};
 use ic_management_canister_types::{NodeMetrics, NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
 use ic_stable_structures::DefaultMemoryImpl;
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
@@ -119,10 +119,7 @@ async fn partial_failures_are_handled_correctly() {
     let mut mock = mock::MockCanisterClient::new();
     mock.expect_node_metrics_history().returning(move |subnet| {
         if SubnetId::from(PrincipalId::from(subnet.subnet_id)) == subnet_1 {
-            Err(CallError::CallRejected(ic_cdk::call::CallRejected {
-                reject_code: RejectCode::Unknown,
-                reject_message: "Error".to_string(),
-            }))
+            Err(CallError::CallPerformFailed(CallPerformFailed {}))
         } else {
             Ok(node_metrics_history_gen(1))
         }
@@ -232,7 +229,7 @@ impl NodeMetricsHistoryResponseTracker {
 }
 
 async fn _daily_metrics_correct_different_update_size(size: usize) {
-    let day_start = NaiveDate::from_ymd(2025, 1, 1);
+    let day_start = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
     let tracker = NodeMetricsHistoryResponseTracker::new()
         .with_subnet(subnet_id(1))
         .add_node_metrics(
@@ -314,7 +311,7 @@ async fn daily_metrics_correct_2_subs() {
     let subnet_2 = subnet_id(2);
 
     let node_1 = node_id(1);
-    let day_start = NaiveDate::from_ymd(2025, 1, 1);
+    let day_start = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
 
     let tracker = NodeMetricsHistoryResponseTracker::new()
         .with_subnet(subnet_1)
@@ -408,7 +405,7 @@ async fn daily_metrics_correct_overlapping_days() {
 
     let node_1 = node_id(1);
     let node_2 = node_id(2);
-    let day_start = NaiveDate::from_ymd(2025, 1, 1);
+    let day_start = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
 
     let tracker = NodeMetricsHistoryResponseTracker::new()
         .with_subnet(subnet_1)

@@ -189,7 +189,7 @@ where
     ) -> BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>> {
         let mut metrics_by_subnet = BTreeMap::new();
         let first_key = SubnetMetricsKey {
-            timestamp_nanos: first_unix_timestamp_nanoseconds(&date.pred()),
+            timestamp_nanos: first_unix_timestamp_nanoseconds(&date.pred_opt().unwrap()),
             ..SubnetMetricsKey::min_key()
         };
         let last_key = SubnetMetricsKey {
