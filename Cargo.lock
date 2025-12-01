@@ -15511,6 +15511,7 @@ dependencies = [
  "base64 0.13.1",
  "hex",
  "ic-crypto-interfaces-sig-verification",
+ "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-sha2",
  "ic-crypto-standalone-sig-verifier",
  "ic-crypto-temp-crypto",
@@ -15518,10 +15519,15 @@ dependencies = [
  "ic-crypto-test-utils-root-of-trust",
  "ic-crypto-tree-hash",
  "ic-limits",
+ "ic-secp256r1",
  "ic-test-utilities-types",
  "ic-types",
  "mockall",
  "rand 0.8.5",
+ "serde",
+ "serde_cbor",
+ "serde_json",
+ "simple_asn1",
  "thiserror 2.0.17",
 ]
 
