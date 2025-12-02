@@ -21225,7 +21225,6 @@ dependencies = [
  "futures",
  "getrandom 0.2.15",
  "hex",
- "ic-agent 0.40.1",
  "ic-base-types",
  "ic-canister-client-sender",
  "ic-cdk",
