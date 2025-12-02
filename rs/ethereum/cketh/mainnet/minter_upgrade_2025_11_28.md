@@ -15,7 +15,8 @@ Previous ckETH minter proposal: https://dashboard.internetcomputer.org/proposal/
 ---
 
 ## Motivation
-TODO: THIS MUST BE FILLED OUT
+The ckETH minter does not accept deposits from or withdrawals to Ethereum addresses on its internal blocklist.
+This upgrade of the ckETH minter updates the blocklist based on the latest [OFAC SDN list](https://sanctionslist.ofac.treas.gov/Home/SdnList).
 
 
 ## Release Notes
