@@ -1,0 +1,75 @@
+# work around race condition in zig: https://github.com/ziglang/zig/issues/23993
+diff --git a/toolchain/defs.bzl b/toolchain/defs.bzl
+index f6f613e..bac9464 100644
+--- a/toolchain/defs.bzl
++++ b/toolchain/defs.bzl
+@@ -148,7 +148,7 @@ def _zig_repository_impl(repository_ctx):
+     cache_prefix = repository_ctx.os.environ.get("HERMETIC_CC_TOOLCHAIN_CACHE_PREFIX", "")
+     if cache_prefix == "":
+         if os == "windows":
+-            cache_prefix = "C:\\\\Temp\\\\zig-cache"
++            fail("windows is not supported")
+         elif os == "macos":
+             cache_prefix = "/var/tmp/zig-cache"
+         elif os == "linux":
+@@ -156,6 +156,10 @@ def _zig_repository_impl(repository_ctx):
+         else:
+             fail("unknown os: {}".format(os))
+
++    # use the catchall config to ensure all builds use a `zig-cache/config-FOO/`
++    # subdirectory, including the zig-wrapper itself
++    cache_prefix = cache_prefix + "/config-catchall"
++
+     repository_ctx.template(
+         "tools/zig-wrapper.zig",
+         Label("//toolchain:zig-wrapper.zig"),
+diff --git a/toolchain/zig-wrapper.zig b/toolchain/zig-wrapper.zig
+index d1d59f9..e556fc8 100644
+--- a/toolchain/zig-wrapper.zig
++++ b/toolchain/zig-wrapper.zig
+@@ -161,6 +161,23 @@ fn execUnix(arena: mem.Allocator, params: ExecParams) u8 {
+     return 1;
+ }
+
++fn makeSuffix(allocator: std.mem.Allocator, pwd: []const u8) ![]const u8 {
++    var it = std.mem.tokenize(u8, pwd, "/");
++
++    while (it.next()) |segment| {
++        if (std.mem.startsWith(u8, segment, "k8-opt-")) {
++            var hasher = std.hash.Wyhash.init(0);
++            hasher.update(segment);
++            const hash_value = hasher.final();
++            return std.fmt.allocPrint(allocator, "config-{x}", .{hash_value});
++        }
++    }
++
++    // no "k8-opt-" found
++    return std.fmt.allocPrint(allocator, "config-catchall", .{});
++}
++
++
+ // argv_it is an object that has such method:
+ //     fn next(self: *Self) ?[]const u8
+ // in non-testing code it is *process.ArgIterator.
+@@ -217,9 +234,19 @@ fn parseArgs(
+     var env = process.getEnvMap(arena) catch |err|
+         return parseFatal(arena, "error getting env: {s}", .{@errorName(err)});
+
++    // Get the current working directory (PWD)
++    const allocator = std.heap.page_allocator;
++    const pwd = std.fs.cwd().realpathAlloc(allocator, ".") catch {
++        std.process.exit(1);
++    };
++    defer allocator.free(pwd);
++
++    const suffix = try makeSuffix(arena, pwd);
++    const cache_dir = try std.fmt.allocPrint(arena, "{s}/{s}", .{ CACHE_DIR, suffix });
++
+     try env.put("ZIG_LIB_DIR", zig_lib_dir);
+-    try env.put("ZIG_LOCAL_CACHE_DIR", CACHE_DIR);
+-    try env.put("ZIG_GLOBAL_CACHE_DIR", CACHE_DIR);
++    try env.put("ZIG_LOCAL_CACHE_DIR", cache_dir);
++    try env.put("ZIG_GLOBAL_CACHE_DIR", cache_dir);
+
+     // args is the path to the zig binary and args to it.
+     var args = ArrayListUnmanaged([]const u8){};

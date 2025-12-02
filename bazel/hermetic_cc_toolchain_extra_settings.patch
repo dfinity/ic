@@ -1,0 +1,137 @@
+# add support for selecting which targets inherit the toolchain: https://github.com/uber/hermetic_cc_toolchain/pull/213
+diff --git a/toolchain/defs.bzl b/toolchain/defs.bzl
+index 25b905c..4b36565 100644
+--- a/toolchain/defs.bzl
++++ b/toolchain/defs.bzl
+@@ -60,7 +60,8 @@ def toolchains(
+         version = VERSION,
+         url_formats = [],
+         host_platform_sha256 = HOST_PLATFORM_SHA256,
+-        host_platform_ext = _HOST_PLATFORM_EXT):
++        host_platform_ext = _HOST_PLATFORM_EXT,
++        extra_settings = []):
+     """
+         Download zig toolchain and declare bazel toolchains.
+         The platforms are not registered automatically, that should be done by
+@@ -83,6 +84,7 @@ def toolchains(
+         url_formats = url_formats,
+         host_platform_sha256 = host_platform_sha256,
+         host_platform_ext = host_platform_ext,
++        extra_settings = extra_settings
+     )
+
+ def _quote(s):
+@@ -110,6 +112,8 @@ def _zig_repository_impl(repository_ctx):
+         "host_platform": host_platform,
+     }
+
++    extra_settings = "[" + " ".join([_quote(str(setting)) for setting in repository_ctx.attr.extra_settings]) + "]"
++
+     # Fetch Label dependencies before doing download/extract.
+     # The Bazel docs are not very clear about this behavior but see:
+     # https://bazel.build/extending/repo#when_is_the_implementation_function_executed
+@@ -117,7 +121,6 @@ def _zig_repository_impl(repository_ctx):
+     # https://github.com/bazelbuild/bazel-gazelle/pull/1206
+     for dest, src in {
+         "platform/BUILD": "//toolchain/platform:BUILD",
+-        "toolchain/BUILD": "//toolchain/toolchain:BUILD",
+         "libc/BUILD": "//toolchain/libc:BUILD",
+         "libc_aware/platform/BUILD": "//toolchain/libc_aware/platform:BUILD",
+         "libc_aware/toolchain/BUILD": "//toolchain/libc_aware/toolchain:BUILD",
+@@ -126,6 +129,7 @@ def _zig_repository_impl(repository_ctx):
+
+     for dest, src in {
+         "BUILD": "//toolchain:BUILD.sdk.bazel",
++        "toolchain/BUILD": "//toolchain/toolchain:BUILD",
+     }.items():
+         repository_ctx.template(
+             dest,
+@@ -134,6 +138,7 @@ def _zig_repository_impl(repository_ctx):
+             substitutions = {
+                 "{zig_sdk_path}": _quote("external/zig_sdk"),
+                 "{os}": _quote(os),
++                "{extra_settings}": extra_settings,
+             },
+         )
+
+@@ -234,6 +239,7 @@ zig_repository = repository_rule(
+         "host_platform_sha256": attr.string_dict(),
+         "url_formats": attr.string_list(allow_empty = False),
+         "host_platform_ext": attr.string_dict(),
++        "extra_settings": attr.label_list(),
+     },
+     environ = ["HERMETIC_CC_TOOLCHAIN_CACHE_PREFIX"],
+     implementation = _zig_repository_impl,
+diff --git a/toolchain/ext.bzl b/toolchain/ext.bzl
+index ebf0ff8..c2e8af3 100644
+--- a/toolchain/ext.bzl
++++ b/toolchain/ext.bzl
+@@ -1,6 +1,11 @@
+ load("@hermetic_cc_toolchain//toolchain:defs.bzl", zig_toolchains = "toolchains")
+
+ def _toolchains_impl(ctx):
+-    zig_toolchains()
++    extra_settings = []
++    for mod in ctx.modules:
++        for tag in mod.tags.extra_settings:
++            extra_settings += tag.settings
+
+-toolchains = module_extension(implementation = _toolchains_impl)
++    zig_toolchains(extra_settings = extra_settings)
++
++toolchains = module_extension(implementation = _toolchains_impl, tag_classes = { "extra_settings": tag_class(attrs = { "settings": attr.label_list(doc = "Each setting is added to every toolchain to make them more restrictive.")})})
+diff --git a/toolchain/toolchain/BUILD b/toolchain/toolchain/BUILD
+index 552fcaa..8f7dba5 100644
+--- a/toolchain/toolchain/BUILD
++++ b/toolchain/toolchain/BUILD
+@@ -4,4 +4,4 @@ package(
+     default_visibility = ["//visibility:public"],
+ )
+
+-declare_toolchains()
++declare_toolchains(extra_settings = {extra_settings})
+diff --git a/toolchain/toolchain/defs.bzl b/toolchain/toolchain/defs.bzl
+index 50cc881..0549c26 100644
+--- a/toolchain/toolchain/defs.bzl
++++ b/toolchain/toolchain/defs.bzl
+@@ -1,6 +1,6 @@
+ load("@hermetic_cc_toolchain//toolchain/private:defs.bzl", "target_structs")
+
+-def declare_toolchains():
++def declare_toolchains(extra_settings = []):
+     for target_config in target_structs():
+         gotarget = target_config.gotarget
+         zigtarget = target_config.zigtarget
+@@ -12,7 +12,7 @@ def declare_toolchains():
+         if hasattr(target_config, "libc_constraint"):
+             extra_constraints = ["@zig_sdk//libc:unconstrained"]
+
+-        _declare_toolchain(gotarget, zigtarget, target_config.constraint_values + extra_constraints)
++        _declare_toolchain(gotarget, zigtarget, target_config.constraint_values + extra_constraints, extra_settings)
+
+ def declare_libc_aware_toolchains():
+     for target_config in target_structs():
+@@ -25,13 +25,14 @@ def declare_libc_aware_toolchains():
+         if hasattr(target_config, "libc_constraint"):
+             _declare_toolchain(gotarget, zigtarget, target_config.constraint_values + [target_config.libc_constraint])
+
+-def _declare_toolchain(gotarget, zigtarget, target_compatible_with):
++def _declare_toolchain(gotarget, zigtarget, target_compatible_with, extra_settings):
+     # register two kinds of toolchain targets: Go and Zig conventions.
+     # Go convention: amd64/arm64, linux/darwin
+     native.toolchain(
+         name = gotarget,
+         exec_compatible_with = None,
+         target_compatible_with = target_compatible_with,
++        target_settings = extra_settings,
+         toolchain = "@zig_sdk//:%s_cc" % zigtarget,
+         toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+     )
+@@ -41,6 +42,7 @@ def _declare_toolchain(gotarget, zigtarget, target_compatible_with):
+         name = zigtarget,
+         exec_compatible_with = None,
+         target_compatible_with = target_compatible_with,
++        target_settings = extra_settings,
+         toolchain = "@zig_sdk//:%s_cc" % zigtarget,
+         toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+     )
