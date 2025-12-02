@@ -710,7 +710,7 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
         let mut cc: Vec<[G1Affine; NUM_CHUNKS]> = Vec::with_capacity(receivers);
 
         for (pk, ptext) in recipient_and_message {
-            let pk_g1_tbl = G1Projective::compute_mul2_affine_tbl(&pk, &g1);
+            let pk_g1_tbl = G1Projective::compute_mul2_affine_tbl(pk, g1);
 
             let chunks = ptext.chunks_as_scalars();
 

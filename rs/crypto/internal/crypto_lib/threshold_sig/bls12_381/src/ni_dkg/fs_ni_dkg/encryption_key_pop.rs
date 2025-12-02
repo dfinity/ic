@@ -138,7 +138,7 @@ pub fn verify_pop(
     let blinder_public_key = G1Projective::mul2_affine_vartime(
         &instance.public_key,
         &minus_challenge,
-        &&instance.g1_gen,
+        &instance.g1_gen,
         &pop.response,
     );
 
