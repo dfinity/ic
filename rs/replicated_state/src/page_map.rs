@@ -952,7 +952,7 @@ impl Buffer {
                     Some((cached_page, cached_bytes)) if *cached_page == page => cached_bytes,
                     _ => {
                         let loaded: &PageBytes = self.page_map.get_page(page);
-                        *cache = Some((page, loaded.clone()));
+                        *cache = Some((page, *loaded));
                         loaded
                     }
                 }
