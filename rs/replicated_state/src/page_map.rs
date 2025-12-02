@@ -944,24 +944,26 @@ impl Buffer {
             let offset_into_page = offset % page_size;
             let page_len = dst.len().min(page_size - offset_into_page);
 
-            // First check if the page is dirty, then check the clean pages cache, and finally
-            // load it from the underlying page map.
-            let page_contents: &PageBytes = if let Some(bytes) = self.dirty_pages.get(&page) {
-                bytes
-            } else {
-                if let Some(bytes) = self.clean_pages.borrow().get(&page) {
-                    bytes
-                } else {
-                    let loaded: PageBytes = *self.page_map.get_page(page);
-                    self.clean_pages.borrow_mut().insert(page, loaded);
-                    self.clean_pages.borrow().get(&page).unwrap()
-                }
+            let mut do_copy = |bytes: &[u8]| {
+                deterministic_copy_from_slice(
+                    &mut dst[..page_len],
+                    &bytes[offset_into_page..offset_into_page + page_len],
+                );
             };
 
-            deterministic_copy_from_slice(
-                &mut dst[0..page_len],
-                &page_contents[offset_into_page..offset_into_page + page_len],
-            );
+            // First check if the page is dirty, then check the clean pages cache, and finally
+            // load it from the underlying page map.
+            if let Some(bytes) = self.dirty_pages.get(&page) {
+                do_copy(bytes);
+            } else if let Some(bytes) = self.clean_pages.borrow().get(&page) {
+                do_copy(bytes);
+            } else {
+                let loaded: PageBytes = *self.page_map.get_page(page);
+                self.clean_pages.borrow_mut().insert(page, loaded);
+                let clean_pages = self.clean_pages.borrow();
+                let bytes = clean_pages.get(&page).unwrap();
+                do_copy(bytes);
+            }
 
             offset += page_len;
             let n = dst.len();
