@@ -13,7 +13,7 @@ const INVALID_INDEX_ENTRY: u64 = u64::MAX;
 /// It stores the record’s start position in the data region and basic
 /// metadata for range queries (idx, timestamp, byte length).
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct IndexEntry {
+pub(crate) struct IndexEntry {
     /// Start position of the record within the data region.
     pub position: MemoryPosition,
     /// Record unituque sequential index.
@@ -67,7 +67,7 @@ impl IndexEntry {
 /// ring buffer may contain records of interest, reducing the amount of data
 /// that must be read during large or targeted searches.
 #[derive(Debug)]
-pub struct IndexTable {
+pub(crate) struct IndexTable {
     front: Option<IndexEntry>,   // Position of the oldest live log record.
     entries: Vec<IndexEntry>,    // Array of entries covering all data region segments.
     segment_size: MemorySize,    // Size of each data region segment in bytes.
