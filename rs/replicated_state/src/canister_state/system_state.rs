@@ -38,8 +38,8 @@ use ic_types::methods::Callback;
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::CoarseTime;
 use ic_types::{
-    CanisterId, CanisterLog, CanisterTimer, Cycles, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
-    MemoryAllocation, NumBytes, NumInstructions, PrincipalId, Time,
+    CanisterId, CanisterLog, CanisterTimer, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    PrincipalId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -334,10 +334,7 @@ pub struct SystemState {
     /// Log visibility of the canister.
     pub log_visibility: LogVisibilityV2,
 
-    /// The capacity of the canister log in bytes.
-    pub log_memory_limit: NumBytes,
-
-    /// Log records of the canister.
+   /// Log records of the canister.
     #[validate_eq(CompareWithValidateEq)]
     pub canister_log: CanisterLog,
 
@@ -524,7 +521,6 @@ impl SystemState {
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: Default::default(),
-            log_memory_limit: NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64),
             // TODO(DSM-11): CanisterLog does not store log records efficiently,
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
@@ -558,7 +554,6 @@ impl SystemState {
         wasm_chunk_store_data: PageMap,
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
         log_visibility: LogVisibilityV2,
-        log_memory_limit: NumBytes,
         canister_log: CanisterLog,
         log_memory_store_data: PageMap,
         wasm_memory_limit: Option<NumBytes>,
@@ -590,7 +585,6 @@ impl SystemState {
                 wasm_chunk_store_metadata,
             ),
             log_visibility,
-            log_memory_limit,
             canister_log,
             log_memory_store: LogMemoryStore::from_checkpoint(log_memory_store_data),
             wasm_memory_limit,
@@ -2229,7 +2223,6 @@ pub mod testing {
             canister_history: Default::default(),
             wasm_chunk_store: WasmChunkStore::new_for_testing(),
             log_visibility: Default::default(),
-            log_memory_limit: NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64),
             // TODO(DSM-11): CanisterLog does not store log records efficiently,
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
