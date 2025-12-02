@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 use thiserror::Error;
 
-/// The max size (in bytes) of the LMDB cache, also know as the LMDB map size.
+/// The max size (in bytes) of the LMDB cache, also known as the LMDB map size.
 const MAX_LMDB_CACHE_SIZE: usize = 0x4_0000_0000; // 16GB
 
 /// Database key used to store tip header.
