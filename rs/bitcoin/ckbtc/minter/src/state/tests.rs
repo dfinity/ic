@@ -489,12 +489,39 @@ mod utxo_set {
     }
 
     #[test]
+    fn does_not_work_as_expected() {
+        let (small_utxo, medium_utxo, _large_utxo) = three_utxos();
+        let mut utxo_btree_set = BTreeSet::default();
+        let mut utxo_set = UtxoSet::default();
+
+        assert!(utxo_btree_set.insert(small_utxo.clone()));
+        assert!(utxo_btree_set.insert(medium_utxo.clone()));
+        assert!(utxo_set.insert(small_utxo.clone()));
+        assert!(utxo_set.insert(medium_utxo.clone()));
+
+        let utxo_btree_set_order: Vec<_> = utxo_btree_set.iter().collect();
+        assert_eq!(utxo_btree_set_order, vec![&medium_utxo, &small_utxo]);
+
+        let utxo_set_order: Vec<_> = utxo_set.iter().collect();
+        assert_eq!(utxo_set_order, vec![&small_utxo, &medium_utxo]);
+
+        assert_eq!(utxo_btree_set.take(&medium_utxo), Some(medium_utxo.clone()));
+        // Method calls `BTreeSet::take`
+        // [Guess of what's happening](https://github.com/rust-lang/rust/blob/a80d39a086683ae5be0a1638cfd84600330d2447/library/alloc/src/collections/btree/search.rs#L226):
+        // 1) Rust implementation calls Borrow on all elements in the set leading to &Utxo
+        // 2) Rust implementation compares needle (&medium_utxo) to those elements, but that uses the order we don't want
+        // 3) First do medium_utxo.cmp(&small_utxo), since medium_utxo is strictly smaller (according to orignal ordering) we don't find it :-(
+        assert_eq!(utxo_set.remove(&medium_utxo), None);
+    }
+
+    #[test]
     fn should_find_lower_bound() {
         let mut utxos = UtxoSet::default();
         let (small_utxo, medium_utxo, large_utxo) = three_utxos();
         assert!(utxos.insert(medium_utxo.clone()));
         assert!(utxos.insert(large_utxo.clone()));
         assert!(utxos.insert(small_utxo.clone()));
+        println!("utxos {utxos:?}");
 
         assert_eq!(utxos.find_lower_bound(0), Some(&small_utxo));
         assert_eq!(utxos.find_lower_bound(10), Some(&small_utxo));
@@ -514,6 +541,7 @@ mod utxo_set {
         assert_eq!(utxos.find_lower_bound(100), Some(&medium_utxo));
         assert_eq!(utxos.find_lower_bound(101), None);
 
+        println!("utxos {utxos:?}, medium_utxo: {medium_utxo:?}");
         assert_eq!(utxos.remove(&medium_utxo), Some(medium_utxo));
 
         assert_eq!(utxos.find_lower_bound(0), Some(&small_utxo));

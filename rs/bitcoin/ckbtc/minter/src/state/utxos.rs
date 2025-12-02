@@ -1,13 +1,13 @@
 use ic_btc_interface::Utxo;
-use std::collections::{BTreeMap, BTreeSet, btree_map};
+use std::borrow::Borrow;
+use std::cmp::Ordering;
+use std::collections::BTreeSet;
 
 /// Set of UTXOs sorted by value.
 ///
 /// From outside, this should behave like a `BTreeSet<>`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct UtxoSet {
-    utxos: BTreeMap<u64, BTreeSet<Utxo>>,
-}
+pub struct UtxoSet(BTreeSet<UtxoSortedByValue>);
 
 impl UtxoSet {
     pub fn new() -> Self {
@@ -15,70 +15,83 @@ impl UtxoSet {
     }
 
     pub fn insert(&mut self, utxo: Utxo) -> bool {
-        self.utxos.entry(utxo.value).or_default().insert(utxo)
+        self.0.insert(UtxoSortedByValue(utxo))
     }
 
     pub fn contains(&self, utxo: &Utxo) -> bool {
-        self.utxos
-            .get(&utxo.value)
-            .map(|utxos| utxos.contains(utxo))
-            .unwrap_or(false)
+        self.0.contains(utxo)
     }
 
     pub fn remove(&mut self, utxo: &Utxo) -> Option<Utxo> {
-        if let btree_map::Entry::Occupied(entry) = self.utxos.entry(utxo.value) {
-            return UtxoSet::mutate_utxo_set(entry, |utxos| utxos.take(utxo));
-        }
-        None
+        self.0.take(utxo).map(Utxo::from)
     }
 
-    /// Find a UTXO with the smallest value being at least `value`.
     pub fn find_lower_bound(&self, value: u64) -> Option<&Utxo> {
-        self.utxos
-            .range(value..)
-            .next()
-            .and_then(|(_value, utxos)| utxos.first())
+        self.0.range(value..).next().map(|u| u.borrow())
     }
 
-    /// Remove a UTXO with the smallest value.
     pub fn pop_first(&mut self) -> Option<Utxo> {
-        if let Some(entry) = self.utxos.first_entry() {
-            return UtxoSet::mutate_utxo_set(entry, |utxos| utxos.pop_first());
-        }
-        None
+        self.0.pop_first().map(Utxo::from)
     }
 
-    /// A UTXO with the largest value.
     pub fn last(&self) -> Option<&Utxo> {
-        self.utxos
-            .last_key_value()
-            .and_then(|(_value, utxos)| utxos.last())
+        self.0.last().map(|u| u.borrow())
     }
 
     pub fn len(&self) -> usize {
-        self.utxos.values().map(|utxos| utxos.len()).sum()
+        self.0.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.utxos.is_empty()
+        self.0.is_empty()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Utxo> {
-        self.utxos.values().flat_map(|utxos| utxos.iter())
+        self.0.iter().map(|u| u.borrow())
     }
+}
 
-    // Helper method to change an entry in `UtxoSet`.
-    // It ensures the map entry will be removed if its values are empty.
-    fn mutate_utxo_set<R, F: FnOnce(&mut BTreeSet<Utxo>) -> R>(
-        mut entry: btree_map::OccupiedEntry<u64, BTreeSet<Utxo>>,
-        mutator: F,
-    ) -> R {
-        let utxos = entry.get_mut();
-        let result = mutator(utxos);
-        if entry.get().is_empty() {
-            entry.remove_entry();
+#[derive(Clone, Debug)]
+struct UtxoSortedByValue(Utxo);
+
+impl PartialEq for UtxoSortedByValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for UtxoSortedByValue {}
+
+impl PartialOrd for UtxoSortedByValue {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for UtxoSortedByValue {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.0.value.cmp(&other.0.value) {
+            Ordering::Equal => self.0.cmp(&other.0),
+            ordering => ordering,
         }
-        result
+    }
+}
+
+impl Borrow<Utxo> for UtxoSortedByValue {
+    fn borrow(&self) -> &Utxo {
+        &self.0
+    }
+}
+
+impl Borrow<u64> for UtxoSortedByValue {
+    fn borrow(&self) -> &u64 {
+        &self.0.value
+    }
+}
+
+impl From<UtxoSortedByValue> for Utxo {
+    fn from(utxo: UtxoSortedByValue) -> Self {
+        utxo.0
     }
 }
 
