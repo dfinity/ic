@@ -270,9 +270,7 @@ rust_ic_test_suite_with_extra_srcs(
 
 rust_ic_test_suite_with_extra_srcs(
     name = "registry_canister_data_migration_test",
-    srcs = glob(
-        ["tests/data_migration_test.rs"],
-    ),
+    srcs = ["tests/data_migration_test.rs"],
     data = [
         ":registry-canister-test",
     ] + POCKET_IC_DATA,
