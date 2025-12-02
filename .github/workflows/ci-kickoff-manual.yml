@@ -11,6 +11,10 @@ on:
         description: 'The PR number' # this is used for posting comments with the CI link
         required: true
         default: ''
+      confirm:
+        description: 'Check this box to confirm you have reviewed the PR'
+        required: true
+        type: boolean
 
 jobs:
   get-pr-base-ref:
