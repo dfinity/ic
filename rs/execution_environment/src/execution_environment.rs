@@ -1976,7 +1976,7 @@ impl ExecutionEnvironment {
         since: Instant,
     ) -> (ReplicatedState, Option<NumInstructions>) {
         let instructions = match &result {
-            ExecuteSubnetMessageResult::Processing => None,
+            ExecuteSubnetMessageResult::Processing => Some(NumInstructions::from(0)),
             ExecuteSubnetMessageResult::Finished {
                 response,
                 instructions,
