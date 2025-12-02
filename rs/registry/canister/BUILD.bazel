@@ -86,6 +86,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:candid_parser",
     "@crate_index//:itertools",
+    "@crate_index//:ic-agent",
     "@crate_index//:pretty_assertions",
     "@crate_index//:rand",
     "@crate_index//:rand_distr",
@@ -270,21 +271,25 @@ rust_ic_test_suite_with_extra_srcs(
 
 rust_ic_test_suite_with_extra_srcs(
     name = "registry_canister_data_migration_test",
-    srcs = glob(["tests/data_migration_test.rs"]),
+    srcs = glob(
+        ["tests/data_migration_test.rs"],
+    ),
+    extra_srcs = glob(["tests/common/*.rs"]),
     data = [
-        ":registry-canister",
+        ":registry-canister-test",
     ] + POCKET_IC_DATA,
     env = {
+        "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath :registry-canister-test)",
         "CARGO_MANIFEST_DIR": "rs/registry/canister",
-        "REGISTRY_CANISTER_WASM_PATH": "$(rootpath :registry-canister)",
     } | POCKET_IC_ENV,
-    extra_srcs = glob(["tests/common/*.rs"]),
     proc_macro_deps = DEV_MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":canister",
         "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
-        "//rs/state_machine_tests",
     ] + POCKET_IC_DEPS,
+    tags = [
+        "requires-network",
+    ]
 )
 
 generated_files_check(

@@ -108,6 +108,7 @@ pocket-ic = { path = "../../../packages/pocket-ic" }
 pretty_assertions = { workspace = true }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
+ic-agent = { workspace = true }
 
 [features]
 test = []

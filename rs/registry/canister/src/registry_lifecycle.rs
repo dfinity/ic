@@ -117,7 +117,6 @@ mod test {
         registry_lifecycle::Registry,
     };
     use ic_base_types::PrincipalId;
-    use ic_registry_transport::insert;
     use maplit::btreemap;
     use std::str::FromStr;
 

@@ -1267,6 +1267,21 @@ pub mod nns {
                     response
                 })
         }
+
+        pub async fn apply_mutations_for_test(
+            pocket_ic: &PocketIc,
+            mutations: &Vec<RegistryMutation>,
+        ) -> Result<(), RejectResponse> {
+            pocket_ic
+                .update_call(
+                    REGISTRY_CANISTER_ID.get().0,
+                    Principal::anonymous(),
+                    "apply_mutations_for_test",
+                    candid::Encode!(mutations).unwrap(),
+                )
+                .await
+                .map(|_| ())
+        }
     }
 
     pub mod ledger {

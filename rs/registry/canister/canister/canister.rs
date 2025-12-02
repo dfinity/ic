@@ -497,6 +497,17 @@ fn mutate_test_high_capacity_records() {
     });
 }
 
+#[cfg(feature = "test")]
+#[unsafe(export_name = "canister_update apply_mutations_for_test")]
+fn apply_mutations_for_test() {
+    over(candid_one, |mutations| {
+        println!("Came into the apply mutations for test");
+        let registry = registry_mut();
+        registry.apply_mutations_for_test(mutations);
+        recertify_registry();
+    });
+}
+
 #[unsafe(export_name = "canister_update revise_elected_guestos_versions")]
 fn revise_elected_guestos_versions() {
     check_caller_is_governance_and_log("revise_elected_guestos_versions");

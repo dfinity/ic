@@ -367,7 +367,7 @@ impl Registry {
         self.apply_mutations(mutations);
     }
 
-    #[cfg(any(test, feature = "canbench-rs"))]
+    #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
     pub fn apply_mutations_for_test(&mut self, mutations: Vec<RegistryMutation>) {
         self.apply_mutations(mutations);
     }
