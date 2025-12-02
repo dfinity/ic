@@ -2657,7 +2657,6 @@ dependencies = [
  "get_if_addrs",
  "ic-config",
  "ic_sev",
- "linux_kernel_command_line",
  "macaddr",
  "network",
  "once_cell",
@@ -2803,6 +2802,7 @@ dependencies = [
  "ic-utils 0.40.1",
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
+ "regex",
  "slog",
  "tokio",
 ]
@@ -5587,7 +5587,6 @@ dependencies = [
  "ic-metrics-tool",
  "ic_device",
  "ic_sev",
- "linux_kernel_command_line",
  "macaddr",
  "memchr",
  "nix 0.24.3",
@@ -7352,7 +7351,7 @@ dependencies = [
  "tempfile",
  "threadpool",
  "wat",
- "which 4.4.2",
+ "which",
 ]
 
 [[package]]
@@ -11339,14 +11338,17 @@ dependencies = [
  "ic-base-types",
  "ic-cdk",
  "ic-cdk-timers",
+ "ic-limits",
  "ic-management-canister-types 0.5.0",
  "ic-management-canister-types-private",
  "ic-nns-test-utils",
  "ic-stable-structures 0.7.0",
+ "ic-transport-types 0.40.1",
  "ic-universal-canister",
  "itertools 0.12.1",
  "pocket-ic",
  "registry-canister",
+ "reqwest 0.12.24",
  "serde",
  "serde_cbor",
  "strum 0.26.3",
@@ -11618,6 +11620,16 @@ dependencies = [
  "ic-nervous-system-histogram",
  "itertools 0.12.1",
  "lazy_static",
+]
+
+[[package]]
+name = "ic-nervous-system-instruction-stats-update-attribute"
+version = "0.0.1"
+dependencies = [
+ "candid",
+ "ic-cdk",
+ "quote",
+ "syn 2.0.110",
 ]
 
 [[package]]
@@ -15511,6 +15523,7 @@ dependencies = [
  "base64 0.13.1",
  "hex",
  "ic-crypto-interfaces-sig-verification",
+ "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-sha2",
  "ic-crypto-standalone-sig-verifier",
  "ic-crypto-temp-crypto",
@@ -15518,10 +15531,15 @@ dependencies = [
  "ic-crypto-test-utils-root-of-trust",
  "ic-crypto-tree-hash",
  "ic-limits",
+ "ic-secp256r1",
  "ic-test-utilities-types",
  "ic-types",
  "mockall",
  "rand 0.8.5",
+ "serde",
+ "serde_cbor",
+ "serde_json",
+ "simple_asn1",
  "thiserror 2.0.17",
 ]
 
@@ -17538,13 +17556,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd945864f07fe9f5371a27ad7b52a172b4b499999f1d97574c9fa68373937e12"
 
 [[package]]
-name = "linux_kernel_command_line"
-version = "0.9.0"
-dependencies = [
- "regex",
-]
-
-[[package]]
 name = "litemap"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -19342,7 +19353,6 @@ dependencies = [
  "tar",
  "tempfile",
  "tokio",
- "which 6.0.3",
  "zstd",
 ]
 
@@ -22850,7 +22860,6 @@ dependencies = [
  "anyhow",
  "clap 4.5.27",
  "indoc 1.0.9",
- "linux_kernel_command_line",
  "partition_tools",
  "regex",
  "tempfile",
@@ -25965,18 +25974,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "which"
-version = "6.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4ee928febd44d98f2f459a4a79bd4d928591333a494a10a868418ac1b39cf1f"
-dependencies = [
- "either",
- "home",
- "rustix 0.38.44",
- "winsafe",
-]
-
-[[package]]
 name = "widestring"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -26443,12 +26440,6 @@ dependencies = [
  "cfg-if 1.0.0",
  "windows-sys 0.48.0",
 ]
-
-[[package]]
-name = "winsafe"
-version = "0.0.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
 
 [[package]]
 name = "wirm"

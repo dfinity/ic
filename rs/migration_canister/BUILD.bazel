@@ -11,6 +11,7 @@ rust_library(
     ],
     deps = [
         # Keep sorted.
+        "//rs/limits",
         "@crate_index//:candid",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
@@ -34,6 +35,7 @@ rust_canister(
     service_file = ":migration_canister.did",
     deps = [
         # Keep sorted.
+        "//rs/limits",
         "@crate_index//:candid",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
@@ -56,6 +58,7 @@ rust_test(
     ],
     deps = [
         # Keep sorted.
+        "//rs/limits",
         "@crate_index//:candid",
         "@crate_index//:candid_parser",
         "@crate_index//:futures",
@@ -106,8 +109,11 @@ rust_test(
         "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:ic-management-canister-types",
+        "@crate_index//:ic-transport-types",
         "@crate_index//:itertools",
+        "@crate_index//:reqwest",
         "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
         "@crate_index//:strum",
         "@crate_index//:tempfile",
         "@crate_index//:tokio",

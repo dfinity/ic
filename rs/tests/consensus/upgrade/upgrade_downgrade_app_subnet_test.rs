@@ -120,7 +120,6 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         &target_version,
         SubnetType::Application,
         None,
-        /*assert_graceful_orchestrator_tasks_exits=*/ false,
     );
     let initial_version = get_guestos_img_version();
     info!(logger, "Upgrading to initial version: {}", initial_version);
@@ -130,7 +129,6 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         &initial_version,
         SubnetType::Application,
         None,
-        /*assert_graceful_orchestrator_tasks_exits=*/ true,
     );
     info!(
         logger,

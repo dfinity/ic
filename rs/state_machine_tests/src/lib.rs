@@ -2867,8 +2867,8 @@ impl StateMachine {
         }
     }
 
-    /// Advances time by 1ns (to make sure time is strictly monotone)
-    /// and triggers a single round of execution with block payload as an input.
+    /// Advances time by 1ns (to make sure that time is strictly monotonic)
+    /// and triggers a single round of execution with the given payload as input.
     pub fn execute_payload(&self, payload: PayloadBuilder) -> Height {
         let batch_number = self.message_routing.expected_batch_height();
 
@@ -3248,7 +3248,7 @@ impl StateMachine {
         );
     }
 
-    // Enable checkpoints and make a tick to write a checkpoint.
+    /// Enables checkpoints and makes a tick to write a checkpoint.
     pub fn checkpointed_tick(&self) {
         let checkpoint_interval_length = self.checkpoint_interval_length.load(Ordering::Relaxed);
         self.set_checkpoints_enabled(true);

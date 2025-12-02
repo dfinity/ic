@@ -14,7 +14,6 @@ ic_device = { path = "../../device" }
 grub = { path = "../../grub" }
 ic-metrics-tool = { path = "../../metrics_tool" }
 ic_sev = { path = "../../sev" }
-linux_kernel_command_line = { path = "../../linux_kernel_command_line" }
 
 anyhow = { workspace = true }
 askama = { workspace = true }
