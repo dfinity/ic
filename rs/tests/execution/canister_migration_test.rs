@@ -446,10 +446,11 @@ async fn test_async(env: TestEnv) {
                 .call_and_wait()
                 .await
                 .expect("Failed to call migration_status.");
-            let decoded_status = Decode!(&status, Vec<MigrationStatus>)
-                .expect("Failed to decode response from migration_status.");
+            let decoded_status = Decode!(&status, Option<MigrationStatus>)
+                .expect("Failed to decode response from migration_status.")
+                .expect("There should be a migration status available.");
 
-            if matches!(decoded_status[0], MigrationStatus::Succeeded { .. }) {
+            if matches!(decoded_status, MigrationStatus::Succeeded { .. }) {
                 Ok(())
             } else {
                 bail!("Not ready. Status: {:?}", decoded_status[0])
