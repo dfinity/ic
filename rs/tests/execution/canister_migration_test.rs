@@ -431,13 +431,13 @@ async fn test_async(env: TestEnv) {
 
     assert_eq!(decoded_result, Ok(()));
 
-    // The migration canister has a step where it waits for 5 minutes, so we give it a minute more than that.
-    println!("Wait over 5 minutes for processing.");
+    // The migration canister has a step where it waits for 6 minutes, so we give it a minute more than that.
+    println!("Wait 7 minutes for processing.");
 
     retry_with_msg_async!(
-        "Wait 5m for migration canister to process",
+        "Wait 7m for migration canister to process",
         &logger,
-        Duration::from_secs(360),
+        Duration::from_secs(420),
         Duration::from_secs(10),
         || async {
             let status = nns_agent
