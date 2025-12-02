@@ -263,14 +263,16 @@ fn create_db_env(path: &Path, map_size: usize) -> Environment {
     builder.set_flags(builder_flags);
     builder.set_max_dbs(1);
     builder.set_map_size(map_size);
-    builder
+    let env = builder
         .open_with_permissions(path, permission)
         .unwrap_or_else(|err| {
             panic!(
                 "Error opening LMDB environment with permissions at {:?}: {:?}",
                 path, err
             )
-        })
+        });
+    assert_eq!(env.info().unwrap().map_size(), map_size);
+    env
 }
 
 #[derive(Error, Debug)]
@@ -897,14 +899,16 @@ pub(crate) mod test {
 
     #[test]
     fn test_db_size_limit_increase() {
+        const INITIAL_MAP_SIZE: usize = 0x8000;
+        const INCREASED_MAP_SIZE: usize = 0x10000;
+
         let dir = tempdir().unwrap();
         let path = dir.path();
         std::fs::create_dir_all(path).unwrap();
-        // 1. Create a DB and write to it until MapFull error.
-        let idx = {
-            let env = create_db_env(path, 30000);
+        let write_to_limit = |map_size, init_value| {
+            let env = create_db_env(path, map_size);
             let db = env.create_db(Some("DB"), DatabaseFlags::empty()).unwrap();
-            let mut i = 0u8;
+            let mut i = init_value;
             let err = loop {
                 let mut tx = env.begin_rw_txn().unwrap();
                 let bytes = [i; 32];
@@ -919,15 +923,17 @@ pub(crate) mod test {
             assert_eq!(err, lmdb::Error::MapFull);
             i
         };
+        // 1. Create a DB and write to it until MapFull error.
+        let idx = write_to_limit(INITIAL_MAP_SIZE, 0);
 
         // 2. Open the same DB and read it, no error. Write additional data, got MapFull.
         {
-            let env = create_db_env(path, 30000);
+            let env = create_db_env(path, INITIAL_MAP_SIZE);
             let db = env.create_db(Some("DB"), DatabaseFlags::empty()).unwrap();
             let mut tx = env.begin_rw_txn().unwrap();
-            let mut bytes = [0; 32];
+            let bytes = [0; 32];
             assert_eq!(tx.get(db, &bytes).unwrap(), bytes);
-            bytes = [idx; 32];
+            let bytes = [idx; 32];
             assert_eq!(
                 tx.put(db, &bytes, &bytes, WriteFlags::empty()),
                 Err(lmdb::Error::MapFull)
@@ -935,23 +941,7 @@ pub(crate) mod test {
         }
 
         // 3. Open the same DB with bigger size limit, no problem writing more data to it.
-        {
-            let env = create_db_env(path, 60000);
-            let db = env.create_db(Some("DB"), DatabaseFlags::empty()).unwrap();
-            let mut i = idx;
-            let err = loop {
-                let mut tx = env.begin_rw_txn().unwrap();
-                let bytes = [i; 32];
-                if let Err(err) = tx
-                    .put(db, &bytes, &bytes, WriteFlags::empty())
-                    .and_then(|_| tx.commit())
-                {
-                    break err;
-                };
-                i += 1;
-            };
-            assert_eq!(err, lmdb::Error::MapFull);
-            assert!(i > idx);
-        }
+        let new_idx = write_to_limit(INCREASED_MAP_SIZE, idx);
+        assert!(new_idx > idx);
     }
 }
