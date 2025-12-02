@@ -290,17 +290,12 @@ pub(super) fn build_signature_inputs<'a>(
                 callback_id,
                 height: args.height,
             };
-            debug_assert_eq!(
-                context.derivation_path.len(),
-                1,
-                "context's derivation path for vetKD must have single element"
-            );
+            debug_assert_eq!(context.derivation_path.len(), 1);
+            const EMPTY_VEC_REF: &Vec<u8> = &vec![];
             let inputs = ThresholdSigInputs::VetKd(VetKdArgs {
                 context: VetKdDerivationContextRef {
                     caller: context.request.sender.get_ref(),
-                    context: context.derivation_path.as_ref().first().expect(
-                        "the context's derivation path for vetKD should have exactly one element",
-                    ),
+                    context: context.derivation_path.first().unwrap_or(EMPTY_VEC_REF),
                 },
                 ni_dkg_id: &args.ni_dkg_id,
                 input: &args.input,

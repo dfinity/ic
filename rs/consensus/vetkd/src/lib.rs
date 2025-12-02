@@ -56,6 +56,8 @@ mod metrics;
 mod test_utils;
 mod utils;
 
+const EMPTY_VEC_REF: &Vec<u8> = &vec![];
+
 /// In addition to a timeout, we expire request contexts that were created more than one entire
 /// DKG interval ago. VetKD NiDkgTranscripts are reshared during every interval. However, it is
 /// important that for any given request, we use the same transcript to create, validate and
@@ -241,17 +243,11 @@ impl VetKdPayloadBuilderImpl {
                     let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
                         return None;
                     };
-                    debug_assert_eq!(
-                        context.derivation_path.len(),
-                        1,
-                        "context's derivation path for vetKD must have single element"
-                    );
+                    debug_assert_eq!(context.derivation_path.len(), 1);
                     let args = VetKdArgs {
                         context: VetKdDerivationContextRef {
                             caller: context.request.sender.get_ref(),
-                            context: context.derivation_path.as_ref().first().expect(
-                                "the context's derivation path for vetKD should have exactly one element",
-                            ),
+                            context: context.derivation_path.first().unwrap_or(EMPTY_VEC_REF),
                         },
                         ni_dkg_id: &ctxt_args.ni_dkg_id,
                         input: &ctxt_args.input,
@@ -382,17 +378,11 @@ impl VetKdPayloadBuilderImpl {
         let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
             return invalid_artifact_err(InvalidVetKdPayloadReason::UnexpectedIDkgContext(id));
         };
-        debug_assert_eq!(
-            context.derivation_path.len(),
-            1,
-            "context's derivation path for vetKD must have single element"
-        );
+        debug_assert_eq!(context.derivation_path.len(), 1);
         let args = VetKdArgs {
             context: VetKdDerivationContextRef {
                 caller: context.request.sender.get_ref(),
-                context: context.derivation_path.as_ref().first().expect(
-                    "the context's derivation path for vetKD should have exactly one element",
-                ),
+                context: context.derivation_path.first().unwrap_or(EMPTY_VEC_REF),
             },
             ni_dkg_id: &ctxt_args.ni_dkg_id,
             input: &ctxt_args.input,
