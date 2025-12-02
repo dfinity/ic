@@ -85,7 +85,7 @@ fn candid_value_to_self_describing(candid_value: IDLValue) -> SelfDescribingValu
         IDLValue::Float64(f) => Value::Text(format!("{}", f)),
 
         // This should be unreacheable as no type in candid is represented as this `Number` type,
-        // but we convert it anyway.
+        // but we convert it anyway. Also, the content of the `Number` type is already a string,
         IDLValue::Number(s) => Value::Text(s),
 
         IDLValue::Blob(bytes) => Value::Blob(bytes),
