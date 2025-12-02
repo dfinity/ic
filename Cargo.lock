@@ -8225,6 +8225,7 @@ dependencies = [
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-test-utils-tls",
+ "ic-crypto-test-utils-vetkd",
  "ic-crypto-tls-cert-validation",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tree-hash",
@@ -9189,8 +9190,10 @@ dependencies = [
 name = "ic-crypto-test-utils-vetkd"
 version = "0.1.0"
 dependencies = [
+ "ic-base-types",
  "ic-crypto-internal-bls12-381-type",
  "ic-crypto-internal-bls12-381-vetkd",
+ "ic-types",
  "ic-vetkeys",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -14999,6 +15002,7 @@ dependencies = [
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-crypto-test-utils-vetkd",
  "ic-crypto-tree-hash",
  "ic-interfaces",
  "ic-interfaces-state-manager",
