@@ -9,6 +9,7 @@ use crate::page_map::{Buffer, PageMap};
 
 pub struct StructIO {
     buffer: Buffer,
+    // TODO: add caching for header and index table.
 }
 
 impl StructIO {
