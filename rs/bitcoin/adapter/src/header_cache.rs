@@ -910,15 +910,15 @@ pub(crate) mod test {
                 .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err));
             let mut i = 0u8;
             let err = loop {
-                if let Err(err) = env.begin_rw_txn().and_then(|mut tx| {
-                    let bytes = [i; 32];
-                    tx.put(db, &bytes, &bytes, WriteFlags::empty())
-                        .and_then(|_| tx.commit())
-                }) {
+                let mut tx = env.begin_rw_txn().unwrap();
+                let bytes = [i; 32];
+                if let Err(err) = tx
+                    .put(db, &bytes, &bytes, WriteFlags::empty())
+                    .and_then(|_| tx.commit())
+                {
                     break err;
-                } else {
-                    i += 1;
-                }
+                };
+                i += 1;
             };
             assert_eq!(err, lmdb::Error::MapFull);
             i
@@ -948,15 +948,15 @@ pub(crate) mod test {
                 .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err));
             let mut i = idx;
             let err = loop {
-                if let Err(err) = env.begin_rw_txn().and_then(|mut tx| {
-                    let bytes = [i; 32];
-                    tx.put(db, &bytes, &bytes, WriteFlags::empty())
-                        .and_then(|_| tx.commit())
-                }) {
+                let mut tx = env.begin_rw_txn().unwrap();
+                let bytes = [i; 32];
+                if let Err(err) = tx
+                    .put(db, &bytes, &bytes, WriteFlags::empty())
+                    .and_then(|_| tx.commit())
+                {
                     break err;
-                } else {
-                    i += 1;
-                }
+                };
+                i += 1;
             };
             assert_eq!(err, lmdb::Error::MapFull);
             assert!(i > idx);
