@@ -1921,6 +1921,8 @@ impl CanisterManager {
     /// will uninstall code of the canister atomically after creating the new snapshot.
     /// In particular, the canister's memory usage will be updated atomically.
     /// This function returns a vector of system-generated responses from the uninstalled canister.
+    /// This is because we cannot process the responses in this function
+    /// while the `canister` is taken out of `ReplicatedState`.
     ///
     /// If the new snapshot cannot be created, an appropriate error will be returned.
     pub(crate) fn take_canister_snapshot(
@@ -2056,7 +2058,7 @@ impl CanisterManager {
             let rejects = uninstall_canister(
                 &self.log,
                 canister,
-                None,
+                None, /* we don't pass RoundLimits since we update them separately via `cycles_and_memory_usage_updates` */
                 time,
                 Arc::clone(&self.fd_factory),
             );
