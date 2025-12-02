@@ -1648,17 +1648,21 @@ pub struct GetIDkgDealingInBlockResponse {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StrippedBlockProposal {
+    /// The original block proposal proto but all \[`Strippable`\] data is removed.
     #[prost(message, optional, tag = "1")]
-    pub block_proposal_without_ingress_payload: ::core::option::Option<BlockProposal>,
+    pub pruned_block_proposal: ::core::option::Option<BlockProposal>,
+    /// The stripped ingress messages, i.e. the IDs of ingress messages that were pruned from the block proposal.
     #[prost(message, repeated, tag = "2")]
     pub ingress_messages: ::prost::alloc::vec::Vec<StrippedIngressMessage>,
+    /// The consensus message ID of the original (unstripped) block proposal, including the \[`Strippable`\] data.
     #[prost(message, optional, tag = "3")]
     pub unstripped_consensus_message_id: ::core::option::Option<ConsensusMessageId>,
+    /// The stripped IDKG dealings, i.e. the IDs of IDKG dealings that were pruned from the block proposal.
     #[prost(message, repeated, tag = "4")]
-    pub stripped_dealings: ::prost::alloc::vec::Vec<StrippedDealing>,
+    pub stripped_idkg_dealings: ::prost::alloc::vec::Vec<StrippedIDkgDealing>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct StrippedDealing {
+pub struct StrippedIDkgDealing {
     #[prost(uint32, tag = "1")]
     pub dealer_index: u32,
     #[prost(message, optional, tag = "2")]

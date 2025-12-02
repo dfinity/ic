@@ -481,6 +481,46 @@ impl TopologySnapshot {
         )
     }
 
+    pub fn system_api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
+        let registry_version = self.local_registry.get_latest_version();
+
+        Box::new(
+            self.local_registry
+                .get_system_api_boundary_node_ids(registry_version)
+                .unwrap()
+                .into_iter()
+                .map(|node_id| IcNodeSnapshot {
+                    node_id,
+                    registry_version,
+                    local_registry: self.local_registry.clone(),
+                    env: self.env.clone(),
+                    ic_name: self.ic_name.clone(),
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
+    }
+
+    pub fn app_api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
+        let registry_version = self.local_registry.get_latest_version();
+
+        Box::new(
+            self.local_registry
+                .get_app_api_boundary_node_ids(registry_version)
+                .unwrap()
+                .into_iter()
+                .map(|node_id| IcNodeSnapshot {
+                    node_id,
+                    registry_version,
+                    local_registry: self.local_registry.clone(),
+                    env: self.env.clone(),
+                    ic_name: self.ic_name.clone(),
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
+    }
+
     pub fn elected_replica_versions(&self) -> anyhow::Result<Vec<String>> {
         Ok(self
             .local_registry
@@ -866,21 +906,6 @@ impl IcNodeSnapshot {
     pub fn get_domain(&self) -> Option<String> {
         let node_record = self.raw_node_record();
         node_record.domain
-    }
-
-    /// Is it accessible via ssh with the `admin` user.
-    /// Waits until connection is ready.
-    pub fn await_can_login_as_admin_via_ssh(&self) -> Result<()> {
-        let sess = self.block_on_ssh_session()?;
-        let mut channel = sess.channel_session()?;
-        channel.exec("echo ready")?;
-        let mut s = String::new();
-        channel.read_to_string(&mut s)?;
-        if s.trim() == "ready" {
-            Ok(())
-        } else {
-            bail!("Failed receive from ssh session")
-        }
     }
 
     pub fn subnet_id(&self) -> Option<SubnetId> {
@@ -1537,6 +1562,21 @@ pub trait SshSession: HasTestEnv {
             bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
         }
         Ok(out)
+    }
+
+    /// Is it accessible via ssh with the `admin` user.
+    /// Waits until connection is ready.
+    fn await_can_login_as_admin_via_ssh(&self) -> Result<()> {
+        let sess = self.block_on_ssh_session()?;
+        let mut channel = sess.channel_session()?;
+        channel.exec("echo ready")?;
+        let mut s = String::new();
+        channel.read_to_string(&mut s)?;
+        if s.trim() == "ready" {
+            Ok(())
+        } else {
+            bail!("Failed receive from ssh session")
+        }
     }
 }
 

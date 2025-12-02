@@ -218,8 +218,8 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             ));
         }
 
-        let mut messages_from_pool = BTreeMap::new();
-        let mut messages_from_peers = BTreeMap::new();
+        let mut messages_from_pool = BTreeMap::<StrippedMessageType, usize>::new();
+        let mut messages_from_peers = BTreeMap::<StrippedMessageType, usize>::new();
 
         while let Some(join_result) = join_set.join_next().await {
             let Ok((message, peer_id)) = join_result else {
@@ -239,14 +239,16 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             if let Err(err) = assembler.try_insert_stripped_message(message) {
                 warn!(
                     self.log,
-                    "Failed to insert stripped message {}. This is a bug.", err
+                    "Failed to insert stripped message of type {}: {}. This is a bug.",
+                    message_type.as_str(),
+                    err
                 );
 
                 return AssembleResult::Unwanted;
             }
         }
 
-        // Only report the metric if we actually downloaded some ingresses from peers
+        // Only report the metric if we actually downloaded some stripped messages from peers
         if !messages_from_peers.is_empty() {
             timer.stop_and_record();
         } else {
@@ -299,7 +301,7 @@ async fn get_or_fetch<P: Peers>(
     node_id: NodeId,
     peer_rx: P,
 ) -> (StrippedMessage, NodeId) {
-    match stripped_message_id {
+    let stripped_message_id = match stripped_message_id {
         StrippedMessageId::Ingress(signed_ingress_id) => {
             // First check if the ingress message exists in the Ingress Pool.
             if let Some(ingress_message) = ingress_pool
@@ -316,18 +318,10 @@ async fn get_or_fetch<P: Peers>(
                     );
                 }
             }
-            download_stripped_message(
-                transport,
-                StrippedMessageId::Ingress(signed_ingress_id),
-                full_consensus_message_id,
-                &log,
-                &metrics,
-                peer_rx,
-            )
-            .await
+            StrippedMessageId::Ingress(signed_ingress_id)
         }
         StrippedMessageId::IDkgDealing(dealing_id, node_index) => {
-            // First check if the ingress message exists in the idkg Pool.
+            // First check if the dealing exists in the IDKG Pool.
             if let Some(IDkgMessage::Dealing(signed_dealing)) =
                 idkg_pool.read().unwrap().get(&dealing_id)
             {
@@ -336,17 +330,18 @@ async fn get_or_fetch<P: Peers>(
                     node_id,
                 );
             }
-            download_stripped_message(
-                transport,
-                StrippedMessageId::IDkgDealing(dealing_id, node_index),
-                full_consensus_message_id,
-                &log,
-                &metrics,
-                peer_rx,
-            )
-            .await
+            StrippedMessageId::IDkgDealing(dealing_id, node_index)
         }
-    }
+    };
+    download_stripped_message(
+        transport,
+        stripped_message_id,
+        full_consensus_message_id,
+        &log,
+        &metrics,
+        peer_rx,
+    )
+    .await
 }
 
 #[derive(Debug, PartialEq, Error)]
@@ -396,20 +391,18 @@ impl BlockProposalAssembler {
         }
     }
 
-    /// Returns the list of ingress messages which have been stripped from the block.
+    /// Returns the list of messages which have been stripped from the block.
     pub(crate) fn missing_stripped_messages(&self) -> Vec<StrippedMessageId> {
-        let ingress = self
-            .ingress_messages
-            .iter()
-            .filter_map(|(signed_ingress_id, maybe_ingress)| {
-                if maybe_ingress.is_none() {
-                    Some(signed_ingress_id)
-                } else {
-                    None
-                }
-            })
-            .cloned()
-            .map(StrippedMessageId::Ingress);
+        let ingress =
+            self.ingress_messages
+                .iter()
+                .filter_map(|(signed_ingress_id, maybe_ingress)| {
+                    if maybe_ingress.is_none() {
+                        Some(StrippedMessageId::Ingress(signed_ingress_id.clone()))
+                    } else {
+                        None
+                    }
+                });
 
         let idkg_dealings =
             self.signed_dealings
@@ -500,7 +493,7 @@ impl BlockProposalAssembler {
             signed_dealings,
         } = self;
         let mut reconstructed_block_proposal_proto =
-            stripped_block_proposal.block_proposal_without_ingresses_proto;
+            stripped_block_proposal.pruned_block_proposal_proto;
 
         let ingresses = ingress_messages
             .into_iter()

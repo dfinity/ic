@@ -11,7 +11,7 @@ use ic_btc_validation::doge::DogecoinHeaderValidator;
 use ic_btc_validation::{
     AuxPowHeaderValidator, HeaderStore, ValidateAuxPowHeaderError, ValidateHeaderError,
 };
-use ic_logger::ReplicaLogger;
+use ic_logger::{ReplicaLogger, error};
 use ic_metrics::MetricsRegistry;
 use std::fmt::Debug;
 use std::{
@@ -65,6 +65,7 @@ pub struct BlockchainState<Network: BlockchainNetwork> {
     /// Used to determine how validation should be handled with `validate_header`.
     network: Network,
     metrics: BlockchainStateMetrics,
+    logger: ReplicaLogger,
 }
 
 impl HeaderValidator<bitcoin::Network> for BlockchainState<bitcoin::Network> {
@@ -108,7 +109,7 @@ where
             genesis_block_header,
             cache_dir,
             metrics_registry,
-            logger,
+            logger.clone(),
         ));
         let block_cache = RwLock::new(HashMap::new());
         BlockchainState {
@@ -116,6 +117,7 @@ where
             block_cache,
             network,
             metrics: BlockchainStateMetrics::new(metrics_registry),
+            logger,
         }
     }
 
@@ -210,9 +212,14 @@ where
         anchor: BlockHash,
     ) -> tokio::task::JoinHandle<()> {
         let header_cache = self.header_cache.clone();
+        let logger = self.logger.clone();
         tokio::task::spawn_blocking(move || {
-            // Error is ignored, since it is a background task
-            let _ = header_cache.persist_and_prune_headers_below_anchor(anchor);
+            if let Err(err) = header_cache.persist_and_prune_headers_below_anchor(anchor) {
+                error!(
+                    logger,
+                    "Error persist_and_prune_headers_below_anchor({}): {}", anchor, err
+                )
+            }
         })
     }
 

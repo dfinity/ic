@@ -69,6 +69,7 @@ fn all_icp_features() -> IcpFeatures {
         ii: Some(IcpFeaturesConfig::DefaultConfig),
         nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
         bitcoin: Some(IcpFeaturesConfig::DefaultConfig),
+        dogecoin: Some(IcpFeaturesConfig::DefaultConfig),
         canister_migration: Some(IcpFeaturesConfig::DefaultConfig),
     }
 }
@@ -127,14 +128,14 @@ fn test_canister_migration() {
     res.0.unwrap();
 
     let status = || {
-        let res = update_candid::<_, (Vec<MigrationStatus>,)>(
+        let res = update_candid::<_, (Option<MigrationStatus>,)>(
             &pic,
             canister_migration_orchestrator,
             "migration_status",
             (migrate_canister_args.clone(),),
         )
         .unwrap();
-        res.0.last().unwrap().clone()
+        res.0.unwrap()
     };
     loop {
         pic.advance_time(Duration::from_secs(10));
@@ -1054,6 +1055,7 @@ async fn with_all_icp_features_and_nns_subnet_state() {
         icp_config: None,
         log_level: None,
         bitcoind_addr: None,
+        dogecoind_addr: None,
         icp_features: Some(all_icp_features()),
         incomplete_state: None,
         initial_time: None,

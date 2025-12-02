@@ -59,7 +59,7 @@ impl Strippable for ConsensusMessage {
                 } = block_proposal.content.as_ref().payload.as_ref().as_data();
 
                 MaybeStrippedConsensusMessage::StrippedBlockProposal(StrippedBlockProposal {
-                    block_proposal_without_ingresses_proto: proto,
+                    pruned_block_proposal_proto: proto,
                     unstripped_consensus_message_id,
                     stripped_ingress_payload: ingress.strip(),
                     stripped_idkg_dealings: idkg.strip(),

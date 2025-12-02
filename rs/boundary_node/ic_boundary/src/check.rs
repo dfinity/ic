@@ -9,7 +9,7 @@ use anyhow::Error;
 use async_trait::async_trait;
 use bytes::Buf;
 use http::Method;
-use ic_bn_lib::{http::Client, tasks::Run};
+use ic_bn_lib_common::traits::{Run, http::Client};
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
 use simple_moving_average::{SMA, SumTreeSMA};

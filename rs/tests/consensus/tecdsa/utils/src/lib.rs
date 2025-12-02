@@ -31,6 +31,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+            SshSession,
         },
     },
     nns::vote_and_execute_proposal,

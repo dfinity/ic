@@ -104,11 +104,7 @@ impl CountBytes for StrippedMessage {
     fn count_bytes(&self) -> usize {
         match self {
             StrippedMessage::Ingress(_, ingress) => ingress.count_bytes(),
-            StrippedMessage::IDkgDealing(_, _, dealing) => {
-                dealing.content.internal_dealing_raw.len()
-                    + dealing.signature.signature.get_ref().0.len()
-                    + dealing.signature.signer.get_ref().0.as_ref().len()
-            }
+            StrippedMessage::IDkgDealing(_, _, dealing) => dealing.count_bytes(),
         }
     }
 }

@@ -127,7 +127,7 @@ rust_test(
     deps = [
         # Keep sorted.
         "@crate_index//:assert_matches",
-        "@crate_index//:bitcoin_0_28",
+        "@crate_index//:bitcoin-0.28.2",
         "@crate_index//:maplit",
         "@crate_index//:mockall",
         "@crate_index//:proptest",
@@ -185,7 +185,7 @@ rust_test(
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/bitcoin/checker:btc_checker_lib",
         "//rs/types/management_canister_types",
-        "@crate_index//:bitcoin_0_28",
+        "@crate_index//:bitcoin-0.28.2",
         "@crate_index//:candid",
         "@crate_index//:flate2",
         "@crate_index//:ic-agent",
@@ -233,7 +233,7 @@ rust_ic_test(
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:assert_matches",
-        "@crate_index//:bitcoin_0_28",
+        "@crate_index//:bitcoin-0.28.2",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",

@@ -7,11 +7,46 @@ on:
         description: 'The commit SHA to run the workflow on'
         required: true
         default: ''
+      pr-number:
+        description: 'The PR number' # this is used for posting comments with the CI link
+        required: true
+        default: ''
+      confirm:
+        description: 'Check this box to confirm you have reviewed the PR at the specified commit'
+        required: true
+        type: boolean
 
 jobs:
+  get-pr-base-ref:
+    name: Get PR Base Ref
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      base-ref: ${{ steps.fetch.outputs.base_ref }}
+    steps:
+      - name: Fetch PR Base Ref
+        id: fetch
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const prNumber = parseInt('${{ inputs.pr-number }}', 10);
+            if (isNaN(prNumber)) {
+              core.setFailed('Invalid pr-number input');
+              return;
+            }
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            core.info(`PR #${prNumber} base ref: ${pr.base.ref}`);
+            core.setOutput('base_ref', pr.base.ref);
+
   ci-main:
     name: CI Main
-    uses: ./.github/workflows/ci_main.yml
+    uses: ./.github/workflows/ci-main.yml
     secrets: inherit
     with:
       commit-sha: ${{ inputs.commit-sha }}
@@ -21,18 +56,21 @@ jobs:
 
   ci-pr-only:
     name: CI PR Only
+    needs: [get-pr-base-ref]
     uses: ./.github/workflows/ci-pr-only.yml
     secrets: inherit
     with:
       commit-sha: ${{ inputs.commit-sha }}
+      base-ref: ${{ needs.get-pr-base-ref.outputs.base-ref }}
+      pr-number: ${{ inputs.pr-number }}
     permissions:
       contents: read
       pull-requests: write
 
-  post-commit-status:
-    name: Post Commit Status
+  post-required-check-status-ci-main:
+    name: CI Main Required Check Status
     runs-on: ubuntu-latest
-    needs: [ci-main, ci-pr-only]
+    needs: [ci-main]
     if: success() || failure()
     permissions:
       contents: read
@@ -46,3 +84,43 @@ jobs:
         with:
           commit-sha: ${{ inputs.commit-sha }}
           run-result: ${{ needs.ci-main.result }}
+          name: ci-main-status
+
+  post-required-check-status-ci-pr-only:
+    name: CI PR Only Post Required Check Status
+    runs-on: ubuntu-latest
+    needs: [ci-pr-only]
+    if: success() || failure()
+    permissions:
+      contents: read
+      pull-requests: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit-sha }}
+      - uses: ./.github/actions/post-commit-status
+        with:
+          commit-sha: ${{ inputs.commit-sha }}
+          run-result: ${{ needs.ci-pr-only.result }}
+          name: ci-pr-only-status
+
+  post-comment-with-ci-link:
+    name: Post Comment with CI Link
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Add PR Comment
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            let message = 'Run on ${{ inputs.commit-sha }} URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n'
+
+            github.rest.issues.createComment({
+              issue_number: ${{ inputs.pr-number }},
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message
+            })
