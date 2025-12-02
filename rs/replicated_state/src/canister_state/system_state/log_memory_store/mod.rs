@@ -512,4 +512,102 @@ mod tests {
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].idx, 5);
     }
+
+    #[test]
+    fn test_very_small_capacity_single_byte() {
+        let mut store = LogMemoryStore::new_for_testing();
+        // Set capacity to 1 byte - this will be clamped to DATA_CAPACITY_MIN (4096 bytes).
+        store.set_byte_capacity(1);
+
+        // Verify capacity was clamped to minimum.
+        assert_eq!(store.byte_capacity(), 4096);
+
+        let mut delta = CanisterLog::new_delta_with_next_index(0, 4096);
+        // Add a record - it should fit within the minimum capacity.
+        delta.add_record(0, b"a".to_vec());
+
+        store.append_delta_log(&mut delta);
+
+        // The record should be stored.
+        assert_eq!(store.next_id(), 1);
+        assert_eq!(store.bytes_used(), 21);
+        let records = store.records(None);
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].content, b"a");
+    }
+
+    #[test]
+    fn test_small_capacity_with_eviction() {
+        let mut store = LogMemoryStore::new_for_testing();
+        // Set capacity to minimum (4096 bytes).
+        let capacity = 4096;
+        store.set_byte_capacity(capacity);
+
+        // Verify capacity is at minimum.
+        assert_eq!(store.byte_capacity(), capacity);
+
+        // Fill the buffer with records until we're close to capacity.
+        // Each record is ~21 bytes (8+8+4+1), so we can fit ~195 records.
+        let record_size = 21;
+        let max_records = capacity / record_size; // ~195
+
+        // Add records to fill the buffer.
+        for i in 0..max_records {
+            let mut delta = CanisterLog::new_delta_with_next_index(i as u64, capacity);
+            delta.add_record(i as u64, vec![i as u8]);
+            store.append_delta_log(&mut delta);
+        }
+
+        // Verify all records fit.
+        assert_eq!(store.next_id(), max_records as u64);
+        let records = store.records(None);
+        assert_eq!(records.len(), max_records);
+
+        // Add one more record - this should evict the oldest one.
+        let mut delta = CanisterLog::new_delta_with_next_index(max_records as u64, capacity);
+        delta.add_record(max_records as u64, vec![255]);
+        store.append_delta_log(&mut delta);
+
+        // Verify the oldest record was evicted.
+        assert_eq!(store.next_id(), (max_records + 1) as u64);
+        let records = store.records(None);
+        assert_eq!(records.len(), max_records);
+        assert_eq!(records[0].idx, 1); // First record (idx=0) was evicted.
+        assert_eq!(records.last().unwrap().idx, max_records as u64);
+    }
+
+    #[test]
+    fn test_filtering_with_multiple_records_in_same_segment() {
+        let mut store = LogMemoryStore::new_for_testing();
+        // Capacity 100KB. Segment size ~685 bytes.
+        store.set_byte_capacity(100_000);
+
+        let mut delta = CanisterLog::new_delta_with_next_index(0, 100_000);
+        // Add 20 records, each ~21 bytes. All should fit in segment 0.
+        for i in 0..20 {
+            delta.add_record(i * 1000, vec![i as u8]);
+        }
+        store.append_delta_log(&mut delta);
+
+        // Filter for records in the middle: [5000, 15000).
+        let records = store.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
+            FetchCanisterLogsRange {
+                start: 5000,
+                end: 15000,
+            },
+        )));
+        // Should return records 5-14 (10 records).
+        assert_eq!(records.len(), 10);
+        assert_eq!(records[0].idx, 5);
+        assert_eq!(records[9].idx, 14);
+
+        // Filter by idx: [10, 15).
+        let records = store.records(Some(FetchCanisterLogsFilter::ByIdx(
+            FetchCanisterLogsRange { start: 10, end: 15 },
+        )));
+        // Should return records 10-14 (5 records).
+        assert_eq!(records.len(), 5);
+        assert_eq!(records[0].idx, 10);
+        assert_eq!(records[4].idx, 14);
+    }
 }
