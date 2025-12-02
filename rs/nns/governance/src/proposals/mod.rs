@@ -19,7 +19,6 @@ use ic_nns_constants::{PROTOCOL_CANISTER_IDS, SNS_AGGREGATOR_CANISTER_ID, SNS_WA
 use std::{collections::HashMap, sync::Arc};
 
 pub mod call_canister;
-pub mod candid_to_self_describing;
 pub mod create_service_nervous_system;
 mod decode_candid_args_to_self_describing_value;
 pub mod deregister_known_neuron;

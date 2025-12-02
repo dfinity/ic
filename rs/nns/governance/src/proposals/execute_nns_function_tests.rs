@@ -10,7 +10,7 @@ use candid::Encode;
 use ic_base_types::CanisterId;
 use ic_management_canister_types_private::{CanisterMetadataRequest, CanisterMetadataResponse};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
-use ic_nns_governance_api::SelfDescribingValue as ApiValue;
+use ic_nns_governance_api::SelfDescribingValue;
 use maplit::hashmap;
 use std::sync::Arc;
 
@@ -178,11 +178,11 @@ service : {
     );
 
     // Verify the value
-    let api_value = ApiValue::from(result.value.unwrap());
+    let self_describing_value = SelfDescribingValue::from(result.value.unwrap());
     assert_eq!(
-        api_value,
-        ApiValue::Map(hashmap! {
-            "Add".to_string() => ApiValue::Text("application".to_string()),
+        self_describing_value,
+        SelfDescribingValue::Map(hashmap! {
+            "Add".to_string() => SelfDescribingValue::Text("application".to_string()),
         })
     );
 }
