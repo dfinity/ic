@@ -433,6 +433,8 @@ fn lazy_wasms() {
         .take_canister_snapshot(TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         })
         .unwrap()
         .snapshot_id();
@@ -7456,6 +7458,8 @@ fn restore_heap_from_snapshot() {
         .take_canister_snapshot(TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         })
         .unwrap()
         .snapshot_id();
@@ -7528,6 +7532,8 @@ fn restore_stable_memory_from_snapshot() {
         .take_canister_snapshot(TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         })
         .unwrap()
         .snapshot_id();
@@ -7600,6 +7606,8 @@ fn restore_binary_from_snapshot() {
         .take_canister_snapshot(TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         })
         .unwrap()
         .snapshot_id();
@@ -7670,6 +7678,8 @@ fn restore_chunk_store_from_snapshot() {
         .take_canister_snapshot(TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         })
         .unwrap()
         .snapshot_id();
