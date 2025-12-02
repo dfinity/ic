@@ -1,5 +1,6 @@
 use ic_agent::{Agent, export::Principal};
 use ic_certification::{Certificate, HashTree, LookupResult, SubtreeLookupResult};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
     fs,
@@ -10,9 +11,17 @@ use std::{
 const PRODUCTION_AGENT_URL: &str = "https://ic0.app";
 
 /// Supports calling a canister, printing out the signed reply, loading a signed
-/// reply from a file, and printing just the reply content itself.
+/// reply from a file, verifying the signature, and printing just the reply
+/// content itself.
 ///
-/// A signed reply is a CBOR-encoded ICP certificate. For a detailed explanation
+/// A signed reply is a CBOR-encoded ICP certificate wrapped in an object like this:
+///
+/// {
+///   "callee_principal_id": ${CALLEE_PRINCIPAL_ID},
+///   "certificate": ${CERTIFICATE},
+/// }
+///
+/// For a detailed explanation
 /// of what "certificate" means in this context and how it wraps a reply, see
 /// the following sections of the ICP interface specification:
 ///
@@ -92,13 +101,18 @@ impl CallCanister {
         let arg = read_argv_path(&arg_path);
 
         // Call canister, fetching signed reply.
-        let signed_proposal = download_signed_proposal(&agent, callee, &method, arg).await;
+        let signed_canister_reply =
+            download_signed_canister_reply(&agent, callee, &method, arg).await;
 
         // Re-encode signed reply in preparation for output.
-        let signed_proposal = serde_cbor::to_vec(&signed_proposal).unwrap();
+        let signed_canister_reply = serde_cbor::to_vec(&SignedCanisterReply {
+            callee_principal_id: callee,
+            certificate: signed_canister_reply,
+        })
+        .unwrap();
 
         // Output signed reply.
-        stdout.write_all(&signed_proposal).unwrap();
+        stdout.write_all(&signed_canister_reply).unwrap();
         stdout.flush().unwrap();
 
         eprintln!("👍 Done outputing the certificate from read_state to stdout.");
@@ -125,10 +139,15 @@ impl LoadFromFile {
 
         // Read file.
         let content = read_argv_path(&signed_reply_path);
+
         // Parse.
-        let certificate = serde_cbor::from_slice::<Certificate>(&content).unwrap();
+        let SignedCanisterReply {
+            callee_principal_id,
+            certificate,
+        } = serde_cbor::from_slice(&content).unwrap();
+
         // Verify signature.
-        let reply = verify_signed_proposal(&agent, certificate);
+        let reply = verify_signed_canister_reply(&agent, certificate, callee_principal_id);
 
         // Format output.
         let reply = reply
@@ -138,6 +157,12 @@ impl LoadFromFile {
         // Send output.
         write!(stdout, "{reply}").unwrap();
     }
+}
+
+#[derive(Serialize, Deserialize)]
+struct SignedCanisterReply {
+    callee_principal_id: Principal,
+    certificate: Certificate,
 }
 
 /// This follows the tradition that when `-` is passed via command line, it
@@ -154,7 +179,7 @@ fn read_argv_path(path: &str) -> Vec<u8> {
     fs::read(path).unwrap()
 }
 
-async fn download_signed_proposal(
+async fn download_signed_canister_reply(
     agent: &Agent,
     callee: Principal,
     method_name: &str,
@@ -171,11 +196,13 @@ async fn download_signed_proposal(
     certificate
 }
 
-fn verify_signed_proposal(agent: &Agent, certificate: Certificate) -> Vec<u8> {
-    let governance_principal = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
-
+fn verify_signed_canister_reply(
+    agent: &Agent,
+    signed_canister_reply: Certificate,
+    callee: Principal,
+) -> Vec<u8> {
     agent
-        .verify(&certificate, governance_principal)
+        .verify(&signed_canister_reply, callee)
         .unwrap_or_else(|err| {
             panic!("INPUT DOES NOT SEEM TO BE A GENUINE RESPONSE FROM THE CANISTER: {err:?}");
         });
@@ -187,7 +214,7 @@ fn verify_signed_proposal(agent: &Agent, certificate: Certificate) -> Vec<u8> {
     );
     eprintln!();
 
-    let request_status = RequestStatus::try_from_tree(certificate.tree).unwrap();
+    let request_status = RequestStatus::try_from_tree(signed_canister_reply.tree).unwrap();
     assert_eq!(&request_status.status, "replied");
 
     request_status.reply

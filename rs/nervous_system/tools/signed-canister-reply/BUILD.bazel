@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-certification",
+    "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:tokio",
 ]
@@ -25,7 +26,7 @@ LIBRARY_SRCS = glob(
 rust_library(
     name = "signed-canister-reply",
     srcs = LIBRARY_SRCS,
-    crate_name = "ic_nervous_system_signed_canister_reply",
+    crate_name = "ic_nervous_system_tools_signed_canister_reply",
     deps = DEPENDENCIES,
 )
 

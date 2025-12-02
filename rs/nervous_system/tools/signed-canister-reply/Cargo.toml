@@ -1,5 +1,5 @@
 [package]
-name = "ic-nervous-system-signed-canister-reply"
+name = "ic-nervous-system-tools-signed-canister-reply"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -15,6 +15,7 @@ base64           = { workspace = true }
 clap             = { workspace = true }
 ic-agent         = { workspace = true }
 ic-certification = { workspace = true }
+serde            = { workspace = true }
 serde_cbor       = { workspace = true }
 tokio            = { workspace = true }
 

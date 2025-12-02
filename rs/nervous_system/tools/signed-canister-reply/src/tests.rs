@@ -61,12 +61,20 @@ async fn test_call_canister() {
         method: "get_build_metadata".to_string(),
         arg_path: "arg.can".to_string(),
     }
-    .execute(agent, &mut stdout)
+    .execute(agent.clone(), &mut stdout)
     .await;
 
     // Step 3: Verify results.
 
-    let certificate = serde_cbor::from_slice::<Certificate>(&stdout).unwrap();
+    let SignedCanisterReply {
+        callee_principal_id,
+        certificate,
+    } = serde_cbor::from_slice(&stdout).unwrap();
+
+    assert_eq!(callee_principal_id, callee_canister_id);
+
+    agent.verify(&certificate, callee_principal_id).unwrap();
+
     let request_status = RequestStatus::try_from_tree(certificate.tree).unwrap();
     assert_eq!(&request_status.status, "replied", "{request_status:#?}");
     let reply = decode_args::<(String,)>(&request_status.reply).unwrap().0;
