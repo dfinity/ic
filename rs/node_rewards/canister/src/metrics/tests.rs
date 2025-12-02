@@ -244,10 +244,7 @@ async fn _daily_metrics_correct_different_update_size(size: usize) {
 
     let mut mock = mock::MockCanisterClient::new();
     mock.expect_node_metrics_history()
-        .returning(move |contract| {
-            let res = tracker.next(size, &contract);
-            Ok(res)
-        });
+        .returning(move |contract| Ok(tracker.next(size, contract)));
     let mm = MetricsManager::new_test(mock);
 
     for _ in 0..MAX_TIMES {
@@ -327,10 +324,7 @@ async fn daily_metrics_correct_2_subs() {
 
     let mut mock = mock::MockCanisterClient::new();
     mock.expect_node_metrics_history()
-        .returning(move |contract| {
-            let res = tracker.next_2_steps(&contract);
-            Ok(res)
-        });
+        .returning(move |contract| Ok(tracker.next_2_steps(contract)));
     let mm = MetricsManager::new_test(mock);
 
     for _ in 0..MAX_TIMES {
