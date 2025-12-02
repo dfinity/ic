@@ -1225,11 +1225,8 @@ fn test_build_consolidation_transaction() {
     let mut runner = TestRunner::new(Config::default());
     let mut utxos: BTreeSet<Utxo> = strategy.new_tree(&mut runner).unwrap().current();
 
-    let input_utxos = select_utxos_to_consolidate(&utxos);
+    let input_utxos = select_utxos_to_consolidate(&mut utxos);
     let max_input_value: u64 = input_utxos.iter().map(|x| x.value).max().unwrap();
-    for utxo in &input_utxos {
-        utxos.remove(utxo);
-    }
     assert!(utxos.iter().all(|x| x.value > max_input_value));
 
     let total_amount = input_utxos.iter().map(|u| u.value).sum::<u64>();

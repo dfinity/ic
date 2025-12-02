@@ -1383,25 +1383,24 @@ pub enum ConsolidateUtxoError {
 
 /// Consolidate UTXOs.
 ///
-/// If there are more than 10,000 UTXOs, combine the smallest 1000 UTXOs.
-/// A lower fee rate can be used, e.g. the 25th fee percentile.
+/// If there are more than 10,000 UTXOs, combine the smallest 1000 of them.
 ///
 /// This function can be called any time to check if a consolidation is required, but
 /// the consolidation process will only take place after a minimum interval since the last
 /// consolidation submission.
 ///
-/// A Consolidation request is like a special retrieve_btc transaction:
+/// A Consolidation transaction is like a special retrieve_btc transaction:
 /// - Inputs are 1000 UTXOs with small values.
-/// - Output (including change output) goes to minter address.
+/// - Outputs (including change output) are addressed to the minter.
 /// - Transaction fee (in ckBTC) is burned from the fee collector account.
 ///
-/// Such a request is constructed differently but the remaining signing and sending
-/// shares the same logic as retrieve_btc request.
+/// Such a request is constructed differently but the signing and sending tasks
+/// share the same logic as a retrieve_btc request.
 pub async fn consolidate_utxos<R: CanisterRuntime>(
     runtime: &R,
     min_consolidation_utxo_required: usize,
 ) -> Result<u64, ConsolidateUtxoError> {
-    // TODO: make this configurable
+    // TODO DEFI-2551: make this configurable
     const MIN_CONSOLIDATION_INTERVAL: Duration = Duration::from_secs(24 * 3600);
 
     assert!(min_consolidation_utxo_required > MAX_NUM_INPUTS_IN_TRANSACTION);
@@ -1425,51 +1424,52 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
         mutate_state(|s| s.last_consolidate_utxos_request_created_time_ns = last_submission);
     });
 
-    // TODO: use 25% percentile
+    let ecdsa_public_key = updates::get_btc_address::init_ecdsa_public_key().await;
+
+    // TODO DEFI-2552: use 25% percentile
     let fee_millisatoshi_per_vbyte = estimate_fee_per_vbyte(runtime)
         .await
         .ok_or(ConsolidateUtxoError::EstimateFeeNotAvailable)?;
 
     // Select UTXOs to consolidate. Note that they are not removed from available_utxos yet.
-    let input_utxos = read_state(|s| select_utxos_to_consolidate(&s.available_utxos));
-    // There will be two outputs: 1 normal output and 1 change output, each about
-    // half of the total value of the input UTXOs.
-    let total_amount = input_utxos.iter().map(|x| x.value).sum::<u64>();
-    let output_amount = total_amount / 2;
-    let main_address = read_state(|s| runtime.derive_minter_address(s));
-    let fee_estimator = read_state(|s| runtime.fee_estimator(s));
-    let (unsigned_tx, change_output, total_fee) = build_unsigned_transaction_from_inputs(
-        &input_utxos,
-        vec![(main_address.clone(), output_amount)],
-        main_address,
-        fee_millisatoshi_per_vbyte,
-        &fee_estimator,
-    )
-    .map_err(|err| {
-        log!(
-            Priority::Info,
-            "[consolidate_utxos]: failed to build conslidation transaction {:?}",
-            err
-        );
-        ConsolidateUtxoError::BuildTx(err)
-    })?;
-
-    // Remove input_utxos from available_utxos.
-    mutate_state(|s| {
-        for utxo in &input_utxos {
-            s.available_utxos.remove(utxo);
-        }
-    });
-    // In case of any error, revert the above state change by putting the utxos back.
-    let utxos_guard = guard(input_utxos, |utxos| {
+    let input_utxos = mutate_state(|s| select_utxos_to_consolidate(&mut s.available_utxos));
+    let restore_utxos = |utxos| {
         mutate_state(|s| {
             for utxo in utxos {
                 s.available_utxos.insert(utxo);
             }
         })
-    });
+    };
 
-    let ecdsa_public_key = updates::get_btc_address::init_ecdsa_public_key().await;
+    // There will be two outputs: 1 normal output and 1 change output, each about
+    // half of the total value of the input UTXOs. It could be made into just one
+    // output, but two outputs make it easier to reuse the existing implementation
+    // of build_unsigned_transaction_from_inputs.
+    let total_amount = input_utxos.iter().map(|x| x.value).sum::<u64>();
+    let output_amount = total_amount / 2;
+    let main_address = read_state(|s| runtime.derive_minter_address(s));
+    let fee_estimator = read_state(|s| runtime.fee_estimator(s));
+    let (unsigned_tx, change_output, total_fee) = match build_unsigned_transaction_from_inputs(
+        &input_utxos,
+        vec![(main_address.clone(), output_amount)],
+        main_address,
+        fee_millisatoshi_per_vbyte,
+        &fee_estimator,
+    ) {
+        Ok(result) => result,
+        Err(err) => {
+            log!(
+                Priority::Info,
+                "[consolidate_utxos]: failed to build conslidation transaction {:?}",
+                err
+            );
+            restore_utxos(input_utxos);
+            return Err(ConsolidateUtxoError::BuildTx(err));
+        }
+    };
+
+    // In case of any error, revert state change by putting input_utxos back.
+    let utxos_guard = guard(input_utxos, restore_utxos);
 
     // Burn transaction fee (bitcoin_fee) from fee collector's account.
     let burn_memo = memo::BurnMemo::Convert {
@@ -1492,9 +1492,6 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
         ConsolidateUtxoError::BurnCkbtc(err, total_fee.bitcoin_fee)
     })?;
 
-    let utxos = ScopeGuard::into_inner(utxos_guard);
-    let _ = ScopeGuard::into_inner(request_created_guard);
-
     let request = state::ConsolidateUtxosRequest {
         block_index,
         amount: total_amount,
@@ -1502,6 +1499,7 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
     };
     state::audit::accept_consolidate_utxos_request(request.clone(), runtime);
 
+    let utxos = ScopeGuard::into_inner(utxos_guard);
     let request = read_state(|s| SignTxRequest {
         key_name: s.ecdsa_key_name.clone(),
         ecdsa_public_key,
@@ -1516,18 +1514,23 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
         .await
         .map_err(ConsolidateUtxoError::SubmitRequest)?;
 
+    let _ = ScopeGuard::into_inner(request_created_guard);
     Ok(block_index)
 }
 
-fn select_utxos_to_consolidate(available_utxos: &BTreeSet<Utxo>) -> Vec<Utxo> {
-    let mut available_utxos: Vec<_> = available_utxos.iter().collect();
-    available_utxos.sort_by_key(|u| u.value);
-    let input_utxos = available_utxos
+// Return UTXOs for consolidation and remove them from available_utxos.
+fn select_utxos_to_consolidate(available_utxos: &mut BTreeSet<Utxo>) -> Vec<Utxo> {
+    let mut utxos: Vec<_> = available_utxos.iter().collect();
+    utxos.sort_by_key(|u| u.value);
+    let input_utxos = utxos
         .into_iter()
         .take(MAX_NUM_INPUTS_IN_TRANSACTION)
         .cloned()
         .collect::<Vec<_>>();
     assert!(input_utxos.len() == MAX_NUM_INPUTS_IN_TRANSACTION);
+    for utxo in &input_utxos {
+        available_utxos.remove(utxo);
+    }
     input_utxos
 }
 
