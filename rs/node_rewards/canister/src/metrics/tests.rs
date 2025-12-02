@@ -23,7 +23,7 @@ pub mod mock {
 
         #[async_trait]
         impl ManagementCanisterClient for CanisterClient {
-            async fn node_metrics_history(&self, args: NodeMetricsHistoryArgs) -> CallResult<Vec<NodeMetricsHistoryRecord>>;
+            async fn node_metrics_history(&self, args: &NodeMetricsHistoryArgs) -> CallResult<Vec<NodeMetricsHistoryRecord>>;
         }
     }
 }
@@ -203,7 +203,7 @@ impl NodeMetricsHistoryResponseTracker {
     fn next(
         &self,
         response_step: usize,
-        args: NodeMetricsHistoryArgs,
+        args: &NodeMetricsHistoryArgs,
     ) -> Vec<NodeMetricsHistoryRecord> {
         let mut response = Vec::new();
         let subnet_id = SubnetId::from(PrincipalId::from(args.subnet_id));
@@ -223,7 +223,7 @@ impl NodeMetricsHistoryResponseTracker {
         response
     }
 
-    fn next_2_steps(&self, contract: NodeMetricsHistoryArgs) -> Vec<NodeMetricsHistoryRecord> {
+    fn next_2_steps(&self, contract: &NodeMetricsHistoryArgs) -> Vec<NodeMetricsHistoryRecord> {
         self.next(2, contract)
     }
 }
@@ -244,7 +244,7 @@ async fn _daily_metrics_correct_different_update_size(size: usize) {
 
     let mut mock = mock::MockCanisterClient::new();
     mock.expect_node_metrics_history()
-        .returning(move |contract| Ok(tracker.next(size, contract)));
+        .returning(move |contract| Ok(tracker.next(size, &contract)));
     let mm = MetricsManager::new_test(mock);
 
     for _ in 0..MAX_TIMES {
@@ -324,7 +324,7 @@ async fn daily_metrics_correct_2_subs() {
 
     let mut mock = mock::MockCanisterClient::new();
     mock.expect_node_metrics_history()
-        .returning(move |contract| Ok(tracker.next_2_steps(contract)));
+        .returning(move |contract| Ok(tracker.next_2_steps(&contract)));
     let mm = MetricsManager::new_test(mock);
 
     for _ in 0..MAX_TIMES {
