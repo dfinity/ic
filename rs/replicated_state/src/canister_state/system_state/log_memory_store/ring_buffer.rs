@@ -201,6 +201,8 @@ impl RingBuffer {
                 records[start..].to_vec()
             }
 
+            Some(filter) if !filter.is_valid() => Vec::new(),
+
             Some(filter) => {
                 // Find an approximate start where matching records may begin.
                 let approx_start = match index.find_approx_start(filter) {

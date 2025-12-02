@@ -3531,6 +3531,12 @@ pub struct FetchCanisterLogsRange {
 impl Payload<'_> for FetchCanisterLogsRange {}
 
 impl FetchCanisterLogsRange {
+    pub fn is_valid(&self) -> bool {
+        self.start < self.end
+    }
+}
+
+impl FetchCanisterLogsRange {
     /// Creates a new range from `start` (inclusive) to `end` (exclusive).
     pub fn new(start: u64, end: u64) -> Self {
         Self { start, end }
@@ -3568,6 +3574,15 @@ pub enum FetchCanisterLogsFilter {
 }
 
 impl Payload<'_> for FetchCanisterLogsFilter {}
+
+impl FetchCanisterLogsFilter {
+    pub fn is_valid(&self) -> bool {
+        match self {
+            FetchCanisterLogsFilter::ByIdx(range) => range.is_valid(),
+            FetchCanisterLogsFilter::ByTimestampNanos(range) => range.is_valid(),
+        }
+    }
+}
 
 /// `CandidType` for `FetchCanisterLogsRequest`
 /// ```text

@@ -255,12 +255,14 @@ mod tests {
         s.append_delta_log(&mut delta);
 
         // By index — inclusive range.
+        // Range is [1, 2).
         let records = s.records(Some(FetchCanisterLogsFilter::ByIdx(
             FetchCanisterLogsRange { start: 1, end: 2 },
         )));
         assert_eq!(records, vec![make_canister_record(1, 20, "b")]);
 
         // By timestamp — inclusive range that picks middle record.
+        // Range is [15, 25).
         let records = s.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
             FetchCanisterLogsRange { start: 15, end: 25 },
         )));
@@ -468,5 +470,34 @@ mod tests {
         assert_eq!(records.len(), 2, "Should return 2 records");
         assert_eq!(records[0].content, b"a");
         assert_eq!(records[1].content, b"b");
+    }
+
+    #[test]
+    fn test_multiple_records_in_same_segment() {
+        let mut store = LogMemoryStore::new_for_testing();
+        // Capacity 100KB. Segment size ~685 bytes.
+        store.set_byte_capacity(100_000);
+
+        let mut delta = CanisterLog::new_delta_with_next_index(0, 100_000);
+        // Add 10 records, each ~21 bytes. All should fit in segment 0.
+        for i in 0..10 {
+            delta.add_record(i, vec![i as u8]);
+        }
+        store.append_delta_log(&mut delta);
+
+        // Verify we can retrieve all of them.
+        let records = store.records(None);
+        assert_eq!(records.len(), 10);
+        for (i, r) in records.iter().enumerate() {
+            assert_eq!(r.idx, i as u64);
+        }
+
+        // Verify filtering works.
+        // Filter for record 5. Range is [5, 6).
+        let records = store.records(Some(FetchCanisterLogsFilter::ByIdx(
+            FetchCanisterLogsRange { start: 5, end: 6 },
+        )));
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].idx, 5);
     }
 }
