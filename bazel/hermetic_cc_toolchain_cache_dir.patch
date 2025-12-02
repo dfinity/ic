@@ -1,34 +1,23 @@
 # work around race condition in zig: https://github.com/ziglang/zig/issues/23993
 diff --git a/toolchain/defs.bzl b/toolchain/defs.bzl
-index f6f613e..bac9464 100644
+index 88978ee..6456bb5 100644
 --- a/toolchain/defs.bzl
 +++ b/toolchain/defs.bzl
-@@ -148,7 +148,7 @@ def _zig_repository_impl(repository_ctx):
+@@ -184,7 +184,7 @@ def _zig_repository_impl(repository_ctx):
      cache_prefix = repository_ctx.os.environ.get("HERMETIC_CC_TOOLCHAIN_CACHE_PREFIX", "")
      if cache_prefix == "":
-         if os == "windows":
+         if host_os == "windows":
 -            cache_prefix = "C:\\\\Temp\\\\zig-cache"
 +            fail("windows is not supported")
-         elif os == "macos":
+         elif host_os == "macos":
              cache_prefix = "/var/tmp/zig-cache"
-         elif os == "linux":
-@@ -156,6 +156,10 @@ def _zig_repository_impl(repository_ctx):
-         else:
-             fail("unknown os: {}".format(os))
-
-+    # use the catchall config to ensure all builds use a `zig-cache/config-FOO/`
-+    # subdirectory, including the zig-wrapper itself
-+    cache_prefix = cache_prefix + "/config-catchall"
-+
-     repository_ctx.template(
-         "tools/zig-wrapper.zig",
-         Label("//toolchain:zig-wrapper.zig"),
+         elif host_os == "linux":
 diff --git a/toolchain/zig-wrapper.zig b/toolchain/zig-wrapper.zig
-index d1d59f9..e556fc8 100644
+index 42f84d5..acac7de 100644
 --- a/toolchain/zig-wrapper.zig
 +++ b/toolchain/zig-wrapper.zig
-@@ -161,6 +161,23 @@ fn execUnix(arena: mem.Allocator, params: ExecParams) u8 {
-     return 1;
+@@ -201,6 +201,22 @@ fn spawnAndStripUnix(arena: mem.Allocator, params: ExecParams) u8 {
+     return code;
  }
 
 +fn makeSuffix(allocator: std.mem.Allocator, pwd: []const u8) ![]const u8 {
@@ -47,11 +36,10 @@ index d1d59f9..e556fc8 100644
 +    return std.fmt.allocPrint(allocator, "config-catchall", .{});
 +}
 +
-+
  // argv_it is an object that has such method:
  //     fn next(self: *Self) ?[]const u8
  // in non-testing code it is *process.ArgIterator.
-@@ -217,9 +234,19 @@ fn parseArgs(
+@@ -257,9 +273,19 @@ fn parseArgs(
      var env = process.getEnvMap(arena) catch |err|
          return parseFatal(arena, "error getting env: {s}", .{@errorName(err)});
 

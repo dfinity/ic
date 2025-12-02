@@ -1,13 +1,14 @@
 # Strip debug_info off every target for determinism
 # (https://github.com/ziglang/zig/issues/23821, https://github.com/ziglang/zig/issues/23823).
 diff --git a/MODULE.bazel b/MODULE.bazel
-index 1265298..15b70b3 100644
+index cfca164..9f258cc 100644
 --- a/MODULE.bazel
 +++ b/MODULE.bazel
-@@ -54,3 +54,20 @@ register_toolchains(
-     # These toolchains are only registered locally.
+@@ -60,3 +60,21 @@ register_toolchains(
+     "@zig_sdk//toolchain:zig",
      dev_dependency = True,
  )
++
 +
 +bazel_dep(name = "bazel_skylib", version = "1.7.1")
 +
@@ -26,10 +27,10 @@ index 1265298..15b70b3 100644
 +    path = "/usr/bin",
 +)
 diff --git a/toolchain/defs.bzl b/toolchain/defs.bzl
-index bac9464..25b905c 100644
+index b90b93b..88978ee 100644
 --- a/toolchain/defs.bzl
 +++ b/toolchain/defs.bzl
-@@ -276,6 +276,7 @@ def declare_files(os):
+@@ -320,6 +320,7 @@ def declare_files(os):
                  ":zig",
                  ":{}_includes".format(target_config.zigtarget),
                  cxx_tool_label,
@@ -37,16 +38,16 @@ index bac9464..25b905c 100644
              ],
          )
 
-@@ -285,6 +286,7 @@ def declare_files(os):
+@@ -329,6 +330,7 @@ def declare_files(os):
                  ":zig",
                  ":{}_includes".format(target_config.zigtarget),
                  cxx_tool_label,
 +                "@strip//:strip_bin",
+                 ":tools/ld.lld{}".format(exe),
              ] + native.glob([
                  "lib/libc/{}/**".format(target_config.libc),
-                 "lib/libcxx/**",
 diff --git a/toolchain/zig-wrapper.zig b/toolchain/zig-wrapper.zig
-index 3ea3964..4f471ee 100644
+index 5584f44..42f84d5 100644
 --- a/toolchain/zig-wrapper.zig
 +++ b/toolchain/zig-wrapper.zig
 @@ -132,7 +132,7 @@ pub fn main() u8 {
@@ -58,10 +59,17 @@ index 3ea3964..4f471ee 100644
          },
      }
  }
-@@ -177,6 +177,54 @@ fn makeSuffix(allocator: std.mem.Allocator, pwd: []const u8) ![]const u8 {
-     return std.fmt.allocPrint(allocator, "config-catchall", .{});
+@@ -152,13 +152,53 @@ fn spawnWindows(arena: mem.Allocator, params: ExecParams) u8 {
+     }
  }
 
+-fn execUnix(arena: mem.Allocator, params: ExecParams) u8 {
+-    const err = process.execve(arena, params.args.items, &params.env);
+-    std.debug.print(
+-        "error execing {s}: {s}\n",
+-        .{ params.args.items[0], @errorName(err) },
+-    );
+-    return 1;
 +fn spawnAndStripUnix(arena: mem.Allocator, params: ExecParams) u8 {
 +    // Build a strip command
 +    const strip_cmd = blk: {
@@ -109,7 +117,6 @@ index 3ea3964..4f471ee 100644
 +    };
 +
 +    return code;
-+}
+ }
 
  // argv_it is an object that has such method:
- //     fn next(self: *Self) ?[]const u8
