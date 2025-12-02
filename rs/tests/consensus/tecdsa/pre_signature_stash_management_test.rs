@@ -24,8 +24,9 @@ end::catalog[] */
 
 use anyhow::Result;
 use canister_test::Canister;
-use ic_consensus_system_test_utils::node::{
-    await_node_certified_height, get_node_certified_height,
+use ic_consensus_system_test_utils::{
+    node::{await_node_certified_height, get_node_certified_height},
+    rw_message::install_nns_and_check_progress,
 };
 use ic_consensus_threshold_sig_system_test_utils::{
     await_pre_signature_stash_size, get_master_public_key, make_key_ids_for_all_idkg_schemes,
@@ -39,9 +40,7 @@ use ic_system_test_driver::{
         group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
-        test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-        },
+        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
     systest,
     util::{MessageCanister, block_on, runtime_from_url},
@@ -52,7 +51,7 @@ use slog::info;
 const MAX_PARALLEL_PRE_SIGNATURES: u32 = 10;
 const DKG_INTERVAL_LENGTH: u64 = 19;
 
-fn setup(test_env: TestEnv) {
+fn setup(env: TestEnv) {
     let key_ids = make_key_ids_for_all_idkg_schemes();
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
@@ -76,24 +75,10 @@ fn setup(test_env: TestEnv) {
                     ),
                 }),
         )
-        .setup_and_start(&test_env)
+        .setup_and_start(&env)
         .expect("Could not start IC!");
 
-    test_env.topology_snapshot().subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
-
-    let nns_node = test_env
-        .topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap();
-    NnsInstallationBuilder::new()
-        .install(&nns_node, &test_env)
-        .expect("Failed to install NNS canisters");
+    install_nns_and_check_progress(env.topology_snapshot());
 }
 
 fn test(test_env: TestEnv) {
