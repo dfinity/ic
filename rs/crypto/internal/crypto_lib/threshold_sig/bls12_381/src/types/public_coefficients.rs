@@ -31,6 +31,10 @@ impl PublicCoefficients {
         }
     }
 
+    pub(crate) fn new(coefficients: Vec<PublicKey>) -> Self {
+        Self { coefficients }
+    }
+
     /// Deserializes a `PublicCoefficients` from a *trusted* source.
     ///
     /// # Note
