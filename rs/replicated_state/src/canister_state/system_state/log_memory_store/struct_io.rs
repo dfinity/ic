@@ -92,6 +92,9 @@ impl StructIO {
         )
     }
 
+    /// Save index table to the memory store.
+    /// IMPORTANT: the caller must ensure that the header
+    /// is created and up-to-date.
     pub fn save_index_table(&mut self, index: &IndexTable) {
         // Save entries.
         let mut addr = INDEX_TABLE_OFFSET;
