@@ -695,13 +695,10 @@ fn create_setupos_config_image(
 
     // Pack dirs into config image
     let config_image = nested_vm.get_setupos_config_image_path()?;
-    let path_key = "PATH";
-    let new_path = format!("{}:{}", "/usr/sbin", std::env::var(path_key)?);
     let status = Command::new(build_setupos_config_image)
         .arg(config_dir)
         .arg(data_dir)
         .arg(&config_image)
-        .env(path_key, &new_path)
         .status()?;
 
     if !status.success() {
