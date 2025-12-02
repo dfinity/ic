@@ -5,15 +5,6 @@ use ic_types::PrincipalId;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Eq, PartialEq, CandidType, Deserialize, Message, Serialize)]
-pub struct ApproveAddNodePayload {
-    /// Represents the expected node ID sent by the
-    /// node operator that will be used to map an incoming
-    /// request from the node to register itself.
-    #[prost(message, optional, tag = "1")]
-    pub node_id: Option<PrincipalId>,
-}
-
 #[derive(Debug, PartialEq)]
 pub enum ApprovePayloadError {
     MissingNodeId,
@@ -30,6 +21,15 @@ impl Display for ApprovePayloadError {
             }
         )
     }
+}
+
+#[derive(Clone, Eq, PartialEq, CandidType, Deserialize, Message, Serialize)]
+pub struct ApproveAddNodePayload {
+    /// Represents the expected node ID sent by the
+    /// node operator that will be used to map an incoming
+    /// request from the node to register itself.
+    #[prost(message, optional, tag = "1")]
+    pub node_id: Option<PrincipalId>,
 }
 
 impl ApproveAddNodePayload {
