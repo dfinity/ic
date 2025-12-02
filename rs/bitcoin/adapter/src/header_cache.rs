@@ -899,15 +899,11 @@ pub(crate) mod test {
     fn test_db_size_limit_increase() {
         let dir = tempdir().unwrap();
         let path = dir.path();
-        std::fs::create_dir_all(path).unwrap_or_else(|err| {
-            panic!("Error creating DB directory {}: {}", path.display(), err)
-        });
+        std::fs::create_dir_all(path).unwrap();
         // 1. Create a DB and write to it until MapFull error.
         let idx = {
             let env = create_db_env(path, 30000);
-            let db = env
-                .create_db(Some("DB"), DatabaseFlags::empty())
-                .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err));
+            let db = env.create_db(Some("DB"), DatabaseFlags::empty()).unwrap();
             let mut i = 0u8;
             let err = loop {
                 let mut tx = env.begin_rw_txn().unwrap();
@@ -927,9 +923,7 @@ pub(crate) mod test {
         // 2. Open the same DB and read it, no error. Write additional data, got MapFull.
         {
             let env = create_db_env(path, 30000);
-            let db = env
-                .create_db(Some("DB"), DatabaseFlags::empty())
-                .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err));
+            let db = env.create_db(Some("DB"), DatabaseFlags::empty()).unwrap();
             let mut tx = env.begin_rw_txn().unwrap();
             let mut bytes = [0; 32];
             assert_eq!(tx.get(db, &bytes).unwrap(), bytes);
@@ -943,9 +937,7 @@ pub(crate) mod test {
         // 3. Open the same DB with bigger size limit, no problem writing more data to it.
         {
             let env = create_db_env(path, 60000);
-            let db = env
-                .create_db(Some("DB"), DatabaseFlags::empty())
-                .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err));
+            let db = env.create_db(Some("DB"), DatabaseFlags::empty()).unwrap();
             let mut i = idx;
             let err = loop {
                 let mut tx = env.begin_rw_txn().unwrap();
