@@ -89,7 +89,7 @@ impl CallCanister {
             arg_path,
         } = self;
 
-        let arg = read_flag_path(&arg_path);
+        let arg = read_argv_path(&arg_path);
 
         // Call canister, fetching signed reply.
         let signed_proposal = download_signed_proposal(&agent, callee, &method, arg).await;
@@ -124,7 +124,7 @@ impl LoadFromFile {
         let Self { signed_reply_path } = self;
 
         // Read file.
-        let content = read_flag_path(&signed_reply_path);
+        let content = read_argv_path(&signed_reply_path);
         // Parse.
         let certificate = serde_cbor::from_slice::<Certificate>(&content).unwrap();
         // Verify signature.
@@ -140,7 +140,11 @@ impl LoadFromFile {
     }
 }
 
-fn read_flag_path(path: &str) -> Vec<u8> {
+/// This follows the tradition that when `-` is passed via command line, it
+/// indicates that input should be read from stdin, rather than an actual file.
+///
+/// Other than that, this behaves like std::fs::read(...).unwrap().
+fn read_argv_path(path: &str) -> Vec<u8> {
     if path == "-" {
         let mut result = vec![];
         stdin().read_to_end(&mut result).unwrap();
