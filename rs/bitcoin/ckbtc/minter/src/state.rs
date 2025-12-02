@@ -120,7 +120,7 @@ impl From<Vec<RetrieveBtcRequest>> for SubmittedWithdrawalRequests {
 }
 
 impl SubmittedWithdrawalRequests {
-    pub fn into_iter(self) -> Box<dyn Iterator<Item = BtcTransactionRequest>> {
+    pub fn into_tx_request_iter(self) -> Box<dyn Iterator<Item = BtcTransactionRequest>> {
         match self {
             Self::ToConfirm { requests } => {
                 Box::new(requests.into_iter().map(BtcTransactionRequest::from))
@@ -1165,7 +1165,7 @@ impl CkBtcMinterState {
             assert!(!self.has_pending_request(block_index));
             self.requests_in_flight.remove(&block_index);
         }
-        for req in requests.into_iter() {
+        for req in requests.into_tx_request_iter() {
             self.pending_btc_requests.push(req);
         }
         self.pending_btc_requests.sort_by_key(|r| r.received_at());
