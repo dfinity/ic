@@ -19,7 +19,7 @@ pub type RetryCount = u64;
 pub trait ManagementCanisterClient {
     async fn node_metrics_history(
         &self,
-        args: NodeMetricsHistoryArgs,
+        args: &NodeMetricsHistoryArgs,
     ) -> CallResult<Vec<NodeMetricsHistoryRecord>>;
 }
 
@@ -32,13 +32,9 @@ impl ManagementCanisterClient for ICCanisterClient {
     /// in the 'contract' to fetch daily node metrics.
     async fn node_metrics_history(
         &self,
-        args: NodeMetricsHistoryArgs,
+        args: &NodeMetricsHistoryArgs,
     ) -> CallResult<Vec<NodeMetricsHistoryRecord>> {
-        ic_cdk::call::Call::bounded_wait(Principal::management_canister(), "node_metrics_history")
-            .with_arg(args)
-            .await?
-            .candid()
-            .map_err(Into::into)
+        ic_cdk::management_canister::node_metrics_history(args)
     }
 }
 
@@ -74,7 +70,7 @@ where
             };
 
             subnets_history
-                .push(async move { (*subnet_id, self.client.node_metrics_history(args).await) });
+                .push(async move { (*subnet_id, self.client.node_metrics_history(&args).await) });
         }
 
         futures::future::join_all(subnets_history)
@@ -288,7 +284,7 @@ pub mod management_canister_client_test {
     impl ManagementCanisterClient for ICCanisterClient {
         async fn node_metrics_history(
             &self,
-            args: NodeMetricsHistoryArgs,
+            args: &NodeMetricsHistoryArgs,
         ) -> CallResult<Vec<NodeMetricsHistoryRecord>> {
             use crate::canister::current_time;
             use crate::registry_querier::RegistryQuerier;
