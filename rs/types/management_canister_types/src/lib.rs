@@ -3536,6 +3536,11 @@ impl FetchCanisterLogsRange {
         Self { start, end }
     }
 
+    /// Returns true if the range is valid (i.e., start < end).
+    pub fn is_valid(&self) -> bool {
+        self.start < self.end
+    }
+
     /// Returns the length of the range.
     /// If user provides an `end` value below `start`, the length is 0.
     fn len(&self) -> u64 {
@@ -3568,6 +3573,15 @@ pub enum FetchCanisterLogsFilter {
 }
 
 impl Payload<'_> for FetchCanisterLogsFilter {}
+
+impl FetchCanisterLogsFilter {
+    pub fn is_valid(&self) -> bool {
+        match self {
+            FetchCanisterLogsFilter::ByIdx(range) => range.is_valid(),
+            FetchCanisterLogsFilter::ByTimestampNanos(range) => range.is_valid(),
+        }
+    }
+}
 
 /// `CandidType` for `FetchCanisterLogsRequest`
 /// ```text

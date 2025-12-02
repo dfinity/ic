@@ -7,8 +7,9 @@ use crate::canister_state::system_state::log_memory_store::{
 };
 use crate::page_map::{Buffer, PageMap};
 
-pub struct StructIO {
+pub(super) struct StructIO {
     buffer: Buffer,
+    // TODO: add caching for header and index table.
 }
 
 impl StructIO {
@@ -91,6 +92,9 @@ impl StructIO {
         )
     }
 
+    /// Save index table to the memory store.
+    /// IMPORTANT: the caller must ensure that the header
+    /// is created and up-to-date.
     pub fn save_index_table(&mut self, index: &IndexTable) {
         // Save entries.
         let mut addr = INDEX_TABLE_OFFSET;

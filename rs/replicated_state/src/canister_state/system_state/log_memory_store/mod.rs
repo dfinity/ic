@@ -6,7 +6,8 @@ mod ring_buffer;
 mod struct_io;
 
 use crate::canister_state::system_state::log_memory_store::{
-    memory::MemorySize, ring_buffer::RingBuffer,
+    memory::MemorySize,
+    ring_buffer::{DATA_CAPACITY_MIN, RingBuffer},
 };
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
 use ic_management_canister_types_private::{
@@ -73,10 +74,19 @@ impl LogMemoryStore {
         )
     }
 
+    /// Returns the total allocated bytes for the ring buffer
+    /// including header, index table and data region.
+    #[allow(dead_code)]
+    pub fn total_allocated_bytes(&self) -> usize {
+        self.load_ring_buffer().total_allocated_bytes()
+    }
+
+    /// Returns the data capacity of the ring buffer.
     pub fn byte_capacity(&self) -> usize {
         self.load_ring_buffer().byte_capacity()
     }
 
+    /// Returns the data size of the ring buffer.
     #[cfg(test)]
     pub fn bytes_used(&self) -> usize {
         self.load_ring_buffer().bytes_used()
@@ -84,6 +94,8 @@ impl LogMemoryStore {
 
     /// Set the ring buffer capacity — preserves existing records by collecting and re-appending them.
     pub fn set_byte_capacity(&mut self, new_byte_capacity: usize) {
+        let new_byte_capacity = new_byte_capacity.max(DATA_CAPACITY_MIN);
+
         // TODO: PageMap cannot be shrunk today; reducing capacity does not free allocated pages
         // (practical ring buffer max currently ~55 MB). Future improvement: allocate a new PageMap
         // with the desired capacity, refeed records, then drop the old map or provide a `PageMap::shrink` API.
@@ -255,12 +267,14 @@ mod tests {
         s.append_delta_log(&mut delta);
 
         // By index — inclusive range.
+        // Range is [1, 2).
         let records = s.records(Some(FetchCanisterLogsFilter::ByIdx(
             FetchCanisterLogsRange { start: 1, end: 2 },
         )));
         assert_eq!(records, vec![make_canister_record(1, 20, "b")]);
 
         // By timestamp — inclusive range that picks middle record.
+        // Range is [15, 25).
         let records = s.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
             FetchCanisterLogsRange { start: 15, end: 25 },
         )));
@@ -468,5 +482,132 @@ mod tests {
         assert_eq!(records.len(), 2, "Should return 2 records");
         assert_eq!(records[0].content, b"a");
         assert_eq!(records[1].content, b"b");
+    }
+
+    #[test]
+    fn test_multiple_records_in_same_segment() {
+        let mut store = LogMemoryStore::new_for_testing();
+        // Capacity 100KB. Segment size ~685 bytes.
+        store.set_byte_capacity(100_000);
+
+        let mut delta = CanisterLog::new_delta_with_next_index(0, 100_000);
+        // Add 10 records, each ~21 bytes. All should fit in segment 0.
+        for i in 0..10 {
+            delta.add_record(i, vec![i as u8]);
+        }
+        store.append_delta_log(&mut delta);
+
+        // Verify we can retrieve all of them.
+        let records = store.records(None);
+        assert_eq!(records.len(), 10);
+        for (i, r) in records.iter().enumerate() {
+            assert_eq!(r.idx, i as u64);
+        }
+
+        // Verify filtering works.
+        // Filter for record 5. Range is [5, 6).
+        let records = store.records(Some(FetchCanisterLogsFilter::ByIdx(
+            FetchCanisterLogsRange { start: 5, end: 6 },
+        )));
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].idx, 5);
+    }
+
+    #[test]
+    fn test_very_small_capacity_single_byte() {
+        let mut store = LogMemoryStore::new_for_testing();
+        // Set capacity to 1 byte - this will be clamped to DATA_CAPACITY_MIN (4096 bytes).
+        store.set_byte_capacity(1);
+
+        // Verify capacity was clamped to minimum.
+        assert_eq!(store.byte_capacity(), 4096);
+
+        let mut delta = CanisterLog::new_delta_with_next_index(0, 4096);
+        // Add a record - it should fit within the minimum capacity.
+        delta.add_record(0, b"a".to_vec());
+
+        store.append_delta_log(&mut delta);
+
+        // The record should be stored.
+        assert_eq!(store.next_id(), 1);
+        assert_eq!(store.bytes_used(), 21);
+        let records = store.records(None);
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].content, b"a");
+    }
+
+    #[test]
+    fn test_small_capacity_with_eviction() {
+        let mut store = LogMemoryStore::new_for_testing();
+        // Set capacity to minimum (4096 bytes).
+        let capacity = 4096;
+        store.set_byte_capacity(capacity);
+
+        // Verify capacity is at minimum.
+        assert_eq!(store.byte_capacity(), capacity);
+
+        // Fill the buffer with records until we're close to capacity.
+        // Each record is ~21 bytes (8+8+4+1), so we can fit ~195 records.
+        let record_size = 21;
+        let max_records = capacity / record_size; // ~195
+
+        // Add records to fill the buffer.
+        for i in 0..max_records {
+            let mut delta = CanisterLog::new_delta_with_next_index(i as u64, capacity);
+            delta.add_record(i as u64, vec![i as u8]);
+            store.append_delta_log(&mut delta);
+        }
+
+        // Verify all records fit.
+        assert_eq!(store.next_id(), max_records as u64);
+        let records = store.records(None);
+        assert_eq!(records.len(), max_records);
+
+        // Add one more record - this should evict the oldest one.
+        let mut delta = CanisterLog::new_delta_with_next_index(max_records as u64, capacity);
+        delta.add_record(max_records as u64, vec![255]);
+        store.append_delta_log(&mut delta);
+
+        // Verify the oldest record was evicted.
+        assert_eq!(store.next_id(), (max_records + 1) as u64);
+        let records = store.records(None);
+        assert_eq!(records.len(), max_records);
+        assert_eq!(records[0].idx, 1); // First record (idx=0) was evicted.
+        assert_eq!(records.last().unwrap().idx, max_records as u64);
+    }
+
+    #[test]
+    fn test_filtering_with_multiple_records_in_same_segment() {
+        let mut store = LogMemoryStore::new_for_testing();
+        // Capacity 100KB. Segment size ~685 bytes.
+        store.set_byte_capacity(100_000);
+
+        let mut delta = CanisterLog::new_delta_with_next_index(0, 100_000);
+        // Add 20 records, each ~21 bytes. All should fit in segment 0.
+        for i in 0..20 {
+            delta.add_record(i * 1000, vec![i as u8]);
+        }
+        store.append_delta_log(&mut delta);
+
+        // Filter for records in the middle: [5000, 15000).
+        let records = store.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
+            FetchCanisterLogsRange {
+                start: 5000,
+                end: 15000,
+            },
+        )));
+        // Should return records 5-14 (10 records).
+        assert_eq!(records.len(), 10);
+        assert_eq!(records[0].idx, 5);
+        assert_eq!(records[9].idx, 14);
+
+        // Filter by idx: [10, 15).
+        let records = store.records(Some(FetchCanisterLogsFilter::ByIdx(
+            FetchCanisterLogsRange { start: 10, end: 15 },
+        )));
+        // Should return records 10-14 (5 records).
+        assert_eq!(records.len(), 5);
+        assert_eq!(records[0].idx, 10);
+        assert_eq!(records[4].idx, 14);
     }
 }

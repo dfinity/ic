@@ -37,7 +37,10 @@ const DATA_SEGMENT_SIZE_MAX: u64 = DATA_CAPACITY_MAX.get() / INDEX_ENTRY_COUNT_M
 // Ensure data segment size is significantly smaller than max result size, say 20%.
 const _: () = assert!(5 * DATA_SEGMENT_SIZE_MAX <= RESULT_MAX_SIZE.get());
 
-pub struct RingBuffer {
+pub const DATA_CAPACITY_MIN: usize = PAGE_SIZE;
+const _: () = assert!(PAGE_SIZE <= DATA_CAPACITY_MIN); // data capacity must be at least one page.
+
+pub(super) struct RingBuffer {
     io: StructIO,
 }
 
@@ -69,10 +72,21 @@ impl RingBuffer {
         self.io.to_page_map()
     }
 
+    /// Returns the total allocated bytes for the ring buffer
+    /// including header, index table and data region.
+    pub fn total_allocated_bytes(&self) -> usize {
+        let header = self.io.load_header();
+        HEADER_SIZE.get() as usize
+            + header.index_table_pages as usize * PAGE_SIZE
+            + header.data_capacity.get() as usize
+    }
+
+    /// Returns the data capacity of the ring buffer.
     pub fn byte_capacity(&self) -> usize {
         self.io.load_header().data_capacity.get() as usize
     }
 
+    /// Returns the data size of the ring buffer.
     pub fn bytes_used(&self) -> usize {
         self.io.load_header().data_size.get() as usize
     }
@@ -200,6 +214,8 @@ impl RingBuffer {
                 }
                 records[start..].to_vec()
             }
+
+            Some(filter) if !filter.is_valid() => Vec::new(),
 
             Some(filter) => {
                 // Find an approximate start where matching records may begin.

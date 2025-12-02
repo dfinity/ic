@@ -2,7 +2,7 @@ use std::ops::{Add, Mul, Rem, Sub};
 
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq)]
-pub struct MemoryAddress(u64);
+pub(super) struct MemoryAddress(u64);
 const _: () = assert!(std::mem::size_of::<MemoryAddress>() == 8);
 
 impl MemoryAddress {
@@ -37,7 +37,7 @@ impl Add<MemorySize> for MemoryAddress {
 
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq)]
-pub struct MemoryPosition(u64);
+pub(super) struct MemoryPosition(u64);
 const _: () = assert!(std::mem::size_of::<MemoryAddress>() == 8);
 
 impl MemoryPosition {
@@ -76,7 +76,7 @@ impl Sub<MemoryPosition> for MemoryPosition {
 
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq)]
-pub struct MemorySize(u64);
+pub(super) struct MemorySize(u64);
 const _: () = assert!(std::mem::size_of::<MemoryAddress>() == 8);
 
 impl MemorySize {
