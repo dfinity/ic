@@ -11,6 +11,24 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-11-28: Proposal 139576
+
+http://dashboard.internetcomputer.org/proposal/139576
+
+## Added
+
+### Node Swaps
+
+All node operators can now swap nodes on non-system subnets; later, swapping will be enabled on all subnets.
+
+### Other
+
+* Temporary logging for when add_node traps.
+
+* Migration Swiss subnet Node Operators max_rewardable_nodes to btreemap! {"type3.1" => 1} as requested by
+  Alexander Ufimtsev.
+
+
 # 2025-11-14: Proposal 139405
 
 http://dashboard.internetcomputer.org/proposal/139405

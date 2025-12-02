@@ -26,7 +26,12 @@ archive_override(
     module_name = "hermetic_cc_toolchain",
     integrity = "sha256-kHdFv5FVX3foI0wLlTNx5srFunFdHPEv9kFJbdG86dE=",
     patch_strip = 1,
-    patches = ["//bazel:hermetic_cc_toolchain.patch"],
+    patches = [
+        "//bazel:hermetic_cc_toolchain_cache_dir.patch",
+        "//bazel:hermetic_cc_toolchain_wasi_freestanding.patch",
+        "//bazel:hermetic_cc_toolchain_strip.patch",
+        "//bazel:hermetic_cc_toolchain_extra_settings.patch",
+    ],
     urls = ["https://github.com/uber/hermetic_cc_toolchain/releases/download/v3.1.1/hermetic_cc_toolchain-v3.1.1.tar.gz"],
 )
 
@@ -55,6 +60,10 @@ archive_override(
 # Misc tools
 
 bazel_dep(name = "pigz", version = "2.8")  # (parallel) gzip
+
+# Rust
+
+include("//bazel:rust.MODULE.bazel")
 
 # Python dependencies
 
