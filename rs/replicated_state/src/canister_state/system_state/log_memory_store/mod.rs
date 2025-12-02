@@ -10,9 +10,7 @@ use crate::canister_state::system_state::log_memory_store::{
     ring_buffer::{DATA_CAPACITY_MIN, RingBuffer},
 };
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
-use ic_management_canister_types_private::{
-    CanisterLogRecord, FetchCanisterLogsFilter, FetchCanisterLogsRange,
-};
+use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
 use ic_types::{CanisterLog, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -87,7 +85,6 @@ impl LogMemoryStore {
     }
 
     /// Returns the data size of the ring buffer.
-    #[cfg(test)]
     pub fn bytes_used(&self) -> usize {
         self.load_ring_buffer().bytes_used()
     }
@@ -104,56 +101,54 @@ impl LogMemoryStore {
             return;
         }
 
-        // `old.records(...)` may return results in batches, so iterate until all available records are collected.
-        let mut records = Vec::new();
-        let mut idx = 0;
-        while idx < old.next_id() {
-            let batch = old.records(Some(FetchCanisterLogsFilter::ByIdx(
-                FetchCanisterLogsRange {
-                    start: idx,
-                    end: u64::MAX,
-                },
-            )));
-            if batch.is_empty() {
-                break;
-            }
-            idx = batch.last().unwrap().idx + 1;
-            records.extend(batch);
-        }
-
         // Recreate ring buffer with new capacity and restore records.
         let mut new = RingBuffer::new(
             self.page_map.clone(),
             MemorySize::new(new_byte_capacity as u64),
         );
-        new.append_log(records);
+        new.append_log(old.all_records());
         self.page_map = new.to_page_map();
     }
 
-    pub fn next_id(&self) -> u64 {
-        self.load_ring_buffer().next_id()
+    /// Returns the next log record `idx`.
+    pub fn next_idx(&self) -> u64 {
+        self.load_ring_buffer().next_idx()
     }
 
     pub fn is_empty(&self) -> bool {
         self.load_ring_buffer().is_empty()
     }
 
+    /// Returns the canister log records, optionally filtered.
     pub fn records(&self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
         self.load_ring_buffer().records(filter)
     }
 
+    /// Returns all canister log records.
+    pub fn all_records(&self) -> Vec<CanisterLogRecord> {
+        self.load_ring_buffer().all_records()
+    }
+
+    /// Clears the canister log records.
+    pub fn clear(&mut self) {
+        self.update_ring_buffer(|rb| rb.clear());
+    }
+
+    /// Appends a delta log to the ring buffer.
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
         // Record the size of the appended delta log for metrics.
         self.push_delta_log_size(delta_log.bytes_used());
+        let records: Vec<CanisterLogRecord> = delta_log
+            .records_mut()
+            .iter_mut()
+            .map(std::mem::take)
+            .collect();
+        self.update_ring_buffer(|rb| rb.append_log(records));
+    }
 
+    fn update_ring_buffer(&mut self, f: impl FnOnce(&mut RingBuffer)) {
         let mut ring_buffer = self.load_ring_buffer();
-        ring_buffer.append_log(
-            delta_log
-                .records_mut()
-                .iter_mut()
-                .map(std::mem::take)
-                .collect(),
-        );
+        f(&mut ring_buffer);
         self.page_map = ring_buffer.to_page_map();
     }
 
@@ -175,7 +170,7 @@ impl LogMemoryStore {
 mod tests {
     use super::*;
     use crate::canister_state::system_state::log_memory_store::ring_buffer::RESULT_MAX_SIZE;
-    use ic_management_canister_types_private::DataSize;
+    use ic_management_canister_types_private::{DataSize, FetchCanisterLogsRange};
 
     fn make_canister_record(idx: u64, ts: u64, message: &str) -> CanisterLogRecord {
         CanisterLogRecord {
@@ -213,7 +208,7 @@ mod tests {
                 return;
             }
             store.append_delta_log(&mut delta);
-            next_idx = store.next_id();
+            next_idx = store.next_idx();
         }
     }
 
@@ -224,7 +219,7 @@ mod tests {
     #[test]
     fn initialization_defaults() {
         let s = LogMemoryStore::new_for_testing();
-        assert_eq!(s.next_id(), 0);
+        assert_eq!(s.next_idx(), 0);
         assert!(s.is_empty());
         assert_eq!(s.bytes_used(), 0);
         assert_eq!(s.byte_capacity(), DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
@@ -242,7 +237,7 @@ mod tests {
         let mut s = LogMemoryStore::new_for_testing();
         s.append_delta_log(&mut delta);
 
-        assert_eq!(s.next_id(), 3);
+        assert_eq!(s.next_idx(), 3);
         assert!(!s.is_empty());
         assert!(s.bytes_used() > 0);
         assert_eq!(
@@ -304,7 +299,7 @@ mod tests {
         );
         assert_eq!(
             records.last().unwrap().idx + 1,
-            s.next_id(),
+            s.next_idx(),
             "end records should be present"
         );
     }
@@ -328,7 +323,7 @@ mod tests {
         let result = s.records(None);
         assert!(total_size(&result) <= RESULT_MAX_SIZE.get() as usize);
         // And recent records (tail) must be present.
-        assert_eq!(result.last().unwrap().idx + 1, s.next_id());
+        assert_eq!(result.last().unwrap().idx + 1, s.next_idx());
     }
 
     #[test]
@@ -441,7 +436,7 @@ mod tests {
 
         let records_before = store.records(None);
         let bytes_used_before = store.bytes_used();
-        let next_idx_before = store.next_id();
+        let next_idx_before = store.next_idx();
 
         // Decrease capacity.
         store.set_byte_capacity(100_000); // 100 KB
@@ -453,7 +448,7 @@ mod tests {
         assert!(records_after.len() < records_before.len());
         assert!(bytes_used_after < bytes_used_before);
         // Verify recent records are preserved.
-        assert_eq!(next_idx_before, store.next_id());
+        assert_eq!(next_idx_before, store.next_idx());
     }
 
     #[test]
@@ -529,7 +524,7 @@ mod tests {
         store.append_delta_log(&mut delta);
 
         // The record should be stored.
-        assert_eq!(store.next_id(), 1);
+        assert_eq!(store.next_idx(), 1);
         assert_eq!(store.bytes_used(), 21);
         let records = store.records(None);
         assert_eq!(records.len(), 1);
@@ -559,7 +554,7 @@ mod tests {
         }
 
         // Verify all records fit.
-        assert_eq!(store.next_id(), max_records as u64);
+        assert_eq!(store.next_idx(), max_records as u64);
         let records = store.records(None);
         assert_eq!(records.len(), max_records);
 
@@ -569,7 +564,7 @@ mod tests {
         store.append_delta_log(&mut delta);
 
         // Verify the oldest record was evicted.
-        assert_eq!(store.next_id(), (max_records + 1) as u64);
+        assert_eq!(store.next_idx(), (max_records + 1) as u64);
         let records = store.records(None);
         assert_eq!(records.len(), max_records);
         assert_eq!(records[0].idx, 1); // First record (idx=0) was evicted.
