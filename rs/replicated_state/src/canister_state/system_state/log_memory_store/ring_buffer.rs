@@ -69,10 +69,21 @@ impl RingBuffer {
         self.io.to_page_map()
     }
 
+    /// Returns the total allocated bytes for the ring buffer
+    /// including header, index table and data region.
+    pub fn total_allocated_bytes(&self) -> usize {
+        let header = self.io.load_header();
+        HEADER_SIZE.get() as usize
+            + header.index_table_pages as usize * PAGE_SIZE
+            + header.data_capacity.get() as usize
+    }
+
+    /// Returns the data capacity of the ring buffer.
     pub fn byte_capacity(&self) -> usize {
         self.io.load_header().data_capacity.get() as usize
     }
 
+    /// Returns the data size of the ring buffer.
     pub fn bytes_used(&self) -> usize {
         self.io.load_header().data_size.get() as usize
     }

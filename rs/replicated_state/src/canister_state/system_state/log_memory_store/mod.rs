@@ -73,10 +73,19 @@ impl LogMemoryStore {
         )
     }
 
+    /// Returns the total allocated bytes for the ring buffer
+    /// including header, index table and data region.
+    #[allow(dead_code)]
+    pub fn total_allocated_bytes(&self) -> usize {
+        self.load_ring_buffer().total_allocated_bytes()
+    }
+
+    /// Returns the data capacity of the ring buffer.
     pub fn byte_capacity(&self) -> usize {
         self.load_ring_buffer().byte_capacity()
     }
 
+    /// Returns the data size of the ring buffer.
     #[cfg(test)]
     pub fn bytes_used(&self) -> usize {
         self.load_ring_buffer().bytes_used()
