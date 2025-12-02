@@ -62,10 +62,33 @@ fn convert_encoded_candid_args_to_idl(
 }
 
 fn candid_value_to_self_describing(candid_value: IDLValue) -> SelfDescribingValue {
-    println!("candid_value: {:?}", candid_value);
     let value = match candid_value {
-        IDLValue::Blob(bytes) => Value::Blob(bytes),
+        // Boolean types are converted to Nat.
+        IDLValue::Bool(bool) => to_self_describing_nat(if bool { 1u8 } else { 0u8 }),
 
+        // Unsigned integer types are converted to Nat.
+        IDLValue::Nat(i) => to_self_describing_nat(i),
+        IDLValue::Nat8(n) => to_self_describing_nat(n),
+        IDLValue::Nat16(n) => to_self_describing_nat(n),
+        IDLValue::Nat32(n) => to_self_describing_nat(n),
+        IDLValue::Nat64(n) => to_self_describing_nat(n),
+
+        // Signed integer types are converted to Int.
+        IDLValue::Int(i) => to_self_describing_int(i),
+        IDLValue::Int8(i) => to_self_describing_int(i),
+        IDLValue::Int16(i) => to_self_describing_int(i),
+        IDLValue::Int32(i) => to_self_describing_int(i),
+        IDLValue::Int64(i) => to_self_describing_int(i),
+
+        // Floating point types are converted to Text.
+        IDLValue::Float32(f) => Value::Text(format!("{}", f)),
+        IDLValue::Float64(f) => Value::Text(format!("{}", f)),
+
+        // This should be unreacheable as no type in candid is represented as this `Number` type,
+        // but we convert it anyway.
+        IDLValue::Number(s) => Value::Text(s),
+
+        IDLValue::Blob(bytes) => Value::Blob(bytes),
         IDLValue::Text(s) => Value::Text(s),
         IDLValue::Principal(p) => Value::Text(format!("{}", p)),
 
@@ -94,31 +117,6 @@ fn candid_value_to_self_describing(candid_value: IDLValue) -> SelfDescribingValu
                 .collect(),
         }),
         IDLValue::Variant(value) => convert_variant_to_self_describing(value),
-
-        // Boolean types are converted to Nat.
-        IDLValue::Bool(bool) => to_self_describing_nat(if bool { 1u8 } else { 0u8 }),
-
-        // Unsigned integer types are converted to Nat.
-        IDLValue::Nat(i) => to_self_describing_nat(i),
-        IDLValue::Nat8(n) => to_self_describing_nat(n),
-        IDLValue::Nat16(n) => to_self_describing_nat(n),
-        IDLValue::Nat32(n) => to_self_describing_nat(n),
-        IDLValue::Nat64(n) => to_self_describing_nat(n),
-
-        // Signed integer types are converted to Int.
-        IDLValue::Int(i) => to_self_describing_int(i),
-        IDLValue::Int8(i) => to_self_describing_int(i),
-        IDLValue::Int16(i) => to_self_describing_int(i),
-        IDLValue::Int32(i) => to_self_describing_int(i),
-        IDLValue::Int64(i) => to_self_describing_int(i),
-
-        // Floating point types are converted to Text.
-        IDLValue::Float32(f) => Value::Text(format!("{}", f)),
-        IDLValue::Float64(f) => Value::Text(format!("{}", f)),
-
-        // This should be unreacheable as no type in candid is represented as this `Number` type,
-        // but we convert it anyway.
-        IDLValue::Number(s) => Value::Text(s),
 
         IDLValue::Service(_) | IDLValue::Func(..) => {
             panic!("Unexpected IDLValue: {:?}", candid_value)
