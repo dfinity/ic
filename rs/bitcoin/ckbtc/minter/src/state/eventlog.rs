@@ -350,7 +350,7 @@ pub fn replay<I: CheckInvariants>(
                 })?;
 
                 state.push_finalized_request(FinalizedBtcRequest {
-                    request: request.into(),
+                    request,
                     state: FinalizedStatus::AmountTooLow,
                 })
             }

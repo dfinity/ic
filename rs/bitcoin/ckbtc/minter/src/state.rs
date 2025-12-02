@@ -220,7 +220,7 @@ impl BtcTransactionRequest {
     }
     pub fn kyt_provider(&self) -> Option<Principal> {
         match self {
-            Self::RetrieveBtc(request) => request.kyt_provider.clone(),
+            Self::RetrieveBtc(request) => request.kyt_provider,
             Self::ConsolidateUtxos(_) => None,
         }
     }
@@ -332,7 +332,9 @@ pub enum RetrieveBtcStatusV2 {
 }
 
 /// Controls which operations the minter can perform.
-#[derive(Clone, Eq, PartialEq, Debug, Serialize, candid::CandidType, serde::Deserialize)]
+#[derive(
+    Default, Clone, Eq, PartialEq, Debug, Serialize, candid::CandidType, serde::Deserialize,
+)]
 pub enum Mode {
     /// Minter's state is read-only.
     ReadOnly,
@@ -340,6 +342,7 @@ pub enum Mode {
     RestrictedTo(Vec<Principal>),
     /// Only the specified principals can deposit BTC.
     DepositsRestrictedTo(Vec<Principal>),
+    #[default]
     /// No restrictions on the minter interactions.
     GeneralAvailability,
 }
@@ -377,12 +380,6 @@ impl Mode {
                 Ok(())
             }
         }
-    }
-}
-
-impl Default for Mode {
-    fn default() -> Self {
-        Self::GeneralAvailability
     }
 }
 

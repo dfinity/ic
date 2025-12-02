@@ -1244,7 +1244,7 @@ fn test_build_consolidation_transaction() {
     let (unsigned_tx, _change_output, fee) = result.unwrap();
     let outputs = &unsigned_tx.outputs;
     assert_eq!(outputs.len(), 2);
-    assert!(outputs.iter().all(|x| &x.address == &main_address));
+    assert!(outputs.iter().all(|x| x.address == main_address));
     assert_eq!(
         total_amount,
         outputs.iter().map(|x| x.value).sum::<u64>() + fee.bitcoin_fee
