@@ -1273,7 +1273,12 @@ fn webauthn_sign_message<F: FnOnce(&[u8]) -> Vec<u8>>(msg: &[u8], sign_fn: F) ->
         Blob(client_data_json),
         signature,
     );
-    serde_cbor::to_vec(&sig).unwrap()
+
+    // serialize to self-describing CBOR
+    let mut serializer = serde_cbor::Serializer::new(Vec::new());
+    serializer.self_describe().unwrap();
+    sig.serialize(&mut serializer).unwrap();
+    serializer.into_inner()
 }
 
 fn webauthn_sign_ecdsa_secp256r1(sk: &ic_secp256r1::PrivateKey, msg: &[u8]) -> Vec<u8> {
@@ -1283,15 +1288,9 @@ fn webauthn_sign_ecdsa_secp256r1(sk: &ic_secp256r1::PrivateKey, msg: &[u8]) -> V
 
 fn webauthn_sign_rsa_pkcs1(sk: &rsa::RsaPrivateKey, msg: &[u8]) -> Vec<u8> {
     let sign_fn = |to_sign: &[u8]| -> Vec<u8> {
-        let digest = ic_crypto_sha2::Sha256::hash(to_sign);
-        let pkcs1 = rsa::Pkcs1v15Sign {
-            hash_len: Some(32),
-            prefix: Box::<[u8]>::from([
-                0x30, 0x31, 0x30, 0x0D, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02,
-                0x01, 0x05, 0x00, 0x04, 0x20,
-            ]),
-        };
-        sk.sign(pkcs1, &digest[..]).expect("RSA signing failed")
+        let signing_key = rsa::pkcs1v15::SigningKey::<rsa::sha2::Sha256>::new(sk.clone());
+        use rsa::signature::{SignatureEncoding, Signer};
+        signing_key.sign(to_sign).to_vec()
     };
     webauthn_sign_message(msg, sign_fn)
 }
