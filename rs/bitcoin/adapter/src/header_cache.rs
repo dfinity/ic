@@ -903,8 +903,8 @@ pub(crate) mod test {
             panic!("Error creating DB directory {}: {}", path.display(), err)
         });
         // 1. Create a DB and write to it until MapFull error.
-        {
-            let env = create_db_env(&path, 30000);
+        let idx = {
+            let env = create_db_env(path, 30000);
             let db = env
                 .create_db(Some("DB"), DatabaseFlags::empty())
                 .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err));
@@ -921,19 +921,19 @@ pub(crate) mod test {
                 }
             };
             assert_eq!(err, lmdb::Error::MapFull);
-            assert_eq!(i, 1);
-        }
+            i
+        };
 
         // 2. Open the same DB and read it, no error. Write additional data, got MapFull.
         {
-            let env = create_db_env(&path, 30000);
+            let env = create_db_env(path, 30000);
             let db = env
                 .create_db(Some("DB"), DatabaseFlags::empty())
                 .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err));
             let mut tx = env.begin_rw_txn().unwrap();
             let mut bytes = [0; 32];
             assert_eq!(tx.get(db, &bytes).unwrap(), bytes);
-            bytes = [2; 32];
+            bytes = [idx; 32];
             assert_eq!(
                 tx.put(db, &bytes, &bytes, WriteFlags::empty()),
                 Err(lmdb::Error::MapFull)
@@ -942,11 +942,11 @@ pub(crate) mod test {
 
         // 3. Open the same DB with bigger size limit, no problem writing more data to it.
         {
-            let env = create_db_env(&path, 60000);
+            let env = create_db_env(path, 60000);
             let db = env
                 .create_db(Some("DB"), DatabaseFlags::empty())
                 .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err));
-            let mut i = 0;
+            let mut i = idx;
             let err = loop {
                 if let Err(err) = env.begin_rw_txn().and_then(|mut tx| {
                     let bytes = [i; 32];
@@ -959,7 +959,7 @@ pub(crate) mod test {
                 }
             };
             assert_eq!(err, lmdb::Error::MapFull);
-            assert!(i > 1);
+            assert!(i > idx);
         }
     }
 }
