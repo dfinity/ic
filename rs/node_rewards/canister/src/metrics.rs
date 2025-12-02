@@ -2,7 +2,6 @@ use crate::KeyRange;
 use crate::chrono_utils::{first_unix_timestamp_nanoseconds, last_unix_timestamp_nanoseconds};
 use crate::pb::v1::{SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue};
 use async_trait::async_trait;
-use candid::Principal;
 use chrono::{DateTime, NaiveDate};
 use ic_base_types::{NodeId, SubnetId};
 use ic_cdk::call::CallResult;
@@ -34,7 +33,7 @@ impl ManagementCanisterClient for ICCanisterClient {
         &self,
         args: &NodeMetricsHistoryArgs,
     ) -> CallResult<Vec<NodeMetricsHistoryRecord>> {
-        ic_cdk::management_canister::node_metrics_history(args)
+        ic_cdk::management_canister::node_metrics_history(args).await
     }
 }
 
