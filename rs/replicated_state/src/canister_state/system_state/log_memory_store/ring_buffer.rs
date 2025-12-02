@@ -37,6 +37,9 @@ const DATA_SEGMENT_SIZE_MAX: u64 = DATA_CAPACITY_MAX.get() / INDEX_ENTRY_COUNT_M
 // Ensure data segment size is significantly smaller than max result size, say 20%.
 const _: () = assert!(5 * DATA_SEGMENT_SIZE_MAX <= RESULT_MAX_SIZE.get());
 
+pub const DATA_CAPACITY_MIN: usize = PAGE_SIZE;
+const _: () = assert!(PAGE_SIZE <= DATA_CAPACITY_MIN); // data capacity must be at least one page.
+
 pub struct RingBuffer {
     io: StructIO,
 }

@@ -6,7 +6,8 @@ mod ring_buffer;
 mod struct_io;
 
 use crate::canister_state::system_state::log_memory_store::{
-    memory::MemorySize, ring_buffer::RingBuffer,
+    memory::MemorySize,
+    ring_buffer::{DATA_CAPACITY_MIN, RingBuffer},
 };
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
 use ic_management_canister_types_private::{
@@ -93,6 +94,8 @@ impl LogMemoryStore {
 
     /// Set the ring buffer capacity — preserves existing records by collecting and re-appending them.
     pub fn set_byte_capacity(&mut self, new_byte_capacity: usize) {
+        let new_byte_capacity = new_byte_capacity.max(DATA_CAPACITY_MIN);
+
         // TODO: PageMap cannot be shrunk today; reducing capacity does not free allocated pages
         // (practical ring buffer max currently ~55 MB). Future improvement: allocate a new PageMap
         // with the desired capacity, refeed records, then drop the old map or provide a `PageMap::shrink` API.
