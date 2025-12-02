@@ -3934,6 +3934,7 @@ impl Payload<'_> for StoredChunksReply {}
 ///   canister_id : principal;
 ///   replace_snapshot : opt blob;
 ///   uninstall_code : opt bool;
+///   sender_canister_version : opt na64;
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]

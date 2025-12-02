@@ -1,0 +1,15 @@
+[package]
+name = "ic-nervous-system-instruction-stats-update-attribute"
+version = "0.0.1"
+edition.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = "1"
+syn = { workspace = true }
+
+[dev-dependencies]
+candid = { workspace = true }
+ic-cdk = { workspace = true }

@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for Dogecoin: PocketIC server interacts with a `dogecoind` process listening at an address and port specified in a new optional field `dogecoind_addr` of the endpoint `/instances/`.
 - The endpoint `/instances/<instance_id>/update/canister_snapshot_download` to download a canister snapshot to a given snapshot directory.
 - The endpoint `/instances/<instance_id>/update/canister_snapshot_upload` to upload a canister snapshot from a given snapshot directory.
+- New CLI option `--mainnet-routing-table` to specify a path to a JSON file containing the mainnet routing table (used to create canisters with mainnet canister IDs).
+  The PocketIC server contains a hard-coded mainnet routing table used if this option is not provided.
+- New CLI option `--fetch-mainnet-routing-table` to specify that the mainnet routing table should be fetched from the mainnet registry
+  and written to the file path specified as `--mainnet-routing-table`.
 
 
 
