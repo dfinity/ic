@@ -747,8 +747,8 @@ impl SystemMetadata {
         let Self {
             mut ingress_history,
             mut streams,
-            canister_allocation_ranges,
-            last_generated_canister_id,
+            mut canister_allocation_ranges,
+            mut last_generated_canister_id,
             prev_state_hash,
             batch_time,
             network_topology,
@@ -813,6 +813,10 @@ impl SystemMetadata {
 
             // No streams.
             streams = Default::default();
+
+            // Will be initialized from the registry in subnet B's first round.
+            canister_allocation_ranges = Default::default();
+            last_generated_canister_id = None;
 
             // No in-progress subnet calls on subnet B.
             subnet_call_context_manager = Default::default();
