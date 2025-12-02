@@ -2802,6 +2802,7 @@ dependencies = [
  "ic-utils 0.40.1",
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
+ "regex",
  "slog",
  "tokio",
 ]
