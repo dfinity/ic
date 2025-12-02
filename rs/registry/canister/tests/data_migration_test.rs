@@ -1,3 +1,4 @@
+use candid::Principal;
 use common::test_helpers::install_registry_canister_with_payload_builder;
 use ic_agent::agent::AgentBuilder;
 use ic_agent::identity::AnonymousIdentity;
@@ -6,12 +7,28 @@ use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::{
     apply_mutations_for_test, get_changes_since_as_registry_records, get_latest_version,
 };
 use ic_nns_constants::REGISTRY_CANISTER_ID;
+use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
+use ic_protobuf::registry::dc::v1::DataCenterRecord;
+use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
+use ic_protobuf::registry::node::v1::NodeRecord;
+use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
+use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
+use ic_protobuf::registry::replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord};
+use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord};
+use ic_registry_keys::{
+    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, DATA_CENTER_KEY_PREFIX, HOSTOS_VERSION_KEY_PREFIX,
+    NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
+    REPLICA_VERSION_KEY_PREFIX, SUBNET_RECORD_KEY_PREFIX,
+};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_transport::pb::v1::RegistryMutation;
+use ic_registry_transport::pb::v1::registry_mutation::Type;
 use ic_registry_transport::{delete, upsert};
 use pocket_ic::PocketIcBuilder;
 use pocket_ic::nonblocking::PocketIc;
+use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
+use serde_json::Value;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -229,5 +246,80 @@ impl DataMigrationAssert for EmptyDataAssertion {
 }
 
 fn mutations_to_json(mutations: &[RegistryMutation]) -> String {
-    "".to_string()
+    let mapped: BTreeMap<String, Value> = mutations
+        .iter()
+        .map(|m| {
+            let key = m.key_as_string();
+            let value = if m.mutation_type() == Type::Delete {
+                Value::String("Deleted".to_string())
+            } else if key.starts_with(NODE_RECORD_KEY_PREFIX) {
+                let decoded = NodeRecord::decode(m.value.as_slice()).unwrap();
+                serde_json::to_value(&decoded).unwrap()
+            } else if key.starts_with("subnet_list") {
+                let decoded = SubnetListRecord::decode(m.value.as_slice()).unwrap();
+                serde_json::to_value(&decoded).unwrap()
+            } else if key.starts_with(NODE_REWARDS_TABLE_KEY) {
+                let decoded = NodeRewardsTable::decode(m.value.as_slice()).unwrap();
+                serde_json::to_value(&decoded).unwrap()
+            } else if key.starts_with("blessed_replica_versions") {
+                let decoded = BlessedReplicaVersions::decode(m.value.as_slice()).unwrap();
+                serde_json::to_value(&decoded).unwrap()
+            } else if key.starts_with(API_BOUNDARY_NODE_RECORD_KEY_PREFIX) {
+                let decoded = ApiBoundaryNodeRecord::decode(m.value.as_slice()).unwrap();
+                serde_json::to_value(&decoded).unwrap()
+            } else if key.starts_with(NODE_OPERATOR_RECORD_KEY_PREFIX) {
+                let decoded = NodeOperatorRecord::decode(m.value.as_slice()).unwrap();
+                serde_json::to_value(&decoded).unwrap()
+            } else if key.starts_with(REPLICA_VERSION_KEY_PREFIX) {
+                let decoded = ReplicaVersionRecord::decode(m.value.as_slice()).unwrap();
+                serde_json::to_value(&decoded).unwrap()
+            } else if key.starts_with(HOSTOS_VERSION_KEY_PREFIX) {
+                let decoded = HostosVersionRecord::decode(m.value.as_slice()).unwrap();
+                serde_json::to_value(&decoded).unwrap()
+            } else if key.starts_with(SUBNET_RECORD_KEY_PREFIX) {
+                let decoded = SubnetRecord::decode(m.value.as_slice()).unwrap();
+                serde_json::to_value(&decoded).unwrap()
+            } else if key.starts_with(DATA_CENTER_KEY_PREFIX) {
+                let decoded = DataCenterRecord::decode(m.value.as_slice()).unwrap();
+                serde_json::to_value(&decoded).unwrap()
+            } else {
+                panic!("Missing mapping for key {}", key);
+            };
+
+            let value = fixup_ids(value);
+
+            (key.to_string(), value)
+        })
+        .collect();
+
+    serde_json::to_string_pretty(&mapped).unwrap()
+}
+
+fn fixup_ids(mut value: Value) -> Value {
+    if let Value::Array(arr) = &value {
+        // Try to convert the JSON array of numbers into a Vec<u8>
+        let byte_vec: Option<Vec<u8>> = arr
+            .iter()
+            // Check if all elements are numbers that can fit in a u8
+            .all(|v| v.is_u64() && v.as_u64().unwrap() <= 255)
+            .then(|| arr.iter().map(|v| v.as_u64().unwrap() as u8).collect());
+
+        if let Some(bytes) = byte_vec {
+            match Principal::try_from_slice(&bytes) {
+                Ok(p) => return Value::String(p.to_text()),
+                Err(_) => return Value::Array(arr.to_vec()),
+            }
+        }
+    }
+
+    if let Value::Object(map) = &mut value {
+        for value in map.values_mut() {
+            *value = fixup_ids(std::mem::take(value));
+        }
+    } else if let Value::Array(arr) = &mut value {
+        for item in arr {
+            *item = fixup_ids(std::mem::take(item));
+        }
+    }
+    value
 }
