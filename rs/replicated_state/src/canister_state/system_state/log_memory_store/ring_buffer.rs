@@ -72,6 +72,12 @@ impl RingBuffer {
         self.io.to_page_map()
     }
 
+    /// Clears the canister log records.
+    pub fn clear(&mut self) {
+        let data_capacity = self.io.load_header().data_capacity;
+        self.io.save_header(&Header::new(data_capacity));
+    }
+
     /// Returns the total allocated bytes for the ring buffer
     /// including header, index table and data region.
     pub fn total_allocated_bytes(&self) -> usize {
@@ -95,7 +101,7 @@ impl RingBuffer {
         self.bytes_used() == 0
     }
 
-    pub fn next_id(&self) -> u64 {
+    pub fn next_idx(&self) -> u64 {
         self.io.load_header().next_idx
     }
 
@@ -247,6 +253,17 @@ impl RingBuffer {
                 records
             }
         }
+    }
+
+    pub fn all_records(&self) -> Vec<CanisterLogRecord> {
+        let header = self.io.load_header();
+        let mut records: Vec<CanisterLogRecord> = Vec::new();
+        let mut pos = header.data_head;
+        while let Some(record) = self.io.load_record(pos) {
+            pos = header.advance_position(pos, MemorySize::new(record.bytes_len() as u64));
+            records.push(CanisterLogRecord::from(record));
+        }
+        records
     }
 }
 
