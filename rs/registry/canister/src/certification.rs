@@ -81,12 +81,12 @@ pub fn recertify_registry(registry: &Registry) {
     }
 }
 
-#[cfg(all(not(target_arch = "wasm32"), not(test), not(feature = "test")))]
+#[cfg(all(not(target_arch = "wasm32"), not(test)))]
 pub fn recertify_registry(_: &Registry) {
     panic!("recertify_registry should only be called inside canisters and test context");
 }
 
-#[cfg(all(not(target_arch = "wasm32"), any(test, feature = "test")))]
+#[cfg(all(not(target_arch = "wasm32"), test))]
 pub fn recertify_registry(_: &Registry) {
     println!("recertify_registry called in test context");
 }

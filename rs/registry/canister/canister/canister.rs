@@ -501,7 +501,6 @@ fn mutate_test_high_capacity_records() {
 #[unsafe(export_name = "canister_update apply_mutations_for_test")]
 fn apply_mutations_for_test() {
     over(candid_one, |mutations| {
-        println!("Came into the apply mutations for test");
         let registry = registry_mut();
         registry.apply_mutations_for_test(mutations);
         recertify_registry();

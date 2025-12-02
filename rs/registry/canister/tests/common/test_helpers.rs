@@ -447,3 +447,20 @@ pub async fn install_registry_canister_with_payload_builder(
     )
     .await;
 }
+
+pub async fn upgrade_registry_canister(pocket_ic: &PocketIc, test_configuration: bool) {
+    pocket_ic
+        .upgrade_canister(
+            REGISTRY_CANISTER_ID.get().0,
+            if test_configuration {
+                build_test_registry_wasm()
+            } else {
+                build_registry_wasm()
+            }
+            .bytes(),
+            vec![],
+            Some(ROOT_CANISTER_ID.get().0),
+        )
+        .await
+        .unwrap()
+}

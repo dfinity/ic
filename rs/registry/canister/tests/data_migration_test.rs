@@ -1,10 +1,16 @@
 use common::test_helpers::install_registry_canister_with_payload_builder;
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::apply_mutations_for_test;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::{
+    apply_mutations_for_test, get_value,
+};
+use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_registry_transport::{delete, upsert};
 use pocket_ic::PocketIcBuilder;
+use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
+
+use crate::common::test_helpers::upgrade_registry_canister;
 
 mod common;
 
@@ -21,6 +27,18 @@ async fn test_mainnet_data() {
     for batch in &mutations {
         apply_mutations_for_test(&pocket_ic, batch).await.unwrap();
     }
+
+    upgrade_registry_canister(&pocket_ic, true).await;
+
+    let subnet_list = get_value(&pocket_ic, "subnet_list", None).await.unwrap();
+    assert!(subnet_list.error.is_none());
+
+    let value = match subnet_list.content.unwrap() {
+        ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content::Value(items) => SubnetListRecord::decode(items.as_slice()).unwrap(),
+        ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content::LargeValueChunkKeys(_) => unreachable!(),
+    };
+
+    assert!(!value.subnets.is_empty());
 }
 
 async fn fetch_all_mainnet_changes() -> Vec<Vec<RegistryMutation>> {
@@ -36,9 +54,11 @@ async fn fetch_all_mainnet_changes() -> Vec<Vec<RegistryMutation>> {
 
     loop {
         match local_version.get().cmp(&latest_version_on_mainnet) {
-            // Still need to sync
             std::cmp::Ordering::Less => {}
-            std::cmp::Ordering::Equal | std::cmp::Ordering::Greater => break,
+            std::cmp::Ordering::Equal => break,
+            std::cmp::Ordering::Greater => panic!(
+                "Impossible, the local version was in front of the registry on mainnet. Local {local_version}, remote {latest_version_on_mainnet}"
+            ),
         }
 
         // The registry itself maps the limit of deltas to
@@ -49,7 +69,7 @@ async fn fetch_all_mainnet_changes() -> Vec<Vec<RegistryMutation>> {
             .await
             .unwrap();
 
-        let new_version = records.last().map(|r| r.version.increment());
+        let new_version = records.last().map(|r| r.version);
         mutations.push(
             records
                 .into_iter()
