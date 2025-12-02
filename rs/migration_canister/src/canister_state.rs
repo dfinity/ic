@@ -94,13 +94,20 @@ pub mod requests {
         REQUESTS.with_borrow(|req| req.keys().filter(predicate).collect())
     }
 
-    pub fn find_request(source: Principal, target: Principal) -> Vec<RequestState> {
-        // TODO: should do a range scan for efficiency.
-        REQUESTS.with_borrow(|r| {
+    pub fn find_request(source: Principal, target: Principal) -> Option<RequestState> {
+        // We perform a linear scan here which is fine since
+        // there can only be at most `RATE_LIMIT` (50) requests
+        // at any time.
+        let requests: Vec<_> = REQUESTS.with_borrow(|r| {
             r.keys()
                 .filter(|x| x.request().source == source && x.request().target == target)
                 .collect()
-        })
+        });
+        assert!(
+            requests.len() <= 1,
+            "There should only be a single request for a given pair of canister IDs."
+        );
+        requests.first().cloned()
     }
 }
 
@@ -136,14 +143,12 @@ pub mod events {
         })
     }
 
-    pub fn find_event(source: Principal, target: Principal) -> Vec<Event> {
+    pub fn find_last_event(source: Principal, target: Principal) -> Option<Event> {
         // TODO: should do a range scan for efficiency.
         HISTORY.with_borrow(|r| {
             r.keys()
-                .filter(|x| {
-                    x.event.request().source == source && x.event.request().target == target
-                })
-                .collect()
+                .rev()
+                .find(|x| x.event.request().source == source && x.event.request().target == target)
         })
     }
 }
