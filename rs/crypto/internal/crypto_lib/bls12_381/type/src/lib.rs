@@ -1752,6 +1752,14 @@ macro_rules! declare_mul2_impl_for {
                 pub fn compute_mul2_tbl(x: &Self, y: &Self) -> $tbl_typ {
                     declare_compute_mul2_table_inline!($projective, $tbl_typ, $big_window_size, x, y)
                 }
+
+                /// Compute a mul2 table that contains linear combinations of `x` and `y`,
+                /// which is intended to be used for multiple mul2 calls with the same `x` and `y`
+                /// but different scalar pairs. To call `mul2` only once, consider calling
+                /// it directly, which might be more efficient.
+                pub fn compute_mul2_affine_tbl(x: &$affine, y: &$affine) -> $tbl_typ {
+                    declare_compute_mul2_table_inline!($projective, $tbl_typ, $big_window_size, x, y)
+                }
             }
         }
     };
