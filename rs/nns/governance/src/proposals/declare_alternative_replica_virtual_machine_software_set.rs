@@ -186,3 +186,7 @@ fn validate_guest_launch_measurement(
 
     defects
 }
+
+#[cfg(test)]
+#[path = "declare_alternative_replica_virtual_machine_software_set_tests.rs"]
+mod tests;
