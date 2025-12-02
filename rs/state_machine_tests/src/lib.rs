@@ -3570,7 +3570,7 @@ impl StateMachine {
     ///  1. Write a checkpoint on `self`.
     ///  2. Clone its enire state directory into a new `state_dir`.
     ///  3. Create a new `StateMachine` using this `state_dir` and the provided
-    ///    `seed`.
+    ///     `seed`.
     ///  4. Reload the registry and update it to the latest version.
     ///  5. Call `split_tick()` on both `self` and the new `StateMachine`.
     ///
