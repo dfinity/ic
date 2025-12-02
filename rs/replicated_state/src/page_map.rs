@@ -943,11 +943,12 @@ impl Buffer {
             let offset_into_page = offset % page_size;
             let page_len = dst.len().min(page_size - offset_into_page);
 
+            // First check dirty pages, then clean page cache, then load from underlying page map.
+            let mut cache = self.clean_page.borrow_mut();
             let page_contents: &PageBytes = if let Some(bytes) = self.dirty_pages.get(&page) {
                 bytes
             } else {
-                let mut cache = self.clean_page.borrow_mut();
-                match cache {
+                match &*cache {
                     Some((cached_page, cached_bytes)) if *cached_page == page => cached_bytes,
                     _ => {
                         let loaded: &PageBytes = self.page_map.get_page(page);
@@ -985,6 +986,8 @@ impl Buffer {
                 &mut dirty_page[offset_into_page..offset_into_page + page_len],
                 &src[0..page_len],
             );
+
+            // No need to update clean page cache because dirty page takes precedence.
 
             offset += page_len;
             src = &src[page_len..src.len()];
