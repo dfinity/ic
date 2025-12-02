@@ -236,7 +236,7 @@ impl RingBuffer {
                 let mut total_size = 0;
                 let mut pos = approx_start.position;
                 while let Some(record) = self.io.load_record(pos) {
-                    let bytes = record.bytes_len();
+                    let distance = MemorySize::new(record.bytes_len() as u64);
                     if record.matches(&filter) {
                         let canister_log_record = CanisterLogRecord::from(record);
                         total_size += canister_log_record.data_size();
@@ -248,7 +248,16 @@ impl RingBuffer {
                         // Stop after the first non-matching record once we have matches.
                         break;
                     }
-                    pos = header.advance_position(pos, MemorySize::new(bytes as u64));
+                    let new_pos = header.advance_position(pos, distance);
+                    // corrupted or zero-length record — avoid infinite loop
+                    if new_pos == pos {
+                        break;
+                    }
+                    pos = new_pos;
+                    // stop when we've reached the tail position — handles full-buffer case
+                    if pos == header.data_tail {
+                        break;
+                    }
                 }
                 records
             }
@@ -259,10 +268,23 @@ impl RingBuffer {
         let header = self.io.load_header();
         let mut records: Vec<CanisterLogRecord> = Vec::new();
         let mut pos = header.data_head;
+
         while let Some(record) = self.io.load_record(pos) {
-            pos = header.advance_position(pos, MemorySize::new(record.bytes_len() as u64));
+            let distance = MemorySize::new(record.bytes_len() as u64);
             records.push(CanisterLogRecord::from(record));
+
+            let new_pos = header.advance_position(pos, distance);
+            // corrupted or zero-length record — avoid infinite loop
+            if new_pos == pos {
+                break;
+            }
+            pos = new_pos;
+            // stop when we've reached the tail position — handles full-buffer case
+            if pos == header.data_tail {
+                break;
+            }
         }
+
         records
     }
 }
@@ -298,7 +320,7 @@ mod tests {
 
         assert_eq!(rb.byte_capacity(), data_capacity.get() as usize);
         assert_eq!(rb.bytes_used(), 0);
-        assert_eq!(rb.next_id(), 0);
+        assert_eq!(rb.next_idx(), 0);
     }
 
     #[test]
@@ -316,6 +338,23 @@ mod tests {
         assert_eq!(rb.pop_front().unwrap(), r0);
         assert_eq!(rb.pop_front().unwrap(), r1);
         assert!(rb.pop_front().is_none());
+    }
+
+    #[test]
+    fn test_clear() {
+        let page_map = PageMap::new_for_testing();
+        let data_capacity = TEST_DATA_CAPACITY;
+        let mut rb = RingBuffer::new(page_map, data_capacity);
+
+        let r0 = log_record(0, 100, "a");
+        let r1 = log_record(1, 200, "bb");
+        rb.append(&r0);
+        rb.append(&r1);
+        rb.clear();
+
+        assert_eq!(rb.bytes_used(), 0);
+        assert_eq!(rb.byte_capacity(), data_capacity.get() as usize);
+        assert_eq!(rb.pop_front(), None);
     }
 
     #[test]

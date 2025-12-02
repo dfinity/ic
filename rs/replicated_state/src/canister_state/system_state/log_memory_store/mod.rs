@@ -124,6 +124,7 @@ impl LogMemoryStore {
         self.load_ring_buffer().records(filter)
     }
 
+    /// Returns all canister log records.
     pub fn all_records(&self) -> Vec<CanisterLogRecord> {
         self.load_ring_buffer().all_records()
     }
