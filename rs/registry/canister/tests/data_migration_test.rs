@@ -3,42 +3,67 @@ use ic_agent::agent::AgentBuilder;
 use ic_agent::identity::AnonymousIdentity;
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::{
-    apply_mutations_for_test, get_changes_since_as_registry_records, get_latest_version, get_value,
+    apply_mutations_for_test, get_changes_since_as_registry_records, get_latest_version,
 };
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_registry_transport::{delete, upsert};
 use pocket_ic::PocketIcBuilder;
-use prost::Message;
+use pocket_ic::nonblocking::PocketIc;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
+use std::cell::RefCell;
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use crate::common::test_helpers::upgrade_registry_canister;
 
 mod common;
 
-trait DataMigrationAssert {
+#[async_trait::async_trait]
+trait DataMigrationAssert: Send + Sync {
     async fn assert_expected_changes(&self, new_mutations: &Vec<RegistryMutation>);
-}
-
-struct TestScenario {
-    name: String,
-    on_hash: String,
-    asserts: Vec<Box<dyn DataMigrationAssert>>,
 }
 
 struct Setup {
     pocket_ic: PocketIc,
-    mainnet_mutation_batches: Vec<Vec<RegistryMutation>>,
     mainnet_module_hash: String,
+}
+
+thread_local! {
+    static MIGRATION_SCENARIOS: RefCell<BTreeMap<String, Vec<Arc<dyn DataMigrationAssert>>>> = RefCell::new(
+        [
+            ("4842f2cb8fbe9b57d08edf5c66608be7a56eec27bced313c3ed194da263d36c0", &[
+               Arc::new(EmptyDataAssertion{}) as Arc<dyn DataMigrationAssert>,
+            ])
+        ].into_iter().map(|(k, v)| (k.to_string(), v.to_vec())).collect()
+        );
+}
+
+#[tokio::test]
+async fn test_mainnet_data() {
+    let setup = Setup::new().await;
+
+    let new_mutations = setup.upgrade().await;
+
+    setup.assert(new_mutations).await;
 }
 
 impl Setup {
     async fn new() -> Self {
+        let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
+        let mainnet_mutations = Self::fetch_all_mainnet_changes().await;
+
+        let builder = RegistryCanisterInitPayloadBuilder::new();
+
+        install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
+
+        for batch in &mainnet_mutations {
+            apply_mutations_for_test(&pocket_ic, &batch).await.unwrap();
+        }
+
         Self {
-            mainnet_mutation_batches: Self::fetch_all_mainnet_changes().await,
-            pocket_ic: PocketIcBuilder::new().with_nns_subnet().build_async().await,
+            pocket_ic,
             mainnet_module_hash: Self::fetch_current_module_hash().await,
         }
     }
@@ -95,20 +120,20 @@ impl Setup {
             .build()
             .unwrap();
 
-        std::str::from_utf8(
-            &agent
-                .read_state_canister_module_hash(REGISTRY_CANISTER_ID.get().0)
-                .await
-                .unwrap(),
-        )?
-        .trim()
-        .to_string()
+        let hash = agent
+            .read_state_canister_module_hash(REGISTRY_CANISTER_ID.get().0)
+            .await
+            .unwrap();
+
+        let encoded = hex::encode(hash);
+        println!("Mainnet hash {encoded}");
+        encoded
     }
 
     async fn upgrade(&self) -> Vec<RegistryMutation> {
         let version_before_upgrade = get_latest_version(&self.pocket_ic).await.unwrap();
 
-        upgrade_registry_canister(&pocket_ic, true).await;
+        upgrade_registry_canister(&self.pocket_ic, true).await;
 
         let version_after_upgrade = get_latest_version(&self.pocket_ic).await.unwrap();
 
@@ -117,7 +142,7 @@ impl Setup {
         );
 
         let (records_since_upgrade, _) =
-            get_changes_since_as_registry_records(&pocket_ic, version_before_upgrade)
+            get_changes_since_as_registry_records(&self.pocket_ic, version_before_upgrade)
                 .await
                 .unwrap();
 
@@ -129,11 +154,27 @@ impl Setup {
             })
             .collect()
     }
+
+    async fn assert(&self, new_mutations: Vec<RegistryMutation>) {
+        let default_assertions =
+            vec![Arc::new(EmptyDataAssertion {}) as Arc<dyn DataMigrationAssert>];
+        let batch_to_run = MIGRATION_SCENARIOS
+            .with_borrow(|scenarios| scenarios.get(&self.mainnet_module_hash).cloned());
+
+        let batch_to_run = batch_to_run.unwrap_or(default_assertions);
+
+        for assertion in batch_to_run {
+            assertion.assert_expected_changes(&new_mutations).await;
+        }
+    }
 }
 
-#[tokio::test]
-async fn test_mainnet_data() {
-    let setup = Setup::new().await;
+#[derive(Clone)]
+struct EmptyDataAssertion {}
 
-    let new_mutations = setup.upgrade().await;
+#[async_trait::async_trait]
+impl DataMigrationAssert for EmptyDataAssertion {
+    async fn assert_expected_changes(&self, new_mutations: &Vec<RegistryMutation>) {
+        assert!(new_mutations.is_empty())
+    }
 }

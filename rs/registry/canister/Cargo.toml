@@ -109,6 +109,7 @@ pretty_assertions = { workspace = true }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-agent = { workspace = true }
+async-trait = { workspace = true }
 
 [features]
 test = []

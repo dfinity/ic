@@ -1219,11 +1219,14 @@ pub mod nns {
     pub mod registry {
         use ic_interfaces_registry::RegistryRecord;
         use ic_registry_canister_api::{Chunk, GetChunkRequest};
+        use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_records;
+        use ic_registry_transport::deserialize_get_changes_since_response;
         use ic_registry_transport::{
             GetChunk, dechunkify_delta, deserialize_get_value_response,
             pb::v1::{HighCapacityRegistryGetValueResponse, RegistryGetLatestVersionResponse},
             serialize_get_changes_since_request, serialize_get_value_request,
         };
+        use prost::Message;
         use registry_canister::mutations::do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload;
 
         use super::*;
@@ -1292,7 +1295,7 @@ pub mod nns {
                     REGISTRY_CANISTER_ID.get().0,
                     Principal::anonymous(),
                     "get_latest_version",
-                    candid::encode_one(()).unwrap(),
+                    vec![],
                 )
                 .await
                 .map(
@@ -1322,13 +1325,16 @@ pub mod nns {
             let mut inlined_deltas = vec![];
             for delta in high_capacity_deltas {
                 inlined_deltas.push(
-                    dechunkify_delta(delta, PocketIcChunkFetcher { pocket_ic })
+                    dechunkify_delta(delta, &PocketIcChunkFetcher { pocket_ic })
                         .await
                         .unwrap(),
                 );
             }
 
-            Ok((inlined_deltas, version))
+            Ok((
+                registry_deltas_to_registry_records(inlined_deltas).unwrap(),
+                version,
+            ))
         }
 
         struct PocketIcChunkFetcher<'a> {
@@ -1357,7 +1363,7 @@ pub mod nns {
                     .map_err(|e| e.to_string())?;
 
                 let Chunk { content } =
-                    Decode!(&response, Result<Chunk, String>).map_err(|e| e.to_string());
+                    Decode!(&response, Result<Chunk, String>).map_err(|e| e.to_string())??;
 
                 content.ok_or_else(|| {
                     "content in get_chunk response is null (not even an empty string)".to_string()

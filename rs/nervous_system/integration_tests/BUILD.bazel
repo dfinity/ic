@@ -23,6 +23,7 @@ BASE_DEPENDENCIES = [
     "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
     "//rs/registry/proto_data_provider",
+    "//rs/registry/nns_data_provider",
     "//rs/registry/canister/api",
     "//rs/sns/cli",
     "//rs/sns/governance",
@@ -34,7 +35,6 @@ BASE_DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "@crate_index//:assert_matches",
-    "@crate_index//:async-trait",
     "@crate_index//:candid",
     "@crate_index//:futures",
     "@crate_index//:hex",
@@ -86,6 +86,7 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:rust_decimal_macros",
+    "@crate_index//:async-trait",
 ]
 
 DEV_DEPENDENCIES = []

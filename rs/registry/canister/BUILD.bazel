@@ -103,6 +103,7 @@ MACRO_DEPENDENCIES = [
 DEV_MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nns/test_utils_macros",
+    "@crate_index//:async-trait",
 ]
 
 BUILD_DEPENDENCIES = [

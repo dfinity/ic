@@ -11661,6 +11661,7 @@ dependencies = [
  "ic-protobuf",
  "ic-registry-canister-api",
  "ic-registry-keys",
+ "ic-registry-nns-data-provider",
  "ic-registry-proto-data-provider",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
@@ -21215,6 +21216,7 @@ name = "registry-canister"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
+ "async-trait",
  "build-info",
  "build-info-build",
  "canbench-rs",
