@@ -31,13 +31,63 @@ struct Setup {
 }
 
 thread_local! {
-    static MIGRATION_SCENARIOS: RefCell<BTreeMap<String, Vec<Arc<dyn DataMigrationAssert>>>> = RefCell::new(
-        [
-            ("4842f2cb8fbe9b57d08edf5c66608be7a56eec27bced313c3ed194da263d36c0", &[
-               Arc::new(EmptyDataAssertion{}) as Arc<dyn DataMigrationAssert>,
-            ])
-        ].into_iter().map(|(k, v)| (k.to_string(), v.to_vec())).collect()
-        );
+    /// Registry Data Migration Scenarios
+    ///
+    /// This map links a **Mainnet Module Hash** (the state of production before upgrade)
+    /// to a specific **Migration Assertion** strategy.
+    ///
+    /// # Purpose
+    /// To verify that post-upgrade hooks strictly perform the expected data migrations
+    /// (and nothing else) when applied to real-world Mainnet data.
+    ///
+    /// # Logic
+    /// 1. The test fetches the current WASM module hash from Mainnet.
+    /// 2. It queries this map using that hash.
+    /// 3. **Match Found:** Executes the specific `DataMigrationAssert` logic defined here.
+    /// 4. **No Match:** Executes `EmptyDataAssertion`, which asserts that **zero** changes occur.
+    ///
+    /// # How to Add a Migration Test
+    /// If you are introducing a registry migration:
+    /// 1. Implement `DataMigrationAssert` for a new struct.
+    /// 2. Obtain the current Mainnet WASM hash (via dashboard or `dfx`).
+    /// 3. Add an entry below mapping that hash to your new assertion struct.
+    ///
+    /// # Example
+    /// ```rust
+    /// // 1. Define expectations
+    /// struct VerifyNodeFix;
+    /// #[async_trait::async_trait]
+    /// impl DataMigrationAssert for VerifyNodeFix {
+    ///     async fn assert_expected_changes(&self, changes: &Vec<RegistryMutation>) {
+    ///         assert_eq!(changes.len(), 1);
+    ///         assert_eq!(changes[0].key, b"node_operator_xyz");
+    ///     }
+    /// }
+    /// ...
+    /// thread_local! {
+    ///     static MIGRATION_SCENARIOS: RefCell<BTreeMap<String, Arc<dyn DataMigrationAssert>>> =
+    ///     RefCell::new({
+    ///         let mut map = BTreeMap::new();
+    ///
+    ///         map.insert("<current-module-hash>", Arc::new(VerifyNodeFix {});
+    ///         map.insert("<old-hash-that-wont-run>", Arc::new(OldFix {});
+    ///
+    ///         map
+    ///     }),
+    /// }
+    static MIGRATION_SCENARIOS: RefCell<BTreeMap<String, Arc<dyn DataMigrationAssert>>> = RefCell::new({
+        #[allow(unused_mut)]
+        let mut map: BTreeMap<String, Arc<dyn DataMigrationAssert>> = BTreeMap::new();
+
+        // Insert your assertions here like the following example
+        //
+        // map.insert(
+        //     "4842f2cb8fbe9b57d08edf5c66608be7a56eec27bced313c3ed194da263d36c0".to_string(),
+        //     Arc::new(EmptyDataAssertion{})
+        // );
+
+        map
+    });
 }
 
 #[tokio::test]
@@ -156,16 +206,13 @@ impl Setup {
     }
 
     async fn assert(&self, new_mutations: Vec<RegistryMutation>) {
-        let default_assertions =
-            vec![Arc::new(EmptyDataAssertion {}) as Arc<dyn DataMigrationAssert>];
+        let default_assertion = Arc::new(EmptyDataAssertion {}) as Arc<dyn DataMigrationAssert>;
         let batch_to_run = MIGRATION_SCENARIOS
             .with_borrow(|scenarios| scenarios.get(&self.mainnet_module_hash).cloned());
 
-        let batch_to_run = batch_to_run.unwrap_or(default_assertions);
+        let assertion = batch_to_run.unwrap_or(default_assertion);
 
-        for assertion in batch_to_run {
-            assertion.assert_expected_changes(&new_mutations).await;
-        }
+        assertion.assert_expected_changes(&new_mutations).await;
     }
 }
 
