@@ -9,6 +9,7 @@ documentation.workspace = true
 # Dependencies required to compile the test canisters.
 [dependencies]
 assert_matches = { workspace = true }
+async-trait = { workspace = true }
 candid = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }
 futures = { workspace = true }
@@ -22,6 +23,7 @@ ic-nervous-system-clients = { path = "../clients" }
 ic-nervous-system-common = { path = "../common" }
 ic-nervous-system-proto = { path = "../proto" }
 ic-nervous-system-root = { path = "../root" }
+ic-registry-canister-api = { path = "../../registry/canister/api/" }
 ic-nervous-system-runtime = { path = "../runtime" }
 sns-treasury-manager = { path = "../../sns/treasury_manager" }
 ic-nns-common = { path = "../../nns/common" }

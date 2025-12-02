@@ -1217,9 +1217,12 @@ pub mod nns {
     }
 
     pub mod registry {
+        use ic_interfaces_registry::RegistryRecord;
+        use ic_registry_canister_api::{Chunk, GetChunkRequest};
         use ic_registry_transport::{
-            deserialize_get_value_response, pb::v1::HighCapacityRegistryGetValueResponse,
-            serialize_get_value_request,
+            GetChunk, dechunkify_delta, deserialize_get_value_response,
+            pb::v1::{HighCapacityRegistryGetValueResponse, RegistryGetLatestVersionResponse},
+            serialize_get_changes_since_request, serialize_get_value_request,
         };
         use registry_canister::mutations::do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload;
 
@@ -1281,6 +1284,85 @@ pub mod nns {
                 )
                 .await
                 .map(|_| ())
+        }
+
+        pub async fn get_latest_version(pocket_ic: &PocketIc) -> Result<u64, RejectResponse> {
+            pocket_ic
+                .query_call(
+                    REGISTRY_CANISTER_ID.get().0,
+                    Principal::anonymous(),
+                    "get_latest_version",
+                    candid::encode_one(()).unwrap(),
+                )
+                .await
+                .map(
+                    |r| match RegistryGetLatestVersionResponse::decode(r.as_slice()) {
+                        Ok(res) => res.version,
+                        Err(e) => panic!("Couldn't decode into get latest version response: {e:?}"),
+                    },
+                )
+        }
+
+        pub async fn get_changes_since_as_registry_records(
+            pocket_ic: &PocketIc,
+            since: u64,
+        ) -> Result<(Vec<RegistryRecord>, u64), RejectResponse> {
+            let payload = serialize_get_changes_since_request(since).unwrap();
+
+            let (high_capacity_deltas, version) = pocket_ic
+                .query_call(
+                    REGISTRY_CANISTER_ID.get().0,
+                    Principal::anonymous(),
+                    "get_changes_since",
+                    payload,
+                )
+                .await
+                .map(|response| deserialize_get_changes_since_response(response).unwrap())?;
+
+            let mut inlined_deltas = vec![];
+            for delta in high_capacity_deltas {
+                inlined_deltas.push(
+                    dechunkify_delta(delta, PocketIcChunkFetcher { pocket_ic })
+                        .await
+                        .unwrap(),
+                );
+            }
+
+            Ok((inlined_deltas, version))
+        }
+
+        struct PocketIcChunkFetcher<'a> {
+            pocket_ic: &'a PocketIc,
+        }
+
+        #[async_trait::async_trait]
+        impl<'a> GetChunk for PocketIcChunkFetcher<'a> {
+            async fn get_chunk_without_validation(
+                &self,
+                content_sha256: &[u8],
+            ) -> Result<Vec<u8>, String> {
+                let request = GetChunkRequest {
+                    content_sha256: Some(content_sha256.to_vec()),
+                };
+
+                let response = self
+                    .pocket_ic
+                    .query_call(
+                        REGISTRY_CANISTER_ID.get().0,
+                        Principal::anonymous(),
+                        "get_chunk",
+                        Encode!(&request).unwrap(),
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+
+                let Chunk { content } =
+                    Decode!(&response, Result<Chunk, String>).map_err(|e| e.to_string());
+
+                content.ok_or_else(|| {
+                    "content in get_chunk response is null (not even an empty string)".to_string()
+                })
+            }
         }
     }
 

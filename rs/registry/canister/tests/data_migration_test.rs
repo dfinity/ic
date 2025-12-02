@@ -3,7 +3,7 @@ use ic_agent::agent::AgentBuilder;
 use ic_agent::identity::AnonymousIdentity;
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::{
-    apply_mutations_for_test, get_value,
+    apply_mutations_for_test, get_changes_since_as_registry_records, get_latest_version, get_value,
 };
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
@@ -35,10 +35,10 @@ struct Setup {
 }
 
 impl Setup {
-    async fn new(pocket_ic: PocketIc) -> Self {
+    async fn new() -> Self {
         Self {
             mainnet_mutation_batches: Self::fetch_all_mainnet_changes().await,
-            pocket_ic,
+            pocket_ic: PocketIcBuilder::new().with_nns_subnet().build_async().await,
             mainnet_module_hash: Self::fetch_current_module_hash().await,
         }
     }
@@ -106,81 +106,34 @@ impl Setup {
     }
 
     async fn upgrade(&self) -> Vec<RegistryMutation> {
-        vec![]
+        let version_before_upgrade = get_latest_version(&self.pocket_ic).await.unwrap();
+
+        upgrade_registry_canister(&pocket_ic, true).await;
+
+        let version_after_upgrade = get_latest_version(&self.pocket_ic).await.unwrap();
+
+        println!(
+            "Version before upgrade {version_before_upgrade} : {version_after_upgrade} Version after upgrade"
+        );
+
+        let (records_since_upgrade, _) =
+            get_changes_since_as_registry_records(&pocket_ic, version_before_upgrade)
+                .await
+                .unwrap();
+
+        records_since_upgrade
+            .into_iter()
+            .map(|r| match &r.value {
+                Some(val) => upsert(r.key.as_bytes(), val),
+                None => delete(r.key.as_bytes()),
+            })
+            .collect()
     }
 }
 
 #[tokio::test]
 async fn test_mainnet_data() {
-    let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
-    let builder = RegistryCanisterInitPayloadBuilder::new();
+    let setup = Setup::new().await;
 
-    install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
-
-    let mutations = fetch_all_mainnet_changes().await;
-    println!("Fetched {} mutations", mutations.len());
-
-    for batch in &mutations {
-        apply_mutations_for_test(&pocket_ic, batch).await.unwrap();
-    }
-
-    upgrade_registry_canister(&pocket_ic, true).await;
-
-    let subnet_list = get_value(&pocket_ic, "subnet_list", None).await.unwrap();
-    assert!(subnet_list.error.is_none());
-
-    let value = match subnet_list.content.unwrap() {
-        ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content::Value(items) => SubnetListRecord::decode(items.as_slice()).unwrap(),
-        ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content::LargeValueChunkKeys(_) => unreachable!(),
-    };
-
-    assert!(!value.subnets.is_empty());
-}
-
-async fn fetch_all_mainnet_changes() -> Vec<Vec<RegistryMutation>> {
-    let registry_canister = ic_registry_nns_data_provider::registry::RegistryCanister::new(vec![
-        "https://ic0.app".parse().unwrap(),
-    ]);
-
-    let mut mutations = vec![];
-
-    let latest_version_on_mainnet = registry_canister.get_latest_version().await.unwrap();
-
-    let mut local_version = ZERO_REGISTRY_VERSION;
-
-    loop {
-        match local_version.get().cmp(&latest_version_on_mainnet) {
-            std::cmp::Ordering::Less => {}
-            std::cmp::Ordering::Equal => break,
-            std::cmp::Ordering::Greater => panic!(
-                "Impossible, the local version was in front of the registry on mainnet. Local {local_version}, remote {latest_version_on_mainnet}"
-            ),
-        }
-
-        // The registry itself maps the limit of deltas to
-        // fit into the message, so we just need to send
-        // them in the exact same batches, mapped.
-        let (records, _) = registry_canister
-            .get_changes_since_as_registry_records(local_version.get())
-            .await
-            .unwrap();
-
-        let new_version = records.last().map(|r| r.version);
-        mutations.push(
-            records
-                .into_iter()
-                .map(|r| match r.value {
-                    None => delete(r.key.as_bytes()),
-                    Some(val) => upsert(r.key.as_bytes(), val.as_slice()),
-                })
-                .collect(),
-        );
-
-        local_version = match new_version {
-            Some(v) => v,
-            None => break,
-        }
-    }
-
-    mutations
+    let new_mutations = setup.upgrade().await;
 }

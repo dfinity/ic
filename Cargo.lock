@@ -11625,6 +11625,7 @@ name = "ic-nervous-system-integration-tests"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
+ "async-trait",
  "candid",
  "canister-test",
  "cycles-minting-canister",
@@ -11658,6 +11659,7 @@ dependencies = [
  "ic-nns-test-utils",
  "ic-nns-test-utils-macros",
  "ic-protobuf",
+ "ic-registry-canister-api",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
  "ic-registry-routing-table",
