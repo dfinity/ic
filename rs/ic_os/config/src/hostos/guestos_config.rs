@@ -107,23 +107,21 @@ fn node_ipv6_address(
 /// Retrieves the recovery-hash from the recovery file, if present.
 /// The file is read once and then deleted to ensure one-time use.
 fn guestos_recovery_hash(recovery_file_path: &Path) -> Result<Option<RecoveryConfig>> {
-    if !recovery_file_path.exists() {
-        return Ok(None);
+    if recovery_file_path.exists() {
+        let recovery_hash_value = std::fs::read_to_string(recovery_file_path)?
+            .trim()
+            .to_string();
+
+        std::fs::remove_file(recovery_file_path)?;
+
+        if !recovery_hash_value.is_empty() {
+            return Ok(Some(RecoveryConfig {
+                recovery_hash: recovery_hash_value,
+            }));
+        }
     }
 
-    let recovery_hash_value = std::fs::read_to_string(recovery_file_path)?
-        .trim()
-        .to_string();
-
-    std::fs::remove_file(recovery_file_path)?;
-
-    if recovery_hash_value.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(RecoveryConfig {
-            recovery_hash: recovery_hash_value,
-        }))
-    }
+    Ok(None)
 }
 
 #[cfg(test)]

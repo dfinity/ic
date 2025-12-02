@@ -208,26 +208,14 @@ fn create_universal_vm_config_image(
     label: &str,
 ) -> Result<()> {
     let script_path = get_dependency_path("rs/tests/create-universal-vm-config-image.sh");
-    let mut cmd = Command::new(script_path);
-
-    // Add /usr/sbin to the PATH env var to give access to required tools like mkfs.vfat.
-    let path_env_var = "PATH";
-    let path_prefix = match std::env::var(path_env_var) {
-        Ok(old_path) => {
-            format!("{old_path}:")
-        }
-        Err(_) => String::from(""),
-    };
-    cmd.env(path_env_var, format!("{path_prefix}{}", "/usr/sbin"));
-
-    cmd.arg("--input")
+    let output = Command::new(script_path)
+        .arg("--input")
         .arg(input_dir)
         .arg("--output")
         .arg(output_img)
         .arg("--label")
-        .arg(label);
-
-    let output = cmd.output()?;
+        .arg(label)
+        .output()?;
     std::io::stdout().write_all(&output.stdout)?;
     std::io::stderr().write_all(&output.stderr)?;
     if !output.status.success() {
