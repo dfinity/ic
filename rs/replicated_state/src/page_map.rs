@@ -1031,7 +1031,7 @@ impl Buffer {
 
     /// Returns a vector of owned (PageIndex, PageBytes) for pages that are dirty.
     /// Using an owned Vec avoids returning a borrow tied to the RefCell borrow.
-    fn dirty_pages(&self) -> Vec<(PageIndex, PageBytes)> {
+    pub fn dirty_pages(&self) -> Vec<(PageIndex, PageBytes)> {
         self.cached_pages
             .borrow()
             .iter()
