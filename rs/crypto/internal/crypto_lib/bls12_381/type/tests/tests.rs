@@ -1840,14 +1840,22 @@ test_point_operation!(mul_with_precompute, [g1, g2], {
     g_with_precompute.precompute();
 
     let assert_same_result = |s: Scalar| {
-        let no_precomp = &g * &s;
-        let with_precomp = &g_with_precompute * &s;
-        assert_eq!(no_precomp, with_precomp);
+        let p1 = &g * &s;
+        let p2 = &g_with_precompute * &s;
+        let p3 = g.mul_vartime(&s);
+        let p4 = g_with_precompute.mul_vartime(&s);
+
+        assert_eq!(p1, p2);
+        assert_eq!(p2, p3);
+        assert_eq!(p3, p4);
     };
 
     assert_same_result(Scalar::zero());
     assert_same_result(Scalar::one());
     assert_same_result(Scalar::one().neg());
+    for _ in 0..1000 {
+        assert_same_result(Scalar::biased(rng));
+    }
     for _ in 0..1000 {
         assert_same_result(Scalar::random(rng));
     }

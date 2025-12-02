@@ -435,7 +435,7 @@ impl EncryptedKeyShare {
     ) -> bool {
         let (dpk, offset) = context.derive_key(master_pk);
 
-        let derived_node_key = G2Affine::from(G2Affine::generator() * &offset + node_pk);
+        let derived_node_key = G2Affine::from(G2Affine::generator().mul_vartime(&offset) + node_pk);
 
         let msg = G1Affine::augmented_hash(&dpk, input);
 
