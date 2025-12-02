@@ -22,7 +22,7 @@ mod common;
 
 #[async_trait::async_trait]
 trait DataMigrationAssert: Send + Sync {
-    async fn assert_expected_changes(&self, new_mutations: &Vec<RegistryMutation>);
+    async fn assert_expected_changes(&self, new_mutations: &[RegistryMutation]);
 }
 
 struct Setup {
@@ -109,7 +109,7 @@ impl Setup {
         install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
 
         for batch in &mainnet_mutations {
-            apply_mutations_for_test(&pocket_ic, &batch).await.unwrap();
+            apply_mutations_for_test(&pocket_ic, batch).await.unwrap();
         }
 
         Self {
@@ -221,7 +221,7 @@ struct EmptyDataAssertion {}
 
 #[async_trait::async_trait]
 impl DataMigrationAssert for EmptyDataAssertion {
-    async fn assert_expected_changes(&self, new_mutations: &Vec<RegistryMutation>) {
+    async fn assert_expected_changes(&self, new_mutations: &[RegistryMutation]) {
         assert!(new_mutations.is_empty())
     }
 }
