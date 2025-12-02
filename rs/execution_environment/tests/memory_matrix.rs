@@ -450,7 +450,17 @@ where
                     Scenario::DecreaseMemoryAllocation => {
                         assert!(current_memory_usage > current_memory_allocation)
                     }
-                    _ => assert_eq!(current_memory_usage, current_memory_allocation),
+                    _ => {
+                        // Memory allocation is set to match the memory usage after setup,
+                        // but canister history memory usage can increase even in case of `MemoryUsageChange::None`.
+                        let canister_history_memory_usage_increase =
+                            final_history_memory_usage - initial_history_memory_usage;
+                        assert_eq!(
+                            current_memory_usage,
+                            current_memory_allocation
+                                + canister_history_memory_usage_increase.get()
+                        );
+                    }
                 },
                 MemoryUsageChange::Decrease => {
                     assert!(current_memory_usage < current_memory_allocation)
@@ -778,6 +788,24 @@ fn setup_universal_canister_with_much_memory(test: &mut ExecutionTest, canister_
         .unwrap();
 }
 
+/// Setups a fixed memory canister with no custom sections.
+/// Custom section size matters in canister snapshot tests
+/// since it is accounted for in canister memory usage,
+/// but not in canister snapshot memory usage.
+fn setup_fixed_memory_canister(test: &mut ExecutionTest, canister_id: CanisterId) {
+    const FIXED_MEMORY_WAT: &str = r#"
+    (module
+        (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+        (func $init
+            (drop (call $stable64_grow (i64.const 1024))))
+        (memory $memory 1024)
+        (export "canister_init" (func $init))
+    )"#;
+    let fixed_memory_wasm = wat::parse_str(FIXED_MEMORY_WAT).unwrap();
+    test.install_canister(canister_id, fixed_memory_wasm)
+        .unwrap();
+}
+
 fn test_memory_suite_grow_memory_entry_point_(payload: Vec<u8>) {
     let op = |test: &mut ExecutionTest, canister_id, ()| {
         let msg_id = test.ingress_raw(canister_id, "update", payload.clone()).0;
@@ -962,25 +990,21 @@ fn test_memory_suite_replace_snapshot() {
 }
 
 #[test]
-fn test_memory_suite_replace_snapshot_and_uninstall_code() {
+fn test_memory_suite_take_snapshot_and_uninstall_code() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
-        setup_universal_canister_with_much_memory(test, canister_id);
-        let take_canister_snapshot_args =
-            TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
-        let res = test.subnet_message(
-            Method::TakeCanisterSnapshot,
-            take_canister_snapshot_args.encode(),
-        );
-        let snapshot_id = CanisterSnapshotResponse::decode(&get_reply(res))
-            .unwrap()
-            .id;
-        test.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        setup_fixed_memory_canister(test, canister_id);
+        // We upload a chunk to test that its memory usage is accounted for
+        // after uninstalling the canister.
+        let upload_chunk_args = UploadChunkArgs {
+            canister_id: canister_id.get(),
+            chunk: vec![42; 1 << 20],
+        };
+        test.subnet_message(Method::UploadChunk, upload_chunk_args.encode())
             .unwrap();
-        snapshot_id
     };
-    let op = |test: &mut ExecutionTest, canister_id, snapshot_id| {
+    let op = |test: &mut ExecutionTest, canister_id, ()| {
         let take_canister_snapshot_args =
-            TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id), Some(true), None);
+            TakeCanisterSnapshotArgs::new(canister_id, None, Some(true), None);
         test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -989,7 +1013,7 @@ fn test_memory_suite_replace_snapshot_and_uninstall_code() {
     };
     let params = ScenarioParams {
         scenario: Scenario::OtherManagement,
-        memory_usage_change: MemoryUsageChange::Decrease,
+        memory_usage_change: MemoryUsageChange::None,
         setup,
         op,
     };
