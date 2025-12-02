@@ -96,6 +96,8 @@ async fn test_mainnet_data() {
 
     let new_mutations = setup.upgrade().await;
 
+    println!("New mutations:\n{}", mutations_to_json(&new_mutations));
+
     setup.assert(new_mutations).await;
 }
 
@@ -224,4 +226,8 @@ impl DataMigrationAssert for EmptyDataAssertion {
     async fn assert_expected_changes(&self, new_mutations: &[RegistryMutation]) {
         assert!(new_mutations.is_empty())
     }
+}
+
+fn mutations_to_json(mutations: &[RegistryMutation]) -> String {
+    "".to_string()
 }
