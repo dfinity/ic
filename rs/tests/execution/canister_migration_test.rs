@@ -453,7 +453,7 @@ async fn test_async(env: TestEnv) {
             if matches!(decoded_status, MigrationStatus::Succeeded { .. }) {
                 Ok(())
             } else {
-                bail!("Not ready. Status: {:?}", decoded_status[0])
+                bail!("Not ready. Status: {:?}", decoded_status)
             }
         }
     )
