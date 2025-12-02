@@ -130,9 +130,10 @@ system_test(
 
 system_test_nns(
     name = "canister_migration_test",
-    enable_mainnet_nns_variant = False,
     env = UNIVERSAL_CANISTER_ENV,
-    test_timeout = "eternal",
+    tags = [
+        "long_test",
+    ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/nns/constants",
