@@ -13,6 +13,9 @@ use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
+#[cfg(test)]
+mod tests;
+
 #[derive(CandidType, Deserialize)]
 pub struct RetrieveBtcStatusRequest {
     pub block_index: u64,
@@ -185,7 +188,7 @@ impl DecodeLedgerMemoArgs {
     }
 }
 
-#[derive(Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
 pub enum Status {
     /// The minter accepted a retrieve_btc request.
     Accepted,
@@ -204,7 +207,7 @@ impl From<memo::Status> for Status {
     }
 }
 
-#[derive(Debug, CandidType, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
 pub enum MintMemo {
     Convert {
         txid: Option<Vec<u8>>,
@@ -253,7 +256,7 @@ impl<'a> From<memo::MintMemo<'a>> for MintMemo {
     }
 }
 
-#[derive(Debug, CandidType, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
 pub enum BurnMemo {
     Convert {
         address: Option<String>,
@@ -278,13 +281,13 @@ impl<'a> From<memo::BurnMemo<'a>> for BurnMemo {
     }
 }
 
-#[derive(Debug, CandidType, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
 pub enum DecodedMemo {
     Mint(Option<MintMemo>),
     Burn(Option<BurnMemo>),
 }
 
-#[derive(Debug, CandidType, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
 pub enum DecodeLedgerMemoError {
     InvalidMemo(String),
 }

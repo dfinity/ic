@@ -3,6 +3,9 @@ use crate::state::LedgerBurnIndex;
 use minicbor::Encoder;
 use minicbor::{Decode, Encode};
 
+#[cfg(test)]
+pub(crate) mod tests;
+
 /// Encodes minter memo as a binary blob.
 pub fn encode<T: minicbor::Encode<()>>(t: &T) -> Vec<u8> {
     let mut encoder = Encoder::new(Vec::new());
@@ -10,7 +13,7 @@ pub fn encode<T: minicbor::Encode<()>>(t: &T) -> Vec<u8> {
     encoder.into_writer()
 }
 
-#[derive(Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Decode, Encode)]
 #[cbor(index_only)]
 pub enum Status {
     #[n(0)]
@@ -23,7 +26,7 @@ pub enum Status {
     CallFailed,
 }
 
-#[derive(Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub enum MintMemo<'a> {
     #[n(0)]
     /// The minter converted a single UTXO to ckBTC.
