@@ -966,9 +966,18 @@ impl CanisterManager {
             canister,
             Some(round_limits),
             time,
-            AddCanisterChangeToHistory::Yes(origin),
             Arc::clone(&self.fd_factory),
         );
+
+        let available_execution_memory_change = canister.add_canister_change(
+            time,
+            origin,
+            CanisterChangeDetails::CanisterCodeUninstall,
+        );
+        round_limits
+            .subnet_available_memory
+            .update_execution_memory_unchecked(available_execution_memory_change);
+
         crate::util::process_responses(
             rejects,
             state,
@@ -976,6 +985,7 @@ impl CanisterManager {
             self.log.clone(),
             canister_not_found_error,
         );
+
         Ok(())
     }
 
@@ -2949,6 +2959,9 @@ impl CanisterManager {
             canister.scheduler_state.heap_delta_debit += NumBytes::new(bytes_written);
         }
         round_limits.instructions -= as_round_instructions(instructions);
+
+        state.record_snapshot_data_upload(snapshot_id);
+
         // Return the instructions needed to write the chunk to the destination.
         Ok(instructions)
     }
@@ -3106,9 +3119,8 @@ fn get_response_size(kind: &CanisterSnapshotDataKind) -> Result<u64, CanisterMan
 pub fn uninstall_canister(
     log: &ReplicaLogger,
     canister: &mut CanisterState,
-    mut round_limits: Option<&mut RoundLimits>,
+    round_limits: Option<&mut RoundLimits>,
     time: Time,
-    add_canister_change: AddCanisterChangeToHistory,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Vec<Response> {
     let old_allocated_bytes = canister.memory_allocated_bytes();
@@ -3133,7 +3145,7 @@ pub fn uninstall_canister(
     let new_allocated_bytes = canister.memory_allocated_bytes();
     debug_assert!(new_allocated_bytes <= old_allocated_bytes);
 
-    if let Some(round_limits) = round_limits.as_deref_mut() {
+    if let Some(round_limits) = round_limits {
         let deallocated_bytes = old_allocated_bytes.saturating_sub(&new_allocated_bytes);
         round_limits.subnet_available_memory.increment(
             deallocated_bytes,
@@ -3141,22 +3153,6 @@ pub fn uninstall_canister(
             NumBytes::from(0),
         );
     }
-
-    match add_canister_change {
-        AddCanisterChangeToHistory::Yes(origin) => {
-            let available_execution_memory_change = canister.add_canister_change(
-                time,
-                origin,
-                CanisterChangeDetails::CanisterCodeUninstall,
-            );
-            if let Some(round_limits) = round_limits {
-                round_limits
-                    .subnet_available_memory
-                    .update_execution_memory_unchecked(available_execution_memory_change);
-            }
-        }
-        AddCanisterChangeToHistory::No => {}
-    };
 
     let canister_id = canister.canister_id();
 

@@ -32,7 +32,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-            READY_WAIT_TIMEOUT, RETRY_BACKOFF, SubnetSnapshot,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF, SshSession, SubnetSnapshot,
         },
     },
     nns::vote_and_execute_proposal,

@@ -1,5 +1,5 @@
 //! Unit tests
-use crate::migration_canister::{ListEventsArgs, MigrationCanisterInitArgs};
+use crate::migration_canister::MigrationCanisterInitArgs;
 use crate::privileged::MigrationCanisterError;
 use crate::{MigrateCanisterArgs, MigrationStatus, ValidationError};
 use candid::Principal;
@@ -28,7 +28,7 @@ fn test() {
         caller,
     );
     insert_request(RequestState::Accepted { request });
-    assert!(find_request(source, target).len() == 1);
+    assert!(find_request(source, target).is_some());
 }
 
 #[test]
