@@ -345,9 +345,9 @@ fn serialize_page_map() {
 /// pages.
 fn write_and_verify_dirty_pages(buf: &mut Buffer, src: &[u8], offset: usize) -> u64 {
     let new = buf.dirty_pages_from_write(offset as u64, src.len() as u64);
-    let initial = buf.dirty_pages().len();
+    let initial = buf.dirty_pages.len();
     buf.write(src, offset);
-    let updated = buf.dirty_pages().len();
+    let updated = buf.dirty_pages.len();
     assert_eq!(updated - initial, new.get() as usize);
     new.get()
 }
