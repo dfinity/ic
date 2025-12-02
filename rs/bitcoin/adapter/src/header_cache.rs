@@ -271,7 +271,7 @@ fn create_db_env(path: &Path, map_size: usize) -> Environment {
                 path, err
             )
         });
-    assert_eq!(env.info().unwrap().map_size(), map_size);
+    debug_assert_eq!(env.info().unwrap().map_size(), map_size);
     env
 }
 
