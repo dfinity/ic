@@ -338,13 +338,7 @@ pub fn kgen<R: RngCore + CryptoRng>(
     let x = Scalar::random(rng);
     let rho = Scalar::random(rng);
     let a = G1Affine::from(g1 * &rho);
-    let b = G2Projective::mul2(
-        &G2Projective::from(g2),
-        &x,
-        &G2Projective::from(&sys.f0),
-        &rho,
-    )
-    .to_affine();
+    let b = G2Projective::mul2_affine(g2, &x, &sys.f0, &rho).to_affine();
     let mut d_t = LinkedList::new();
     for f in sys.f.iter() {
         d_t.push_back(G2Affine::from(f * &rho));
@@ -715,11 +709,8 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
     let cc = {
         let mut cc: Vec<[G1Affine; NUM_CHUNKS]> = Vec::with_capacity(receivers);
 
-        let g1 = G1Projective::from(g1);
-
         for (pk, ptext) in recipient_and_message {
-            let pk = G1Projective::from(pk);
-            let pk_g1_tbl = G1Projective::compute_mul2_tbl(&pk, &g1);
+            let pk_g1_tbl = G1Projective::compute_mul2_affine_tbl(&pk, &g1);
 
             let chunks = ptext.chunks_as_scalars();
 
