@@ -986,9 +986,6 @@ impl Buffer {
                 &src[0..page_len],
             );
 
-            // Note — we intentionally do NOT update cached_pages here. Reads
-            // consult dirty_pages first, so cached_pages can remain a cheap,
-            // read-only cache for pages that haven't been modified.
             offset += page_len;
             src = &src[page_len..src.len()];
         }
