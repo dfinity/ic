@@ -1675,12 +1675,11 @@ impl ExecutionEnvironment {
                         registry_settings.subnet_size,
                         round_limits,
                     );
-                    let msg_result = ExecuteSubnetMessageResult::Finished {
+                    ExecuteSubnetMessageResult::Finished {
                         response: result.map(|res| (res, Some(canister_id))),
                         refund: msg.take_cycles(),
                         instructions: instructions_used,
-                    };
-                    return self.finish_subnet_message_execution(state, msg, msg_result, since);
+                    }
                 }
             },
 
@@ -1702,13 +1701,11 @@ impl ExecutionEnvironment {
                         round_limits,
                         origin,
                     );
-                    let msg_result = ExecuteSubnetMessageResult::Finished {
+                    ExecuteSubnetMessageResult::Finished {
                         response: result.map(|res| (res, Some(canister_id))),
                         refund: msg.take_cycles(),
                         instructions: instructions_used,
-                    };
-
-                    return self.finish_subnet_message_execution(state, msg, msg_result, since);
+                    }
                 }
             },
 
@@ -1820,13 +1817,11 @@ impl ExecutionEnvironment {
                                 registry_settings.subnet_size,
                                 round_limits,
                             );
-                            let msg_result = ExecuteSubnetMessageResult::Finished {
+                            ExecuteSubnetMessageResult::Finished {
                                 response: result.map(|res| (res, Some(canister_id))),
                                 refund: msg.take_cycles(),
                                 instructions: instructions_used,
-                            };
-                            return self
-                                .finish_subnet_message_execution(state, msg, msg_result, since);
+                            }
                         }
                     },
                 }
@@ -1857,13 +1852,11 @@ impl ExecutionEnvironment {
                                 registry_settings.subnet_size,
                                 round_limits,
                             );
-                            let msg_result = ExecuteSubnetMessageResult::Finished {
+                            ExecuteSubnetMessageResult::Finished {
                                 response: result.map(|res| (res, Some(canister_id))),
                                 refund: msg.take_cycles(),
                                 instructions: instructions_used,
-                            };
-                            return self
-                                .finish_subnet_message_execution(state, msg, msg_result, since);
+                            }
                         }
                     },
                 }
