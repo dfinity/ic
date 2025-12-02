@@ -21,9 +21,8 @@ use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 use thiserror::Error;
 
-/// The max size (in bytes) of a LMDB cache, also know as the LMDB map
-/// size. It is a constant because it cannot be changed once DB is created.
-const MAX_LMDB_CACHE_SIZE: usize = 0x2_0000_0000; // 8GB
+/// The max size (in bytes) of the LMDB cache, also know as the LMDB map size.
+const MAX_LMDB_CACHE_SIZE: usize = 0x4_0000_0000; // 16GB
 
 /// Database key used to store tip header.
 const TIP_KEY: &str = "TIP";
@@ -257,13 +256,13 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for RwLock<InMemoryHead
     }
 }
 
-fn create_db_env(path: &Path) -> Environment {
+fn create_db_env(path: &Path, map_size: usize) -> Environment {
     let mut builder = Environment::new();
     let builder_flags = EnvironmentFlags::NO_TLS;
     let permission = 0o644;
     builder.set_flags(builder_flags);
     builder.set_max_dbs(1);
-    builder.set_map_size(MAX_LMDB_CACHE_SIZE);
+    builder.set_map_size(map_size);
     builder
         .open_with_permissions(path, permission)
         .unwrap_or_else(|err| {
@@ -332,7 +331,7 @@ impl LMDBHeaderCache {
         std::fs::create_dir_all(path).unwrap_or_else(|err| {
             panic!("Error creating DB directory {}: {}", path.display(), err)
         });
-        let db_env = create_db_env(path);
+        let db_env = create_db_env(path, MAX_LMDB_CACHE_SIZE);
         let headers = db_env
             .create_db(Some("HEADERS"), DatabaseFlags::empty())
             .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err));
@@ -894,5 +893,73 @@ pub(crate) mod test {
             assert_eq!(tips[0], cache.get_active_chain_tip());
             assert_eq!(tips[0].height, 3);
         });
+    }
+
+    #[test]
+    fn test_db_size_limit_increase() {
+        let dir = tempdir().unwrap();
+        let path = dir.path();
+        std::fs::create_dir_all(path).unwrap_or_else(|err| {
+            panic!("Error creating DB directory {}: {}", path.display(), err)
+        });
+        // 1. Create a DB and write to it until MapFull error.
+        {
+            let env = create_db_env(&path, 30000);
+            let db = env
+                .create_db(Some("DB"), DatabaseFlags::empty())
+                .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err));
+            let mut i = 0u8;
+            let err = loop {
+                if let Err(err) = env.begin_rw_txn().and_then(|mut tx| {
+                    let bytes = [i; 32];
+                    tx.put(db, &bytes, &bytes, WriteFlags::empty())
+                        .and_then(|_| tx.commit())
+                }) {
+                    break err;
+                } else {
+                    i += 1;
+                }
+            };
+            assert_eq!(err, lmdb::Error::MapFull);
+            assert_eq!(i, 1);
+        }
+
+        // 2. Open the same DB and read it, no error. Write additional data, got MapFull.
+        {
+            let env = create_db_env(&path, 30000);
+            let db = env
+                .create_db(Some("DB"), DatabaseFlags::empty())
+                .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err));
+            let mut tx = env.begin_rw_txn().unwrap();
+            let mut bytes = [0; 32];
+            assert_eq!(tx.get(db, &bytes).unwrap(), bytes);
+            bytes = [2; 32];
+            assert_eq!(
+                tx.put(db, &bytes, &bytes, WriteFlags::empty()),
+                Err(lmdb::Error::MapFull)
+            );
+        }
+
+        // 3. Open the same DB with bigger size limit, no problem writing more data to it.
+        {
+            let env = create_db_env(&path, 60000);
+            let db = env
+                .create_db(Some("DB"), DatabaseFlags::empty())
+                .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err));
+            let mut i = 0;
+            let err = loop {
+                if let Err(err) = env.begin_rw_txn().and_then(|mut tx| {
+                    let bytes = [i; 32];
+                    tx.put(db, &bytes, &bytes, WriteFlags::empty())
+                        .and_then(|_| tx.commit())
+                }) {
+                    break err;
+                } else {
+                    i += 1;
+                }
+            };
+            assert_eq!(err, lmdb::Error::MapFull);
+            assert!(i > 1);
+        }
     }
 }
