@@ -3522,10 +3522,10 @@ impl Payload<'_> for NodeMetricsHistoryResponse {}
 /// Exclusive range for fetching canister logs `[start, end)`.
 /// It's used both for `idx` and `timestamp_nanos` based filtering.
 /// If `end` is below `start`, the range is considered empty.
-#[derive(Clone, Debug, Default, CandidType, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, CandidType, Deserialize)]
 pub struct FetchCanisterLogsRange {
-    start: u64, // Inclusive.
-    end: u64,   // Exclusive, values below `start` are ignored.
+    pub start: u64, // Inclusive.
+    pub end: u64,   // Exclusive, values below `start` are ignored.
 }
 
 impl Payload<'_> for FetchCanisterLogsRange {}
@@ -3534,6 +3534,11 @@ impl FetchCanisterLogsRange {
     /// Creates a new range from `start` (inclusive) to `end` (exclusive).
     pub fn new(start: u64, end: u64) -> Self {
         Self { start, end }
+    }
+
+    /// Returns true if the range is valid (i.e., start < end).
+    pub fn is_valid(&self) -> bool {
+        self.start < self.end
     }
 
     /// Returns the length of the range.
@@ -3558,7 +3563,7 @@ impl FetchCanisterLogsRange {
     }
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(Copy, Clone, Debug, CandidType, Deserialize)]
 pub enum FetchCanisterLogsFilter {
     #[serde(rename = "by_idx")]
     ByIdx(FetchCanisterLogsRange),
@@ -3568,6 +3573,15 @@ pub enum FetchCanisterLogsFilter {
 }
 
 impl Payload<'_> for FetchCanisterLogsFilter {}
+
+impl FetchCanisterLogsFilter {
+    pub fn is_valid(&self) -> bool {
+        match self {
+            FetchCanisterLogsFilter::ByIdx(range) => range.is_valid(),
+            FetchCanisterLogsFilter::ByTimestampNanos(range) => range.is_valid(),
+        }
+    }
+}
 
 /// `CandidType` for `FetchCanisterLogsRequest`
 /// ```text

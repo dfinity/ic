@@ -3,6 +3,10 @@ pub mod proto;
 mod task_queue;
 pub mod wasm_chunk_store;
 
+// TODO(DSM-11): remove testing cofiguration when log memory store is used in production.
+#[cfg(test)]
+pub mod log_memory_store;
+
 pub use self::task_queue::{TaskQueue, is_low_wasm_memory_hook_condition_satisfied};
 
 use self::wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata};
