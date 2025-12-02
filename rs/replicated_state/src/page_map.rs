@@ -918,10 +918,9 @@ pub struct Buffer {
     /// matter).
     dirty_pages: HashMap<PageIndex, PageBytes>,
 
-    /// Cache of pages that were read from the underlying PageMap — stored
-    /// separately to avoid extra lookups when the same page is read many times.
-    /// Only stores clean pages; modified pages remain in `dirty_pages`.
-    clean_pages: RefCell<HashMap<PageIndex, PageBytes>>,
+    /// Cached clean page to avoid repeated lookups in the underlying
+    /// page_map for sequential reads.
+    clean_page: RefCell<Option<(PageIndex, PageBytes)>>,
 }
 
 impl Buffer {
@@ -930,7 +929,7 @@ impl Buffer {
         Self {
             page_map,
             dirty_pages: HashMap::new(),
-            clean_pages: RefCell::new(HashMap::new()),
+            clean_page: RefCell::new(None),
         }
     }
 
@@ -944,30 +943,27 @@ impl Buffer {
             let offset_into_page = offset % page_size;
             let page_len = dst.len().min(page_size - offset_into_page);
 
-            let mut do_copy = |bytes: &[u8]| {
-                deterministic_copy_from_slice(
-                    &mut dst[..page_len],
-                    &bytes[offset_into_page..offset_into_page + page_len],
-                );
+            let page_contents: &PageBytes = if let Some(bytes) = self.dirty_pages.get(&page) {
+                bytes
+            } else {
+                let mut cache = self.clean_page.borrow_mut();
+                match cache {
+                    Some((cached_page, cached_bytes)) if *cached_page == page => cached_bytes,
+                    _ => {
+                        let loaded: &PageBytes = self.page_map.get_page(page);
+                        *cache = Some((page, loaded.clone()));
+                        loaded
+                    }
+                }
             };
 
-            // First check if the page is dirty, then check the clean pages cache, and finally
-            // load it from the underlying page map.
-            if let Some(bytes) = self.dirty_pages.get(&page) {
-                do_copy(bytes);
-            } else if let Some(bytes) = self.clean_pages.borrow().get(&page) {
-                do_copy(bytes);
-            } else {
-                let loaded: PageBytes = *self.page_map.get_page(page);
-                self.clean_pages.borrow_mut().insert(page, loaded);
-                let clean_pages = self.clean_pages.borrow();
-                let bytes = clean_pages.get(&page).unwrap();
-                do_copy(bytes);
-            }
+            deterministic_copy_from_slice(
+                &mut dst[..page_len],
+                &page_contents[offset_into_page..offset_into_page + page_len],
+            );
 
             offset += page_len;
-            let n = dst.len();
-            dst = &mut dst[page_len..n];
+            dst = &mut dst[page_len..];
         }
     }
 
