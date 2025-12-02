@@ -2882,7 +2882,7 @@ impl CanisterManager {
                 }
                 let mut buffer = Buffer::new(snapshot_inner.wasm_memory().page_map.clone());
                 buffer.write(&args.chunk, offset as usize);
-                let delta = buffer.dirty_pages();
+                let delta = buffer.dirty_pages().collect::<Vec<_>>();
                 snapshot_inner.wasm_memory_mut().page_map.update(&delta);
             }
             CanisterSnapshotDataOffset::StableMemory { offset } => {
@@ -2896,7 +2896,7 @@ impl CanisterManager {
                 }
                 let mut buffer = Buffer::new(snapshot_inner.stable_memory().page_map.clone());
                 buffer.write(&args.chunk, offset as usize);
-                let delta = buffer.dirty_pages();
+                let delta = buffer.dirty_pages().collect::<Vec<_>>();
                 snapshot_inner.stable_memory_mut().page_map.update(&delta);
             }
             CanisterSnapshotDataOffset::WasmChunk => {
