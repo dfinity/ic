@@ -33,7 +33,5 @@ service : (MigrationCanisterInitArgs) -> {
   disable_api : () -> (MigrationCanisterResult);
   enable_api : () -> (MigrationCanisterResult);
   migrate_canister : (MigrateCanisterArgs) -> (ValidationResult);
-  // The same `(canister_id, replace_canister_id)` pair might be processed again after a failure
-  // and thus we return a vector.
-  migration_status : (MigrateCanisterArgs) -> (vec MigrationStatus) query;
+  migration_status : (MigrateCanisterArgs) -> (opt MigrationStatus) query;
 }
