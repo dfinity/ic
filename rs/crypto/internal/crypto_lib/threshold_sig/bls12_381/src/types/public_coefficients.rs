@@ -173,25 +173,6 @@ impl<B: std::borrow::Borrow<PublicCoefficients>> std::ops::Add<B> for PublicCoef
     }
 }
 
-#[allow(clippy::suspicious_op_assign_impl)]
-impl std::ops::MulAssign<Scalar> for PublicCoefficients {
-    fn mul_assign(&mut self, rhs: Scalar) {
-        for self_c in self.coefficients.iter_mut() {
-            self_c.0.mul_assign(&rhs);
-        }
-        self.remove_zeros();
-    }
-}
-
-impl std::ops::Mul<Scalar> for PublicCoefficients {
-    type Output = Self;
-
-    fn mul(mut self, rhs: Scalar) -> Self {
-        self *= rhs;
-        self
-    }
-}
-
 fn invalid_size(error: std::num::TryFromIntError) -> CryptoError {
     CryptoError::InvalidArgument {
         message: format!("{error:?}"),
