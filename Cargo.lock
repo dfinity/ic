@@ -15060,6 +15060,7 @@ dependencies = [
  "ic-universal-canister",
  "ic-wasm-types",
  "maplit",
+ "num-traits",
  "prometheus 0.13.4",
  "strum 0.26.3",
  "strum_macros 0.26.4",

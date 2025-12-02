@@ -1917,10 +1917,10 @@ impl CanisterManager {
     /// the system will attempt to identify the snapshot based on the provided ID,
     /// and delete it before creating a new one.
     /// Failure to do so will result in the creation of a new snapshot being unsuccessful.
-    /// Finally, if the `uninstall_code` parameter is `Some(true)`,
-    /// the system will uninstall code of the canister atomically
-    /// when creating the new snapshot. In particular, the canister's memory usage
-    /// will be updated atomically.
+    /// Finally, if the `uninstall_code` parameter is `true`, then the system
+    /// will uninstall code of the canister atomically after creating the new snapshot.
+    /// In particular, the canister's memory usage will be updated atomically.
+    /// This function returns a vector of system-generated responses from the uninstalled canister.
     ///
     /// If the new snapshot cannot be created, an appropriate error will be returned.
     pub(crate) fn take_canister_snapshot(
@@ -1933,8 +1933,8 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
         resource_saturation: &ResourceSaturation,
-        canister_not_found_error: &IntCounter,
-    ) -> Result<(CanisterSnapshotResponse, NumInstructions), CanisterManagerError> {
+    ) -> Result<(CanisterSnapshotResponse, Vec<Response>, NumInstructions), CanisterManagerError>
+    {
         let sender = origin.origin();
         let time = state.time();
 
@@ -2052,7 +2052,7 @@ impl CanisterManager {
             .snapshots_memory_usage
             .saturating_add(&new_snapshot_size);
 
-        if uninstall_code {
+        let rejects = if uninstall_code {
             let rejects = uninstall_canister(
                 &self.log,
                 canister,
@@ -2068,14 +2068,10 @@ impl CanisterManager {
             round_limits
                 .subnet_available_memory
                 .update_execution_memory_unchecked(available_execution_memory_change);
-            crate::util::process_responses(
-                rejects,
-                state,
-                Arc::clone(&self.ingress_history_writer),
-                self.log.clone(),
-                canister_not_found_error,
-            );
-        }
+            rejects
+        } else {
+            vec![]
+        };
 
         Ok((
             CanisterSnapshotResponse::new(
@@ -2083,6 +2079,7 @@ impl CanisterManager {
                 state.time().as_nanos_since_unix_epoch(),
                 new_snapshot_size,
             ),
+            rejects,
             instructions,
         ))
     }
@@ -3157,6 +3154,7 @@ fn get_response_size(kind: &CanisterSnapshotDataKind) -> Result<u64, CanisterMan
 ///
 /// Returns a list of rejects that need to be sent out to their callers.
 #[doc(hidden)]
+#[must_use]
 pub fn uninstall_canister(
     log: &ReplicaLogger,
     canister: &mut CanisterState,

@@ -12,8 +12,8 @@ use ic_interfaces::execution_environment::{HypervisorError, MessageMemoryUsage};
 use ic_management_canister_types_private::Global;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
-    VetKdKeyId,
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, Payload, SchnorrAlgorithm, SchnorrKeyId,
+    TakeCanisterSnapshotArgs, VetKdCurve, VetKdKeyId,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -5872,7 +5872,32 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
 }
 
 #[test]
-fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
+fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call_directly() {
+    let op = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        test.uninstall_code(canister_id).unwrap();
+        Cycles::zero()
+    };
+
+    cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call(op);
+}
+
+#[test]
+fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call_after_take_canister_snapshot() {
+    let op = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        let snapshot_cost = test.canister_snapshot_cost(canister_id);
+        let args = TakeCanisterSnapshotArgs::new(canister_id, None, Some(true), None);
+        test.subnet_message("take_canister_snapshot", args.encode())
+            .unwrap();
+        snapshot_cost
+    };
+
+    cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call(op);
+}
+
+fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call<F>(f: F)
+where
+    F: FnOnce(&mut ExecutionTest, CanisterId) -> Cycles,
+{
     // This test uses manual execution to get finer control over the execution
     // and message induction order.
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
@@ -5911,7 +5936,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
         .build();
 
     // The update method #0 of canister B:
-    // 1. Call the update method #2 and transfers some cycles.
+    // 1. Call the update method #1 and transfers some cycles.
     // 2. Forwards the reject code and message to canister A.
     let b_0 = wasm()
         .accept_cycles(a_to_b_accepted)
@@ -5948,7 +5973,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
     test.execute_message(b_id);
 
     // Uninstall canister B, which generates reject messages for all call contexts.
-    test.uninstall_code(b_id).unwrap();
+    let extra_cost = f(&mut test, b_id);
 
     // Execute method #2 of canister B and all the replies.
     test.execute_all();
@@ -5986,6 +6011,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
         initial_cycles
+            - extra_cost
             - test.canister_execution_cost(b_id)
             - test.call_fee("update", &b_1)
             - test.call_fee("update", &b_2)

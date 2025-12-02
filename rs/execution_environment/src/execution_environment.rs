@@ -1631,7 +1631,6 @@ impl ExecutionEnvironment {
                         args,
                         registry_settings.subnet_size,
                         round_limits,
-                        &self.metrics.canister_not_found_error,
                     );
                     let msg_result = ExecuteSubnetMessageResult::Finished {
                         response: result.map(|res| (res, Some(canister_id))),
@@ -2501,7 +2500,6 @@ impl ExecutionEnvironment {
         args: TakeCanisterSnapshotArgs,
         subnet_size: usize,
         round_limits: &mut RoundLimits,
-        canister_not_found_error: &IntCounter,
     ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
         let canister_id = args.get_canister_id();
         // Take canister out.
@@ -2531,13 +2529,21 @@ impl ExecutionEnvironment {
             state,
             round_limits,
             &resource_saturation,
-            canister_not_found_error,
         );
         // Put canister back.
         state.put_canister_state(canister);
 
         match result {
-            Ok((response, instructions_used)) => (Ok(response.encode()), instructions_used),
+            Ok((response, rejects, instructions_used)) => {
+                crate::util::process_responses(
+                    rejects,
+                    state,
+                    Arc::clone(&self.ingress_history_writer),
+                    self.log.clone(),
+                    self.canister_not_found_error(),
+                );
+                (Ok(response.encode()), instructions_used)
+            }
             Err(err) => (Err(err.into()), NumInstructions::new(0)),
         }
     }

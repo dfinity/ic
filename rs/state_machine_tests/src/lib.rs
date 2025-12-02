@@ -3763,11 +3763,11 @@ impl StateMachine {
     }
 
     /// Create a canister snapshot.
-    pub fn take_canister_snapshot(
+    pub fn take_canister_snapshot_as(
         &self,
         args: TakeCanisterSnapshotArgs,
+        sender: PrincipalId,
     ) -> Result<CanisterSnapshotResponse, UserError> {
-        let sender = self.get_controller(&args.get_canister_id());
         self.execute_ingress_as(
             sender,
             ic00::IC_00,
@@ -3780,6 +3780,15 @@ impl StateMachine {
                 panic!("take_canister_snapshot call rejected: {reason}")
             }
         })?
+    }
+
+    /// Create a canister snapshot.
+    pub fn take_canister_snapshot(
+        &self,
+        args: TakeCanisterSnapshotArgs,
+    ) -> Result<CanisterSnapshotResponse, UserError> {
+        let sender = self.get_controller(&args.get_canister_id());
+        self.take_canister_snapshot_as(args, sender)
     }
 
     /// Load the canister state from a canister snapshot.
