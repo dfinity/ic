@@ -30,6 +30,7 @@ use libc::off_t;
 use page_allocator::Page;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Range;
 use std::os::unix::io::RawFd;
@@ -896,23 +897,28 @@ impl From<&[u8]> for PageMap {
     fn from(bytes: &[u8]) -> Self {
         let mut buf = Buffer::new(PageMap::new_for_testing());
         buf.write(bytes, 0);
-        let mut page_map = PageMap::new_for_testing();
-        page_map.update(&buf.dirty_pages().collect::<Vec<_>>());
-        page_map
+        buf.to_page_map()
     }
 }
 
 /// Buffer provides a file-like interface to a PageMap.
 pub struct Buffer {
     page_map: PageMap,
-    /// The map containing pages modified by the caller since this buffer was
-    /// created. These pages can be modified in-place by the write method.
+    /// The map containing pages that have been accessed (read or written).
+    /// Pages are cached here to avoid repeated lookups in the underlying PageMap.
+    /// This includes both dirty pages (modified) and clean pages (only read).
     ///
     /// Note: using a hash map here is beneficial for performance and doesn't
     /// affect determinism because the state machine has no way of observing the
     /// order of the keys in this map (or even inside of PageDelta for that
     /// matter).
-    dirty_pages: HashMap<PageIndex, PageBytes>,
+    cached_pages: RefCell<HashMap<PageIndex, CachedPage>>,
+}
+
+#[derive(Clone)]
+struct CachedPage {
+    contents: PageBytes,
+    dirty: bool,
 }
 
 impl Buffer {
@@ -920,8 +926,29 @@ impl Buffer {
     pub fn new(page_map: PageMap) -> Self {
         Self {
             page_map,
-            dirty_pages: HashMap::new(),
+            cached_pages: RefCell::new(HashMap::new()),
         }
+    }
+
+    /// Gets a page from cache or loads it from the underlying page map.
+    /// Returns a Ref to the cached page so callers can read directly.
+    fn get_or_load_page(&self, page: PageIndex) -> std::cell::Ref<'_, CachedPage> {
+        // If page is not present in cache, load it into cache.
+        if !self.cached_pages.borrow().contains_key(&page) {
+            let page_contents = *self.page_map.get_page(page);
+            self.cached_pages.borrow_mut().insert(
+                page,
+                CachedPage {
+                    contents: page_contents,
+                    dirty: false,
+                },
+            );
+        }
+
+        // Map the borrow to the CachedPage entry.
+        std::cell::Ref::map(self.cached_pages.borrow(), |cache| {
+            cache.get(&page).expect("page must be present after insert")
+        })
     }
 
     /// Reads the contents of this buffer at the specified offset into the
@@ -934,13 +961,10 @@ impl Buffer {
             let offset_into_page = offset % page_size;
             let page_len = dst.len().min(page_size - offset_into_page);
 
-            let page_contents = match self.dirty_pages.get(&page) {
-                Some(bytes) => bytes,
-                None => self.page_map.get_page(page),
-            };
+            let cached_page = self.get_or_load_page(page);
             deterministic_copy_from_slice(
                 &mut dst[0..page_len],
-                &page_contents[offset_into_page..offset_into_page + page_len],
+                &cached_page.contents[offset_into_page..offset_into_page + page_len],
             );
 
             offset += page_len;
@@ -959,14 +983,17 @@ impl Buffer {
             let offset_into_page = offset % page_size;
             let page_len = src.len().min(page_size - offset_into_page);
 
-            let dirty_page = self
-                .dirty_pages
-                .entry(page)
-                .or_insert_with(|| *self.page_map.get_page(page));
+            let mut cache = self.cached_pages.borrow_mut();
+            let cached_page = cache.entry(page).or_insert_with(|| CachedPage {
+                contents: *self.page_map.get_page(page),
+                dirty: false,
+            });
+
             deterministic_copy_from_slice(
-                &mut dirty_page[offset_into_page..offset_into_page + page_len],
+                &mut cached_page.contents[offset_into_page..offset_into_page + page_len],
                 &src[0..page_len],
             );
+            cached_page.dirty = true;
 
             offset += page_len;
             src = &src[page_len..src.len()];
@@ -979,6 +1006,7 @@ impl Buffer {
     ///
     /// This function assumes the write doesn't extend beyond the maximum stable
     /// memory size (in which case the memory would fail anyway).
+    #[cfg(test)]
     pub fn dirty_pages_from_write(&self, offset: u64, size: u64) -> NumOsPages {
         if size == 0 {
             return NumOsPages::from(0);
@@ -988,19 +1016,49 @@ impl Buffer {
             .saturating_add(size - 1)
             .min(MAX_STABLE_MEMORY_IN_BYTES)
             / (PAGE_SIZE as u64);
+        let cache = self.cached_pages.borrow();
         let dirty_page_count = (first_page..=last_page)
-            .filter(|p| !self.dirty_pages.contains_key(&PageIndex::new(*p)))
+            .filter(|p| {
+                // Count pages that are not already dirty — either not cached yet
+                // or cached but not dirty.
+                cache
+                    .get(&PageIndex::new(*p))
+                    .map_or(true, |cached| !cached.dirty)
+            })
             .count();
         NumOsPages::new(dirty_page_count as u64)
     }
 
-    pub fn dirty_pages(&self) -> impl Iterator<Item = (PageIndex, &PageBytes)> {
-        self.dirty_pages.iter().map(|(i, p)| (*i, p))
+    /// Returns a vector of owned (PageIndex, PageBytes) for pages that are dirty.
+    /// Using an owned Vec avoids returning a borrow tied to the RefCell borrow.
+    fn dirty_pages(&self) -> Vec<(PageIndex, PageBytes)> {
+        self.cached_pages
+            .borrow()
+            .iter()
+            .filter_map(|(idx, cached)| {
+                if cached.dirty {
+                    Some((*idx, cached.contents))
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
+    /// Produces a PageMap with this buffer's dirty pages applied.
     pub fn to_page_map(&self) -> PageMap {
         let mut page_map = self.page_map.clone();
-        page_map.update(&self.dirty_pages().collect::<Vec<_>>());
+        let dirty_owned: Vec<(PageIndex, PageBytes)> = self.dirty_pages();
+
+        // Create a temporary Vec of references into dirty_owned so we can call
+        // page_map.update(&[(PageIndex, &PageBytes)]) if that is the expected API.
+        // This keeps allocations minimal and avoids long-lived borrows of RefCell.
+        let dirty_refs: Vec<(PageIndex, &PageBytes)> = dirty_owned
+            .iter()
+            .map(|(idx, bytes)| (*idx, bytes))
+            .collect();
+
+        page_map.update(&dirty_refs);
         page_map
     }
 }

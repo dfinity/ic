@@ -2882,8 +2882,7 @@ impl CanisterManager {
                 }
                 let mut buffer = Buffer::new(snapshot_inner.wasm_memory().page_map.clone());
                 buffer.write(&args.chunk, offset as usize);
-                let delta = buffer.dirty_pages().collect::<Vec<_>>();
-                snapshot_inner.wasm_memory_mut().page_map.update(&delta);
+                snapshot_inner.wasm_memory_mut().page_map = buffer.to_page_map();
             }
             CanisterSnapshotDataOffset::StableMemory { offset } => {
                 let max_size_bytes =
@@ -2896,8 +2895,7 @@ impl CanisterManager {
                 }
                 let mut buffer = Buffer::new(snapshot_inner.stable_memory().page_map.clone());
                 buffer.write(&args.chunk, offset as usize);
-                let delta = buffer.dirty_pages().collect::<Vec<_>>();
-                snapshot_inner.stable_memory_mut().page_map.update(&delta);
+                snapshot_inner.stable_memory_mut().page_map = buffer.to_page_map();
             }
             CanisterSnapshotDataOffset::WasmChunk => {
                 // The chunk store is initialized as empty, and no memory for it has been reserved yet.
