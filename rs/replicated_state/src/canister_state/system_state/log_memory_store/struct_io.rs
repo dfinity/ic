@@ -58,6 +58,7 @@ impl StructIO {
     }
 
     pub fn save_header(&mut self, header: &Header) {
+        self.cache_header.replace(Some(header.clone()));
         let mut addr = HEADER_OFFSET;
         addr = self.write_raw_bytes(addr, &header.magic);
         addr = self.write_raw_u8(addr, header.version);
@@ -70,7 +71,6 @@ impl StructIO {
         addr = self.write_raw_u64(addr, header.data_tail.get());
         addr = self.write_raw_u64(addr, header.next_idx);
         _ = self.write_raw_u64(addr, header.max_timestamp);
-        self.cache_header.replace(Some(header));
     }
 
     pub fn load_index_table(&self) -> IndexTable {
