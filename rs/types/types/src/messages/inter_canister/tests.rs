@@ -7,6 +7,7 @@ use super::*;
 use crate::exhaustive::ExhaustiveSet;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types_test_utils::ids::canister_test_id;
+use prost::Message;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 /// Old version of `Response`, to ensure `Hash` consistency with the "`Request`
@@ -138,5 +139,48 @@ fn request_or_response_proto_round_trip() {
         let round_trip = RequestOrResponse::try_from(encoded).unwrap();
 
         assert_eq!(r, round_trip);
+    }
+}
+
+#[test]
+fn stream_message_proto_round_trip() {
+    for r in StreamMessage::exhaustive_set(&mut reproducible_rng()) {
+        let encoded = pb_queues::StreamMessage::from(&r);
+        let round_trip = StreamMessage::try_from(encoded).unwrap();
+
+        assert_eq!(r, round_trip);
+    }
+}
+
+#[test]
+fn stream_message_request_or_response_proto_round_trip() {
+    for r in RequestOrResponse::exhaustive_set(&mut reproducible_rng()) {
+        let bytes = pb_queues::RequestOrResponse::from(&r).encode_to_vec();
+        let s_proto = pb_queues::StreamMessage::decode(bytes.as_ref()).unwrap();
+        let s = StreamMessage::try_from(s_proto).unwrap();
+
+        assert_eq_message(&r, &s);
+
+        let bytes = pb_queues::StreamMessage::from(&s).encode_to_vec();
+        let r_proto = pb_queues::RequestOrResponse::decode(bytes.as_ref()).unwrap();
+        let r_decoded = RequestOrResponse::try_from(r_proto).unwrap();
+
+        assert_eq!(r, r_decoded);
+    }
+}
+
+#[test]
+fn request_or_response_to_stream_message() {
+    for r in RequestOrResponse::exhaustive_set(&mut reproducible_rng()) {
+        let s = StreamMessage::from(r.clone());
+        assert_eq_message(&r, &s);
+    }
+}
+
+fn assert_eq_message(r: &RequestOrResponse, s: &StreamMessage) {
+    match (r, s) {
+        (RequestOrResponse::Request(q1), StreamMessage::Request(q2)) => assert_eq!(q1, q2),
+        (RequestOrResponse::Response(p1), StreamMessage::Response(p2)) => assert_eq!(p1, p2),
+        _ => panic!("Mismatched variants: {:?} vs {:?}", r, s),
     }
 }

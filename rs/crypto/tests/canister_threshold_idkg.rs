@@ -2104,24 +2104,22 @@ mod load_transcript_with_openings {
                 &key_transcript,
                 rng,
             );
-            let inputs = {
-                let derivation_path = ExtendedDerivationPath {
-                    caller: PrincipalId::new_user_test_id(1),
-                    derivation_path: vec![],
-                };
+            let caller = PrincipalId::new_user_test_id(1);
+            let derivation_path = vec![];
 
-                let hashed_message = rng.r#gen::<[u8; 32]>();
-                let seed = Randomness::from(rng.r#gen::<[u8; 32]>());
+            let hashed_message = rng.r#gen::<[u8; 32]>();
+            let seed = rng.r#gen::<[u8; 32]>();
 
-                ThresholdEcdsaSigInputs::new(
-                    &derivation_path,
-                    &hashed_message,
-                    seed,
-                    quadruple,
-                    key_transcript.clone(),
-                )
-                .expect("failed to create signature inputs")
-            };
+            let inputs = ThresholdEcdsaSigInputs::new(
+                &caller,
+                &derivation_path,
+                &hashed_message,
+                &seed,
+                &quadruple,
+                &key_transcript,
+            )
+            .expect("failed to create signature inputs");
+
             complainer.load_transcript_or_panic(inputs.presig_quadruple().kappa_unmasked());
             complainer.load_transcript_or_panic(inputs.presig_quadruple().lambda_masked());
             complainer.load_transcript_or_panic(inputs.presig_quadruple().kappa_times_lambda());
@@ -2227,14 +2225,14 @@ mod load_transcript_with_openings {
             complainer.load_transcript_or_panic(inputs.presig_transcript().blinder_unmasked());
 
             let sig_result = complainer
-                .create_sig_share(&inputs)
+                .create_sig_share(&inputs.as_ref())
                 .expect("signing failed");
             let verifier = env
                 .nodes
                 .random_filtered_by_receivers_excluding(complainer, &receivers, rng);
 
             verifier
-                .verify_sig_share(complainer.id(), &inputs, &sig_result)
+                .verify_sig_share(complainer.id(), &inputs.as_ref(), &sig_result)
                 .expect("verification failed");
         }
     }

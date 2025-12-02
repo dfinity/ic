@@ -42,10 +42,13 @@ use std::net::Ipv6Addr;
 use std::time::Duration;
 
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
-use slog::{Logger, info};
+use slog::{Logger, info, warn};
 
 pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 pub const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
+
+pub const NODE_UPGRADE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+pub const NODE_UPGRADE_BACKOFF: Duration = Duration::from_secs(5);
 
 /// Setup the basic IC infrastructure (testnet, NNS, gateway)
 pub fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>, is_fast: bool) {
@@ -74,12 +77,13 @@ pub fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>, is_fast
     install_nns_and_check_progress(env.topology_snapshot());
 
     IcGatewayVm::new(IC_GATEWAY_VM_NAME)
+        .disable_ipv4()
         .start(env)
         .expect("failed to setup ic-gateway");
 }
 
 /// Use an SSH channel to check the version on the running HostOS.
-pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
+pub fn check_hostos_version(node: &NestedVm) -> String {
     let session = node
         .block_on_ssh_session()
         .expect("Could not reach HostOS VM.");
@@ -100,7 +104,7 @@ pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
 }
 
 /// Submit a proposal to elect a new GuestOS version
-pub(crate) async fn elect_guestos_version(
+pub async fn elect_guestos_version(
     nns_node: &IcNodeSnapshot,
     target_version: &ReplicaVersion,
     sha256: String,
@@ -127,7 +131,7 @@ pub(crate) async fn elect_guestos_version(
 }
 
 /// Get the current unassigned nodes configuration from the NNS registry.
-pub(crate) async fn get_unassigned_nodes_config(
+pub async fn get_unassigned_nodes_config(
     nns_node: &IcNodeSnapshot,
 ) -> Option<UnassignedNodesConfigRecord> {
     let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
@@ -150,9 +154,7 @@ pub(crate) async fn get_unassigned_nodes_config(
 }
 
 /// Get the blessed guestOS version from the NNS registry.
-pub(crate) async fn get_blessed_guestos_versions(
-    nns_node: &IcNodeSnapshot,
-) -> BlessedReplicaVersions {
+pub async fn get_blessed_guestos_versions(nns_node: &IcNodeSnapshot) -> BlessedReplicaVersions {
     let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
     let blessed_vers_result = registry_canister
         .get_value(
@@ -165,10 +167,7 @@ pub(crate) async fn get_blessed_guestos_versions(
 }
 
 /// Get the blessed guestOS version from the NNS registry.
-pub(crate) async fn update_unassigned_nodes(
-    nns_node: &IcNodeSnapshot,
-    target_version: &ReplicaVersion,
-) {
+pub async fn update_unassigned_nodes(nns_node: &IcNodeSnapshot, target_version: &ReplicaVersion) {
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance_canister = get_governance_canister(&nns);
     let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
@@ -214,7 +213,7 @@ pub async fn check_guestos_version(
 }
 
 /// Submit a proposal to elect a new HostOS version
-pub(crate) async fn elect_hostos_version(
+pub async fn elect_hostos_version(
     nns_node: &IcNodeSnapshot,
     target_version: &HostosVersion,
     sha256: &str,
@@ -239,7 +238,7 @@ pub(crate) async fn elect_hostos_version(
 }
 
 /// Submit a proposal to update the HostOS version on a node
-pub(crate) async fn update_nodes_hostos_version(
+pub async fn update_nodes_hostos_version(
     nns_node: &IcNodeSnapshot,
     new_hostos_version: &HostosVersion,
     node_ids: Vec<NodeId>,
@@ -336,4 +335,56 @@ pub async fn get_host_boot_id_async(node: &NestedVm) -> String {
         .expect("Failed to retrieve boot ID")
         .trim()
         .to_string()
+}
+
+/// Execute a bash script on a node via SSH and log the output.
+pub fn block_on_bash_script_and_log<N: SshSession>(log: &Logger, node: &N, cmd: &str) {
+    match node.block_on_bash_script(cmd) {
+        Ok(out) => info!(log, "{cmd}:\n{out}"),
+        Err(err) => warn!(log, "Failed to execute '{cmd}': {:?}", err),
+    }
+}
+
+/// Logs guestos diagnostics, used in the event of test failure
+pub fn try_logging_guestos_diagnostics(host: &NestedVm, logger: &Logger) {
+    info!(logger, "Logging GuestOS diagnostics...");
+
+    /// 10-second timeout prevents excessive logging when SSH is unavailable.
+    const SSH_TIMEOUT: Duration = Duration::from_secs(10);
+
+    let execute_and_log = |node: &dyn SshSession, cmd: &str| match node
+        .block_on_ssh_session_with_timeout(SSH_TIMEOUT)
+        .and_then(|session| node.block_on_bash_script_from_session(&session, cmd))
+    {
+        Ok(out) => info!(logger, "{cmd}:\n{out}"),
+        Err(err) => warn!(logger, "Failed to execute '{cmd}': {:?}", err),
+    };
+
+    info!(logger, "GuestOS console logs...");
+    execute_and_log(
+        host,
+        "sudo tail -n 200 /var/log/libvirt/qemu/guestos-serial.log",
+    );
+
+    match host.get_guest_ssh() {
+        Ok(guest) => {
+            let diagnostics = vec![
+                "systemctl --failed --no-pager || true",
+                "journalctl -b --no-pager -u systemd-remount-fs.service || true",
+                "mount | sort",
+                "journalctl -b --no-pager -p warning | tail -n 200",
+                "set -o pipefail; dmesg --color=never | grep -iE 'mount|ext4|xfs|btrfs|nvme|sda|i/o error|failed' | tail -n 200 || true",
+            ];
+
+            for cmd in diagnostics {
+                execute_and_log(&guest, cmd);
+            }
+        }
+        Err(err) => {
+            info!(
+                logger,
+                "Unable to establish GuestOS SSH session for diagnostics: {:?}", err
+            );
+        }
+    }
 }

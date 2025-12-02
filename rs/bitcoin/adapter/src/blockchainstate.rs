@@ -11,7 +11,7 @@ use ic_btc_validation::doge::DogecoinHeaderValidator;
 use ic_btc_validation::{
     AuxPowHeaderValidator, HeaderStore, ValidateAuxPowHeaderError, ValidateHeaderError,
 };
-use ic_logger::ReplicaLogger;
+use ic_logger::{ReplicaLogger, error};
 use ic_metrics::MetricsRegistry;
 use std::fmt::Debug;
 use std::{
@@ -65,6 +65,7 @@ pub struct BlockchainState<Network: BlockchainNetwork> {
     /// Used to determine how validation should be handled with `validate_header`.
     network: Network,
     metrics: BlockchainStateMetrics,
+    logger: ReplicaLogger,
 }
 
 impl HeaderValidator<bitcoin::Network> for BlockchainState<bitcoin::Network> {
@@ -107,7 +108,8 @@ where
         let header_cache = Arc::new(HybridHeaderCache::new(
             genesis_block_header,
             cache_dir,
-            logger,
+            metrics_registry,
+            logger.clone(),
         ));
         let block_cache = RwLock::new(HashMap::new());
         BlockchainState {
@@ -115,6 +117,7 @@ where
             block_cache,
             network,
             metrics: BlockchainStateMetrics::new(metrics_registry),
+            logger,
         }
     }
 
@@ -193,17 +196,31 @@ where
             .map_err(|err| AddHeaderError::InvalidHeader(block_hash, err))?;
 
         let header_cache = self.header_cache.clone();
-        let metrics = self.metrics.clone();
-        let result = tokio::task::spawn_blocking(move || {
-            header_cache.add_header(block_hash, header).inspect(|_| {
-                metrics.header_cache_size.inc();
-            })
-        })
-        .await
-        .map_err(|err: tokio::task::JoinError| {
-            AddHeaderCacheError::Internal(format!("{}", err))
-        })??;
+        let result =
+            tokio::task::spawn_blocking(move || header_cache.add_header(block_hash, header))
+                .await
+                .map_err(|err: tokio::task::JoinError| {
+                    AddHeaderCacheError::Internal(format!("{}", err))
+                })??;
         Ok(result)
+    }
+
+    /// Background task to ersist headers below the anchor (as headers) and the anchor (as tip) on to disk, and
+    /// prune headers below the anchor from the in-memory cache.
+    pub fn persist_and_prune_headers_below_anchor(
+        &self,
+        anchor: BlockHash,
+    ) -> tokio::task::JoinHandle<()> {
+        let header_cache = self.header_cache.clone();
+        let logger = self.logger.clone();
+        tokio::task::spawn_blocking(move || {
+            if let Err(err) = header_cache.persist_and_prune_headers_below_anchor(anchor) {
+                error!(
+                    logger,
+                    "Error persist_and_prune_headers_below_anchor({}): {}", anchor, err
+                )
+            }
+        })
     }
 
     /// This method adds a new block to the `block_cache`
@@ -335,6 +352,18 @@ where
             .values()
             .map(|block| block.len())
             .sum()
+    }
+
+    /// Number of headers stored.
+    ///
+    /// Return a pair where
+    /// 1. Number of headers stored on disk
+    /// 2. Number of headers stored in memory
+    pub fn num_headers(&self) -> Result<(usize, usize), String> {
+        self.header_cache
+            .get_num_headers()
+            // do not expose internal error type
+            .map_err(|e| e.to_string())
     }
 }
 

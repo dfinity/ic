@@ -41,7 +41,7 @@ impl Verifier for VerifierImpl {
 mod tests {
     use super::*;
     use assert_matches::assert_matches;
-    use ic_test_utilities::crypto::CryptoReturningOk;
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{

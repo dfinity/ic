@@ -42,11 +42,6 @@ alias(
 )
 
 alias(
-    name = "ormolu-format",
-    actual = "//pre-commit:ormolu-format",
-)
-
-alias(
     name = "gen_rust_project",
     actual = "@rules_rust//tools/rust_analyzer:gen_rust_project",
 )
@@ -96,6 +91,7 @@ alias(
     actual = select({
         "@bazel_tools//src/conditions:darwin_arm64": "@bitcoin_core_darwin_arm64//:bitcoind",
         "@bazel_tools//src/conditions:darwin_x86_64": "@bitcoin_core_darwin_x86//:bitcoind",
+        "@bazel_tools//src/conditions:linux_aarch64": "@bitcoin_core_linux_aarch64//:bitcoind",
         "@bazel_tools//src/conditions:linux_x86_64": "@bitcoin_core_linux_x86//:bitcoind",
     }),
 )
@@ -111,6 +107,87 @@ alias(
     actual = select({
         "@bazel_tools//src/conditions:linux_x86_64": "@dogecoin_core_linux_x86//:dogecoind",
         "//conditions:default": "//:dogecoind_stub",
+    }),
+)
+
+### ruff, python linter & formatter
+
+alias(
+    name = "ruff",
+    actual = select({
+        "@bazel_tools//src/conditions:linux_x86_64": "@ruff-x86_64-linux//:ruff",
+        "@bazel_tools//src/conditions:darwin_arm64": "@ruff-aarch64-darwin//:ruff",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@ruff-x86_64-darwin//:ruff",
+    }),
+)
+
+### rosetta-cli
+
+alias(
+    name = "rosetta-cli",
+    actual = select({
+        "@bazel_tools//src/conditions:linux_x86_64": "@rosetta-cli-x86_64-linux//:rosetta-cli-0.10.3-linux-amd64",
+        "@bazel_tools//src/conditions:darwin_arm64": "@rosetta-cli-aarch64-darwin//:rosetta-cli-0.10.3-darwin-arm64",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@rosetta-cli-x86_64-darwin//:rosetta-cli-0.10.3-darwin-amd64",
+    }),
+)
+
+### rclone, used for uploading artifacts to S3-compatible storage
+
+alias(
+    name = "rclone",
+    actual = select({
+        "@platforms//os:osx": "@rclone-x86_64-darwin//:rclone",  # No arm64 build for this version, use amd64 for now.
+        "@bazel_tools//src/conditions:linux_x86_64": "@rclone-x86_64-linux//:rclone",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
+### trivy, used by ic-os for vulnerability scanning
+
+alias(
+    name = "trivy",
+    actual = select({
+        "@bazel_tools//src/conditions:linux_x86_64": "@trivy-x86_64-linux//:trivy",
+        "@bazel_tools//src/conditions:darwin_arm64": "@trivy-aarch64-darwin//:trivy",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@trivy-x86_64-darwin//:trivy",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
+### dfx
+
+alias(
+    name = "dfx",
+    actual = select({
+        "@bazel_tools//src/conditions:darwin_x86_64": "@dfx-x86_64-darwin//:dfx",
+        "@bazel_tools//src/conditions:darwin_arm64": "@dfx-aarch64-darwin//:dfx",
+        "@bazel_tools//src/conditions:linux_x86_64": "@dfx-x86_64-linux//:dfx",
+        "@bazel_tools//src/conditions:linux_aarch64": "@dfx-aarch64-linux//:dfx",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
+### didc, used in fuzz testing
+
+alias(
+    name = "didc",
+    actual = select({
+        "@platforms//os:osx": "@didc-x86_64-darwin//file:didc",  # No arm64 build for this version, use amd64 for now.
+        "@bazel_tools//src/conditions:linux_x86_64": "@didc-x86_64-linux//file:didc",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
+### shfmt, used to format bash code
+
+alias(
+    name = "shfmt",
+    actual = select({
+        "@bazel_tools//src/conditions:linux_x86_64": "@shfmt-x86_64-linux//file:shfmt",
+        "@bazel_tools//src/conditions:darwin_arm64": "@shfmt-aarch64-darwin//file:shfmt",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@shfmt-x86_64-darwin//file:shfmt",
+        "//conditions:default": "@platforms//:incompatible",
     }),
 )
 
@@ -176,7 +253,6 @@ upload_artifacts(
         "//conditions:default": [
             "//publish/binaries:bundle-legacy",  # avoid overwriting legacy artifacts
             "//publish/canisters:bundle",
-            "//ic-os/guestos/envs/dev:bundle-disk",  # used by icos_deploy testnet script
             "//ic-os/guestos/envs/prod:bundle-update",
             "//ic-os/guestos/envs/dev:bundle-update",  # used by nested tests
             "//ic-os/hostos/envs/prod:bundle-update",

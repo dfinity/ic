@@ -1,45 +1,69 @@
 name: Schedule Daily
+
 on:
   schedule:
     # Note that we would like there to be no overlap between the system-tests-benchmarks-nightly job below
     # and the Release Testing workflow triggered by the Schedule RC workflow.
     - cron: "0 0 * * *"
   workflow_dispatch:
+
 env:
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_JOB_NAME: ${{ github.job }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_RUN_ID: ${{ github.run_id }}
+
 jobs:
-  bazel-test-bare-metal:
-    name: Bazel Test Bare Metal
-    runs-on:
+  fi-tests-nightly:
+    name: Bazel Test FI Nightly
+    runs-on: &dind-large-setup
       labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:503d484ffb0be9be3a713ce1c94b1e2c8dd4903fc0e8a522fa3f1275b86a56e6
+    container: &container-setup
+      image: ghcr.io/dfinity/ic-build@sha256:86c24b5b717519527920d3b720906f91723514d63acddcbaeb27ecf4144aeb37
       options: >-
         -e NODE_NAME --privileged --cgroupns host
-    timeout-minutes: 120
+    timeout-minutes: 720 # 12 hours
     environment: Nightly Tests
     steps:
-      - name: Checkout
+      - &checkout
+        name: Checkout
         uses: actions/checkout@v4
-      - name: Generate Bazel invocation IDs
-        id: gen-uuids
-        uses: ./.github/actions/generate-invocation-ids
+      - &backup-pod-access
+        name: Set up backup pod access
+        run: |
+          # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
+          if [ -z "${SSH_AUTH_SOCK:-}" ]; then
+            eval "$(ssh-agent -s)"
+            ssh-add - <<'EOF'
+          ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
+          EOF
+            echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          fi
+
+          rm -rf ~/.ssh
+          mkdir -p ~/.ssh
+          chmod 0700 ~/.ssh
+          echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
+      - name: Run FI Tests Nightly
+        uses: ./.github/actions/bazel
         with:
-          targets: |
-            [{
-              "name": "HSM Test",
-              "output_id": "hsm_test_id",
-            }, {
-              "name": "Benchmark",
-              "output_id": "benchmark_id",
-            }, {
-              "name": "HostOS metrics",
-              "output_id": "hostos_metrics_id",
-            }]
+          run: |
+            bazel test \
+              --config=stamped \
+              --test_tag_filters=fi_tests_nightly \
+              //rs/ledger_suite/... \
+              --test_env=SSH_AUTH_SOCK \
+              --keep_going --test_timeout=43200
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+  bazel-test-bare-metal:
+    name: Bazel Test Bare Metal
+    runs-on: *dind-large-setup
+    container: *container-setup
+    environment: Nightly Tests
+    steps:
+      - *checkout
       - name: Run Bazel Launch Bare Metal
         shell: bash
         run: |
@@ -47,12 +71,9 @@ jobs:
           echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
 
           launch_bare_metal() {
-            local invocation_id="$1"
-            shift
 
             # shellcheck disable=SC2046,SC2086
             bazel --output_base=/var/tmp/bazel-output run \
-              --invocation_id="$invocation_id" \
               //ic-os/setupos/envs/dev:launch_bare_metal -- \
                 --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
                 --csv_filename "$(realpath file1)" \
@@ -64,104 +85,28 @@ jobs:
           }
 
           # Run bare metal installation test
-          launch_bare_metal "${{ fromJSON(steps.gen-uuids.outputs.output).hsm_test_id }}" --hsm
+          launch_bare_metal --hsm
 
           # Run bare metal node performance benchmarks
-          launch_bare_metal "${{ fromJSON(steps.gen-uuids.outputs.output).benchmark_id }}" --benchmark
+          launch_bare_metal --benchmark
 
           # Run bare metal node hostOS metrics check
-          launch_bare_metal "${{ fromJSON(steps.gen-uuids.outputs.output).hostos_metrics_id }}" --check_hostos_metrics
+          launch_bare_metal --check_hostos_metrics
 
           bazel clean
         env:
           ZH2_DLL01_CSV_SECRETS: "${{ secrets.ZH2_DLL01_CSV_SECRETS }}"
           ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
-  fi-tests-nightly:
-    name: Bazel Test FI Nightly
-    runs-on:
-      labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:503d484ffb0be9be3a713ce1c94b1e2c8dd4903fc0e8a522fa3f1275b86a56e6
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host
-    timeout-minutes: 720 # 12 hours
-    environment: Nightly Tests
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set up backup pod access
-        run: |
-          # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
-          if [ -z "${SSH_AUTH_SOCK:-}" ]; then
-            eval "$(ssh-agent -s)"
-            ssh-add - <<'EOF'
-          ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
-          EOF
-            echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
-          fi
 
-          rm -rf ~/.ssh
-          mkdir -p ~/.ssh
-          chmod 0700 ~/.ssh
-          echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
-      - name: Generate Bazel invocation IDs
-        id: gen-uuids
-        uses: ./.github/actions/generate-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Test",
-              "output_id": "test_id",
-            }]
-      - name: Run FI Tests Nightly
-        uses: ./.github/actions/bazel
-        with:
-          run: |
-            bazel test \
-              --config=stamped \
-              --invocation_id="${{  fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
-              --test_tag_filters=fi_tests_nightly \
-              //rs/ledger_suite/... \
-              --test_env=SSH_AUTH_SOCK \
-              --keep_going --test_timeout=43200
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   nns-tests-nightly:
     name: Bazel Test NNS Nightly
-    runs-on:
-      labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:503d484ffb0be9be3a713ce1c94b1e2c8dd4903fc0e8a522fa3f1275b86a56e6
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host
+    runs-on: *dind-large-setup
+    container: *container-setup
     timeout-minutes: 30
     environment: Nightly Tests
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set up backup pod access
-        run: |
-          # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
-          if [ -z "${SSH_AUTH_SOCK:-}" ]; then
-            eval "$(ssh-agent -s)"
-            ssh-add - <<'EOF'
-          ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
-          EOF
-            echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
-          fi
-
-          rm -rf ~/.ssh
-          mkdir -p ~/.ssh
-          chmod 0700 ~/.ssh
-          echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
-      - name: Generate Bazel invocation IDs
-        id: gen-uuids
-        uses: ./.github/actions/generate-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Test",
-              "output_id": "test_id",
-            }]
+      - *checkout
+      - *backup-pod-access
       - name: Run NNS Tests Nightly
         uses: ./.github/actions/bazel
         with:
@@ -169,7 +114,6 @@ jobs:
             bazel test \
               --config=stamped \
               --test_tag_filters=nns_tests_nightly \
-              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               //... \
               --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
               --keep_going
@@ -182,27 +126,14 @@ jobs:
           slack-message: "${{ github.job }} failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}|Run#${{github.run_id}}>"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
+
   pocketic-tests-nightly:
     name: Bazel Test PocketIC Nightly
-    runs-on:
-      labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:503d484ffb0be9be3a713ce1c94b1e2c8dd4903fc0e8a522fa3f1275b86a56e6
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host
+    runs-on: *dind-large-setup
+    container: *container-setup
     timeout-minutes: 30
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Generate Bazel invocation IDs
-        id: gen-uuids
-        uses: ./.github/actions/generate-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Test",
-              "output_id": "test_id",
-            }]
+      - *checkout
       - name: Run PocketIC Tests Nightly
         uses: ./.github/actions/bazel
         with:
@@ -210,7 +141,6 @@ jobs:
             bazel test \
               --config=stamped \
               --test_tag_filters=pocketic_tests_nightly \
-              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               //rs/pocket_ic_server/... \
               --test_env=SSH_AUTH_SOCK \
               --keep_going
@@ -223,27 +153,14 @@ jobs:
           slack-message: "${{ github.job }} failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}|Run#${{github.run_id}}>"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
+
   system-tests-benchmarks-nightly:
     name: Bazel System Test Benchmarks
-    runs-on:
-      labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:503d484ffb0be9be3a713ce1c94b1e2c8dd4903fc0e8a522fa3f1275b86a56e6
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host
+    runs-on: *dind-large-setup
+    container: *container-setup
     timeout-minutes: 480
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Generate Bazel invocation IDs
-        id: gen-uuids
-        uses: ./.github/actions/generate-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "Test",
-              "output_id": "test_id",
-            }]
+      - *checkout
       - name: Test System Test Benchmarks
         id: bazel-system-test-benchmarks
         uses: ./.github/actions/bazel
@@ -264,7 +181,6 @@ jobs:
             bazel test \
               --config=stamped \
               --test_tag_filters=system_test_benchmark \
-              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               --//bazel:enable_upload_perf_systest_results=True \
               --target_pattern_file="$target_pattern_file" \
               --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
@@ -278,71 +194,15 @@ jobs:
           slack-message: "${{ github.job }} failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}|Run#${{github.run_id}}>"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
-  dependency-scan-nightly:
-    if: false
-    name: Dependency Scan Nightly
-    runs-on:
-      labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:503d484ffb0be9be3a713ce1c94b1e2c8dd4903fc0e8a522fa3f1275b86a56e6
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host
-    timeout-minutes: 60
-    permissions:
-      actions: write
-    env:
-      SHELL_WRAPPER: "/usr/bin/time"
-      CARGO_WASMPACK_VERSION: "0.12.1"
-      DEFAULT_NODE_VERSION: "20"
-      CI_PROJECT_PATH: ${{ github.repository }}
-      CI_PIPELINE_ID: ${{ github.run_id }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-      SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
-      GITHUB_REF: ${{ github.ref }}
-      REPO_NAME: ${{ github.repository }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Setup environment deps
-        id: setup-environment-deps
-        shell: bash
-        run: |
-          # Ignore externally-managed-environment pip error, install packages system-wide.
-          PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
-          cargo install wasm-pack --version "${CARGO_WASMPACK_VERSION}"
-          source "${NVM_DIR}/nvm.sh"
-          nvm use ${DEFAULT_NODE_VERSION}
-          node --version
-          npm --version
-      - name: Run Dependency Scan Nightly
-        id: dependency-scan-nightly
-        shell: bash
-        run: |
-          set -euo pipefail
-          export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
-          cd ci/src/dependencies/
-          $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_periodic_job.py
-          $SHELL_WRAPPER python3 job/npm_scanner_periodic_job.py
-          $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py
+
   # CI job is also executed in PR on use of 'CI_COVERAGE' label
   bazel-test-coverage:
     name: Bazel Test Coverage
-    runs-on:
-      labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:503d484ffb0be9be3a713ce1c94b1e2c8dd4903fc0e8a522fa3f1275b86a56e6
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host
-    timeout-minutes: 120
+    runs-on: *dind-large-setup
+    container: *container-setup
     if: false
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - *checkout
       - name: Run Bazel Test Coverage
         shell: bash
         # TODO: enable when bazel coverage is fixed
@@ -357,3 +217,8 @@ jobs:
           compression-level: 9
           path: |
             cov_html.zip
+
+  pocket-ic-tests-windows:
+    uses: ./.github/workflows/pocket-ic-tests-windows.yml
+    with:
+      commit-sha: ${{ github.sha }}

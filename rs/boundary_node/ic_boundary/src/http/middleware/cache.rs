@@ -8,12 +8,15 @@ use axum::{
 };
 use http::Method;
 use ic_bn_lib::{
-    http::cache::{
-        Bypasser, Cache, CacheBuilder, CustomBypassReason, Error as CacheError, KeyExtractor,
-    },
+    http::cache::{Cache, CacheBuilder},
     prometheus::Registry,
-    tasks::Run,
-    types::RequestType,
+};
+use ic_bn_lib_common::{
+    traits::{
+        Run,
+        http::{Bypasser, CustomBypassReason, KeyExtractor},
+    },
+    types::http::CacheError,
 };
 use strum::{Display, IntoStaticStr};
 use tokio_util::sync::CancellationToken;
@@ -68,7 +71,7 @@ impl Bypasser for BypasserIC {
                 CacheError::ExecuteBypasser("unable to get RequestContext extension".into())
             })?;
 
-        Ok(if ctx.request_type != RequestType::Query {
+        Ok(if !ctx.request_type.is_query() {
             // We cache only Query
             Some(BypassReasonIC::IncorrectRequestType)
         } else if ctx.nonce.is_some() {
@@ -137,13 +140,11 @@ mod test {
     };
     use candid::Principal;
     use http::StatusCode;
-    use ic_bn_lib::{
-        http::cache::{CacheBypassReason, CacheStatus},
-        principal,
-    };
+    use ic_bn_lib::http::cache::CacheStatus;
+    use ic_bn_lib_common::{principal, types::http::CacheBypassReason};
     use tower::Service;
 
-    use crate::core::ANONYMOUS_PRINCIPAL;
+    use crate::{core::ANONYMOUS_PRINCIPAL, http::RequestType};
 
     const CANISTER_1: &str = "sqjm4-qahae-aq";
     const MAX_RESP_SIZE: usize = 1024;
@@ -191,7 +192,7 @@ mod test {
     fn gen_request(canister_id: &str, nonce: bool) -> Request<Body> {
         gen_request_with_params(
             canister_id,
-            RequestType::Query,
+            RequestType::QueryV2,
             nonce,
             DEFAULT_SIZE,
             0,
@@ -231,7 +232,7 @@ mod test {
         // Check non-query
         let req = gen_request_with_params(
             CANISTER_1,
-            RequestType::Call,
+            RequestType::CallV2,
             false,
             DEFAULT_SIZE,
             0,
@@ -254,7 +255,7 @@ mod test {
         // Check non-anonymous
         let req = gen_request_with_params(
             CANISTER_1,
-            RequestType::Query,
+            RequestType::QueryV2,
             false,
             DEFAULT_SIZE,
             0,
@@ -275,7 +276,7 @@ mod test {
         // Check non-2xx
         let req = gen_request_with_params(
             CANISTER_1,
-            RequestType::Query,
+            RequestType::QueryV2,
             false,
             DEFAULT_SIZE,
             0,

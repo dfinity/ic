@@ -4,6 +4,7 @@ set -euo pipefail
 
 CHECK_NETWORK_SCRIPT="${1:-./check-network.sh}"
 CHECK_HARDWARE_SCRIPT="${2:-./check-hardware.sh}"
+FUNCTIONS_SCRIPT="${3:-./functions.sh}"
 
 # ------------------------------------------------------------------------------
 # Override "source" for test environment.
@@ -14,17 +15,6 @@ function source() {
         return
     fi
     builtin source "$1"
-}
-
-# ------------------------------------------------------------------------------
-# Mocked Functions
-# ------------------------------------------------------------------------------
-
-function log_and_halt_installation_on_error() {
-    if [ "$1" != "0" ]; then
-        echo "ERROR encountered: $2"
-        exit 1
-    fi
 }
 
 # ------------------------------------------------------------------------------
@@ -69,30 +59,39 @@ function test_validate_domain_name() {
 
 function test_detect_hardware_generation() {
     # Gen1 test
-    test_detect_hardware_generation_helper "1" '[
-    {"id": "cpu:0", "product": "AMD EPYC 7302", "capabilities": {"sev": "true"}},
-    {"id": "cpu:1", "product": "AMD EPYC 7302", "capabilities": {"sev": "true"}}
-    ]'
+    test_detect_hardware_generation_helper 0 "type1" "1"
+    test_detect_hardware_generation_helper 0 "type1.1" "1"
+    test_detect_hardware_generation_helper 0 "type1.9" "1"
     # Gen2 test
-    test_detect_hardware_generation_helper "2" '[
-    {"id": "cpu:0", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "true"}},
-    {"id": "cpu:1", "product": "AMD EPYC 7313", "capabilities": {"sev_snp": "true"}}
-    ]'
+    test_detect_hardware_generation_helper 0 "type3" "2"
+    test_detect_hardware_generation_helper 0 "type3.1" "2"
+    test_detect_hardware_generation_helper 0 "type3.5" "2"
+
+    test_detect_hardware_generation_helper 1 "type5" "fail"
+    test_detect_hardware_generation_helper 1 "type33" "fail"
 }
 
 function test_detect_hardware_generation_helper() {
-    local expected_hardware_generation="$1"
-    local FAKE_CPU_JSON="$2"
+    local expected_result="$1"
+    local fake_node_reward_type="$2"
+    local expected_hardware_generation="$3"
     echo "Running test: test_detect_hardware_generation for Gen${expected_hardware_generation}"
 
-    function get_cpu_info_json() { echo "$FAKE_CPU_JSON"; }
+    function get_config_value() { echo "$fake_node_reward_type"; }
     HARDWARE_GENERATION=""
 
-    detect_hardware_generation
-    if [[ "$HARDWARE_GENERATION" == "${expected_hardware_generation}" ]]; then
-        echo "  PASS: Gen${expected_hardware_generation} hardware detected"
+    if [ "$expected_result" -eq 0 ]; then
+        detect_hardware_generation
+        if [[ "$HARDWARE_GENERATION" == "${expected_hardware_generation}" ]]; then
+            echo "  PASS: Gen${expected_hardware_generation} hardware detected"
+        else
+            echo "  FAIL: Gen${expected_hardware_generation} hardware not detected as expected"
+            exit 1
+        fi
+    elif ! (detect_hardware_generation); then
+        echo "  PASS: unknown node rewards type correctly caused failure"
     else
-        echo "  FAIL: Gen${expected_hardware_generation} hardware not detected as expected"
+        echo "  FAIL: detect hardware generation failed unexpectedly"
         exit 1
     fi
 }
@@ -203,9 +202,39 @@ function test_verify_deployment_path_warning() {
 }
 
 # ------------------------------------------------------------------------------
+# Unit tests for functions.sh
+# ------------------------------------------------------------------------------
+
+function test_check_cmdline_var() {
+    # Test parameter set to 1.
+    check_cmdline_var testparm /dev/fd/3 3<<<'otherparm_quoted="abc def" testparm=1' || {
+        echo "  FAIL: expected check_cmdline_var to be true with testparm=1"
+        exit 1
+    }
+
+    # Test parameter set to 0.
+    ! check_cmdline_var testparm /dev/fd/3 3<<<'otherparm_quoted="abc def" testparm=0' || {
+        echo "  FAIL: expected check_cmdline_var to be false with testparm=0"
+        exit 1
+    }
+
+    # Test parameter set (equivalent to 1).
+    check_cmdline_var testparm /dev/fd/3 3<<<'otherparm_quoted="abc def" testparm' || {
+        echo "  FAIL: expected check_cmdline_var to be true with testparm"
+        exit 1
+    }
+
+    # Test parameter absent.
+    check_cmdline_var testparm /dev/fd/3 3<<<'otherparm_quoted="abc def" notestparm' || {
+        echo "  FAIL: expected check_cmdline_var to be true without testparm"
+        exit 1
+    }
+}
+
+# ------------------------------------------------------------------------------
 # Load scripts WITHOUT executing main() function.
 # ------------------------------------------------------------------------------
-for script in "${CHECK_NETWORK_SCRIPT}" "${CHECK_HARDWARE_SCRIPT}"; do
+for script in "${CHECK_NETWORK_SCRIPT}" "${CHECK_HARDWARE_SCRIPT}" "${FUNCTIONS_SCRIPT}"; do
     if [[ -f "${script}" ]]; then
         tmpfile=$(mktemp)
         sed '/^main$/d' "${script}" >"${tmpfile}"
@@ -213,6 +242,17 @@ for script in "${CHECK_NETWORK_SCRIPT}" "${CHECK_HARDWARE_SCRIPT}"; do
         rm "${tmpfile}"
     fi
 done
+
+# ------------------------------------------------------------------------------
+# Mocked Functions
+# ------------------------------------------------------------------------------
+
+function log_and_halt_installation_on_error() {
+    if [ "$1" != "0" ]; then
+        echo "ERROR encountered: $2"
+        exit 1
+    fi
+}
 
 # ------------------------------------------------------------------------------
 # Run all tests
@@ -232,6 +272,13 @@ test_verify_memory
 test_verify_deployment_path_warning
 echo
 echo "PASSED check-hardware unit tests"
+echo
+
+echo
+echo "Running functions.sh unit tests..."
+test_check_cmdline_var
+echo
+echo "PASSED functions unit tests"
 echo
 
 echo

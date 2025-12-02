@@ -115,7 +115,7 @@ pub fn test(env: TestEnv) {
         &target_version,
         &log,
         sha256,
-        guest_launch_measurements,
+        Some(guest_launch_measurements),
         vec![upgrade_url.to_string()],
     ));
     info!(log, "TARGET_VERSION: {}", target_version);
@@ -223,7 +223,7 @@ pub fn test(env: TestEnv) {
     let payload = get_updatesubnetpayload_with_keys(subnet_id, None, Some(vec![backup_public_key]));
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
     let backup_mean = AuthMean::PrivateKey(backup_private_key);
-    wait_until_authentication_is_granted(&node_ip, "backup", &backup_mean);
+    wait_until_authentication_is_granted(&log, &node_ip, "backup", &backup_mean);
 
     info!(log, "Fetch NNS public key");
     let nns_public_key = env

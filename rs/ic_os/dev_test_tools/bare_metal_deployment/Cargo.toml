@@ -1,0 +1,15 @@
+[package]
+name = "bare_metal_deployment"
+edition = "2021"
+
+[[bin]]
+name = "deploy"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+http = { workspace = true }
+rand = { workspace = true }
+rexpect = { workspace = true }
+ssh2 = { workspace = true }

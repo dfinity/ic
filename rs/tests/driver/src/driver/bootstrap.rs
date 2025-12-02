@@ -1,38 +1,36 @@
 use crate::driver::ic_gateway_vm::HasIcGatewayVm;
 use crate::driver::ic_gateway_vm::IC_GATEWAY_VM_NAME;
 use crate::driver::test_env_api::get_guestos_initial_launch_measurements;
-use crate::k8s::config::LOGS_URL;
-use crate::k8s::images::*;
-use crate::k8s::tnet::{TNet, TNode};
-use crate::util::block_on;
-use crate::{
-    driver::{
-        config::NODES_INFO,
-        driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
-        farm::{AttachImageSpec, Farm, FarmResult, FileId},
-        ic::{InternetComputer, Node},
-        nested::{HasNestedVms, NESTED_CONFIG_IMAGE_PATH, UnassignedRecordConfig},
-        node_software_version::NodeSoftwareVersion,
-        port_allocator::AddrType,
-        resource::{AllocatedVm, HOSTOS_MEMORY_KIB_PER_VM, HOSTOS_VCPUS_PER_VM},
-        test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
-        test_env_api::{
-            HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo,
-            get_build_setupos_config_image_tool, get_guestos_img_version,
-            get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
-            get_setupos_img_sha256, get_setupos_img_url, get_setupos_img_version,
-            try_get_guestos_img_version,
-        },
-        test_setup::InfraProvider,
+use crate::driver::{
+    config::NODES_INFO,
+    driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
+    farm::{AttachImageSpec, Farm, FarmResult, FileId},
+    ic::{InternetComputer, Node},
+    nested::{HasNestedVms, NESTED_CONFIG_IMAGE_PATH, UnassignedRecordConfig},
+    node_software_version::NodeSoftwareVersion,
+    port_allocator::AddrType,
+    resource::AllocatedVm,
+    test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
+    test_env_api::{
+        HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo,
+        get_build_setupos_config_image_tool, get_guestos_img_version,
+        get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
+        get_setupos_img_sha256, get_setupos_img_url, get_setupos_img_version,
+        try_get_guestos_img_version,
     },
-    k8s::job::wait_for_job_completion,
+    test_setup::InfraProvider,
 };
 use anyhow::{Context, Result, bail};
-use config::generate_testnet_config::{
-    GenerateTestnetConfigArgs, Ipv6ConfigType, generate_testnet_config,
-};
 use config::hostos::guestos_bootstrap_image::BootstrapOptions;
-use config_types::DeploymentEnvironment;
+use config::setupos::{
+    config_ini::ConfigIniSettings,
+    deployment_json::{self, CompatDeploymentSettings},
+};
+use config_types::{
+    CONFIG_VERSION, DeploymentEnvironment, GuestOSConfig, GuestOSDevSettings, GuestOSSettings,
+    GuestOSUpgradeConfig, GuestVMType, ICOSDevSettings, ICOSSettings, Ipv4Config, Ipv6Config,
+    NetworkSettings, RecoveryConfig,
+};
 use ic_base_types::NodeId;
 use ic_prep_lib::{
     internet_computer::{IcConfig, InitializedIc, TopologyConfig},
@@ -43,8 +41,7 @@ use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
-use setupos_image_config::{ConfigIni, DeploymentConfig};
-use slog::{Logger, info, warn};
+use slog::{Logger, debug, info, warn};
 use std::{
     collections::BTreeMap,
     convert::Into,
@@ -53,7 +50,7 @@ use std::{
     io,
     io::Write,
     net::{IpAddr, SocketAddr},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Command,
     thread::{self, JoinHandle},
 };
@@ -203,7 +200,7 @@ pub fn init_ic(
         Some(nns_subnet_idx.unwrap_or(0)),
         Some(ic_os_update_img_url),
         Some(ic_os_update_img_sha256),
-        ic_os_launch_measurements,
+        Some(ic_os_launch_measurements),
         Some(whitelist),
         ic.node_operator,
         ic.node_provider,
@@ -216,7 +213,7 @@ pub fn init_ic(
         ic_config.skip_unassigned_record();
     }
 
-    info!(test_env.logger(), "Initializing via {:?}", &ic_config);
+    debug!(test_env.logger(), "Initializing via {:?}", &ic_config);
 
     Ok(ic_config.initialize()?)
 }
@@ -240,12 +237,6 @@ pub fn setup_and_start_vms(
     for node in initialized_ic.api_boundary_nodes.values() {
         nodes.push(node.clone());
     }
-
-    let tnet = match InfraProvider::read_attribute(env) {
-        InfraProvider::K8s => TNet::read_attribute(env),
-        InfraProvider::Farm => TNet::new("dummy")?,
-    };
-
     let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
     let mut nodes_info = NodesInfo::new();
     for node in nodes {
@@ -260,15 +251,6 @@ pub fn setup_and_start_vms(
         let domain = ic.get_domain_of_node(node.node_id);
         let recovery_hash: Option<String> = ic.get_recovery_hash_of_node(node.node_id);
         nodes_info.insert(node.node_id, malicious_behavior.clone());
-        let tnet_node = match InfraProvider::read_attribute(env) {
-            InfraProvider::K8s => tnet
-                .nodes
-                .iter()
-                .find(|n| n.node_id.clone().expect("node_id missing") == vm_name.clone())
-                .expect("tnet doesn't have this node")
-                .clone(),
-            InfraProvider::Farm => TNode::default(),
-        };
         join_handles.push(thread::spawn(move || {
             create_config_disk_image(
                 &ic_name,
@@ -283,33 +265,6 @@ pub fn setup_and_start_vms(
 
             let conf_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
             match InfraProvider::read_attribute(&t_env) {
-                InfraProvider::K8s => {
-                    let url = format!(
-                        "{}/{}",
-                        tnet_node.config_url.clone().expect("Missing config_url"),
-                        mk_compressed_img_path()
-                    );
-                    info!(
-                        t_env.logger(),
-                        "Uploading image {} to {}",
-                        conf_img_path.clone().display().to_string(),
-                        url.clone()
-                    );
-                    block_on(upload_image(conf_img_path.as_path(), &url))
-                        .expect("Failed to upload config image");
-                    // wait for job pulling the disk to complete
-                    block_on(wait_for_job_completion(&tnet_node.name.clone().unwrap()))
-                        .expect("Waiting for job failed");
-                    block_on(tnet_node.start()).expect("Starting vm failed");
-                    let node_name = tnet_node.name.unwrap();
-                    info!(t_farm.logger, "Starting k8s vm: {}", node_name);
-                    info!(
-                        t_farm.logger,
-                        "VM {} console logs: {}",
-                        node_name.clone(),
-                        LOGS_URL.replace("{job}", &node_name)
-                    );
-                }
                 InfraProvider::Farm => {
                     let image_spec = AttachImageSpec::new(upload_config_disk_image(
                         &group_name,
@@ -368,13 +323,7 @@ pub fn setup_and_start_nested_vms(
             info!(logger, "No gateway found, using dummy URL");
             url::Url::parse("http://localhost:8080").unwrap()
         });
-    let nns_public_key = env
-        .prep_dir("")
-        .and_then(|v| std::fs::read_to_string(v.root_public_key_path()).ok())
-        .unwrap_or_else(|| {
-            info!(logger, "No NNS public key found, using dummy key");
-            "dummy_public_key_for_recovery_test".to_string()
-        });
+    let nns_public_key_override = env.prep_dir("").map(|v| v.root_public_key_path());
 
     let setupos_url = get_setupos_img_url();
     let setupos_hash = get_setupos_img_sha256();
@@ -386,7 +335,7 @@ pub fn setup_and_start_nested_vms(
         let t_farm = farm.clone();
         let t_group_name = group_name.to_string();
         let t_ic_gateway_url = ic_gateway_url.clone();
-        let t_nns_public_key = nns_public_key.clone();
+        let t_nns_public_key_override = nns_public_key_override.clone();
         let t_setupos_image_spec = setupos_image_spec.clone();
         join_handles.push(thread::spawn(move || {
             let vm_name = node.vm_name();
@@ -395,7 +344,7 @@ pub fn setup_and_start_nested_vms(
                 &t_env,
                 &vm_name,
                 &t_ic_gateway_url,
-                &t_nns_public_key,
+                t_nns_public_key_override.as_deref(),
             )?;
             let config_image_spec = AttachImageSpec::new(t_farm.upload_file(
                 &t_group_name,
@@ -481,42 +430,6 @@ fn create_config_disk_image(
     recovery_hash: Option<String>,
     test_env: &TestEnv,
 ) -> anyhow::Result<()> {
-    // Build GuestOS config object
-    let mut config = GenerateTestnetConfigArgs {
-        ipv6_config_type: Some(Ipv6ConfigType::RouterAdvertisement),
-        deterministic_prefix: None,
-        deterministic_prefix_length: None,
-        deterministic_gateway: None,
-        fixed_address: None,
-        fixed_gateway: None,
-        ipv4_address: None,
-        ipv4_gateway: None,
-        ipv4_prefix_length: None,
-        domain_name: None,
-        node_reward_type: None,
-        mgmt_mac: None,
-        deployment_environment: Some(DeploymentEnvironment::Testnet),
-        use_nns_public_key: Some(true),
-        nns_urls: None,
-        enable_trusted_execution_environment: None,
-        use_node_operator_private_key: Some(true),
-        use_ssh_authorized_keys: Some(true),
-        recovery_hash,
-        inject_ic_crypto: Some(false),
-        inject_ic_state: Some(false),
-        inject_ic_registry_local_store: Some(false),
-        backup_retention_time_seconds: None,
-        backup_purging_interval_seconds: None,
-        malicious_behavior: None,
-        query_stats_epoch_length: None,
-        bitcoind_addr: None,
-        dogecoind_addr: None,
-        jaeger_addr: None,
-        socks_proxy: None,
-        hostname: None,
-        generate_ic_boundary_tls_cert: None,
-    };
-
     let mut bootstrap_options = BootstrapOptions {
         ic_registry_local_store: Some(
             test_env
@@ -529,95 +442,18 @@ fn create_config_disk_image(
         ..Default::default()
     };
 
-    // We've seen k8s nodes fail to pick up RA correctly, so we specify their
-    // addresses directly. Ideally, all nodes should do this, to match mainnet.
-    if InfraProvider::read_attribute(test_env) == InfraProvider::K8s {
-        let ip = format!("{}/64", node.node_config.public_api.ip());
-        let gateway = "fe80::ecee:eeff:feee:eeee".to_string();
+    let guestos_config = create_guestos_config_for_node(
+        node,
+        malicious_behavior,
+        query_stats_epoch_length,
+        ipv4_config,
+        domain_name,
+        recovery_hash,
+        test_env,
+        ic_name,
+    )?;
 
-        config.ipv6_config_type = Some(Ipv6ConfigType::Fixed);
-        config.fixed_address = Some(ip.clone());
-        config.fixed_gateway = Some(gateway.clone());
-    }
-
-    // If we have a root subnet, specify the correct NNS url.
-    if let Some(node) = test_env
-        .topology_snapshot_by_name(ic_name)
-        .root_subnet()
-        .nodes()
-        .next()
-    {
-        let nns_url = format!("http://[{}]:8080", node.get_ip_addr());
-        config.nns_urls = Some(vec![nns_url.clone()]);
-    }
-
-    if let Some(malicious_behavior) = malicious_behavior {
-        info!(
-            test_env.logger(),
-            "Node with id={} has malicious behavior={:?}", node.node_id, malicious_behavior
-        );
-        config.malicious_behavior = Some(serde_json::to_string(&malicious_behavior)?);
-    }
-
-    if let Some(query_stats_epoch_length) = query_stats_epoch_length {
-        info!(
-            test_env.logger(),
-            "Node with id={} has query_stats_epoch_length={:?}",
-            node.node_id,
-            query_stats_epoch_length
-        );
-        config.query_stats_epoch_length = Some(query_stats_epoch_length);
-    }
-
-    if let Some(ref ipv4_config) = ipv4_config {
-        info!(
-            test_env.logger(),
-            "Node with id={} is IPv4-enabled: {:?}", node.node_id, ipv4_config
-        );
-        config.ipv4_address = Some(ipv4_config.ip_addr().to_string());
-        config.ipv4_gateway = Some(ipv4_config.gateway_ip_addr().to_string());
-        config.ipv4_prefix_length = Some(ipv4_config.prefix_length().try_into().unwrap());
-    }
-
-    // if the node has a domain name, generate a certificate to be used
-    // when the node is an API boundary node.
-    if let Some(domain_name) = &node.node_config.domain {
-        config.generate_ic_boundary_tls_cert = Some(domain_name.to_string());
-    }
-
-    if let Some(ref domain_name) = domain_name {
-        info!(
-            test_env.logger(),
-            "Node with id={} has domain_name {}", node.node_id, domain_name,
-        );
-        config.domain_name = Some(domain_name.to_string());
-    }
-
-    // The bitcoin_addr specifies the local bitcoin node that the bitcoin adapter should connect to in the system test environment.
-    if let Ok(bitcoind_addr) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
-        config.bitcoind_addr = Some(bitcoind_addr.clone());
-    }
-
-    // The dogecoind_addr specifies the local dogecoin node that the dogecoin adapter should connect to in the system test environment.
-    if let Ok(dogecoind_addr) = test_env.read_json_object::<String, _>(DOGECOIND_ADDR_PATH) {
-        config.dogecoind_addr = Some(dogecoind_addr.clone());
-    }
-
-    // The jaeger_addr specifies the local Jaeger node that the nodes should connect to in the system test environment.
-    if let Ok(jaeger_addr) = test_env.read_json_object::<String, _>(JAEGER_ADDR_PATH) {
-        config.jaeger_addr = Some(jaeger_addr.clone());
-    }
-
-    // The socks_proxy configuration indicates that a socks proxy is available to the system test environment.
-    if let Ok(socks_proxy) = test_env.read_json_object::<String, _>(SOCKS_PROXY_PATH) {
-        config.socks_proxy = Some(socks_proxy.clone());
-    }
-
-    let hostname = node.node_id.to_string();
-    config.hostname = Some(hostname.clone());
-
-    // Generate the GuestOS config and set it in bootstrap_options
-    bootstrap_options.guestos_config = Some(generate_testnet_config(config)?);
+    bootstrap_options.guestos_config = Some(guestos_config);
 
     let ssh_authorized_pub_keys_dir = test_env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
     if ssh_authorized_pub_keys_dir.exists() {
@@ -648,6 +484,106 @@ fn create_config_disk_image(
     Ok(())
 }
 
+/// Creates a GuestOSConfig for a node based on the provided parameters.
+fn create_guestos_config_for_node(
+    node: &InitializedNode,
+    malicious_behavior: Option<MaliciousBehavior>,
+    query_stats_epoch_length: Option<u64>,
+    ipv4_config: Option<IPv4Config>,
+    domain_name: Option<String>,
+    recovery_hash: Option<String>,
+    test_env: &TestEnv,
+    ic_name: &str,
+) -> anyhow::Result<GuestOSConfig> {
+    // Build NetworkSettings
+    let ipv6_config = Ipv6Config::RouterAdvertisement;
+
+    let ipv4_config = match ipv4_config {
+        Some(config) => Some(Ipv4Config {
+            address: config.ip_addr().parse::<std::net::Ipv4Addr>()?,
+            gateway: config.gateway_ip_addr().parse::<std::net::Ipv4Addr>()?,
+            prefix_length: config.prefix_length().try_into().unwrap(),
+        }),
+        None => None,
+    };
+
+    let network_settings = NetworkSettings {
+        ipv6_config,
+        ipv4_config,
+        domain_name,
+    };
+
+    // Build ICOS settings
+    let mgmt_mac = "00:00:00:00:00:00".parse()?;
+    let deployment_environment = DeploymentEnvironment::Testnet;
+
+    let nns_urls = if let Some(node) = test_env
+        .topology_snapshot_by_name(ic_name)
+        .root_subnet()
+        .nodes()
+        .next()
+    {
+        let nns_url = format!("http://[{}]:8080", node.get_ip_addr());
+        vec![Url::parse(&nns_url)?]
+    } else {
+        vec![Url::parse("https://cloudflare.com/cdn-cgi/trace")?]
+    };
+
+    let icos_settings = ICOSSettings {
+        node_reward_type: None,
+        mgmt_mac,
+        deployment_environment,
+        use_nns_public_key: false,
+        nns_urls,
+        use_node_operator_private_key: true,
+        enable_trusted_execution_environment: false,
+        use_ssh_authorized_keys: true,
+        icos_dev_settings: ICOSDevSettings::default(),
+    };
+
+    // Build GuestOSDevSettings
+    let guestos_dev_settings = GuestOSDevSettings {
+        backup_spool: None,
+        malicious_behavior,
+        query_stats_epoch_length,
+        bitcoind_addr: test_env
+            .read_json_object::<String, _>(BITCOIND_ADDR_PATH)
+            .ok(),
+        dogecoind_addr: test_env
+            .read_json_object::<String, _>(DOGECOIND_ADDR_PATH)
+            .ok(),
+        jaeger_addr: test_env
+            .read_json_object::<String, _>(JAEGER_ADDR_PATH)
+            .ok(),
+        socks_proxy: test_env
+            .read_json_object::<String, _>(SOCKS_PROXY_PATH)
+            .ok(),
+        hostname: Some(node.node_id.to_string()),
+        generate_ic_boundary_tls_cert: node.node_config.domain.clone(),
+    };
+
+    let guestos_settings = GuestOSSettings {
+        inject_ic_crypto: false,
+        inject_ic_state: false,
+        inject_ic_registry_local_store: false,
+        guestos_dev_settings,
+    };
+
+    // Assemble GuestOSConfig
+    Ok(GuestOSConfig {
+        config_version: CONFIG_VERSION.to_string(),
+        network_settings,
+        icos_settings,
+        guestos_settings,
+        guest_vm_type: GuestVMType::Default,
+        upgrade_config: GuestOSUpgradeConfig::default(),
+        trusted_execution_environment_config: None,
+        recovery_config: recovery_hash.map(|hash| RecoveryConfig {
+            recovery_hash: hash,
+        }),
+    })
+}
+
 fn node_to_config(node: &Node) -> NodeConfiguration {
     let ipv6_addr = IpAddr::V6(node.ipv6.expect("Missing ip_addr"));
     let public_api = SocketAddr::new(ipv6_addr, AddrType::PublicApi.into());
@@ -667,7 +603,7 @@ fn create_setupos_config_image(
     env: &TestEnv,
     name: &str,
     nns_url: &Url,
-    nns_public_key: &str,
+    nns_public_key_override: Option<&Path>,
 ) -> anyhow::Result<PathBuf> {
     info!(
         env.logger(),
@@ -714,38 +650,55 @@ fn create_setupos_config_image(
         .filter(|s| !s.trim().is_empty())
         .map(PathBuf::from);
 
+    let vm_spec = nested_vm.get_vm_spec()?;
+
     setupos_image_config::create_setupos_config(
         &config_dir,
         &data_dir,
-        ConfigIni {
+        ConfigIniSettings {
+            ipv6_prefix: prefix,
+            ipv6_prefix_length: Default::default(),
+            ipv6_gateway: gateway.parse().context("Failed to parse ipv6 gateway")?,
+            ipv4_address: Default::default(),
+            ipv4_gateway: Default::default(),
+            ipv4_prefix_length: Default::default(),
+            domain_name: Default::default(),
+            verbose: Default::default(),
             node_reward_type: Some("type3.1".to_string()),
-            ipv6_prefix: Some(prefix),
-            ipv6_gateway: Some(gateway.parse().context("Failed to parse ipv6 gateway")?),
-            ..ConfigIni::default()
+            enable_trusted_execution_environment: Default::default(),
         },
         node_operator_private_key.as_deref(),
+        nns_public_key_override,
         Some(&ssh_authorized_pub_keys_dir.join("admin")),
-        DeploymentConfig {
-            nns_urls: Some(nns_url.clone()),
-            nns_public_key: Some(nns_public_key.to_string()),
-            memory_gb: Some((HOSTOS_MEMORY_KIB_PER_VM / 2 / 1024 / 1024).get() as u32),
-            cpu: Some(cpu.to_string()),
-            nr_of_vcpus: Some((HOSTOS_VCPUS_PER_VM / 2).get() as u32),
-            mgmt_mac: Some(mac.to_string()),
-            deployment_environment: Some(DeploymentEnvironment::Testnet),
+        CompatDeploymentSettings {
+            deployment: deployment_json::Deployment {
+                deployment_environment: DeploymentEnvironment::Testnet,
+                mgmt_mac: Some(mac.to_string()),
+            },
+            logging: deployment_json::Logging::default(),
+            nns: deployment_json::Nns {
+                urls: vec![nns_url.clone()],
+            },
+            vm_resources: Some(deployment_json::VmResources {
+                memory: (vm_spec.memory_ki_b / 2 / 1024 / 1024) as u32,
+                cpu: cpu.to_string(),
+                nr_of_vcpus: (vm_spec.v_cpus / 2) as u32,
+            }),
+            dev_vm_resources: Some(deployment_json::VmResources {
+                memory: (vm_spec.memory_ki_b / 2 / 1024 / 1024) as u32,
+                cpu: cpu.to_string(),
+                nr_of_vcpus: (vm_spec.v_cpus / 2) as u32,
+            }),
         },
     )
     .context("Could not create SetupOS config")?;
 
     // Pack dirs into config image
     let config_image = nested_vm.get_setupos_config_image_path()?;
-    let path_key = "PATH";
-    let new_path = format!("{}:{}", "/usr/sbin", std::env::var(path_key)?);
     let status = Command::new(build_setupos_config_image)
         .arg(config_dir)
         .arg(data_dir)
         .arg(&config_image)
-        .env(path_key, &new_path)
         .status()?;
 
     if !status.success() {

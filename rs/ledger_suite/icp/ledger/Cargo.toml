@@ -51,7 +51,6 @@ on_wire = { path = "../../../rust_canisters/on_wire" }
 proptest = { workspace = true }
 
 [features]
-notify-method = []
 icp-allowance-getter = []
 next-ledger-version = []
 prev-ledger-version = []

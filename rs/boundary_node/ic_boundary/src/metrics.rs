@@ -16,10 +16,7 @@ use bytes::Bytes;
 use candid::Principal;
 use http::header::CONTENT_TYPE;
 use humantime::format_rfc3339;
-use ic_bn_lib::{
-    http::{ConnInfo, body::CountingBody, cache::CacheStatus, http_version},
-    tasks::Run,
-};
+use ic_bn_lib::http::{body::CountingBody, cache::CacheStatus, http_version};
 use ic_bn_lib::{
     prometheus::{
         Encoder, HistogramOpts, HistogramVec, IntCounterVec, IntGauge, IntGaugeVec, Registry,
@@ -29,6 +26,7 @@ use ic_bn_lib::{
     },
     pubsub::Broker,
 };
+use ic_bn_lib_common::{traits::Run, types::http::ConnInfo};
 use ic_types::{CanisterId, SubnetId, messages::ReplicaHealthStatus};
 use serde_json::json;
 use sha3::{Digest, Sha3_256};
@@ -39,8 +37,11 @@ use tracing::info;
 
 use crate::{
     errors::ErrorCause,
-    http::middleware::{cache::CacheState, geoip, retry::RetryResult},
-    routes::{Health, RequestContext, RequestType},
+    http::{
+        RequestType,
+        middleware::{cache::CacheState, geoip, retry::RetryResult},
+    },
+    routes::{Health, RequestContext},
     snapshot::{Node, RegistrySnapshot, Subnet},
 };
 
@@ -56,6 +57,9 @@ const PROMETHEUS_CONTENT_TYPE: &str = "text/plain; version=0.0.4";
 const NODE_ID_LABEL: &str = "node_id";
 const SUBNET_ID_LABEL: &str = "subnet_id";
 const SUBNET_ID_UNKNOWN: &str = "unknown";
+
+pub(crate) const MAX_LOGGING_METHOD_NAME_LENGTH: usize = 50;
+
 pub struct MetricsCache {
     buffer: Vec<u8>,
 }
@@ -618,6 +622,11 @@ pub async fn metrics_middleware(
         let remote_addr_hashed = hash_fn(&remote_addr);
         let sender_hashed = hash_fn(&sender);
 
+        let method_name = ctx.method_name.as_ref().map(|name| {
+            let truncated_len = name.len().min(MAX_LOGGING_METHOD_NAME_LENGTH);
+            name[..truncated_len].to_string()
+        });
+
         // Log
         if !log_failed_requests_only || failed {
             info!(
@@ -635,7 +644,7 @@ pub async fn metrics_middleware(
                 canister_id_cbor = ctx.canister_id.map(|x| x.to_string()),
                 sender_hashed,
                 remote_addr_hashed,
-                method = ctx.method_name,
+                method = method_name,
                 duration = proc_duration,
                 duration_full = full_duration,
                 request_size = ctx.request_size,
@@ -671,7 +680,7 @@ pub async fn metrics_middleware(
                 "ic_canister_id": canister_id_str,
                 "ic_node_id": node_id.unwrap_or_default(),
                 "ic_subnet_id": subnet_id_str,
-                "ic_method": ctx.method_name,
+                "ic_method": method_name,
                 "request_id": request_id,
                 "request_size": ctx.request_size,
                 "request_type": request_type,

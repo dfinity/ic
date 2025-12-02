@@ -24,21 +24,21 @@ use serde::{Deserialize, Serialize};
 /// Canonical representation of `ic_types::messages::RequestOrResponse` at certification version V19.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct RequestOrResponseV19 {
+pub struct RequestOrResponseV21 {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request: Option<RequestV19>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response: Option<ResponseV19>,
 }
 
-impl From<(&ic_types::messages::RequestOrResponse, CertificationVersion)> for RequestOrResponseV19 {
+impl From<(&ic_types::messages::StreamMessage, CertificationVersion)> for RequestOrResponseV21 {
     fn from(
         (message, certification_version): (
-            &ic_types::messages::RequestOrResponse,
+            &ic_types::messages::StreamMessage,
             CertificationVersion,
         ),
     ) -> Self {
-        use ic_types::messages::RequestOrResponse::*;
+        use ic_types::messages::StreamMessage::*;
         match message {
             Request(request) => Self {
                 request: Some((request.as_ref(), certification_version).into()),
@@ -48,20 +48,21 @@ impl From<(&ic_types::messages::RequestOrResponse, CertificationVersion)> for Re
                 request: None,
                 response: Some((response.as_ref(), certification_version).into()),
             },
+            Refund(_) => unreachable!("No `Refund` variant before certification version V22"),
         }
     }
 }
 
-impl TryFrom<RequestOrResponseV19> for ic_types::messages::RequestOrResponse {
+impl TryFrom<RequestOrResponseV21> for ic_types::messages::StreamMessage {
     type Error = ProxyDecodeError;
 
-    fn try_from(message: RequestOrResponseV19) -> Result<Self, Self::Error> {
+    fn try_from(message: RequestOrResponseV21) -> Result<Self, Self::Error> {
         match message {
-            RequestOrResponseV19 {
+            RequestOrResponseV21 {
                 request: Some(request),
                 response: None,
             } => Ok(Self::Request(Arc::new(request.try_into()?))),
-            RequestOrResponseV19 {
+            RequestOrResponseV21 {
                 request: None,
                 response: Some(response),
             } => Ok(Self::Response(Arc::new(response.try_into()?))),

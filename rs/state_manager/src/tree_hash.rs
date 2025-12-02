@@ -88,7 +88,7 @@ mod tests {
         CanisterId, CryptoHashOfPartialState, Cycles, Time,
         crypto::CryptoHash,
         ingress::{IngressState, IngressStatus},
-        messages::{NO_DEADLINE, RequestMetadata},
+        messages::{NO_DEADLINE, Refund, RequestMetadata},
         nominal_cycles::NominalCycles,
         time::CoarseTime,
         xnet::{RejectReason, StreamFlags, StreamIndex, StreamIndexedQueue},
@@ -201,7 +201,7 @@ mod tests {
                 StreamIndex::new(10),
             );
             let maybe_deadline = |i: u64| {
-                if i % 2 != 0 {
+                if !i.is_multiple_of(2) {
                     CoarseTime::from_secs_since_unix_epoch(i as u32)
                 } else {
                     NO_DEADLINE
@@ -226,6 +226,12 @@ mod tests {
                         .build()
                         .into(),
                 );
+            }
+            // Enqueue some refund messages for certification versions >= V22.
+            if certification_version >= CertificationVersion::V22 {
+                for i in 1..6 {
+                    stream.push(Refund::anonymous(canister_id, Cycles::new(i)).into());
+                }
             }
             stream.push_reject_signal(RejectReason::CanisterMigrating);
             stream.set_reverse_stream_flags(StreamFlags {
@@ -252,6 +258,7 @@ mod tests {
                     message_test_id(i),
                     IngressStatus::Unknown,
                     NumBytes::from(u64::MAX),
+                    |_| {},
                 );
             }
 
@@ -267,6 +274,7 @@ mod tests {
                     time: Time::from_nanos_since_unix_epoch(12345),
                 },
                 NumBytes::from(u64::MAX),
+                |_| {},
             );
 
             state.metadata.node_public_keys = btreemap! {
@@ -369,10 +377,11 @@ mod tests {
         // PLEASE INCREMENT THE CERTIFICATION VERSION AND PROVIDE APPROPRIATE
         // BACKWARD COMPATIBILITY CODE FOR OLD CERTIFICATION VERSIONS THAT
         // NEED TO BE SUPPORTED.
-        let expected_hashes: [&str; 3] = [
+        let expected_hashes = [
             "47C3A071B293B4723FCACB17F2FD2FD75F68C010E333007ACC0EF425D92765FB",
             "3F9441CBAC0A00718BA6CB2D4D1B6FF7FF96F42051567365B670ACFC08AB96EA",
             "9D9C8D991198BCD0BCAA627F409181D08ADD8CA442730393D5A27FA1042D2477",
+            "7FA3E764326968A311F7FE760CE7B6D29978BC9165DCDA332B4350EBEEC6D90C",
         ];
         assert_eq!(expected_hashes.len(), all_supported_versions().count());
 

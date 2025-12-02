@@ -10,11 +10,11 @@ use ic_cdk::api::{
     call::{arg_data_raw, reply_raw},
     caller, data_certificate, instruction_counter, print, set_certified_data, time, trap,
 };
-use ic_cdk::futures::{in_executor_context, in_query_executor_context};
+use ic_cdk::futures::internals::{in_executor_context, in_query_executor_context};
 use ic_cdk::{post_upgrade, pre_upgrade, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icrc1::endpoints::{StandardRecord, convert_transfer_error};
-use ic_ledger_canister_core::ledger::LedgerContext;
+use ic_ledger_canister_core::ledger::{LedgerContext, LedgerData};
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
@@ -398,7 +398,6 @@ thread_local! {
     static POST_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
 }
 
-#[cfg(feature = "notify-method")]
 fn trap_since_notify_is_no_longer_supported() {
     let caller_principal_id = PrincipalId::from(caller());
     print(format!(
@@ -771,10 +770,11 @@ async fn send_dfx(arg: SendArgs) -> BlockIndex {
     })
 }
 
-#[cfg(feature = "notify-method")]
 #[unsafe(export_name = "canister_update notify_pb")]
 fn notify_() {
-    trap_since_notify_is_no_longer_supported();
+    in_executor_context(|| {
+        trap_since_notify_is_no_longer_supported();
+    })
 }
 
 #[update]
@@ -871,10 +871,11 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
 }
 
 /// See caveats of use on send_dfx
-#[cfg(feature = "notify-method")]
 #[unsafe(export_name = "canister_update notify_dfx")]
 fn notify_dfx_() {
-    trap_since_notify_is_no_longer_supported();
+    in_executor_context(|| {
+        trap_since_notify_is_no_longer_supported();
+    })
 }
 
 #[unsafe(export_name = "canister_query block_pb")]
@@ -1222,6 +1223,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "ledger_total_upgrade_instructions_consumed",
         pre_upgrade_instructions.saturating_add(post_upgrade_instructions) as f64,
         "Total number of instructions consumed during the last upgrade.",
+    )?;
+    w.encode_counter(
+        "ledger_archiving_failures",
+        ledger.get_archiving_failure_metric() as f64,
+        "Number of archiving failures since canister initialization.",
     )?;
     Ok(())
 }

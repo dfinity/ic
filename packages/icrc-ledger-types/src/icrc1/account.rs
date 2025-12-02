@@ -193,6 +193,8 @@ impl Storable for Account {
 
 /// Maps a `Principal` to a `Subaccount`.
 /// Can be used to create a separate `Subaccount` for each `Principal`.
+/// Note that no canonical mapping exists from `Principal` to `Subaccount` - this is just one
+/// possible mapping.
 pub fn principal_to_subaccount(principal: Principal) -> Subaccount {
     let mut subaccount = [0; 32];
     let principal = principal.as_slice();
@@ -202,25 +204,51 @@ pub fn principal_to_subaccount(principal: Principal) -> Subaccount {
 }
 
 /// Maps a `Subaccount` to a `Principal`.
-/// Reverse of `principal_to_subaccount` above.
+/// Reverse of `principal_to_subaccount` above - if the `Subaccount` contains a `Principal` that
+/// was converted using another mechanism than `principal_to_subaccount`, the result may be invalid.
+///
+/// # Panics
+/// Panics if the `Subaccount` does not contain a valid `Principal`.
+/// Use `try_from_subaccount_to_principal` if you want to handle the error instead
 pub fn subaccount_to_principal(subaccount: Subaccount) -> Principal {
     let len = subaccount[0] as usize;
     Principal::from_slice(&subaccount[1..len + 1])
 }
 
+/// Tries to map a `Subaccount` to a `Principal`.
+/// Reverse of `principal_to_subaccount` above - if the `Subaccount` contains a `Principal` that
+/// was converted using another mechanism than `principal_to_subaccount`, the result may be invalid.
+///
+/// # Errors
+/// * `PrincipalError::BytesTooLong()` if the length of the principal (`subaccount[0]`) is larger
+///   than 29.
+///
+/// # Returns
+/// The parsed `Principal`.
+pub fn try_from_subaccount_to_principal(
+    subaccount: Subaccount,
+) -> Result<Principal, PrincipalError> {
+    let len = subaccount[0] as usize;
+    if len > Principal::MAX_LENGTH_IN_BYTES {
+        return Err(PrincipalError::BytesTooLong());
+    }
+    Principal::try_from_slice(&subaccount[1..len + 1])
+}
+
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
+    use candid::Principal;
+    use candid::types::principal::PrincipalError;
     use ic_stable_structures::Storable;
     use proptest::prelude::prop;
     use proptest::strategy::Strategy;
     use std::borrow::Cow;
     use std::str::FromStr;
 
-    use candid::Principal;
-
     use crate::icrc1::account::{
         Account, ICRC1TextReprError, principal_to_subaccount, subaccount_to_principal,
+        try_from_subaccount_to_principal,
     };
 
     pub fn principal_strategy() -> impl Strategy<Value = Principal> {
@@ -388,6 +416,42 @@ mod tests {
             let subaccount = principal_to_subaccount(principal);
             prop_assert_eq!(subaccount_to_principal(subaccount), principal);
         })
+    }
+
+    #[test]
+    fn test_try_from_principal_to_subaccount() {
+        // Should be caught by `Principal::try_from_slice`.
+        assert_matches!(
+            try_from_subaccount_to_principal([(Principal::MAX_LENGTH_IN_BYTES + 1) as u8; 32]),
+            Err(PrincipalError::BytesTooLong())
+        );
+        // Should be caught by the additional check in `try_from_subaccount_to_principal`.
+        assert_matches!(
+            try_from_subaccount_to_principal([32u8; 32]),
+            Err(PrincipalError::BytesTooLong())
+        );
+        use proptest::{prop_assert_eq, proptest};
+        proptest!(|(principal in principal_strategy())| {
+            let subaccount = principal_to_subaccount(principal);
+            prop_assert_eq!(
+                try_from_subaccount_to_principal(subaccount).expect("converting of valid subaccount to principal should succeed"),
+                principal
+            );
+        })
+    }
+
+    #[test]
+    #[should_panic(expected = "slice length exceeds capacity")]
+    fn test_principal_error_subaccount_to_principal() {
+        let principal_slice_too_large = [(Principal::MAX_LENGTH_IN_BYTES + 1) as u8; 32];
+        subaccount_to_principal(principal_slice_too_large);
+    }
+
+    #[test]
+    #[should_panic(expected = "range end index 256 out of range for slice of length 32")]
+    fn test_index_out_of_range_subaccount_to_principal() {
+        let index_out_of_range_subaccount = [0xffu8; 32];
+        subaccount_to_principal(index_out_of_range_subaccount);
     }
 
     #[test]

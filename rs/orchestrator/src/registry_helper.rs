@@ -1,5 +1,5 @@
 use crate::error::{OrchestratorError, OrchestratorResult};
-use ic_consensus::make_registry_cup;
+use ic_consensus_cup_utils::make_registry_cup;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::{

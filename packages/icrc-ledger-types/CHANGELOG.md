@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add ICRC-107 fee collector transaction type.
+
+## 0.1.12
+
+### Added
+
+- `try_from_subaccount_to_principal` that returns an error rather than panicking if the subaccount is not a valid Principal.
+- Add optional fee to `Mint` and `Burn` icrc3 operations.
+
 ## 0.1.11
 
 ### Changed

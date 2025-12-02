@@ -5,8 +5,8 @@ use ic_base_types::{NodeId, PrincipalId};
 use ic_crypto_temp_crypto::TempCryptoComponentGeneric;
 use ic_crypto_test_utils_canister_threshold_sigs::node::Node;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    CanisterThresholdSigTestEnvironment, IDkgParticipants, ecdsa_sig_share_from_each_receiver,
-    generate_key_transcript, generate_tecdsa_protocol_inputs,
+    CanisterThresholdSigTestEnvironment, IDkgParticipants, ThresholdEcdsaSigInputsOwned,
+    ecdsa_sig_share_from_each_receiver, generate_key_transcript, generate_tecdsa_protocol_inputs,
     random_crypto_component_not_in_receivers,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
@@ -20,6 +20,8 @@ use rand::{CryptoRng, Rng, RngCore};
 use std::collections::BTreeMap;
 use strum::IntoEnumIterator;
 
+const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(300);
+
 criterion_main!(benches);
 criterion_group!(benches, crypto_tecdsa_benchmarks);
 
@@ -32,6 +34,7 @@ fn crypto_tecdsa_benchmarks(criterion: &mut Criterion) {
     for test_case in test_cases {
         let group = &mut criterion.benchmark_group(test_case.name());
         group
+            .warm_up_time(WARMUP_TIME)
             .sample_size(test_case.sample_size)
             .sampling_mode(test_case.sampling_mode);
 
@@ -73,10 +76,10 @@ fn bench_sign_share<M: Measurement, R: RngCore + CryptoRng>(
                     test_case.alg(),
                     rng,
                 );
-                signer.load_tecdsa_sig_transcripts(&inputs);
+                signer.load_tecdsa_sig_transcripts(&inputs.as_ref());
                 inputs
             },
-            |inputs| sign_share(signer, inputs),
+            |inputs| sign_share(signer, &ThresholdEcdsaSigInputsOwned::as_ref(inputs)),
             SmallInput,
         )
     });
@@ -122,15 +125,20 @@ fn bench_verify_sig_share<M: Measurement, R: RngCore + CryptoRng>(
                 let signer = env
                     .nodes
                     .random_filtered_by_receivers(&key_transcript.receivers, rng);
-                signer.load_tecdsa_sig_transcripts(&inputs);
-                let sig_share = sign_share(signer, &inputs);
+                signer.load_tecdsa_sig_transcripts(&inputs.as_ref());
+                let sig_share = sign_share(signer, &inputs.as_ref());
                 let verifier = env
                     .nodes
                     .random_filtered_by_receivers(&key_transcript.receivers, rng);
                 (verifier, signer.id(), inputs, sig_share)
             },
             |(verifier, signer_id, inputs, sig_share)| {
-                verify_sig_share(verifier, *signer_id, inputs, sig_share)
+                verify_sig_share(
+                    verifier,
+                    *signer_id,
+                    &ThresholdEcdsaSigInputsOwned::as_ref(inputs),
+                    sig_share,
+                )
             },
             SmallInput,
         )
@@ -182,10 +190,16 @@ fn bench_combine_sig_shares<M: Measurement, R: RngCore + CryptoRng>(
                     test_case.alg(),
                     rng,
                 );
-                let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
+                let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs.as_ref());
                 (inputs, sig_shares)
             },
-            |(inputs, sig_shares)| combine_sig_shares(&combiner, inputs, sig_shares),
+            |(inputs, sig_shares)| {
+                combine_sig_shares(
+                    &combiner,
+                    &ThresholdEcdsaSigInputsOwned::as_ref(inputs),
+                    sig_shares,
+                )
+            },
             SmallInput,
         )
     });
@@ -235,11 +249,17 @@ fn bench_verify_combined_sig<M: Measurement, R: RngCore + CryptoRng>(
                     test_case.alg(),
                     rng,
                 );
-                let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
-                let signature = combine_sig_shares(&combiner, &inputs, &sig_shares);
+                let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs.as_ref());
+                let signature = combine_sig_shares(&combiner, &inputs.as_ref(), &sig_shares);
                 (inputs, signature)
             },
-            |(inputs, signature)| verify_combined_sig(&verifier, inputs, signature),
+            |(inputs, signature)| {
+                verify_combined_sig(
+                    &verifier,
+                    &ThresholdEcdsaSigInputsOwned::as_ref(inputs),
+                    signature,
+                )
+            },
             SmallInput,
         )
     });

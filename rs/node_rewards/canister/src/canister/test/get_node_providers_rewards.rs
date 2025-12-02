@@ -1,9 +1,14 @@
 use crate::canister::NodeRewardsCanister;
-use crate::canister::test::test_utils::{CANISTER_TEST, VM, setup_thread_local_canister_for_test};
+use crate::canister::test::test_utils::{
+    CANISTER_TEST, LAST_DAY_SYNCED, VM, setup_thread_local_canister_for_test,
+};
+use crate::chrono_utils::{last_unix_timestamp_nanoseconds, to_native_date};
 use crate::metrics::MetricsManager;
 use crate::pb::v1::{NodeMetrics, SubnetMetricsKey, SubnetMetricsValue};
+use crate::storage::NaiveDateStorable;
 use futures_util::FutureExt;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
+use ic_node_rewards_canister_api::RewardsCalculationAlgorithmVersion;
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, NodeProvidersRewards,
 };
@@ -19,7 +24,6 @@ use maplit::btreemap;
 use rewards_calculation::performance_based_algorithm::test_utils::{
     create_rewards_table_for_region_test, test_node_id, test_provider_id, test_subnet_id,
 };
-use rewards_calculation::types::DayUtc;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -28,8 +32,8 @@ fn setup_data_for_test_rewards_calculation(
     fake_registry: Arc<FakeRegistry>,
     metrics_manager: Rc<MetricsManager<VM>>,
 ) {
-    let day1: DayUtc = DayUtc::try_from("2024-01-01").unwrap();
-    let day2: DayUtc = DayUtc::try_from("2024-01-02").unwrap();
+    let day1 = to_native_date("2024-01-01");
+    let day2 = to_native_date("2024-01-02");
     let subnet1 = test_subnet_id(1);
     let subnet2 = test_subnet_id(2);
     let p1 = test_provider_id(1);
@@ -188,7 +192,7 @@ fn setup_data_for_test_rewards_calculation(
     fake_registry.set_value_at_version_with_timestamp(
         make_node_record_key(p1_node3_t31),
         6,
-        day2.get(),
+        last_unix_timestamp_nanoseconds(&day2),
         None,
     );
 
@@ -214,7 +218,7 @@ fn setup_data_for_test_rewards_calculation(
     fake_registry.set_value_at_version_with_timestamp(
         make_node_record_key(p1_node5_perf),
         6,
-        day2.get(),
+        last_unix_timestamp_nanoseconds(&day2),
         None,
     );
 
@@ -231,7 +235,7 @@ fn setup_data_for_test_rewards_calculation(
     fake_registry.set_value_at_version_with_timestamp(
         make_node_record_key(p2_node1),
         6,
-        day2.get(),
+        last_unix_timestamp_nanoseconds(&day2),
         None,
     );
 
@@ -241,7 +245,7 @@ fn setup_data_for_test_rewards_calculation(
     // Day 1 subnet 1
     subnets_metrics.insert(
         SubnetMetricsKey {
-            timestamp_nanos: day1.unix_ts_at_day_end_nanoseconds(),
+            timestamp_nanos: last_unix_timestamp_nanoseconds(&day1),
             subnet_id: Some(subnet1.get()),
         },
         SubnetMetricsValue {
@@ -273,7 +277,7 @@ fn setup_data_for_test_rewards_calculation(
     // Day 1 subnet 2
     subnets_metrics.insert(
         SubnetMetricsKey {
-            timestamp_nanos: day1.unix_ts_at_day_end_nanoseconds(),
+            timestamp_nanos: last_unix_timestamp_nanoseconds(&day1),
             subnet_id: Some(subnet2.get()),
         },
         SubnetMetricsValue {
@@ -288,7 +292,7 @@ fn setup_data_for_test_rewards_calculation(
     // Day 2 subnet 1
     subnets_metrics.insert(
         SubnetMetricsKey {
-            timestamp_nanos: day2.unix_ts_at_day_end_nanoseconds(),
+            timestamp_nanos: last_unix_timestamp_nanoseconds(&day2),
             subnet_id: Some(subnet1.get()),
         },
         SubnetMetricsValue {
@@ -299,6 +303,7 @@ fn setup_data_for_test_rewards_calculation(
             }],
         },
     );
+    LAST_DAY_SYNCED.with_borrow_mut(|cell| cell.set(Some(NaiveDateStorable(day2))).unwrap());
 }
 
 #[test]
@@ -308,20 +313,19 @@ fn test_get_node_providers_rewards() {
     let (fake_registry, metrics_manager) = setup_thread_local_canister_for_test();
     setup_data_for_test_rewards_calculation(fake_registry, metrics_manager);
     NodeRewardsCanister::schedule_registry_sync(&CANISTER_TEST).now_or_never();
-    NodeRewardsCanister::schedule_metrics_sync(&CANISTER_TEST).now_or_never();
-    let from = DayUtc::try_from("2024-01-01").unwrap();
-    let to = DayUtc::try_from("2024-01-02").unwrap();
+    let from = to_native_date("2024-01-01");
+    let to = to_native_date("2024-01-02");
 
     let request = GetNodeProvidersRewardsRequest {
-        from_day_timestamp_nanos: from.unix_ts_at_day_start_nanoseconds(),
-        to_day_timestamp_nanos: to.unix_ts_at_day_end_nanoseconds(),
+        from_day: from.into(),
+        to_day: to.into(),
+        algorithm_version: None,
     };
     let result_endpoint =
-        NodeRewardsCanister::get_node_providers_rewards(&CANISTER_TEST, request.clone())
-            .now_or_never()
-            .unwrap();
+        NodeRewardsCanister::get_node_providers_rewards(&CANISTER_TEST, request.clone());
 
     let expected = NodeProvidersRewards {
+        algorithm_version: RewardsCalculationAlgorithmVersion::default(),
         rewards_xdr_permyriad: btreemap! {
             test_provider_id(1).0 => 137200,
             test_provider_id(2).0 => 10000,

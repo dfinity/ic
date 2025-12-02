@@ -10,10 +10,11 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:503d484ffb0be9be3a713ce1c94b1e2c8dd4903fc0e8a522fa3f1275b86a56e6
+      image: ghcr.io/dfinity/ic-build@sha256:86c24b5b717519527920d3b720906f91723514d63acddcbaeb27ecf4144aeb37
       options: >-
         -e NODE_NAME
     timeout-minutes: 60 # 1 hour
+    environment: Weekly Tests
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -46,7 +46,6 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
-use std::convert::TryFrom;
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     ops::RangeInclusive,
@@ -260,7 +259,7 @@ impl CanisterStateBuilder {
     }
 
     pub fn with_memory_allocation<B: Into<NumBytes>>(mut self, num_bytes: B) -> Self {
-        self.memory_allocation = MemoryAllocation::try_from(num_bytes.into()).unwrap();
+        self.memory_allocation = MemoryAllocation::from(num_bytes.into());
         self
     }
 
@@ -401,7 +400,7 @@ impl Default for CanisterStateBuilder {
             cycles: INITIAL_CYCLES,
             stable_memory: None,
             wasm: None,
-            memory_allocation: MemoryAllocation::BestEffort,
+            memory_allocation: MemoryAllocation::default(),
             wasm_memory_threshold: NumBytes::new(0),
             compute_allocation: ComputeAllocation::zero(),
             ingress_queue: Vec::default(),
@@ -456,8 +455,7 @@ impl SystemStateBuilder {
     }
 
     pub fn memory_allocation(mut self, memory_allocation: NumBytes) -> Self {
-        self.system_state.memory_allocation =
-            MemoryAllocation::try_from(memory_allocation).unwrap();
+        self.system_state.memory_allocation = MemoryAllocation::from(memory_allocation);
         self
     }
 
@@ -557,7 +555,7 @@ impl CallContextBuilder {
 impl Default for CallContextBuilder {
     fn default() -> Self {
         Self {
-            call_origin: CallOrigin::Ingress(user_test_id(0), message_test_id(0)),
+            call_origin: CallOrigin::Ingress(user_test_id(0), message_test_id(0), String::from("")),
             responded: false,
             time: Time::from_nanos_since_unix_epoch(0),
         }
@@ -924,7 +922,7 @@ prop_compose! {
     )(
         msg_start in msg_start_range,
         msgs in prop::collection::vec(
-            arbitrary::request_or_response_with_config(true),
+            arbitrary::stream_message_with_config(true),
             size_range,
         ),
         (signals_end, reject_signals) in arb_stream_signals(

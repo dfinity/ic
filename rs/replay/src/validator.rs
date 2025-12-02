@@ -6,7 +6,7 @@ use std::{
 
 use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, dkg_pool::DkgPoolImpl};
 use ic_config::{Config, artifact_pool::ArtifactPoolConfig};
-use ic_consensus::consensus::{ValidatorMetrics, validator::Validator};
+use ic_consensus::consensus::validator::Validator;
 use ic_consensus_certification::CertificationCrypto;
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
@@ -37,9 +37,12 @@ use ic_types::{
     crypto::CryptoHashOf,
     replica_config::ReplicaConfig,
 };
+use rayon::ThreadPoolBuilder;
 use serde::{Deserialize, Serialize};
 
 use crate::{mocks::MockPayloadBuilder, player::ReplayError};
+
+const MAX_VALIDATION_THREADS: usize = 8;
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct InvalidArtifact {
@@ -119,6 +122,10 @@ impl ReplayValidator {
         let dkg_pool = RwLock::new(DkgPoolImpl::new(metrics_registry.clone(), log.clone()));
         let node_id = NodeId::from(PrincipalId::new_node_test_id(1));
         let replica_cfg = ReplicaConfig::new(node_id, subnet_id);
+        let thread_pool = ThreadPoolBuilder::new()
+            .num_threads(MAX_VALIDATION_THREADS)
+            .build()
+            .expect("Failed to create thread pool");
 
         let validator = Validator::new(
             replica_cfg.clone(),
@@ -129,8 +136,9 @@ impl ReplayValidator {
             state_manager,
             message_routing,
             Arc::new(dkg_pool) as Arc<_>,
+            Arc::new(thread_pool),
             log.clone(),
-            ValidatorMetrics::new(metrics_registry.clone()),
+            &metrics_registry,
             time_source.clone(),
         );
 

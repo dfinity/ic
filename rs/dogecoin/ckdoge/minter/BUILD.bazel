@@ -1,0 +1,132 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
+
+package(default_visibility = ["//rs/dogecoin/ckdoge/test_utils:__subpackages__"])
+
+rust_library(
+    name = "ckdoge_minter_lib",
+    srcs = glob(
+        ["src/**"],
+        exclude = ["src/main.rs"],
+    ),
+    crate_features = [],
+    crate_name = "ic_ckdoge_minter",
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
+    version = "0.1.0",
+    deps = [
+        # Keep sorted.
+        "//packages/ic-secp256k1",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
+        "@crate_index//:bs58",
+        "@crate_index//:candid",
+        "@crate_index//:hex",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
+        "@crate_index//:sha2",
+    ],
+)
+
+filegroup(
+    name = "test_vectors",
+    srcs = glob(["test_vectors/**"]),
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":ckdoge_minter_lib",
+    data = [":test_vectors"],
+    env = {
+        "TEST_VECTORS": "$(locations :test_vectors)",
+    },
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:test-strategy",
+    ],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:assert_matches",
+        "@crate_index//:proptest",
+        "@crate_index//:serde_json",
+    ],
+)
+
+[
+    rust_canister(
+        name = name,
+        srcs = ["src/main.rs"],
+        compile_data = [":ckdoge_minter.did"],
+        crate_features = features,
+        crate_name = "ic_ckdoge_minter_canister",
+        proc_macro_deps = [
+            # Keep sorted.
+        ],
+        rustc_env = {
+            "CKDOGE_MINTER_DID_PATH": "$(execpath :ckdoge_minter.did)",
+        },
+        service_file = ":ckdoge_minter.did",
+        deps = [
+            # Keep sorted.
+            ":ckdoge_minter_lib",
+            "//packages/ic-http-types",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
+            "@crate_index//:candid",
+            "@crate_index//:ic-cdk",
+        ],
+    )
+    for (name, features) in [
+        # Production version without debug assertions.
+        (
+            "ckdoge_minter",
+            [],
+        ),
+        # Test version with internal consistency checks.
+        (
+            "ckdoge_minter_debug",
+            ["self_check"],
+        ),
+    ]
+]
+
+rust_test(
+    name = "ckdoge_candid_api_tests",
+    crate = ":_wasm_ckdoge_minter",
+    data = [":ckdoge_minter.did"],
+    env = {
+        "CANDID_FILE_PATH": "$(rootpath :ckdoge_minter.did)",
+    },
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid_parser",
+    ],
+)
+
+rust_ic_test(
+    name = "integration_tests",
+    srcs = ["tests/tests.rs"],
+    data = [
+        ":ckdoge_minter_debug.wasm.gz",
+        "//rs/bitcoin/mock:bitcoin_canister_mock",
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+    ],
+    env = {
+        "IC_CKDOGE_MINTER_WASM_PATH": "$(rootpath :ckdoge_minter_debug.wasm.gz)",
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+        "IC_BITCOIN_CANISTER_MOCK_WASM_PATH": "$(rootpath //rs/bitcoin/mock:bitcoin_canister_mock)",
+        "POCKET_IC_BIN": "$(rootpath //:pocket-ic-server)",
+    },
+    deps = [
+        # Keep sorted.
+        ":ckdoge_minter_lib",
+        "//:pocket-ic-server",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/pocket-ic",
+        "//rs/dogecoin/ckdoge/test_utils",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+    ],
+)

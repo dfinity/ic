@@ -35,9 +35,9 @@ use ic_types::{
     batch::{CanisterHttpPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext},
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL, CanisterHttpMethod,
-        CanisterHttpRequestContext, CanisterHttpResponse, CanisterHttpResponseContent,
-        CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
-        CanisterHttpResponseWithConsensus,
+        CanisterHttpRequestContext, CanisterHttpResponse, CanisterHttpResponseArtifact,
+        CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseMetadata,
+        CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
     },
     consensus::get_faults_tolerated,
     crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed, crypto_hash},
@@ -343,6 +343,7 @@ fn timeout_priority() {
                     // this is the important one
                     time: UNIX_EPOCH,
                     replication: ic_types::canister_http::Replication::FullyReplicated,
+                    pricing_version: ic_types::canister_http::PricingVersion::Legacy,
                 };
                 init_state
                     .metadata
@@ -829,6 +830,108 @@ fn divergence_error_message() {
 }
 
 #[test]
+fn non_replicated_request_response_coming_in_gossip_payload_created() {
+    // This test ensures that when a non-replicated request is delegated to
+    // a different node than the block maker, and the response is gossiped
+    // back to the block maker, the payload builder correctly includes the response.
+
+    test_config_with_http_feature(true, 4, |mut payload_builder, canister_http_pool| {
+        // In the test setup, the block maker is node 0. We'll make node 1 delegated.
+        let delegated_node_id = node_test_id(1);
+        let callback_id = CallbackId::from(42);
+
+        let request_context = CanisterHttpRequestContext {
+            request: RequestBuilder::default().build(),
+            url: "https://example.com".to_string(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+            pricing_version: ic_types::canister_http::PricingVersion::Legacy,
+        };
+
+        // Insert the context in the replicated state
+        let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
+        init_state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .insert(callback_id, request_context);
+
+        let state_manager = Arc::new(RefMockStateManager::default());
+        state_manager
+            .get_mut()
+            .expect_get_state_at()
+            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                Height::new(0),
+                Arc::new(init_state),
+            )));
+        payload_builder.state_reader = state_manager;
+
+        // Create artifact containing response.
+        let (response, metadata) = test_response_and_metadata(callback_id.get());
+        let share = metadata_to_share(node_id_to_u64(delegated_node_id), &metadata);
+
+        // Add the artifact to the pool.
+        {
+            let mut pool_access = canister_http_pool.write().unwrap();
+            add_received_artifacts_to_pool(
+                pool_access.deref_mut(),
+                vec![CanisterHttpResponseArtifact {
+                    share,
+                    response: Some(response),
+                }],
+            );
+        }
+
+        // ACT
+        let payload = payload_builder.build_payload(
+            Height::new(1),
+            NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
+            &[],
+            &default_validation_context(),
+        );
+
+        // ASSERT
+        payload_builder
+            .validate_payload(
+                Height::from(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload,
+                &[],
+            )
+            .unwrap();
+
+        let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
+
+        // We should have exactly one response in the payload.
+        assert_eq!(
+            parsed_payload.responses.len(),
+            1,
+            "Expected exactly one response in the payload"
+        );
+
+        // The response must contain one signature.
+        let proof = &parsed_payload.responses[0].proof;
+        assert_eq!(
+            proof.signature.signatures_map.len(),
+            1,
+            "Proof should contain exactly one signature"
+        );
+        assert!(
+            proof
+                .signature
+                .signatures_map
+                .contains_key(&delegated_node_id),
+            "The single signature must be from the delegated node"
+        );
+    });
+}
+
+#[test]
 fn non_replicated_request_with_extra_share_includes_only_delegated_share() {
     // This test ensures that if the pool contains both a valid share from the
     // delegated node and a stray share from another node for the same non-replicated
@@ -840,7 +943,7 @@ fn non_replicated_request_with_extra_share_includes_only_delegated_share() {
         let other_node_id = node_test_id(1);
         let callback_id = CallbackId::from(42);
 
-        // 1. Setup a non-replicated request delegated to our block maker (`delegated_node_id`).
+        // Setup a non-replicated request delegated to our block maker (`delegated_node_id`).
         let request_context = CanisterHttpRequestContext {
             request: RequestBuilder::default().build(),
             url: "https://example.com".to_string(),
@@ -851,6 +954,7 @@ fn non_replicated_request_with_extra_share_includes_only_delegated_share() {
             transform: None,
             time: UNIX_EPOCH,
             replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+            pricing_version: ic_types::canister_http::PricingVersion::Legacy,
         };
 
         // Insert the context in the replicated state
@@ -955,6 +1059,7 @@ fn non_replicated_share_is_ignored_if_content_is_missing() {
             transform: None,
             time: UNIX_EPOCH,
             replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+            pricing_version: ic_types::canister_http::PricingVersion::Legacy,
         };
 
         let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
@@ -1033,6 +1138,7 @@ fn validate_payload_succeeds_for_valid_non_replicated_response() {
             transform: None,
             time: UNIX_EPOCH,
             replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+            pricing_version: ic_types::canister_http::PricingVersion::Legacy,
         };
 
         // Inject this context into the state reader used by the validator.
@@ -1099,6 +1205,7 @@ fn validate_payload_fails_for_non_replicated_response_with_wrong_signer() {
             transform: None,
             time: UNIX_EPOCH,
             replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+            pricing_version: ic_types::canister_http::PricingVersion::Legacy,
         };
 
         // Inject this context into the state reader.
@@ -1181,6 +1288,7 @@ fn validate_payload_fails_for_response_with_no_signatures() {
             transform: None,
             time: UNIX_EPOCH,
             replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+            pricing_version: ic_types::canister_http::PricingVersion::Legacy,
         };
 
         // Inject this context into the state reader used by the validator.
@@ -1268,6 +1376,7 @@ fn validate_payload_fails_when_non_replicated_proof_is_for_fully_replicated_requ
             time: UNIX_EPOCH,
             // The state says the request is replicated.
             replication: ic_types::canister_http::Replication::FullyReplicated,
+            pricing_version: ic_types::canister_http::PricingVersion::Legacy,
         };
 
         // Inject this context into the state reader.
@@ -1360,6 +1469,7 @@ fn validate_payload_fails_for_duplicate_non_replicated_response() {
             transform: None,
             time: UNIX_EPOCH,
             replication: ic_types::canister_http::Replication::NonReplicated(delegated_node_id),
+            pricing_version: ic_types::canister_http::PricingVersion::Legacy,
         };
 
         // 2. Inject this context into the state reader
@@ -1477,25 +1587,47 @@ fn test_response_and_metadata_full(
     };
     (response, metadata)
 }
-/// Replicates the behaviour of receiving and successfully validating a share over the network
-pub(crate) fn add_received_shares_to_pool(
-    pool: &mut dyn MutablePool<CanisterHttpResponseShare, Mutations = CanisterHttpChangeSet>,
-    shares: Vec<CanisterHttpResponseShare>,
+
+pub(crate) fn add_received_artifacts_to_pool(
+    pool: &mut dyn MutablePool<CanisterHttpResponseArtifact, Mutations = CanisterHttpChangeSet>,
+    artifacts: Vec<CanisterHttpResponseArtifact>,
 ) {
-    for share in shares {
+    for artifact in artifacts {
         pool.insert(UnvalidatedArtifact {
-            message: share.clone(),
+            message: artifact.clone(),
             peer_id: node_test_id(0),
             timestamp: UNIX_EPOCH,
         });
 
-        pool.apply(vec![CanisterHttpChangeAction::MoveToValidated(share)]);
+        pool.apply(vec![CanisterHttpChangeAction::MoveToValidated(
+            artifact.share,
+        )]);
+    }
+}
+
+/// Replicates the behaviour of receiving and successfully validating a share over the network
+pub(crate) fn add_received_shares_to_pool(
+    pool: &mut dyn MutablePool<CanisterHttpResponseArtifact, Mutations = CanisterHttpChangeSet>,
+    shares: Vec<CanisterHttpResponseShare>,
+) {
+    for share in shares {
+        let artifact = artifact_from_share(share);
+
+        pool.insert(UnvalidatedArtifact {
+            message: artifact.clone(),
+            peer_id: node_test_id(0),
+            timestamp: UNIX_EPOCH,
+        });
+
+        pool.apply(vec![CanisterHttpChangeAction::MoveToValidated(
+            artifact.share,
+        )]);
     }
 }
 
 /// Replicates the behaviour of adding your own share (and content) to the pool
 pub(crate) fn add_own_share_to_pool(
-    pool: &mut dyn MutablePool<CanisterHttpResponseShare, Mutations = CanisterHttpChangeSet>,
+    pool: &mut dyn MutablePool<CanisterHttpResponseArtifact, Mutations = CanisterHttpChangeSet>,
     share: &CanisterHttpResponseShare,
     content: &CanisterHttpResponse,
 ) {
@@ -1503,6 +1635,16 @@ pub(crate) fn add_own_share_to_pool(
         share.clone(),
         content.clone(),
     )]);
+}
+
+pub(crate) fn artifact_from_share(
+    share: CanisterHttpResponseShare,
+) -> CanisterHttpResponseArtifact {
+    // Fully replicated behaviour.
+    CanisterHttpResponseArtifact {
+        share,
+        response: None,
+    }
 }
 
 /// Creates a [`CanisterHttpResponseShare`] from [`CanisterHttpResponseMetadata`]

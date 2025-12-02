@@ -2,11 +2,10 @@
 use crate::metrics::{observe_get_utxos_latency, observe_sign_with_ecdsa_latency};
 use crate::{CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, Network, tx};
 use candid::Principal;
-use ic_btc_checker::{
-    CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs, CheckTransactionResponse,
-};
+use ic_btc_checker::{CheckTransactionArgs, CheckTransactionResponse};
 use ic_btc_interface::{Address, MillisatoshiPerByte, Utxo};
 use ic_cdk::bitcoin_canister;
+use ic_cdk::bitcoin_canister::GetCurrentFeePercentilesRequest;
 use ic_cdk::management_canister::SignCallError;
 use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
 use ic_management_canister_types_private::DerivationPath;
@@ -143,7 +142,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
             Ok(res)
         } else {
             crate::metrics::GET_UTXOS_CACHE_MISSES.with(|cell| cell.set(cell.get() + 1));
-            runtime.bitcoin_get_utxos(&req).await.inspect(|res| {
+            runtime.get_utxos(&req).await.inspect(|res| {
                 *now = runtime.time();
                 crate::state::mutate_state(|s| s.get_utxos_cache.insert(req, res.clone(), *now))
             })
@@ -192,14 +191,12 @@ pub async fn bitcoin_get_utxos(request: &GetUtxosRequest) -> Result<GetUtxosResp
 }
 
 /// Returns the current fee percentiles on the Bitcoin network.
-pub async fn get_current_fees(network: Network) -> Result<Vec<MillisatoshiPerByte>, CallError> {
-    bitcoin_canister::bitcoin_get_current_fee_percentiles(
-        &bitcoin_canister::GetCurrentFeePercentilesRequest {
-            network: network.into(),
-        },
-    )
-    .await
-    .map_err(|err| CallError::from_cdk_call_error("bitcoin_get_current_fee_percentiles", err))
+pub async fn bitcoin_get_current_fee_percentiles(
+    request: &GetCurrentFeePercentilesRequest,
+) -> Result<Vec<MillisatoshiPerByte>, CallError> {
+    bitcoin_canister::bitcoin_get_current_fee_percentiles(request)
+        .await
+        .map_err(|err| CallError::from_cdk_call_error("bitcoin_get_current_fee_percentiles", err))
 }
 
 /// Sends the transaction to the network the management canister interacts with.
@@ -248,25 +245,12 @@ pub async fn sign_with_ecdsa<R: CanisterRuntime>(
     let start_time = runtime.time();
 
     let result = runtime
-        .sign_with_ecdsa(key_name, derivation_path, message_hash)
+        .sign_with_ecdsa(key_name, derivation_path.into_inner(), message_hash)
         .await;
 
     observe_sign_with_ecdsa_latency(&result, start_time, runtime.time());
 
     result
-}
-
-/// Check if the given Bitcoin address is blocked.
-pub async fn check_withdrawal_destination_address(
-    btc_checker_principal: Principal,
-    address: String,
-) -> Result<CheckAddressResponse, CallError> {
-    ic_cdk::call::Call::bounded_wait(btc_checker_principal, "check_address")
-        .with_arg(CheckAddressArgs { address })
-        .await
-        .map_err(|e| CallError::from_cdk_call_error("check_address", e))?
-        .candid()
-        .map_err(|e| CallError::from_cdk_call_error("check_address", e))
 }
 
 /// Check if the given UTXO passes Bitcoin check.

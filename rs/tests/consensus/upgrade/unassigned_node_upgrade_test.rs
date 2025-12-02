@@ -77,6 +77,7 @@ fn test(env: TestEnv) {
     ));
     let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
     wait_until_authentication_is_granted(
+        &logger,
         &unassigned_node.get_ip_addr(),
         "readonly",
         &readonly_mean,
@@ -118,7 +119,7 @@ fn test(env: TestEnv) {
             Some(&target_version),
             Some(sha256),
             vec![upgrade_url],
-            guest_launch_measurements,
+            Some(guest_launch_measurements),
             vec![],
         )
         .await;

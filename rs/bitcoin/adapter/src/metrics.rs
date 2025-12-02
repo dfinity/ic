@@ -1,6 +1,6 @@
 use ic_metrics::{
     MetricsRegistry,
-    buckets::{decimal_buckets, exponential_buckets},
+    buckets::{decimal_buckets, decimal_buckets_with_zero, exponential_buckets},
 };
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 
@@ -31,6 +31,7 @@ impl ServiceMetrics {
 pub struct GetSuccessorMetrics {
     pub processed_block_hashes: Histogram,
     pub response_blocks: Histogram,
+    pub prune_headers_anchor_height: IntGauge,
 }
 
 impl GetSuccessorMetrics {
@@ -47,6 +48,10 @@ impl GetSuccessorMetrics {
                 "Number of blocks returned in response",
                 // 1, 10, 100, 1000
                 exponential_buckets(1.0, 10.0, 3),
+            ),
+            prune_headers_anchor_height: metrics_registry.int_gauge(
+                "prune_headers_anchor_height",
+                "Anchor height used to prune headers",
             ),
         }
     }
@@ -94,7 +99,6 @@ pub struct BlockchainStateMetrics {
     pub tip_height: IntGauge,
     pub block_cache_size: IntGauge,
     pub block_cache_elements: IntGauge,
-    pub header_cache_size: IntGauge,
     pub tips: IntGauge,
 }
 
@@ -108,11 +112,45 @@ impl BlockchainStateMetrics {
                 "block_cache_elements",
                 "Number of blocks currently stored in the block cache.",
             ),
-            header_cache_size: metrics_registry.int_gauge(
-                "header_cache_size",
-                "Number of headers stored in the adapter.",
-            ),
             tips: metrics_registry.int_gauge("blockchain_tips", "Number of active tips."),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct HeaderCacheMetrics {
+    pub anchor_height_on_disk: IntGauge,
+    pub on_disk_db_size: IntGauge,
+    pub on_disk_elements: IntGauge,
+    pub in_memory_elements: IntGauge,
+    pub headers_pruned_from_memory: Histogram,
+}
+
+impl HeaderCacheMetrics {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+        Self {
+            anchor_height_on_disk: metrics_registry.int_gauge(
+                "anchor_height_on_disk",
+                "Anchor height as stored by on-disk header cache.",
+            ),
+            on_disk_db_size: metrics_registry.int_gauge(
+                "header_cache_on_disk_db_size",
+                "Current size in bytes of the on-disk header cache database.",
+            ),
+            on_disk_elements: metrics_registry.int_gauge(
+                "header_cache_on_disk_elements",
+                "Number of headers currently stored in the on-disk header cache.",
+            ),
+            in_memory_elements: metrics_registry.int_gauge(
+                "header_cache_in_memory_elements",
+                "Number of headers currently stored in the in-memory header cache.",
+            ),
+            headers_pruned_from_memory: metrics_registry.histogram(
+                "headers_pruned_from_memory",
+                "Number of headers pruned from memory each time",
+                // 0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000
+                decimal_buckets_with_zero(0, 3),
+            ),
         }
     }
 }

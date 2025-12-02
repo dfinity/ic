@@ -4,7 +4,7 @@ static CANON_32BIT_NAN: u32 = 0b0111_1111_1100_0000_0000_0000_0000_0000;
 static CANON_64BIT_NAN: u64 =
     0b0111_1111_1111_1000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000;
 
-use dfn_macro::query;
+use ic_cdk::query;
 use std::f32;
 use std::f64;
 
@@ -52,12 +52,18 @@ fn remainder(f1: &Floats, f2: &Floats) -> Floats {
     product(|x, y| x % y, |x, y| x % y, f1, f2)
 }
 
+fn parse_unit(_: Vec<u8>) {}
+
+fn return_result(result: Result<(), String>) -> Vec<u8> {
+    serde_json::to_vec(&result).unwrap()
+}
+
 /// The canonicalized NaN thing looks to be a bit off the beaten path for
 /// WASM codegen, so I decided it makes sense to put some tests here as we
 /// jump from one implementation to another.
 /// Additionally this checks that the NaNs the rust compiler is spitting out
 /// play nicely with the canonicalization
-#[query]
+#[query(decode_with = "parse_unit", encode_with = "return_result")]
 fn nans_are_canonicalized(_: ()) -> Result<(), String> {
     let nan: Floats = vec![(f32::NAN, f64::NAN)];
 

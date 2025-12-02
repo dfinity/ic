@@ -1,3 +1,4 @@
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -11,10 +12,29 @@ rust_library(
         # Keep sorted.
         "//rs/crypto/utils/threshold_sig_der",
         "//rs/protobuf",
+        "//rs/registry/client",
+        "//rs/registry/keys",
         "//rs/registry/local_store",
+        "//rs/registry/nns_data_provider_wrappers",
+        "//rs/registry/routing_table",
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:prost",
+        "@crate_index//:tokio",
+        "@crate_index//:url",
+    ],
+)
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    build_script_env = {
+        "VERSION_TXT_PATH": "$(location //bazel:version.txt)",
+        "COMMIT_DATE_ISO_8601_TXT_PATH": "$(location //bazel:commit_date_iso_8601.txt)",
+    },
+    data = [
+        "//bazel:commit_date_iso_8601.txt",
+        "//bazel:version.txt",
     ],
 )
 
@@ -31,6 +51,7 @@ rust_binary(
     deps = [
         # Keep sorted.
         ":admin",
+        ":build_script",
         "//rs/canister_client",
         "//rs/canister_client/sender",
         "//rs/crypto/internal/crypto_lib/types",
@@ -101,7 +122,7 @@ rust_test(
     name = "integration_tests",
     srcs = glob(["tests/**/*.rs"]),
     data = [
-        "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
+        "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
         "//rs/nns/governance:governance-canister",
         "//rs/nns/handlers/lifeline/impl:lifeline_canister",
         "//rs/nns/handlers/root/impl:root-canister",
@@ -113,7 +134,7 @@ rust_test(
         "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
         "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
-        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
         "LIFELINE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
         "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
         "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",

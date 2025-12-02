@@ -18,7 +18,6 @@ use ic_consensus_utils::{
     pool_reader::PoolReader,
 };
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
-use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::UserError;
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::{
@@ -60,7 +59,7 @@ use ic_state_manager::StateManagerImpl;
 use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
     RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
-    batch::{Batch, BatchMessages, BlockmakerMetrics},
+    batch::{Batch, BatchContent, BatchMessages, BlockmakerMetrics},
     consensus::{
         CatchUpContentProtobufBytes, CatchUpPackage, HasHeight, HasVersion,
         certification::{Certification, CertificationContent, CertificationShare},
@@ -290,12 +289,6 @@ impl Player {
         let metrics_registry = MetricsRegistry::new();
         let subnet_config = SubnetConfig::new(subnet_type);
 
-        let cycles_account_manager = Arc::new(CyclesAccountManager::new(
-            subnet_config.scheduler_config.max_instructions_per_message,
-            subnet_type,
-            subnet_id,
-            subnet_config.cycles_account_manager_config,
-        ));
         let crypto = ic_crypto_for_verification_only::new(registry.clone());
         let crypto = Arc::new(crypto);
 
@@ -316,9 +309,8 @@ impl Player {
             &metrics_registry,
             subnet_id,
             subnet_type,
-            subnet_config.scheduler_config,
             cfg.hypervisor.clone(),
-            Arc::clone(&cycles_account_manager),
+            subnet_config,
             Arc::clone(&state_manager) as Arc<_>,
             state_manager.get_fd_factory(),
             completed_execution_messages_tx,
@@ -330,7 +322,7 @@ impl Player {
             execution_service.ingress_history_writer.clone(),
             execution_service.scheduler,
             cfg.hypervisor.clone(),
-            cycles_account_manager,
+            Arc::clone(&execution_service.cycles_account_manager),
             subnet_id,
             &metrics_registry,
             log.clone(),
@@ -720,7 +712,6 @@ impl Player {
                 self.subnet_id,
                 &self.log,
                 replay_target_height,
-                None,
             ) {
                 Ok(h) => break h,
                 Err(MessageRoutingError::QueueIsFull) => std::thread::sleep(WAIT_DURATION),
@@ -773,32 +764,39 @@ impl Player {
                 )
             }
         };
+
+        let extra_msgs = extra(self, time);
+        if extra_msgs.is_empty() {
+            return (time, None);
+        }
+
+        let extra_ingresses = extra_msgs
+            .iter()
+            .map(|fm| fm.ingress.clone())
+            .collect::<Vec<_>>();
+
         let mut extra_batch = Batch {
             batch_number: message_routing.expected_batch_height(),
             batch_summary: None,
             requires_full_state_hash: false,
-            messages: BatchMessages::default(),
+            content: BatchContent::Data {
+                batch_messages: BatchMessages {
+                    signed_ingress_msgs: extra_ingresses,
+                    ..BatchMessages::default()
+                },
+                chain_key_data: Default::default(),
+                consensus_responses: Vec::new(),
+            },
             // Use a fake randomness here since we don't have random tape for extra messages
             randomness,
-            chain_key_data: Default::default(),
             registry_version,
             time,
-            consensus_responses: Vec::new(),
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
             replica_version,
         };
-        let context_time = extra_batch.time;
-        let extra_msgs = extra(self, context_time);
-        if extra_msgs.is_empty() {
-            return (context_time, None);
-        }
-        if !extra_msgs.is_empty() {
-            extra_batch.messages.signed_ingress_msgs = extra_msgs
-                .iter()
-                .map(|fm| fm.ingress.clone())
-                .collect::<Vec<_>>();
-            println!("extra_batch created with new ingress");
-        }
+
+        println!("extra_batch created with new ingress");
+
         loop {
             match message_routing.deliver_batch(extra_batch.clone()) {
                 Ok(()) => {
@@ -823,7 +821,11 @@ impl Player {
                             });
 
                     extra_batch = extra_batch.clone();
-                    extra_batch.messages.signed_ingress_msgs = Default::default();
+                    extra_batch.content = BatchContent::Data {
+                        batch_messages: BatchMessages::default(),
+                        chain_key_data: Default::default(),
+                        consensus_responses: Vec::new(),
+                    };
                     extra_batch.batch_number = message_routing.expected_batch_height();
                     extra_batch.time += Duration::from_nanos(1);
 
@@ -840,7 +842,7 @@ impl Player {
                 }
             }
         }
-        (context_time, Some((extra_batch.batch_number, extra_msgs)))
+        (time, Some((extra_batch.batch_number, extra_msgs)))
     }
 
     fn certify_state_with_dummy_certification(&self) {

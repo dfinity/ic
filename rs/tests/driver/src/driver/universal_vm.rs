@@ -16,10 +16,6 @@ use crate::driver::test_env_api::{
     HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession, get_dependency_path,
 };
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
-use crate::k8s::datavolume::DataVolumeContentType;
-use crate::k8s::images::upload_image;
-use crate::k8s::tnet::TNet;
-use crate::util::block_on;
 use anyhow::{Result, bail};
 use chrono::Duration;
 use chrono::Utc;
@@ -189,30 +185,6 @@ impl UniversalVm {
                     );
                 }
                 image_specs.push(file_spec);
-            } else {
-                let tnet = TNet::read_attribute(env);
-                let tnet_node = tnet.nodes.last().expect("no nodes");
-                info!(
-                    env.logger(),
-                    "Uploading image {} to {}",
-                    config_img.clone().display().to_string(),
-                    tnet_node.config_url.clone().expect("missing config url")
-                );
-                block_on(upload_image(
-                    config_img,
-                    &format!(
-                        "{}/{}",
-                        tnet_node.config_url.clone().expect("missing config url"),
-                        CONF_IMG_FNAME
-                    ),
-                ))?;
-                block_on(tnet_node.deploy_config_image(
-                    CONF_IMG_FNAME,
-                    "config",
-                    DataVolumeContentType::Kubevirt,
-                ))
-                .expect("deploying config image failed");
-                block_on(tnet_node.add_volume("config")).expect("deploying config image failed");
             }
         }
 
@@ -224,10 +196,6 @@ impl UniversalVm {
                 image_specs,
             )?;
             farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
-        } else if InfraProvider::read_attribute(env) == InfraProvider::K8s {
-            let tnet = TNet::read_attribute(env);
-            let tnet_node = tnet.nodes.last().expect("no nodes");
-            block_on(tnet_node.start()).expect("starting vm failed");
         }
 
         Ok(())
@@ -240,26 +208,14 @@ fn create_universal_vm_config_image(
     label: &str,
 ) -> Result<()> {
     let script_path = get_dependency_path("rs/tests/create-universal-vm-config-image.sh");
-    let mut cmd = Command::new(script_path);
-
-    // Add /usr/sbin to the PATH env var to give access to required tools like mkfs.vfat.
-    let path_env_var = "PATH";
-    let path_prefix = match std::env::var(path_env_var) {
-        Ok(old_path) => {
-            format!("{old_path}:")
-        }
-        Err(_) => String::from(""),
-    };
-    cmd.env(path_env_var, format!("{path_prefix}{}", "/usr/sbin"));
-
-    cmd.arg("--input")
+    let output = Command::new(script_path)
+        .arg("--input")
         .arg(input_dir)
         .arg("--output")
         .arg(output_img)
         .arg("--label")
-        .arg(label);
-
-    let output = cmd.output()?;
+        .arg(label)
+        .output()?;
     std::io::stdout().write_all(&output.stdout)?;
     std::io::stderr().write_all(&output.stderr)?;
     if !output.status.success() {
@@ -391,6 +347,7 @@ until ipv4=$(ip -j address show dev enp2s0 \
             '.[0].addr_info | map(select(.scope == "global")) | .[0].local'); \
 do
   if [ "$count" -ge 120 ]; then
+    echo "Timed out waiting for IPv4 address!" >&2
     exit 1
   fi
   sleep 1

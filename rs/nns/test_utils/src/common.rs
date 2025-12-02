@@ -351,8 +351,7 @@ pub fn build_mainnet_governance_wasm() -> Wasm {
 
 /// Build Wasm for NNS Ledger canister
 pub fn build_ledger_wasm() -> Wasm {
-    let features = ["notify-method"];
-    Project::cargo_bin_maybe_from_env("ledger-canister", &features)
+    Project::cargo_bin_maybe_from_env("ledger-canister", &[])
 }
 
 /// Build mainnet Wasm for NNS Ledger Canister

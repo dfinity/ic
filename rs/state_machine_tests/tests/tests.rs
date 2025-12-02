@@ -10,12 +10,6 @@ enum Request {
     AdvanceTime(Duration),
 }
 
-#[derive(Eq, PartialEq, Debug, Deserialize)]
-enum Response {
-    Ok,
-    Time(SystemTime),
-}
-
 #[test]
 fn test() {
     let state_machine_binary =

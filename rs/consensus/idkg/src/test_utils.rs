@@ -1,7 +1,9 @@
 use crate::{
+    MAX_IDKG_THREADS,
     complaints::{IDkgComplaintHandlerImpl, IDkgTranscriptLoader, TranscriptLoadStatus},
     pre_signer::{IDkgPreSignerImpl, IDkgTranscriptBuilder},
     signer::{ThresholdSignatureBuilder, ThresholdSignerImpl},
+    utils::build_thread_pool,
 };
 use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -120,6 +122,7 @@ pub(crate) struct TestIDkgBlockReader {
     source_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
     target_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
     idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
+    idkg_payloads: BTreeMap<Height, IDkgPayload>,
     fail_to_resolve: bool,
 }
 
@@ -197,6 +200,10 @@ impl TestIDkgBlockReader {
     ) {
         self.idkg_transcripts.insert(transcript_ref, transcript);
     }
+
+    pub(crate) fn add_payload(&mut self, height: Height, payload: IDkgPayload) {
+        self.idkg_payloads.insert(height, payload);
+    }
 }
 
 impl IDkgBlockReader for TestIDkgBlockReader {
@@ -226,27 +233,34 @@ impl IDkgBlockReader for TestIDkgBlockReader {
         Box::new(self.target_subnet_xnet_transcripts.iter())
     }
 
-    fn transcript(
+    fn transcript_as_ref(
         &self,
         transcript_ref: &TranscriptRef,
-    ) -> Result<IDkgTranscript, TranscriptLookupError> {
+    ) -> Result<&IDkgTranscript, TranscriptLookupError> {
         if self.fail_to_resolve {
             return Err("Test transcript resolve failure".into());
         }
-        self.idkg_transcripts
-            .get(transcript_ref)
-            .cloned()
-            .ok_or(format!(
-                "transcript(): {transcript_ref:?} not found in idkg_transcripts"
-            ))
+
+        if let Some(transcript) = self.idkg_transcripts.get(transcript_ref) {
+            return Ok(transcript);
+        }
+
+        self.idkg_payloads
+            .get(&transcript_ref.height)
+            .and_then(|payload| payload.idkg_transcripts.get(&transcript_ref.transcript_id))
+            .ok_or(format!("transcript(): {transcript_ref:?} not found"))
     }
 
     fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
         self.idkg_transcripts.keys().cloned().collect()
     }
 
-    fn iter_above(&self, _height: Height) -> Box<dyn Iterator<Item = &IDkgPayload> + '_> {
-        Box::new(std::iter::empty())
+    fn iter_above(&self, height: Height) -> Box<dyn Iterator<Item = &IDkgPayload> + '_> {
+        Box::new(
+            self.idkg_payloads
+                .range(height.increment()..)
+                .map(|(_, v)| v),
+        )
     }
 }
 
@@ -403,6 +417,21 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto(
     logger: ReplicaLogger,
     consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
 ) -> (IDkgPoolImpl, IDkgPreSignerImpl) {
+    create_pre_signer_dependencies_with_crypto_and_threads(
+        pool_config,
+        logger,
+        consensus_crypto,
+        MAX_IDKG_THREADS,
+    )
+}
+
+// Sets up the dependencies and creates the pre signer
+pub(crate) fn create_pre_signer_dependencies_with_crypto_and_threads(
+    pool_config: ArtifactPoolConfig,
+    logger: ReplicaLogger,
+    consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
+    threads: usize,
+) -> (IDkgPoolImpl, IDkgPreSignerImpl) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
 
@@ -411,6 +440,7 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto(
         NODE_1,
         pool.get_block_cache(),
         consensus_crypto.unwrap_or(crypto),
+        build_thread_pool(threads),
         metrics_registry.clone(),
         logger.clone(),
     );
@@ -431,6 +461,7 @@ pub(crate) fn create_pre_signer_dependencies_and_pool(
         NODE_1,
         pool.get_block_cache(),
         crypto,
+        build_thread_pool(MAX_IDKG_THREADS),
         metrics_registry.clone(),
         logger.clone(),
     );
@@ -445,6 +476,15 @@ pub(crate) fn create_pre_signer_dependencies(
     logger: ReplicaLogger,
 ) -> (IDkgPoolImpl, IDkgPreSignerImpl) {
     create_pre_signer_dependencies_with_crypto(pool_config, logger, None)
+}
+
+// Sets up the dependencies and creates the pre signer
+pub(crate) fn create_pre_signer_dependencies_with_threads(
+    pool_config: ArtifactPoolConfig,
+    logger: ReplicaLogger,
+    threads: usize,
+) -> (IDkgPoolImpl, IDkgPreSignerImpl) {
+    create_pre_signer_dependencies_with_crypto_and_threads(pool_config, logger, None, threads)
 }
 
 // Sets up the dependencies and creates the signer
@@ -463,6 +503,7 @@ pub(crate) fn create_signer_dependencies_with_crypto(
     let signer = ThresholdSignerImpl::new(
         NODE_1,
         consensus_crypto.unwrap_or(crypto),
+        build_thread_pool(MAX_IDKG_THREADS),
         state_manager as Arc<_>,
         metrics_registry.clone(),
         logger.clone(),
@@ -494,6 +535,7 @@ pub(crate) fn create_signer_dependencies_and_state_manager(
     let signer = ThresholdSignerImpl::new(
         NODE_1,
         crypto,
+        build_thread_pool(MAX_IDKG_THREADS),
         state_manager.clone(),
         metrics_registry.clone(),
         logger.clone(),
@@ -511,12 +553,18 @@ pub(crate) fn create_complaint_dependencies_with_crypto_and_node_id(
     node_id: NodeId,
 ) -> (IDkgPoolImpl, IDkgComplaintHandlerImpl) {
     let metrics_registry = MetricsRegistry::new();
-    let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
+    let Dependencies {
+        pool,
+        crypto,
+        state_manager,
+        ..
+    } = dependencies(pool_config.clone(), 1);
 
     let complaint_handler = IDkgComplaintHandlerImpl::new(
         node_id,
         pool.get_block_cache(),
         consensus_crypto.unwrap_or(crypto),
+        state_manager,
         metrics_registry.clone(),
         logger.clone(),
     );
@@ -531,12 +579,28 @@ pub(crate) fn create_complaint_dependencies_and_pool(
     logger: ReplicaLogger,
 ) -> (IDkgPoolImpl, IDkgComplaintHandlerImpl, TestConsensusPool) {
     let metrics_registry = MetricsRegistry::new();
-    let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
+    let Dependencies {
+        pool,
+        crypto,
+        state_manager,
+        ..
+    } = dependencies(pool_config.clone(), 1);
+
+    state_manager
+        .get_mut()
+        .expect_get_certified_state_snapshot()
+        .returning(|| {
+            Some(Box::new(fake_state_with_signature_requests(
+                Height::from(0),
+                [],
+            )))
+        });
 
     let complaint_handler = IDkgComplaintHandlerImpl::new(
         NODE_1,
         pool.get_block_cache(),
         crypto,
+        state_manager,
         metrics_registry.clone(),
         logger.clone(),
     );

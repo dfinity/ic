@@ -74,6 +74,7 @@ use ic_management_canister_types::{
 use ic_transport_types::SubnetMetrics;
 use reqwest::Url;
 use schemars::JsonSchema;
+use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use slog::Level;
 #[cfg(unix)]
@@ -99,7 +100,13 @@ use wslpath::windows_to_wsl;
 pub mod common;
 pub mod nonblocking;
 
-pub const EXPECTED_SERVER_VERSION: &str = "10.0.0";
+const POCKET_IC_SERVER_NAME: &str = "pocket-ic-server";
+
+const MIN_SERVER_VERSION: &str = "10.0.0";
+const MAX_SERVER_VERSION: &str = "11";
+
+/// Public to facilitate downloading the PocketIC server.
+pub const LATEST_SERVER_VERSION: &str = "10.0.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -162,6 +169,7 @@ pub struct PocketIcBuilder {
     icp_config: IcpConfig,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
+    dogecoind_addr: Option<Vec<SocketAddr>>,
     icp_features: IcpFeatures,
     initial_time: Option<InitialTime>,
 }
@@ -180,6 +188,7 @@ impl PocketIcBuilder {
             icp_config: IcpConfig::default(),
             log_level: None,
             bitcoind_addr: None,
+            dogecoind_addr: None,
             icp_features: IcpFeatures::default(),
             initial_time: None,
         }
@@ -202,6 +211,7 @@ impl PocketIcBuilder {
             self.icp_config,
             self.log_level,
             self.bitcoind_addr,
+            self.dogecoind_addr,
             self.icp_features,
             self.initial_time,
             self.http_gateway_config,
@@ -219,6 +229,7 @@ impl PocketIcBuilder {
             self.icp_config,
             self.log_level,
             self.bitcoind_addr,
+            self.dogecoind_addr,
             self.icp_features,
             self.initial_time,
             self.http_gateway_config,
@@ -275,6 +286,13 @@ impl PocketIcBuilder {
     pub fn with_bitcoind_addrs(self, bitcoind_addrs: Vec<SocketAddr>) -> Self {
         Self {
             bitcoind_addr: Some(bitcoind_addrs),
+            ..self
+        }
+    }
+
+    pub fn with_dogecoind_addrs(self, dogecoind_addrs: Vec<SocketAddr>) -> Self {
+        Self {
+            dogecoind_addr: Some(dogecoind_addrs),
             ..self
         }
     }
@@ -565,6 +583,7 @@ impl PocketIc {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_components(
         subnet_config_set: impl Into<ExtendedSubnetConfigSet>,
         server_url: Option<Url>,
@@ -575,6 +594,7 @@ impl PocketIc {
         icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
+        dogecoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
         initial_time: Option<InitialTime>,
         http_gateway_config: Option<InstanceHttpGatewayConfig>,
@@ -600,6 +620,7 @@ impl PocketIc {
                 icp_config,
                 log_level,
                 bitcoind_addr,
+                dogecoind_addr,
                 icp_features,
                 initial_time,
                 http_gateway_config,
@@ -780,7 +801,7 @@ impl PocketIc {
     /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
-    pub async fn make_live_with_params(
+    pub fn make_live_with_params(
         &mut self,
         ip_addr: Option<IpAddr>,
         listen_at: Option<u16>,
@@ -1429,6 +1450,44 @@ impl PocketIc {
                 .await
         })
     }
+
+    /// Download a canister snapshot to a given snapshot directory.
+    /// The sender must be a controller of the canister.
+    /// The snapshot directory must be empty if it exists.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn canister_snapshot_download(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        snapshot_id: Vec<u8>,
+        snapshot_dir: PathBuf,
+    ) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .canister_snapshot_download(canister_id, sender, snapshot_id, snapshot_dir)
+                .await
+        })
+    }
+
+    /// Upload a canister snapshot from a given snapshot directory.
+    /// The sender must be a controller of the canister.
+    /// Returns the snapshot ID of the uploaded snapshot.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn canister_snapshot_upload(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        replace_snapshot: Option<Vec<u8>>,
+        snapshot_dir: PathBuf,
+    ) -> Vec<u8> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .canister_snapshot_upload(canister_id, sender, replace_snapshot, snapshot_dir)
+                .await
+        })
+    }
 }
 
 impl Default for PocketIc {
@@ -1859,20 +1918,36 @@ fn pocket_ic_server_cmd(bin_path: &PathBuf) -> Command {
     Command::new(bin_path)
 }
 
-fn check_pocketic_server_version(server_binary: &PathBuf) -> Result<(), String> {
+fn check_pocketic_server_version(version_line: &str) -> Result<(), String> {
+    let unexpected_version = format!(
+        "Unexpected PocketIC server version: got `{version_line}`; expected `{POCKET_IC_SERVER_NAME} x.y.z`."
+    );
+    let Some((pocket_ic_server, version)) = version_line.split_once(' ') else {
+        return Err(unexpected_version);
+    };
+    if pocket_ic_server != POCKET_IC_SERVER_NAME {
+        return Err(unexpected_version);
+    }
+    let req = VersionReq::parse(&format!(">={MIN_SERVER_VERSION},<{MAX_SERVER_VERSION}")).unwrap();
+    let version = Version::parse(version)
+        .map_err(|e| format!("Failed to parse PocketIC server version: {e}"))?;
+    if !req.matches(&version) {
+        return Err(format!(
+            "Incompatible PocketIC server version: got {version}; expected {req}."
+        ));
+    }
+
+    Ok(())
+}
+
+fn get_and_check_pocketic_server_version(server_binary: &PathBuf) -> Result<(), String> {
     let mut cmd = pocket_ic_server_cmd(server_binary);
     cmd.arg("--version");
     let version = cmd.output().map_err(|e| e.to_string())?.stdout;
     let version_str = String::from_utf8(version)
         .map_err(|e| format!("Failed to parse PocketIC server version: {e}."))?;
     let version_line = version_str.trim_end_matches('\n');
-    let expected_version_line = format!("pocket-ic-server {EXPECTED_SERVER_VERSION}");
-    if version_line != expected_version_line {
-        return Err(format!(
-            "Incompatible PocketIC server version: got {version_line}; expected {expected_version_line}."
-        ));
-    }
-    Ok(())
+    check_pocketic_server_version(version_line)
 }
 
 async fn download_pocketic_server(
@@ -1909,15 +1984,24 @@ pub struct StartServerParams {
 /// Attempt to start a new PocketIC server.
 pub async fn start_server(params: StartServerParams) -> (Child, Url) {
     let default_bin_dir =
-        std::env::temp_dir().join(format!("pocket-ic-server-{EXPECTED_SERVER_VERSION}"));
+        std::env::temp_dir().join(format!("{POCKET_IC_SERVER_NAME}-{LATEST_SERVER_VERSION}"));
     let default_bin_path = default_bin_dir.join("pocket-ic");
+    let bin_path_provided =
+        params.server_binary.is_some() || std::env::var_os("POCKET_IC_BIN").is_some();
     let mut bin_path: PathBuf = params.server_binary.unwrap_or_else(|| {
         std::env::var_os("POCKET_IC_BIN")
             .unwrap_or_else(|| default_bin_path.clone().into())
             .into()
     });
 
-    if let Err(e) = check_pocketic_server_version(&bin_path) {
+    if let Err(e) = get_and_check_pocketic_server_version(&bin_path) {
+        if bin_path_provided {
+            panic!(
+                "Failed to validate PocketIC server binary `{}`: `{}`.",
+                bin_path.display(),
+                e
+            );
+        }
         bin_path = default_bin_path.clone();
         std::fs::create_dir_all(&default_bin_dir)
             .expect("Failed to create PocketIC server directory");
@@ -1936,15 +2020,16 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
                 #[cfg(not(target_arch = "aarch64"))]
                 let arch = "x86_64";
                 let server_url = format!(
-                    "https://github.com/dfinity/pocketic/releases/download/{EXPECTED_SERVER_VERSION}/pocket-ic-{arch}-{os}.gz"
+                    "https://github.com/dfinity/pocketic/releases/download/{LATEST_SERVER_VERSION}/pocket-ic-{arch}-{os}.gz"
                 );
                 println!(
-                    "Failed to validate PocketIC server binary: `{}`. Going to download PocketIC server {} from {} to the local path {}. To avoid downloads during test execution, please specify the path to the (ungzipped and executable) PocketIC server {} using the function `PocketIcBuilder::with_server_binary` or using the `POCKET_IC_BIN` environment variable.",
+                    "Failed to validate PocketIC server binary `{}`: `{}`. Going to download PocketIC server {} from {} to the local path {}. To avoid downloads during test execution, please specify the path to the (ungzipped and executable) PocketIC server {} using the function `PocketIcBuilder::with_server_binary` or using the `POCKET_IC_BIN` environment variable.",
+                    bin_path.display(),
                     e,
-                    EXPECTED_SERVER_VERSION,
+                    LATEST_SERVER_VERSION,
                     server_url,
                     default_bin_path.display(),
-                    EXPECTED_SERVER_VERSION
+                    LATEST_SERVER_VERSION
                 );
                 if let Err(e) = download_pocketic_server(server_url, out).await {
                     let _ = std::fs::remove_file(default_bin_path);
@@ -1952,10 +2037,10 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
                 }
             }
             _ => {
-                // PocketIC server has already been created: wait until it's fully downloaded.
+                // PocketIC server has already been created by another test: wait until it's fully downloaded.
                 let start = std::time::Instant::now();
                 loop {
-                    if check_pocketic_server_version(&default_bin_path).is_ok() {
+                    if get_and_check_pocketic_server_version(&default_bin_path).is_ok() {
                         break;
                     }
                     if start.elapsed() > std::time::Duration::from_secs(60) {
@@ -2080,7 +2165,7 @@ pub fn copy_dir(
 
 #[cfg(test)]
 mod test {
-    use crate::{ErrorCode, RejectCode};
+    use crate::{ErrorCode, RejectCode, check_pocketic_server_version};
     use strum::IntoEnumIterator;
 
     #[test]
@@ -2123,5 +2208,37 @@ mod test {
             let error_code: ErrorCode = (ic_error_code as u64).try_into().unwrap();
             assert_eq!(format!("{error_code:?}"), format!("{:?}", ic_error_code));
         }
+    }
+
+    #[test]
+    fn test_check_pocketic_server_version() {
+        assert!(
+            check_pocketic_server_version("pocket-ic-server")
+                .unwrap_err()
+                .contains("Unexpected PocketIC server version")
+        );
+        assert!(
+            check_pocketic_server_version("pocket-ic 10.0.0")
+                .unwrap_err()
+                .contains("Unexpected PocketIC server version")
+        );
+        assert!(
+            check_pocketic_server_version("pocket-ic-server 10 0 0")
+                .unwrap_err()
+                .contains("Failed to parse PocketIC server version")
+        );
+        assert!(
+            check_pocketic_server_version("pocket-ic-server 9.0.0")
+                .unwrap_err()
+                .contains("Incompatible PocketIC server version")
+        );
+        check_pocketic_server_version("pocket-ic-server 10.0.0").unwrap();
+        check_pocketic_server_version("pocket-ic-server 10.0.1").unwrap();
+        check_pocketic_server_version("pocket-ic-server 10.1.0").unwrap();
+        assert!(
+            check_pocketic_server_version("pocket-ic-server 11.0.0")
+                .unwrap_err()
+                .contains("Incompatible PocketIC server version")
+        );
     }
 }

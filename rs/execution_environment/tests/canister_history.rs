@@ -7,11 +7,13 @@ use ic_management_canister_types_private::CanisterInstallMode::{Install, Reinsta
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInfoRequest, CanisterInfoResponse, CreateCanisterArgs, EnvironmentVariable,
-    InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
+    InstallCodeArgs, MAX_CONTROLLERS, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    UpdateSettingsArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::MAX_CANISTER_HISTORY_CHANGES;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
+use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder, get_reply};
 use ic_types::{CanisterId, Cycles, ingress::WasmResult};
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{
@@ -1123,7 +1125,8 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
     // Create canister snapshot.
     now += Duration::from_secs(5);
     env.set_time(now);
-    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let args: TakeCanisterSnapshotArgs =
+        TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
     let ucan_payload = universal_canister_payload(
         &PrincipalId::default(),
         "take_canister_snapshot",
@@ -1601,49 +1604,124 @@ fn canister_history_tracking_env_vars_update_with_identical_values() {
     assert_eq!(canister_state.system_state.environment_variables, env_vars);
 }
 
+/// Tests that subnet available execution memory matches the canister memory usage
+/// after executing the following requests tracked in canister history:
+/// - canister creation;
+/// - installing/upgrading/reinstalling code;
+/// - uninstalling code;
+/// - taking canister snapshot;
+/// - loading canister snapshot;
+/// - changing canister settings (controllers).
+///
+/// The test also exercises the case of decreasing canister history memory usage
+/// after filling canister history with entries of the maximum possible size.
 #[test]
-fn canister_history_memory_usage_ignored_in_invariant_checks() {
-    let now = std::time::SystemTime::now();
-    let (env, _test_canister, _test_canister_sha256) = test_setup(SubnetType::Application, now);
+fn subnet_available_memory() {
+    let mut test = ExecutionTestBuilder::new().build();
+    test.set_user_id(user_test_id(0));
 
-    let canister_id = env
-        .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.to_vec(),
-            vec![],
-            None,
-            INITIAL_CYCLES_BALANCE,
-        )
-        .unwrap();
-    let memory_size = || {
-        let status = env.canister_status(canister_id).unwrap().unwrap();
-        status.memory_size().get()
+    let initial_subnet_available_memory = test.subnet_available_memory();
+    let mut current_subnet_available_memory = test.subnet_available_memory();
+
+    let canister_id = test.create_canister_with_default_cycles();
+
+    let mut check_subnet_available_memory = |test: &ExecutionTest, memory_usage_increase: bool| {
+        assert_eq!(
+            test.subnet_available_memory().get_execution_memory()
+                + test.canister_state(canister_id).memory_usage().get() as i64,
+            initial_subnet_available_memory.get_execution_memory()
+        );
+        if memory_usage_increase {
+            assert!(
+                test.subnet_available_memory().get_execution_memory()
+                    < current_subnet_available_memory.get_execution_memory()
+            );
+        } else {
+            assert!(
+                test.subnet_available_memory().get_execution_memory()
+                    > current_subnet_available_memory.get_execution_memory()
+            );
+        }
+        current_subnet_available_memory = test.subnet_available_memory();
     };
 
-    // Set the canister memory allocation to its current memory size.
-    let current_memory_size = memory_size();
-    let settings = CanisterSettingsArgsBuilder::new()
-        .with_memory_allocation(current_memory_size)
-        .build();
-    env.update_settings(&canister_id, settings).unwrap();
+    // memory usage increases after canister creation
+    check_subnet_available_memory(&test, true);
 
-    // Reinstalling the canister increases the memory size by the size of the new canister history entry.
-    env.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), vec![])
+    // memory usage increases after installing the universal canister WASM
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
-    assert!(memory_size() > current_memory_size);
+    check_subnet_available_memory(&test, true);
 
-    // Execute an ingress message on the canister to make it "active" and trigger canister invariant checks:
-    // they pass because canister history memory usage is ignored in canister invariant checks,
-    // but the update calls fails because it cannot grow its memory beyond the memory allocation.
-    let err = env
-        .execute_ingress_as(
-            PrincipalId::new_anonymous(),
-            canister_id,
-            "update",
-            wasm().reply().build(),
-        )
-        .unwrap_err();
-    assert!(
-        err.description()
-            .contains("Canister cannot grow its memory usage.")
+    // memory usage increases after taking a snapshot
+    let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
+    let res = test.subnet_message(
+        Method::TakeCanisterSnapshot,
+        take_canister_snapshot_args.encode(),
     );
+    let snapshot_id = CanisterSnapshotResponse::decode(&get_reply(res))
+        .unwrap()
+        .id;
+    check_subnet_available_memory(&test, true);
+
+    // memory usage increases after upgrading and growing stable memory in post-upgrade
+    let grow_payload = wasm().stable_grow(100).build();
+    test.upgrade_canister_with_args(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        grow_payload.clone(),
+    )
+    .unwrap();
+    check_subnet_available_memory(&test, true);
+
+    // memory usage decreases after uninstalling code
+    test.uninstall_code(canister_id).unwrap();
+    check_subnet_available_memory(&test, false);
+
+    // memory usage increases after reinstalling code and growing stable memory in init
+    test.reinstall_canister_with_args(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        grow_payload.clone(),
+    )
+    .unwrap();
+    check_subnet_available_memory(&test, true);
+
+    // memory usage decreases after loading snapshot since the snapshot was taken with empty stable memory;
+    // this way, we also test that `CanisterManager::cycles_and_memory_usage_updates` can handle the case
+    // of decreasing memory usage
+    let load_canister_snapshot_args = LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+    test.subnet_message(
+        Method::LoadCanisterSnapshot,
+        load_canister_snapshot_args.encode(),
+    )
+    .unwrap();
+    check_subnet_available_memory(&test, false);
+
+    // memory usage increases after filling canister history with controllers changes
+    // setting the maximum number of controllers every time
+    for _ in 0..MAX_CANISTER_HISTORY_CHANGES {
+        let controllers = (0..MAX_CONTROLLERS)
+            .map(|i| user_test_id(i as u64).get())
+            .collect();
+        test.canister_update_controller(canister_id, controllers)
+            .unwrap();
+    }
+    check_subnet_available_memory(&test, true);
+
+    // memory usage decreases after setting a single controller since
+    // canister history is a circular buffer and
+    // a change to the maximum number of controllers was just overwriten
+    // with a change to a single controller which takes less memory
+    test.canister_update_controller(canister_id, vec![test.user_id().get()])
+        .unwrap();
+    check_subnet_available_memory(&test, false);
+
+    // memory usage decreases after upgrading since
+    // canister history is a circular buffer and
+    // a change to the maximum number of controllers was just overwriten
+    // with a change to upgrade code which takes less memory
+    test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    check_subnet_available_memory(&test, false);
 }

@@ -7,13 +7,13 @@ use crate::consensus::{
     status::{self, Status},
 };
 use ic_consensus_dkg as dkg;
-use ic_consensus_idkg as idkg;
+use ic_consensus_idkg::{self as idkg};
 use ic_consensus_utils::{
     RoundRobin, active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
     get_oldest_idkg_state_registry_version,
     membership::{Membership, MembershipError},
-    pool_reader::PoolReader,
+    pool_reader::{PoolReader, UnexpectedChainLength},
 };
 use ic_interfaces::{
     batch_payload::ProposalContext,
@@ -27,6 +27,7 @@ use ic_interfaces::{
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateHashError, StateManager};
 use ic_logger::{ReplicaLogger, trace, warn};
+use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     Height, NodeId, RegistryVersion, SubnetId,
@@ -46,6 +47,7 @@ use ic_types::{
     state_manager::StateManagerError,
 };
 use idkg::{IDkgPayloadValidationFailure, InvalidIDkgPayloadReason};
+use rayon::ThreadPool;
 use std::{
     collections::{BTreeMap, HashSet},
     sync::{Arc, RwLock},
@@ -85,6 +87,7 @@ enum ValidationFailure {
     FailedToGetRegistryVersion,
     ValidationContextNotReached(ValidationContext, ValidationContext),
     CatchUpHeightNegligible,
+    MissingPastPayloads,
 }
 
 /// Possible reasons for invalid artifacts.
@@ -682,6 +685,7 @@ pub struct Validator {
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     message_routing: Arc<dyn MessageRouting>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
+    thread_pool: Arc<ThreadPool>,
     log: ReplicaLogger,
     metrics: ValidatorMetrics,
     schedule: RoundRobin,
@@ -700,8 +704,9 @@ impl Validator {
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         message_routing: Arc<dyn MessageRouting>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
+        thread_pool: Arc<ThreadPool>,
         log: ReplicaLogger,
-        metrics: ValidatorMetrics,
+        metrics_registry: &MetricsRegistry,
         time_source: Arc<dyn TimeSource>,
     ) -> Validator {
         Validator {
@@ -713,8 +718,9 @@ impl Validator {
             state_manager,
             message_routing,
             dkg_pool,
+            thread_pool,
             log,
-            metrics,
+            metrics: ValidatorMetrics::new(metrics_registry),
             schedule: RoundRobin::default(),
             time_source,
         }
@@ -1256,10 +1262,26 @@ impl Validator {
         }
 
         // Below are all the payload validations
-        let payloads = pool_reader.get_payloads_from_height(
-            proposal.context.certified_height.increment(),
-            parent.clone(),
-        );
+        let start_height = proposal.context.certified_height.increment();
+        let past_payloads = match pool_reader.get_payloads_from_height(start_height, parent.clone())
+        {
+            Ok(past_payloads) => past_payloads,
+            Err(UnexpectedChainLength { expected, returned }) => {
+                // Defer validation if there are some past payloads missing.
+                // This means that we already have a CUP and this block should be verified
+                // using the notarization fast path.
+                warn!(
+                    every_n_seconds => 10,
+                    self.log,
+                    "Missing past payloads when attempting to validate batch payload at height {}. \
+                    Certified height: {}, expected past payloads len: {}, real past payloads len: {}",
+                    proposal.height(), proposal.context.certified_height, expected, returned
+                );
+                return Err(ValidationError::ValidationFailed(
+                    ValidationFailure::MissingPastPayloads,
+                ));
+            }
+        };
 
         self.payload_builder
             .validate_payload(
@@ -1269,7 +1291,7 @@ impl Validator {
                     validation_context: &proposal.context,
                 },
                 &proposal.payload,
-                &payloads,
+                &past_payloads,
             )
             .map_err(|err| {
                 err.map(
@@ -1282,6 +1304,7 @@ impl Validator {
             self.replica_config.subnet_id,
             self.registry_client.as_ref(),
             self.crypto.as_ref(),
+            self.thread_pool.as_ref(),
             pool_reader,
             self.state_manager.as_ref(),
             &proposal.context,
@@ -1913,7 +1936,9 @@ impl Validator {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::consensus::block_maker::get_block_maker_delay;
+    use crate::consensus::{
+        MAX_CONSENSUS_THREADS, block_maker::get_block_maker_delay, build_thread_pool,
+    };
     use assert_matches::assert_matches;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -1921,6 +1946,7 @@ pub mod test {
         Dependencies, RefMockPayloadBuilder, dependencies_with_subnet_params,
         dependencies_with_subnet_records_with_raw_state_manager,
     };
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_interfaces::{
         messaging::XNetPayloadValidationFailure, p2p::consensus::MutablePool,
         time_source::TimeSource,
@@ -1932,7 +1958,7 @@ pub mod test {
     use ic_registry_client_helpers::subnet::SubnetRegistry;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
+    use ic_test_utilities::state_manager::RefMockStateManager;
     use ic_test_utilities_consensus::{
         assert_changeset_matches_pattern,
         fake::*,
@@ -1957,7 +1983,10 @@ pub mod test {
             RandomBeaconContent, RandomTapeContent, SummaryPayload, dkg::DkgDataPayload,
             idkg::PreSigId,
         },
-        crypto::{BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
+        crypto::{
+            BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CombinedThresholdSig,
+            CombinedThresholdSigOf, CryptoHash,
+        },
         messages::CallbackId,
         replica_config::ReplicaConfig,
         signature::ThresholdSignature,
@@ -2010,8 +2039,9 @@ pub mod test {
                 dependencies.state_manager.clone(),
                 message_routing.clone(),
                 dependencies.dkg_pool.clone(),
+                build_thread_pool(MAX_CONSENSUS_THREADS),
                 no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
+                &MetricsRegistry::new(),
                 Arc::clone(&dependencies.time_source) as Arc<_>,
             );
             Self {
@@ -2794,6 +2824,105 @@ pub mod test {
     }
 
     #[test]
+    // Construct a proposal block with a non-notarized parent and make sure we're
+    // not validating this block until the parent gets notarized.
+    fn test_block_validation_with_missing_past_payload() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let certified_height = Height::from(1);
+            let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let ValidatorAndDependencies {
+                validator,
+                payload_builder,
+                state_manager,
+                mut pool,
+                time_source,
+                ..
+            } = setup_dependencies(pool_config, &committee);
+            payload_builder
+                .get_mut()
+                .expect_validate_payload()
+                .returning(|_, _, _, _| Ok(()));
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(certified_height);
+            state_manager
+                .get_mut()
+                .expect_get_state_at()
+                .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                    Height::new(0),
+                    Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
+                )));
+
+            pool.advance_round_normal_operation_n(8);
+
+            // Make block at height 9
+            let next_proposal = pool.make_next_block();
+            assert_eq!(next_proposal.height().get(), 9);
+            // Make and insert beacon at height 9
+            let next_beacon = pool.make_next_beacon();
+            pool.insert_validated(next_beacon.clone());
+            // Make and insert beacon at height 10
+            let summary_beacon = RandomBeacon::from_parent(&next_beacon);
+            pool.insert_validated(summary_beacon.clone());
+            // Make summary at height 10
+            let summary =
+                pool.make_next_block_from_parent(next_proposal.content.get_value(), Rank(0));
+            let cup = CatchUpPackage {
+                content: CatchUpContent::new(
+                    HashedBlock::new(
+                        ic_types::crypto::crypto_hash,
+                        summary.content.get_value().clone(),
+                    ),
+                    HashedRandomBeacon::new(ic_types::crypto::crypto_hash, summary_beacon.clone()),
+                    CryptoHashOf::from(CryptoHash(Vec::new())),
+                    None,
+                ),
+                signature: ThresholdSignature {
+                    signer: summary_beacon.signature.signer.clone(),
+                    signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
+                },
+            };
+
+            // Insert the Summary before the next proposal
+            pool.notarize(&summary);
+            pool.insert_validated(summary);
+
+            let test_block = pool.make_next_block();
+            assert_eq!(test_block.height().get(), 11);
+            // Forward time correctly
+            time_source
+                .set_time(test_block.content.as_ref().context.time)
+                .unwrap();
+
+            // Validation should fail, since the payload at height 9 is missing
+            let result = validator.check_block_validity(&PoolReader::new(&pool), &test_block);
+            assert_matches!(
+                result,
+                Err(ValidationError::ValidationFailed(
+                    ValidationFailure::MissingPastPayloads,
+                ))
+            );
+
+            // Insert the missing proposal at height 9, the payload should be validated as expected
+            pool.insert_validated(next_proposal);
+            let result = validator.check_block_validity(&PoolReader::new(&pool), &test_block);
+            assert_matches!(result, Ok(()));
+
+            // Insert the cup at height 10, the payload validation should fail
+            // Since payloads below the CUP are not returned
+            pool.insert_validated(cup);
+            let result = validator.check_block_validity(&PoolReader::new(&pool), &test_block);
+            assert_matches!(
+                result,
+                Err(ValidationError::ValidationFailed(
+                    ValidationFailure::MissingPastPayloads,
+                ))
+            );
+        });
+    }
+
+    #[test]
     fn test_block_validation_with_registry_versions() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let certified_height = Height::from(1);
@@ -3523,10 +3652,7 @@ pub mod test {
         block.content.as_mut().payload = Payload::new(
             ic_types::crypto::crypto_hash,
             BlockPayload::Data(DataPayload {
-                batch: BatchPayload {
-                    ingress: IngressPayload::from(vec![]),
-                    ..BatchPayload::default()
-                },
+                batch: BatchPayload::default(),
                 dkg: DkgDataPayload::new_empty(Height::new(0)),
                 idkg: None,
             }),

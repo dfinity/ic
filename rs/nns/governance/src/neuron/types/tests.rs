@@ -52,9 +52,11 @@ fn test_neuron_into_api() {
     original_neuron.recent_ballots_next_entry_index = Some(3);
 
     // Step 2: run code under test.
-    let api_neuron = original_neuron
-        .clone()
-        .into_api(some_timestamp_seconds + 99, &VotingPowerEconomics::DEFAULT);
+    let api_neuron = original_neuron.clone().into_api(
+        some_timestamp_seconds + 99,
+        &VotingPowerEconomics::DEFAULT,
+        false,
+    );
 
     // Step 3: Inspect result(s).
 
@@ -570,6 +572,7 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
             &VotingPowerEconomics::DEFAULT,
             timestamp_seconds,
             principal_id,
+            false,
         );
         assert_eq!(neuron_info.visibility, Some(visibility as i32),);
     }
@@ -584,6 +587,7 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
         &VotingPowerEconomics::DEFAULT,
         timestamp_seconds,
         principal_id,
+        false,
     );
     assert_eq!(neuron_info.visibility, Some(Visibility::Private as i32),);
 
@@ -593,6 +597,7 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
             name: "neuron name".to_string(),
             description: Some("neuron description".to_string()),
             links: vec![],
+            committed_topics: vec![],
         }))
         .build();
 
@@ -602,6 +607,7 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
         &VotingPowerEconomics::DEFAULT,
         timestamp_seconds,
         principal_id,
+        false,
     );
     assert_eq!(neuron_info.visibility, Some(Visibility::Public as i32),);
 }

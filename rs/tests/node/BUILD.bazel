@@ -1,3 +1,4 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//rs/tests:common.bzl", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns", "uvm_config_image")
 
@@ -33,6 +34,9 @@ system_test(
     env = {
         "NODE_ROOT_TESTS_UVM_CONFIG_PATH": "$(rootpath :root_tests_config_image)",
     },
+    proc_macro_deps = [
+        "@crate_index//:indoc",
+    ],
     tags = [
         "long_test",  # The P90 duration of this test was over 6 minutes for the week starting on 2025-08-21.
     ],
@@ -48,6 +52,7 @@ uvm_config_image(
     name = "root_tests_config_image",
     testonly = True,
     srcs = [
+        "//rs/ic_os/device:device_test",
         "//rs/ic_os/os_tools/guest_disk:guest_disk_test",
         "//rs/ic_os/os_tools/guest_vm_runner:upgrade_device_mapper_test",
         "//rs/tests:ubuntu_test_runtime.tar",
@@ -58,7 +63,6 @@ uvm_config_image(
 system_test(
     name = "reboot_toy",
     tags = [
-        "k8s",
         "manual",
     ],
     deps = [
@@ -72,6 +76,8 @@ system_test(
 )
 
 # ict testnet create launch_single_guest --lifetime-mins 3600
+# Or, to measure startup time:
+# bazel run //rs/tests/node:launch_single_guest -- --quiet
 system_test(
     name = "launch_single_guest",
     tags = [
@@ -83,10 +89,13 @@ system_test(
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
+        "@crate_index//:slog",
     ],
 )
 
 # ict testnet create launch_single_host --lifetime-mins 3600
+# Or, to measure startup time:
+# bazel run //rs/tests/node:launch_single_host -- --quiet
 system_test(
     name = "launch_single_host",
     tags = [
@@ -99,5 +108,42 @@ system_test(
         # Keep sorted.
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
+        "@crate_index//:slog",
     ],
+)
+
+rust_binary(
+    name = "kill_start_test_bin",
+    testonly = True,
+    srcs = ["kill_start_test.rs"],
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nested",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
+
+# Tests if killing and starting a node does not corrupt its filesystem.
+# Doesn't run on PRs by default since we do multiple kill-start iterations which takes around 7 minutes.
+system_test(
+    name = "kill_start_long_test",
+    env = {
+        "NUM_KILL_START_ITERATIONS": "5",
+    },
+    tags = ["long_test"],
+    test_driver_target = ":kill_start_test_bin",
+    uses_guestos_img = True,
+)
+
+# Tests if killing and starting a node still allows the node to boot normally.
+system_test(
+    name = "kill_start_short_test",
+    env = {
+        "NUM_KILL_START_ITERATIONS": "1",
+    },
+    test_driver_target = ":kill_start_test_bin",
+    uses_guestos_img = True,
 )

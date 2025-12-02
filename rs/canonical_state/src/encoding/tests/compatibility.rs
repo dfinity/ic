@@ -24,8 +24,8 @@ use ic_types::{
     CryptoHashOfPartialState, Cycles, Funds, NumBytes, Time,
     crypto::CryptoHash,
     messages::{
-        CallbackId, NO_DEADLINE, Payload, RejectContext, Request, RequestMetadata,
-        RequestOrResponse, Response,
+        CallbackId, NO_DEADLINE, Payload, Refund, RejectContext, Request, RequestMetadata,
+        Response, StreamMessage,
     },
     nominal_cycles::NominalCycles,
     time::CoarseTime,
@@ -250,7 +250,7 @@ fn canonical_encoding_subnet_metrics() {
 /// Canonical CBOR encoding of:
 ///
 /// ```no_run
-/// RequestOrResponse::Request(
+/// StreamMessage::Request(
 ///     Request {
 ///         receiver: canister_test_id(1),
 ///         sender: canister_test_id(2),
@@ -271,7 +271,7 @@ fn canonical_encoding_subnet_metrics() {
 ///
 /// ```text
 /// A1                            # map(1)
-///    00                         # field_index(RequestOrResponse::request)
+///    00                         # field_index(StreamMessage::request)
 ///    A7                         # map(7)
 ///       00                      # field_index(Request::receiver)
 ///       4A                      # bytes(10)
@@ -285,7 +285,7 @@ fn canonical_encoding_subnet_metrics() {
 ///       A1                      # map(1)
 ///          00                   # field_index(Funds::cycles)
 ///          A1                   # map(1)
-///             00                # field_index(Cycles::raw)
+///             00                # field_index(Cycles::low)
 ///             04                # unsigned(4)
 ///       04                      # field_index(Request::method_name)
 ///       64                      # text(4)
@@ -304,7 +304,7 @@ fn canonical_encoding_subnet_metrics() {
 #[test]
 fn canonical_encoding_minimal_request() {
     for certification_version in all_supported_versions() {
-        let request: RequestOrResponse = Request {
+        let request: StreamMessage = Request {
             receiver: canister_test_id(1),
             sender: canister_test_id(2),
             sender_reply_callback: CallbackId::from(3),
@@ -326,7 +326,7 @@ fn canonical_encoding_minimal_request() {
 /// Canonical CBOR encoding of:
 ///
 /// ```no_run
-/// RequestOrResponse::Request(
+/// StreamMessage::Request(
 ///     Request {
 ///         receiver: canister_test_id(1),
 ///         sender: canister_test_id(2),
@@ -347,7 +347,7 @@ fn canonical_encoding_minimal_request() {
 ///
 /// ```text
 /// A1                            # map(1)
-///    00                         # field_index(RequestOrResponse::request)
+///    00                         # field_index(StreamMessage::request)
 ///    A8                         # map(8)
 ///       00                      # field_index(Request::receiver)
 ///       4A                      # bytes(10)
@@ -361,7 +361,7 @@ fn canonical_encoding_minimal_request() {
 ///       A1                      # map(1)
 ///          00                   # field_index(Funds::cycles)
 ///          A1                   # map(1)
-///             00                # field_index(Cycles::raw)
+///             00                # field_index(Cycles::low)
 ///             04                # unsigned(4)
 ///       04                      # field_index(Request::method_name)
 ///       64                      # text(4)
@@ -382,7 +382,7 @@ fn canonical_encoding_minimal_request() {
 #[test]
 fn canonical_encoding_request() {
     for certification_version in all_supported_versions() {
-        let request: RequestOrResponse = Request {
+        let request: StreamMessage = Request {
             receiver: canister_test_id(1),
             sender: canister_test_id(2),
             sender_reply_callback: CallbackId::from(3),
@@ -404,7 +404,7 @@ fn canonical_encoding_request() {
 /// Canonical CBOR encoding of:
 ///
 /// ```no_run
-/// RequestOrResponse::Request(
+/// StreamMessage::Request(
 ///     Request {
 ///         receiver: canister_test_id(1),
 ///         sender: canister_test_id(2),
@@ -422,7 +422,7 @@ fn canonical_encoding_request() {
 ///
 /// ```text
 /// A1                            # map(1)
-///    00                         # field_index(RequestOrResponse::request)
+///    00                         # field_index(StreamMessage::request)
 ///    A7                         # map(7)
 ///       00                      # field_index(Request::receiver)
 ///       4A                      # bytes(10)
@@ -436,9 +436,9 @@ fn canonical_encoding_request() {
 ///       A1                      # map(1)
 ///          00                   # field_index(Funds::cycles)
 ///          A2                   # map(2)
-///             00                # field_index(Cycles::raw)
+///             00                # field_index(Cycles::low)
 ///             1B C373E0EE4E3F0AD2  # unsigned(14083847773837265618)
-///             01                # field_index(Cycles::upper_raw)
+///             01                # field_index(Cycles::high)
 ///             1B 000000018EE09FF6  # unsigned(61672207766)
 ///       04                      # field_index(Request::method_name)
 ///       64                      # text(4)
@@ -457,7 +457,7 @@ fn canonical_encoding_request() {
 #[test]
 fn canonical_encoding_request_with_u128_cycles() {
     for certification_version in all_supported_versions() {
-        let request: RequestOrResponse = Request {
+        let request: StreamMessage = Request {
             receiver: canister_test_id(1),
             sender: canister_test_id(2),
             sender_reply_callback: CallbackId::from(3),
@@ -479,7 +479,7 @@ fn canonical_encoding_request_with_u128_cycles() {
 /// Canonical CBOR encoding of:
 ///
 /// ```no_run
-/// RequestOrResponse::Response(
+/// StreamMessage::Response(
 ///     Response {
 ///         originator: canister_test_id(5),
 ///         respondent: canister_test_id(4),
@@ -495,7 +495,7 @@ fn canonical_encoding_request_with_u128_cycles() {
 ///
 /// ```text
 /// A1                            # map(1)
-///    01                         # field_index(RequestOrResponse::response)
+///    01                         # field_index(StreamMessage::response)
 ///    A5                         # map(5)
 ///       00                      # field_index(Response::originator)
 ///       4A                      # bytes(10)
@@ -509,7 +509,7 @@ fn canonical_encoding_request_with_u128_cycles() {
 ///       A1                      # map(1)
 ///          00                   # field_index(Funds::cycles)
 ///          A1                   # map(1)
-///             00                # field_index(Cycles::raw)
+///             00                # field_index(Cycles::low)
 ///             02                # unsigned(2)
 ///       04                      # field_index(Response::response_payload)
 ///       A1                      # map(1)
@@ -521,7 +521,7 @@ fn canonical_encoding_request_with_u128_cycles() {
 #[test]
 fn canonical_encoding_response_no_deadline() {
     for certification_version in all_supported_versions() {
-        let response: RequestOrResponse = Response {
+        let response: StreamMessage = Response {
             originator: canister_test_id(5),
             respondent: canister_test_id(4),
             originator_reply_callback: CallbackId::from(3),
@@ -541,7 +541,7 @@ fn canonical_encoding_response_no_deadline() {
 /// Canonical CBOR encoding of:
 ///
 /// ```no_run
-/// RequestOrResponse::Response(
+/// StreamMessage::Response(
 ///     Response {
 ///         originator: canister_test_id(5),
 ///         respondent: canister_test_id(4),
@@ -557,7 +557,7 @@ fn canonical_encoding_response_no_deadline() {
 ///
 /// ```text
 /// A1                            # map(1)
-///    01                         # field_index(RequestOrResponse::response)
+///    01                         # field_index(StreamMessage::response)
 ///    A6                         # map(6)
 ///       00                      # field_index(Response::originator)
 ///       4A                      # bytes(10)
@@ -571,7 +571,7 @@ fn canonical_encoding_response_no_deadline() {
 ///       A1                      # map(1)
 ///          00                   # field_index(Funds::cycles)
 ///          A1                   # map(1)
-///             00                # field_index(Cycles::raw)
+///             00                # field_index(Cycles::low)
 ///             02                # unsigned(2)
 ///       04                      # field_index(Response::response_payload)
 ///       A1                      # map(1)
@@ -585,7 +585,7 @@ fn canonical_encoding_response_no_deadline() {
 #[test]
 fn canonical_encoding_response() {
     for certification_version in all_supported_versions() {
-        let response: RequestOrResponse = Response {
+        let response: StreamMessage = Response {
             originator: canister_test_id(5),
             respondent: canister_test_id(4),
             originator_reply_callback: CallbackId::from(3),
@@ -606,7 +606,7 @@ fn canonical_encoding_response() {
 /// Canonical CBOR encoding of:
 ///
 /// ```no_run
-/// RequestOrResponse::Response(
+/// StreamMessage::Response(
 ///     Response {
 ///         originator: canister_test_id(5),
 ///         respondent: canister_test_id(4),
@@ -622,7 +622,7 @@ fn canonical_encoding_response() {
 ///
 /// ```text
 /// A1                            # map(1)
-///    01                         # field_index(RequestOrResponse::response)
+///    01                         # field_index(StreamMessage::response)
 ///    A5                         # map(5)
 ///       00                      # field_index(Response::originator)
 ///       4A                      # bytes(10)
@@ -636,9 +636,9 @@ fn canonical_encoding_response() {
 ///       A1                      # map(1)
 ///          00                   # field_index(Funds::cycles)
 ///          A2                   # map(2)
-///             00                # field_index(Cycles::raw)
+///             00                # field_index(Cycles::low)
 ///             1B C373E0EE4E3F0AD2  # unsigned(14083847773837265618)
-///             01                # field_index(Cycles::upper_raw)
+///             01                # field_index(Cycles::high)
 ///             1B 000000018EE09FF6  # unsigned(61672207766)
 ///       04                      # field_index(Response::response_payload)
 ///       A1                      # map(1)
@@ -650,7 +650,7 @@ fn canonical_encoding_response() {
 #[test]
 fn canonical_encoding_response_with_u128_cycles() {
     for certification_version in all_supported_versions() {
-        let response: RequestOrResponse = Response {
+        let response: StreamMessage = Response {
             originator: canister_test_id(5),
             respondent: canister_test_id(4),
             originator_reply_callback: CallbackId::from(3),
@@ -670,7 +670,7 @@ fn canonical_encoding_response_with_u128_cycles() {
 /// Canonical CBOR encoding of:
 ///
 /// ```no_run
-/// RequestOrResponse::Response(
+/// StreamMessage::Response(
 ///     Response {
 ///         originator: canister_test_id(6),
 ///         respondent: canister_test_id(5),
@@ -689,7 +689,7 @@ fn canonical_encoding_response_with_u128_cycles() {
 ///
 /// ```text
 /// A1                            # map(1)
-///    01                         # field_index(RequestOrResponse::response)
+///    01                         # field_index(StreamMessage::response)
 ///    A5                         # map(5)
 ///       00                      # field_index(Response::originator)
 ///       4A                      # bytes(10)
@@ -703,7 +703,7 @@ fn canonical_encoding_response_with_u128_cycles() {
 ///       A1                      # map(1)
 ///          00                   # field_index(Funds::cycles)
 ///          A1                   # map(1)
-///             00                # field_index(Cycles::raw)
+///             00                # field_index(Cycles::low)
 ///             03                # unsigned(3)
 ///       04                      # field_index(Response::response_payload)
 ///       A1                      # map(1)
@@ -719,7 +719,7 @@ fn canonical_encoding_response_with_u128_cycles() {
 #[test]
 fn canonical_encoding_reject_response() {
     for certification_version in all_supported_versions() {
-        let reject_response: RequestOrResponse = Response {
+        let reject_response: StreamMessage = Response {
             originator: canister_test_id(6),
             respondent: canister_test_id(5),
             originator_reply_callback: CallbackId::from(4),
@@ -739,7 +739,45 @@ fn canonical_encoding_reject_response() {
 /// Canonical CBOR encoding of:
 ///
 /// ```no_run
-/// SystemMetadata{
+/// Refund {
+///     recipient: canister_test_id(7),
+///     amount: Cycles::new(8),
+/// }
+/// ```
+///
+/// Expected:
+///
+/// ```text
+/// A1                            # map(1)
+///    02                         # field_index(StreamMessage::refund)
+///    A2                         # map(2)
+///       00                      # field_index(Refund::recipient)
+///       4A                      # bytes(10)
+///          00000000000000070101 # "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0007\u0001\u0001"
+///       01                      # field_index(Refund::amount)
+///       A1                      # map(1)
+///          00                   # field_index(Cycles::low)
+///          08                   # unsigned(8)
+/// ```
+/// Used http://cbor.me/ for printing the human friendly output.
+#[test]
+fn canonical_encoding_anonymous_refund() {
+    for certification_version in
+        all_supported_versions().filter(|v| *v >= CertificationVersion::V22)
+    {
+        let refund: StreamMessage = Refund::anonymous(canister_test_id(7), Cycles::new(8)).into();
+
+        assert_eq!(
+            "A1 02 A2 00 4A 00 00 00 00 00 00 00 07 01 01 01 A1 00 08",
+            as_hex(&encode_message(&refund, certification_version))
+        );
+    }
+}
+
+/// Canonical CBOR encoding of:
+///
+/// ```no_run
+/// SystemMetadata {
 ///     own_subnet_id: new(subnet_test_id(13)),
 ///     prev_state_hash: Some(CryptoHashOfPartialState::new(CryptoHash(vec![15]))),
 ///     ..Default::default()
@@ -842,30 +880,30 @@ fn invalid_stream_header_missing_signals_end() {
 }
 
 //
-// `RequestOrResponse` decoding
+// `StreamMessage` decoding
 //
 
 #[test]
-#[should_panic(expected = "expected field index 0 <= i < 2")]
+#[should_panic(expected = "expected field index 0 <= i < 3")]
 fn invalid_message_extra_field() {
     for certification_version in all_supported_versions() {
-        let bytes = types::RequestOrResponse::encode_with_extra_field((
+        let bytes = types::StreamMessage::encode_with_extra_field((
             &request_message(certification_version),
             certification_version,
         ))
         .unwrap();
 
-        let _: RequestOrResponse = types::RequestOrResponse::proxy_decode(&bytes).unwrap();
+        let _: StreamMessage = types::StreamMessage::proxy_decode(&bytes).unwrap();
     }
 }
 
 #[test]
 #[should_panic(
-    expected = "RequestOrResponse: expected exactly one of `request` or `response` to be `Some(_)`, got `RequestOrResponse { request: None, response: None }`"
+    expected = "StreamMessage: expected exactly one of `request`, `response` or `refund` to be `Some(_)`, got `StreamMessage { request: None, response: None, refund: None }`"
 )]
 fn invalid_message_empty() {
     for certification_version in all_supported_versions() {
-        let bytes = types::RequestOrResponse::encode_without_field(
+        let bytes = types::StreamMessage::encode_without_field(
             (
                 &request_message(certification_version),
                 certification_version,
@@ -874,7 +912,7 @@ fn invalid_message_empty() {
         )
         .unwrap();
 
-        let _: RequestOrResponse = types::RequestOrResponse::proxy_decode(&bytes).unwrap();
+        let _: StreamMessage = types::StreamMessage::proxy_decode(&bytes).unwrap();
     }
 }
 
@@ -1093,6 +1131,80 @@ fn invalid_response_missing_response_payload() {
         .unwrap();
 
         let _: Response = types::Response::proxy_decode(&bytes).unwrap();
+    }
+}
+
+//
+// `Refund` decoding
+//
+
+#[test]
+fn valid_anonymous_refund() {
+    for certification_version in
+        all_supported_versions().filter(|v| *v >= CertificationVersion::V22)
+    {
+        let refund = anonymous_refund(certification_version);
+        let bytes = types::Refund::proxy_encode((&refund, certification_version)).unwrap();
+
+        assert_eq!(refund, types::Refund::proxy_decode(&bytes).unwrap());
+    }
+}
+
+#[test]
+fn invalid_refund_extra_field() {
+    for certification_version in
+        all_supported_versions().filter(|v| *v >= CertificationVersion::V22)
+    {
+        let bytes = types::Refund::encode_with_extra_field((
+            &anonymous_refund(certification_version),
+            certification_version,
+        ))
+        .unwrap();
+
+        let res: Result<Refund, ProxyDecodeError> = types::Refund::proxy_decode(&bytes);
+        assert_matches!(
+            res,
+            Err(ProxyDecodeError::CborDecodeError(err))
+                if err.to_string().contains("expected field index 0 <= i < 2")
+        );
+    }
+}
+
+#[test]
+#[should_panic(expected = "missing field `recipient`")]
+fn invalid_refund_missing_recipient() {
+    for certification_version in
+        all_supported_versions().filter(|v| *v >= CertificationVersion::V22)
+    {
+        let bytes = types::Refund::encode_without_field(
+            (
+                &anonymous_refund(certification_version),
+                certification_version,
+            ),
+            0,
+        )
+        .unwrap();
+
+        let _: Refund = types::Refund::proxy_decode(&bytes).unwrap();
+    }
+}
+
+#[test]
+#[should_panic(expected = "missing field `amount`")]
+fn invalid_refund_missing_amount() {
+    for certification_version in
+        all_supported_versions().filter(|v| *v >= CertificationVersion::V22)
+    {
+        let bytes = types::Refund::encode_without_field(
+            (
+                &anonymous_refund(certification_version),
+                certification_version,
+            ),
+            1,
+        )
+        .unwrap();
+
+        let _: Refund = types::Refund::proxy_decode(&bytes).unwrap();
     }
 }
 
@@ -1347,7 +1459,7 @@ fn reject_signals(
     )
 }
 
-fn request_message(certification_version: CertificationVersion) -> RequestOrResponse {
+fn request_message(certification_version: CertificationVersion) -> StreamMessage {
     request(certification_version).into()
 }
 
@@ -1373,6 +1485,10 @@ fn response(_certification_version: CertificationVersion) -> Response {
         response_payload: data_payload(),
         deadline: CoarseTime::from_secs_since_unix_epoch(8),
     }
+}
+
+fn anonymous_refund(_certification_version: CertificationVersion) -> Refund {
+    Refund::anonymous(canister_test_id(7), cycles())
 }
 
 fn funds() -> Funds {

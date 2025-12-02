@@ -19,9 +19,12 @@ rust_library(
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
+        "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:ic-utils",
+        "@crate_index//:regex",
         "@crate_index//:slog",
+        "@crate_index//:tokio",
     ],
 )
 
@@ -137,7 +140,6 @@ system_test_nns(
 system_test_nns(
     name = "upgrade_with_alternative_urls",
     tags = [
-        "k8s",
         "long_test",
     ],
     uses_guestos_img = True,
@@ -158,7 +160,6 @@ system_test_nns(
 system_test_nns(
     name = "unassigned_node_upgrade_test",
     tags = [
-        "k8s",
         "long_test",
     ],
     uses_guestos_img = True,

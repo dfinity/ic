@@ -32,7 +32,7 @@ async fn test_large_file_download() {
     let hash = get_hash(downloader, version.as_ref()).await;
 
     let url = format!(
-        "http://download.proxy-global.dfinity.network:8080/ic/{version}/guest-os/update-img/update-img.tar.zst"
+        "https://download.dfinity.systems/ic/{version}/guest-os/update-img/update-img.tar.zst"
     );
     let downloader = FileDownloader::new_with_timeout(None, std::time::Duration::from_secs(2));
 

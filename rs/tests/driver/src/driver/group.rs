@@ -25,8 +25,6 @@ use crate::driver::{
     test_env::{TestEnv, TestEnvAttribute},
     test_setup::{GroupSetup, InfraProvider},
 };
-use crate::k8s::tnet::TNet;
-use crate::util::block_on;
 use chrono::Utc;
 use regex::Regex;
 use walkdir::WalkDir;
@@ -71,6 +69,7 @@ const KEEPALIVE_TASK_NAME: &str = "keepalive";
 const UVMS_LOGS_STREAM_TASK_NAME: &str = "uvms_logs_stream";
 const VECTOR_TASK_NAME: &str = "vector_logging";
 const SETUP_TASK_NAME: &str = "setup";
+const TEARDOWN_TASK_NAME: &str = "teardown";
 const LIFETIME_GUARD_TASK_PREFIX: &str = "lifetime_guard_";
 pub const COLOCATE_CONTAINER_NAME: &str = "system_test";
 
@@ -118,9 +117,6 @@ pub struct CliArgs {
     )]
     pub filter_tests: Option<String>,
 
-    #[clap(long = "k8s", help = "Use k8s as infra provider instead of Farm.")]
-    pub k8s: bool,
-
     #[clap(long = "group-base-name", help = "Group base name.")]
     pub group_base_name: String,
 
@@ -145,6 +141,9 @@ pub struct CliArgs {
         help = "The list of regexes which will be skipped from the streaming."
     )]
     pub exclude_logs: Vec<Regex>,
+
+    #[clap(long, short, help = "Reduce terminal logging to mostly test output.")]
+    pub quiet: bool,
 }
 
 impl CliArgs {
@@ -222,9 +221,16 @@ fn subproc(
     task_id: TaskId,
     target_fn: impl SubprocessFn,
     ctx: &mut ComposeContext,
+    quiet: bool,
 ) -> SubprocessTask {
     trace!(ctx.group_ctx.log(), "subproc(task_name={})", &task_id);
-    SubprocessTask::new(task_id, ctx.rh.clone(), target_fn, ctx.group_ctx.clone())
+    SubprocessTask::new(
+        task_id,
+        ctx.rh.clone(),
+        target_fn,
+        ctx.group_ctx.clone(),
+        quiet,
+    )
 }
 
 fn timed(
@@ -397,7 +403,7 @@ impl SystemTestSubGroup {
                 };
                 timed(
                     Plan::Leaf {
-                        task: Box::from(subproc(task_id, closure, ctx)),
+                        task: Box::from(subproc(task_id, closure, ctx, false)),
                     },
                     ctx.timeout_per_test,
                     None,
@@ -410,6 +416,7 @@ impl SystemTestSubGroup {
 
 pub struct SystemTestGroup {
     setup: Option<Box<dyn PotSetupFn>>,
+    teardown: Option<Box<dyn PotSetupFn>>,
     tests: Vec<SystemTestSubGroup>,
     timeout_per_test: Option<Duration>,
     overall_timeout: Option<Duration>,
@@ -447,6 +454,7 @@ impl SystemTestGroup {
     pub fn new() -> Self {
         Self {
             setup: Default::default(),
+            teardown: Default::default(),
             tests: Default::default(),
             timeout_per_test: None,
             overall_timeout: None,
@@ -470,6 +478,11 @@ impl SystemTestGroup {
 
     pub fn with_setup<F: PotSetupFn>(mut self, setup: F) -> Self {
         self.setup = Some(Box::new(setup));
+        self
+    }
+
+    pub fn with_teardown<F: PotSetupFn>(mut self, teardown: F) -> Self {
+        self.teardown = Some(Box::new(teardown));
         self
     }
 
@@ -564,6 +577,8 @@ impl SystemTestGroup {
         debug!(group_ctx.log(), "SystemTestGroup.make_plan");
         let start_time = Utc::now();
 
+        let quiet = group_ctx.quiet;
+
         let mut compose_ctx = ComposeContext {
             rh,
             group_ctx: group_ctx.clone(),
@@ -573,87 +588,81 @@ impl SystemTestGroup {
         };
 
         let uvms_logs_stream_task_id = TaskId::Test(String::from(UVMS_LOGS_STREAM_TASK_NAME));
-        let uvms_logs_stream_task = if !group_ctx.k8s {
-            Box::from(subproc(
-                uvms_logs_stream_task_id,
-                {
-                    let logger = group_ctx.logger().clone();
-                    let group_ctx = group_ctx.clone();
-                    move || {
-                        let rt: Runtime = tokio::runtime::Builder::new_multi_thread()
-                            .worker_threads(1)
-                            .max_blocking_threads(1)
-                            .enable_all()
-                            .build()
-                            .unwrap_or_else(|err| panic!("Could not create tokio runtime: {err}"));
-                        let root_search_dir = {
-                            let root_env = group_ctx
-                                .clone()
-                                .get_root_env()
-                                .expect("root_env should already exist");
-                            let base_path = root_env.base_path();
-                            base_path
-                                .parent()
-                                .expect("root_env dir should have a parent dir")
-                                .to_path_buf()
-                        };
-                        let mut streamed_uvms: HashMap<String, Ipv6Addr> = HashMap::new();
-                        let mut skipped_uvms: BTreeSet<String> = BTreeSet::new();
-                        debug!(logger, ">>> {UVMS_LOGS_STREAM_TASK_NAME}");
-                        loop {
-                            match discover_uvms(root_search_dir.clone()) {
-                                Ok(discovered_uvms) => {
-                                    for (key, value) in discovered_uvms {
-                                        if skipped_uvms.contains(&key) {
-                                            continue;
-                                        }
+        let uvms_logs_stream_task = Box::from(subproc(
+            uvms_logs_stream_task_id,
+            {
+                let logger = group_ctx.logger().clone();
+                let group_ctx = group_ctx.clone();
+                move || {
+                    let rt: Runtime = tokio::runtime::Builder::new_multi_thread()
+                        .worker_threads(1)
+                        .max_blocking_threads(1)
+                        .enable_all()
+                        .build()
+                        .unwrap_or_else(|err| panic!("Could not create tokio runtime: {err}"));
+                    let root_search_dir = {
+                        let root_env = group_ctx
+                            .clone()
+                            .get_root_env()
+                            .expect("root_env should already exist");
+                        let base_path = root_env.base_path();
+                        base_path
+                            .parent()
+                            .expect("root_env dir should have a parent dir")
+                            .to_path_buf()
+                    };
+                    let mut streamed_uvms: HashMap<String, Ipv6Addr> = HashMap::new();
+                    let mut skipped_uvms: BTreeSet<String> = BTreeSet::new();
+                    debug!(logger, ">>> {UVMS_LOGS_STREAM_TASK_NAME}");
+                    loop {
+                        match discover_uvms(root_search_dir.clone()) {
+                            Ok(discovered_uvms) => {
+                                for (key, value) in discovered_uvms {
+                                    if skipped_uvms.contains(&key) {
+                                        continue;
+                                    }
 
-                                        let key_match = group_ctx
-                                            .exclude_logs
-                                            .iter()
-                                            .any(|pattern| pattern.is_match(&key));
+                                    let key_match = group_ctx
+                                        .exclude_logs
+                                        .iter()
+                                        .any(|pattern| pattern.is_match(&key));
 
-                                        if key_match {
-                                            debug!(
-                                                logger,
-                                                "Skipping journald streaming of [uvm={key}] because it was excluded by the `--exclude-logs` pattern"
-                                            );
-                                            skipped_uvms.insert(key);
-                                            continue;
-                                        }
+                                    if key_match {
+                                        debug!(
+                                            logger,
+                                            "Skipping journald streaming of [uvm={key}] because it was excluded by the `--exclude-logs` pattern"
+                                        );
+                                        skipped_uvms.insert(key);
+                                        continue;
+                                    }
 
-                                        streamed_uvms.entry(key.clone()).or_insert_with(|| {
-                                                let logger = logger.clone();
-                                                info!(
+                                    streamed_uvms.entry(key.clone()).or_insert_with(|| {
+                                            let logger = logger.clone();
+                                            info!(
                                                     logger,
                                                     "Streaming Journald for newly discovered [uvm={key}] with ipv6={value}"
                                                 );
-                                                // The task starts, but the handle is never joined.
-                                                rt.spawn(stream_journald_with_retries(logger, key.clone(), value));
-                                                value
-                                            });
-                                    }
-                                }
-                                Err(err) => {
-                                    warn!(
-                                        logger,
-                                        "Discovering deployed uvms failed with err:{err}"
-                                    );
+                                            // The task starts, but the handle is never joined.
+                                            rt.spawn(stream_journald_with_retries(logger, key.clone(), value));
+                                            value
+                                        });
                                 }
                             }
-                            std::thread::sleep(RETRY_DELAY_DISCOVER_UVMS);
+                            Err(err) => {
+                                warn!(logger, "Discovering deployed uvms failed with err:{err}");
+                            }
                         }
+                        std::thread::sleep(RETRY_DELAY_DISCOVER_UVMS);
                     }
-                },
-                &mut compose_ctx,
-            )) as Box<dyn Task>
-        } else {
-            Box::from(EmptyTask::new(uvms_logs_stream_task_id)) as Box<dyn Task>
-        };
+                }
+            },
+            &mut compose_ctx,
+            false,
+        )) as Box<dyn Task>;
 
         // The ID of the root task is needed outside this function for awaiting when the plan execution finishes.
         let keepalive_task_id = TaskId::Test(String::from(KEEPALIVE_TASK_NAME));
-        let keepalive_task = if self.with_farm && !group_ctx.k8s && !group_ctx.no_farm_keepalive {
+        let keepalive_task = if self.with_farm && !group_ctx.no_farm_keepalive {
             Box::from(subproc(
                 keepalive_task_id.clone(),
                 {
@@ -703,6 +712,7 @@ impl SystemTestGroup {
                     }
                 },
                 &mut compose_ctx,
+                quiet,
             )) as Box<dyn Task>
         } else {
             Box::from(EmptyTask::new(keepalive_task_id)) as Box<dyn Task>
@@ -738,6 +748,7 @@ impl SystemTestGroup {
                     }
                 },
                 &mut compose_ctx,
+                quiet,
             );
 
             Box::from(log_task) as Box<dyn Task>
@@ -769,6 +780,7 @@ impl SystemTestGroup {
                     SetupResult {}.write_attribute(&env);
                 },
                 &mut compose_ctx,
+                false,
             );
             timed(
                 Plan::Leaf {
@@ -780,7 +792,29 @@ impl SystemTestGroup {
             )
         };
 
-        // TODO: k8s
+        let teardown_plan = self.teardown.map(|teardown_fn| {
+            let logger = group_ctx.logger().clone();
+            let group_ctx = group_ctx.clone();
+            let teardown_task = subproc(
+                TaskId::Test(String::from(TEARDOWN_TASK_NAME)),
+                move || {
+                    debug!(logger, ">>> teardown_fn");
+                    let env = ensure_setup_env(group_ctx);
+                    teardown_fn(env);
+                },
+                &mut compose_ctx,
+                false,
+            );
+            timed(
+                Plan::Leaf {
+                    task: Box::from(teardown_task),
+                },
+                compose_ctx.timeout_per_test,
+                None,
+                &mut compose_ctx,
+            )
+        });
+
         // normal case: no debugkeepalive, overall timeout is active
         if !group_ctx.debug_keepalive {
             let keepalive_plan = compose(
@@ -795,13 +829,13 @@ impl SystemTestGroup {
                                 .into_iter()
                                 .map(|sub_group| sub_group.into_plan(&mut compose_ctx)),
                         )
+                        .chain(teardown_plan)
                         .collect(),
                     &mut compose_ctx,
                 )],
                 &mut compose_ctx,
             );
 
-            // TODO: k8s
             let uvms_stream_plan = compose(
                 Some(uvms_logs_stream_task),
                 EvalOrder::Sequential,
@@ -816,7 +850,6 @@ impl SystemTestGroup {
                 &mut compose_ctx,
             );
 
-            // TODO: k8s
             let report_plan = Ok(compose(
                 Some(Box::new(EmptyTask::new(TaskId::Test(
                     REPORT_TASK_NAME.to_string(),
@@ -837,7 +870,6 @@ impl SystemTestGroup {
             return report_plan;
         }
 
-        // TODO: k8s
         // otherwise: keepalive needs to be above report task. no overall timeout.
         let keepalive_plan: Plan<Box<dyn Task>> = Plan::Leaf {
             task: Box::new(DebugKeepaliveTask::new(
@@ -847,7 +879,6 @@ impl SystemTestGroup {
             )),
         };
 
-        // TODO: k8s
         let uvms_stream_plan = compose(
             Some(uvms_logs_stream_task),
             EvalOrder::Sequential,
@@ -862,7 +893,6 @@ impl SystemTestGroup {
             &mut compose_ctx,
         );
 
-        // TODO: k8s
         let report_plan = compose(
             Some(Box::new(EmptyTask::new(TaskId::Test(
                 REPORT_TASK_NAME.to_string(),
@@ -877,6 +907,7 @@ impl SystemTestGroup {
                             .into_iter()
                             .map(|sub_group| sub_group.into_plan(&mut compose_ctx)),
                     )
+                    .chain(teardown_plan)
                     .collect(),
                 &mut compose_ctx,
             )],
@@ -911,12 +942,12 @@ impl SystemTestGroup {
             args.debug_keepalive,
             args.no_farm_keepalive || args.no_group_ttl,
             args.group_base_name,
-            args.k8s,
             !args.no_logs,
             args.exclude_logs,
+            args.quiet,
         )?;
 
-        let with_farm = self.with_farm && !args.k8s;
+        let with_farm = self.with_farm;
 
         if is_parent_process {
             let root_env = group_ctx.get_root_env().unwrap();
@@ -924,12 +955,8 @@ impl SystemTestGroup {
             if let Some(required_args) = args.required_host_features {
                 required_args.write_attribute(&root_env);
             }
-            if args.k8s {
-                InfraProvider::K8s.write_attribute(&root_env);
-            } else {
-                InfraProvider::Farm.write_attribute(&root_env);
-            }
-            if with_farm || args.k8s {
+            InfraProvider::Farm.write_attribute(&root_env);
+            if with_farm {
                 root_env.create_group_setup(group_ctx.group_base_name.clone(), args.no_group_ttl);
             }
             debug!(group_ctx.log(), "Created group context: {:?}", group_ctx);
@@ -1032,9 +1059,6 @@ impl SystemTestGroup {
                 if with_farm && !args.no_delete_farm_group {
                     Self::delete_farm_group(group_ctx.clone());
                 }
-                if args.k8s && !args.debug_keepalive {
-                    Self::delete_tnet(group_ctx.clone());
-                }
                 if report.failure.is_empty() {
                     Ok(Outcome::FromParentProcess(report))
                 } else {
@@ -1076,13 +1100,6 @@ impl SystemTestGroup {
         let farm = Farm::new(farm_url, env.logger());
         let group_name = group_setup.infra_group_name;
         farm.delete_group(&group_name);
-    }
-
-    fn delete_tnet(ctx: GroupContext) {
-        info!(ctx.log(), "Deleting k8s tnet.");
-        let env = ensure_setup_env(ctx);
-        let tnet = TNet::read_attribute(&env);
-        block_on(tnet.delete()).expect("deleting tnet");
     }
 }
 

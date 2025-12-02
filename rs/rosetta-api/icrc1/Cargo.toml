@@ -2,7 +2,7 @@
 name = "ic-icrc-rosetta"
 description = "Build Once. Integrate Your Blockchain Everywhere. "
 default-run = "ic-icrc-rosetta"
-version = "1.2.6"
+version = "1.2.7"
 authors.workspace = true
 edition.workspace = true
 documentation.workspace = true
@@ -74,6 +74,7 @@ ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 ic-utils = { workspace = true }
 once_cell = "1.8.0"
 pocket-ic = { path = "../../../packages/pocket-ic" }
+prometheus-parse = { workspace = true }
 url = { workspace = true }
 
 [[test]]

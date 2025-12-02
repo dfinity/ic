@@ -244,7 +244,7 @@ pub fn decrypt(
     let ciphertext = crypto::FsEncryptionCiphertext::deserialize(ciphertext)
         .map_err(DecryptError::MalformedCiphertext)?;
     crypto::dec_chunks(secret_key, index, &ciphertext, epoch, associated_data)
-        .map_err(|_| DecryptError::InvalidChunk)
+        .map_err(|e| DecryptError::InvalidChunk(format!("{e:?}")))
 }
 
 /// Zero knowledge proof of correct chunking

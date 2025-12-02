@@ -76,14 +76,6 @@ fn ledger_wasm_prev_version() -> Vec<u8> {
     )
 }
 
-fn ledger_wasm_notify_method() -> Vec<u8> {
-    ic_test_utilities_load_wasm::load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger-canister_notify-method",
-        &[],
-    )
-}
-
 fn ledger_wasm_mainnet() -> Vec<u8> {
     std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap()
 }
@@ -468,6 +460,14 @@ fn test_tx_deduplication() {
 #[test]
 fn test_mint_burn() {
     ic_ledger_suite_state_machine_tests::test_mint_burn(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_mint_burn_fee_rejected() {
+    ic_ledger_suite_state_machine_tests::test_mint_burn_fee_rejected(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]
@@ -1920,11 +1920,7 @@ fn test_notify_caller_logging() {
         .build()
         .unwrap();
     let canister_id = env
-        .install_canister(
-            ledger_wasm_notify_method(),
-            Encode!(&payload).unwrap(),
-            None,
-        )
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
         .expect("Unable to install the Ledger canister");
 
     // Make a transfer that we can notify about
@@ -2072,6 +2068,33 @@ fn test_archiving_respects_num_blocks_to_archive_upper_limit() {
         ic_ledger_suite_state_machine_tests::archiving::query_encoded_blocks,
         icp_archives,
         ic_ledger_suite_state_machine_tests::archiving::get_encoded_blocks,
+    );
+}
+
+#[test]
+fn test_archiving_fails_on_app_subnet_if_ledger_does_not_have_enough_cycles() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_fails_on_app_subnet_if_ledger_does_not_have_enough_cycles(
+        ledger_wasm(), encode_init_args,
+        icp_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_encoded_blocks,
+    );
+}
+
+#[test]
+fn test_archiving_succeeds_on_system_subnet_if_ledger_does_not_have_any_cycles() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_succeeds_on_system_subnet_if_ledger_does_not_have_any_cycles(
+        ledger_wasm(), encode_init_args,
+        icp_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_encoded_blocks,
+    );
+}
+
+#[test]
+fn test_archiving_succeeds_if_ledger_has_enough_cycles_to_attach() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_succeeds_if_ledger_has_enough_cycles_to_attach(
+        ledger_wasm(), encode_init_args,
+        icp_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_encoded_blocks,
     );
 }
 

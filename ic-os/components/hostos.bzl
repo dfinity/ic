@@ -37,15 +37,17 @@ component_files = {
     Label("misc/config/config-hostos.sh"): "/opt/ic/bin/config.sh",
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
+    Label("misc/output-wrapper.sh"): "/opt/ic/bin/output-wrapper.sh",
     Label("misc/vsock/vsock-agent.service"): "/etc/systemd/system/vsock-agent.service",
     Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
     Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
     Label("hostos/misc/sudoers"): "/etc/sudoers",
+    Label("hostos/misc/limited-console"): "/opt/ic/bin/limited-console",
+    Label("hostos/misc/bash"): "/opt/ic/bin/rbash/bash",
     Label("hostos/misc/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
     Label("hostos/misc/20-ipmi.rules"): "/etc/udev/rules.d/20-ipmi.rules",
     Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.sh"): "/opt/ic/bin/guestos-recovery-upgrader.sh",
-    Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.service"): "/etc/systemd/system/guestos-recovery-upgrader.service",
     Label("misc/systemd-user/user@.service"): "/etc/systemd/system/user@.service",
 
     # monitoring

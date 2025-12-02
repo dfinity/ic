@@ -38,15 +38,21 @@
 # Tip: to test which files matches <PATTERN> you can use the following:
 # git ls-files | python -c 'import sys, fnmatch; print("\n".join(fnmatch.filter(sys.stdin.read().splitlines(),"<PATTERN>")))'
 #
-# Run `ci/bazel-scripts/targets.py check` to see the matches for every pattern
+# Run `ci/scripts/targets.py check` to see the matches for every pattern
 # and to check the correctness of this file. This is also run automatically by
 # the check-pull-request-bazel-targets job on CI.
 
 *.sh        //pre-commit:shfmt-check
 *.py        //pre-commit:ruff-lint
-*.hs        //pre-commit:ormolu-lint
 *.proto     //pre-commit:protobuf-format-check
             //pre-commit:buf-breaking
+
+mainnet-icos-revisions.json
+  //rs/tests/consensus/backup:backup_manager_downgrade_test_colocate
+  //rs/tests/consensus/backup:backup_manager_upgrade_test_colocate
+  //rs/tests/consensus/upgrade:upgrade_downgrade_app_subnet_test_colocate
+
+ic-os/guestos/context/docker-base.* //rs/tests/node:kill_start_long_test
 
 # Run most nested tests for any ic-os/ or rs/ic_os/ changes:
 *ic[-_]os/* //rs/tests/nested:guestos_upgrade_smoke_test
@@ -61,17 +67,21 @@
 # XNet compatibility test for changes to certifications
 *canonical_state/* //rs/tests/message_routing/xnet:xnet_compatibility
 
-*nns_delegation* //rs/tests/networking:nns_delegation_mainnet_nns_version_test
-                 //rs/tests/networking:nns_delegation_branch_nns_version_test
+rs/nns/cmc/*.rs //rs/tests/nns:nns_cycles_minting_test
+
+*nns_delegation* //rs/tests/networking:nns_delegation_branch_nns_version_test
+# TODO(NET-1784): add this back
+# //rs/tests/networking:nns_delegation_mainnet_nns_version_test
 
 rs/backup/*.rs //rs/tests/consensus/backup/...
+
+rs/orchestrator/*.rs //rs/tests/consensus/orchestrator/...
+                     //rs/tests/consensus/upgrade/...
 
 *guestos-recovery-engine* //rs/tests/consensus:guestos_recovery_engine_smoke_test
                           //rs/tests/nested/nns_recovery/...
 
 *guestos-recovery-upgrader* //rs/tests/nested/nns_recovery/...
-# TODO(NODE-1707): re-enable this test after next weekly release
-# //rs/tests/nested:recovery_upgrader_test
 
 rs/recovery/src/*.rs //rs/tests/consensus/subnet_recovery/...
                      //rs/tests/consensus:subnet_splitting_test_colocate
@@ -84,3 +94,5 @@ rs/bitcoin/* //rs/tests/ckbtc:btc_adapter_basics_test
              //rs/tests/execution:btc_get_balance_test_colocate
 
 rs/boundary_node/rate_limits/* //rs/tests/boundary_nodes:rate_limit_canister_test
+
+rs/migration_canister/* //rs/tests/execution:canister_migration_test_head_nns

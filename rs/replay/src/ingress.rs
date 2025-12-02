@@ -1,5 +1,5 @@
 use crate::cmd::{
-    AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, WithLedgerAccountCmd, WithNeuronCmd,
+    AddRegistryContentCmd, UpgradeSubnetToReplicaVersionCmd, WithLedgerAccountCmd, WithNeuronCmd,
     WithTrustedNeuronsFollowingNeuronCmd,
 };
 use candid::{Encode, decode_one};
@@ -12,9 +12,9 @@ use ic_nervous_system_common::ledger;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_governance_api::{
-    ManageNeuron, ManageNeuronResponse, Topic,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Topic,
     manage_neuron::{
-        ClaimOrRefresh, Command, Configure, Follow, IncreaseDissolveDelay, NeuronIdOrSubaccount,
+        ClaimOrRefresh, Configure, Follow, IncreaseDissolveDelay, NeuronIdOrSubaccount,
         claim_or_refresh::{By, MemoAndController},
         configure::Operation,
     },
@@ -141,10 +141,10 @@ pub fn cmd_add_neuron(time: Time, cmd: &WithNeuronCmd) -> Result<Vec<IngressWith
         print: None,
     });
 
-    let payload = Encode!(&ManageNeuron {
+    let payload = Encode!(&ManageNeuronRequest {
         id: None,
         neuron_id_or_subaccount: None,
-        command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+        command: Some(ManageNeuronCommandRequest::ClaimOrRefresh(ClaimOrRefresh {
             by: Some(By::MemoAndController(MemoAndController {
                 memo,
                 controller: Some(controller)
@@ -217,12 +217,12 @@ pub fn cmd_make_trusted_neurons_follow_neuron(
 
     for (principal, neuron_id) in trusted_neurons {
         let principal = PrincipalId::from_str(principal).expect("Invalid principal");
-        let follow_payload = Encode!(&ManageNeuron {
+        let follow_payload = Encode!(&ManageNeuronRequest {
             id: None,
             neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
                 id: *neuron_id,
             })),
-            command: Some(Command::Follow(Follow {
+            command: Some(ManageNeuronCommandRequest::Follow(Follow {
                 topic: Topic::Unspecified as i32,
                 followees: [NeuronId { id: cmd.neuron_id }].to_vec(),
             })),
@@ -243,10 +243,10 @@ pub fn cmd_make_trusted_neurons_follow_neuron(
 
     // Increase the neuron's delay
     let user_agent = &agent_with_principal_as_sender(&cmd.neuron_controller)?;
-    let delay_payload = Encode!(&ManageNeuron {
+    let delay_payload = Encode!(&ManageNeuronRequest {
         id: Some(NeuronId { id: cmd.neuron_id }),
         neuron_id_or_subaccount: None,
-        command: Some(Command::Configure(Configure {
+        command: Some(ManageNeuronCommandRequest::Configure(Configure {
             operation: Some(Operation::IncreaseDissolveDelay(IncreaseDissolveDelay {
                 additional_dissolve_delay_seconds: 31560000 // one year
             }))
@@ -296,37 +296,44 @@ pub fn cmd_add_ledger_account(
     ])
 }
 
-/// Creates signed ingress messages to add a new blessed replica version and
-/// potentially updates the subnet record with this replica version.
-pub(crate) fn cmd_add_and_bless_replica_version(
+/// Creates signed ingress messages to potentially add a new blessed replica
+/// version and updates the subnet record with this replica version.
+pub(crate) fn cmd_upgrade_subnet_to_replica_version(
     agent: &Agent,
     player: &crate::player::Player,
-    cmd: &AddAndBlessReplicaVersionCmd,
+    cmd: &UpgradeSubnetToReplicaVersionCmd,
     context_time: Time,
 ) -> Result<Vec<SignedIngress>, String> {
     let replica_version_id = cmd.replica_version_id.clone();
     let replica_version_record =
         serde_json::from_str::<ReplicaVersionRecord>(&cmd.replica_version_value)
             .unwrap_or_else(|err| panic!("Error parsing replica version JSON value: {err:?}"));
-    let mut msgs = vec![
-        add_replica_version(
+
+    let mut msgs = Vec::new();
+
+    if cmd.add_and_bless_replica_version {
+        msgs.push(add_replica_version(
             agent,
             replica_version_id.clone(),
             replica_version_record,
             context_time,
-        )?,
-        bless_replica_version(agent, player, replica_version_id.clone(), context_time)?,
-    ];
-    if cmd.update_subnet_record {
-        let mut subnet_record = player.get_subnet_record(context_time + Duration::from_secs(60))?;
-        subnet_record.replica_version_id = replica_version_id;
-        msgs.push(update_subnet_record(
+        )?);
+        msgs.push(bless_replica_version(
             agent,
-            player.subnet_id,
-            subnet_record,
+            player,
+            replica_version_id.clone(),
             context_time,
         )?);
     }
+
+    let mut subnet_record = player.get_subnet_record(context_time + Duration::from_secs(60))?;
+    subnet_record.replica_version_id = replica_version_id;
+    msgs.push(update_subnet_record(
+        agent,
+        player.subnet_id,
+        subnet_record,
+        context_time,
+    )?);
     Ok(msgs)
 }
 

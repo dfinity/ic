@@ -48,21 +48,21 @@ rust_test_suite(
     data = [
         "//rs/canister_sandbox",
         "//rs/canister_sandbox:sandbox_launcher",
-        "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
+        "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
         "//rs/pocket_ic_server:pocket-ic-server",
         "//rs/rosetta-api/icp:ic-rosetta-api-rosetta-blocks",
         "//rs/rosetta-api/icp/test_utils/sender_canister:ic-sender-canister",
-        "@mainnet_icp_ledger_canister//file",
+        "@mainnet_canisters//:ledger.wasm.gz",
     ],
     env = {
         "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
-        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "ROSETTA_PATH": "$(rootpath //rs/rosetta-api/icp:ic-rosetta-api-rosetta-blocks)",
         "RUST_TEST_THREADS": "4",
         "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
         "IC_SENDER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp/test_utils/sender_canister:ic-sender-canister)",
-        "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
+        "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ledger.wasm.gz)",
     },
     # The test is critical to get resources timely and therefore fails sometimes when run on heavily loaded node.
     # TODO(IDX-2225): reconsider when we will use Remote Execution.

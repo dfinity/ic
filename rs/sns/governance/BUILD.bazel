@@ -4,12 +4,30 @@ load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
+load("//rs/nervous_system/patch_canister_did:defs.bzl", "canister_test_did")
 
 package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "protos",
     srcs = glob(["proto/**/*.proto"]),
+)
+
+exports_files(
+    [
+        "canister/governance.did",
+        "canister/governance_test.did.patch",
+    ],
+    visibility = [
+        "//visibility:public",
+    ],
+)
+
+canister_test_did(
+    name = "test_did",
+    canister_did = "canister/governance.did",
+    canister_test_did_patch = "canister/governance_test.did.patch",
+    output_path = "canister/governance_test.did",
 )
 
 DEPENDENCIES = [
@@ -165,7 +183,7 @@ rust_canister(
     name = "sns-governance-canister",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
-    compile_data = ["canister/governance.did"],
+    compile_data = [":canister/governance.did"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance.did",
     deps = DEPENDENCIES + [
@@ -176,12 +194,14 @@ rust_canister(
 
 rust_canister(
     name = "sns-governance-canister-test",
+    testonly = True,
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
-    compile_data = ["canister/governance_test.did"],
+    compile_data = [":test_did"],
     crate_features = ["test"],
+    did_check = False,  # we don't check in the did so can't meaningfully check
     proc_macro_deps = MACRO_DEPENDENCIES,
-    service_file = ":canister/governance_test.did",
+    service_file = ":test_did",
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance--test_feature",
@@ -208,7 +228,7 @@ rust_test(
 rust_test(
     name = "canister_unit_test",
     srcs = glob(["canister/**/*.rs"]),
-    compile_data = ["canister/governance.did"],
+    compile_data = [":canister/governance.did"],
     crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
@@ -220,7 +240,7 @@ rust_test(
 rust_test(
     name = "canister_test_unit_test",
     srcs = glob(["canister/**/*.rs"]),
-    compile_data = ["canister/governance_test.did"],
+    compile_data = [":test_did"],
     crate_features = ["test"],
     crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,

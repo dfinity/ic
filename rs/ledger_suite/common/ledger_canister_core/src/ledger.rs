@@ -18,7 +18,7 @@ use crate::archive::{ArchivingGuardError, FailedToArchiveBlocks, LedgerArchiving
 use ic_ledger_core::balances::{BalanceError, Balances, BalancesStore};
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, FeeCollector};
 use ic_ledger_core::timestamp::TimeStamp;
-use ic_ledger_core::tokens::TokensType;
+use ic_ledger_core::tokens::{TokensType, Zero};
 use ic_ledger_hash_of::HashOf;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -34,6 +34,7 @@ pub enum TxApplyError<Tokens> {
     ExpiredApproval { now: TimeStamp },
     AllowanceChanged { current_allowance: Tokens },
     SelfApproval,
+    BurnOrMintFee,
 }
 
 impl<Tokens> From<BalanceError<Tokens>> for TxApplyError<Tokens> {
@@ -186,6 +187,10 @@ pub trait LedgerData: LedgerContext {
     fn on_purged_transaction(&mut self, height: BlockIndex);
 
     fn fee_collector_mut(&mut self) -> Option<&mut FeeCollector<Self::AccountId>>;
+
+    fn increment_archiving_failure_metric(&mut self);
+
+    fn get_archiving_failure_metric(&self) -> u64;
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -264,6 +269,9 @@ where
                 TransferError::AllowanceChanged { current_allowance }
             }
             TxApplyError::SelfApproval => TransferError::SelfApproval,
+            TxApplyError::BurnOrMintFee => TransferError::BadFee {
+                expected_fee: L::Tokens::zero(),
+            },
         })?;
 
     let fee_collector = ledger.fee_collector().cloned();
@@ -428,6 +436,10 @@ pub async fn archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone, max_messa
         max_message_size,
     )
     .await;
+
+    if result.is_err() {
+        LA::with_ledger_mut(|ledger| ledger.increment_archiving_failure_metric());
+    }
 
     remove_archived_blocks::<LA>(archiving_guard, num_blocks, &sink, result)
 }

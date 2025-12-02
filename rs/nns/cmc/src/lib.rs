@@ -1,15 +1,11 @@
 #![allow(deprecated)]
+pub use ic_management_canister_types_private::CanisterSettingsArgs;
+
 use candid::{CandidType, Nat};
 use ic_cdk::api::call::{CallResult, RejectionCode};
 use std::time::{Duration, SystemTime};
 
 use dfn_protobuf::{ProtoBuf, ToProto};
-use ic_management_canister_types_private::{
-    // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
-    BoundedControllers,
-    CanisterSettingsArgs as Ic00CanisterSettingsArgs,
-    LogVisibilityV2,
-};
 
 use ic_nervous_system_time_helpers::now_nanoseconds;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
@@ -130,99 +126,6 @@ pub struct CyclesCanisterInitPayload {
 pub struct NotifyTopUp {
     pub block_index: BlockIndex,
     pub canister_id: CanisterId,
-}
-
-// TODO(EXC-1670): remove after migration to `LogVisibilityV2`.
-/// Log visibility for a canister.
-/// ```text
-/// variant {
-///    controllers;
-///    public;
-/// }
-/// ```
-#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
-pub enum LogVisibility {
-    #[default]
-    #[serde(rename = "controllers")]
-    Controllers = 1,
-    #[serde(rename = "public")]
-    Public = 2,
-}
-
-impl From<LogVisibility> for LogVisibilityV2 {
-    fn from(log_visibility: LogVisibility) -> Self {
-        match log_visibility {
-            LogVisibility::Controllers => Self::Controllers,
-            LogVisibility::Public => Self::Public,
-        }
-    }
-}
-
-impl From<LogVisibilityV2> for LogVisibility {
-    fn from(log_visibility: LogVisibilityV2) -> Self {
-        match log_visibility {
-            LogVisibilityV2::Controllers => Self::Controllers,
-            LogVisibilityV2::Public => Self::Public,
-            LogVisibilityV2::AllowedViewers(_) => Self::default(),
-        }
-    }
-}
-
-// TODO(EXC-1687): remove temporary copy of management canister types.
-// It was added to overcome dependency on `LogVisibility` while
-// management canister already migrated to `LogVisibilityV2`.
-/// Struct used for encoding/decoding
-/// `(record {
-///     controllers: opt vec principal;
-///     compute_allocation: opt nat;
-///     memory_allocation: opt nat;
-///     freezing_threshold: opt nat;
-///     reserved_cycles_limit: opt nat;
-///     log_visibility : opt log_visibility;
-///     wasm_memory_limit: opt nat;
-///     wasm_memory_threshold: opt nat;
-/// })`
-#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
-pub struct CanisterSettingsArgs {
-    pub controllers: Option<BoundedControllers>,
-    pub compute_allocation: Option<candid::Nat>,
-    pub memory_allocation: Option<candid::Nat>,
-    pub freezing_threshold: Option<candid::Nat>,
-    pub reserved_cycles_limit: Option<candid::Nat>,
-    pub log_visibility: Option<LogVisibility>,
-    pub wasm_memory_limit: Option<candid::Nat>,
-    pub wasm_memory_threshold: Option<candid::Nat>,
-}
-
-impl From<CanisterSettingsArgs> for Ic00CanisterSettingsArgs {
-    fn from(settings: CanisterSettingsArgs) -> Self {
-        Ic00CanisterSettingsArgs {
-            controllers: settings.controllers,
-            compute_allocation: settings.compute_allocation,
-            memory_allocation: settings.memory_allocation,
-            freezing_threshold: settings.freezing_threshold,
-            reserved_cycles_limit: settings.reserved_cycles_limit,
-            log_visibility: settings.log_visibility.map(LogVisibilityV2::from),
-            wasm_memory_limit: settings.wasm_memory_limit,
-            wasm_memory_threshold: settings.wasm_memory_threshold,
-            environment_variables: None,
-        }
-    }
-}
-
-impl From<Ic00CanisterSettingsArgs> for CanisterSettingsArgs {
-    fn from(settings: Ic00CanisterSettingsArgs) -> Self {
-        CanisterSettingsArgs {
-            controllers: settings.controllers,
-            compute_allocation: settings.compute_allocation,
-            memory_allocation: settings.memory_allocation,
-            freezing_threshold: settings.freezing_threshold,
-            reserved_cycles_limit: settings.reserved_cycles_limit,
-            log_visibility: settings.log_visibility.map(LogVisibility::from),
-            wasm_memory_limit: settings.wasm_memory_limit,
-            wasm_memory_threshold: settings.wasm_memory_threshold,
-        }
-    }
 }
 
 /// Argument taken by create canister notification endpoint

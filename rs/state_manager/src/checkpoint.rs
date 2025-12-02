@@ -488,6 +488,20 @@ impl CheckpointLoader {
         .map_err(|err| self.map_to_checkpoint_error("CanisterQueues".into(), err))
     }
 
+    fn load_refunds(&self) -> Result<ic_replicated_state::RefundPool, CheckpointError> {
+        let _timer = self
+            .metrics
+            .load_checkpoint_step_duration
+            .with_label_values(&["refunds"])
+            .start_timer();
+
+        ic_replicated_state::RefundPool::try_from((
+            self.checkpoint_layout.refunds().deserialize()?,
+            &self.metrics as &dyn CheckpointLoadingMetrics,
+        ))
+        .map_err(|err| self.map_to_checkpoint_error("RefundPool".into(), err))
+    }
+
     fn load_epoch_query_stats(&self) -> Result<RawQueryStats, CheckpointError> {
         let stats = self.checkpoint_layout.stats().deserialize()?;
         if let Some(query_stats) = stats.query_stats {
@@ -654,6 +668,7 @@ pub fn load_checkpoint(
         checkpoint_loader.load_canister_states(&mut thread_pool)?,
         checkpoint_loader.load_system_metadata()?,
         checkpoint_loader.load_subnet_queues()?,
+        checkpoint_loader.load_refunds()?,
         checkpoint_loader.load_epoch_query_stats()?,
         checkpoint_loader.load_canister_snapshots(&mut thread_pool)?,
     ))
@@ -698,6 +713,7 @@ fn validate_eq_checkpoint_internal(
         canister_states,
         metadata,
         subnet_queues,
+        refunds,
         consensus_queue,
         epoch_query_stats,
         canister_snapshots,
@@ -722,6 +738,10 @@ fn validate_eq_checkpoint_internal(
         .load_subnet_queues()
         .unwrap()
         .validate_eq(subnet_queues)?;
+    checkpoint_loader
+        .load_refunds()
+        .unwrap()
+        .validate_eq(refunds)?;
     if checkpoint_loader.load_epoch_query_stats().unwrap() != *epoch_query_stats {
         return Err("query_stats has diverged.".to_string());
     }
@@ -882,6 +902,7 @@ pub fn load_canister_state(
         wasm_chunk_store_data,
         canister_state_bits.wasm_chunk_store_metadata,
         canister_state_bits.log_visibility,
+        canister_state_bits.log_memory_limit,
         canister_state_bits.canister_log,
         canister_state_bits.wasm_memory_limit,
         canister_state_bits.next_snapshot_id,

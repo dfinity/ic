@@ -144,10 +144,10 @@ DATA_DEPS = [
     ":sns-governance-mem-test-canister",
     ":sns-test-dapp-canister",
     "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
-    "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
     "//rs/ledger_suite/icrc1/archive:archive_canister",
     "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
     "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+    "//rs/migration_canister:migration-canister",
     "//rs/nervous_system/common/test_canister",
     "//rs/nns/cmc:cycles-minting-canister",
     "//rs/nns/governance:governance-canister-test",
@@ -162,7 +162,7 @@ DATA_DEPS = [
     "//rs/sns/root:sns-root-canister",
     "//rs/sns/swap:sns-swap-canister",
     "//rs/universal_canister/impl:universal_canister.wasm.gz",
-    "@mainnet_ic-icrc1-ledger//file",
+    "@mainnet_canisters//:sns_ledger.wasm.gz",
 ]
 
 ENV = {
@@ -175,7 +175,6 @@ ENV = {
     "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
     "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     "IC_NERVOUS_SYSTEM_COMMON_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/nervous_system/common/test_canister:test_canister)",
-    "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
     "NODE_REWARDS_CANISTER_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
     "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
@@ -188,7 +187,8 @@ ENV = {
     "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
     "UNSTOPPABLE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/integration_tests:unstoppable-canister)",
     "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
-    "MAINNET_IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
+    "MAINNET_IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath @mainnet_canisters//:sns_ledger.wasm.gz)",
+    "MIGRATION_CANISTER_WASM_PATH": "$(rootpath //rs/migration_canister:migration-canister)",
 }
 
 rust_ic_test_suite_with_extra_srcs(
@@ -272,10 +272,10 @@ rust_ic_test_suite_with_extra_srcs(
     ],
     crate_features = ["test"],
     data = DATA_DEPS + [
-        "@mainnet_sns-swap-canister//file",
+        "@mainnet_canisters//:swap.wasm.gz",
     ],
     env = dict(ENV.items() + [
-        ("MAINNET_SNS_SWAP_CANISTER_WASM_PATH", "$(rootpath @mainnet_sns-swap-canister//file)"),
+        ("MAINNET_SNS_SWAP_CANISTER_WASM_PATH", "$(rootpath @mainnet_canisters//:swap.wasm.gz)"),
     ]),
     extra_srcs = [],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,

@@ -1,12 +1,6 @@
-load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
-
-bool_flag(
-    name = "k8s",
-    build_setting_default = False,
-)
 
 exports_files([
     "assets/vector.toml",
@@ -20,7 +14,6 @@ rust_library(
         "//rs/utils": "utils",
     },
     compile_data = [
-        "//ic-os/components:guestos/generate-ic-config/ic.json5.template",
         ":assets/vector.toml",
     ],
     crate_name = "ic_system_test_driver",
@@ -113,8 +106,6 @@ rust_library(
         "@crate_index//:ic-utils",
         "@crate_index//:itertools",
         "@crate_index//:json5",
-        "@crate_index//:k8s-openapi",
-        "@crate_index//:kube",
         "@crate_index//:lazy_static",
         "@crate_index//:macaddr",
         "@crate_index//:maplit",

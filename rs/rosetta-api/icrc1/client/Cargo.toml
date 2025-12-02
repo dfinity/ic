@@ -24,6 +24,7 @@ ic-rosetta-api = { path = "../../icp" }
 ic-secp256k1 = { path = "../../../../packages/ic-secp256k1" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-bigint = { workspace = true }
+prometheus-parse = { workspace = true }
 reqwest = { workspace = true }
 rosetta-core = { path = "../../common/rosetta_core" }
 serde = { workspace = true }

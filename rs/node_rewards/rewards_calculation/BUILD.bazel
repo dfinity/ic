@@ -6,9 +6,11 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/protobuf",
     "//rs/types/base_types",
+    "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:chrono_canisters",
     "@crate_index//:itertools",
+    "@crate_index//:lazy_static",
     "@crate_index//:maplit",
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",

@@ -106,7 +106,7 @@ pub enum DecryptError {
         secret_key_epoch: Epoch,
     },
     /// One of the forward-secure-encryption chunks failed to decrypt.
-    InvalidChunk,
+    InvalidChunk(String),
     /// Hardware error: This machine cannot handle this request because some
     /// parameter was too large.
     SizeError(SizeError),

@@ -198,7 +198,18 @@ pub async fn start_synching_blocks(
         // Update the account balances. When queried for its status, the ledger will return the
         // highest block index for which the account balances have been processed.
         match storage_client.update_account_balances() {
-            Ok(_) => {}
+            Ok(_) => {
+                // We will only end up here if there are no gaps, the blockchain is synced to the
+                // tip, and the account balances have been updated.
+                let highest_block_index = storage_client
+                    .get_block_with_highest_block_idx()
+                    .unwrap_or(None)
+                    .map(|rosetta_block| rosetta_block.index)
+                    .unwrap_or(0u64);
+                storage_client
+                    .get_metrics()
+                    .set_verified_height(highest_block_index);
+            }
             Err(e) => {
                 error!("Error while updating account balances: {}", e);
                 sync_failed = true;
@@ -266,7 +277,7 @@ pub async fn sync_from_the_tip(
 
     storage_client
         .get_metrics()
-        .set_verified_height(tip_block_index);
+        .set_target_height(tip_block_index);
 
     // The starting point of the synchronization process is either 0 if the database is empty or the highest stored block index plus one.
     // The trailing parent hash is either `None` if the database is empty or the block hash of the block with the highest block index in storage.
@@ -401,13 +412,13 @@ async fn sync_blocks_interval(
 
         // Verify that the fetched blocks are valid.
         // Leading block hash of a non empty fetched blocks can never be `None` -> Unwrap is safe.
-        if !blocks_verifier::is_valid_blockchain(
+        if let Err(error) = blocks_verifier::is_valid_blockchain(
             &fetched_blocks,
             &leading_block_hash.clone().unwrap(),
         ) {
             // Abort synchronization if blockchain is not valid.
             bail!(
-                "The fetched blockchain contains invalid blocks in index range {} to {}",
+                "The fetched blockchain contains invalid blocks in index range {} to {}: {error}",
                 next_index_interval.start(),
                 next_index_interval.end()
             );
@@ -434,6 +445,12 @@ async fn sync_blocks_interval(
         storage_client
             .get_metrics()
             .add_blocks_fetched(number_of_blocks_fetched);
+        // The first iteration of the loop will fetch blocks up to the end of the `sync_range`.
+        // Subsequent iterations will fetch blocks with lower indexes, and calls to
+        // `set_synced_height` will be redundant but harmless.
+        storage_client
+            .get_metrics()
+            .set_synced_height(*sync_range.index_range.end());
         pr.update(number_of_blocks_fetched);
 
         // If the interval of the last iteration started at the target height, then all blocks above and including the target height have been synched.
@@ -554,7 +571,14 @@ async fn fetch_blocks_interval(
                     + index as u64;
                 fetched_blocks_result.insert(
                     block_index,
-                    Some(RosettaBlock::from_generic_block(block, block_index)?),
+                    Some(
+                        RosettaBlock::from_generic_block(block, block_index).map_err(|e| {
+                            let old_context = e.to_string();
+                            e.context(format!(
+                                "Failed to parse block at index {block_index}: {old_context}"
+                            ))
+                        })?,
+                    ),
                 );
             }
 
@@ -651,29 +675,39 @@ pub mod blocks_verifier {
     use serde_bytes::ByteBuf;
     use std::ops::RangeInclusive;
 
-    pub fn is_valid_blockchain(blockchain: &[RosettaBlock], leading_block_hash: &ByteBuf) -> bool {
+    pub fn is_valid_blockchain(
+        blockchain: &[RosettaBlock],
+        leading_block_hash: &ByteBuf,
+    ) -> Result<(), String> {
         if blockchain.is_empty() {
-            return true;
+            return Ok(());
         }
 
         // Check that the leading block has the block hash that is provided.
         // Safe to call unwrap as the blockchain is guaranteed to have at least one element.
         if blockchain.last().unwrap().clone().get_block_hash().clone() != leading_block_hash {
-            return false;
+            return Err(format!(
+                "Invalid block at index {}",
+                blockchain.last().unwrap().clone().index
+            ));
         }
 
         let mut parent_hash = Some(blockchain[0].clone().get_block_hash().clone());
-        // The blockchain has more than one element so it is save to skip the first one.
+        // The blockchain has more than one element so it is safe to skip the first one.
         // The first element cannot be verified so we start at element 2.
         for block in blockchain.iter().skip(1) {
             if block.get_parent_hash() != parent_hash {
-                return false;
+                if block.index == 0 {
+                    return Err("Block with index 0 found at different location".to_string());
+                } else {
+                    return Err(format!("Invalid block at index {}", block.index - 1));
+                }
             }
             parent_hash = Some(block.clone().get_block_hash());
         }
 
         // No invalid blocks were found return true.
-        true
+        Ok(())
     }
 
     /// Checks whether the blocks in the blockchain are a continous subset of the requested indices
@@ -718,14 +752,14 @@ mod tests {
                     rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.encode()),index as u64).unwrap());
                 }
                 // Blockchain is valid and should thus pass the verification.
-                assert!(blocks_verifier::is_valid_blockchain(&rosetta_blocks,&rosetta_blocks.last().map(|block|block.clone().get_block_hash().clone()).unwrap_or_else(|| ByteBuf::from(r#"TestBytes"#))));
+                assert!(blocks_verifier::is_valid_blockchain(&rosetta_blocks,&rosetta_blocks.last().map(|block|block.clone().get_block_hash().clone()).unwrap_or_else(|| ByteBuf::from(r#"TestBytes"#))).is_ok());
 
                 // There is no point in shuffling the blockchain if it has length zero.
                 if num_blocks > 0 {
                     // If shuffled, the blockchain is no longer in order and thus no longer valid.
                     rosetta_blocks.shuffle(&mut rand::thread_rng());
                     let shuffled_blocks = rosetta_blocks.to_vec();
-                    assert!(!blocks_verifier::is_valid_blockchain(&shuffled_blocks,&rosetta_blocks.last().unwrap().clone().get_block_hash().clone())|| num_blocks<=1||rosetta_blocks==shuffled_blocks);
+                    assert!(blocks_verifier::is_valid_blockchain(&shuffled_blocks,&rosetta_blocks.last().unwrap().clone().get_block_hash().clone()).is_err()|| num_blocks<=1||rosetta_blocks==shuffled_blocks);
                 }
 
             }

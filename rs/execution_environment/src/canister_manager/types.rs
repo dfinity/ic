@@ -16,9 +16,8 @@ use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
 };
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, InvalidComputeAllocationError,
-    InvalidMemoryAllocationError, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
-    SnapshotId, SubnetId,
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    PrincipalId, SnapshotId, SubnetId,
     ingress::IngressStatus,
     messages::{CanisterCall, MessageId, RejectContext},
 };
@@ -259,46 +258,16 @@ impl InstallCodeContext {
 /// an [`InstallCodeContext`].
 #[derive(Debug)]
 pub enum InstallCodeContextError {
-    ComputeAllocation(InvalidComputeAllocationError),
-    MemoryAllocation(InvalidMemoryAllocationError),
     InvalidHash(String),
 }
 
 impl From<InstallCodeContextError> for UserError {
     fn from(err: InstallCodeContextError) -> Self {
         match err {
-            InstallCodeContextError::ComputeAllocation(err) => UserError::new(
-                ErrorCode::CanisterContractViolation,
-                format!(
-                    "ComputeAllocation expected to be in the range [{}..{}], got {}",
-                    err.min(),
-                    err.max(),
-                    err.given()
-                ),
-            ),
-            InstallCodeContextError::MemoryAllocation(err) => UserError::new(
-                ErrorCode::CanisterContractViolation,
-                format!(
-                    "MemoryAllocation expected to be in the range [{}..{}], got {}",
-                    err.min, err.max, err.given
-                ),
-            ),
             InstallCodeContextError::InvalidHash(err) => {
                 UserError::new(ErrorCode::CanisterContractViolation, err)
             }
         }
-    }
-}
-
-impl From<InvalidComputeAllocationError> for InstallCodeContextError {
-    fn from(err: InvalidComputeAllocationError) -> Self {
-        Self::ComputeAllocation(err)
-    }
-}
-
-impl From<InvalidMemoryAllocationError> for InstallCodeContextError {
-    fn from(err: InvalidMemoryAllocationError) -> Self {
-        Self::MemoryAllocation(err)
     }
 }
 
@@ -347,12 +316,6 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
     }
 }
 
-/// Indicates whether `uninstall_canister` should push a canister change (with a given change origin) to canister history.
-pub enum AddCanisterChangeToHistory {
-    Yes(CanisterChangeOrigin),
-    No,
-}
-
 pub(crate) struct UploadChunkResult {
     pub(crate) reply: UploadChunkReply,
     pub(crate) heap_delta_increase: NumBytes,
@@ -365,6 +328,7 @@ pub(crate) enum CanisterManagerError {
         controllers_expected: BTreeSet<PrincipalId>,
         controller_provided: PrincipalId,
     },
+    CallerNotAuthorized,
     CanisterAlreadyExists(CanisterId),
     CanisterIdAlreadyExists(CanisterId),
     CanisterNotFound(CanisterId),
@@ -387,10 +351,6 @@ pub(crate) enum CanisterManagerError {
     DeleteCanisterSelf(CanisterId),
     DeleteCanisterQueueNotEmpty(CanisterId),
     SenderNotInWhitelist(PrincipalId),
-    NotEnoughMemoryAllocationGiven {
-        memory_allocation_given: MemoryAllocation,
-        memory_usage_needed: NumBytes,
-    },
     CreateCanisterNotEnoughCycles {
         sent: Cycles,
         required: Cycles,
@@ -453,6 +413,15 @@ pub(crate) enum CanisterManagerError {
         canister_id: CanisterId,
         snapshot_id: SnapshotId,
     },
+    CanisterSnapshotNotController {
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+    },
+    CanisterSnapshotNotLoadable {
+        canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+    },
     CanisterSnapshotExecutionStateNotFound {
         canister_id: CanisterId,
     },
@@ -498,6 +467,21 @@ pub(crate) enum CanisterManagerError {
     EnvironmentVariablesValueTooLong {
         value: String,
         max_value_length: usize,
+    },
+    CanisterMetadataNoWasmModule {
+        canister_id: CanisterId,
+    },
+    CanisterMetadataSectionNotFound {
+        canister_id: CanisterId,
+        section_name: String,
+    },
+    CanisterLogMemoryLimitIsTooLow {
+        bytes: NumBytes,
+        limit: NumBytes,
+    },
+    CanisterLogMemoryLimitIsTooHigh {
+        bytes: NumBytes,
+        limit: NumBytes,
     },
 }
 
@@ -559,10 +543,6 @@ impl AsErrorHelp for CanisterManagerError {
                 in the meantime stop the canister."
                     .to_string(),
                 doc_link: doc_ref("delete-canister-queue-not-empty"),
-            },
-            CanisterManagerError::NotEnoughMemoryAllocationGiven { .. } => ErrorHelp::UserError {
-                suggestion: "Try increasing the canister's memory allocation.".to_string(),
-                doc_link: doc_ref("not-enough-memory-allocation-given"),
             },
             CanisterManagerError::CreateCanisterNotEnoughCycles { .. } => ErrorHelp::UserError {
                 suggestion: "Try sending more cycles with the request.".to_string(),
@@ -646,6 +626,20 @@ impl AsErrorHelp for CanisterManagerError {
                         .to_string(),
                 doc_link: doc_ref("canister-snapshot-invalid-ownership"),
             },
+            CanisterManagerError::CanisterSnapshotNotController { .. } => {
+                ErrorHelp::UserError {
+                    suggestion: "Make sure you are a controller of the canister that the snapshot belongs to."
+                        .to_string(),
+                    doc_link: "canister-snapshot-not-controller".to_string(),
+                }
+            }
+            CanisterManagerError::CanisterSnapshotNotLoadable { .. } => {
+                ErrorHelp::UserError {
+                    suggestion: "Snapshot is not currently loadable on the specified canister. Try again later. The call should succeed if you wait sufficiently long (usually ten minutes)."
+                        .to_string(),
+                    doc_link: "canister-snapshot-not-loadable".to_string(),
+                }
+            }
             CanisterManagerError::CanisterSnapshotExecutionStateNotFound { .. } => {
                 ErrorHelp::UserError {
                     suggestion: "".to_string(),
@@ -719,6 +713,26 @@ impl AsErrorHelp for CanisterManagerError {
             },
             CanisterManagerError::EnvironmentVariablesValueTooLong { .. } => ErrorHelp::UserError {
                 suggestion: "Shorten the environment variable value to fit within the allowed limit.".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::CanisterMetadataNoWasmModule { .. } => ErrorHelp::UserError {
+                suggestion: "If you are a controller of the canister, install a Wasm module containing a metadata section with the given name.".to_string(),
+                doc_link: "canister-metadata-no-wasm-module".to_string(),
+            },
+            CanisterManagerError::CanisterMetadataSectionNotFound { .. } => ErrorHelp::UserError {
+                suggestion: "If you are a controller of the canister, install a Wasm module containing a metadata section with the given name.".to_string(),
+                doc_link: "canister-metadata-section-not-found".to_string(),
+            },
+            CanisterManagerError::CallerNotAuthorized => ErrorHelp::UserError {
+                suggestion: "The caller is not authorized to call this method.".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::CanisterLogMemoryLimitIsTooLow { .. } => ErrorHelp::UserError {
+                suggestion: "Set a higher canister log memory limit.".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::CanisterLogMemoryLimitIsTooHigh { .. } => ErrorHelp::UserError {
+                suggestion: "Set a lower canister log memory limit.".to_string(),
                 doc_link: "".to_string(),
             },
         }
@@ -834,15 +848,6 @@ impl From<CanisterManagerError> for UserError {
                     String::from("Sender not authorized to use method."),
                 )
             }
-            NotEnoughMemoryAllocationGiven {
-                memory_allocation_given,
-                memory_usage_needed,
-            } => Self::new(
-                ErrorCode::InsufficientMemoryAllocation,
-                format!(
-                    "Canister was given {memory_allocation_given} memory allocation but at least {memory_usage_needed} of memory is needed.{additional_help}",
-                ),
-            ),
             CreateCanisterNotEnoughCycles { sent, required } => Self::new(
                 ErrorCode::InsufficientCyclesForCreateCanister,
                 format!(
@@ -1007,6 +1012,27 @@ impl From<CanisterManagerError> for UserError {
                 ErrorCode::CanisterSnapshotImmutable,
                 "Only canister snapshots created by metadata upload can be mutated.".to_string(),
             ),
+            CanisterSnapshotNotController {
+                sender,
+                canister_id,
+                snapshot_id,
+            } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "Only a controller of the canister that snapshot {} belongs to can load it on canister {}. Sender: {}.{additional_help}",
+                    snapshot_id, canister_id, sender,
+                ),
+            ),
+            CanisterSnapshotNotLoadable {
+                canister_id,
+                snapshot_id,
+            } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "Snapshot {} is not currently loadable on the specified canister {}. Try again later. The call should succeed if you wait sufficiently long (usually ten minutes).",
+                    snapshot_id, canister_id,
+                ),
+            ),
             LongExecutionAlreadyInProgress { canister_id } => Self::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
@@ -1072,6 +1098,37 @@ impl From<CanisterManagerError> for UserError {
                 ErrorCode::InvalidManagementPayload,
                 format!(
                     "Environment variable value \"{value}\" exceeds the maximum allowed length of {max_value_length}."
+                ),
+            ),
+            CanisterMetadataNoWasmModule { canister_id } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "The canister {canister_id} has no Wasm module and hence no metadata is available."
+                ),
+            ),
+            CanisterMetadataSectionNotFound {
+                canister_id,
+                section_name,
+            } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "The canister {canister_id} has no metadata section with the name {section_name}."
+                ),
+            ),
+            CallerNotAuthorized => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                "The caller is not authorized to call this method.".to_string(),
+            ),
+            CanisterLogMemoryLimitIsTooLow { bytes, limit } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "The canister log memory limit {bytes} is too low. It must be at least {limit}."
+                ),
+            ),
+            CanisterLogMemoryLimitIsTooHigh { bytes, limit } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "The canister log memory limit {bytes} is too high. It must be at most {limit}."
                 ),
             ),
         }

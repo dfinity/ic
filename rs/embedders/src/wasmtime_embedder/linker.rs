@@ -300,20 +300,20 @@ pub fn syscalls<
     /// Calculate logging charge bytes based on message size and remaining space in canister log.
     fn logging_charge_bytes(
         caller: &mut Caller<'_, StoreData>,
-        message_num_bytes: u64,
-    ) -> Result<u64, anyhow::Error> {
-        let capacity = with_system_api(caller, |s| Ok(s.canister_log().capacity()))?;
-        let remaining_space = with_system_api(caller, |s| Ok(s.canister_log().remaining_space()))?;
-        let allocated_num_bytes = message_num_bytes.min(capacity as u64);
-        let transmitted_num_bytes = message_num_bytes.min(remaining_space as u64);
+        message_num_bytes: usize,
+    ) -> Result<usize, anyhow::Error> {
+        let byte_capacity = with_system_api(caller, |s| Ok(s.canister_log().byte_capacity()))?;
+        let remaining_bytes = with_system_api(caller, |s| Ok(s.canister_log().remaining_bytes()))?;
+        let allocated_num_bytes = message_num_bytes.min(byte_capacity);
+        let transmitted_num_bytes = message_num_bytes.min(remaining_bytes);
         // LINT.IfChange
         // The cost of logging is proportional to the size of the message, but is limited
-        // by the log capacity and the remaining space in the log.
+        // by the log byte capacity and the remaining bytes in the log.
         // The cost is calculated as follows:
         // - the allocated bytes (x2 to account for adding new message and removing the oldest one)
         //   - this must be in sync with `CanisterLog::add_record()` from `ic_management_canister_types_private`
         // - the transmitted bytes (multiplied by the cost factor) for sending the payload to the replica.
-        Ok(2 * allocated_num_bytes + BYTE_TRANSMISSION_COST_FACTOR as u64 * transmitted_num_bytes)
+        Ok(2 * allocated_num_bytes + BYTE_TRANSMISSION_COST_FACTOR * transmitted_num_bytes)
         // LINT.ThenChange(logging_charge_bytes_rule)
     }
 
@@ -637,16 +637,14 @@ pub fn syscalls<
     linker
         .func_wrap("ic0", "debug_print", {
             move |mut caller: Caller<'_, StoreData>, offset: I, length: I| {
-                let length: u64 = length.try_into().expect("Failed to convert I to u64");
-                let mut num_bytes = 0;
-                num_bytes += logging_charge_bytes(&mut caller, length)?;
+                let length: usize = length.try_into().expect("Failed to convert I to usize");
+                let mut num_bytes = logging_charge_bytes(&mut caller, length)?;
                 let debug_print_is_enabled = debug_print_is_enabled(&mut caller, &feature_flags)?;
                 if debug_print_is_enabled {
                     num_bytes += length;
                 }
-                charge_for_cpu_and_mem(&mut caller, overhead::DEBUG_PRINT, num_bytes as usize)?;
+                charge_for_cpu_and_mem(&mut caller, overhead::DEBUG_PRINT, num_bytes)?;
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
-                let length = length as usize;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.save_log_message(offset, length, memory);
                     if debug_print_is_enabled {
@@ -664,7 +662,8 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>, offset: I, length: I| -> Result<(), _> {
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
                 let length: usize = length.try_into().expect("Failed to convert I to usize");
-                charge_for_cpu_and_mem(&mut caller, overhead::TRAP, length)?;
+                let num_bytes = length + logging_charge_bytes(&mut caller, length)?;
+                charge_for_cpu_and_mem(&mut caller, overhead::TRAP, num_bytes)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_trap(offset, length, memory)
                 })
@@ -1226,6 +1225,24 @@ pub fn syscalls<
                     s.ic0_cost_http_request(request_size, max_res_bytes, dst, memory)
                 })
                 .map_err(|e| anyhow::Error::msg(format!("ic0_cost_http_request failed: {e}")))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "cost_http_request_v2", {
+            move |mut caller: Caller<'_, StoreData>, params_src: I, params_size: I, dst: I| {
+                charge_for_cpu(&mut caller, overhead::COST_HTTP_REQUEST_V2)?;
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    let params_src: usize =
+                        params_src.try_into().expect("Failed to convert I to usize");
+                    let params_size: usize = params_size
+                        .try_into()
+                        .expect("Failed to convert I to usize");
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                    s.ic0_cost_http_request_v2(params_src, params_size, dst, memory)
+                })
+                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_http_request_v2 failed: {e}")))
             }
         })
         .unwrap();

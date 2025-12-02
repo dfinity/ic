@@ -26,7 +26,7 @@ const IC0_TRAP_ERROR: &str =
 
 const IC0_TRAP_BACKTRACE: &str = r#"
 Canister Backtrace:
-ic_cdk_executor::set_panic_hook::{{closure}}::{{closure}}
+ic_cdk_executor::machinery::setup_panic_hook::{{closure}}::{{closure}}
 std::panicking::rust_panic_with_hook
 std::panicking::begin_panic_handler::{{closure}}
 std::sys::backtrace::__rust_end_short_backtrace
@@ -35,7 +35,8 @@ core::panicking::panic_fmt
 _wasm_backtrace_canister::ic0_trap::inner_2
 _wasm_backtrace_canister::ic0_trap::inner
 _wasm_backtrace_canister::ic0_trap::outer
-ic_cdk_executor::in_executor_context
+_wasm_backtrace_canister::ic0_trap
+ic_cdk_executor::machinery::in_tracking_executor_context
 canister_update ic0_trap
 "#;
 
@@ -228,7 +229,7 @@ fn backtrace_test_stable_oob() {
         "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped: ",
         r#"stable memory out of bounds
 Canister Backtrace:
-ic0::sys::stable64_write
+stable64_write
 _wasm_backtrace_canister::stable_oob::inner_2
 _wasm_backtrace_canister::stable_oob::inner
 _wasm_backtrace_canister::stable_oob::outer

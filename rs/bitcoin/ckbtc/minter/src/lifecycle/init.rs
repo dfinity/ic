@@ -1,7 +1,7 @@
-use crate::Network;
 use crate::lifecycle::upgrade::UpgradeArgs;
 pub use crate::state::Mode;
 use crate::state::{CkBtcMinterState, replace_state};
+use crate::{CanisterRuntime, Network};
 use candid::{CandidType, Deserialize};
 use ic_base_types::CanisterId;
 use serde::Serialize;
@@ -70,8 +70,15 @@ pub struct InitArgs {
     pub get_utxos_cache_expiration_seconds: Option<u64>,
 }
 
-pub fn init(args: InitArgs) {
+pub fn init<R: CanisterRuntime>(args: InitArgs, runtime: &R) {
+    use crate::logs::Priority;
+    use canlog::log;
+
+    log!(
+        Priority::Info,
+        "[init]: Initializing canister with args {args:?}"
+    );
     let state: CkBtcMinterState = CkBtcMinterState::from(args);
-    state.validate_config();
+    runtime.validate_config(&state);
     replace_state(state);
 }

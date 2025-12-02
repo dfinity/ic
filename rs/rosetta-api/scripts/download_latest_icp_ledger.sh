@@ -3,6 +3,7 @@ set -uo pipefail
 
 ### Configuration
 RELEASE_TAG_PREFIX=ledger-suite-icp
+# FIXME(FI-1845): Update to the new wasm file name after the next release
 WASM_FILE=ledger-canister_notify-method.wasm.gz
 DID_FILE=ledger.did
 

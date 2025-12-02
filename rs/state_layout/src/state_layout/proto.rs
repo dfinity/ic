@@ -6,6 +6,7 @@ use ic_protobuf::{
         canister_state_bits::v1 as pb_canister_state_bits,
     },
 };
+use ic_types::DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT;
 
 impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
     fn from(item: CanisterStateBits) -> Self {
@@ -24,7 +25,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             )
             .into(),
             execution_state_bits: item.execution_state_bits.as_ref().map(|v| v.into()),
-            memory_allocation: item.memory_allocation.bytes().get(),
+            memory_allocation: item.memory_allocation.pre_allocated_bytes().get(),
             wasm_memory_threshold: Some(item.wasm_memory_threshold.get()),
             freeze_threshold: item.freeze_threshold.get(),
             cycles_balance: Some(item.cycles_balance.into()),
@@ -59,6 +60,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             total_query_stats: Some((&item.total_query_stats).into()),
             log_visibility_v2: pb_canister_state_bits::LogVisibilityV2::from(&item.log_visibility)
                 .into(),
+            log_memory_limit: item.log_memory_limit.get(),
             canister_log_records: item
                 .canister_log
                 .records()
@@ -143,9 +145,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .unwrap_or_default()
             .into(),
             execution_state_bits,
-            memory_allocation: MemoryAllocation::new_unchecked(NumBytes::from(
-                value.memory_allocation,
-            )),
+            memory_allocation: MemoryAllocation::from(NumBytes::from(value.memory_allocation)),
             wasm_memory_threshold: NumBytes::new(value.wasm_memory_threshold.unwrap_or(0)),
             freeze_threshold: NumSeconds::from(value.freeze_threshold),
             cycles_balance,
@@ -193,7 +193,10 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::log_visibility_v2",
             )
             .unwrap_or_default(),
-            canister_log: CanisterLog::new(
+            // TODO(EXC-2118): remove this temporary code of setting the log memory limit to default value,
+            // read properly from `NumBytes::from(value.log_memory_limit)`.
+            log_memory_limit: NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64),
+            canister_log: CanisterLog::new_aggregate(
                 value.next_canister_log_record_idx,
                 value
                     .canister_log_records

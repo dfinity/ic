@@ -99,7 +99,7 @@ fn map_threshold_sign_error_or_panic(
             // if a call to `load_transcript`, which inserts a key in the secret key store,
             // runs concurrently with an invocation of `retain_active_keys`, which removes keys
             // associated with past epochs, it could happen that the inserted key is immediately
-            // removed after insertion, even though it releates to a future epoch. In this case
+            // removed after insertion, even though it relates to a future epoch. In this case
             // calling again `load_transcript` may help reinserting the key in the key store.
             // Note that this is unexpected since consensus waits for past calls to
             // `retain_active_keys` to terminate before loading new transcripts.

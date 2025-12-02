@@ -125,27 +125,29 @@ impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
             .processed_block_hashes
             .observe(request.processed_block_hashes.len() as f64);
 
+        let anchor_height = self
+            .state
+            .get_cached_header(&request.anchor)
+            .map_or(0, |cached| cached.data.height);
+
         // Spawn persist-to-disk task without waiting for it to finish, and make sure there
         // is only one task running at a time.
-        let cache = self.state.header_cache.clone();
         let mut handle = self.pruning_task_handle.lock().unwrap();
         let is_finished = handle
             .as_ref()
             .map(|handle| handle.is_finished())
             .unwrap_or(true);
         if is_finished {
-            *handle = Some(tokio::task::spawn_blocking(move || {
-                // Error is ignored, since it is a background task
-                let _ = cache.persist_and_prune_headers_below_anchor(request.anchor);
-            }));
+            self.metrics
+                .prune_headers_anchor_height
+                .set(anchor_height as i64);
+            *handle = Some(
+                self.state
+                    .persist_and_prune_headers_below_anchor(request.anchor),
+            );
         }
 
         let (blocks, next, obsolete_blocks) = {
-            let anchor_height = self
-                .state
-                .get_cached_header(&request.anchor)
-                .map_or(0, |cached| cached.data.height);
-
             let allow_multiple_blocks = self.network.are_multiple_blocks_allowed(anchor_height);
             let blocks = get_successor_blocks(
                 &self.state,

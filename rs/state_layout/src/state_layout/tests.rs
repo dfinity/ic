@@ -13,6 +13,7 @@ use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::{ids::canister_test_id, ids::user_test_id};
+use ic_types::DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT;
 use ic_types::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask};
 use ic_types::time::UNIX_EPOCH;
 use itertools::Itertools;
@@ -55,7 +56,8 @@ fn default_canister_state_bits() -> CanisterStateBits {
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
         total_query_stats: TotalQueryStats::default(),
         log_visibility: Default::default(),
-        canister_log: Default::default(),
+        log_memory_limit: NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64),
+        canister_log: CanisterLog::default_aggregate(),
         wasm_memory_limit: None,
         next_snapshot_id: 0,
         snapshots_memory_usage: NumBytes::from(0),
@@ -499,7 +501,7 @@ fn test_can_remove_unverified_marker_file_twice() {
         let state_layout = StateLayout::try_new(log, root_path, &metrics_registry).unwrap();
 
         let height = Height::new(1);
-        let state_sync_scratchpad = state_layout.state_sync_scratchpad(height).unwrap();
+        let state_sync_scratchpad = state_layout.state_sync_scratchpad(height);
         let scratchpad_layout =
             CheckpointLayout::<RwPolicy<()>>::new_untracked(state_sync_scratchpad, height)
                 .expect("failed to create checkpoint layout");

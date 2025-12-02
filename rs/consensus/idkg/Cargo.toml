@@ -26,6 +26,7 @@ ic-types = { path = "../../types/types" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
 rand = { workspace = true }
+rayon = { workspace = true }
 slog = { workspace = true }
 
 [dev-dependencies]
@@ -33,6 +34,7 @@ assert_matches = { workspace = true }
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-consensus-mocks = { path = "../mocks" }
 ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
+ic-crypto-test-utils-crypto-returning-ok = { path = "../../crypto/test_utils/crypto_returning_ok" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-registry-client-fake = { path = "../../registry/fake" }

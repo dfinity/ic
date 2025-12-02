@@ -33,7 +33,7 @@ use ic_types::{
 use std::sync::Arc;
 
 /// CatchUpPackage maker is responsible for creating beacon shares
-pub struct CatchUpPackageMaker {
+pub(crate) struct CatchUpPackageMaker {
     replica_config: ReplicaConfig,
     membership: Arc<Membership>,
     crypto: Arc<dyn ConsensusCrypto>,

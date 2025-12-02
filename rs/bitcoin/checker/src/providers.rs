@@ -1,7 +1,7 @@
 use crate::BtcNetwork;
 use ic_btc_interface::Txid;
-use ic_cdk::api::management_canister::http_request::{
-    CanisterHttpRequestArgument, HttpHeader, HttpMethod, TransformContext, TransformFunc,
+use ic_cdk::management_canister::{
+    HttpHeader, HttpMethod, HttpRequestArgs, TransformContext, TransformFunc,
 };
 use std::cell::RefCell;
 use std::fmt;
@@ -86,7 +86,7 @@ impl Provider {
         &self,
         txid: Txid,
         max_response_bytes: u32,
-    ) -> Result<CanisterHttpRequestArgument, String> {
+    ) -> Result<HttpRequestArgs, String> {
         match (self.provider_id, &self.btc_network) {
             (_, BtcNetwork::Regtest { json_rpc_url }) => {
                 make_post_request(json_rpc_url, txid, max_response_bytes)
@@ -113,20 +113,21 @@ impl Provider {
     }
 }
 
-fn btcscan_request(txid: Txid, max_response_bytes: u32) -> CanisterHttpRequestArgument {
+fn btcscan_request(txid: Txid, max_response_bytes: u32) -> HttpRequestArgs {
     let host = "btcscan.org";
     let url = format!("https://{host}/api/tx/{txid}/raw");
     let request_headers = vec![HttpHeader {
         name: "User-Agent".to_string(),
         value: "bitcoin_inputs_collector".to_string(),
     }];
-    CanisterHttpRequestArgument {
+    HttpRequestArgs {
         url: url.to_string(),
         method: HttpMethod::GET,
         body: None,
         max_response_bytes: Some(max_response_bytes as u64),
         transform: param_transform(),
         headers: request_headers,
+        is_replicated: None,
     }
 }
 
@@ -135,20 +136,21 @@ fn make_get_request(
     network: &BtcNetwork,
     txid: Txid,
     max_response_bytes: u32,
-) -> CanisterHttpRequestArgument {
+) -> HttpRequestArgs {
     let url = match network {
         BtcNetwork::Mainnet => format!("https://{host}/api/tx/{txid}/raw"),
         BtcNetwork::Testnet => format!("https://{host}/testnet/api/tx/{txid}/raw"),
         BtcNetwork::Regtest { .. } => panic!("Request to regtest network requires POST"),
     };
     let request_headers = vec![];
-    CanisterHttpRequestArgument {
+    HttpRequestArgs {
         url: url.to_string(),
         method: HttpMethod::GET,
         body: None,
         max_response_bytes: Some(max_response_bytes as u64),
         transform: param_transform(),
         headers: request_headers,
+        is_replicated: None,
     }
 }
 
@@ -156,23 +158,24 @@ fn make_post_request(
     json_rpc_url: &str,
     txid: Txid,
     max_response_bytes: u32,
-) -> Result<CanisterHttpRequestArgument, String> {
+) -> Result<HttpRequestArgs, String> {
     let (url, header) = parse_authorization_header_from_url(json_rpc_url)?;
     let body = format!("{{\"method\": \"gettransaction\", \"params\": [\"{txid}\"]}}");
-    Ok(CanisterHttpRequestArgument {
+    Ok(HttpRequestArgs {
         url: url.to_string(),
         method: HttpMethod::POST,
         body: Some(body.as_bytes().to_vec()),
         max_response_bytes: Some(max_response_bytes as u64),
         transform: param_transform(),
         headers: vec![header],
+        is_replicated: None,
     })
 }
 
 fn param_transform() -> Option<TransformContext> {
     Some(TransformContext {
         function: TransformFunc(candid::Func {
-            principal: ic_cdk::api::id(),
+            principal: ic_cdk::api::canister_self(),
             method: "transform".to_string(),
         }),
         context: vec![],

@@ -24,7 +24,6 @@ prost = { workspace = true }
 reqwest = { workspace = true }
 regex = { workspace = true }
 slog = { workspace = true }
-url = { workspace = true }
 
 [lib]
 name = "nested"

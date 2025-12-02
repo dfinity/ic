@@ -6,9 +6,6 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 system_test(
     name = "compute_allocation_test",
     env = UNIVERSAL_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/config",
@@ -27,9 +24,6 @@ system_test(
 system_test(
     name = "cycles_restrictions_test",
     env = UNIVERSAL_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
@@ -45,7 +39,6 @@ system_test(
     name = "cycles_cost_schedule_test",
     env = NNS_CANISTER_ENV | UNIVERSAL_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",
     ],
     runtime_deps = NNS_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
@@ -72,9 +65,6 @@ system_test(
     srcs = glob(["general_execution_tests/*.rs"]),
     crate_root = "general_execution_test.rs",
     env = UNIVERSAL_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/config",
@@ -110,9 +100,6 @@ system_test(
     srcs = glob(["inter_canister_queries_tests/*.rs"]),
     crate_root = "inter_canister_queries_test.rs",
     env = UNIVERSAL_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
@@ -129,9 +116,6 @@ system_test(
 system_test(
     name = "max_number_of_canisters_test",
     env = UNIVERSAL_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
@@ -144,11 +128,37 @@ system_test(
     ],
 )
 
+system_test_nns(
+    name = "canister_migration_test",
+    enable_mainnet_nns_variant = False,
+    env = UNIVERSAL_CANISTER_ENV,
+    tags = [
+        "long_test",
+    ],
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-utils",
+        "@crate_index//:serde",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-util",
+    ],
+)
+
 system_test(
     name = "system_api_security_test",
-    tags = [
-        "k8s",
-    ],
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
@@ -164,9 +174,6 @@ system_test(
 system_test(
     name = "system_subnets_test",
     env = UNIVERSAL_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
@@ -239,7 +246,6 @@ system_test_nns(
     flaky = True,  # flakiness rate of over 3% over the month from 2025-02-11 till 2025-03-11 only for the //rs/tests/execution:btc_get_balance_test_head_nns variant.
     tags = [
         "colocate",
-        "k8s",
         "long_test",  # the P90 duration was over 7 minutes for the week starting on 2025-08-25.
     ],
     runtime_deps =

@@ -2,7 +2,7 @@
 use aide::{
     axum::{
         ApiRouter, IntoApiResponse,
-        routing::{get, post},
+        routing::{delete, get, post},
     },
     openapi::{Info, OpenApi},
 };
@@ -17,6 +17,7 @@ use axum::{
 };
 use axum_server::Handle;
 use clap::Parser;
+use ic_admin::get_routing_table;
 use ic_canister_sandbox_backend_lib::{
     RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG,
     canister_sandbox_main, compiler_sandbox::compiler_sandbox_main,
@@ -25,29 +26,33 @@ use ic_canister_sandbox_backend_lib::{
 use ic_crypto_iccsa::{public_key_bytes_from_der, types::SignatureBytes, verify};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
+use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_types::SubnetId;
 use libc::{RLIMIT_NOFILE, getrlimit, rlimit, setrlimit};
 use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCanisterSigArg};
 use pocket_ic_server::BlobStore;
-use pocket_ic_server::state_api::routes::handler_read_graph;
+use pocket_ic_server::state_api::routes::{handler_prune_graph, handler_read_graph};
 use pocket_ic_server::state_api::{
     routes::{AppState, RouterExt, http_gateway_routes, instances_routes, status},
     state::{ApiState, PocketIcApiStateBuilder},
 };
-use std::collections::HashMap;
+use std::cmp::max;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::Write;
 use std::io::{self, Error};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 use tokio::sync::mpsc::channel;
-use tokio::time::{Duration, Instant};
 use tower_http::trace::TraceLayer;
 use tracing::{debug, error, info};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::EnvFilter;
+use url::Url;
 
 const TTL_SEC: u64 = 60;
 // axum logs rejections from built-in extractors with the `axum::rejection`
@@ -55,6 +60,8 @@ const TTL_SEC: u64 = 60;
 const DEFAULT_LOG_LEVELS: &str = "pocket_ic_server=info,tower_http=info,axum::rejection=trace";
 const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
+
+static MAINNET_ROUTING_TABLE: &[u8] = include_bytes!("mainnet_routing_table.json");
 
 #[derive(Parser)]
 #[clap(name = "pocket-ic-server")]
@@ -75,6 +82,13 @@ struct Args {
     /// The time-to-live of the PocketIC server in seconds
     #[clap(long, default_value_t = TTL_SEC)]
     ttl: u64,
+    /// A json file storing the mainnet routing table.
+    #[clap(long)]
+    mainnet_routing_table: Option<PathBuf>,
+    /// Specifies to fetch the mainnet routing table from the mainnet registry
+    /// and write it to the file path specified as `--mainnet-routing-table`.
+    #[clap(long, default_value_t = false, requires = "mainnet_routing_table")]
+    fetch_mainnet_routing_table: bool,
 }
 
 /// Get the path of the current running binary.
@@ -198,12 +212,43 @@ async fn start(runtime: Arc<Runtime>) {
         .build();
     // A time-to-live mechanism: Requests bump this value, and the server
     // gracefully shuts down when the value wasn't bumped for a while.
-    let min_alive_until = Arc::new(RwLock::new(Instant::now()));
+    let min_alive_until = Arc::new(AtomicU64::new(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64,
+    ));
+    let mainnet_routing_table_json = if args.fetch_mainnet_routing_table {
+        let nns_url = Url::parse("https://icp0.io").unwrap();
+        let (routing_table, _) = get_routing_table(vec![nns_url]);
+        let routing_table_json = serde_json::to_string_pretty(&routing_table).unwrap();
+        // `#[clap(long, default_value_t = false, requires = "mainnet_routing_table")]`
+        // ensures that the mainnet routing table file path is specified.
+        let mainnet_routing_table_path = args.mainnet_routing_table.unwrap();
+        std::fs::write(mainnet_routing_table_path, &routing_table_json)
+            .expect("Failed to write mainnet routing table file");
+        routing_table_json.into_bytes()
+    } else if let Some(mainnet_routing_table_path) = args.mainnet_routing_table {
+        std::fs::read(mainnet_routing_table_path)
+            .expect("Failed to read mainnet routing table file")
+    } else {
+        MAINNET_ROUTING_TABLE.to_vec()
+    };
+    let mainnet_routing_table_vec: Vec<(CanisterIdRange, SubnetId)> =
+        serde_json::from_slice(&mainnet_routing_table_json)
+            .expect("Failed to parse mainnet routing table");
+    let mainnet_routing_table = RoutingTable::try_from(
+        mainnet_routing_table_vec
+            .into_iter()
+            .collect::<BTreeMap<_, _>>(),
+    )
+    .expect("Failed to build mainnet routing table");
     let app_state = AppState {
         api_state,
         pending_requests: Arc::new(AtomicU64::new(0)),
         min_alive_until,
         runtime,
+        mainnet_routing_table,
         blob_store: Arc::new(InMemoryBlobStore::new()),
     };
 
@@ -225,7 +270,13 @@ async fn start(runtime: Arc<Runtime>) {
         .directory_route("/verify_signature", post(verify_signature))
         //
         // Read state: Poll a result based on a received Started{} reply.
-        .directory_route("/read_graph/{state_label}/{op_id}", get(handler_read_graph))
+        .route("/read_graph/{state_label}/{op_id}", get(handler_read_graph))
+        //
+        // Prune state: Prune a result after successful polling based on a received Started{} reply.
+        .route(
+            "/prune_graph/{state_label}/{op_id}",
+            delete(handler_prune_graph),
+        )
         //
         // All instance routes.
         .nest("/instances", instances_routes::<AppState>())
@@ -265,12 +316,15 @@ async fn start(runtime: Arc<Runtime>) {
     // This is a safeguard against orphaning this child process.
     tokio::spawn(async move {
         loop {
-            let pending_requests = app_state.pending_requests.load(Ordering::Relaxed);
-            let guard = app_state.min_alive_until.read().await;
-            if pending_requests == 0 && guard.elapsed() > Duration::from_secs(args.ttl) {
+            let pending_requests = app_state.pending_requests.load(Ordering::SeqCst);
+            let min_alive_until =
+                UNIX_EPOCH + Duration::from_nanos(app_state.min_alive_until.load(Ordering::SeqCst));
+            let elapsed = SystemTime::now()
+                .duration_since(min_alive_until)
+                .unwrap_or_default();
+            if pending_requests == 0 && elapsed > Duration::from_secs(args.ttl) {
                 break;
             }
-            drop(guard);
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
 
@@ -398,6 +452,42 @@ fn create_file<P: AsRef<std::path::Path>>(file_path: P) -> std::io::Result<File>
         .open(&file_path)
 }
 
+struct PendingGuard {
+    pending_requests: Arc<AtomicU64>,
+    min_alive_until: Arc<AtomicU64>,
+}
+
+impl PendingGuard {
+    fn new(pending_requests: Arc<AtomicU64>, min_alive_until: Arc<AtomicU64>) -> Self {
+        pending_requests.fetch_add(1, Ordering::SeqCst);
+        Self {
+            pending_requests,
+            min_alive_until,
+        }
+    }
+}
+
+impl Drop for PendingGuard {
+    fn drop(&mut self) {
+        // TTL should not decrease: If now is later
+        // than the current TTL (from previous requests), reset it.
+        // Otherwise, a previous request set a larger TTL and we don't
+        // touch it.
+        let alive_until = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        self.min_alive_until
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |min_alive_until| {
+                Some(max(min_alive_until, alive_until))
+            })
+            .unwrap();
+        // Only mark the pending request as completed (by subtracting the counter)
+        // *after* updating TTL!
+        self.pending_requests.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
 async fn bump_last_request_timestamp(
     State(AppState {
         pending_requests,
@@ -407,22 +497,8 @@ async fn bump_last_request_timestamp(
     request: http::Request<axum::body::Body>,
     next: Next,
 ) -> impl IntoApiResponse {
-    pending_requests.fetch_add(1, Ordering::Relaxed);
-    let resp = next.run(request).await;
-    // TTL should not decrease: If now is later
-    // than the current TTL (from previous requests), reset it.
-    // Otherwise, a previous request set a larger TTL and we don't
-    // touch it.
-    let alive_until = Instant::now();
-    let mut min_alive_until = min_alive_until.write().await;
-    if *min_alive_until < alive_until {
-        *min_alive_until = alive_until;
-    }
-    drop(min_alive_until);
-    // Only mark the pending request as completed (by subtracting the counter)
-    // *after* updating TTL!
-    pending_requests.fetch_sub(1, Ordering::Relaxed);
-    resp
+    let _guard = PendingGuard::new(pending_requests.clone(), min_alive_until.clone());
+    next.run(request).await
 }
 
 async fn get_blob_store_entry(

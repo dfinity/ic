@@ -12,8 +12,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use candid::{CandidType, Principal};
-use ic_bn_lib::http::{Client as HttpClient, proxy};
-pub use ic_bn_lib::types::RequestType;
+use ic_bn_lib::http::proxy;
+use ic_bn_lib_common::traits::http::Client as HttpClient;
 use ic_types::{CanisterId, SubnetId, messages::ReplicaHealthStatus};
 use serde::Deserialize;
 use url::Url;
@@ -21,7 +21,7 @@ use url::Url;
 use crate::{
     core::ANONYMOUS_PRINCIPAL,
     errors::{ApiError, ErrorCause},
-    http::error_infer,
+    http::{RequestType, error_infer},
     persist::Routes,
     snapshot::{RegistrySnapshot, Subnet},
 };
@@ -262,13 +262,11 @@ pub(crate) mod test {
         StatusCode,
         header::{CONTENT_TYPE, HeaderName, HeaderValue, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS},
     };
-    use ic_bn_lib::{
-        http::headers::{
-            X_IC_CANISTER_ID, X_IC_METHOD_NAME, X_IC_NODE_ID, X_IC_REQUEST_TYPE, X_IC_SENDER,
-            X_IC_SUBNET_ID, X_IC_SUBNET_TYPE,
-        },
-        principal,
+    use ic_bn_lib::http::headers::{
+        X_IC_CANISTER_ID, X_IC_METHOD_NAME, X_IC_NODE_ID, X_IC_REQUEST_TYPE, X_IC_SENDER,
+        X_IC_SUBNET_ID, X_IC_SUBNET_TYPE,
     };
+    use ic_bn_lib_common::principal;
     use ic_types::{
         PrincipalId,
         messages::{
@@ -602,7 +600,7 @@ pub(crate) mod test {
         assert_header(&headers, X_IC_SENDER, &sender.to_string());
         assert_header(&headers, X_IC_CANISTER_ID, &canister_id.to_string());
         assert_header(&headers, X_IC_METHOD_NAME, "foobar");
-        assert_header(&headers, X_IC_REQUEST_TYPE, "query");
+        assert_header(&headers, X_IC_REQUEST_TYPE, "query_v2");
         assert_header(&headers, CONTENT_TYPE, "application/cbor");
         assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
         assert_header(&headers, X_FRAME_OPTIONS, "DENY");

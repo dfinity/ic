@@ -60,6 +60,9 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     /// Critical error for attempting to execute new message
     /// while already in progress a long-running message.
     pub(crate) long_execution_already_in_progress: IntCounter,
+    /// Critical error for attempting to load a canister snapshot
+    /// when the snapshot exists but there is no associated canister.
+    pub(crate) snapshot_exists_without_associated_canister: IntCounter,
 
     /// Metrics for HTTP outcalls costs.
     /// This is
@@ -127,6 +130,7 @@ impl ExecutionEnvironmentMetrics {
                 "Total number of intra-subnet messages that exceed the 2 MiB limit for inter-subnet messages."
             ),
             long_execution_already_in_progress: metrics_registry.error_counter("execution_environment_long_execution_already_in_progress"),
+            snapshot_exists_without_associated_canister: metrics_registry.error_counter("execution_environment_snapshot_exists_without_associated_canister"),
             // The minimum price of an outcall is ~50 million cycles, while the maximum price is ~30 billion.
             http_outcalls_metrics: HttpOutcallMetrics {
                 old_price: metrics_registry.histogram(
@@ -279,6 +283,7 @@ impl ExecutionEnvironmentMetrics {
                 let speed_label = match method_name {
                     ic00::Method::CanisterStatus
                     | ic00::Method::CanisterInfo
+                    | ic00::Method::CanisterMetadata
                     | ic00::Method::CreateCanister
                     | ic00::Method::DeleteCanister
                     | ic00::Method::DepositCycles

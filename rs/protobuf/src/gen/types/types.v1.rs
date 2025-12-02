@@ -630,6 +630,13 @@ pub mod canister_http_response_message {
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpArtifact {
+    #[prost(message, optional, tag = "1")]
+    pub share: ::core::option::Option<CanisterHttpShare>,
+    #[prost(message, optional, tag = "2")]
+    pub response: ::core::option::Option<CanisterHttpResponse>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgPayload {
     #[prost(message, repeated, tag = "1")]
     pub signature_agreements: ::prost::alloc::vec::Vec<CompletedSignature>,
@@ -1623,6 +1630,21 @@ pub struct GetIngressMessageInBlockRequest {
 pub struct GetIngressMessageInBlockResponse {
     #[prost(bytes = "vec", tag = "1")]
     pub ingress_message: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetIDkgDealingInBlockRequest {
+    #[prost(uint32, tag = "1")]
+    pub node_index: u32,
+    #[prost(message, optional, tag = "2")]
+    pub dealing_id: ::core::option::Option<IDkgArtifactId>,
+    #[prost(message, optional, tag = "3")]
+    pub block_proposal_id: ::core::option::Option<ConsensusMessageId>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetIDkgDealingInBlockResponse {
+    #[prost(message, optional, tag = "1")]
+    pub signed_dealing:
+        ::core::option::Option<super::super::registry::subnet::v1::IDkgSignedDealingTuple>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StrippedBlockProposal {

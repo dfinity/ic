@@ -120,7 +120,7 @@ fn start_bitcoind<T: RpcClientType>(network: T) -> Daemon<T> {
     let name = format!("{}_CORE_PATH", T::NAME.to_uppercase());
     let path = std::env::var(&name).unwrap_or_else(|_| panic!("Failed to get {name} env variable"));
 
-    Daemon::new(&path, network, conf).unwrap()
+    Daemon::new(&path, network, conf)
 }
 
 fn start_client<T: RpcClientType>(
@@ -876,7 +876,7 @@ fn test_receives_blocks_from_forks<T: RpcClientType + Into<AdapterNetwork>>() {
     wait_for_blocks(client2, 26);
 
     let anchor = client1.get_block_hash(0).unwrap()[..].to_vec();
-    let blocks = sync_blocks::<T>(&adapter_client, &mut vec![], anchor, 29, 201);
+    let blocks = sync_blocks::<T>(&adapter_client, &mut vec![], anchor, 29, 400);
     assert_eq!(blocks.len(), 29);
 }
 

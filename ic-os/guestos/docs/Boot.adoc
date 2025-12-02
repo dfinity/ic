@@ -193,7 +193,7 @@ This service initializes configuration in +/run/config/config.json+ from the boo
 == IC node bootstrap
 
 Service: +bootstrap-ic-node.service+, depends on +mount-config.service+ and +init-config.service+ and requires
-+/boot/config+, +/mnt/config+, +/var/lib/ic/data+, and +/var/lib/ic/crypto+ mounts.
++/boot/config+,  +/var/lib/ic/data+, and +/var/lib/ic/crypto+ mounts.
 
 This service is only executed once on first boot after provisioning.
 It looks for

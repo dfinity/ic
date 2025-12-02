@@ -1,34 +1,64 @@
 name: PocketIC Windows
 on:
-  pull_request:
-    paths:
-      - .github/workflows/pocket-ic-tests-windows.yml
-      - packages/pocket-ic/**
-      - rs/pocket_ic_server/**
-  schedule:
-    - cron: "0 1 * * *"
-
-# runs for the same workflow are cancelled on PRs but not on master
-# explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
-concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+  # called from ci-main and schedule-daily workflows
+  workflow_call:
+    inputs:
+      commit-sha:
+        description: The commit sha to run the CI on
+        required: true
+        type: string
 
 jobs:
+  run-pocket-ic-tests:
+    name: Check Run PocketIC Tests
+    runs-on: ubuntu-latest
+    outputs:
+      run-pocket-ic-tests: ${{ steps.set-output.outputs.run-pocket-ic-tests }}
+    steps:
+      - name: Filter Relevant Files
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          filters: |
+            pocket-ic:
+              - .github/workflows/pocket-ic-tests-windows.yml
+              - packages/pocket-ic/**
+              - rs/pocket_ic_server/**
+      - name: Check Run Conditions
+        id: set-output
+        shell: bash
+        run: |
+          set -euo pipefail
+          # if it is a pull request, only run if relevant files changed
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            if [ "${{ steps.filter.outputs.pocket-ic }}" == "true" ]; then
+              echo "run-pocket-ic-tests=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "run-pocket-ic-tests=false" >> "$GITHUB_OUTPUT"
+            fi
+          # for any other event (like triggered by a schedule), run regardless of changed files
+          else
+            echo "run-pocket-ic-tests=true" >> "$GITHUB_OUTPUT"
+          fi
+
   bazel-build-pocket-ic:
     name: Bazel Build PocketIC
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:503d484ffb0be9be3a713ce1c94b1e2c8dd4903fc0e8a522fa3f1275b86a56e6
+      image: ghcr.io/dfinity/ic-build@sha256:86c24b5b717519527920d3b720906f91723514d63acddcbaeb27ecf4144aeb37
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     timeout-minutes: 90
     runs-on:
       labels: dind-large
+    needs: [run-pocket-ic-tests]
+    if: ${{ needs.run-pocket-ic-tests.outputs.run-pocket-ic-tests == 'true' }}
     steps:
-      - name: Checkout
+      - &checkout
+        name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+          ref: ${{ inputs.commit-sha }}
       - name: Build PocketIC server
         run: |
           bazel build //rs/pocket_ic_server:pocket-ic-server
@@ -55,11 +85,10 @@ jobs:
   pocket-ic-lint-on-windows:
     name: PocketIC Lint on Windows
     runs-on: windows-2022
+    needs: [run-pocket-ic-tests]
+    if: ${{ needs.run-pocket-ic-tests.outputs.run-pocket-ic-tests == 'true' }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      - *checkout
       - name: Linting
         run: |
           cargo clippy -p pocket-ic --locked --all-features --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off -A clippy::uninlined_format_args
@@ -69,10 +98,7 @@ jobs:
     needs: [bazel-build-pocket-ic]
     runs-on: windows-2022
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      - *checkout
       - name: Download PocketIC server
         uses: actions/download-artifact@v4
         with:

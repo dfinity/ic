@@ -5,9 +5,12 @@ use ic_protobuf::registry::subnet::v1::{
     CanisterCyclesCostSchedule, ChainKeyConfig, KeyConfig, SubnetRecord, SubnetType,
 };
 use ic_protobuf::types::v1 as pb_types;
+use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
+use std::sync::Arc;
 use std::time::Duration;
 
 /// A crypto component set up in a temporary directory and using [`OsRng`]. The
@@ -485,7 +488,7 @@ pub mod internal {
         }
     }
 
-    impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable> BasicSigner<T>
+    impl<C: CryptoServiceProvider + Send + Sync, R: CryptoComponentRng, T: Signable> BasicSigner<T>
         for TempCryptoComponentGeneric<C, R>
     {
         fn sign_basic(
@@ -1222,4 +1225,14 @@ impl NodeKeysToGenerate {
             ..Self::none()
         }
     }
+}
+
+pub fn temp_crypto_component_with_fake_registry(node_id: NodeId) -> TempCryptoComponent {
+    let empty_fake_registry = Arc::new(FakeRegistryClient::new(Arc::new(
+        ProtoRegistryDataProvider::new(),
+    )));
+    TempCryptoComponent::builder()
+        .with_registry(empty_fake_registry)
+        .with_node_id(node_id)
+        .build()
 }

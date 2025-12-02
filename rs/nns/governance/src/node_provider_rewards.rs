@@ -43,6 +43,7 @@ pub(crate) fn latest_node_provider_rewards() -> Option<ArchivedMonthlyNodeProvid
         if len == 0 {
             return None;
         }
+        // Since len > 0, len - 1 will not underflow.
         log.get(len - 1)
     })
 }
@@ -96,6 +97,9 @@ mod test {
             maximum_node_provider_rewards_e8s: None,
             registry_version: None,
             node_providers: vec![],
+            start_date: None,
+            end_date: None,
+            algorithm_version: None,
         };
 
         let rewards_2 = MonthlyNodeProviderRewards {
@@ -106,6 +110,9 @@ mod test {
             maximum_node_provider_rewards_e8s: None,
             registry_version: None,
             node_providers: vec![],
+            start_date: None,
+            end_date: None,
+            algorithm_version: None,
         };
 
         // Assert empty on start

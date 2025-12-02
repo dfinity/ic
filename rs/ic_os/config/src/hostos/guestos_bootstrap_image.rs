@@ -1,7 +1,6 @@
 use crate::serialize_and_write_config;
 use anyhow::{Context, Result, bail};
 use config_types::GuestOSConfig;
-use std::env;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -24,8 +23,9 @@ pub struct BootstrapOptions {
     /// IC_PREP_OUT_PATH/ic_registry_local_store
     pub ic_registry_local_store: Option<PathBuf>,
 
-    /// NNS public key file.
-    pub nns_public_key: Option<PathBuf>,
+    /// NNS public key override file.
+    #[cfg(feature = "dev")]
+    pub nns_public_key_override: Option<PathBuf>,
 
     /// Should point to a directory with files containing the authorized ssh
     /// keys for specific user accounts on the machine. The name of the
@@ -66,12 +66,9 @@ impl BootstrapOptions {
             .context("Failed to set output file size")?;
 
         // Format the disk image as FAT
-        // mkfs.vfat is usually in /usr/sbin which is not always in the PATH
-        let path_with_usr_sbin = format!("/usr/sbin:{}", env::var("PATH").unwrap_or_default());
-        if !Command::new("mkfs.vfat")
+        if !Command::new("/usr/sbin/mkfs.vfat")
             .arg("-n")
             .arg("CONFIG")
-            .env("PATH", path_with_usr_sbin)
             .arg(out_file)
             .status()
             .context("Failed to execute mkfs.vfat command")?
@@ -107,27 +104,12 @@ impl BootstrapOptions {
                 .context("Failed to write guestos config to config.json")?;
         }
 
-        if let Some(nns_public_key) = &self.nns_public_key {
-            fs::copy(
-                nns_public_key,
-                bootstrap_dir.path().join("nns_public_key.pem"),
-            )
-            .context("Failed to copy NNS public key")?;
-        }
-
         if let Some(node_operator_private_key) = &self.node_operator_private_key {
             fs::copy(
                 node_operator_private_key,
                 bootstrap_dir.path().join("node_operator_private_key.pem"),
             )
             .context("Failed to copy node operator private key")?;
-        }
-
-        #[cfg(feature = "dev")]
-        if let Some(accounts_ssh_authorized_keys) = &self.accounts_ssh_authorized_keys {
-            let target_dir = bootstrap_dir.path().join("accounts_ssh_authorized_keys");
-            Self::copy_dir_recursively(accounts_ssh_authorized_keys, &target_dir)
-                .context("Failed to copy SSH authorized keys")?;
         }
 
         if let Some(ic_crypto) = &self.ic_crypto {
@@ -148,6 +130,29 @@ impl BootstrapOptions {
                 &bootstrap_dir.path().join("ic_registry_local_store"),
             )
             .context("Failed to copy registry local store")?;
+        }
+
+        #[cfg(feature = "dev")]
+        {
+            if let Some(nns_public_key_override) = &self.nns_public_key_override {
+                fs::copy(
+                    nns_public_key_override,
+                    bootstrap_dir.path().join("nns_public_key_override.pem"),
+                )
+                .context("Failed to copy NNS public key override")?;
+                // NODE-1653: remove once rolled out to all nodes. Exists to pass downgrade tests
+                fs::copy(
+                    nns_public_key_override,
+                    bootstrap_dir.path().join("nns_public_key.pem"),
+                )
+                .context("Failed to copy NNS public key")?;
+            }
+
+            if let Some(accounts_ssh_authorized_keys) = &self.accounts_ssh_authorized_keys {
+                let target_dir = bootstrap_dir.path().join("accounts_ssh_authorized_keys");
+                Self::copy_dir_recursively(accounts_ssh_authorized_keys, &target_dir)
+                    .context("Failed to copy SSH authorized keys")?;
+            }
         }
 
         if !Command::new("tar")
@@ -192,12 +197,6 @@ impl BootstrapOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use config_types::{
-        DeploymentEnvironment, GuestOSUpgradeConfig, GuestVMType, ICOSSettings, Ipv6Config,
-        NetworkSettings,
-    };
-    use std::net::Ipv6Addr;
-    use std::str::FromStr;
 
     #[test]
     fn test_build_bootstrap_config_image_succeeds_with_default_options() {
@@ -228,7 +227,15 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "dev")]
     fn test_build_bootstrap_tar_with_all_options() -> Result<()> {
+        use config_types::{
+            DeploymentEnvironment, GuestOSUpgradeConfig, GuestVMType, ICOSSettings, Ipv6Config,
+            NetworkSettings,
+        };
+        use std::net::Ipv6Addr;
+        use std::str::FromStr;
+
         let tmp_dir = tempfile::tempdir()?;
         let out_file = tmp_dir.path().join("bootstrap.tar");
 
@@ -247,7 +254,6 @@ mod tests {
                 node_reward_type: None,
                 mgmt_mac: Default::default(),
                 deployment_environment: DeploymentEnvironment::Mainnet,
-                logging: Default::default(),
                 use_nns_public_key: false,
                 nns_urls: vec![],
                 use_node_operator_private_key: false,
@@ -264,8 +270,8 @@ mod tests {
             recovery_config: Default::default(),
         };
 
-        let nns_key_path = test_files_dir.join("nns.pem");
-        fs::write(&nns_key_path, "test_nns_key")?;
+        let nns_key_override_path = test_files_dir.join("nns_public_key_override.pem");
+        fs::write(&nns_key_override_path, "test_nns_key")?;
 
         let node_key_path = test_files_dir.join("node.pem");
         fs::write(&node_key_path, "test_node_key")?;
@@ -289,7 +295,7 @@ mod tests {
         // Create full configuration
         let bootstrap_options = BootstrapOptions {
             guestos_config: Some(guestos_config.clone()),
-            nns_public_key: Some(nns_key_path),
+            nns_public_key_override: Some(nns_key_override_path),
             node_operator_private_key: Some(node_key_path),
             #[cfg(feature = "dev")]
             accounts_ssh_authorized_keys: Some(ssh_keys_dir),
@@ -315,7 +321,7 @@ mod tests {
             serde_json::to_string_pretty(&guestos_config)?
         );
         assert_eq!(
-            fs::read_to_string(extract_dir.join("nns_public_key.pem"))?,
+            fs::read_to_string(extract_dir.join("nns_public_key_override.pem"))?,
             "test_nns_key"
         );
         assert_eq!(
@@ -340,11 +346,5 @@ mod tests {
         );
 
         Ok(())
-    }
-
-    #[test]
-    fn ensure_tested_with_dev() {
-        // Ensure that the test is run with the dev feature enabled.
-        assert!(cfg!(feature = "dev"));
     }
 }

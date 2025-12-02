@@ -9,8 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-- Whitelisted the migration canister to call `migrate_canisters`
-
 ## Changed
 
 ## Deprecated

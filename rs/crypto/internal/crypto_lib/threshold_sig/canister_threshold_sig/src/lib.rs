@@ -691,6 +691,20 @@ impl From<&ExtendedDerivationPath> for DerivationPath {
     }
 }
 
+impl From<ExtendedDerivationPath> for DerivationPath {
+    fn from(extended_derivation_path: ExtendedDerivationPath) -> Self {
+        // We use generalized derivation for all path bytestrings after prepending
+        // the caller's principal. It means only big-endian encoded 4-byte values
+        // less than 2^31 are compatible with BIP-32 non-hardened derivation path.
+        Self::new(
+            std::iter::once(extended_derivation_path.caller.to_vec())
+                .chain(extended_derivation_path.derivation_path)
+                .map(crate::signing::key_derivation::DerivationIndex)
+                .collect::<Vec<_>>(),
+        )
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ThresholdEcdsaGenerateSigShareInternalError {
     InvalidArguments(String),

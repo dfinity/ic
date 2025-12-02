@@ -17,6 +17,7 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/types/types",
+    "//rs/utils",
     "@crate_index//:hex",
     "@crate_index//:prometheus",
     "@crate_index//:rand",

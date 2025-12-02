@@ -5,6 +5,7 @@ use crate::metrics::{
     LABEL_UPLOAD, LABEL_URL_PARSE,
 };
 use core::convert::TryFrom;
+use futures::TryFutureExt;
 use http::{HeaderName, HeaderValue, Uri, header::USER_AGENT};
 use http_body_util::{BodyExt, Full};
 use hyper::body::Incoming;
@@ -22,7 +23,7 @@ use ic_https_outcalls_service::{
     HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse,
     https_outcalls_service_server::HttpsOutcallsService,
 };
-use ic_logger::{ReplicaLogger, debug};
+use ic_logger::{ReplicaLogger, debug, info};
 use ic_metrics::MetricsRegistry;
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
 use rand::{seq::SliceRandom, thread_rng};
@@ -57,7 +58,6 @@ type Cache =
 
 pub struct CanisterHttp {
     client: Client<HttpsConnector<HttpConnector>, OutboundRequestBody>,
-    socks_client: Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>,
     cache: Arc<RwLock<Cache>>,
     logger: ReplicaLogger,
     metrics: AdapterMetrics,
@@ -71,27 +71,6 @@ impl CanisterHttp {
         http_connector.enforce_http(false);
         http_connector
             .set_connect_timeout(Some(Duration::from_secs(config.http_connect_timeout_secs)));
-        // The proxy connnector requires a the URL scheme to be specified. I.e socks5://
-        // Config validity check ensures that url includes scheme, host and port.
-        // Therefore the parse 'Uri' will be in the correct format. I.e socks5://somehost.com:1080
-        let proxy_connector = SocksConnector {
-            proxy_addr: config
-                .socks_proxy
-                .parse()
-                .expect("Failed to parse socks url."),
-            auth: None,
-            connector: http_connector.clone(),
-        };
-        let proxied_builder = HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .expect("Failed to set native roots");
-        #[cfg(not(feature = "http"))]
-        let proxied_builder = proxied_builder.https_only();
-        #[cfg(feature = "http")]
-        let proxied_builder = proxied_builder.https_or_http();
-        let proxied_https_connector = proxied_builder
-            .enable_all_versions()
-            .wrap_connector(proxy_connector);
 
         // Https client setup.
         let builder = HttpsConnectorBuilder::new()
@@ -105,15 +84,12 @@ impl CanisterHttp {
         let builder = builder.enable_all_versions();
         let direct_https_connector = builder.wrap_connector(http_connector);
 
-        let socks_client =
-            Client::builder(TokioExecutor::new()).build::<_, Full<Bytes>>(proxied_https_connector);
         let client = Client::builder(TokioExecutor::new())
             .http2_max_header_list_size(MAX_HEADER_LIST_SIZE)
             .build::<_, Full<Bytes>>(direct_https_connector);
 
         Self {
             client,
-            socks_client,
             cache: Arc::new(RwLock::new(BTreeMap::new())),
             logger,
             metrics: AdapterMetrics::new(metrics),
@@ -340,82 +316,43 @@ impl HttpsOutcallsService for CanisterHttp {
             .map(|(name, value)| name.as_str().len() + value.len())
             .sum::<usize>();
 
-        // For the moment, if there are socks proxy address in the request, it means that we should try via them
-        // in case the direct connection fails.
-        // Otherwise, we should use the config address as a backup
-        // This is temporary until we open some of the API boundary nodes to the app subnets too.
-        let http_resp = if !req.socks_proxy_addrs.is_empty() {
-            // System subnet
-            // Http request does not implement clone. So we have to manually construct a clone.
-            let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
-            *http_req.headers_mut() = headers;
-            *http_req.method_mut() = method;
-            *http_req.uri_mut() = uri.clone();
-            let http_req_clone = http_req.clone();
+        // Http request does not implement clone. So we have to manually construct a clone.
+        let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
+        *http_req.headers_mut() = headers;
+        *http_req.method_mut() = method;
+        *http_req.uri_mut() = uri.clone();
+        let http_req_clone = http_req.clone();
 
-            match self.client.request(http_req).await {
-                // If we fail we try with the socks proxy. For destinations that are ipv4 only this should
+        let http_resp = self
+            .client
+            .request(http_req)
+            .or_else(|direct_err| async move {
+                // If we fail, we try with the socks proxy. For destinations that are ipv4 only this should
                 // fail fast because our interface does not have an ipv4 assigned.
-                Err(direct_err) => {
-                    self.metrics.requests_socks.inc();
-                    self.do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone)
-                        .await
-                        .map_err(|socks_err| {
+                self.metrics.requests_socks.inc();
+                info!(
+                    self.logger,
+                    "Direct connection failed, trying via socks proxies with addsrs: {:?}",
+                    req.socks_proxy_addrs
+                );
+                self.do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone)
+                    .await
+                    .map_err(|socks_err| {
+                        self.metrics
+                            .request_errors
+                            .with_label_values(&[LABEL_CONNECT])
+                            .inc();
+                        Status::new(
+                            tonic::Code::Unavailable,
                             format!(
-                                "Request failed direct connect {direct_err:?} and connect through socks {socks_err:?}"
-                            )
-                        })
-                }
-                Ok(resp) => Ok(resp),
-            }
-        } else {
-            // Application subnet.
-            // TODO: as technically socks proxies are now tried all the time, instead of using
-            // the "socks_proxy_allowed" flag, we should instead send the relevant URLs in the
-            // "socks_proxy_addrs" param. Particularly, the caller should send the API BNs in
-            // the case of system subnets, and the socks5.ic0.app URL in the case of app subnets.
-            let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
-            *http_req.headers_mut() = headers;
-            *http_req.method_mut() = method;
-            *http_req.uri_mut() = uri.clone();
-            let http_req_clone = http_req.clone();
-            match self.client.request(http_req).await {
-                Ok(http_resp) => Ok(http_resp),
-                Err(direct_err) => {
-                    self.metrics.requests_socks.inc();
-                    self.socks_client
-                        .request(http_req_clone)
-                        .await
-                        .map_err(|socks_err| {
-                            format!(
-                                "Request failed direct connect {direct_err:?} \
-                                and connect through socks {socks_err:?}. \
-                                (Please note that the canister HTTPS outcalls feature \
-                                is an IPv6-only feature. \
-                                While IPv4 is an experimental feature, \
-                                it cannot be relied upon for this functionality. \
-                                For more information, please consult \
-                                the Internet Computer developer documentation)"
-                            )
-                        })
-                }
-            }
-        }
-        .map_err(|err| {
-            debug!(self.logger, "Failed to connect: {}", err);
-            self.metrics
-                .request_errors
-                .with_label_values(&[LABEL_CONNECT])
-                .inc();
-            Status::new(
-                tonic::Code::Unavailable,
-                format!(
-                    "Connecting to {:.50} failed: {}",
-                    uri.host().unwrap_or(""),
-                    err,
-                ),
-            )
-        })?;
+                                "Connecting to {:.50} failed: direct connect {direct_err:?} 
+                                and connect through socks {socks_err:?}",
+                                uri.host().unwrap_or(""),
+                            ),
+                        )
+                    })
+            })
+            .await?;
         self.metrics
             .network_traffic
             .with_label_values(&[LABEL_UPLOAD])

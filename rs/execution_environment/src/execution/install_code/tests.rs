@@ -1,6 +1,7 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_error_types::{ErrorCode, UserError};
+use ic_interfaces::execution_environment::MessageMemoryUsage;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
     CanisterInstallModeV2, EmptyBlob, InstallChunkedCodeArgs, InstallChunkedCodeArgsLegacy,
@@ -10,7 +11,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store;
-use ic_replicated_state::{ExecutionTask, MessageMemoryUsage, ReplicatedState};
+use ic_replicated_state::{ExecutionTask, ReplicatedState};
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status, get_reply,
 };
@@ -334,9 +335,15 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
     // only a few canisters.
     let available_wasm_custom_sections_memory = 1024; // 1 KiB
 
+    let canister_history_memory_for_creation =
+        size_of::<CanisterChange>() + size_of::<PrincipalId>();
+    let canister_history_memory_for_install = size_of::<CanisterChange>();
+    let canister_history_memory_per_canister =
+        canister_history_memory_for_creation + canister_history_memory_for_install;
     // This value might need adjustment if something changes in the canister's
     // wasm that gets installed in the test.
-    let total_memory_taken_per_canister_in_bytes = 364441;
+    let total_memory_taken_per_canister_in_bytes =
+        364441 + canister_history_memory_per_canister as i64;
 
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000_000)
@@ -372,24 +379,11 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
         iterations += 1;
     }
 
-    // One more request to install a canister with wasm custom sections should fail.
-    let canister_id = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
-        .unwrap();
-
-    let payload = InstallCodeArgs {
-        mode: CanisterInstallMode::Install,
-        canister_id: canister_id.get(),
-        wasm_module: include_bytes!("../../../tests/test-data/custom_sections.wasm").to_vec(),
-        arg: vec![],
-        sender_canister_version: None,
-    };
-    let result = test.subnet_message(Method::InstallCode, payload.encode());
-
-    assert!(result.is_err());
     assert_eq!(
-        test.subnet_available_memory().get_execution_memory(),
-        subnet_available_memory_before - iterations * total_memory_taken_per_canister_in_bytes
+        test.subnet_available_memory().get_execution_memory()
+            + iterations * total_memory_taken_per_canister_in_bytes
+            + canister_history_memory_for_creation as i64,
+        subnet_available_memory_before
     );
 }
 
@@ -621,7 +615,7 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
     let canister_history_memory_usage = size_of::<CanisterChange>() + size_of::<PrincipalId>();
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         ic_config::execution_environment::Config::default().default_freeze_threshold,
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         NumBytes::new(canister_history_memory_usage as u64),
         MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),

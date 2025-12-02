@@ -1,10 +1,10 @@
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_index_ng::{GetBlocksResponse, IndexArg, InitArg as IndexInitArg, Log, Status};
 use ic_icrc1_ledger::{FeatureFlags, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_state_machine_tests::{StateMachine, WasmResult};
+use ic_ledger_suite_state_machine_helpers::get_logs;
+use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::Account;
 #[cfg(feature = "icrc3_disabled")]
 use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
@@ -59,11 +59,15 @@ pub fn default_archive_options() -> ArchiveOptions {
 
 #[allow(dead_code)]
 pub fn index_ng_wasm() -> Vec<u8> {
-    ic_test_utilities_load_wasm::load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ic-icrc1-index-ng",
-        &[],
-    )
+    let index_ng_wasm_path = std::env::var("IC_ICRC1_INDEX_NG_WASM_PATH").expect(
+        "The Index-ng wasm path must be set using the env variable IC_ICRC1_INDEX_NG_WASM_PATH",
+    );
+    std::fs::read(&index_ng_wasm_path).unwrap_or_else(|e| {
+        panic!(
+            "failed to load Wasm file from path {} (env var IC_ICRC1_INDEX_NG_WASM_PATH): {}",
+            index_ng_wasm_path, e
+        )
+    })
 }
 
 pub fn install_ledger(
@@ -91,6 +95,29 @@ pub fn install_ledger(
     env.install_canister_with_cycles(
         ledger_wasm(),
         Encode!(&LedgerArgument::Init(builder.build())).unwrap(),
+        None,
+        ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+    )
+    .unwrap()
+}
+
+fn icrc3_test_ledger() -> Vec<u8> {
+    let ledger_wasm_path = std::env::var("IC_ICRC3_TEST_LEDGER_WASM_PATH").expect(
+        "The Ledger wasm path must be set using the env variable IC_ICRC3_TEST_LEDGER_WASM_PATH",
+    );
+    std::fs::read(&ledger_wasm_path).unwrap_or_else(|e| {
+        panic!(
+            "failed to load Wasm file from path {} (env var IC_ICRC3_TEST_LEDGER_WASM_PATH): {}",
+            ledger_wasm_path, e
+        )
+    })
+}
+
+#[allow(dead_code)]
+pub fn install_icrc3_test_ledger(env: &StateMachine) -> CanisterId {
+    env.install_canister_with_cycles(
+        icrc3_test_ledger(),
+        Encode!(&()).unwrap(),
         None,
         ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
@@ -211,7 +238,7 @@ pub fn wait_until_sync_is_completed(
             return;
         }
     }
-    let log = get_logs(env, index_id);
+    let log = parse_index_logs(&get_logs(env, index_id));
     let mut log_lines = String::new();
     for entry in log.entries {
         log_lines.push_str(&format!(
@@ -267,31 +294,8 @@ fn archive_get_all_blocks(
     res
 }
 
-fn assert_reply(result: WasmResult) -> Vec<u8> {
-    match result {
-        WasmResult::Reply(bytes) => bytes,
-        WasmResult::Reject(reject) => {
-            panic!("Expected a successful reply, got a reject: {}", reject)
-        }
-    }
-}
-
-fn get_logs(env: &StateMachine, index_id: CanisterId) -> Log {
-    let request = HttpRequest {
-        method: "".to_string(),
-        url: "/logs".to_string(),
-        headers: vec![],
-        body: serde_bytes::ByteBuf::new(),
-    };
-    let response = Decode!(
-        &assert_reply(
-            env.execute_ingress(index_id, "http_request", Encode!(&request).unwrap(),)
-                .expect("failed to get index-ng info")
-        ),
-        HttpResponse
-    )
-    .unwrap();
-    serde_json::from_slice(&response.body).expect("failed to parse index-ng log")
+pub(crate) fn parse_index_logs(logs: &[u8]) -> Log {
+    serde_json::from_slice(logs).expect("failed to parse index-ng log")
 }
 
 #[cfg(not(feature = "icrc3_disabled"))]

@@ -1,7 +1,7 @@
 use crate::ic_wasm::ICWasmModule;
 use ic_config::{
     embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
-    flag_status::FlagStatus, subnet_config::SchedulerConfig,
+    subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
@@ -12,13 +12,15 @@ use ic_embedders::{
         sandbox_safe_system_state::SandboxSafeSystemState,
     },
 };
-use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::Global;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    ExecutionState, ExportedFunctions, Memory, MessageMemoryUsage, NetworkTopology,
+    ExecutionState, ExportedFunctions, Memory, NetworkTopology,
     canister_state::execution_state::{WasmBinary, WasmMetadata},
     page_map::TestPageAllocatorFileDescriptorImpl,
 };
@@ -144,7 +146,6 @@ pub(crate) fn get_system_state(api_type: ApiType) -> SandboxSafeSystemState {
 pub(crate) fn get_execution_parameters() -> ExecutionParameters {
     ExecutionParameters {
         instruction_limits: InstructionLimits::new(
-            FlagStatus::Disabled,
             DEFAULT_NUM_INSTRUCTIONS,
             DEFAULT_NUM_INSTRUCTIONS,
         ),

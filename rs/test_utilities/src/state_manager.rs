@@ -9,7 +9,10 @@ use ic_interfaces_state_manager::{
 };
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::{
+    ReplicatedState,
+    page_map::{PageAllocatorFileDescriptor, TestPageAllocatorFileDescriptorImpl},
+};
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
@@ -19,7 +22,7 @@ use ic_types::{
         CryptoHash, CryptoHashOf,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
     },
-    messages::{Request, RequestOrResponse, Response},
+    messages::{Refund, Request, Response, StreamMessage},
     state_manager::{StateManagerError, StateManagerResult},
     xnet::{
         CertifiedStreamSlice, RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex,
@@ -28,6 +31,7 @@ use ic_types::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, VecDeque};
+use std::path::Path;
 use std::sync::{Arc, Barrier, RwLock};
 
 #[derive(Clone)]
@@ -53,9 +57,10 @@ impl Snapshot {
 pub struct FakeStateManager {
     states: Arc<RwLock<Vec<Snapshot>>>,
     tip: Arc<RwLock<Option<(Height, ReplicatedState)>>>,
-    _tempdir: Arc<tempfile::TempDir>,
+    tempdir: Arc<tempfile::TempDir>,
     /// Size 1 by default (no op).
     pub encode_certified_stream_slice_barrier: Arc<RwLock<Barrier>>,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 }
 
 impl Default for FakeStateManager {
@@ -84,9 +89,18 @@ impl FakeStateManager {
                 height,
                 ReplicatedState::new(subnet_test_id(169), SubnetType::Application),
             )))),
-            _tempdir: Arc::new(tmpdir),
+            tempdir: Arc::new(tmpdir),
             encode_certified_stream_slice_barrier: Arc::new(RwLock::new(Barrier::new(1))),
+            fd_factory: Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         }
+    }
+
+    pub fn tmp(&self) -> &Path {
+        self.tempdir.path()
+    }
+
+    pub fn get_fd_factory(&self) -> Arc<dyn PageAllocatorFileDescriptor> {
+        Arc::clone(&self.fd_factory)
     }
 }
 
@@ -269,6 +283,11 @@ impl StateReader for FakeStateManager {
             .map_or_else(initial_state, |snap| snap.make_labeled_state())
     }
 
+    // No certification support in FakeStateManager
+    fn get_latest_certified_state(&self) -> Option<Labeled<Arc<Self::State>>> {
+        None
+    }
+
     fn get_state_at(&self, height: Height) -> StateManagerResult<Labeled<Arc<Self::State>>> {
         if height == Height::new(0) {
             return Ok(initial_state());
@@ -308,35 +327,30 @@ impl StateReader for FakeStateManager {
 }
 
 /// Local helper to enable serialization and deserialization of
-/// [`RequestOrResponse`] for testing.
+/// [`StreamMessage`] for testing.
 #[derive(Deserialize, Serialize)]
-enum SerializableRequestOrResponse {
+enum SerializableStreamMessage {
     Request(Request),
     Response(Response),
+    Refund(Refund),
 }
 
-impl From<&RequestOrResponse> for SerializableRequestOrResponse {
-    fn from(msg: &RequestOrResponse) -> Self {
+impl From<&StreamMessage> for SerializableStreamMessage {
+    fn from(msg: &StreamMessage) -> Self {
         match msg {
-            RequestOrResponse::Request(req) => {
-                SerializableRequestOrResponse::Request((**req).clone())
-            }
-            RequestOrResponse::Response(rep) => {
-                SerializableRequestOrResponse::Response((**rep).clone())
-            }
+            StreamMessage::Request(req) => SerializableStreamMessage::Request((**req).clone()),
+            StreamMessage::Response(rep) => SerializableStreamMessage::Response((**rep).clone()),
+            StreamMessage::Refund(refund) => SerializableStreamMessage::Refund(**refund),
         }
     }
 }
 
-impl From<SerializableRequestOrResponse> for RequestOrResponse {
-    fn from(msg: SerializableRequestOrResponse) -> RequestOrResponse {
+impl From<SerializableStreamMessage> for StreamMessage {
+    fn from(msg: SerializableStreamMessage) -> StreamMessage {
         match msg {
-            SerializableRequestOrResponse::Request(req) => {
-                RequestOrResponse::Request(Arc::new(req))
-            }
-            SerializableRequestOrResponse::Response(rep) => {
-                RequestOrResponse::Response(Arc::new(rep))
-            }
+            SerializableStreamMessage::Request(req) => StreamMessage::Request(Arc::new(req)),
+            SerializableStreamMessage::Response(rep) => StreamMessage::Response(Arc::new(rep)),
+            SerializableStreamMessage::Refund(refund) => StreamMessage::Refund(Arc::new(refund)),
         }
     }
 }
@@ -471,11 +485,11 @@ impl From<SerializableStreamFlags> for StreamFlags {
 #[derive(Deserialize, Serialize)]
 struct SerializableStreamIndexedQueue {
     begin: StreamIndex,
-    queue: VecDeque<SerializableRequestOrResponse>,
+    queue: VecDeque<SerializableStreamMessage>,
 }
 
-impl From<&StreamIndexedQueue<RequestOrResponse>> for SerializableStreamIndexedQueue {
-    fn from(q: &StreamIndexedQueue<RequestOrResponse>) -> Self {
+impl From<&StreamIndexedQueue<StreamMessage>> for SerializableStreamIndexedQueue {
+    fn from(q: &StreamIndexedQueue<StreamMessage>) -> Self {
         SerializableStreamIndexedQueue {
             begin: q.begin(),
             queue: q.iter().map(|(_, msg)| msg.into()).collect(),
@@ -483,8 +497,8 @@ impl From<&StreamIndexedQueue<RequestOrResponse>> for SerializableStreamIndexedQ
     }
 }
 
-impl From<SerializableStreamIndexedQueue> for StreamIndexedQueue<RequestOrResponse> {
-    fn from(q: SerializableStreamIndexedQueue) -> StreamIndexedQueue<RequestOrResponse> {
+impl From<SerializableStreamIndexedQueue> for StreamIndexedQueue<StreamMessage> {
+    fn from(q: SerializableStreamIndexedQueue) -> StreamIndexedQueue<StreamMessage> {
         let mut queue = StreamIndexedQueue::with_begin(q.begin);
         q.queue
             .into_iter()
@@ -731,6 +745,10 @@ impl StateReader for RefMockStateManager {
 
     fn get_latest_state(&self) -> Labeled<Arc<Self::State>> {
         self.mock.read().unwrap().get_latest_state()
+    }
+
+    fn get_latest_certified_state(&self) -> Option<Labeled<Arc<Self::State>>> {
+        self.mock.read().unwrap().get_latest_certified_state()
     }
 
     fn get_state_at(&self, height: Height) -> StateManagerResult<Labeled<Arc<Self::State>>> {

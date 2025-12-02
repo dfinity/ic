@@ -1,6 +1,8 @@
 use crate::common::local_replica;
 use crate::common::local_replica::{create_and_install_icrc_ledger, test_identity};
-use crate::common::utils::{get_rosetta_blocks_from_icrc1_ledger, wait_for_rosetta_block};
+use crate::common::utils::{
+    get_rosetta_blocks_from_icrc1_ledger, metrics_gauge_value, wait_for_rosetta_block,
+};
 use candid::Nat;
 use candid::Principal;
 use common::local_replica::get_custom_agent;
@@ -1352,6 +1354,87 @@ fn test_mempool() {
 }
 
 #[test]
+fn test_metrics() {
+    const NUM_BLOCKS: u64 = 2;
+    let sender_keypair = Secp256k1KeyPair::generate(0);
+    let rt = Runtime::new().unwrap();
+    let icrc1_ledger_1_builder = Icrc1LedgerBuilder::new(*TEST_LEDGER_CANISTER_ID)
+        .with_symbol("SYM1")
+        .with_decimals(6)
+        // The Icrc1LedgerBuilder already includes one initial balance, but we add another one here
+        // so that the index of the latest block is non-zero.
+        .with_initial_balance(
+            sender_keypair.generate_principal_id().unwrap().0,
+            1_000_000_000_000u64,
+        );
+    let setup = Setup::builder()
+        .add_icrc1_ledger_builder(icrc1_ledger_1_builder)
+        .build(&rt);
+
+    let rosetta_ledger_setup_builder =
+        RosettaLedgerTestingEnvironmentBuilder::new(&setup.icrc1_ledgers[0], setup.port)
+            .with_icrc1_symbol("SYM1".to_string());
+
+    let icrc1_ledgers = setup.icrc1_ledgers.clone();
+
+    rt.block_on(async {
+        let env = RosettaTestingEnvironmentBuilder::new(false, setup.port)
+            .add_rosetta_ledger_testing_env_builder(rosetta_ledger_setup_builder)
+            .build()
+            .await;
+        wait_for_rosetta_block(
+            &env.rosetta_client,
+            env.rosetta_ledger_testing_envs[0]
+                .network_identifier
+                .clone(),
+            NUM_BLOCKS - 1,
+        )
+        .await;
+
+        let metrics = env
+            .rosetta_client
+            .metrics()
+            .await
+            .expect("should return metrics");
+
+        let network_identifier = env.rosetta_ledger_testing_envs[0]
+            .network_identifier
+            .clone();
+
+        let current_index = env
+            .rosetta_client
+            .network_status(network_identifier.clone())
+            .await
+            .expect("Unable to call network_status")
+            .current_block_identifier
+            .index;
+
+        let ledger_num_blocks = get_rosetta_blocks_from_icrc1_ledger(
+            icrc1_ledgers[0].agent.clone(),
+            0,
+            *MAX_BLOCKS_PER_REQUEST,
+        )
+        .await
+        .len();
+        assert_eq!(ledger_num_blocks as u64, NUM_BLOCKS);
+        assert_eq!(current_index, NUM_BLOCKS - 1);
+
+        let rosetta_synched_block_height =
+            metrics_gauge_value(&metrics, "rosetta_synched_block_height")
+                .expect("should export rosetta_synched_block_height metric");
+        assert_eq!(rosetta_synched_block_height as u64, NUM_BLOCKS - 1);
+        let rosetta_verified_block_height =
+            metrics_gauge_value(&metrics, "rosetta_verified_block_height")
+                .expect("should export rosetta_verified_block_height metric");
+        assert_eq!(rosetta_verified_block_height as u64, NUM_BLOCKS - 1);
+        let rosetta_target_block_height =
+            metrics_gauge_value(&metrics, "rosetta_target_block_height")
+                .expect("should export rosetta_target_block_height metric");
+        assert_eq!(rosetta_target_block_height as u64, NUM_BLOCKS - 1);
+    });
+}
+
+#[test]
 fn test_construction_preprocess() {
     let rt = Runtime::new().unwrap();
     let icrc1_ledger_1_builder =
@@ -1756,6 +1839,7 @@ fn test_construction_submit() {
                             ic_icrc1::Operation::Approve { fee, .. } => fee,
                             ic_icrc1::Operation::Mint { .. } => None,
                             ic_icrc1::Operation::Burn { .. } => None,
+                            ic_icrc1::Operation::FeeCollector { .. } => None,
                         };
 
                         if matches!(

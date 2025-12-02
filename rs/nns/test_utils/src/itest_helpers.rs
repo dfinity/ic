@@ -6,7 +6,7 @@ use crate::{
     governance::{submit_external_update_proposal, wait_for_final_state},
     state_test_helpers::state_machine_builder_for_nns_tests,
 };
-use candid::Encode;
+use candid::{CandidType, Encode, Principal};
 use canister_test::{
     Canister, Project, Runtime, Wasm, local_test_with_config_e,
     local_test_with_config_with_mutations_on_system_subnet,
@@ -39,6 +39,7 @@ use lifeline::LIFELINE_CANISTER_WASM;
 use on_wire::{IntoWire, bytes};
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
+use serde::Deserialize;
 use std::{future::Future, path::Path, thread, time::SystemTime};
 use xrc_mock::{ExchangeRate, XrcMockInitPayload};
 
@@ -58,6 +59,7 @@ pub struct NnsCanisters<'a> {
     pub identity: Canister<'a>,
     pub nns_ui: Canister<'a>,
     pub sns_wasms: Canister<'a>,
+    pub migration: Canister<'a>,
 
     // Optional canisters.
     pub subnet_rental: Option<Canister<'a>>,
@@ -105,9 +107,9 @@ impl NnsCanisters<'_> {
         let nns_ui = Canister::new(runtime, NNS_UI_CANISTER_ID);
         let mut sns_wasms = Canister::new(runtime, SNS_WASM_CANISTER_ID);
         let mut subnet_rental = Canister::new(runtime, SUBNET_RENTAL_CANISTER_ID);
+        let mut migration = Canister::new(runtime, MIGRATION_CANISTER_ID);
 
         // Install code into canisters (pass init argument/payload).
-
         // Registry and Governance need to first or the process hangs,
         // Ledger is just added as to avoid Governance spamming the logs.
         futures::join!(
@@ -129,6 +131,7 @@ impl NnsCanisters<'_> {
                     install_subnet_rental_canister(&mut subnet_rental).await;
                 }
             },
+            install_migration_canister(&mut migration),
         );
 
         eprintln!("NNS canisters installed after {:.1} s", since_start_secs());
@@ -150,6 +153,7 @@ impl NnsCanisters<'_> {
             nns_ui.set_controller_with_retries(ROOT_CANISTER_ID.get()),
             sns_wasms.set_controller_with_retries(ROOT_CANISTER_ID.get()),
             subnet_rental.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            migration.set_controller_with_retries(ROOT_CANISTER_ID.get()),
         )
         .unwrap();
 
@@ -167,8 +171,8 @@ impl NnsCanisters<'_> {
             identity,
             nns_ui,
             sns_wasms,
-
             subnet_rental: init_payloads.subnet_rental.map(|()| subnet_rental),
+            migration,
         }
     }
 
@@ -224,6 +228,10 @@ impl NnsCanisters<'_> {
             .create_canister_at_id_max_cycles_with_retries(SNS_WASM_CANISTER_ID.get())
             .await
             .unwrap();
+        let mut migration = runtime
+            .create_canister_at_id_max_cycles_with_retries(MIGRATION_CANISTER_ID.get())
+            .await
+            .unwrap();
 
         let mut subnet_rental = init_payloads.subnet_rental.as_ref().map(|_not_used| {
             block_on(async {
@@ -258,6 +266,7 @@ impl NnsCanisters<'_> {
                     install_subnet_rental_canister(subnet_rental).await;
                 }
             },
+            install_migration_canister(&mut migration),
         );
 
         eprintln!("NNS canisters installed after {:.1} s", since_start_secs());
@@ -285,6 +294,7 @@ impl NnsCanisters<'_> {
                     Ok(())
                 }
             },
+            migration.set_controller_with_retries(ROOT_CANISTER_ID.get()),
         )
         .unwrap();
 
@@ -302,6 +312,7 @@ impl NnsCanisters<'_> {
             nns_ui,
             sns_wasms,
             subnet_rental,
+            migration,
         }
     }
 
@@ -579,7 +590,7 @@ pub async fn install_registry_canister(
     init_payload: RegistryCanisterInitPayload,
 ) {
     let encoded = Encode!(&init_payload).unwrap();
-    install_rust_canister(canister, "registry-canister", &[], Some(encoded)).await;
+    install_rust_canister(canister, "registry-canister", &["test"], Some(encoded)).await;
 }
 
 /// Creates and installs the registry canister.
@@ -617,7 +628,7 @@ pub async fn install_ledger_canister(canister: &mut Canister<'_>, args: LedgerCa
     install_rust_canister(
         canister,
         "ledger-canister",
-        &["notify-method"],
+        &[],
         Some(CandidOne(args).into_bytes().unwrap()),
     )
     .await
@@ -775,6 +786,28 @@ pub async fn set_up_sns_wasm_canister(
 ) -> Canister<'_> {
     let mut canister = runtime.create_canister(cycles).await.unwrap();
     install_sns_wasm_canister(&mut canister, init_payload).await;
+    canister
+}
+
+/// Compiles the migration canister and installs it.
+pub async fn install_migration_canister(canister: &mut Canister<'_>) {
+    #[derive(CandidType, Deserialize, Default)]
+    struct MigrationCanisterInitArgs {
+        allowlist: Option<Vec<Principal>>,
+    }
+    install_rust_canister(
+        canister,
+        "migration-canister",
+        &[],
+        Some(Encode!(&MigrationCanisterInitArgs::default()).unwrap()),
+    )
+    .await;
+}
+
+/// Creates and installs the migration canister.
+pub async fn set_up_migration_canister(runtime: &'_ Runtime) -> Canister<'_> {
+    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
+    install_migration_canister(&mut canister).await;
     canister
 }
 

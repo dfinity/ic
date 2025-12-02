@@ -1,3 +1,5 @@
+use crate::chrono_utils::last_unix_timestamp_nanoseconds;
+use chrono::NaiveDate;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_interfaces_registry::RegistryValue;
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
@@ -11,7 +13,7 @@ use ic_registry_keys::{
     make_node_operator_record_key, make_subnet_list_record_key,
 };
 use ic_types::registry::RegistryClientError;
-use rewards_calculation::types::{DayUtc, Region, RewardableNode, UnixTsNanos};
+use rewards_calculation::types::{Region, RewardableNode, UnixTsNanos};
 use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -32,7 +34,7 @@ impl RegistryQuerier {
     }
 
     ///  Returns the latest registry version corresponding to the given timestamp.
-    pub fn version_for_timestamp(&self, ts: UnixTsNanos) -> Option<RegistryVersion> {
+    pub fn version_for_timestamp_nanoseconds(&self, ts: UnixTsNanos) -> Option<RegistryVersion> {
         self.registry_client
             .timestamp_to_versions_map()
             .range(..=ts)
@@ -82,12 +84,12 @@ impl RegistryQuerier {
     /// version of that day.
     pub fn get_rewardable_nodes_per_provider(
         &self,
-        day_utc: &DayUtc,
+        date: &NaiveDate,
         provider_filter: Option<&PrincipalId>,
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, RegistryClientError> {
         let mut rewardable_nodes_per_provider: BTreeMap<_, Vec<RewardableNode>> = BTreeMap::new();
         let registry_version = self
-            .version_for_timestamp(day_utc.unix_ts_at_day_end_nanoseconds())
+            .version_for_timestamp_nanoseconds(last_unix_timestamp_nanoseconds(date))
             .unwrap();
         let nodes = self.nodes_in_version(registry_version)?;
 

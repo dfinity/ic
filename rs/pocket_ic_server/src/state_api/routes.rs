@@ -10,10 +10,10 @@ use super::state::{
 };
 use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
-    DashboardRequest, GetCanisterHttp, GetControllers, GetCyclesBalance, GetStableMemory,
-    GetSubnet, GetTime, GetTopology, IngressMessageStatus, MockCanisterHttp, PubKey, Query,
-    QueryRequest, SetCertifiedTime, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
-    SubnetReadStateRequest, Tick,
+    CanisterSnapshotDownload, CanisterSnapshotUpload, DashboardRequest, GetCanisterHttp,
+    GetControllers, GetCyclesBalance, GetStableMemory, GetSubnet, GetTime, GetTopology,
+    IngressMessageStatus, MockCanisterHttp, PubKey, Query, QueryRequest, SetCertifiedTime,
+    SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage, SubnetReadStateRequest, Tick,
 };
 use crate::{BlobStore, InstanceId, OpId, Operation, async_trait, pocket_ic::PocketIc};
 use aide::{
@@ -36,15 +36,17 @@ use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use ic_boundary::{ErrorClientFacing, MAX_REQUEST_BODY_SIZE};
 use ic_http_endpoints_public::{cors_layer, make_plaintext_response, query, read_state};
-use ic_types::{CanisterId, SubnetId};
+use ic_registry_routing_table::RoutingTable;
+use ic_types::{CanisterId, SnapshotId, SubnetId};
 use pocket_ic::RejectResponse;
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
     HttpGatewayDetails, IcpConfig, IcpFeatures, InitialTime, InstanceConfig,
     MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
-    RawCanisterResult, RawCycles, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
-    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, TickConfigs,
-    Topology,
+    RawCanisterResult, RawCanisterSnapshotDownload, RawCanisterSnapshotId,
+    RawCanisterSnapshotUpload, RawCycles, RawIngressStatusArgs, RawMessageId,
+    RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
+    RawTime, TickConfigs, Topology,
 };
 use serde::Serialize;
 use slog::Level;
@@ -56,7 +58,7 @@ use std::{
     sync::atomic::AtomicU64,
     time::{Duration, SystemTime},
 };
-use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
+use tokio::runtime::Runtime;
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::trace;
 
@@ -88,8 +90,10 @@ const RETRY_TIMEOUT_S: u64 = 300;
 pub struct AppState {
     pub api_state: Arc<ApiState>,
     pub pending_requests: Arc<AtomicU64>,
-    pub min_alive_until: Arc<RwLock<Instant>>,
+    /// TTL in nanoseconds since UNIX epoch
+    pub min_alive_until: Arc<AtomicU64>,
     pub runtime: Arc<Runtime>,
+    pub mainnet_routing_table: RoutingTable,
     pub blob_store: Arc<dyn BlobStore>,
 }
 
@@ -131,6 +135,14 @@ where
         .directory_route("/set_stable_memory", post(handler_set_stable_memory))
         .directory_route("/tick", post(handler_tick))
         .directory_route("/mock_canister_http", post(handler_mock_canister_http))
+        .directory_route(
+            "/canister_snapshot_download",
+            post(handler_canister_snapshot_download),
+        )
+        .directory_route(
+            "/canister_snapshot_upload",
+            post(handler_canister_snapshot_upload),
+        )
 }
 
 async fn handle_limit_error(req: Request, next: Next) -> Response {
@@ -560,6 +572,16 @@ impl TryFrom<OpOut> for Vec<RawCanisterHttpRequest> {
     }
 }
 
+impl TryFrom<OpOut> for RawCanisterSnapshotId {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
+        match value {
+            OpOut::CanisterSnapshotId(snapshot_id) => Ok(RawCanisterSnapshotId { snapshot_id }),
+            _ => Err(OpConversionError),
+        }
+    }
+}
+
 #[async_trait]
 impl FromOpOut for PocketHttpResponse {
     async fn from(value: OpOut) -> (StatusCode, ApiResponse<PocketHttpResponse>) {
@@ -770,6 +792,98 @@ pub async fn handler_pub_key(
     let op = PubKey { subnet_id };
     let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))
+}
+
+pub async fn handler_canister_snapshot_download(
+    State(AppState { api_state, .. }): State<AppState>,
+    headers: HeaderMap,
+    Path(instance_id): Path<InstanceId>,
+    axum::extract::Json(RawCanisterSnapshotDownload {
+        sender,
+        canister_id,
+        snapshot_id,
+        snapshot_dir,
+    }): axum::extract::Json<RawCanisterSnapshotDownload>,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    let timeout = timeout_or_default(headers);
+    let canister_id = match CanisterId::try_from(canister_id.canister_id) {
+        Ok(canister_id) => canister_id,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::Error {
+                    message: format!("{e:?}"),
+                }),
+            );
+        }
+    };
+    let snapshot_id = match SnapshotId::try_from(snapshot_id) {
+        Ok(snapshot_id) => snapshot_id,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::Error {
+                    message: format!("{e:?}"),
+                }),
+            );
+        }
+    };
+    let op = CanisterSnapshotDownload {
+        sender: ic_types::PrincipalId(sender.into()),
+        canister_id,
+        snapshot_id,
+        snapshot_dir,
+    };
+    let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
+    (code, Json(response))
+}
+
+pub async fn handler_canister_snapshot_upload(
+    State(AppState { api_state, .. }): State<AppState>,
+    headers: HeaderMap,
+    Path(instance_id): Path<InstanceId>,
+    axum::extract::Json(RawCanisterSnapshotUpload {
+        sender,
+        canister_id,
+        replace_snapshot,
+        snapshot_dir,
+    }): axum::extract::Json<RawCanisterSnapshotUpload>,
+) -> (StatusCode, Json<ApiResponse<RawCanisterSnapshotId>>) {
+    let timeout = timeout_or_default(headers);
+    let canister_id = match CanisterId::try_from(canister_id.canister_id) {
+        Ok(canister_id) => canister_id,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::Error {
+                    message: format!("{e:?}"),
+                }),
+            );
+        }
+    };
+    let replace_snapshot = if let Some(replace_snapshot) = replace_snapshot {
+        match SnapshotId::try_from(replace_snapshot.snapshot_id) {
+            Ok(snapshot_id) => Some(snapshot_id),
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::Error {
+                        message: format!("{e:?}"),
+                    }),
+                );
+            }
+        }
+    } else {
+        None
+    };
+    let op = CanisterSnapshotUpload {
+        sender: ic_types::PrincipalId(sender.into()),
+        canister_id,
+        replace_snapshot,
+        snapshot_dir,
+    };
+    let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
+    (code, Json(response))
 }
 
 pub async fn handler_dashboard(
@@ -1032,6 +1146,13 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
             )),
         )
             .into_response(),
+        opout @ OpOut::CanisterSnapshotId(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::Success(
+                RawCanisterSnapshotId::try_from(opout).unwrap(),
+            )),
+        )
+            .into_response(),
         OpOut::RawResponse(fut) => {
             let (status, headers, bytes) = fut.await;
             let mut resp = Response::builder().status(status);
@@ -1043,28 +1164,26 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
     }
 }
 
-/// Read a node in the graph of computations. Needed for polling for a previous ApiResponse::Started reply.
+/// Read a result. Needed for polling for a previous ApiResponse::Started reply.
 pub async fn handler_read_graph(
     State(AppState { api_state, .. }): State<AppState>,
     // TODO: type state label and op id correctly but such that axum can handle it
     Path((state_label_str, op_id_str)): Path<(String, String)>,
 ) -> Response {
     let Ok(vec) = base64::decode_config(state_label_str.as_bytes(), base64::URL_SAFE) else {
-        return (StatusCode::BAD_REQUEST, "malformed state_label").into_response();
+        return (StatusCode::BAD_REQUEST, "Malformed state label.").into_response();
     };
     if let Ok(state_label) = StateLabel::try_from(vec) {
         let op_id = OpId(op_id_str.clone());
         // TODO: use new_state_label and return it to library
-        match api_state.read_graph(&state_label, &op_id) {
+        match api_state.read_graph(state_label, op_id).await {
             Some((_new_state_label, op_out)) => op_out_to_response(op_out).await,
             _ => (
                 StatusCode::NOT_FOUND,
                 Json(ApiResponse::<()>::Error {
                     message: format!(
-                        "state_label / op_id not found: {} (base64: {}) / {}",
-                        state_label_str,
-                        base64::encode_config(state_label.0, base64::URL_SAFE),
-                        op_id_str,
+                        "state_label / op_id not found: {} / {}",
+                        state_label_str, op_id_str,
                     ),
                 }),
             )
@@ -1074,10 +1193,47 @@ pub async fn handler_read_graph(
         (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<()>::Error {
-                message: "Bad state_label".to_string(),
+                message: "Malformed state label.".to_string(),
             }),
         )
             .into_response()
+    }
+}
+
+/// Prune a result. Needed for releasing memory after successfully polling for a previous ApiResponse::Started reply.
+pub async fn handler_prune_graph(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path((state_label_str, op_id_str)): Path<(String, String)>,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    let Ok(vec) = base64::decode_config(state_label_str.as_bytes(), base64::URL_SAFE) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::Error {
+                message: "Malformed state label.".to_string(),
+            }),
+        );
+    };
+    if let Ok(state_label) = StateLabel::try_from(vec) {
+        let op_id = OpId(op_id_str.clone());
+        match api_state.prune_graph(state_label, op_id).await {
+            Some(()) => (StatusCode::OK, Json(ApiResponse::Success(()))),
+            None => (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::Error {
+                    message: format!(
+                        "state_label / op_id not found: {} / {}",
+                        state_label_str, op_id_str,
+                    ),
+                }),
+            ),
+        }
+    } else {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::Error {
+                message: "Malformed state label.".to_string(),
+            }),
+        )
     }
 }
 
@@ -1275,7 +1431,10 @@ fn contains_unimplemented(config: ExtendedSubnetConfigSet) -> bool {
 /// The new InstanceId will be returned.
 pub async fn create_instance(
     State(AppState {
-        api_state, runtime, ..
+        api_state,
+        runtime,
+        mainnet_routing_table,
+        ..
     }): State<AppState>,
     extract::Json(instance_config): extract::Json<InstanceConfig>,
 ) -> (StatusCode, Json<rest::CreateInstanceResponse>) {
@@ -1362,6 +1521,12 @@ pub async fn create_instance(
             sns,
             ii,
             nns_ui,
+            /* `nns_ui` does not depend on `bitcoin` */
+            bitcoin: _,
+            /* `nns_ui` does not depend on `dogecoin` */
+            dogecoin: _,
+            /* `nns_ui` does not depend on `canister_migration` */
+            canister_migration: _,
         } = icp_features;
         if nns_ui.is_some() {
             if instance_config.http_gateway_config.is_none() {
@@ -1398,12 +1563,14 @@ pub async fn create_instance(
             move |seed, gateway_port| {
                 PocketIc::try_new(
                     runtime,
+                    mainnet_routing_table,
                     seed,
                     subnet_configs,
                     instance_config.state_dir,
                     instance_config.icp_config.unwrap_or(IcpConfig::default()),
                     log_level,
                     instance_config.bitcoind_addr,
+                    instance_config.dogecoind_addr,
                     instance_config.icp_features,
                     instance_config.incomplete_state,
                     initial_time,

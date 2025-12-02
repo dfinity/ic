@@ -26,7 +26,7 @@ use ic_types::{
     batch::BlockmakerMetrics,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
-    messages::{CanisterCall, MessageId, Payload, RejectContext, RequestOrResponse, Response},
+    messages::{CanisterCall, MessageId, Payload, RejectContext, Response, StreamMessage},
     node_id_into_protobuf, node_id_try_from_option,
     nominal_cycles::NominalCycles,
     state_sync::{CURRENT_STATE_SYNC_VERSION, StateSyncVersion},
@@ -369,11 +369,13 @@ impl SystemMetadata {
             node_public_keys: Default::default(),
             api_boundary_nodes: Default::default(),
             split_from: None,
+
             // StateManager populates proper values of these fields before
             // committing each state.
             prev_state_hash: Default::default(),
             state_sync_version: CURRENT_STATE_SYNC_VERSION,
             certification_version: CURRENT_CERTIFICATION_VERSION,
+
             heap_delta_estimate: NumBytes::from(0),
             subnet_metrics: Default::default(),
             expected_compiled_wasms: BTreeSet::new(),
@@ -420,7 +422,9 @@ impl SystemMetadata {
         for range in routing_table_ranges.iter().rev() {
             let start = canister_id_into_u64(range.start);
             let end = canister_id_into_u64(range.end);
-            if start % CANISTER_IDS_PER_SUBNET == 0 && end == start + CANISTER_IDS_PER_SUBNET - 1 {
+            if start.is_multiple_of(CANISTER_IDS_PER_SUBNET)
+                && end == start + CANISTER_IDS_PER_SUBNET - 1
+            {
                 // Found the `[N * 2^20, (N+1) * 2^20 - 1]` (sub)range, use it as allocation
                 // range.
                 //
@@ -628,7 +632,7 @@ impl SystemMetadata {
         // Destructure `self` in order for the compiler to enforce an explicit decision
         // whenever new fields are added.
         //
-        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS A `match`!
         let &mut SystemMetadata {
             ref mut ingress_history,
             streams: _,
@@ -640,8 +644,8 @@ impl SystemMetadata {
             // Overwritten as soon as the round begins, no explicit action needed.
             network_topology: _,
             ref own_subnet_id,
-            // `own_subnet_type` has been set by `load_checkpoint()` based on the subnet
-            // registry record of B, do not touch it.
+            // `own_subnet_type` has been set by `load_checkpoint()` based on the respective
+            // subnet registry record, do not touch it.
             own_subnet_type: _,
             // Overwritten as soon as the round begins, no explicit action needed.
             own_subnet_features: _,
@@ -660,6 +664,7 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: _,
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
+            // Overwritten as soon as the round begins, no explicit action needed.
             cost_schedule: _,
         } = self;
 
@@ -684,20 +689,26 @@ impl SystemMetadata {
         self.reject_in_progress_management_calls_after_split(&is_local_canister, subnet_queues);
     }
 
-    /// Creates rejects for all in-progress management messages that cannot or should
-    /// not be handled on this subnet in the second phase of a subnet split.
-    /// Enqueues reject responses into the provided `subnet_queues` for calls originating
-    /// from canisters; and records a `Failed` state in `self.ingress_history` for calls
-    /// originating from ingress messages. The rejects are created for:
-    ///     - All in-progress subnet messages whose target canisters are no longer
-    ///     on this subnet.
-    ///       On the other subnet (which must be *subnet B*), the execution of these same
-    ///     messages, now without matching subnet call contexts, will be silently
-    ///     aborted / rolled back (without producing a response). This is the only way
-    ///     to ensure consistency for a message that would otherwise be executing on one
-    ///     subnet, but for which a response may only be produced by another subnet.
-    ///     - Specific requests that must be entirely handled by the local subnet where
-    ///    the originator canister exists.
+    /// Creates rejects for all in-progress management messages that can no longer
+    /// be handled on *subnet A'* following a subnet split.
+    ///
+    /// Enqueues reject responses into the provided `subnet_queues` for canister
+    /// calls; and records a `Failed` state in `ingress_history` for calls
+    /// originating from ingress messages.
+    ///
+    /// Rejects are created for:
+    ///
+    ///  * All in-progress subnet messages whose target canisters are no longer
+    ///    on this subnet (e.g. install, stop).
+    ///
+    ///    On *subnet B*, the execution of these same messages, now without matching
+    ///    subnet call contexts, will be silently aborted / rolled back (without
+    ///    producing a response). This is the only way to ensure consistency for a
+    ///    message that would otherwise be executing on *subnet B*, but for which a
+    ///    only a response from *subnet A'* could be inducted.
+    ///
+    ///  * Specific requests that must be entirely handled by the local subnet where
+    ///    the originator canister exists (e.g. `raw_rand`).
     fn reject_in_progress_management_calls_after_split<F>(
         &mut self,
         is_local_canister: F,
@@ -795,6 +806,7 @@ impl SystemMetadata {
                     status,
                     self.time(),
                     u64::MAX.into(), // No need to enforce ingress memory limits,
+                    |_| {},
                 );
             }
         }
@@ -812,7 +824,7 @@ impl SystemMetadata {
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Stream {
     /// Indexed queue of outgoing messages.
-    messages: StreamIndexedQueue<RequestOrResponse>,
+    messages: StreamIndexedQueue<StreamMessage>,
 
     /// Index of the next expected reverse stream message.
     ///
@@ -840,7 +852,7 @@ impl Default for Stream {
         let messages = Default::default();
         let signals_end = Default::default();
         let reject_signals = VecDeque::default();
-        let messages_size_bytes = Self::size_bytes(&messages);
+        let messages_size_bytes = Self::calculate_size_bytes(&messages);
         let reverse_stream_flags = StreamFlags {
             deprecated_responses_only: false,
         };
@@ -858,8 +870,8 @@ impl Default for Stream {
 
 impl Stream {
     /// Creates a new `Stream` with the given `messages` and `signals_end`.
-    pub fn new(messages: StreamIndexedQueue<RequestOrResponse>, signals_end: StreamIndex) -> Self {
-        let messages_size_bytes = Self::size_bytes(&messages);
+    pub fn new(messages: StreamIndexedQueue<StreamMessage>, signals_end: StreamIndex) -> Self {
+        let messages_size_bytes = Self::calculate_size_bytes(&messages);
         let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         Self {
             messages,
@@ -873,11 +885,11 @@ impl Stream {
 
     /// Creates a new `Stream` with the given `messages`, `signals_end` and `reject_signals`.
     pub fn with_signals(
-        messages: StreamIndexedQueue<RequestOrResponse>,
+        messages: StreamIndexedQueue<StreamMessage>,
         signals_end: StreamIndex,
         reject_signals: VecDeque<RejectSignal>,
     ) -> Self {
-        let messages_size_bytes = Self::size_bytes(&messages);
+        let messages_size_bytes = Self::calculate_size_bytes(&messages);
         let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         Self {
             messages,
@@ -908,7 +920,7 @@ impl Stream {
     }
 
     /// Returns a reference to the message queue.
-    pub fn messages(&self) -> &StreamIndexedQueue<RequestOrResponse> {
+    pub fn messages(&self) -> &StreamIndexedQueue<StreamMessage> {
         &self.messages
     }
 
@@ -928,9 +940,9 @@ impl Stream {
     }
 
     /// Appends the given message to the tail of the stream.
-    pub fn push(&mut self, message: RequestOrResponse) {
+    pub fn push(&mut self, message: StreamMessage) {
         self.messages_size_bytes += message.count_bytes();
-        if let RequestOrResponse::Response(response) = &message
+        if let StreamMessage::Response(response) = &message
             && !response.is_best_effort()
         {
             *self
@@ -939,7 +951,10 @@ impl Stream {
                 .or_insert(0) += 1;
         }
         self.messages.push(message);
-        debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
+        debug_assert_eq!(
+            Self::calculate_size_bytes(&self.messages),
+            self.messages_size_bytes
+        );
         debug_assert_eq!(
             Self::calculate_guaranteed_response_counts(&self.messages),
             self.guaranteed_response_counts
@@ -952,7 +967,7 @@ impl Stream {
         &mut self,
         new_begin: StreamIndex,
         reject_signals: &VecDeque<RejectSignal>,
-    ) -> Vec<(RejectReason, RequestOrResponse)> {
+    ) -> Vec<(RejectReason, StreamMessage)> {
         assert!(
             new_begin >= self.messages.begin(),
             "Begin index ({}) has already advanced past requested begin index ({})",
@@ -983,9 +998,12 @@ impl Stream {
 
             // Deduct every discarded message from the stream's byte size.
             self.messages_size_bytes -= msg.count_bytes();
-            debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
+            debug_assert_eq!(
+                Self::calculate_size_bytes(&self.messages),
+                self.messages_size_bytes
+            );
 
-            if let RequestOrResponse::Response(response) = &msg
+            if let StreamMessage::Response(response) = &msg
                 && !response.is_best_effort()
             {
                 match self
@@ -1055,20 +1073,20 @@ impl Stream {
     }
 
     /// Calculates the estimated byte size of the given messages.
-    fn size_bytes(messages: &StreamIndexedQueue<RequestOrResponse>) -> usize {
+    fn calculate_size_bytes(messages: &StreamIndexedQueue<StreamMessage>) -> usize {
         messages.iter().map(|(_, m)| m.count_bytes()).sum()
     }
 
     fn calculate_guaranteed_response_counts(
-        messages: &StreamIndexedQueue<RequestOrResponse>,
+        messages: &StreamIndexedQueue<StreamMessage>,
     ) -> BTreeMap<CanisterId, usize> {
         let mut result = BTreeMap::new();
         for (_, msg) in messages.iter() {
-            if let RequestOrResponse::Response(response) = msg {
-                // We only count guaranteed responses
-                if !response.is_best_effort() {
-                    *result.entry(response.respondent).or_insert(0) += 1;
-                }
+            // We only count guaranteed responses
+            if let StreamMessage::Response(response) = msg
+                && !response.is_best_effort()
+            {
+                *result.entry(response.respondent).or_insert(0) += 1;
             }
         }
         result
@@ -1141,6 +1159,7 @@ impl IngressHistoryState {
         status: IngressStatus,
         time: Time,
         ingress_memory_capacity: NumBytes,
+        observe_time_in_terminal_state: impl Fn(u64),
     ) -> Arc<IngressStatus> {
         // Store the associated expiry time for the given message id only for a
         // "terminal" ingress status. This way we are not risking deleting any status
@@ -1167,7 +1186,11 @@ impl IngressHistoryState {
         }
 
         if self.memory_usage > ingress_memory_capacity.get() as usize {
-            self.forget_terminal_statuses(ingress_memory_capacity);
+            self.forget_terminal_statuses(
+                ingress_memory_capacity,
+                time,
+                observe_time_in_terminal_state,
+            );
         }
 
         debug_assert_eq!(
@@ -1237,7 +1260,12 @@ impl IngressHistoryState {
     /// Note that this function must remain private and should only be
     /// called from within `insert` to ensure that `next_terminal_time`
     /// is consistently updated and we don't miss any completed statuses.
-    fn forget_terminal_statuses(&mut self, target_size: NumBytes) {
+    fn forget_terminal_statuses(
+        &mut self,
+        target_size: NumBytes,
+        now: Time,
+        observe_time_in_terminal_state: impl Fn(u64),
+    ) {
         // In debug builds we store the length of the statuses map here so that
         // we can later debug_assert that no status disappeared.
         #[cfg(debug_assertions)]
@@ -1256,7 +1284,13 @@ impl IngressHistoryState {
                 break;
             }
 
+            // We keep track of entries by how much they are evicted before their "pruning_time".
+            let time_until_pruning = time.saturating_duration_since(now);
+            let time_in_ingress_history_secs =
+                MAX_INGRESS_TTL.saturating_sub(time_until_pruning).as_secs();
+
             for id in ids.iter() {
+                observe_time_in_terminal_state(time_in_ingress_history_secs);
                 match statuses.get(id).map(Arc::as_ref) {
                     Some(IngressStatus::Known {
                         receiver,

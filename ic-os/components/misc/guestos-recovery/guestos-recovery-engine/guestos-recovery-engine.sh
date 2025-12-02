@@ -123,6 +123,7 @@ while [ $attempt -le $MAX_ATTEMPTS ]; do
 
     if perform_recovery; then
         echo "✓ Recovery completed successfully on attempt $attempt"
+        /opt/ic/bin/vsock_guest --notify "Manual recovery completed successfully" --count 10
         exit 0
     else
         echo "✗ Recovery failed on attempt $attempt"
@@ -137,4 +138,5 @@ while [ $attempt -le $MAX_ATTEMPTS ]; do
 done
 
 echo "ERROR: Recovery failed after $MAX_ATTEMPTS attempts"
+/opt/ic/bin/vsock_guest --notify "Manual recovery failed after $MAX_ATTEMPTS attempts" --count 10
 exit 1

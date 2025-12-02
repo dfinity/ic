@@ -65,6 +65,21 @@ message NodeRecord {
 
   optional NodeRewardType node_reward_type = 20;
 
+  // SSH public keys that have permissions necessary to upload subnet state as
+  // part of subnet recovery.
+  //
+  // This is set by NNS proposals of type SetSubnetOperationalLevel.
+  //
+  // This would generally be empty, only populated while subnet recovery is
+  // being performed. At the beginning of the recovery process, this
+  // would be populated (generally with a single value), and then at the end,
+  // set back to empty.
+  //
+  // See also ssh_*_access fields in SubnetRecord. Of course, the difference is
+  // that this applies only to one node, while the fields in SubnetRecord apply
+  // to nodes in all the subnet.
+  repeated string ssh_node_state_write_access = 21;
+
   reserved 1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14;
   reserved "node_id";
   reserved "gossip_advert";
