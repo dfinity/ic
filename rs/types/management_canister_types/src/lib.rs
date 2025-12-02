@@ -3531,15 +3531,14 @@ pub struct FetchCanisterLogsRange {
 impl Payload<'_> for FetchCanisterLogsRange {}
 
 impl FetchCanisterLogsRange {
-    pub fn is_valid(&self) -> bool {
-        self.start < self.end
-    }
-}
-
-impl FetchCanisterLogsRange {
     /// Creates a new range from `start` (inclusive) to `end` (exclusive).
     pub fn new(start: u64, end: u64) -> Self {
         Self { start, end }
+    }
+
+    /// Returns true if the range is valid (i.e., start < end).
+    pub fn is_valid(&self) -> bool {
+        self.start < self.end
     }
 
     /// Returns the length of the range.
