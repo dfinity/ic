@@ -257,7 +257,7 @@ message StrippedBlockProposal {
   BlockProposal pruned_block_proposal = 1;
   // The stripped ingress messages, i.e. the IDs of ingress messages that were pruned from the block proposal.
   repeated StrippedIngressMessage ingress_messages = 2;
-  //The consensus message ID of the original (unstripped) block proposal, including the [`Strippable`] data.
+  // The consensus message ID of the original (unstripped) block proposal, including the [`Strippable`] data.
   ConsensusMessageId unstripped_consensus_message_id = 3;
   // The stripped IDKG dealings, i.e. the IDs of IDKG dealings that were pruned from the block proposal.
   repeated StrippedIDkgDealing stripped_idkg_dealings = 4;

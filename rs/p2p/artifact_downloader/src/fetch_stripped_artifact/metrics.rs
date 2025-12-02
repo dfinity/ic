@@ -86,7 +86,7 @@ impl FetchStrippedConsensusArtifactMetrics {
         &self,
         source: StrippedMessageSource,
         message_type: StrippedMessageType,
-        count: u64,
+        count: usize,
     ) {
         self.stripped_messages_in_a_block_count
             .with_label_values(&[source.as_str(), message_type.as_str()])

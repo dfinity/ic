@@ -211,8 +211,8 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             ));
         }
 
-        let mut messages_from_pool = BTreeMap::new();
-        let mut messages_from_peers = BTreeMap::new();
+        let mut messages_from_pool = BTreeMap::<StrippedMessageType, usize>::new();
+        let mut messages_from_peers = BTreeMap::<StrippedMessageType, usize>::new();
 
         while let Some(join_result) = join_set.join_next().await {
             let Ok((message, peer_id)) = join_result else {
@@ -241,7 +241,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             }
         }
 
-        // Only report the metric if we actually downloaded some ingresses from peers
+        // Only report the metric if we actually downloaded some stripped messages from peers
         if !messages_from_peers.is_empty() {
             timer.stop_and_record();
         } else {
@@ -378,20 +378,18 @@ impl BlockProposalAssembler {
         }
     }
 
-    /// Returns the list of ingress messages which have been stripped from the block.
+    /// Returns the list of messages which have been stripped from the block.
     pub(crate) fn missing_stripped_messages(&self) -> Vec<StrippedMessageId> {
-        let ingress = self
-            .ingress_messages
-            .iter()
-            .filter_map(|(signed_ingress_id, maybe_ingress)| {
-                if maybe_ingress.is_none() {
-                    Some(signed_ingress_id)
-                } else {
-                    None
-                }
-            })
-            .cloned()
-            .map(StrippedMessageId::Ingress);
+        let ingress =
+            self.ingress_messages
+                .iter()
+                .filter_map(|(signed_ingress_id, maybe_ingress)| {
+                    if maybe_ingress.is_none() {
+                        Some(StrippedMessageId::Ingress(signed_ingress_id.clone()))
+                    } else {
+                        None
+                    }
+                });
 
         let idkg_dealings =
             self.signed_dealings
