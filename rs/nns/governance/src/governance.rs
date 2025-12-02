@@ -511,6 +511,9 @@ impl Action {
             Action::StopOrStartCanister(_) => "ACTION_STOP_OR_START_CANISTER",
             Action::UpdateCanisterSettings(_) => "ACTION_UPDATE_CANISTER_SETTINGS",
             Action::FulfillSubnetRentalRequest(_) => "ACTION_FULFILL_SUBNET_RENTAL_REQUEST",
+            Action::DeclareAlternativeReplicaVirtualMachineSoftwareSet(_) => {
+                "ACTION_DECLARE_ALTERNATIVE_REPLICA_VIRTUAL_MACHINE_SOFTWARE_SET"
+            }
         }
     }
 }
@@ -4237,6 +4240,24 @@ impl Governance {
                 self.perform_fulfill_subnet_rental_request(pid, fulfill_subnet_rental_request)
                     .await
             }
+            ValidProposalAction::DeclareAlternativeReplicaVirtualMachineSoftwareSet(_) =>
+            // Like with Motion proposals, the execution of these proposals
+            // is trivial. The reason for trivial execution in this case is
+            // that the way this is actually effected is by a node operator
+            // manually running some command(s) on a node in case the normal
+            // means of changing software fail (i.e. via a
+            // DeployGuestosToAllSubnetNodes proposal). Such manual
+            // intervention includes downloading this ProposalInfo, and
+            // proceeding with guest boot, once it sees that approved
+            // software and configuration (consisting of firmware, kernel,
+            // initrd, and kernel command line) is being run. The job of the
+            // Governance canister in this case is merely to record whether
+            // neurons have (collectively) approved that new software is
+            // allowed. Beyond that, making those changes actually take
+            // effect is beyond the scope of the Governance canister itself.
+            {
+                self.set_proposal_execution_status(pid, Ok(()))
+            }
         }
     }
 
@@ -4824,6 +4845,9 @@ impl Governance {
             ValidProposalAction::DeregisterKnownNeuron(deregister_known_neuron) => {
                 deregister_known_neuron.validate(&self.neuron_store)
             }
+            ValidProposalAction::DeclareAlternativeReplicaVirtualMachineSoftwareSet(
+                declare_alternative_virtual_machine_software_set,
+            ) => declare_alternative_virtual_machine_software_set.validate(),
         }
     }
 

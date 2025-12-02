@@ -703,6 +703,9 @@ message Proposal {
     UpdateCanisterSettings update_canister_settings = 27;
     // Create a rented subnet.
     FulfillSubnetRentalRequest fulfill_subnet_rental_request = 28;
+    // Allow node operators to manually intervene in case of disaster to run
+    // (NNS-approved) new software.
+    DeclareAlternativeReplicaVirtualMachineSoftwareSet declare_alternative_replica_virtual_machine_software_set = 31;
   }
 }
 
@@ -1919,6 +1922,43 @@ message FulfillSubnetRentalRequest {
   ic_base_types.pb.v1.PrincipalId user = 1;
   repeated ic_base_types.pb.v1.PrincipalId node_ids = 3;
   string replica_version_id = 2;
+}
+
+message DeclareAlternativeReplicaVirtualMachineSoftwareSet {
+  repeated bytes chip_ids = 1;
+  string hexidecimal_recovery_rootfs_fingerprint = 2;
+  GuestLaunchMeasurements base_guest_launch_measurements = 3;
+}
+
+// This is copied from rs/protobuf/.../replica_version.proto. This hack gets
+// around how we tell Prost to slather #[derive(Comparable)] all over the place.
+// That creates a viral requirement, but the rest of the world does not fulfill
+// that requiremnt. Thus, we paint ourselves into this corner where we are not
+// allowed to use the rest of the world, and must do unholy things like this.
+//
+// A less hacky way around this might be to use an alternative Prost
+// configuration to derive Rust types that have the necessary
+// #[derive(Comparable)] from the same replica_version.proto file, but for the
+// time being, copying seems more or less okish.
+message GuestLaunchMeasurements {
+  // A list of valid SEV-SNP measurements. One release can have multiple valid
+  // measurements, e.g. depending on the kernel command line used to launch the
+  // guest. Must be non-empty.
+  repeated GuestLaunchMeasurement guest_launch_measurements = 1;
+}
+
+// See remarks on GuestLaunchMeasurements (plural).
+message GuestLaunchMeasurement {
+  // SEV-SNP measurement (48 bytes)
+  bytes measurement = 1;
+  // Metadata about how the measurement was obtained
+  GuestLaunchMeasurementMetadata metadata = 2;
+}
+
+// See remarks on GuestLaunchMeasurements (plural).
+message GuestLaunchMeasurementMetadata {
+  // Kernel command line string used to launch the guest
+  string kernel_cmdline = 1;
 }
 
 // This represents the whole NNS governance system. It contains all

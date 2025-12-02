@@ -2,10 +2,11 @@ use crate::{
     governance::{Environment, LOG_PREFIX},
     pb::v1::{
         AddOrRemoveNodeProvider, ApproveGenesisKyc, CreateServiceNervousSystem,
-        DeregisterKnownNeuron, FulfillSubnetRentalRequest, GovernanceError, InstallCode,
-        KnownNeuron, ManageNeuron, Motion, NetworkEconomics, ProposalData, RewardNodeProvider,
-        RewardNodeProviders, SelfDescribingProposalAction, StopOrStartCanister, Topic,
-        UpdateCanisterSettings, Vote, governance_error::ErrorType, proposal::Action,
+        DeclareAlternativeReplicaVirtualMachineSoftwareSet, DeregisterKnownNeuron,
+        FulfillSubnetRentalRequest, GovernanceError, InstallCode, KnownNeuron, ManageNeuron,
+        Motion, NetworkEconomics, ProposalData, RewardNodeProvider, RewardNodeProviders,
+        SelfDescribingProposalAction, StopOrStartCanister, Topic, UpdateCanisterSettings, Vote,
+        governance_error::ErrorType, proposal::Action,
     },
     proposals::{
         execute_nns_function::ValidExecuteNnsFunction,
@@ -20,7 +21,7 @@ use std::{collections::HashMap, sync::Arc};
 
 pub mod call_canister;
 pub mod create_service_nervous_system;
-mod decode_candid_args_to_self_describing_value;
+pub mod declare_alternative_replica_virtual_machine_software_set;
 pub mod deregister_known_neuron;
 pub mod execute_nns_function;
 pub mod fulfill_subnet_rental_request;
@@ -29,6 +30,8 @@ pub mod register_known_neuron;
 pub mod self_describing;
 pub mod stop_or_start_canister;
 pub mod update_canister_settings;
+
+mod decode_candid_args_to_self_describing_value;
 
 /// Represents a valid proposal action that has passed initial validation.
 /// Unlike the protobuf Action enum, this enum only includes non-obsolete actions.
@@ -50,6 +53,9 @@ pub enum ValidProposalAction {
     StopOrStartCanister(StopOrStartCanister),
     UpdateCanisterSettings(UpdateCanisterSettings),
     FulfillSubnetRentalRequest(FulfillSubnetRentalRequest),
+    DeclareAlternativeReplicaVirtualMachineSoftwareSet(
+        DeclareAlternativeReplicaVirtualMachineSoftwareSet,
+    ),
 }
 
 impl TryFrom<Option<Action>> for ValidProposalAction {
@@ -103,6 +109,13 @@ impl TryFrom<Option<Action>> for ValidProposalAction {
             Action::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => Ok(
                 ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request),
             ),
+            Action::DeclareAlternativeReplicaVirtualMachineSoftwareSet(
+                declare_alternative_virtual_machine_software_set,
+            ) => Ok(
+                ValidProposalAction::DeclareAlternativeReplicaVirtualMachineSoftwareSet(
+                    declare_alternative_virtual_machine_software_set,
+                ),
+            ),
 
             // Obsolete actions
             Action::SetDefaultFollowees(_) => Err(GovernanceError::new_with_message(
@@ -146,6 +159,9 @@ impl ValidProposalAction {
                 update_settings.valid_topic()?
             }
             ValidProposalAction::FulfillSubnetRentalRequest(_) => Topic::SubnetRental,
+            ValidProposalAction::DeclareAlternativeReplicaVirtualMachineSoftwareSet(_) => {
+                Topic::NodeAdmin
+            }
         };
         Ok(topic)
     }

@@ -432,7 +432,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28, 31"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -538,6 +538,12 @@ pub mod proposal {
         /// Create a rented subnet.
         #[prost(message, tag = "28")]
         FulfillSubnetRentalRequest(super::FulfillSubnetRentalRequest),
+        /// Allow node operators to manually intervene in case of disaster to run
+        /// (NNS-approved) new software.
+        #[prost(message, tag = "31")]
+        DeclareAlternativeReplicaVirtualMachineSoftwareSet(
+            super::DeclareAlternativeReplicaVirtualMachineSoftwareSet,
+        ),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -2785,6 +2791,82 @@ pub struct FulfillSubnetRentalRequest {
     pub node_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
     #[prost(string, tag = "2")]
     pub replica_version_id: ::prost::alloc::string::String,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct DeclareAlternativeReplicaVirtualMachineSoftwareSet {
+    #[prost(bytes = "vec", repeated, tag = "1")]
+    pub chip_ids: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    #[prost(string, tag = "2")]
+    pub hexidecimal_recovery_rootfs_fingerprint: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub base_guest_launch_measurements: ::core::option::Option<GuestLaunchMeasurements>,
+}
+/// This is copied from rs/protobuf/.../replica_version.proto. This hack gets
+/// around how we tell Prost to slather #\[derive(Comparable)\] all over the place.
+/// That creates a viral requirement, but the rest of the world does not fulfill
+/// that requiremnt. Thus, we paint ourselves into this corner where we are not
+/// allowed to use the rest of the world, and must do unholy things like this.
+///
+/// A less hacky way around this might be to use an alternative Prost
+/// configuration to derive Rust types that have the necessary
+/// #\[derive(Comparable)\] from the same replica_version.proto file, but for the
+/// time being, copying seems more or less okish.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GuestLaunchMeasurements {
+    /// A list of valid SEV-SNP measurements. One release can have multiple valid
+    /// measurements, e.g. depending on the kernel command line used to launch the
+    /// guest. Must be non-empty.
+    #[prost(message, repeated, tag = "1")]
+    pub guest_launch_measurements: ::prost::alloc::vec::Vec<GuestLaunchMeasurement>,
+}
+/// See remarks on GuestLaunchMeasurements (plural).
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GuestLaunchMeasurement {
+    /// SEV-SNP measurement (48 bytes)
+    #[prost(bytes = "vec", tag = "1")]
+    pub measurement: ::prost::alloc::vec::Vec<u8>,
+    /// Metadata about how the measurement was obtained
+    #[prost(message, optional, tag = "2")]
+    pub metadata: ::core::option::Option<GuestLaunchMeasurementMetadata>,
+}
+/// See remarks on GuestLaunchMeasurements (plural).
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GuestLaunchMeasurementMetadata {
+    /// Kernel command line string used to launch the guest
+    #[prost(string, tag = "1")]
+    pub kernel_cmdline: ::prost::alloc::string::String,
 }
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept

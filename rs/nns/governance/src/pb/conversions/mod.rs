@@ -455,6 +455,9 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             pb_api::proposal::Action::FulfillSubnetRentalRequest(v) => {
                 pb::proposal::Action::FulfillSubnetRentalRequest(v.into())
             }
+            pb_api::proposal::Action::DeclareAlternativeReplicaVirtualMachineSoftwareSet(v) => {
+                pb::proposal::Action::DeclareAlternativeReplicaVirtualMachineSoftwareSet(v.into())
+            }
         }
     }
 }
@@ -2683,6 +2686,98 @@ impl From<pb_api::FulfillSubnetRentalRequest> for pb::FulfillSubnetRentalRequest
             user: item.user,
             node_ids: item.node_ids.unwrap_or_default(),
             replica_version_id: item.replica_version_id.unwrap_or_default(),
+        }
+    }
+}
+
+impl From<pb::DeclareAlternativeReplicaVirtualMachineSoftwareSet>
+    for pb_api::DeclareAlternativeReplicaVirtualMachineSoftwareSet
+{
+    fn from(item: pb::DeclareAlternativeReplicaVirtualMachineSoftwareSet) -> Self {
+        Self {
+            chip_ids: Some(item.chip_ids),
+            hexidecimal_recovery_rootfs_fingerprint: Some(
+                item.hexidecimal_recovery_rootfs_fingerprint,
+            ),
+            base_guest_launch_measurements: item
+                .base_guest_launch_measurements
+                .map(|item| item.into()),
+        }
+    }
+}
+
+impl From<pb_api::DeclareAlternativeReplicaVirtualMachineSoftwareSet>
+    for pb::DeclareAlternativeReplicaVirtualMachineSoftwareSet
+{
+    fn from(item: pb_api::DeclareAlternativeReplicaVirtualMachineSoftwareSet) -> Self {
+        Self {
+            chip_ids: item.chip_ids.unwrap_or_default(),
+            hexidecimal_recovery_rootfs_fingerprint: item
+                .hexidecimal_recovery_rootfs_fingerprint
+                .unwrap_or_default(),
+            base_guest_launch_measurements: item
+                .base_guest_launch_measurements
+                .map(|item| item.into()),
+        }
+    }
+}
+
+impl From<pb::GuestLaunchMeasurements> for pb_api::GuestLaunchMeasurements {
+    fn from(item: pb::GuestLaunchMeasurements) -> Self {
+        Self {
+            guest_launch_measurements: Some(
+                item.guest_launch_measurements
+                    .into_iter()
+                    .map(|item| item.into())
+                    .collect(),
+            ),
+        }
+    }
+}
+
+impl From<pb_api::GuestLaunchMeasurements> for pb::GuestLaunchMeasurements {
+    fn from(item: pb_api::GuestLaunchMeasurements) -> Self {
+        Self {
+            guest_launch_measurements: item
+                .guest_launch_measurements
+                .unwrap_or_default()
+                .into_iter()
+                .map(|item| item.into())
+                .collect(),
+        }
+    }
+}
+
+impl From<pb::GuestLaunchMeasurement> for pb_api::GuestLaunchMeasurement {
+    fn from(item: pb::GuestLaunchMeasurement) -> Self {
+        Self {
+            measurement: Some(item.measurement),
+            metadata: item.metadata.map(|item| item.into()),
+        }
+    }
+}
+
+impl From<pb_api::GuestLaunchMeasurement> for pb::GuestLaunchMeasurement {
+    fn from(item: pb_api::GuestLaunchMeasurement) -> Self {
+        Self {
+            measurement: item.measurement.unwrap_or_default(),
+            metadata: item.metadata.map(|item| item.into()),
+        }
+    }
+}
+
+impl From<pb::GuestLaunchMeasurementMetadata> for pb_api::GuestLaunchMeasurementMetadata {
+    fn from(item: pb::GuestLaunchMeasurementMetadata) -> Self {
+        Self {
+            kernel_cmdline: Some(item.kernel_cmdline),
+        }
+    }
+}
+
+impl From<pb_api::GuestLaunchMeasurementMetadata> for pb::GuestLaunchMeasurementMetadata {
+    fn from(item: pb_api::GuestLaunchMeasurementMetadata) -> Self {
+        Self {
+            kernel_cmdline: item.kernel_cmdline.unwrap_or_default(),
         }
     }
 }
