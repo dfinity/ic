@@ -94,3 +94,5 @@ rs/bitcoin/* //rs/tests/ckbtc:btc_adapter_basics_test
              //rs/tests/execution:btc_get_balance_test_colocate
 
 rs/boundary_node/rate_limits/* //rs/tests/boundary_nodes:rate_limit_canister_test
+
+rs/migration_canister/* //rs/tests/execution:canister_migration_test_head_nns
