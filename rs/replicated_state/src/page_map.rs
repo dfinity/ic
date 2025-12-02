@@ -918,7 +918,7 @@ pub struct Buffer {
     /// Cache of pages that were read from the underlying PageMap — stored
     /// separately to avoid extra lookups when the same page is read many times.
     /// Only stores clean pages; modified pages remain in `dirty_pages`.
-    cached_pages: RefCell<HashMap<PageIndex, PageBytes>>,
+    clean_pages: RefCell<HashMap<PageIndex, PageBytes>>,
 }
 
 impl Buffer {
@@ -927,7 +927,7 @@ impl Buffer {
         Self {
             page_map,
             dirty_pages: HashMap::new(),
-            cached_pages: RefCell::new(HashMap::new()),
+            clean_pages: RefCell::new(HashMap::new()),
         }
     }
 
@@ -941,17 +941,17 @@ impl Buffer {
             let offset_into_page = offset % page_size;
             let page_len = dst.len().min(page_size - offset_into_page);
 
-            // First check if the page is dirty, then check the cache, and finally
+            // First check if the page is dirty, then check the clean pages cache, and finally
             // load it from the underlying page map.
             let page_contents: &PageBytes = if let Some(bytes) = self.dirty_pages.get(&page) {
                 bytes
             } else {
-                if let Some(bytes) = self.cached_pages.borrow().get(&page) {
+                if let Some(bytes) = self.clean_pages.borrow().get(&page) {
                     bytes
                 } else {
                     let loaded: PageBytes = *self.page_map.get_page(page);
-                    self.cached_pages.borrow_mut().insert(page, loaded);
-                    self.cached_pages.borrow().get(&page).unwrap()
+                    self.clean_pages.borrow_mut().insert(page, loaded);
+                    self.clean_pages.borrow().get(&page).unwrap()
                 }
             };
 
