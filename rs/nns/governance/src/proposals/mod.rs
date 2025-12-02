@@ -106,7 +106,7 @@ impl TryFrom<Option<Action>> for ValidProposalAction {
             // Obsolete actions
             Action::SetDefaultFollowees(_) => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                "Se tDefaultFollowees is obsolete",
+                "SetDefaultFollowees is obsolete",
             )),
             Action::OpenSnsTokenSwap(_) => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
