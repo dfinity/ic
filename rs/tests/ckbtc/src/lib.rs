@@ -8,6 +8,8 @@ use ic_btc_checker::{
     CheckArg, CheckMode, InitArg as CheckerInitArg, UpgradeArg as CheckerUpgradeArg,
 };
 use ic_btc_interface::{Config, Fees, Flag, Network};
+#[cfg(feature = "tla")]
+use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::{
     CKBTC_LEDGER_MEMO_SIZE,
     lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg, Mode},
@@ -48,6 +50,9 @@ use std::{
     time::Duration,
 };
 
+#[cfg(feature = "tla")]
+use ic_ckbtc_minter::tla::perform_trace_check;
+
 pub mod adapter;
 pub mod utils;
 
@@ -75,6 +80,23 @@ pub const BTC_MIN_CONFIRMATIONS: u64 = 6;
 pub const CHECK_FEE: u64 = 1001;
 
 const UNIVERSAL_VM_NAME: &str = "btc-node";
+
+#[cfg(feature = "tla")]
+pub fn fetch_and_check_traces(agent: &CkBtcMinterAgent) {
+    // Fetch traces from the canister
+    let traces: Vec<tla_instrumentation::UpdateTrace> = ::candid::decode_one(
+        &block_on(
+            agent
+                .agent
+                .query(&agent.minter_canister_id, "get_tla_traces")
+                .call(),
+        )
+        .expect("Failed to query get_tla_traces"),
+    )
+    .expect("Failed to decode traces");
+
+    perform_trace_check(traces);
+}
 
 pub(crate) const BITCOIND_RPC_USER: &str = "btc-dev-preview";
 

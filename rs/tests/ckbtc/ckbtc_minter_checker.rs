@@ -17,6 +17,8 @@ use ic_system_test_driver::{
     systest,
     util::{UniversalCanister, assert_create_agent, block_on, runtime_from_url},
 };
+#[cfg(feature = "tla")]
+use ic_tests_ckbtc::fetch_and_check_traces;
 use ic_tests_ckbtc::{
     BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, ckbtc_setup,
     create_canister, install_bitcoin_canister, install_btc_checker, install_ledger, install_minter,
@@ -352,6 +354,9 @@ pub fn test_btc_checker(env: TestEnv) {
         let metrics = minter_agent.get_metrics_map().await;
         let owed_kyt_amount = metrics.get("ckbtc_minter_owed_kyt_amount").unwrap().value;
         assert_eq!(owed_kyt_amount, 0_f64);
+
+        #[cfg(feature = "tla")]
+        fetch_and_check_traces(&minter_agent);
     });
 }
 

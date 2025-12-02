@@ -35,6 +35,9 @@ use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use slog::{debug, info};
 
+#[cfg(feature = "tla")]
+use ic_tests_ckbtc::fetch_and_check_traces;
+
 /// Test retrieve_btc method of the minter canister.
 pub fn test_retrieve_btc(env: TestEnv) {
     let logger = env.logger();
@@ -252,6 +255,9 @@ pub fn test_retrieve_btc(env: TestEnv) {
             .expect("Error while calling retrieve_btc")
             .expect("failed to retrieve btc");
         assert_eq!(5, retrieve_result.block_index);
+
+        #[cfg(feature = "tla")]
+        fetch_and_check_traces(&minter_agent);
     });
 }
 fn main() -> Result<()> {

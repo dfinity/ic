@@ -40,7 +40,7 @@ impl std::fmt::Debug for ApalacheError {
                     {
                         f.write_str("This is most likely a mismatch between the code and the model")
                     }
-                    _ => f.write_str("This is most likely a problem with the model itself."),
+                    _ => f.write_str("This is most likely a problem with the model itself, or the TLA annotations (e.g., failing to log the values of some variables)"),
                 }
             }
             ApalacheError::CheckFailed(None, s) => {
@@ -167,17 +167,16 @@ fn run_apalache(
         .arg("--length=1")
         .arg(tla_module)
         .env("JVM_ARGS", jvm_args);
-    cmd.status()
+    cmd.output()
         .map_err(|e| ApalacheError::SetupError(e.to_string()))
         .and_then(|e| {
-            if e.success() {
+            if e.status.success() {
                 Ok(())
             } else {
                 Err(ApalacheError::CheckFailed(
-                    e.code(),
-                    format!("When checking file\n{tla_module:?}\nApalache returned the error: {e}")
-                        .to_string(),
-                ))
+                    e.status.code(),
+                    format!("When checking file\n{tla_module:?}\nApalache returned the error: {}\nApalache stdout:\n{}\nApalache stderr:\n{}", e.status, String::from_utf8_lossy(&e.stdout), String::from_utf8_lossy(&e.stderr)
+                )))
             }
         })
 }
