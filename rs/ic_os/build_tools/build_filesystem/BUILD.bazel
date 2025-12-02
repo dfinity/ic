@@ -1,0 +1,38 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+package(default_visibility = [
+    "//rs:ic-os-pkg",
+    "//toolchains/sysimage:__pkg__",
+])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:anyhow",
+    "@crate_index//:clap",
+    "@crate_index//:rand",
+    "@crate_index//:regex",
+    "@crate_index//:selinux",
+    "@crate_index//:tar",
+    "@crate_index//:tempfile",
+]
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEPENDENCIES = []
+
+rust_binary(
+    name = "build-filesystem",
+    srcs = glob(["src/**/*.rs"]),
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "build_filesystem_test",
+    srcs = glob(["src/**/*.rs"]),
+    crate_root = "src/main.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+

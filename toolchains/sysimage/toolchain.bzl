@@ -162,166 +162,99 @@ build_container_filesystem = _icos_build_rule(
     },
 )
 
-def _vfat_image_impl(ctx):
-    args = []
-    inputs = []
-    outputs = []
+def icos_image(
+        name,
+        image_type,
+        partition_size = None,
+        src = None,
+        subdir = None,
+        file_contexts = None,
+        strip_paths = None,
+        extra_files = None,
+        label = None,
+        **kwargs):
+    """
+    Build a filesystem image from a tar file.
 
-    # Output file is the name given to the target
-    output_file = ctx.actions.declare_file(ctx.label.name)
-    args.extend(["-o", output_file.path])
-    outputs.append(output_file)
+    Args:
+        name: Name of the output file (if compressed format, e.g. .tar.zst, the image will be compressed)
+        image_type: Type of image to create ("tar", "ext4", "vfat", "fat32")
+        partition_size: Size of the partition (e.g., "100M", "1G"). Required for ext4, vfat, and fat32, not allowed for tar.
+        src: Optional input tar file
+        subdir: Optional subdirectory to extract from input tar
+        file_contexts: Optional SELinux file_contexts file
+        strip_paths: Optional list of paths to remove from the tree
+        extra_files: Optional dict of extra files to inject (label -> target path)
+        label: Optional volume label (for fat32 filesystems)
+    """
 
-    for src_file in ctx.files.src:
-        args.extend(["-i", src_file.path])
-    inputs.extend(ctx.files.src)
-
-    args.extend([
-        "-s",
-        ctx.attr.partition_size,
-        "-p",
-        ctx.attr.subdir,
-        "--dflate",
-        ctx.executable._dflate.path,
-    ])
-
-    for input_target, install_target in ctx.attr.extra_files.items():
-        args.append(input_target.files.to_list()[0].path + ":" + install_target)
-        inputs.extend(input_target.files.to_list())
-
-    _run_with_icos_wrapper(
-        ctx,
-        executable = ctx.executable._tool.path,
-        arguments = args,
-        inputs = inputs,
-        outputs = outputs,
-        tools = [ctx.attr._tool.files_to_run, ctx.attr._dflate.files_to_run],
+    # All image types are now handled directly by the build_fs_tar binary
+    _icos_image_impl_rule(
+        name = name,
+        src = src,
+        output = name,
+        image_type = image_type,
+        partition_size = partition_size or "",
+        subdir = subdir,
+        file_contexts = file_contexts,
+        strip_paths = strip_paths or [],
+        extra_files = extra_files or {},
+        label = label or "",
+        **kwargs
     )
 
-    return [DefaultInfo(files = depset(outputs))]
+def tar_image(name, **kwargs):
+    icos_image(
+        name = name,
+        image_type = "tar",
+        **kwargs
+    )
 
-vfat_image = _icos_build_rule(
-    implementation = _vfat_image_impl,
-    attrs = {
-        "src": attr.label(
-            allow_files = True,
-        ),
-        "extra_files": attr.label_keyed_string_dict(
-            allow_files = True,
-        ),
-        "partition_size": attr.string(
-            mandatory = True,
-        ),
-        "subdir": attr.string(
-            default = "/",
-        ),
-        "_tool": attr.label(
-            default = "//toolchains/sysimage:build_vfat_image",
-            executable = True,
-            cfg = "exec",
-        ),
-        "_dflate": attr.label(
-            default = "//rs/ic_os/build_tools/dflate",
-            executable = True,
-            cfg = "exec",
-        ),
-    },
-)
+def ext4_image(name, **kwargs):
+    icos_image(
+        name = name,
+        image_type = "ext4",
+        **kwargs
+    )
 
-def _fat32_image_impl(ctx):
+def vfat_image(name, **kwargs):
+    icos_image(
+        name = name,
+        image_type = "vfat",
+        **kwargs
+    )
+
+def fat32_image(name, **kwargs):
+    icos_image(
+        name = name,
+        image_type = "fat32",
+        **kwargs
+    )
+
+def _icos_image_impl_rule_impl(ctx):
     args = []
     inputs = []
     outputs = []
 
-    # Output file is the name given to the target
-    output_file = ctx.actions.declare_file(ctx.label.name)
+    output_file = ctx.actions.declare_file(ctx.attr.output)
     args.extend(["-o", output_file.path])
     outputs.append(output_file)
 
-    for src_file in ctx.files.src:
-        args.extend(["-i", src_file.path])
-    inputs.extend(ctx.files.src)
+    if ctx.files.src:
+        for src_file in ctx.files.src:
+            args.extend(["-i", src_file.path])
+        inputs.extend(ctx.files.src)
 
-    args.extend([
-        "-s",
-        ctx.attr.partition_size,
-        "-p",
-        ctx.attr.subdir,
-        "--dflate",
-        ctx.executable._dflate.path,
-    ])
+    args.extend(["-t", ctx.attr.image_type])
 
-    for input_target, install_target in ctx.attr.extra_files.items():
-        args.append(input_target.files.to_list()[0].path + ":" + install_target)
-        inputs.extend(input_target.files.to_list())
+    if ctx.attr.partition_size:
+        args.extend(["--partition-size", ctx.attr.partition_size])
 
     if ctx.attr.label:
-        args.extend(["-l", ctx.attr.label])
+        args.extend(["--label", ctx.attr.label])
 
-    _run_with_icos_wrapper(
-        ctx,
-        executable = ctx.executable._tool.path,
-        arguments = args,
-        inputs = inputs,
-        outputs = outputs,
-        tools = [ctx.attr._tool.files_to_run, ctx.attr._dflate.files_to_run],
-    )
-
-    return [DefaultInfo(files = depset(outputs))]
-
-fat32_image = _icos_build_rule(
-    implementation = _fat32_image_impl,
-    attrs = {
-        "src": attr.label(
-            allow_files = True,
-        ),
-        "extra_files": attr.label_keyed_string_dict(
-            allow_files = True,
-        ),
-        "partition_size": attr.string(
-            mandatory = True,
-        ),
-        "label": attr.string(),
-        "subdir": attr.string(
-            default = "/",
-        ),
-        "_tool": attr.label(
-            default = "//toolchains/sysimage:build_fat32_image",
-            executable = True,
-            cfg = "exec",
-        ),
-        "_dflate": attr.label(
-            default = "//rs/ic_os/build_tools/dflate",
-            executable = True,
-            cfg = "exec",
-        ),
-    },
-)
-
-def _ext4_image_impl(ctx):
-    args = []
-    inputs = []
-    outputs = []
-
-    # Output file is the name given to the target
-    output_file = ctx.actions.declare_file(ctx.label.name)
-    args.extend(["-o", output_file.path])
-    outputs.append(output_file)
-
-    for src_file in ctx.files.src:
-        args.extend(["-i", src_file.path])
-    inputs.extend(ctx.files.src)
-
-    args.extend([
-        "-s",
-        ctx.attr.partition_size,
-        "-p",
-        ctx.attr.subdir,
-        "--diroid",
-        ctx.executable._diroid.path,
-        "--dflate",
-        ctx.executable._dflate.path,
-    ])
+    if ctx.attr.subdir:
+        args.extend(["-p", ctx.attr.subdir])
 
     if ctx.attr.file_contexts:
         args.extend(["-S", ctx.files.file_contexts[0].path])
@@ -342,42 +275,31 @@ def _ext4_image_impl(ctx):
         arguments = args,
         inputs = inputs,
         outputs = outputs,
-        tools = [ctx.attr._tool.files_to_run, ctx.attr._diroid.files_to_run, ctx.attr._dflate.files_to_run],
+        tools = [ctx.attr._tool.files_to_run],
     )
 
     return [DefaultInfo(files = depset(outputs))]
 
-ext4_image = _icos_build_rule(
-    implementation = _ext4_image_impl,
+_icos_image_impl_rule = _icos_build_rule(
+    implementation = _icos_image_impl_rule_impl,
     attrs = {
         "src": attr.label(
             allow_files = True,
         ),
+        "output": attr.string(mandatory = True),
+        "image_type": attr.string(mandatory = True),
+        "partition_size": attr.string(),
+        "label": attr.string(),
         "file_contexts": attr.label(
             allow_single_file = True,
         ),
         "strip_paths": attr.string_list(),
-        "partition_size": attr.string(
-            mandatory = True,
-        ),
-        "subdir": attr.string(
-            default = "/",
-        ),
+        "subdir": attr.string(),
         "extra_files": attr.label_keyed_string_dict(
             allow_files = True,
         ),
         "_tool": attr.label(
-            default = "//toolchains/sysimage:build_ext4_image",
-            executable = True,
-            cfg = "exec",
-        ),
-        "_diroid": attr.label(
-            default = "//rs/ic_os/build_tools/diroid",
-            executable = True,
-            cfg = "exec",
-        ),
-        "_dflate": attr.label(
-            default = "//rs/ic_os/build_tools/dflate",
+            default = "//toolchains/sysimage:build_fs_tar",
             executable = True,
             cfg = "exec",
         ),

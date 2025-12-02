@@ -53,17 +53,6 @@ py_binary(
 )
 
 py_binary(
-    name = "build_ext4_image",
-    srcs = ["build_ext4_image.py"],
-)
-
-py_binary(
-    name = "build_fat32_image",
-    srcs = ["build_fat32_image.py"],
-    deps = [":utils"],
-)
-
-py_binary(
     name = "build_lvm_image",
     srcs = ["build_lvm_image.py"],
     deps = [":crc"],
@@ -72,12 +61,6 @@ py_binary(
 py_binary(
     name = "build_upgrade_image",
     srcs = ["build_upgrade_image.py"],
-)
-
-py_binary(
-    name = "build_vfat_image",
-    srcs = ["build_vfat_image.py"],
-    deps = [":utils"],
 )
 
 py_binary(

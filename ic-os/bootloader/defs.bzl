@@ -19,11 +19,11 @@ def build_grub_partition(name, grub_config, visibility = None, tags = None):
         name = name,
         src = Label("//ic-os/bootloader:bootloader-tree.tar"),
         extra_files = {
-            grub_config: "/boot/grub/grub.cfg:0644",
-            "//ic-os/bootloader:grubenv": "/boot/grub/grubenv:0644",
+            grub_config: "grub.cfg:0644",
+            "//ic-os/bootloader:grubenv": "grubenv:0644",
         },
         partition_size = "100M",
-        subdir = "boot/grub",
+        subdir = "/boot/grub",
         target_compatible_with = [
             "@platforms//os:linux",
         ],

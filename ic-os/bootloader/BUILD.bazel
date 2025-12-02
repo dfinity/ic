@@ -30,7 +30,7 @@ vfat_image(
     name = "partition-esp.tzst",
     src = ":bootloader-tree.tar",
     partition_size = "100M",
-    subdir = "boot/efi",
+    subdir = "/boot/efi",
     tags = ["manual"],
     target_compatible_with = [
         "@platforms//os:linux",
