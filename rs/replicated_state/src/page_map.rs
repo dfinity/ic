@@ -22,7 +22,7 @@ pub use storage::{
 };
 use storage::{OverlayFile, OverlayVersion, Storage};
 
-use ic_types::{Height, MAX_STABLE_MEMORY_IN_BYTES, NumOsPages};
+use ic_types::Height;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use int_map::{Bounds, IntMap};
@@ -35,6 +35,9 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::os::unix::io::RawFd;
 use std::sync::Arc;
+
+#[cfg(test)]
+use ic_types::{MAX_STABLE_MEMORY_IN_BYTES, NumOsPages};
 
 const LABEL_OP: &str = "op";
 const LABEL_TYPE: &str = "type";
