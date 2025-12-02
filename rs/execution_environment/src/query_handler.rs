@@ -278,6 +278,9 @@ impl InternalHttpQueryHandler {
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
         let subnet_available_memory = full_subnet_memory_capacity(&self.config);
+        // Letting the canister use the full subnet memory reservation
+        // is fine as we do not persist state modifications.
+        let subnet_memory_reservation = self.config.subnet_memory_reservation;
         // We apply the (rather high) subnet soft limit for callbacks because the
         // instruction limit for the whole composite query tree imposes a much lower
         // implicit bound anyway.
@@ -299,6 +302,7 @@ impl InternalHttpQueryHandler {
             data_certificate,
             subnet_available_memory,
             subnet_available_callbacks,
+            subnet_memory_reservation,
             self.config.canister_guaranteed_callback_quota as u64,
             self.max_instructions_per_query,
             self.config.max_query_call_graph_depth,

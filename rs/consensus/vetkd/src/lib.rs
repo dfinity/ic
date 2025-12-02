@@ -975,14 +975,11 @@ mod tests {
             let payload = build_and_validate(&builder, max, &[], &VALIDATION_CONTEXT);
             assert!(payload.len() as u64 <= max.get());
             let payload_deserialized = bytes_to_vetkd_payload(&payload).unwrap();
-            // Only the first agreement should have been included
+            // Only one of the agreements should have been included
             assert_eq!(payload_deserialized.vetkd_agreements.len(), 1);
-            assert_matches!(
-                payload_deserialized
-                    .vetkd_agreements
-                    .get(&CallbackId::from(1)),
-                Some(VetKdAgreement::Success(_))
-            );
+            let (id, agreement) = payload_deserialized.vetkd_agreements.iter().next().unwrap();
+            assert_matches!(agreement, VetKdAgreement::Success(_));
+            assert!(id.get() == 1 || id.get() == 2);
         })
     }
 
@@ -1051,7 +1048,7 @@ mod tests {
                 validation.unwrap_err(),
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
                     InvalidVetKdPayloadReason::MissingContext(id)
-                )) if id.get() == 3
+                )) if id.get() >= 3 && id.get() <= 5
             );
         })
     }

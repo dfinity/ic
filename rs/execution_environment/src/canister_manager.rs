@@ -56,15 +56,14 @@ use ic_replicated_state::{
 };
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
-    CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
-    NumInstructions, PrincipalId, SnapshotId, SubnetId, Time, default_log_memory_limit,
+    CanisterId, CanisterTimer, ComputeAllocation, Cycles, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
+    MAX_AGGREGATE_LOG_MEMORY_LIMIT, MIN_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation, NumBytes,
+    NumInstructions, PrincipalId, SnapshotId, SubnetId, Time,
     ingress::{IngressState, IngressStatus},
-    max_allowed_log_memory_limit,
     messages::{
         CanisterCall, Payload, RejectContext, Response as CanisterResponse, SignedIngressContent,
         StopCanisterContext,
     },
-    min_allowed_log_memory_limit,
     nominal_cycles::NominalCycles,
 };
 use ic_wasm_types::WasmHash;
@@ -457,20 +456,24 @@ impl CanisterManager {
             });
         }
 
-        let log_memory_limit = settings
-            .log_memory_limit()
-            .or(Some(default_log_memory_limit()));
+        let log_memory_limit = settings.log_memory_limit().or(Some(NumBytes::new(
+            DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64,
+        )));
+        let (min_limit, max_limit) = (
+            NumBytes::new(MIN_AGGREGATE_LOG_MEMORY_LIMIT as u64),
+            NumBytes::new(MAX_AGGREGATE_LOG_MEMORY_LIMIT as u64),
+        );
         match log_memory_limit {
-            Some(bytes) if bytes < min_allowed_log_memory_limit() => {
+            Some(bytes) if bytes < min_limit => {
                 return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooLow {
                     bytes,
-                    limit: min_allowed_log_memory_limit(),
+                    limit: min_limit,
                 });
             }
-            Some(bytes) if bytes > max_allowed_log_memory_limit() => {
+            Some(bytes) if bytes > max_limit => {
                 return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooHigh {
                     bytes,
-                    limit: max_allowed_log_memory_limit(),
+                    limit: max_limit,
                 });
             }
             _ => {}
@@ -2946,6 +2949,9 @@ impl CanisterManager {
             canister.scheduler_state.heap_delta_debit += NumBytes::new(bytes_written);
         }
         round_limits.instructions -= as_round_instructions(instructions);
+
+        state.record_snapshot_data_upload(snapshot_id);
+
         // Return the instructions needed to write the chunk to the destination.
         Ok(instructions)
     }

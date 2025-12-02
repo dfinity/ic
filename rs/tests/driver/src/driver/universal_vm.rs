@@ -359,6 +359,7 @@ until ipv4=$(ip -j address show dev enp2s0 \
             '.[0].addr_info | map(select(.scope == "global")) | .[0].local'); \
 do
   if [ "$count" -ge 120 ]; then
+    echo "Timed out waiting for IPv4 address!" >&2
     exit 1
   fi
   sleep 1

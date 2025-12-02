@@ -129,6 +129,7 @@ impl<'a> QueryContext<'a> {
         data_certificate: Option<Vec<u8>>,
         subnet_available_memory: SubnetAvailableMemory,
         subnet_available_callbacks: i64,
+        subnet_memory_reservation: NumBytes,
         canister_guaranteed_callback_quota: u64,
         max_instructions_per_query: NumInstructions,
         max_query_call_graph_depth: usize,
@@ -148,6 +149,7 @@ impl<'a> QueryContext<'a> {
             subnet_available_callbacks,
             // Ignore compute allocation
             compute_allocation_used: 0,
+            subnet_memory_reservation,
         };
         Self {
             log,

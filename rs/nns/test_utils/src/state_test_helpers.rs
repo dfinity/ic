@@ -42,7 +42,7 @@ use ic_nns_governance_api::{
     self as nns_governance_pb, Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
     GetNeuronsFundAuditInfoResponse, Governance, GovernanceError, InstallCodeRequest,
     ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons, ListNeuronsResponse,
-    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfo,
+    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfoRequest,
     ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
     ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
     ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
@@ -1496,7 +1496,7 @@ pub fn nns_set_auto_stake_maturity(
 
 pub fn nns_list_proposals(
     state_machine: &StateMachine,
-    request: ListProposalInfo,
+    request: ListProposalInfoRequest,
 ) -> ListProposalInfoResponse {
     let result = state_machine
         .execute_ingress(
@@ -1515,13 +1515,13 @@ pub fn nns_list_proposals(
 }
 
 /// Return the monthly Node Provider rewards
-pub fn nns_get_monthly_node_provider_rewards(
+pub fn nns_get_node_provider_rewards(
     state_machine: &StateMachine,
 ) -> Result<RewardNodeProviders, GovernanceError> {
     let result = state_machine
         .execute_ingress(
             GOVERNANCE_CANISTER_ID,
-            "get_monthly_node_provider_rewards",
+            "get_node_provider_rewards",
             Encode!(&()).unwrap(),
         )
         .unwrap();

@@ -4,7 +4,7 @@ use bitcoin::{Address as BtcAddress, Network as BtcNetwork};
 use candid::{Decode, Encode, Nat, Principal};
 use canlog::LogEntry;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_bitcoin_canister_mock::{OutPoint, PushUtxoToAddress, Utxo};
+use ic_bitcoin_canister_mock::{OutPoint, PushUtxosToAddress, Utxo};
 use ic_btc_checker::{
     BtcNetwork as CheckerBtcNetwork, CheckArg, CheckMode, InitArg as CheckerInitArg,
     UpgradeArg as CheckerUpgradeArg,
@@ -12,6 +12,7 @@ use ic_btc_checker::{
 use ic_btc_interface::{
     GetCurrentFeePercentilesRequest, MillisatoshiPerByte, NetworkInRequest, Txid,
 };
+use ic_ckbtc_minter::fees::{BitcoinFeeEstimator, FeeEstimator};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::logs::Priority;
@@ -28,9 +29,8 @@ use ic_ckbtc_minter::updates::update_balance::{
     PendingUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
 };
 use ic_ckbtc_minter::{
-    CKBTC_LEDGER_MEMO_SIZE, MAX_NUM_INPUTS_IN_TRANSACTION, MIN_RELAY_FEE_PER_VBYTE,
-    MIN_RESUBMISSION_DELAY, MinterInfo, Network, REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS,
-    UTXOS_COUNT_THRESHOLD,
+    CKBTC_LEDGER_MEMO_SIZE, MAX_NUM_INPUTS_IN_TRANSACTION, MIN_RESUBMISSION_DELAY, MinterInfo,
+    Network, UTXOS_COUNT_THRESHOLD,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
@@ -147,17 +147,27 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
     }
 }
 
-fn input_utxos(tx: &bitcoin::Transaction) -> Vec<bitcoin::OutPoint> {
-    tx.input.iter().map(|txin| txin.previous_output).collect()
-}
-
 fn assert_replacement_transaction(old: &bitcoin::Transaction, new: &bitcoin::Transaction) {
+    fn input_utxos(tx: &bitcoin::Transaction) -> Vec<bitcoin::OutPoint> {
+        tx.input.iter().map(|txin| txin.previous_output).collect()
+    }
+
+    fn output_script_pubkey(
+        tx: &bitcoin::Transaction,
+    ) -> BTreeSet<&bitcoin::blockdata::script::Script> {
+        tx.output
+            .iter()
+            .map(|output| &output.script_pubkey)
+            .collect()
+    }
+
     assert_ne!(old.txid(), new.txid());
     assert_eq!(input_utxos(old), input_utxos(new));
+    assert_eq!(output_script_pubkey(old), output_script_pubkey(new));
 
     let new_out_value = new.output.iter().map(|out| out.value).sum::<u64>();
     let prev_out_value = old.output.iter().map(|out| out.value).sum::<u64>();
-    let relay_cost = new.vsize() as u64 * MIN_RELAY_FEE_PER_VBYTE / 1000;
+    let relay_cost = new.vsize() as u64 * BitcoinFeeEstimator::MIN_RELAY_FEE_RATE_INCREASE / 1000;
 
     assert!(
         new_out_value + relay_cost <= prev_out_value,
@@ -399,7 +409,7 @@ fn test_no_new_utxos() {
 
     let deposit_address = ckbtc.get_btc_address(user);
 
-    ckbtc.push_utxo(deposit_address, utxo.clone());
+    ckbtc.push_utxos(vec![utxo.clone()], deposit_address);
 
     let update_balance_args = UpdateBalanceArgs {
         owner: None,
@@ -800,15 +810,19 @@ impl CkBtcSetup {
             .expect("failed to set fee tip height");
     }
 
-    pub fn push_utxo(&self, address: String, utxo: Utxo) {
+    pub fn push_utxos<I: IntoIterator<Item = Utxo>>(&self, utxos: I, address: String) {
+        let request = PushUtxosToAddress {
+            utxos: utxos.into_iter().collect(),
+            address,
+        };
         assert_reply(
             self.env
                 .execute_ingress(
                     self.bitcoin_id,
-                    "push_utxo_to_address",
-                    Encode!(&PushUtxoToAddress { address, utxo }).unwrap(),
+                    "push_utxos_to_address",
+                    Encode!(&request).unwrap(),
                 )
-                .expect("failed to push a UTXO"),
+                .expect("failed to push UTXOs"),
         );
     }
 
@@ -984,9 +998,7 @@ impl CkBtcSetup {
         let account = account.into();
         let deposit_address = self.get_btc_address(account);
 
-        for utxo in utxos.iter() {
-            self.push_utxo(deposit_address.clone(), utxo.clone());
-        }
+        self.push_utxos(utxos.clone(), deposit_address.clone());
 
         let utxo_status = Decode!(
             &assert_reply(
@@ -1333,16 +1345,16 @@ impl CkBtcSetup {
         self.env
             .advance_time(MIN_CONFIRMATIONS * Duration::from_secs(600) + Duration::from_secs(1));
         let txid_bytes: [u8; 32] = tx.txid().to_vec().try_into().unwrap();
-        self.push_utxo(
-            change_address.to_string(),
-            Utxo {
+        self.push_utxos(
+            vec![Utxo {
                 value: change_utxo.value,
                 height: 0,
                 outpoint: OutPoint {
                     txid: txid_bytes.into(),
                     vout: 1,
                 },
-            },
+            }],
+            change_address.to_string(),
         );
     }
 
@@ -2380,8 +2392,7 @@ fn should_cancel_and_reimburse_large_withdrawal() {
     );
 
     let reimbursement_block_index = block_index + 1;
-    let reimbursement_amount =
-        withdrawal_amount - REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS;
+    let reimbursement_amount = withdrawal_amount - BitcoinFeeEstimator::COST_OF_ONE_BILLION_CYCLES;
 
     assert_matches!(
         ckbtc.retrieve_btc_status_v2(block_index),
@@ -2429,6 +2440,6 @@ fn should_cancel_and_reimburse_large_withdrawal() {
     ckbtc.assert_ledger_transaction_reimbursement_correct(block_index, reimbursement_block_index);
     assert_eq!(
         ckbtc.balance_of(user_account),
-        balance_before_withdrawal.clone() - REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS
+        balance_before_withdrawal.clone() - BitcoinFeeEstimator::COST_OF_ONE_BILLION_CYCLES
     );
 }

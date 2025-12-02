@@ -20,7 +20,7 @@ use ic_config::{
         CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, DEFAULT_WASM_MEMORY_LIMIT,
         MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH, MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
         MAX_ENVIRONMENT_VARIABLES, MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
-        SUBNET_CALLBACK_SOFT_LIMIT,
+        SUBNET_CALLBACK_SOFT_LIMIT, SUBNET_MEMORY_RESERVATION,
     },
     flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
@@ -2355,6 +2355,7 @@ fn failed_upgrade_hooks_consume_instructions() {
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
             compute_allocation_used: state.total_compute_allocation(),
+            subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
         };
         let sender = canister_test_id(100).get();
         let canister_id = canister_manager
@@ -2394,6 +2395,7 @@ fn failed_upgrade_hooks_consume_instructions() {
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
             compute_allocation_used: state.total_compute_allocation(),
+            subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
         };
         let compilation_cost = wasm_compilation_cost(&upgrade_wasm);
         let (instructions_left, result, _) = install_code(
@@ -2496,6 +2498,7 @@ fn failed_install_hooks_consume_instructions() {
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
             compute_allocation_used: state.total_compute_allocation(),
+            subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
         };
         let sender = canister_test_id(100).get();
         let canister_id = canister_manager
@@ -2581,6 +2584,7 @@ fn install_code_respects_instruction_limit() {
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
     let sender = canister_test_id(100).get();
     let canister_id = canister_manager
@@ -2634,6 +2638,7 @@ fn install_code_respects_instruction_limit() {
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
     let (instructions_left, result, canister) = install_code(
         &canister_manager,
@@ -2665,6 +2670,7 @@ fn install_code_respects_instruction_limit() {
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
     let (instructions_left, result, canister) = install_code(
         &canister_manager,
@@ -2690,6 +2696,7 @@ fn install_code_respects_instruction_limit() {
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
     let (instructions_left, result, canister) = install_code(
         &canister_manager,
@@ -2720,6 +2727,7 @@ fn install_code_respects_instruction_limit() {
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
     let (instructions_left, result, _) = install_code(
         &canister_manager,
@@ -2778,6 +2786,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
 
     // 1. INSTALL
@@ -2985,6 +2994,7 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
     canister_manager
         .uninstall_code(
@@ -6994,6 +7004,7 @@ fn create_canister_with_cycles_sender_in_whitelist() {
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
     let sender = canister_test_id(1).get();
     let canister_id = canister_manager
@@ -7032,6 +7043,7 @@ fn create_canister_with_specified_id(
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
 
     let creator = canister_test_id(1).get();

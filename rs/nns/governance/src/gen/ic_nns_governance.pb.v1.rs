@@ -423,6 +423,11 @@ pub struct Proposal {
     /// 2000 bytes.
     #[prost(string, tag = "2")]
     pub url: ::prost::alloc::string::String,
+    /// A self-describing action that can be understood without the schema of a specific proposal type.
+    /// This is populated and stored at the time of proposal creation and does not change as the
+    /// proposal type evolves.
+    #[prost(message, optional, tag = "30")]
+    pub self_describing_action: ::core::option::Option<SelfDescribingProposalAction>,
     /// This section describes the action that the proposal proposes to
     /// take.
     #[prost(
@@ -3152,62 +3157,6 @@ pub struct XdrConversionRate {
     #[prost(uint64, optional, tag = "2")]
     pub xdr_permyriad_per_icp: ::core::option::Option<u64>,
 }
-/// Proposals with restricted voting are not included unless the caller
-/// is allowed to vote on them.
-///
-/// The actual ballots of the proposal are restricted to ballots cast
-/// by the caller.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct ListProposalInfo {
-    /// Limit on the number of \[ProposalInfo\] to return. If no value is
-    /// specified, or if a value greater than 100 is specified, 100
-    /// will be used.
-    #[prost(uint32, tag = "1")]
-    pub limit: u32,
-    /// If specified, only return proposals that are strictly earlier than
-    /// the specified proposal according to the proposal ID. If not
-    /// specified, start with the most recent proposal.
-    #[prost(message, optional, tag = "2")]
-    pub before_proposal: ::core::option::Option<::ic_nns_common::pb::v1::ProposalId>,
-    /// Exclude proposals with a topic in this list. This is particularly
-    /// useful to exclude proposals on the topics TOPIC_EXCHANGE_RATE and
-    /// TOPIC_KYC which most users are not likely to be interested in
-    /// seeing.
-    #[prost(enumeration = "Topic", repeated, tag = "3")]
-    pub exclude_topic: ::prost::alloc::vec::Vec<i32>,
-    /// Include proposals that have a reward status in this list (see
-    /// \[ProposalRewardStatus\] for more information). If this list is
-    /// empty, no restriction is applied. For example, many users listing
-    /// proposals will only be interested in proposals for which they can
-    /// receive voting rewards, i.e., with reward status
-    /// PROPOSAL_REWARD_STATUS_ACCEPT_VOTES.
-    #[prost(enumeration = "ProposalRewardStatus", repeated, tag = "4")]
-    pub include_reward_status: ::prost::alloc::vec::Vec<i32>,
-    /// Include proposals that have a status in this list (see
-    /// \[ProposalStatus\] for more information). If this list is empty, no
-    /// restriction is applied.
-    #[prost(enumeration = "ProposalStatus", repeated, tag = "5")]
-    pub include_status: ::prost::alloc::vec::Vec<i32>,
-    /// Include all ManageNeuron proposals regardless of the visibility of the
-    /// proposal to the caller principal. Note that exclude_topic is still
-    /// respected even when this option is set to true.
-    #[prost(bool, optional, tag = "6")]
-    pub include_all_manage_neuron_proposals: ::core::option::Option<bool>,
-    /// Omits "large fields" from the response. Currently only omits the
-    /// `logo` and `token_logo` field of CreateServiceNervousSystem proposals. This
-    /// is useful to improve download times and to ensure that the response to the
-    /// request doesn't exceed the message size limit.
-    #[prost(bool, optional, tag = "7")]
-    pub omit_large_fields: ::core::option::Option<bool>,
-}
 /// A response to "ListKnownNeurons"
 #[derive(
     candid::CandidType,
@@ -3304,6 +3253,9 @@ pub struct MonthlyNodeProviderRewards {
     /// The registry version used to calculate these rewards at the time the rewards were calculated.
     #[prost(uint64, optional, tag = "6")]
     pub registry_version: ::core::option::Option<u64>,
+    /// Rewards calculation algorithm version used to calculate rewards.
+    #[prost(uint32, optional, tag = "10")]
+    pub algorithm_version: ::core::option::Option<u32>,
     /// The list of node_provieders at the time when the rewards were calculated.
     #[prost(message, repeated, tag = "7")]
     pub node_providers: ::prost::alloc::vec::Vec<NodeProvider>,
@@ -4146,6 +4098,92 @@ pub struct FinalizeDisburseMaturity {
     /// The account identifer to which to transfer the ICPs.
     #[prost(message, optional, tag = "5")]
     pub to_account_identifier: ::core::option::Option<::icp_ledger::protobuf::AccountIdentifier>,
+}
+/// An ICRC-3-like value.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SelfDescribingValue {
+    #[prost(oneof = "self_describing_value::Value", tags = "1, 2, 3, 4, 5, 6")]
+    pub value: ::core::option::Option<self_describing_value::Value>,
+}
+/// Nested message and enum types in `SelfDescribingValue`.
+pub mod self_describing_value {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Value {
+        #[prost(bytes, tag = "1")]
+        Blob(::prost::alloc::vec::Vec<u8>),
+        #[prost(string, tag = "2")]
+        Text(::prost::alloc::string::String),
+        /// nat/int are stored as bytes since candid Nat/Int does not have equivalent protobuf types.
+        #[prost(bytes, tag = "3")]
+        Nat(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "4")]
+        Int(::prost::alloc::vec::Vec<u8>),
+        #[prost(message, tag = "5")]
+        Array(super::SelfDescribingValueArray),
+        #[prost(message, tag = "6")]
+        Map(super::SelfDescribingValueMap),
+    }
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SelfDescribingValueArray {
+    #[prost(message, repeated, tag = "1")]
+    pub values: ::prost::alloc::vec::Vec<SelfDescribingValue>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SelfDescribingValueMap {
+    #[prost(map = "string, message", tag = "1")]
+    pub values: ::std::collections::HashMap<::prost::alloc::string::String, SelfDescribingValue>,
+}
+/// Proposal action that is self-describing. It can be understood without the schema of a specific
+/// proposal type.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SelfDescribingProposalAction {
+    #[prost(string, tag = "1")]
+    pub type_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub type_description: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub value: ::core::option::Option<SelfDescribingValue>,
 }
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow
