@@ -86,7 +86,7 @@ impl RingBuffer {
     }
 
     #[cfg(test)]
-    pub fn append(&mut self, record: &CanisterLogRecord) {
+    fn append(&mut self, record: &CanisterLogRecord) {
         self.append_log(vec![record.clone()]);
     }
 
@@ -98,14 +98,18 @@ impl RingBuffer {
             // Check that records are added in order, otherwise it breaks the index.
             let h = self.io.load_header();
             if record.idx < h.next_idx {
-                debug_assert!(false, "log records must be appended in order");
+                debug_assert!(false, "Log record idx must be >= than next idx");
+                continue;
+            }
+            if record.timestamp < h.max_timestamp {
+                debug_assert!(false, "Log record timestamp must be >= than max timestamp");
                 continue;
             }
 
             let added_size = MemorySize::new(record.bytes_len() as u64);
             let capacity = MemorySize::new(self.byte_capacity() as u64);
             if added_size > capacity {
-                debug_assert!(false, "log record size exceeds ring buffer capacity",);
+                debug_assert!(false, "Log record size exceeds ring buffer capacity");
                 return;
             }
             self.make_free_space(added_size);
@@ -119,6 +123,7 @@ impl RingBuffer {
             h.data_tail = h.advance_position(position, added_size);
             h.data_size = h.data_size.saturating_add(added_size);
             h.next_idx = record.idx + 1;
+            h.max_timestamp = record.timestamp;
             self.io.save_header(&h);
 
             // Update the index table with the latest record position.
@@ -153,84 +158,79 @@ impl RingBuffer {
         })
     }
 
-    pub fn records(&self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
-        let index = self.io.load_index_table();
-        let (start_inclusive, end_inclusive) = match index.bounded_scan_range(filter.clone()) {
-            Some(range) => range,
-            None => return vec![],
-        };
-
+    /// Returns records according to an optional filter.
+    ///
+    /// - No filter: return the most recent records (tail), trimming older ones
+    ///   from the start so total data size ≤ result_max_size.
+    /// - With filter: return the most oldest records (head), trimming newer ones
+    ///   from the end so total data size ≤ result_max_size.
+    pub fn records(&self, maybe_filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
         let header = self.io.load_header();
-        let mut records = Vec::new();
+        let index = self.io.load_index_table();
+        let size_limit = index.result_max_size().get() as usize;
 
-        // Walk the coarse range collecting all records in order.
-        let mut pos = start_inclusive.position;
-        while let Some(record) = self.io.load_record(pos) {
-            if record.idx > end_inclusive.idx {
-                break; // Reached the end of the range.
-            }
-            records.push(record.clone());
-            pos = header.advance_position(pos, MemorySize::new(record.bytes_len() as u64));
-        }
-
-        match filter {
-            Some(ref f) => {
-                // When a filter is present — keep oldest records (prefix) that match the filter.
-                let filtered: Vec<_> = records
-                    .into_iter()
-                    .filter(|r| r.matches(f))
-                    .map(CanisterLogRecord::from)
-                    .collect();
-                take_by_size(&filtered, RESULT_MAX_SIZE, true)
-            }
+        match maybe_filter {
             None => {
-                // No filter — return newest records (suffix) up to the size limit.
-                let records: Vec<_> = records.into_iter().map(CanisterLogRecord::from).collect();
-                take_by_size(&records, RESULT_MAX_SIZE, false)
-            }
-        }
-    }
-}
+                // Determine approximate start/end of the tail range.
+                let (start_entry, end_entry) = match index.no_filter_approx_range() {
+                    None => return Vec::new(),
+                    Some(range) => range,
+                };
 
-/// Keep a prefix or a suffix of `records` whose total serialized size does not
-/// exceed `limit` bytes — prefix keeps oldest-first; suffix keeps newest-first.
-/// Returns records in chronological order (oldest-first).
-pub fn take_by_size(
-    records: &[CanisterLogRecord],
-    limit: MemorySize,
-    take_prefix: bool,
-) -> Vec<CanisterLogRecord> {
-    let limit = limit.get() as usize;
-    if limit == 0 || records.is_empty() {
-        return Vec::new();
-    }
+                // Load the contiguous records in [start, end].
+                let mut records: Vec<CanisterLogRecord> = Vec::new();
+                let mut pos = start_entry.position;
+                while let Some(record) = self.io.load_record(pos) {
+                    if record.idx > end_entry.idx {
+                        break;
+                    }
+                    pos = header.advance_position(pos, MemorySize::new(record.bytes_len() as u64));
+                    records.push(CanisterLogRecord::from(record));
+                }
 
-    let mut total: usize = 0;
-    if take_prefix {
-        // Find how many from the front fit.
-        let mut end: usize = 0;
-        for r in records.iter() {
-            let sz = r.data_size();
-            if total + sz > limit {
-                break;
+                // Trim older records from the front so total data size ≤ limit.
+                let mut total_size = 0;
+                let mut start = records.len();
+                for rec in records.iter().rev() {
+                    total_size += rec.data_size();
+                    if total_size > size_limit {
+                        break;
+                    }
+                    start -= 1;
+                }
+                records[start..].to_vec()
             }
-            total += sz;
-            end += 1;
-        }
-        records[..end].to_vec()
-    } else {
-        // Find start index so that records[start..] (the newest records)
-        // fit into the limit — walk backward and then clone that tail.
-        let mut start: usize = records.len();
-        while start > 0 {
-            let sz = records[start - 1].data_size();
-            if total + sz > limit {
-                break;
+
+            Some(filter) => {
+                // Find an approximate start where matching records may begin.
+                let approx_start = match index.find_approx_start(filter) {
+                    None => return Vec::new(),
+                    Some(e) => e,
+                };
+
+                // Scan forward from approx start — collect matching records until limit
+                // or until a non-matching record is seen after we started collecting.
+                let mut records: Vec<CanisterLogRecord> = Vec::new();
+                let mut total_size = 0;
+                let mut pos = approx_start.position;
+                while let Some(record) = self.io.load_record(pos) {
+                    let bytes = record.bytes_len();
+                    if record.matches(&filter) {
+                        let canister_log_record = CanisterLogRecord::from(record);
+                        total_size += canister_log_record.data_size();
+                        if total_size > size_limit {
+                            break;
+                        }
+                        records.push(canister_log_record);
+                    } else if !records.is_empty() {
+                        // Stop after the first non-matching record once we have matches.
+                        break;
+                    }
+                    pos = header.advance_position(pos, MemorySize::new(bytes as u64));
+                }
+                records
             }
-            total += sz;
-            start -= 1;
         }
-        records[start..].to_vec()
     }
 }
 

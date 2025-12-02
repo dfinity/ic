@@ -1,9 +1,9 @@
-pub(crate) mod header;
-pub(crate) mod index_table;
-pub(crate) mod log_record;
-pub(crate) mod memory;
-pub(crate) mod ring_buffer;
-pub(crate) mod struct_io;
+mod header;
+mod index_table;
+mod log_record;
+mod memory;
+mod ring_buffer;
+mod struct_io;
 
 use crate::canister_state::system_state::log_memory_store::{
     memory::MemorySize, ring_buffer::RingBuffer,
@@ -177,7 +177,7 @@ mod tests {
     fn make_full_delta(mut next_idx: u64, byte_capacity: usize, content_len: usize) -> CanisterLog {
         let mut delta = CanisterLog::new_delta_with_next_index(next_idx, byte_capacity);
         let fake_record = make_canister_record(0, 0, &"x".repeat(content_len));
-        let count = byte_capacity / fake_record.data_size();
+        let count = delta.byte_capacity() / fake_record.data_size();
         for _ in 0..count {
             delta.add_record(next_idx * 1_000, vec![b'x'; content_len]);
             next_idx = delta.next_idx();
@@ -440,5 +440,33 @@ mod tests {
         assert!(bytes_used_after < bytes_used_before);
         // Verify recent records are preserved.
         assert_eq!(next_idx_before, store.next_id());
+    }
+
+    #[test]
+    fn test_small_capacity_indexing() {
+        let mut store = LogMemoryStore::new_for_testing();
+        // Set a very small capacity, smaller than 146 bytes (INDEX_ENTRY_COUNT_MAX).
+        // 146 entries. If capacity is 100. 100 / 146 = 0.
+        store.set_byte_capacity(100);
+
+        let mut delta = CanisterLog::new_delta_with_next_index(0, 100);
+        // Add multiple records.
+        // Header overhead is 8+8+4 = 20 bytes.
+        // Content "a" is 1 byte.
+        // Total 21 bytes per record.
+        delta.add_record(0, b"a".to_vec());
+        delta.add_record(1, b"b".to_vec());
+
+        store.append_delta_log(&mut delta);
+
+        assert!(!store.is_empty());
+        // 21 * 2 = 42 bytes used.
+        assert_eq!(store.bytes_used(), 42);
+
+        // Try to read it back.
+        let records = store.records(None);
+        assert_eq!(records.len(), 2, "Should return 2 records");
+        assert_eq!(records[0].content, b"a");
+        assert_eq!(records[1].content, b"b");
     }
 }
