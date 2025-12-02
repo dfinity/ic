@@ -1,9 +1,5 @@
 use crate::certification::recertify_registry;
-use crate::max_rewardable_nodes_mapping::MAX_REWARDABLE_NODES_MAPPING;
 use crate::{pb::v1::RegistryCanisterStableStorage, registry::Registry};
-use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-use ic_registry_keys::make_node_operator_record_key;
-use ic_registry_transport::{pb::v1::RegistryMutation, update};
 use prost::Message;
 
 pub fn canister_post_upgrade(
@@ -66,10 +62,6 @@ mod test {
         registry::{EncodedVersion, Version},
         registry_lifecycle::Registry,
     };
-    use ic_base_types::PrincipalId;
-    use ic_registry_transport::insert;
-    use maplit::btreemap;
-    use std::str::FromStr;
 
     fn stable_storage_from_registry(
         registry: &Registry,
