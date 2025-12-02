@@ -213,13 +213,13 @@ impl Upgrade {
                         break 'block (subnet_id, None);
                     }
                     Err(OrchestratorError::NodeUnassignedError(_, _)) => {
-                        return match self
+                        match self
                             .check_for_upgrade_as_unassigned(latest_registry_version)
                             .await
                         {
-                            Ok(true) => UpgradeCheckResult::Stop,
-                            Ok(false) => UpgradeCheckResult::Unassigned,
-                            Err(err) => UpgradeCheckResult::ErrorAsUnassigned(err),
+                            Ok(true) => return UpgradeCheckResult::Stop,
+                            Ok(false) => return UpgradeCheckResult::Unassigned,
+                            Err(err) => return UpgradeCheckResult::ErrorAsUnassigned(err),
                         };
                     }
                     Err(err) => {
@@ -403,10 +403,13 @@ impl Upgrade {
             // Only downloads the new image if it doesn't already exists locally, i.e. it
             // was previously downloaded by `prepare_upgrade_if_scheduled()`, see
             // below.
-            return match self.execute_upgrade(&new_replica_version).await {
-                Ok(Rebooting) => UpgradeCheckResult::Stop,
+            match self.execute_upgrade(&new_replica_version).await {
+                Ok(Rebooting) => return UpgradeCheckResult::Stop,
                 Err(err) => {
-                    UpgradeCheckResult::ErrorAsAssigned(subnet_id, OrchestratorError::from(err))
+                    return UpgradeCheckResult::ErrorAsAssigned(
+                        subnet_id,
+                        OrchestratorError::from(err),
+                    );
                 }
             };
         }
