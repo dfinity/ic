@@ -6,16 +6,18 @@ use crate::canister_state::system_state::log_memory_store::{
     ring_buffer::{DATA_REGION_OFFSET, HEADER_OFFSET, INDEX_TABLE_OFFSET, RESULT_MAX_SIZE},
 };
 use crate::page_map::{Buffer, PageMap};
+use std::cell::RefCell;
 
 pub(super) struct StructIO {
     buffer: Buffer,
-    // TODO: add caching for header and index table.
+    cache_header: RefCell<Option<Header>>,
 }
 
 impl StructIO {
     pub fn new(page_map: PageMap) -> Self {
         Self {
             buffer: Buffer::new(page_map),
+            cache_header: RefCell::new(None),
         }
     }
 
@@ -24,6 +26,9 @@ impl StructIO {
     }
 
     pub fn load_header(&self) -> Header {
+        if let Some(cached_header) = self.cache_header.borrow().as_ref() {
+            return cached_header.clone();
+        }
         let (magic, addr) = self.read_raw_bytes::<3>(HEADER_OFFSET);
         let (version, addr) = self.read_raw_u8(addr);
         let (index_table_pages, addr) = self.read_raw_u16(addr);
@@ -35,7 +40,7 @@ impl StructIO {
         let (data_tail, addr) = self.read_raw_u64(addr);
         let (next_idx, addr) = self.read_raw_u64(addr);
         let (max_timestamp, _addr) = self.read_raw_u64(addr);
-        Header {
+        let header = Header {
             magic,
             version,
             index_table_pages,
@@ -47,10 +52,13 @@ impl StructIO {
             data_tail: MemoryPosition::new(data_tail),
             next_idx,
             max_timestamp,
-        }
+        };
+        self.cache_header.replace(Some(header.clone()));
+        header
     }
 
     pub fn save_header(&mut self, header: &Header) {
+        self.cache_header.replace(Some(header.clone()));
         let mut addr = HEADER_OFFSET;
         addr = self.write_raw_bytes(addr, &header.magic);
         addr = self.write_raw_u8(addr, header.version);
