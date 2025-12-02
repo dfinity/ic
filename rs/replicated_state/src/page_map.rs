@@ -30,6 +30,7 @@ use libc::off_t;
 use page_allocator::Page;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Range;
 use std::os::unix::io::RawFd;
