@@ -36,6 +36,21 @@ pub fn accept_retrieve_btc_request<R: CanisterRuntime>(
     }
 }
 
+pub fn accept_consolidate_utxos_request<R: CanisterRuntime>(
+    request: ConsolidateUtxosRequest,
+    runtime: &R,
+) {
+    record_event(
+        EventType::AcceptedConsolidateUtxosRequest(request.clone()),
+        runtime,
+    );
+    // Note that here it shouldn't add the request to state.pending_btc_request
+    // like what was done in accept_retrieve_btc_request. This is because
+    // a ConsolidateUtxoRequest is accepted only *after* the transaction is
+    // built (and will then be signed and submitted), which means it is
+    // should not be in pending status.
+}
+
 pub fn add_utxos<R: CanisterRuntime>(
     state: &mut CkBtcMinterState,
     mint_txid: Option<u64>,
@@ -297,14 +312,4 @@ pub fn reimburse_withdrawal_completed<R: CanisterRuntime>(
         runtime,
     );
     state.reimburse_withdrawal_completed(burn_block_index, mint_block_index);
-}
-
-pub fn accept_consolidate_utxos_request<R: CanisterRuntime>(
-    request: ConsolidateUtxosRequest,
-    runtime: &R,
-) {
-    record_event(
-        EventType::AcceptedConsolidateUtxosRequest(request.clone()),
-        runtime,
-    );
 }
