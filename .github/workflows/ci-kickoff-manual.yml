@@ -12,7 +12,7 @@ on:
         required: true
         default: ''
       confirm:
-        description: 'Check this box to confirm you have reviewed the PR'
+        description: 'Check this box to confirm you have reviewed the PR at the specified commit'
         required: true
         type: boolean
 
