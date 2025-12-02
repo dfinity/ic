@@ -6,7 +6,7 @@ use crate::canister_state::system_state::log_memory_store::{
 /// Header structure for the log memory store (version 1).
 /// This is the in-memory representation of the header.
 #[derive(Debug, PartialEq, Clone)]
-pub(crate) struct Header {
+pub(super) struct Header {
     // Validation and compatibility.
     pub magic: [u8; 3],
     pub version: u8,

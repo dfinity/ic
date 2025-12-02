@@ -7,7 +7,7 @@ use crate::canister_state::system_state::log_memory_store::{
 };
 use crate::page_map::{Buffer, PageMap};
 
-pub(crate) struct StructIO {
+pub(super) struct StructIO {
     buffer: Buffer,
     // TODO: add caching for header and index table.
 }
