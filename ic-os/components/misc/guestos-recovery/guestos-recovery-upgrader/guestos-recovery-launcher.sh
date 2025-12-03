@@ -16,7 +16,7 @@ exec /usr/bin/systemd-run \
     --property="CapabilityBoundingSet=CAP_SYS_ADMIN CAP_DAC_OVERRIDE CAP_SYS_RESOURCE CAP_CHOWN CAP_FOWNER" \
     --property="AmbientCapabilities=CAP_SYS_ADMIN CAP_DAC_OVERRIDE CAP_SYS_RESOURCE" \
     --property=ProtectSystem=strict \
-    --property="ReadWritePaths=/dev /run /tmp /var/lib/lvm /var/log" \
+    --property="ReadWritePaths=/dev /run /tmp /var/log" \
     --property=ProtectHome=yes \
     --property=PrivateTmp=yes \
     --property="RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX" \
