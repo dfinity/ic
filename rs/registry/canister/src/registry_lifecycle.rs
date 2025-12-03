@@ -1,6 +1,5 @@
 use crate::certification::recertify_registry;
 use crate::{pb::v1::RegistryCanisterStableStorage, registry::Registry};
-use prost::Message;
 
 pub fn canister_post_upgrade(
     registry: &mut Registry,
