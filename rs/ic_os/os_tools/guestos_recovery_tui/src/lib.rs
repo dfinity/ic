@@ -219,7 +219,13 @@ pub struct RecoveryTask {
 
 impl RecoveryTask {
     pub fn start(params: &RecoveryParams) -> Result<Self> {
-        let mut cmd = build_upgrader_command(params);
+        let recovery_command = build_recovery_upgrader_command(
+            &params.version,
+            &params.version_hash,
+            &params.recovery_hash,
+        );
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c").arg(recovery_command);
         cmd.stdout(Stdio::piped());
         // Redirect stderr to null to avoid cluttering the TUI output
         cmd.stderr(Stdio::null());
@@ -760,17 +766,6 @@ impl GuestOSRecoveryApp {
 // ============================================================================
 // Process and Log Monitoring
 // ============================================================================
-
-fn build_upgrader_command(params: &RecoveryParams) -> Command {
-    let full_command = build_recovery_upgrader_command(
-        &params.version,
-        &params.version_hash,
-        &params.recovery_hash,
-    );
-    let mut cmd = Command::new("sh");
-    cmd.arg("-c").arg(full_command);
-    cmd
-}
 
 /// Spawns a thread to read lines from stdout and append them to a shared log buffer
 fn start_log_capture<R>(stream: R, log_lines: Arc<Mutex<Vec<String>>>) -> thread::JoinHandle<()>
