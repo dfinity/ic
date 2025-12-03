@@ -1,6 +1,8 @@
 use super::*;
-use crate::pb::v1::{
-    GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
+use crate::{
+    pb::v1::{GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements},
+    temporarily_disable_declare_alternative_replica_virtual_machine_software_set_proposals,
+    temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals,
 };
 
 #[track_caller]
@@ -17,6 +19,9 @@ fn assert_contains_all_key_words(observed_str: &str, key_words: &[&str]) {
 
 #[test]
 fn test_validate_chip_ids_empty() {
+    let _guard =
+        temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals();
+
     let defects = validate_chip_ids(&[]);
     assert_eq!(defects.len(), 1, "{defects:#?}");
     assert_contains_all_key_words(&defects[0], &["chip_ids", "empty"]);
@@ -24,6 +29,9 @@ fn test_validate_chip_ids_empty() {
 
 #[test]
 fn test_validate_chip_ids_valid() {
+    let _guard =
+        temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals();
+
     let chip_ids = vec![vec![0u8; 64], vec![1u8; 64]];
     let defects = validate_chip_ids(&chip_ids);
     assert!(defects.is_empty(), "{defects:#?}");
@@ -31,6 +39,9 @@ fn test_validate_chip_ids_valid() {
 
 #[test]
 fn test_validate_chip_ids_wrong_length() {
+    let _guard =
+        temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals();
+
     let chip_ids = vec![
         vec![0u8; 64],  // Valid
         vec![0u8; 32],  // Too short
@@ -44,12 +55,18 @@ fn test_validate_chip_ids_wrong_length() {
 
 #[test]
 fn test_validate_hexadecimal_recovery_rootfs_fingerprint_valid() {
+    let _guard =
+        temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals();
+
     let defects = validate_hexadecimal_recovery_rootfs_fingerprint("0123456789abcdefABCDEF");
     assert!(defects.is_empty(), "{defects:#?}");
 }
 
 #[test]
 fn test_validate_hexadecimal_recovery_rootfs_fingerprint_invalid() {
+    let _guard =
+        temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals();
+
     let defects = validate_hexadecimal_recovery_rootfs_fingerprint("not-hex!");
     assert_eq!(defects.len(), 1, "{defects:#?}");
     assert_contains_all_key_words(&defects[0], &["hexadecimal", "not-hex!"]);
@@ -57,6 +74,9 @@ fn test_validate_hexadecimal_recovery_rootfs_fingerprint_invalid() {
 
 #[test]
 fn test_validate_hexadecimal_recovery_rootfs_fingerprint_empty_is_invalid() {
+    let _guard =
+        temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals();
+
     // Empty fingerprint should be rejected
     let defects = validate_hexadecimal_recovery_rootfs_fingerprint("");
     assert_eq!(defects.len(), 1, "{defects:#?}");
@@ -65,6 +85,9 @@ fn test_validate_hexadecimal_recovery_rootfs_fingerprint_empty_is_invalid() {
 
 #[test]
 fn test_validate_base_guest_launch_measurements_none() {
+    let _guard =
+        temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals();
+
     let defects = validate_base_guest_launch_measurements(&None);
     assert_eq!(defects.len(), 1, "{defects:#?}");
     assert_contains_all_key_words(&defects[0], &["base_guest_launch_measurements", "present"]);
@@ -72,6 +95,9 @@ fn test_validate_base_guest_launch_measurements_none() {
 
 #[test]
 fn test_validate_base_guest_launch_measurements_empty() {
+    let _guard =
+        temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals();
+
     let measurements = GuestLaunchMeasurements {
         guest_launch_measurements: vec![],
     };
@@ -82,6 +108,9 @@ fn test_validate_base_guest_launch_measurements_empty() {
 
 #[test]
 fn test_validate_base_guest_launch_measurements_valid() {
+    let _guard =
+        temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals();
+
     let guest_launch_measurements = GuestLaunchMeasurements {
         guest_launch_measurements: vec![GuestLaunchMeasurement {
             measurement: vec![0u8; 48],
@@ -96,6 +125,9 @@ fn test_validate_base_guest_launch_measurements_valid() {
 
 #[test]
 fn test_validate_base_guest_launch_measurements_multiple_defects() {
+    let _guard =
+        temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals();
+
     let measurements = GuestLaunchMeasurements {
         guest_launch_measurements: vec![
             // Valid measurement
@@ -144,6 +176,9 @@ fn test_validate_base_guest_launch_measurements_multiple_defects() {
 
 #[test]
 fn test_validate_guest_launch_measurement_valid() {
+    let _guard =
+        temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals();
+
     let measurement = GuestLaunchMeasurement {
         measurement: vec![0u8; 48],
         metadata: Some(GuestLaunchMeasurementMetadata {
@@ -156,6 +191,9 @@ fn test_validate_guest_launch_measurement_valid() {
 
 #[test]
 fn test_validate_guest_launch_measurement_wrong_size() {
+    let _guard =
+        temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals();
+
     let measurement = GuestLaunchMeasurement {
         measurement: vec![0u8; 32],
         metadata: Some(GuestLaunchMeasurementMetadata {
@@ -169,6 +207,9 @@ fn test_validate_guest_launch_measurement_wrong_size() {
 
 #[test]
 fn test_validate_guest_launch_measurement_no_metadata() {
+    let _guard =
+        temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals();
+
     let measurement = GuestLaunchMeasurement {
         measurement: vec![0u8; 48],
         metadata: None,
@@ -180,6 +221,9 @@ fn test_validate_guest_launch_measurement_no_metadata() {
 
 #[test]
 fn test_validate_guest_launch_measurement_empty_kernel_cmdline() {
+    let _guard =
+        temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals();
+
     let measurement = GuestLaunchMeasurement {
         measurement: vec![0u8; 48],
         metadata: Some(GuestLaunchMeasurementMetadata {
@@ -195,6 +239,9 @@ fn test_validate_guest_launch_measurement_empty_kernel_cmdline() {
 
 #[test]
 fn test_validate_guest_launch_measurement_multiple_defects() {
+    let _guard =
+        temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals();
+
     let measurement = GuestLaunchMeasurement {
         measurement: vec![0u8; 32], // Wrong size
         metadata: None,             // Missing metadata
@@ -208,6 +255,9 @@ fn test_validate_guest_launch_measurement_multiple_defects() {
 
 #[test]
 fn test_declare_alternative_replica_virtual_machine_software_set_validate_valid() {
+    let _guard =
+        temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals();
+
     let proposal = DeclareAlternativeReplicaVirtualMachineSoftwareSet {
         chip_ids: vec![vec![0u8; 64]],
         hexidecimal_recovery_rootfs_fingerprint: "abc123".to_string(),
@@ -226,6 +276,9 @@ fn test_declare_alternative_replica_virtual_machine_software_set_validate_valid(
 
 #[test]
 fn test_declare_alternative_replica_virtual_machine_software_set_validate_multiple_errors() {
+    let _guard =
+        temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals();
+
     let proposal = DeclareAlternativeReplicaVirtualMachineSoftwareSet {
         chip_ids: vec![],                                                // Empty
         hexidecimal_recovery_rootfs_fingerprint: "not-hex!".to_string(), // Invalid
@@ -247,6 +300,55 @@ fn test_declare_alternative_replica_virtual_machine_software_set_validate_multip
             "hexidecimal",
             "base_guest_launch_measurements",
             "present",
+        ],
+    );
+}
+
+#[test]
+fn test_declare_alternative_replica_virtual_machine_software_set_disabled() {
+    // Explicitly disable the flag - test that proposals are rejected when disabled
+    let _guard =
+        temporarily_disable_declare_alternative_replica_virtual_machine_software_set_proposals();
+
+    let proposal = DeclareAlternativeReplicaVirtualMachineSoftwareSet {
+        chip_ids: vec![vec![0u8; 64]],
+        hexidecimal_recovery_rootfs_fingerprint: "abc123".to_string(),
+        base_guest_launch_measurements: Some(GuestLaunchMeasurements {
+            guest_launch_measurements: vec![GuestLaunchMeasurement {
+                measurement: vec![0u8; 48],
+                metadata: Some(GuestLaunchMeasurementMetadata {
+                    kernel_cmdline: "console=ttyS0".to_string(),
+                }),
+            }],
+        }),
+    };
+
+    let result = proposal.validate().unwrap_err();
+    assert_eq!(
+        ErrorType::try_from(result.error_type),
+        Ok(ErrorType::InvalidProposal),
+        "{result:?}"
+    );
+    assert_contains_all_key_words(
+        &result.error_message,
+        &[
+            "DeclareAlternativeReplicaVirtualMachineSoftwareSet",
+            "not enabled",
+        ],
+    );
+
+    // Also test execute() is blocked
+    let result = proposal.execute().unwrap_err();
+    assert_eq!(
+        ErrorType::try_from(result.error_type),
+        Ok(ErrorType::InvalidProposal),
+        "{result:?}"
+    );
+    assert_contains_all_key_words(
+        &result.error_message,
+        &[
+            "DeclareAlternativeReplicaVirtualMachineSoftwareSet",
+            "not enabled",
         ],
     );
 }

@@ -209,6 +209,9 @@ thread_local! {
 
     static ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS: Cell<bool>
         = const { Cell::new(false) };
+
+    static ENABLE_DECLARE_ALTERNATIVE_REPLICA_VIRTUAL_MACHINE_SOFTWARE_SET_PROPOSALS: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
 }
 
 thread_local! {
@@ -282,6 +285,28 @@ pub fn temporarily_enable_self_describing_proposal_actions() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_self_describing_proposal_actions() -> Temporary {
     Temporary::new(&ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS, false)
+}
+
+pub fn are_declare_alternative_replica_virtual_machine_software_set_proposals_enabled() -> bool {
+    ENABLE_DECLARE_ALTERNATIVE_REPLICA_VIRTUAL_MACHINE_SOFTWARE_SET_PROPOSALS.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals()
+-> Temporary {
+    Temporary::new(
+        &ENABLE_DECLARE_ALTERNATIVE_REPLICA_VIRTUAL_MACHINE_SOFTWARE_SET_PROPOSALS,
+        true,
+    )
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_declare_alternative_replica_virtual_machine_software_set_proposals()
+-> Temporary {
+    Temporary::new(
+        &ENABLE_DECLARE_ALTERNATIVE_REPLICA_VIRTUAL_MACHINE_SOFTWARE_SET_PROPOSALS,
+        false,
+    )
 }
 
 pub fn decoder_config() -> DecoderConfig {

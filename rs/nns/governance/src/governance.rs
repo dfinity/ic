@@ -32,7 +32,8 @@ use crate::{
         self,
         proposal_conversions::{ProposalDisplayOptions, proposal_data_to_info},
         v1::{
-            ArchivedMonthlyNodeProviderRewards, Ballot, CreateServiceNervousSystem, Followees,
+            ArchivedMonthlyNodeProviderRewards, Ballot, CreateServiceNervousSystem,
+            DeclareAlternativeReplicaVirtualMachineSoftwareSet, Followees,
             FulfillSubnetRentalRequest, GetNeuronsFundAuditInfoRequest,
             GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
             InstallCode, KnownNeuron, ListKnownNeuronsResponse, ManageNeuron,
@@ -4240,24 +4241,12 @@ impl Governance {
                 self.perform_fulfill_subnet_rental_request(pid, fulfill_subnet_rental_request)
                     .await
             }
-            ValidProposalAction::DeclareAlternativeReplicaVirtualMachineSoftwareSet(_) =>
-            // Like with Motion proposals, the execution of these proposals
-            // is trivial. The reason for trivial execution in this case is
-            // that the way this is actually effected is by a node operator
-            // manually running some command(s) on a node in case the normal
-            // means of changing software fail (i.e. via a
-            // DeployGuestosToAllSubnetNodes proposal). Such manual
-            // intervention includes downloading this ProposalInfo, and
-            // proceeding with guest boot, once it sees that approved
-            // software and configuration (consisting of firmware, kernel,
-            // initrd, and kernel command line) is being run. The job of the
-            // Governance canister in this case is merely to record whether
-            // neurons have (collectively) approved that new software is
-            // allowed. Beyond that, making those changes actually take
-            // effect is beyond the scope of the Governance canister itself.
-            {
-                self.set_proposal_execution_status(pid, Ok(()))
-            }
+            ValidProposalAction::DeclareAlternativeReplicaVirtualMachineSoftwareSet(
+                declare_alternative_virtual_machine_software_set,
+            ) => self.perform_declare_alternative_virtual_machine_software_set(
+                pid,
+                declare_alternative_virtual_machine_software_set,
+            ),
         }
     }
 
@@ -4326,6 +4315,15 @@ impl Governance {
         let result = fulfill_subnet_rental_request
             .execute(ProposalId { id: proposal_id }, &self.env)
             .await;
+        self.set_proposal_execution_status(proposal_id, result);
+    }
+
+    fn perform_declare_alternative_virtual_machine_software_set(
+        &mut self,
+        proposal_id: u64,
+        declare_alternative_virtual_machine_software_set: DeclareAlternativeReplicaVirtualMachineSoftwareSet,
+    ) {
+        let result = declare_alternative_virtual_machine_software_set.execute();
         self.set_proposal_execution_status(proposal_id, result);
     }
 
