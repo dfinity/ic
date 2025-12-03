@@ -219,6 +219,23 @@ enum CupCorruption {
     CorruptedIncludingInvalidNiDkgId,
 }
 
+impl CupCorruption {
+    fn is_corrupted(&self) -> bool {
+        match self {
+            CupCorruption::NotCorrupted => false,
+            CupCorruption::CorruptedWithValidNiDkgId
+            | CupCorruption::CorruptedIncludingInvalidNiDkgId => true,
+        }
+    }
+
+    fn can_provision_ssh_keys(&self) -> bool {
+        match self {
+            CupCorruption::NotCorrupted | CupCorruption::CorruptedWithValidNiDkgId => true,
+            CupCorruption::CorruptedIncludingInvalidNiDkgId => false,
+        }
+    }
+}
+
 struct TestConfig {
     subnet_size: usize,
     upgrade: bool,
@@ -335,14 +352,12 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         ssh_user_pub_key: ssh_readonly_pub_key,
         ..
     } = get_admin_keys_and_generate_readonly_keys(&env);
-    // If the latest CUP is corrupted such that even the NiDkgId cannot be parsed, then we cannot
-    // deploy read-only access to the subnet.
-    let ssh_readonly_pub_key_deployed = match cfg.corrupt_cup {
-        CupCorruption::NotCorrupted | CupCorruption::CorruptedWithValidNiDkgId => {
-            Some(ssh_readonly_pub_key)
-        }
-        CupCorruption::CorruptedIncludingInvalidNiDkgId => None,
-    };
+    // We can deploy the read-only key only if the CUP is not corrupted in a way that prevents
+    // nodes from provisioning SSH keys.
+    let ssh_readonly_pub_key_deployed = cfg
+        .corrupt_cup
+        .can_provision_ssh_keys()
+        .then_some(ssh_readonly_pub_key);
 
     let current_version = get_guestos_img_version();
     info!(logger, "Current GuestOS version: {:?}", current_version);
@@ -543,10 +558,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         (download_pool_node, node_cert_share, admins)
     };
 
-    if matches!(
-        cfg.corrupt_cup,
-        CupCorruption::CorruptedWithValidNiDkgId | CupCorruption::CorruptedIncludingInvalidNiDkgId
-    ) {
+    if cfg.corrupt_cup.is_corrupted() {
         info!(logger, "Corrupting the latest CUP on all nodes");
         corrupt_latest_cup(&app_subnet, &cfg.corrupt_cup, &admin_helper, &logger);
         assert_subnet_is_broken(
@@ -622,12 +634,10 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         next_step: None,
         // Skip validating the output if the CUP is corrupted, as in this case no replica will be
         // running to compare the heights to.
-        skip: matches!(
-            cfg.corrupt_cup,
-            CupCorruption::CorruptedWithValidNiDkgId
-                | CupCorruption::CorruptedIncludingInvalidNiDkgId,
-        )
-        .then_some(vec![StepType::ValidateReplayOutput]),
+        skip: cfg
+            .corrupt_cup
+            .is_corrupted()
+            .then_some(vec![StepType::ValidateReplayOutput]),
     };
 
     info!(
@@ -777,11 +787,7 @@ fn corrupt_latest_cup(
     logger: &Logger,
 ) {
     assert!(
-        matches!(
-            cup_corruption,
-            CupCorruption::CorruptedWithValidNiDkgId
-                | CupCorruption::CorruptedIncludingInvalidNiDkgId
-        ),
+        cup_corruption.is_corrupted(),
         "cup_corruption must indicate some kind of corruption"
     );
 
