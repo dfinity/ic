@@ -114,6 +114,16 @@ impl From<PrincipalId> for SelfDescribingValue {
     }
 }
 
+impl<T: Into<SelfDescribingValue>> From<Option<T>> for SelfDescribingValue {
+    fn from(value: Option<T>) -> Self {
+        SelfDescribingValue {
+            value: Some(Array(SelfDescribingValueArray {
+                values: value.into_iter().map(Into::into).collect(),
+            })),
+        }
+    }
+}
+
 #[path = "self_describing_tests.rs"]
 #[cfg(test)]
 pub mod tests;
