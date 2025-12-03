@@ -22,7 +22,7 @@ pub use storage::{
 };
 use storage::{OverlayFile, OverlayVersion, Storage};
 
-use ic_types::{Height, MAX_STABLE_MEMORY_IN_BYTES, NumOsPages};
+use ic_types::Height;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use int_map::{Bounds, IntMap};
@@ -30,10 +30,14 @@ use libc::off_t;
 use page_allocator::Page;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Range;
 use std::os::unix::io::RawFd;
 use std::sync::Arc;
+
+#[cfg(test)]
+use ic_types::{MAX_STABLE_MEMORY_IN_BYTES, NumOsPages};
 
 const LABEL_OP: &str = "op";
 const LABEL_TYPE: &str = "type";
@@ -913,6 +917,10 @@ pub struct Buffer {
     /// order of the keys in this map (or even inside of PageDelta for that
     /// matter).
     dirty_pages: HashMap<PageIndex, PageBytes>,
+
+    /// Cached clean page to avoid repeated lookups in the underlying
+    /// page_map for sequential reads.
+    clean_page: RefCell<Option<(PageIndex, PageBytes)>>,
 }
 
 impl Buffer {
@@ -921,6 +929,7 @@ impl Buffer {
         Self {
             page_map,
             dirty_pages: HashMap::new(),
+            clean_page: RefCell::new(None),
         }
     }
 
@@ -934,18 +943,25 @@ impl Buffer {
             let offset_into_page = offset % page_size;
             let page_len = dst.len().min(page_size - offset_into_page);
 
-            let page_contents = match self.dirty_pages.get(&page) {
-                Some(bytes) => bytes,
-                None => self.page_map.get_page(page),
+            // First check dirty pages, then clean page cache, then load from underlying page map.
+            let mut cache = self.clean_page.borrow_mut();
+            let page_contents: &PageBytes = if let Some(bytes) = self.dirty_pages.get(&page) {
+                bytes
+            } else {
+                let cache_hit = cache.as_ref().is_some_and(|(p, _)| *p == page);
+                if !cache_hit {
+                    *cache = Some((page, *self.page_map.get_page(page)));
+                }
+                &cache.as_ref().unwrap().1
             };
+
             deterministic_copy_from_slice(
-                &mut dst[0..page_len],
+                &mut dst[..page_len],
                 &page_contents[offset_into_page..offset_into_page + page_len],
             );
 
             offset += page_len;
-            let n = dst.len();
-            dst = &mut dst[page_len..n];
+            dst = &mut dst[page_len..];
         }
     }
 
@@ -968,6 +984,8 @@ impl Buffer {
                 &src[0..page_len],
             );
 
+            // No need to update clean page cache because dirty page takes precedence.
+
             offset += page_len;
             src = &src[page_len..src.len()];
         }
@@ -979,6 +997,7 @@ impl Buffer {
     ///
     /// This function assumes the write doesn't extend beyond the maximum stable
     /// memory size (in which case the memory would fail anyway).
+    #[cfg(test)]
     pub fn dirty_pages_from_write(&self, offset: u64, size: u64) -> NumOsPages {
         if size == 0 {
             return NumOsPages::from(0);
