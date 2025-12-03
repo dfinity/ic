@@ -21,6 +21,7 @@ type Action = variant {
   AddOrRemoveNodeProvider : AddOrRemoveNodeProvider;
   Motion : Motion;
   FulfillSubnetRentalRequest : FulfillSubnetRentalRequest;
+  DeclareAlternativeReplicaVirtualMachineSoftwareSet : DeclareAlternativeReplicaVirtualMachineSoftwareSet;
 };
 
 type AddHotKey = record {
@@ -1029,6 +1030,7 @@ type ProposalActionRequest = variant {
   AddOrRemoveNodeProvider : AddOrRemoveNodeProvider;
   Motion : Motion;
   FulfillSubnetRentalRequest : FulfillSubnetRentalRequest;
+  DeclareAlternativeReplicaVirtualMachineSoftwareSet : DeclareAlternativeReplicaVirtualMachineSoftwareSet;
 };
 
 // Creates a rented subnet from a rental request (in the Subnet Rental
@@ -1062,6 +1064,39 @@ type FulfillSubnetRentalRequest = record {
   //     https://github.com/dfinity/ic/releases/latest
   replica_version_id : opt text;
 };
+
+// Declares an approved set of alternative replica virtual machine software for
+// disaster recovery purposes.
+type DeclareAlternativeReplicaVirtualMachineSoftwareSet = record {
+  // AMD Secure Processor chip IDs that are allowed to run this software.
+  // Each chip ID must be exactly 64 bytes.
+  chip_ids : opt vec blob;
+
+  // Hexadecimal fingerprint of the recovery rootfs.
+  // Must contain only hexadecimal characters (0-9, A-F, a-f).
+  hexidecimal_recovery_rootfs_fingerprint : opt text;
+
+  // Base guest launch measurements for SEV-SNP attestation.
+  base_guest_launch_measurements : opt GuestLaunchMeasurements;
+};
+
+type GuestLaunchMeasurements = record {
+  guest_launch_measurements : opt vec GuestLaunchMeasurement;
+};
+
+type GuestLaunchMeasurement = record {
+  // SEV-SNP measurement (48 bytes).
+  measurement : opt blob;
+
+  // Metadata associated with the measurement.
+  metadata : opt GuestLaunchMeasurementMetadata;
+};
+
+type GuestLaunchMeasurementMetadata = record {
+  // Kernel command line used for this measurement.
+  kernel_cmdline : opt text;
+};
+
 
 type ProposalData = record {
   id : opt ProposalId;

@@ -507,6 +507,9 @@ impl From<pb_api::ProposalActionRequest> for pb::proposal::Action {
             pb_api::ProposalActionRequest::FulfillSubnetRentalRequest(v) => {
                 pb::proposal::Action::FulfillSubnetRentalRequest(v.into())
             }
+            pb_api::ProposalActionRequest::DeclareAlternativeReplicaVirtualMachineSoftwareSet(
+                v,
+            ) => pb::proposal::Action::DeclareAlternativeReplicaVirtualMachineSoftwareSet(v.into()),
         }
     }
 }

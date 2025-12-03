@@ -1400,6 +1400,9 @@ pub enum ProposalActionRequest {
     StopOrStartCanister(StopOrStartCanister),
     UpdateCanisterSettings(UpdateCanisterSettings),
     FulfillSubnetRentalRequest(FulfillSubnetRentalRequest),
+    DeclareAlternativeReplicaVirtualMachineSoftwareSet(
+        DeclareAlternativeReplicaVirtualMachineSoftwareSet,
+    ),
 }
 
 #[derive(
