@@ -2,7 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
-# Define a separate library for recovery_utils to avoid circular dependency with guestos_recovery_tui
 rust_library(
     name = "recovery_utils",
     srcs = ["src/recovery_utils.rs"],
@@ -37,13 +36,6 @@ rust_binary(
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    deps = DEPENDENCIES + ["//rs/ic_os/config:config_lib"],
-)
-
-rust_library(
-    name = "hostos_tool_lib",
-    srcs = glob(["src/**/*.rs"]),
-    crate_name = "hostos_tool",
     deps = DEPENDENCIES + ["//rs/ic_os/config:config_lib"],
 )
 
