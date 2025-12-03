@@ -948,14 +948,11 @@ impl Buffer {
             let page_contents: &PageBytes = if let Some(bytes) = self.dirty_pages.get(&page) {
                 bytes
             } else {
-                match &*cache {
-                    Some((cached_page, cached_bytes)) if *cached_page == page => cached_bytes,
-                    _ => {
-                        let loaded: &PageBytes = self.page_map.get_page(page);
-                        *cache = Some((page, *loaded));
-                        loaded
-                    }
+                let cache_hit = cache.as_ref().map_or(false, |(p, _)| *p == page);
+                if !cache_hit {
+                    *cache = Some((page, *self.page_map.get_page(page)));
                 }
+                &cache.as_ref().unwrap().1
             };
 
             deterministic_copy_from_slice(
