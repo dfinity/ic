@@ -44,9 +44,7 @@ use crate::{
             RewardNodeProvider, RewardNodeProviders, SettleNeuronsFundParticipationRequest,
             SettleNeuronsFundParticipationResponse, StopOrStartCanister, Tally, Topic,
             UpdateCanisterSettings, UpdateNodeProvider, Vote, VotingPowerEconomics,
-            WaitForQuietState,
-            add_or_remove_node_provider::Change,
-            archived_monthly_node_provider_rewards,
+            WaitForQuietState, archived_monthly_node_provider_rewards,
             create_service_nervous_system::LedgerParameters,
             get_neurons_fund_audit_info_response,
             governance::{
@@ -168,7 +166,6 @@ pub mod tla_macros;
 #[cfg(feature = "tla")]
 pub mod tla;
 
-use crate::pb::v1::AddOrRemoveNodeProvider;
 use crate::reward::distribution::RewardsDistribution;
 use crate::storage::with_voting_state_machines_mut;
 #[cfg(feature = "tla")]
@@ -4131,80 +4128,9 @@ impl Governance {
                 let result = self.approve_genesis_kyc(&proposal.principals);
                 self.set_proposal_execution_status(pid, result);
             }
-            ValidProposalAction::AddOrRemoveNodeProvider(ref proposal) => {
-                if let Some(change) = &proposal.change {
-                    match change {
-                        Change::ToAdd(node_provider) => {
-                            if node_provider.id.is_none() {
-                                self.set_proposal_execution_status(
-                                    pid,
-                                    Err(GovernanceError::new_with_message(
-                                        ErrorType::PreconditionFailed,
-                                        "Node providers must have a principal id.",
-                                    )),
-                                );
-                                return;
-                            }
-
-                            // Check if the node provider already exists
-                            if self
-                                .heap_data
-                                .node_providers
-                                .iter()
-                                .any(|np| np.id == node_provider.id)
-                            {
-                                self.set_proposal_execution_status(
-                                    pid,
-                                    Err(GovernanceError::new_with_message(
-                                        ErrorType::PreconditionFailed,
-                                        "A node provider with the same principal already exists.",
-                                    )),
-                                );
-                                return;
-                            }
-                            self.heap_data.node_providers.push(node_provider.clone());
-                            self.set_proposal_execution_status(pid, Ok(()));
-                        }
-                        Change::ToRemove(node_provider) => {
-                            if node_provider.id.is_none() {
-                                self.set_proposal_execution_status(
-                                    pid,
-                                    Err(GovernanceError::new_with_message(
-                                        ErrorType::PreconditionFailed,
-                                        "Node providers must have a principal id.",
-                                    )),
-                                );
-                                return;
-                            }
-
-                            if let Some(pos) = self
-                                .heap_data
-                                .node_providers
-                                .iter()
-                                .position(|np| np.id == node_provider.id)
-                            {
-                                self.heap_data.node_providers.remove(pos);
-                                self.set_proposal_execution_status(pid, Ok(()));
-                            } else {
-                                self.set_proposal_execution_status(
-                                    pid,
-                                    Err(GovernanceError::new_with_message(
-                                        ErrorType::NotFound,
-                                        "Can't find a NodeProvider with the same principal id.",
-                                    )),
-                                );
-                            }
-                        }
-                    }
-                } else {
-                    self.set_proposal_execution_status(
-                        pid,
-                        Err(GovernanceError::new_with_message(
-                            ErrorType::PreconditionFailed,
-                            "The proposal didn't contain a change.",
-                        )),
-                    );
-                }
+            ValidProposalAction::AddOrRemoveNodeProvider(proposal) => {
+                let result = proposal.execute(&mut self.heap_data.node_providers);
+                self.set_proposal_execution_status(pid, result);
             }
             ValidProposalAction::RewardNodeProvider(ref reward) => {
                 self.reward_node_provider(pid, reward).await;
@@ -4823,7 +4749,7 @@ impl Governance {
             }
 
             ValidProposalAction::AddOrRemoveNodeProvider(add_or_remove_node_provider) => {
-                self.validate_add_or_remove_node_provider(add_or_remove_node_provider)
+                add_or_remove_node_provider.validate(&self.heap_data.node_providers)
             }
             ValidProposalAction::ApproveGenesisKyc(_)
             | ValidProposalAction::RewardNodeProvider(_)
@@ -4935,79 +4861,6 @@ impl Governance {
         }
 
         Ok(())
-    }
-
-    fn validate_add_or_remove_node_provider(
-        &self,
-        add_or_remove_node_provider: &AddOrRemoveNodeProvider,
-    ) -> Result<(), GovernanceError> {
-        match &add_or_remove_node_provider.change {
-            None => Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "AddOrRemoveNodeProvider proposal must have a change field",
-            )),
-            Some(Change::ToAdd(node_provider)) => {
-                let Some(np_id) = node_provider.id else {
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::InvalidProposal,
-                        "AddOrRemoveNodeProvider proposal must have a node provider id",
-                    ));
-                };
-                // Validate that np does not exist
-                if self
-                    .heap_data
-                    .node_providers
-                    .iter()
-                    .any(|np| np.id.as_ref() == Some(&np_id))
-                {
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::InvalidProposal,
-                        format!(
-                            "AddOrRemoveNodeProvider cannot add already existing Node Provider: {np_id}"
-                        ),
-                    ));
-                }
-
-                if let Some(ref account_identifier) = node_provider.reward_account {
-                    validate_account_identifier(account_identifier).map_err(|e| {
-                        GovernanceError::new_with_message(
-                            ErrorType::InvalidProposal,
-                            format!("The account_identifier field is invalid: {e}"),
-                        )
-                    })?;
-                }
-
-                // Validate that np does not exist
-                // validate the account_identifier
-                Ok(())
-            }
-            Some(Change::ToRemove(node_provider)) => {
-                let Some(np_id) = node_provider.id else {
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::InvalidProposal,
-                        "AddOrRemoveNodeProvider proposal must have a node provider id",
-                    ));
-                };
-
-                // Validate that np exists
-                if !self
-                    .heap_data
-                    .node_providers
-                    .iter()
-                    .any(|np| np.id.as_ref() == Some(&np_id))
-                {
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::InvalidProposal,
-                        format!(
-                            "AddOrRemoveNodeProvider ToRemove must target an existing Node Provider \
-                              but targeted {np_id}"
-                        ),
-                    ));
-                }
-
-                Ok(())
-            }
-        }
     }
 
     fn validate_add_or_remove_data_centers_payload(payload: &[u8]) -> Result<(), String> {
