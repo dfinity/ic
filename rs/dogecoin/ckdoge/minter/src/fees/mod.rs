@@ -1,15 +1,14 @@
 #[cfg(test)]
 mod tests;
 
-use crate::Utxo;
 use crate::candid_api::WithdrawalFee;
 use crate::lifecycle::init::Network;
 use crate::tx::UnsignedTransaction;
 use ic_ckbtc_minter::{
     BuildTxError, MillisatoshiPerByte, Satoshi, address::BitcoinAddress, fees::FeeEstimator,
+    state::utxos::UtxoSet,
 };
 use std::cmp::max;
-use std::collections::BTreeSet;
 
 // TODO DEFI-2458: have proper domain design for handling units:
 // * fee rate (millisatoshis/vbyte or millikoinus/byte)
@@ -132,7 +131,7 @@ impl FeeEstimator for DogecoinFeeEstimator {
 }
 
 pub fn estimate_retrieve_doge_fee<F: FeeEstimator>(
-    available_utxos: &BTreeSet<Utxo>,
+    available_utxos: &UtxoSet,
     withdrawal_amount: u64,
     median_fee_millikoinu_per_byte: u64,
     fee_estimator: &F,

@@ -8225,6 +8225,7 @@ dependencies = [
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-test-utils-tls",
+ "ic-crypto-test-utils-vetkd",
  "ic-crypto-tls-cert-validation",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tree-hash",
@@ -9189,8 +9190,10 @@ dependencies = [
 name = "ic-crypto-test-utils-vetkd"
 version = "0.1.0"
 dependencies = [
+ "ic-base-types",
  "ic-crypto-internal-bls12-381-type",
  "ic-crypto-internal-bls12-381-vetkd",
+ "ic-types",
  "ic-vetkeys",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -11902,6 +11905,25 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nns-constants",
  "icp-ledger",
+]
+
+[[package]]
+name = "ic-nervous-system-tools-signed-canister-reply"
+version = "0.9.0"
+dependencies = [
+ "base64 0.13.1",
+ "candid",
+ "canister-test",
+ "clap 4.5.27",
+ "hex",
+ "ic-agent 0.40.1",
+ "ic-certification 3.0.3",
+ "lazy_static",
+ "pocket-ic",
+ "serde",
+ "serde_cbor",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -14999,6 +15021,7 @@ dependencies = [
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-crypto-test-utils-vetkd",
  "ic-crypto-tree-hash",
  "ic-interfaces",
  "ic-interfaces-state-manager",
@@ -16066,6 +16089,7 @@ name = "ic_crypto_system_tests"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "base64 0.13.1",
  "candid",
  "ic-agent 0.40.1",
  "ic-certification 3.0.3",
@@ -16087,9 +16111,11 @@ dependencies = [
  "p256",
  "rand 0.8.5",
  "reqwest 0.12.24",
+ "rsa",
  "serde",
  "serde_bytes",
  "serde_cbor",
+ "serde_json",
  "simple_asn1",
  "slog",
  "tokio",
