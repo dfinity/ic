@@ -1,7 +1,11 @@
-use crate::pb::v1::{
-    AddOrRemoveNodeProvider, GovernanceError, NodeProvider, add_or_remove_node_provider::Change,
-    governance_error::ErrorType,
+use crate::{
+    pb::v1::{
+        AddOrRemoveNodeProvider, GovernanceError, NodeProvider, SelfDescribingValue,
+        add_or_remove_node_provider::Change, governance_error::ErrorType,
+    },
+    proposals::self_describing::{LocallyDescribableProposalAction, ValueBuilder},
 };
+
 use ic_base_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, protobuf::AccountIdentifier as AccountIdentifierPb};
 
@@ -97,6 +101,49 @@ impl TryFrom<AddOrRemoveNodeProvider> for ValidAddOrRemoveNodeProvider {
                 ))
             }
         }
+    }
+}
+
+impl LocallyDescribableProposalAction for ValidAddOrRemoveNodeProvider {
+    const TYPE_NAME: &'static str = "Add or Remove Node Provider";
+    const TYPE_DESCRIPTION: &'static str = "Assign (or revoke) an identity to a node provider, \
+    associating key information regarding the legal person associated that should provide a way \
+    to uniquely identify it.";
+
+    fn to_self_describing_value(&self) -> SelfDescribingValue {
+        let builder = ValueBuilder::new();
+        let builder = match self {
+            ValidAddOrRemoveNodeProvider::ToAdd(valid_add_node_provider) => {
+                builder.add_field("to_add", valid_add_node_provider.clone())
+            }
+            ValidAddOrRemoveNodeProvider::ToRemove(valid_remove_node_provider) => {
+                builder.add_field("to_remove", valid_remove_node_provider.clone())
+            }
+        };
+        builder.build()
+    }
+}
+
+impl From<ValidAddNodeProvider> for SelfDescribingValue {
+    fn from(value: ValidAddNodeProvider) -> Self {
+        ValueBuilder::new()
+            .add_field("id", value.id)
+            .add_field("reward_account", value.reward_account)
+            .build()
+    }
+}
+
+impl From<ValidAccountIdentifier> for SelfDescribingValue {
+    fn from(value: ValidAccountIdentifier) -> Self {
+        ValueBuilder::new()
+            .add_field("account_identifier", value.0.to_hex())
+            .build()
+    }
+}
+
+impl From<ValidRemoveNodeProvider> for SelfDescribingValue {
+    fn from(value: ValidRemoveNodeProvider) -> Self {
+        ValueBuilder::new().add_field("id", value.id).build()
     }
 }
 
