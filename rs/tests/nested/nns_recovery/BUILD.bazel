@@ -27,7 +27,7 @@ rust_library(
     crate_name = "ic_nested_nns_recovery_common",
     deps = [
         # Keep sorted.
-        "//rs/ic_os/os_tools/hostos_tool:hostos_tool_lib",
+        "//rs/ic_os/os_tools/hostos_tool:recovery_utils",
         "//rs/recovery",
         "//rs/tests/consensus/subnet_recovery:lib",
         "//rs/tests/consensus/utils",

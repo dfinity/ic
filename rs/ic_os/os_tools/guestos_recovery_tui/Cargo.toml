@@ -4,7 +4,6 @@ version = "1.0.0"
 edition.workspace = true
 
 [dependencies]
-hostos_tool = { path = "../hostos_tool" }
 anyhow = { workspace = true }
 ratatui = { workspace = true }
 tui-textarea = "0.7"

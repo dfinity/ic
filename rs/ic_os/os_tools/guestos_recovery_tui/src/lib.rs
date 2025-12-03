@@ -1,7 +1,7 @@
 mod ui;
 
 use anyhow::{Context, Result};
-use hostos_tool::recovery_utils::build_recovery_upgrader_command;
+use hostos_tool_recovery_utils::build_recovery_upgrader_command;
 use ratatui::crossterm::event::{
     DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers,
 };
