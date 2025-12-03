@@ -8,7 +8,9 @@ use tar::Header;
 pub struct FileEntry<'a> {
     /// Path of the entry in the filesystem
     pub path: ImagePath,
-    /// Tar header containing all metadata (mode, size, uid, gid, mtime, entry type, etc.)
+    /// Header containing all metadata (mode, size, uid, gid, mtime, entry type, etc.)
+    // Reusing tar::Header is convenient because it already includes all the necessary fields and
+    // makes it easy to push entries from a tar file to another tar file.
     pub header: Header,
     /// Contents of the file (empty for directories)
     pub contents: &'a mut (dyn Read + 'a),

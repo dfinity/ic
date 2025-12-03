@@ -1310,6 +1310,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "bindgen"
+version = "0.72.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "993776b509cfb49c750f11b8f07a46fa23e0a1386ffc01fb1e7d343efc387895"
+dependencies = [
+ "bitflags 2.9.0",
+ "cexpr",
+ "clang-sys",
+ "itertools 0.13.0",
+ "log",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "rustc-hash 2.1.1",
+ "shlex",
+ "syn 2.0.110",
+]
+
+[[package]]
 name = "binread"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3852,6 +3872,7 @@ dependencies = [
  "scraper",
  "scrypt",
  "secp256k1 0.22.2",
+ "selinux",
  "semver",
  "serde",
  "serde-bytes-repr",
@@ -12128,6 +12149,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "selinux"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f6af114a661557df02e60c25e5cb40779d295ec2e4ae0fd903fe414578b6191"
+dependencies = [
+ "bitflags 2.9.0",
+ "errno 0.3.10",
+ "libc",
+ "once_cell",
+ "parking_lot 0.12.5",
+ "selinux-sys",
+ "thiserror 2.0.17",
+]
+
+[[package]]
+name = "selinux-sys"
+version = "0.6.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "debaba5832b4831ffe0ba9118b526c752c960f41c46c4ef197d9a15f5179d6fd"
+dependencies = [
+ "bindgen 0.72.1",
+ "cc",
+ "dunce",
+ "walkdir",
+]
+
+[[package]]
 name = "semver"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13345,7 +13393,7 @@ dependencies = [
  "getrandom 0.3.1",
  "once_cell",
  "rustix 1.0.5",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

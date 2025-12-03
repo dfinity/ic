@@ -22,6 +22,7 @@ PACKAGES = [
     "@noble//dosfstools/amd64",
     "@noble//e2fsprogs/amd64",
     "@noble//gawk/amd64",
+    "@noble//grep/amd64",
     "@noble//gzip/amd64",
     "@noble//libssl3t64/amd64",
     "@noble//libunwind8/amd64",

@@ -10,6 +10,7 @@ use tempfile::TempPath;
 mod ext4;
 mod fat;
 mod fs_builder;
+mod integration_tests;
 mod partition_size;
 mod path_converter;
 mod processor;
@@ -24,7 +25,8 @@ use selinux::FileContexts;
 use tar::TarBuilder;
 
 #[derive(Debug, Clone, ValueEnum, Eq, PartialEq)]
-enum OutputType {
+#[cfg_attr(test, derive(Copy))]
+pub(crate) enum OutputType {
     Tar,
     Ext4,
     Vfat,
@@ -33,47 +35,52 @@ enum OutputType {
 
 #[derive(Parser, Debug)]
 #[command(about = "Build filesystem images from input tar with transformations")]
-struct Args {
+#[cfg_attr(test, derive(Clone))]
+pub(crate) struct Args {
     /// Output file path
     #[arg(short = 'o', long)]
-    output: PathBuf,
+    pub(crate) output: PathBuf,
 
     /// Input tar file (optional, if not provided creates empty filesystem)
     #[arg(short = 'i', long)]
-    input: Option<PathBuf>,
+    pub(crate) input: Option<PathBuf>,
 
     /// Output type (tar, ext4, vfat, fat32)
     #[arg(short = 't', long, value_enum, default_value = "tar")]
-    output_type: OutputType,
+    pub(crate) output_type: OutputType,
 
     /// Partition size (required for ext4, vfat, and fat32, e.g., "100M", "1G")
     #[arg(long)]
-    partition_size: Option<PartitionSize>,
+    pub(crate) partition_size: Option<PartitionSize>,
 
     /// Volume label (optional, for fat32 filesystems)
     #[arg(long)]
-    label: Option<String>,
+    pub(crate) label: Option<String>,
 
     /// Path to extract from input tar (limit to subdirectory)
     #[arg(short = 'p', long)]
-    subdir: Option<PathBuf>,
+    pub(crate) subdir: Option<PathBuf>,
 
     /// SELinux file_contexts file for setting security contexts
     #[arg(short = 'S', long)]
-    file_contexts: Option<PathBuf>,
+    pub(crate) file_contexts: Option<PathBuf>,
 
     /// Paths to remove from the tree
     #[arg(long = "strip-paths", num_args = 0..)]
-    strip_paths: Vec<String>,
+    pub(crate) strip_paths: Vec<String>,
 
     /// Extra files to inject (format: source:target:mode)
     #[arg(long = "extra-files", num_args = 0..)]
-    extra_files: Vec<String>,
+    pub(crate) extra_files: Vec<String>,
 }
 
 fn main() -> Result<()> {
     let args = Args::parse();
+    build_filesystem(args)
+}
 
+/// Main build_filesystem logic that can be called programmatically
+pub(crate) fn build_filesystem(args: Args) -> Result<()> {
     let output_str = args.output.to_str().unwrap_or_default();
     ensure!(
         output_str.ends_with(".tar")

@@ -53,9 +53,46 @@ fn root_test(env: TestEnv, test: &str) {
         .expect("Failed to run {test}");
 }
 
+fn build_filesystem_test(env: TestEnv) {
+    let deployed_universal_vm = env
+        .get_deployed_universal_vm(UNIVERSAL_VM_NAME)
+        .expect("unable to get deployed VM.");
+    deployed_universal_vm
+        .block_on_bash_script(&indoc::formatdoc!(
+            r#"
+                set -euo pipefail
+                docker load -i /config/ubuntu_test_runtime.tar
+
+                TMPDIR=$(mktemp -d)
+                trap "rm -rf ${{TMPDIR}}" exit
+                cd "${{TMPDIR}}"
+
+                # Copy the build_filesystem binary and test script
+                cp /config/build_filesystem .
+                cp /config/integration_test.sh .
+                chmod +x build_filesystem integration_test.sh
+
+                cat <<EOF > Dockerfile
+                    FROM ubuntu_test_runtime:image
+                    COPY --chmod=755 build_filesystem /usr/local/bin/build_filesystem
+                    COPY --chmod=755 integration_test.sh /integration_test.sh
+                EOF
+
+                docker build --tag final -f Dockerfile .
+                docker run --privileged -v /dev:/dev --rm final /usr/bin/bash -c "
+                    export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+                    /usr/lib/systemd/systemd-udevd --daemon
+                    /integration_test.sh /usr/local/bin/build_filesystem
+                "
+            "#
+        ))
+        .expect("Failed to run build_filesystem_test");
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
+        .add_test(systest!(build_filesystem_test))
         .add_test(systest!(root_test; "upgrade_device_mapper_test"))
         .add_test(systest!(root_test; "guest_disk_test"))
         .add_test(systest!(root_test; "device_test"))

@@ -1000,6 +1000,14 @@ new_local_repository(
     path = "/usr",
 )
 
+# Use libselinux from the host environment
+# Used for SELinux context lookups in build tools.
+new_local_repository(
+    name = "libselinux",
+    build_file = "@//third_party:BUILD.selinux.bazel",
+    path = "/usr",
+)
+
 # Mainnet canister references
 
 canisters = use_repo_rule("//bazel:mainnet-canisters.bzl", "canisters")

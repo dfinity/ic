@@ -43,6 +43,29 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 "OPENSSL_STATIC": "1",
             },
         )],
+        "selinux-sys": [crate.annotation(
+            build_script_data = crate.select(
+                [],
+                {
+                    "@platforms//os:linux": ["@libselinux//:libselinux"],
+                },
+            ),
+            build_script_env = crate.select(
+                {},
+                {
+                    "@platforms//os:linux": {
+                        "SELINUX_INCLUDE_DIR": "/usr/include",
+                        "SELINUX_LIB_DIR": "/usr/lib/x86_64-linux-gnu",
+                    },
+                },
+            ),
+            deps = crate.select(
+                [],
+                {
+                    "@platforms//os:linux": ["@libselinux//:libselinux"],
+                },
+            ),
+        )],
         "canbench": [crate.annotation(
             gen_binaries = True,
         )],
@@ -1246,6 +1269,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                     "rand-std",
                 ],
             ),
+            "selinux": crate.spec(
+                version = "^0.5",
+            ),
             "semver": crate.spec(
                 version = "^1.0.9",
                 features = [
@@ -1392,7 +1418,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.20.0",
             ),
             "tar": crate.spec(
-                version = "^0.4.38",
+                version = "^0.4.43",
             ),
             "tarpc": crate.spec(
                 version = "^0.34",

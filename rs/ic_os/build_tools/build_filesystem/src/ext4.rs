@@ -21,7 +21,6 @@ pub struct Ext4Builder {
 impl Ext4Builder {
     /// Create a new Ext4Builder
     ///
-    /// # Arguments
     /// * `output_path` - Path where the final ext4 image will be written
     /// * `partition_size` - Size of the partition
     /// * `label` - Optional volume label for the filesystem

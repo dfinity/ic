@@ -29,6 +29,7 @@ packages:
   - "dpkg" # for apt list --installed
   - "e2fsprogs" # for mkfs.ext4 used in ICOS device tests
   - "gawk" # for build-bootstrap-config-image
+  - "grep"
   - "gzip" # for tar-ing up ic regsitry store in systests
   - "libcryptsetup-dev"
   - "libssl3t64"

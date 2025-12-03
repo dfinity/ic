@@ -163,6 +163,7 @@ members = [
     "rs/http_utils",
     "rs/ic_os/attestation",
     "rs/ic_os/attestation/testing",
+    "rs/ic_os/build_tools/build_filesystem",
     "rs/ic_os/build_tools/dflate",
     "rs/ic_os/build_tools/diroid",
     "rs/ic_os/build_tools/inject_files",

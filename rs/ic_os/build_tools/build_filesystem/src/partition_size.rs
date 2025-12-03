@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail, ensure};
 pub struct PartitionSize(u64);
 
 impl PartitionSize {
-    pub(crate) fn as_kb(&self) -> Result<u64> {
+    pub fn as_kb(&self) -> Result<u64> {
         ensure!(
             self.0 % 1024 == 0,
             "Partition size must be a multiple of 1024"

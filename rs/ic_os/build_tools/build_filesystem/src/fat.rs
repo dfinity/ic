@@ -9,7 +9,7 @@ use tempfile::NamedTempFile;
 /// FAT filesystem type
 #[derive(Debug, Clone, Copy)]
 pub enum FatType {
-    /// VFAT filesystem (default FAT type)
+    /// VFAT filesystem
     Vfat,
     /// FAT32 filesystem
     Fat32,
@@ -30,7 +30,6 @@ pub struct FatBuilder {
 impl FatBuilder {
     /// Create a new FatBuilder
     ///
-    /// # Arguments
     /// * `output_path` - Path where the final FAT image will be written
     /// * `partition_size` - Size of the partition
     /// * `fat_type` - Type of FAT filesystem (VFAT or FAT32)
@@ -100,7 +99,6 @@ impl FilesystemBuilder for FatBuilder {
                     .arg("-i")
                     .arg(&self.output_path)
                     .arg(&fat_path)
-                    .env("MTOOLS_SKIP_CHECK", "1")
                     .env("SOURCE_DATE_EPOCH", "0")
                     .output()
                     .with_context(|| {
@@ -139,7 +137,6 @@ impl FilesystemBuilder for FatBuilder {
                     .arg(&self.output_path)
                     .arg(temp_file.path())
                     .arg(&fat_path)
-                    .env("MTOOLS_SKIP_CHECK", "1")
                     .env("SOURCE_DATE_EPOCH", "0")
                     .output()
                     .with_context(|| {

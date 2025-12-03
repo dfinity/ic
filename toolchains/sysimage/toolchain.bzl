@@ -188,7 +188,7 @@ def icos_image(
         label: Optional volume label (for fat32 filesystems)
     """
 
-    # All image types are now handled directly by the build_fs_tar binary
+    # All image types are now handled directly by the build_filesystem binary
     _icos_image_impl_rule(
         name = name,
         src = src,
@@ -299,7 +299,7 @@ _icos_image_impl_rule = _icos_build_rule(
             allow_files = True,
         ),
         "_tool": attr.label(
-            default = "//toolchains/sysimage:build_fs_tar",
+            default = "//rs/ic_os/build_tools/build_filesystem:build_filesystem",
             executable = True,
             cfg = "exec",
         ),

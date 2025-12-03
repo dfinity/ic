@@ -1,38 +1,57 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 package(default_visibility = [
     "//rs:ic-os-pkg",
+    "//rs/tests/node:__subpackages__",
     "//toolchains/sysimage:__pkg__",
 ])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:anyhow",
-    "@crate_index//:clap",
-    "@crate_index//:rand",
-    "@crate_index//:regex",
-    "@crate_index//:selinux",
-    "@crate_index//:tar",
-    "@crate_index//:tempfile",
-]
-
-DEV_DEPENDENCIES = []
-
-MACRO_DEPENDENCIES = []
+filegroup(
+    name = "integration_test.sh",
+    srcs = ["tests/integration_test.sh"],
+    visibility = ["//rs/tests/node:__subpackages__"],
+)
 
 rust_binary(
-    name = "build-filesystem",
+    name = "build_filesystem",
     srcs = glob(["src/**/*.rs"]),
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:anyhow",
+        "@crate_index//:clap",
+        "@crate_index//:nix",
+        "@crate_index//:rand",
+        "@crate_index//:regex",
+        "@crate_index//:selinux",
+        "@crate_index//:tar",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+        "@crate_index//:walkdir",
+    ] + select({
+        "@platforms//os:linux": ["//rs/ic_os/device"],
+        "//conditions:default": [],
+    }),
 )
 
 rust_test(
     name = "build_filesystem_test",
-    srcs = glob(["src/**/*.rs"]),
-    crate_root = "src/main.rs",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    crate = ":build_filesystem",
+    # Integration tests require root privileges to mount filesystems (Linux only)
+    tags = ["local"],
 )
 
+sh_test(
+    name = "integration_test",
+    srcs = ["tests/integration_test.sh"],
+    data = [":build_filesystem"],
+    env = {
+        "BUILD_FILESYSTEM_BIN": "$(rootpath :build_filesystem)",
+    },
+    # This test needs root privileges to mount filesystems
+    tags = ["local"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+)

@@ -1,5 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
+/// Converts paths between the source filesystem and the target filesystem image for simplifying
+/// extracting entries from a subdir.
 pub struct PathConverter {
     subdir: Option<PathBuf>,
 }
@@ -13,6 +15,11 @@ impl PathConverter {
         Self { subdir }
     }
 
+    /// Converts a path from the source filesystem to the target filesystem image.
+    /// (removes the subdir prefix)
+    ///
+    /// Returns `None` if the path does not start with the subdir that is it is not be included
+    /// in the target.
     pub fn source_to_target(&self, source_path: &ImagePath) -> Option<ImagePath> {
         match &self.subdir {
             Some(subdir) => match source_path.0.strip_prefix(subdir) {
@@ -23,6 +30,8 @@ impl PathConverter {
         }
     }
 
+    /// Converts a path from the target filesystem image to the source filesystem.
+    /// (adds the subdir prefix)
     pub fn target_to_source(&self, target_path: &ImagePath) -> ImagePath {
         if let Some(subdir) = &self.subdir {
             ImagePath::from(subdir.join(target_path.as_relative_path()))
@@ -32,6 +41,7 @@ impl PathConverter {
     }
 }
 
+/// Represents a path in the filesystem image
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImagePath(PathBuf);
 
@@ -62,14 +72,12 @@ impl ImagePath {
 
 impl<T: Into<PathBuf>> From<T> for ImagePath {
     fn from(path: T) -> Self {
-        let mut path = path.into();
-        if !path.starts_with("/") {
-            path = PathBuf::from("/").join(path);
-        }
-
-        if path.ends_with("/") && path != PathBuf::from("/") {
-            path.pop();
-        }
+        let path = std::iter::once(Component::RootDir)
+            .chain(
+                path.into().components()
+                    .skip_while(|c| matches!(c, Component::CurDir | Component::RootDir)),
+            )
+            .collect::<PathBuf>();
 
         Self(path)
     }
