@@ -801,7 +801,7 @@ impl SystemMetadata {
             // executions, now without matching subnet call contexts, are silently aborted.
             Self::reject_in_progress_management_calls_after_split(
                 &mut subnet_call_context_manager,
-                &is_local_canister,
+                is_local_canister,
                 batch_time,
                 subnet_queues,
                 &mut ingress_history,
@@ -813,7 +813,7 @@ impl SystemMetadata {
 
             // Prune the ingress history, retaining only messages addressed to local
             // canisters and messages in terminal states.
-            ingress_history.prune_after_split(&is_local_canister);
+            ingress_history.prune_after_split(is_local_canister);
 
             // No streams.
             streams = Default::default();
