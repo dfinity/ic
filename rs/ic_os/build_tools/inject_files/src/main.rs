@@ -1,7 +1,7 @@
-use std::path::{Path, PathBuf};
-use std::process::Command;
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use tempfile::tempdir;
 
 use partition_tools::{
@@ -41,11 +41,10 @@ fn main() -> Result<()> {
         .arg(temp_dir.path())
         .status()?;
 
-    let mut target = ExtPartition::open(temp_file.clone(), cli.index)
-        .context(format!(
-            "Failed to open partition file {}",
-            temp_file.clone().display()
-        ))?;
+    let mut target = ExtPartition::open(temp_file.clone(), cli.index).context(format!(
+        "Failed to open partition file {}",
+        temp_file.clone().display()
+    ))?;
 
     let contexts = cli
         .file_contexts

@@ -337,22 +337,18 @@ pub mod testing {
             let extraction_dir = TempDir::new().context("Could not create tempdir")?;
 
             match options.file_system {
-                FileSystem::Vfat => {
-                    extract_partition::<FatPartition>(
-                        &device,
-                        offset_bytes,
-                        len_bytes,
-                        extraction_dir.path(),
-                    )
-                }
-                FileSystem::Ext4 => {
-                    extract_partition::<ExtPartition>(
-                        &device,
-                        offset_bytes,
-                        len_bytes,
-                        extraction_dir.path(),
-                    )
-                }
+                FileSystem::Vfat => extract_partition::<FatPartition>(
+                    &device,
+                    offset_bytes,
+                    len_bytes,
+                    extraction_dir.path(),
+                ),
+                FileSystem::Ext4 => extract_partition::<ExtPartition>(
+                    &device,
+                    offset_bytes,
+                    len_bytes,
+                    extraction_dir.path(),
+                ),
             }
             .context(format!(
                 "Could not extract partition to {}",

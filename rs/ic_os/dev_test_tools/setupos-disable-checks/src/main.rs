@@ -1,8 +1,8 @@
-use std::fs;
 use anyhow::{Context, Error};
 use clap::Parser;
 use linux_kernel_command_line::{ImproperlyQuotedValue, KernelCommandLine};
 use regex::Regex;
+use std::fs;
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
