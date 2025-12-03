@@ -213,11 +213,17 @@ pub fn setup_failover_nodes(env: TestEnv) {
     );
 }
 
+enum CupCorruption {
+    NotCorrupted,
+    CorruptedWithValidNiDkgId,
+    CorruptedIncludingInvalidNiDkgId,
+}
+
 struct TestConfig {
     subnet_size: usize,
     upgrade: bool,
     chain_key: bool,
-    corrupt_cup: bool,
+    corrupt_cup: CupCorruption,
     local_recovery: bool,
 }
 
@@ -228,7 +234,7 @@ pub fn test_with_chain_keys(env: TestEnv) {
             subnet_size: APP_NODES,
             upgrade: true,
             chain_key: true,
-            corrupt_cup: false,
+            corrupt_cup: CupCorruption::NotCorrupted,
             local_recovery: false,
         },
     );
@@ -241,7 +247,7 @@ pub fn test_without_chain_keys(env: TestEnv) {
             subnet_size: APP_NODES,
             upgrade: true,
             chain_key: false,
-            corrupt_cup: false,
+            corrupt_cup: CupCorruption::NotCorrupted,
             local_recovery: false,
         },
     );
@@ -249,7 +255,15 @@ pub fn test_without_chain_keys(env: TestEnv) {
 
 pub fn test_no_upgrade_with_chain_keys(env: TestEnv) {
     // Test the corrupt CUP case only when recovering an app subnet with chain keys without upgrade
-    let corrupt_cup = env.topology_snapshot().unassigned_nodes().count() > 0;
+    let corrupt_cup = if env.topology_snapshot().unassigned_nodes().count() > 0 {
+        // We try the "very corrupted" case by recovering on failover nodes because nodes will not
+        // be able to see the recovery CUP in the registry
+        CupCorruption::CorruptedIncludingInvalidNiDkgId
+    } else {
+        // A corrupted CUP whose NiDkgId can still be parsed can tell nodes to which subnet they
+        // belong to, see the recovery CUP, and thus allow the recovery on the same nodes.
+        CupCorruption::CorruptedWithValidNiDkgId
+    };
     app_subnet_recovery_test(
         env,
         TestConfig {
@@ -269,7 +283,7 @@ pub fn test_large_with_chain_keys(env: TestEnv) {
             subnet_size: APP_NODES_LARGE,
             upgrade: false,
             chain_key: true,
-            corrupt_cup: false,
+            corrupt_cup: CupCorruption::NotCorrupted,
             local_recovery: false,
         },
     );
@@ -282,7 +296,7 @@ pub fn test_no_upgrade_without_chain_keys(env: TestEnv) {
             subnet_size: APP_NODES,
             upgrade: false,
             chain_key: false,
-            corrupt_cup: false,
+            corrupt_cup: CupCorruption::NotCorrupted,
             local_recovery: false,
         },
     );
@@ -295,7 +309,7 @@ pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
             subnet_size: APP_NODES,
             upgrade: false,
             chain_key: false,
-            corrupt_cup: false,
+            corrupt_cup: CupCorruption::NotCorrupted,
             local_recovery: true,
         },
     );
@@ -321,8 +335,14 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         ssh_user_pub_key: ssh_readonly_pub_key,
         ..
     } = get_admin_keys_and_generate_readonly_keys(&env);
-    // If the latest CUP is corrupted we can't deploy read-only access
-    let ssh_readonly_pub_key_deployed = (!cfg.corrupt_cup).then_some(ssh_readonly_pub_key);
+    // If the latest CUP is corrupted such that even the NiDkgId cannot be parsed, then we cannot
+    // deploy read-only access to the subnet.
+    let ssh_readonly_pub_key_deployed = match cfg.corrupt_cup {
+        CupCorruption::NotCorrupted | CupCorruption::CorruptedWithValidNiDkgId => {
+            Some(ssh_readonly_pub_key)
+        }
+        CupCorruption::CorruptedIncludingInvalidNiDkgId => None,
+    };
 
     let current_version = get_guestos_img_version();
     info!(logger, "Current GuestOS version: {:?}", current_version);
@@ -523,9 +543,12 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         (download_pool_node, node_cert_share, admins)
     };
 
-    if cfg.corrupt_cup {
+    if matches!(
+        cfg.corrupt_cup,
+        CupCorruption::CorruptedWithValidNiDkgId | CupCorruption::CorruptedIncludingInvalidNiDkgId
+    ) {
         info!(logger, "Corrupting the latest CUP on all nodes");
-        corrupt_latest_cup(&app_subnet, &admin_helper, &logger);
+        corrupt_latest_cup(&app_subnet, &cfg.corrupt_cup, &admin_helper, &logger);
         assert_subnet_is_broken(
             &download_state_node.get_public_url(),
             app_can_id,
@@ -599,9 +622,12 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         next_step: None,
         // Skip validating the output if the CUP is corrupted, as in this case no replica will be
         // running to compare the heights to.
-        skip: cfg
-            .corrupt_cup
-            .then_some(vec![StepType::ValidateReplayOutput]),
+        skip: matches!(
+            cfg.corrupt_cup,
+            CupCorruption::CorruptedWithValidNiDkgId
+                | CupCorruption::CorruptedIncludingInvalidNiDkgId,
+        )
+        .then_some(vec![StepType::ValidateReplayOutput]),
     };
 
     info!(
@@ -740,9 +766,25 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
     }
 }
 
-// Corrupt the latest cup of all subnet nodes by change the CUP's replica version field.
-// This will change the hash of the block, thus making the CUP non-deserializable.
-fn corrupt_latest_cup(subnet: &SubnetSnapshot, admin_helper: &AdminHelper, logger: &Logger) {
+// Corrupt the latest cup of all subnet nodes by changing the CUP's replica version field for "soft"
+// corruptions where the NiDkgId can still be parsed. This will change the hash of the block, thus
+// making the CUP non-deserializable.
+// For "hard" corruptions, we change the NiDkgId field itself.
+fn corrupt_latest_cup(
+    subnet: &SubnetSnapshot,
+    cup_corruption: &CupCorruption,
+    admin_helper: &AdminHelper,
+    logger: &Logger,
+) {
+    assert!(
+        matches!(
+            cup_corruption,
+            CupCorruption::CorruptedWithValidNiDkgId
+                | CupCorruption::CorruptedIncludingInvalidNiDkgId
+        ),
+        "cup_corruption must indicate some kind of corruption"
+    );
+
     const CUP_PATH: &str = "/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb";
     const NEW_CUP_PATH: &str = "/var/lib/ic/data/cups/new_cup.pb";
 
@@ -767,11 +809,24 @@ fn corrupt_latest_cup(subnet: &SubnetSnapshot, admin_helper: &AdminHelper, logge
     let mut bytes = Vec::new();
     channel.read_to_end(&mut bytes).unwrap();
 
-    info!(logger, "Modifying CUP replica version");
     let proto_cup = pb::CatchUpPackage::decode(bytes.as_slice()).unwrap();
     let mut cup = CatchUpPackage::try_from(&proto_cup).unwrap();
-    cup.content.block.as_mut().version = ReplicaVersion::try_from("invalid_version").unwrap();
-    let bytes = pb::CatchUpPackage::from(cup).encode_to_vec();
+    let corrupted_proto_cup = match cup_corruption {
+        CupCorruption::CorruptedWithValidNiDkgId => {
+            info!(logger, "Modifying CUP replica version");
+            cup.content.block.as_mut().version =
+                ReplicaVersion::try_from("invalid_version").unwrap();
+            pb::CatchUpPackage::from(cup)
+        }
+        CupCorruption::CorruptedIncludingInvalidNiDkgId => {
+            info!(logger, "Modifying CUP NiDkgId");
+            let mut proto = pb::CatchUpPackage::from(cup);
+            proto.signer = None;
+            proto
+        }
+        CupCorruption::NotCorrupted => unreachable!(),
+    };
+    let bytes = corrupted_proto_cup.encode_to_vec();
 
     for node in subnet.nodes() {
         info!(
