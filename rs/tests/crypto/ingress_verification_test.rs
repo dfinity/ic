@@ -40,9 +40,7 @@ fn main() -> Result<()> {
                 .add_test(systest!(requests_with_delegations_with_targets; 3))
                 .add_test(systest!(requests_with_delegation_loop; 2))
                 .add_test(systest!(requests_with_delegation_loop; 3))
-                .add_test(systest!(requests_to_mgmt_canister_with_delegations; 2))
-                .add_test(systest!(requests_to_mgmt_canister_with_delegations; 3))
-                .add_test(systest!(requests_to_mgmt_canister_with_delegations; 4))
+                .add_test(systest!(requests_to_mgmt_canister_with_delegations))
                 .add_test(systest!(requests_with_invalid_expiry))
                 .add_test(systest!(requests_with_canister_signature)),
         )
@@ -663,7 +661,7 @@ pub fn requests_with_delegation_loop(env: TestEnv, api_ver: usize) {
 }
 
 // Tests delegation handling for requests sent to the management canister
-pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv, api_ver: usize) {
+pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
     let agent = node.build_default_agent();
@@ -687,8 +685,8 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv, api_ver: usize) 
 
             let mgmt_canister = canister_id_from_principal(&Principal::management_canister());
 
-            let test_info = TestInformation {
-                api_ver,
+            let mut test_info = TestInformation {
+                api_ver: 0,
                 url: node_url,
                 canister_id: mgmt_canister,
             };
@@ -722,7 +720,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv, api_ver: usize) 
                             rng,
                         )
                     } else {
-                        random_canister_ids(targets_per_delegation, rng);
+                        random_canister_ids(targets_per_delegation, rng)
                     };
 
                     targets.push(target_canister_ids);
@@ -733,39 +731,83 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv, api_ver: usize) 
                 let sender = &identities[0];
                 let signer = &identities[identities.len() - 1];
 
-                let content = HttpCallContent::Call {
-                    update: HttpCanisterUpdate {
-                        canister_id: Blob(mgmt_canister.get().as_slice().to_vec()),
-                        method_name: "canister_status".to_string(),
-                        arg: Blob(
-                            Encode!(&CanisterIdRecord {
-                                canister_id: canister_id.into()
-                            })
-                            .unwrap(),
-                        ),
-                        sender: Blob(sender.principal().as_slice().to_vec()),
-                        ingress_expiry: expiry_time().as_nanos() as u64,
-                        nonce: None,
-                    },
-                };
+                for api_ver in ALL_UPDATE_API_VERSIONS {
+                    // Test behavior with update
+                    let content = HttpCallContent::Call {
+                        update: HttpCanisterUpdate {
+                            canister_id: Blob(mgmt_canister.get().as_slice().to_vec()),
+                            method_name: "canister_status".to_string(),
+                            arg: Blob(
+                                Encode!(&CanisterIdRecord {
+                                    canister_id: canister_id.into()
+                                })
+                                    .unwrap(),
+                            ),
+                            sender: Blob(sender.principal().as_slice().to_vec()),
+                            ingress_expiry: expiry_time().as_nanos() as u64,
+                            nonce: None,
+                        },
+                    };
 
-                let signature = signer.sign_update(&content);
+                    let signature = signer.sign_update(&content);
 
-                let update_status = send_request(
-                    &test_info,
-                    "call",
-                    content,
-                    sender.public_key_der(),
-                    Some(delegations.to_vec()),
-                    signature,
-                )
-                .await
-                .status();
+                    test_info.api_ver = *api_ver;
+                    let update_status = send_request(
+                        &test_info,
+                        "call",
+                        content,
+                        sender.public_key_der(),
+                        Some(delegations.to_vec()),
+                        signature,
+                    )
+                        .await
+                        .status();
 
-                if include_mgmt_canister_id {
-                    assert_eq!(update_status, 200);
-                } else {
-                    assert_eq!(update_status, 400);
+                    if include_mgmt_canister_id {
+                        assert_eq!(update_status, 200);
+                    } else {
+                        assert_eq!(update_status, 400);
+                    }
+                }
+
+                for api_ver in ALL_QUERY_API_VERSIONS {
+                    // Test behavior with query
+                    let content = HttpQueryContent::Query {
+                        query: HttpUserQuery {
+                            canister_id: Blob(mgmt_canister.get().as_slice().to_vec()),
+                            method_name: "canister_status".to_string(),
+                            arg: Blob(
+                                Encode!(&CanisterIdRecord {
+                                    canister_id: canister_id.into()
+                                })
+                                    .unwrap(),
+                            ),
+                            sender: Blob(sender.principal().as_slice().to_vec()),
+                            ingress_expiry: expiry_time().as_nanos() as u64,
+                            nonce: None,
+                        },
+                    };
+
+                    let signature = signer.sign_query(&content);
+
+                    test_info.api_ver = *api_ver;
+                    let query = send_request(
+                        &test_info,
+                        "query",
+                        content,
+                        sender.public_key_der(),
+                        Some(delegations.to_vec()),
+                        signature,
+                    )
+                        .await;
+
+                    let query_status = query.status();
+                    println!("Resp = {}", hex::encode(query.bytes().await.unwrap()));
+                    if include_mgmt_canister_id {
+                        assert_eq!(query_status, 200);
+                    } else {
+                        assert_eq!(query_status, 400);
+                    }
                 }
             }
         }
