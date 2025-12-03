@@ -1999,22 +1999,20 @@ fn test_ledger_memo() {
         panic!("Expected Burn memo, got something else");
     }
 
-    // Step 3: test decoding invalid memos
+    // Step 3: test decoding invalid memo smoke test
 
-    for encoded_memo in [vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF], vec![0xFF; 85]] {
-        let decoded_result = ckbtc.decode_ledger_memo(encoded_memo);
+    let decoded_result = ckbtc.decode_ledger_memo(vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
 
-        assert!(
-            decoded_result.is_err(),
-            "Expected error when decoding invalid memo"
+    assert!(
+        decoded_result.is_err(),
+        "Expected error when decoding invalid memo"
+    );
+    if let Err(Some(err)) = decoded_result {
+        // Verify that the error message indicates the memo couldn't be decoded
+        assert_matches!(
+            err,
+            ic_ckbtc_minter::queries::DecodeLedgerMemoError::InvalidMemo(_)
         );
-        if let Err(Some(err)) = decoded_result {
-            // Verify that the error message indicates the memo couldn't be decoded
-            assert_matches!(
-                err,
-                ic_ckbtc_minter::queries::DecodeLedgerMemoError::InvalidMemo(_)
-            );
-        }
     }
 }
 

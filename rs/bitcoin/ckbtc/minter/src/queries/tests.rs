@@ -1,5 +1,8 @@
 use super::*;
 use crate::memo;
+use crate::memo::tests::{arb_burn_memo, arb_mint_memo};
+use crate::queries::DecodeLedgerMemoError::InvalidMemo;
+use assert_matches::assert_matches;
 use proptest::prelude::*;
 
 #[test]
@@ -64,8 +67,41 @@ fn test_decode_mint_reimburse_withdrawal_memo_is_stable() {
     );
 }
 
-// Re-export the strategies from memo::tests for use in these tests
-use crate::memo::tests::{arb_burn_memo, arb_mint_memo};
+#[test]
+fn test_decode_empty_array() {
+    let encoded_memo = vec![];
+    let result = decode_ledger_memo(DecodeLedgerMemoArgs { encoded_memo });
+
+    assert_matches!(
+        result,
+        Err(Some(InvalidMemo(msg)))
+        if msg.contains("Could not decode")
+    );
+}
+
+#[test]
+fn test_decode_bogus_memo_bytes() {
+    let encoded_memo = vec![0xDE, 0xAD, 0xBE, 0xEF];
+    let result = decode_ledger_memo(DecodeLedgerMemoArgs { encoded_memo });
+
+    assert_matches!(
+        result,
+        Err(Some(InvalidMemo(msg)))
+        if msg.contains("Could not decode")
+    );
+}
+
+#[test]
+fn test_decode_too_long_memo() {
+    let encoded_memo = vec![0x67; 1 + CKBTC_LEDGER_MEMO_SIZE as usize];
+    let result = decode_ledger_memo(DecodeLedgerMemoArgs { encoded_memo });
+
+    assert_matches!(
+        result,
+        Err(Some(InvalidMemo(msg)))
+        if msg.contains("Memo longer than permitted length")
+    );
+}
 
 proptest! {
     #[test]
