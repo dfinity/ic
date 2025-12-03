@@ -335,7 +335,6 @@ pub(crate) async fn download_stripped_message<P: Peers>(
                 .next_backoff()
                 .unwrap_or(MAX_ARTIFACT_RPC_TIMEOUT);
         if let Some(peer) = { peer_rx.peers().into_iter().choose(&mut rng) } {
-            let message_type = StrippedMessageType::from(&stripped_message_id);
             match timeout_at(next_request_at, transport.rpc(&peer, request.clone())).await {
                 Ok(Ok(response)) if response.status() == StatusCode::OK => {
                     match parse_response(&stripped_message_id, response.into_body()) {

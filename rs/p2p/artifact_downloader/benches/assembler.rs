@@ -5,7 +5,7 @@ use std::{
     vec,
 };
 
-use criterion::{BatchSize, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BatchSize, Bencher, Criterion, black_box, criterion_group, criterion_main};
 use ic_artifact_downloader::FetchStrippedConsensusArtifact;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
 use ic_interfaces::p2p::consensus::{ArtifactAssembler, BouncerValue, Peers, ValidatedPoolReader};
@@ -37,7 +37,7 @@ use ic_types::{
     time::UNIX_EPOCH,
 };
 use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_0, node_test_id};
-use tokio::runtime::Handle;
+use tokio::runtime::{Handle, Runtime};
 
 struct FakeIngressPool {
     ingresses: BTreeMap<IngressMessageId, SignedIngress>,
@@ -83,14 +83,12 @@ fn set_up_assembler(
 ) -> FetchStrippedConsensusArtifact {
     let mock_transport = MockTransport::new();
     let consensus_pool = MockValidatedPoolReader::<ConsensusMessage>::default();
-    let count = idkg_dealings.len();
     let idkg_pool = FakeIDkgPool {
         dealings: idkg_dealings
             .into_iter()
             .map(|dealing| (dealing.message_id(), dealing))
             .collect(),
     };
-    assert_eq!(idkg_pool.dealings.len(), count);
     let ingress_pool = FakeIngressPool {
         ingresses: ingress_messages
             .into_iter()
@@ -116,13 +114,9 @@ fn set_up_assembler(
     handler(Arc::new(mock_transport))
 }
 
-fn fake_block_proposal_with_ingresses(ingress_messages: Vec<SignedIngress>) -> ConsensusMessage {
-    fake_block_proposal_with_ingresses_and_idkg(ingress_messages, None)
-}
-
-fn fake_block_proposal_with_ingresses_and_idkg(
+fn fake_block_proposal_with_ingresses_and_idkg_dealings(
     ingress_messages: Vec<SignedIngress>,
-    idkg: Option<IDkgPayload>,
+    idkg_dealings: Vec<SignedIDkgDealing>,
 ) -> ConsensusMessage {
     let parent = make_genesis(DkgSummary::fake()).content.block;
     let block = Block::new(
@@ -135,7 +129,7 @@ fn fake_block_proposal_with_ingresses_and_idkg(
                     ..BatchPayload::default()
                 },
                 dkg: DkgDataPayload::new_empty(Height::from(0)),
-                idkg,
+                idkg: (!idkg_dealings.is_empty()).then_some(fake_idkg_payload(idkg_dealings)),
             }),
         ),
         parent.as_ref().height.increment(),
@@ -146,10 +140,7 @@ fn fake_block_proposal_with_ingresses_and_idkg(
     ConsensusMessage::BlockProposal(BlockProposal::fake(block, NODE_1))
 }
 
-pub(crate) fn fake_block_proposal_with_dealings(
-    dealings: Vec<SignedIDkgDealing>,
-) -> ConsensusMessage {
-    let dealings_count = dealings.len();
+pub(crate) fn fake_idkg_payload(dealings: Vec<SignedIDkgDealing>) -> IDkgPayload {
     let mut idkg_transcripts = BTreeMap::new();
     for dealing in dealings {
         let transcript_id = dealing.idkg_dealing().transcript_id;
@@ -177,16 +168,9 @@ pub(crate) fn fake_block_proposal_with_dealings(
         );
     }
 
-    let count: usize = idkg_transcripts
-        .values()
-        .map(|t| t.verified_dealings.len())
-        .sum();
-    assert_eq!(count, dealings_count);
-
     let mut idkg_payload = IDkgPayload::empty(Height::new(100), SUBNET_0, vec![]);
     idkg_payload.idkg_transcripts = idkg_transcripts;
-
-    fake_block_proposal_with_ingresses_and_idkg(vec![], Some(idkg_payload))
+    idkg_payload
 }
 
 fn fake_idkg_dealings(
@@ -236,7 +220,7 @@ fn fake_ingress_message_with_arg_size(method_name: &str, arg_size: usize) -> Sig
 }
 
 fn disassemble_ingress(criterion: &mut Criterion) {
-    let mut group = criterion.benchmark_group("disassemble");
+    let mut group = criterion.benchmark_group("disassemble_ingress");
     let rt = tokio::runtime::Runtime::new().unwrap();
 
     for (ingresses_count, ingress_size) in [
@@ -262,73 +246,14 @@ fn disassemble_ingress(criterion: &mut Criterion) {
                         )
                     })
                     .collect();
-                let assembler =
-                    set_up_assembler(ingress_messages.clone(), vec![], rt.handle().clone());
-                let block = fake_block_proposal_with_ingresses(ingress_messages);
-
-                b.iter_batched(
-                    || (assembler.clone(), block.clone()),
-                    |(assembler, block)| {
-                        black_box(assembler.disassemble_message(block));
-                    },
-                    BatchSize::SmallInput,
-                )
-            },
-        );
-    }
-}
-
-fn assemble_ingress(criterion: &mut Criterion) {
-    let mut group = criterion.benchmark_group("assemble");
-    group.measurement_time(Duration::from_secs(15));
-    let rt = tokio::runtime::Runtime::new().unwrap();
-
-    for (ingresses_count, ingress_size) in [
-        (1, 1),
-        (1000, 1),
-        (1000, 4 * 1024),
-        (1000, 8 * 1024),
-        (1000, 16 * 1024),
-        (1000, 32 * 1024),
-        (2, 2_000_000),
-        (4, 2_000_000),
-        (8, 2_000_000),
-        (16, 2_000_000),
-    ] {
-        group.bench_function(
-            format!("ingress_count:{ingresses_count}, ingress_size:{ingress_size}"),
-            |b| {
-                let ingress_messages: Vec<_> = (0..ingresses_count)
-                    .map(|i| {
-                        fake_ingress_message_with_arg_size(
-                            &format!("method_name_{i}"),
-                            ingress_size,
-                        )
-                    })
-                    .collect();
-                let assembler =
-                    set_up_assembler(ingress_messages.clone(), vec![], rt.handle().clone());
-                let block = fake_block_proposal_with_ingresses(ingress_messages);
-
-                let stripped_block = assembler.disassemble_message(block);
-                let id = stripped_block.id();
-
-                b.to_async(&rt).iter_batched(
-                    || (assembler.clone(), stripped_block.clone(), id.clone()),
-                    |(assembler, stripped_block, id)| async move {
-                        assembler
-                            .assemble_message(id, Some((stripped_block, NODE_2)), MockPeers(NODE_2))
-                            .await;
-                    },
-                    BatchSize::SmallInput,
-                )
+                bench_disassemble(b, &rt, ingress_messages, vec![]);
             },
         );
     }
 }
 
 fn disassemble_idkg_dealings(criterion: &mut Criterion) {
-    let mut group = criterion.benchmark_group("disassemble");
+    let mut group = criterion.benchmark_group("disassemble_idkg_dealings");
     let rt = tokio::runtime::Runtime::new().unwrap();
 
     let dealing_size = 4500;
@@ -345,24 +270,71 @@ fn disassemble_idkg_dealings(criterion: &mut Criterion) {
             format!("transcripts:{transcripts}, dealings_per_transcript:{dealings_per_transcript}, dealing_size:{dealing_size}"),
             |b| {
                 let dealings = fake_idkg_dealings(transcripts, dealings_per_transcript, dealing_size);
-                let assembler =
-                    set_up_assembler(vec![], dealings.clone(), rt.handle().clone());
-                let block = fake_block_proposal_with_dealings(dealings);
+                bench_disassemble(b, &rt, vec![], dealings);
+            },
+        );
+    }
+}
 
-                b.iter_batched(
-                    || (assembler.clone(), block.clone()),
-                    |(assembler, block)| {
-                        black_box(assembler.disassemble_message(block));
-                    },
-                    BatchSize::SmallInput,
-                )
+fn bench_disassemble(
+    bencher: &mut Bencher<'_>,
+    rt: &Runtime,
+    ingress_messages: Vec<SignedIngress>,
+    idkg_dealings: Vec<SignedIDkgDealing>,
+) {
+    let assembler = set_up_assembler(
+        ingress_messages.clone(),
+        idkg_dealings.clone(),
+        rt.handle().clone(),
+    );
+    let block =
+        fake_block_proposal_with_ingresses_and_idkg_dealings(ingress_messages, idkg_dealings);
+
+    bencher.iter_batched(
+        || (assembler.clone(), block.clone()),
+        |(assembler, block)| {
+            black_box(assembler.disassemble_message(block));
+        },
+        BatchSize::SmallInput,
+    )
+}
+
+fn assemble_ingress(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("assemble_ingress");
+    group.measurement_time(Duration::from_secs(15));
+    let rt = tokio::runtime::Runtime::new().unwrap();
+
+    for (ingresses_count, ingress_size) in [
+        (1, 1),
+        (1000, 1),
+        (1000, 4 * 1024),
+        (1000, 8 * 1024),
+        (1000, 16 * 1024),
+        (1000, 32 * 1024),
+        (2, 2_000_000),
+        (4, 2_000_000),
+        (8, 2_000_000),
+        (16, 2_000_000),
+    ] {
+        group.bench_function(
+            format!("ingress_count:{ingresses_count}, ingress_size:{ingress_size}"),
+            |b| {
+                let ingress_messages: Vec<_> = (0..ingresses_count)
+                    .map(|i| {
+                        fake_ingress_message_with_arg_size(
+                            &format!("method_name_{i}"),
+                            ingress_size,
+                        )
+                    })
+                    .collect();
+                bench_assemble(b, &rt, ingress_messages, vec![]);
             },
         );
     }
 }
 
 fn assemble_idkg_dealings(criterion: &mut Criterion) {
-    let mut group = criterion.benchmark_group("assemble");
+    let mut group = criterion.benchmark_group("assemble_idkg_dealings");
     group.measurement_time(Duration::from_secs(15));
     let rt = tokio::runtime::Runtime::new().unwrap();
 
@@ -380,25 +352,38 @@ fn assemble_idkg_dealings(criterion: &mut Criterion) {
             format!("transcripts:{transcripts}, dealings_per_transcript:{dealings_per_transcript}, dealing_size:{dealing_size}"),
             |b| {
                 let dealings = fake_idkg_dealings(transcripts, dealings_per_transcript, dealing_size);
-                let assembler =
-                    set_up_assembler(vec![], dealings.clone(), rt.handle().clone());
-                let block = fake_block_proposal_with_dealings(dealings);
-
-                let stripped_block = assembler.disassemble_message(block);
-                let id = stripped_block.id();
-
-                b.to_async(&rt).iter_batched(
-                    || (assembler.clone(), stripped_block.clone(), id.clone()),
-                    |(assembler, stripped_block, id)| async move {
-                        assembler
-                            .assemble_message(id, Some((stripped_block, NODE_2)), MockPeers(NODE_2))
-                            .await;
-                    },
-                    BatchSize::SmallInput,
-                )
+                bench_assemble(b, &rt, vec![], dealings);
             },
         );
     }
+}
+
+fn bench_assemble(
+    bencher: &mut Bencher<'_>,
+    rt: &Runtime,
+    ingress_messages: Vec<SignedIngress>,
+    idkg_dealings: Vec<SignedIDkgDealing>,
+) {
+    let assembler = set_up_assembler(
+        ingress_messages.clone(),
+        idkg_dealings.clone(),
+        rt.handle().clone(),
+    );
+    let block =
+        fake_block_proposal_with_ingresses_and_idkg_dealings(ingress_messages, idkg_dealings);
+
+    let stripped_block = assembler.disassemble_message(block);
+    let id = stripped_block.id();
+
+    bencher.to_async(rt).iter_batched(
+        || (assembler.clone(), stripped_block.clone(), id.clone()),
+        |(assembler, stripped_block, id)| async move {
+            assembler
+                .assemble_message(id, Some((stripped_block, NODE_2)), MockPeers(NODE_2))
+                .await;
+        },
+        BatchSize::SmallInput,
+    )
 }
 
 criterion_group!(

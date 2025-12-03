@@ -91,12 +91,11 @@ impl Strippable for &Option<IDkgPayload> {
             idkg.idkg_transcripts
                 .iter()
                 .flat_map(|(_id, transcript)| {
-                    transcript
-                        .verified_dealings
-                        .iter()
-                        .map(|(dealer_index, signed_dealing)| {
-                            (*dealer_index, signed_dealing.content.message_id())
-                        })
+                    transcript.verified_dealings.iter().map(
+                        |(dealer_index, batch_signed_dealing)| {
+                            (*dealer_index, batch_signed_dealing.content.message_id())
+                        },
+                    )
                 })
                 .collect::<Vec<_>>()
         } else {

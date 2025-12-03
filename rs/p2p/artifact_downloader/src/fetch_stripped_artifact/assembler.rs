@@ -508,7 +508,7 @@ impl BlockProposalAssembler {
         let reconstructed_ingress_payload_proto =
             pb::IngressPayload::from(reconstructed_ingress_payload);
 
-        let mut idkg_dealings: BTreeMap<u64, BTreeMap<u32, SignedIDkgDealing>> = BTreeMap::new();
+        let mut idkg_dealings = BTreeMap::<u64, BTreeMap<NodeIndex, SignedIDkgDealing>>::new();
         for ((dealer_index, dealing_id), signed_dealing) in signed_dealings {
             let signed_dealing = signed_dealing
                 .ok_or_else(|| AssemblyError::MissingIDkgDealing(dealing_id.clone()))?;
