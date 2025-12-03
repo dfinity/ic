@@ -1125,7 +1125,8 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
     // Create canister snapshot.
     now += Duration::from_secs(5);
     env.set_time(now);
-    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let args: TakeCanisterSnapshotArgs =
+        TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
     let ucan_payload = universal_canister_payload(
         &PrincipalId::default(),
         "take_canister_snapshot",
@@ -1653,7 +1654,7 @@ fn subnet_available_memory() {
     check_subnet_available_memory(&test, true);
 
     // memory usage increases after taking a snapshot
-    let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
     let res = test.subnet_message(
         Method::TakeCanisterSnapshot,
         take_canister_snapshot_args.encode(),

@@ -43,9 +43,14 @@ rust_test(
     env = {
         "TEST_VECTORS": "$(locations :test_vectors)",
     },
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:test-strategy",
+    ],
     deps = [
         # Keep sorted.
         "@crate_index//:assert_matches",
+        "@crate_index//:proptest",
         "@crate_index//:serde_json",
     ],
 )

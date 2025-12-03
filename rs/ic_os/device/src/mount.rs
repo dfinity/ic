@@ -286,15 +286,15 @@ pub mod testing {
             let key = (device.clone(), offset_bytes, len_bytes);
             let mut mounts = self.mounts.lock().unwrap();
             if !mounts.contains_key(&key) {
-                let tempdir = tokio::runtime::Handle::current().block_on(
+                mounts.insert(
+                    key.clone(),
                     self.extract_partition_to_tempdir(
                         device.clone(),
                         offset_bytes,
                         len_bytes,
                         options,
-                    ),
-                )?;
-                mounts.insert(key.clone(), tempdir);
+                    )?,
+                );
             }
 
             Ok(Box::new(MockMount {
@@ -304,47 +304,39 @@ pub mod testing {
     }
 
     impl ExtractingFilesystemMounter {
-        async fn extract_partition_to_tempdir(
+        fn extract_partition_to_tempdir(
             &self,
             device: PathBuf,
             offset_bytes: u64,
             len_bytes: u64,
             options: MountOptions,
         ) -> Result<Arc<TempDir>> {
-            async fn extract_partition<P: Partition>(
+            fn extract_partition<P: Partition>(
                 device: &Path,
                 offset_bytes: u64,
                 len_bytes: u64,
                 target: &Path,
             ) -> Result<()> {
-                P::open_range(device.to_path_buf(), offset_bytes, len_bytes)
-                    .await?
+                P::open_range(device.to_path_buf(), offset_bytes, len_bytes)?
                     .copy_files_to(target)
-                    .await
                     .context("Could not copy files to tempdir")
             }
 
             let extraction_dir = TempDir::new().context("Could not create tempdir")?;
 
             match options.file_system {
-                FileSystem::Vfat => {
-                    extract_partition::<FatPartition>(
-                        &device,
-                        offset_bytes,
-                        len_bytes,
-                        extraction_dir.path(),
-                    )
-                    .await
-                }
-                FileSystem::Ext4 => {
-                    extract_partition::<ExtPartition>(
-                        &device,
-                        offset_bytes,
-                        len_bytes,
-                        extraction_dir.path(),
-                    )
-                    .await
-                }
+                FileSystem::Vfat => extract_partition::<FatPartition>(
+                    &device,
+                    offset_bytes,
+                    len_bytes,
+                    extraction_dir.path(),
+                ),
+                FileSystem::Ext4 => extract_partition::<ExtPartition>(
+                    &device,
+                    offset_bytes,
+                    len_bytes,
+                    extraction_dir.path(),
+                ),
             }
             .context(format!(
                 "Could not extract partition to {}",
@@ -371,7 +363,7 @@ mod tests {
         write!(File::create(temp_dir.path().join("foo.txt"))?, "hello")?;
 
         ensure!(
-            Command::new("mkfs.ext4")
+            Command::new("/usr/sbin/mkfs.ext4")
                 .arg(out.path())
                 .arg("-d")
                 .arg(temp_dir.path())

@@ -111,7 +111,7 @@ fn timer() {
     // ic_ckbtc_minter::timer invokes ic_cdk::spawn
     // which must be wrapped in in_executor_context
     // as required by the new ic-cdk-executor.
-    ic_cdk::futures::in_executor_context(|| {
+    ic_cdk::futures::internals::in_executor_context(|| {
         #[cfg(feature = "self_check")]
         ok_or_die(check_invariants());
 
@@ -198,7 +198,7 @@ async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusRes
 #[update]
 async fn upload_events(events: Vec<Event>) {
     for event in events {
-        storage::record_event_v0(event.payload, &IC_CANISTER_RUNTIME);
+        storage::record_event(event.payload, &IC_CANISTER_RUNTIME);
     }
 }
 

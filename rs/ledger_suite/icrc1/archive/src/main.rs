@@ -348,6 +348,10 @@ fn icrc3_supported_block_types() -> Vec<SupportedBlockType> {
             url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md"
                 .to_string(),
         },
+        SupportedBlockType {
+            block_type: "107feecol".to_string(),
+            url: "https://github.com/dfinity/ICRC/pull/117".to_string(),
+        },
     ]
 }
 
