@@ -31,10 +31,8 @@ exec /usr/bin/systemd-run \
     --property=RestrictSUIDSGID=yes \
     --property=ProtectControlGroups=yes \
     --property=ProtectHostname=yes \
-    --property=StandardOutput=journal \
-    --property=StandardError=journal \
     --property=SyslogIdentifier=guestos-recovery-upgrader \
     --property=TimeoutStartSec=1800 \
-    --wait --collect -- \
+    --wait --pipe --collect -- \
     /opt/ic/bin/guestos-recovery-upgrader.sh "$@"
 
