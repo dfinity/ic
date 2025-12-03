@@ -1514,19 +1514,16 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
 }
 
 // Return UTXOs for consolidation and remove them from available_utxos.
-fn select_utxos_to_consolidate(available_utxos: &mut BTreeSet<Utxo>) -> Vec<Utxo> {
-    let mut utxos: Vec<_> = available_utxos.iter().collect();
-    utxos.sort_by_key(|u| u.value);
-    let input_utxos = utxos
-        .into_iter()
-        .take(MAX_NUM_INPUTS_IN_TRANSACTION)
-        .cloned()
-        .collect::<Vec<_>>();
-    assert!(input_utxos.len() == MAX_NUM_INPUTS_IN_TRANSACTION);
-    for utxo in &input_utxos {
-        available_utxos.remove(utxo);
+fn select_utxos_to_consolidate(available_utxos: &mut UtxoSet) -> Vec<Utxo> {
+    let mut utxos = Vec::with_capacity(MAX_NUM_INPUTS_IN_TRANSACTION);
+    while utxos.len() < MAX_NUM_INPUTS_IN_TRANSACTION {
+        if let Some(utxo) = available_utxos.pop_first() {
+            utxos.push(utxo);
+        } else {
+            break;
+        }
     }
-    input_utxos
+    utxos
 }
 
 #[async_trait]

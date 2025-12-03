@@ -1212,9 +1212,9 @@ fn test_build_consolidation_transaction() {
     let fee_millisatoshi_per_vbyte = 10;
 
     // Randomly generate a utxo set from proptest strategy
-    let strategy = btree_set(arbitrary::utxo(1_000_000u64..1_000_000_000), 1000..2000);
+    let strategy = arbitrary::utxo_set(1_000_000u64..1_000_000_000, 1000..2000);
     let mut runner = TestRunner::new(Config::default());
-    let mut utxos: BTreeSet<Utxo> = strategy.new_tree(&mut runner).unwrap().current();
+    let mut utxos: UtxoSet = strategy.new_tree(&mut runner).unwrap().current();
 
     let input_utxos = select_utxos_to_consolidate(&mut utxos);
     let max_input_value: u64 = input_utxos.iter().map(|x| x.value).max().unwrap();
