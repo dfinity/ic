@@ -35,4 +35,3 @@ exec /usr/bin/systemd-run \
     --property=TimeoutStartSec=1800 \
     --wait --pipe --collect -- \
     /opt/ic/bin/guestos-recovery-upgrader.sh "$@"
-
