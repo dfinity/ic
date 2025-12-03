@@ -91,6 +91,15 @@ fn g1_muln_instance<R: Rng + CryptoRng>(
     (points, scalars)
 }
 
+fn g1_muln_affine_instance<R: Rng + CryptoRng>(
+    terms: usize,
+    rng: &mut R,
+) -> (Vec<G1Affine>, Vec<Scalar>) {
+    let (points, scalars) = g1_muln_instance(terms, rng);
+    let points = G1Projective::batch_normalize(&points);
+    (points, scalars)
+}
+
 fn g1_sparse_muln_instance<R: Rng + CryptoRng>(
     terms: usize,
     num_bits: u8,
@@ -116,6 +125,15 @@ fn g2_muln_instance<R: Rng + CryptoRng>(
         points.push(random_g2(rng));
         scalars.push(random_scalar(rng));
     }
+    (points, scalars)
+}
+
+fn g2_muln_affine_instance<R: Rng + CryptoRng>(
+    terms: usize,
+    rng: &mut R,
+) -> (Vec<G2Affine>, Vec<Scalar>) {
+    let (points, scalars) = g2_muln_instance(terms, rng);
+    let points = G2Projective::batch_normalize(&points);
     (points, scalars)
 }
 
@@ -402,6 +420,13 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
                 BatchSize::SmallInput,
             )
         });
+        group.bench_function(format!("multiexp_muln_affine_{n}"), |b| {
+            b.iter_batched_ref(
+                || g1_muln_affine_instance(n, rng),
+                |(points, scalars)| G1Projective::muln_affine_vartime(&points[..], &scalars[..]),
+                BatchSize::SmallInput,
+            )
+        });
     }
 
     group.bench_function("multiexp_muln_sparse_32_inputs_16_bits", |b| {
@@ -592,6 +617,13 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
             b.iter_batched_ref(
                 || g2_muln_instance(n, rng),
                 |(points, scalars)| G2Projective::muln_vartime(&points[..], &scalars[..]),
+                BatchSize::SmallInput,
+            )
+        });
+        group.bench_function(format!("multiexp_muln_affine_{n}"), |b| {
+            b.iter_batched_ref(
+                || g2_muln_affine_instance(n, rng),
+                |(points, scalars)| G2Projective::muln_affine_vartime(&points[..], &scalars[..]),
                 BatchSize::SmallInput,
             )
         });
