@@ -73,6 +73,7 @@ rust_library(
         "@crate_index//:tokio",
         "@crate_index//:tokio-util",
         "@crate_index//:url",
+        "@crate_index//:qrcode",
     ],
 )
 

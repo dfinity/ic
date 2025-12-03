@@ -30,6 +30,7 @@ use ic_sys::utility_command::UtilityCommand;
 use ic_types::{NodeId, RegistryVersion, SubnetId, crypto::KeyPurpose, messages::MessageId};
 use idna::domain_to_ascii_strict;
 use prost::Message;
+use qrcode::{QrCode, render::unicode};
 use rand::prelude::*;
 use std::{
     net::IpAddr,
@@ -691,11 +692,61 @@ fn protobuf_to_vec<M: Message>(entry: M) -> Vec<u8> {
     buf
 }
 
+fn encode_as_qrcode(node_id: NodeId) -> OrchestratorResult<String> {
+    let code = QrCode::new(node_id.to_string())
+        .map_err(|e| OrchestratorError::QrEncodingError(node_id, e))?;
+
+    Ok(code.render::<unicode::Dense1x2>().build())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use ic_sys::utility_command::UtilityCommand;
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_types::PrincipalId;
+
+    #[test]
+    fn encoding_node_ids_works() {
+        let test_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
+
+        let encoded = encode_as_qrcode(test_node_id).unwrap();
+
+        let expected = r"
+    █▀▀▀▀▀█ ▀▄█▄ ██▄▀ ▄▄  █▀▀▀▀▀█
+    █ ███ █ ▄▄ █▄ ▀  ▀    █ ███ █
+    █ ▀▀▀ █ █▄  █   ▄▀▀▄  █ ▀▀▀ █
+    ▀▀▀▀▀▀▀ █▄█ ▀▄▀▄█▄█ ▀ ▀▀▀▀▀▀▀
+    █▄▄ █ ▀██ ▄▄██▄ ▄▀▀▀▀▀████▄▄█
+    ▄▄▄██▄▀  ▀▄▄█ ▄ ▀▄  ▀▀█ ▄▄▀▀▀
+    ▀ ▄ ▄ ▀▄▀▄▀██▀▀▀▀▀▄▀▀▀▄ ▄▄ ▀█
+    ▄██▄▄█▀▀██▄ ▄█▀█▄█▄ ▀▀█▄ ▀ ▄▀
+    ▄█ ▄ ▀▀▀   ▄▀█▄ ▄█▄▀▀▀▄▄▄▀  █
+      █▀▄▄▀█ █▄█▀ ▄ ▀█▄ █▀█▄ █  ▀
+    ▀▀  ▀ ▀ ▄▀ ▄█▀▀▀▀▄█▄█▀▀▀█▀ ▄▄
+    █▀▀▀▀▀█ ▀█ █▄█▀█▄ ▀▀█ ▀ █▄ ▀▀
+    █ ███ █ ▀▄▀▄▄█▄ ▄ ▄▀██▀▀▀▄▄▄▀
+    █ ▀▀▀ █  █ ▄█▀  ▀█▄ ▄█▄▄▄█ ██
+    ▀▀▀▀▀▀▀ ▀▀ ▀ ▀▀▀▀ ▀ ▀▀  ▀▀ ▀
+"
+        .to_string();
+
+        let normalize = |s: String| -> String {
+            s.lines()
+                .map(|line| line.trim().to_string())
+                .filter(|line| !line.is_empty())
+                .map(|line| format!("{line}\n"))
+                .collect()
+        };
+
+        assert_eq!(
+            normalize(expected),
+            normalize(encoded),
+            "Expected something like:\n{}\nBut got something like:\n{}",
+            normalize(expected),
+            normalize(encoded)
+        );
+    }
 
     #[test]
     fn default_http_config_endpoint_succeeds() {
