@@ -562,7 +562,7 @@ impl CanisterManager {
         if let Some(log_visibility) = settings.log_visibility() {
             canister.system_state.log_visibility = log_visibility.clone();
         }
-        if let Some(log_memory_limit) = settings.log_memory_limit() {
+        if let Some(_log_memory_limit) = settings.log_memory_limit() {
             // TODO: populate log_memory_store with the new limit.
         }
         if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
