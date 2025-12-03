@@ -1,23 +1,13 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
-
-rust_library(
-    name = "recovery_utils",
-    srcs = ["src/recovery_utils.rs"],
-    crate_name = "hostos_tool_recovery_utils",
-    visibility = [
-        "//rs:ic-os-pkg",
-        "//rs:system-tests-pkg",
-    ],
-)
 
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/ic_os/config_types",
     "//rs/ic_os/deterministic_ips",
     "//rs/ic_os/network",
-    "//rs/ic_os/os_tools/guestos_recovery_tui",
+    "//rs/ic_os/os_tools/manual_guestos_recovery",
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
     "@crate_index//:clap",

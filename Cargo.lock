@@ -5609,15 +5609,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "guestos_recovery_tui"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "ratatui",
- "tui-textarea",
-]
-
-[[package]]
 name = "guestos_tool"
 version = "1.0.0"
 dependencies = [
@@ -6009,8 +6000,8 @@ dependencies = [
  "config",
  "config_types",
  "deterministic_ips",
- "guestos_recovery_tui",
  "itertools 0.12.1",
+ "manual_guestos_recovery",
  "network",
  "regex",
  "utils",
@@ -16148,6 +16139,7 @@ dependencies = [
  "ic-types",
  "ic_consensus_system_test_subnet_recovery",
  "ic_consensus_system_test_utils",
+ "manual_guestos_recovery",
  "nested",
  "rand 0.8.5",
  "sha2 0.10.9",
@@ -17818,6 +17810,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19b955cdeb2a02b9117f121ce63aa52d08ade45de53e48fe6a38b39c10f6f709"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "manual_guestos_recovery"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "ratatui",
+ "tui-textarea",
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
 [package]
-name = "guestos_recovery_tui"
+name = "manual_guestos_recovery"
 version = "1.0.0"
 edition.workspace = true
 

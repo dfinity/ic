@@ -1,7 +1,7 @@
+pub mod recovery_utils;
 mod ui;
 
 use anyhow::{Context, Result};
-use hostos_tool_recovery_utils::build_recovery_upgrader_command;
 use ratatui::crossterm::event::{
     DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers,
 };
@@ -10,6 +10,7 @@ use ratatui::crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode, size,
 };
 use ratatui::{Frame, Terminal, backend::CrosstermBackend};
+use recovery_utils::build_recovery_upgrader_command;
 use std::io::{self, BufRead, BufReader, IsTerminal, Read};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};

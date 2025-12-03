@@ -1,7 +1,6 @@
 use std::path::Path;
 
 use anyhow::bail;
-use hostos_tool_recovery_utils::build_recovery_upgrader_command;
 use ic_consensus_system_test_subnet_recovery::utils::{
     AdminAndUserKeys, BACKUP_USERNAME, assert_subnet_is_broken, break_nodes,
     get_admin_keys_and_generate_backup_keys,
@@ -39,6 +38,7 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use ic_types::ReplicaVersion;
+use manual_guestos_recovery::recovery_utils::build_recovery_upgrader_command;
 use nested::util::setup_ic_infrastructure;
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
