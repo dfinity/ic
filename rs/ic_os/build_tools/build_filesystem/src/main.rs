@@ -72,6 +72,10 @@ pub(crate) struct Args {
     /// Extra files to inject (format: source:target:mode)
     #[arg(long = "extra-files", num_args = 0..)]
     pub(crate) extra_files: Vec<String>,
+
+    /// Path to mke2fs binary (optional, defaults to system mke2fs)
+    #[arg(long = "mke2fs")]
+    pub(crate) mke2fs_path: Option<PathBuf>,
 }
 
 fn main() -> Result<()> {
@@ -166,7 +170,7 @@ pub(crate) fn build_filesystem(args: Args) -> Result<()> {
             let partition_size = args
                 .partition_size
                 .context("Partition size is required for ext4")?;
-            Box::new(Ext4Builder::new(&output_path, partition_size, args.label)?)
+            Box::new(Ext4Builder::new(&output_path, partition_size, args.label, args.mke2fs_path.clone())?)
         }
         OutputType::Vfat => {
             let partition_size = args

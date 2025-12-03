@@ -1,3 +1,4 @@
+use crate::state::utxos::UtxoSet;
 use crate::{
     BuildTxError, CacheWithExpiration, Network,
     address::BitcoinAddress,
@@ -19,15 +20,12 @@ use candid::Principal;
 use ic_base_types::CanisterId;
 use ic_btc_interface::{OutPoint, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
-use maplit::btreeset;
 use proptest::{
-    array::uniform20,
-    collection::{btree_set, vec as pvec},
-    prelude::any,
-    prop_assert, prop_assert_eq, prop_assume, proptest,
+    array::uniform20, collection::vec as pvec, prelude::any, prop_assert, prop_assert_eq,
+    prop_assume, proptest,
 };
 use std::cmp::max;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -192,7 +190,7 @@ fn signed_tx_to_bitcoin_tx(tx: &tx::SignedTransaction) -> bitcoin::Transaction {
 
 #[test]
 fn greedy_smoke_test() {
-    let mut utxos: BTreeSet<Utxo> = (1..10u64).map(dummy_utxo_from_value).collect();
+    let mut utxos: UtxoSet = (1..10u64).map(dummy_utxo_from_value).collect();
     assert_eq!(utxos.len(), 9_usize);
 
     let res = greedy(15, &mut utxos);
@@ -203,7 +201,7 @@ fn greedy_smoke_test() {
 
 #[test]
 fn should_have_same_input_and_output_count() {
-    let mut available_utxos = BTreeSet::new();
+    let mut available_utxos = UtxoSet::new();
     for i in 0..crate::UTXOS_COUNT_THRESHOLD {
         available_utxos.insert(Utxo {
             outpoint: OutPoint {
@@ -295,7 +293,7 @@ fn test_min_change_amount() {
         },
         ..utxo_1.clone()
     };
-    let mut available_utxos = btreeset! {utxo_1.clone(), utxo_2.clone()};
+    let mut available_utxos = UtxoSet::from_iter([utxo_1.clone(), utxo_2.clone()]);
 
     let minter_addr = BitcoinAddress::P2wpkhV0([0; 20]);
     let out1_addr = BitcoinAddress::P2wpkhV0([1; 20]);
@@ -360,14 +358,14 @@ fn test_min_change_amount() {
 fn test_no_dust_outputs() {
     const P2PKH_DUST_THRESHOLD: u64 = 546;
 
-    let mut available_utxos = btreeset! {Utxo {
+    let mut available_utxos = UtxoSet::from_iter([Utxo {
         outpoint: OutPoint {
             txid: [0; 32].into(),
             vout: 0,
         },
         value: 100_000,
         height: 10,
-    }};
+    }]);
     assert_eq!(available_utxos.len(), 1);
     let initial_available_utxos = available_utxos.clone();
 
@@ -425,7 +423,7 @@ fn test_no_dust_in_change_output() {
 
     let fee_estimator = bitcoin_fee_estimator();
     for change in 1..=100 {
-        let mut available_utxos = btreeset! {utxo.clone()};
+        let mut available_utxos = UtxoSet::from_iter(vec![utxo.clone()]);
         let (tx, change_output, _withdrawal_fee, _utxos) = build_unsigned_transaction(
             &mut available_utxos,
             vec![(out1_addr.clone(), utxo.value - change)],
@@ -459,19 +457,12 @@ fn test_no_dust_in_change_output() {
 proptest! {
     #[test]
     fn greedy_solution_properties(
-        values in pvec(1u64..1_000_000_000, 1..10),
+        mut utxos in arbitrary::utxo_set(1u64..1_000_000_000, 1..10),
         target in 1u64..1_000_000_000,
     ) {
-        let mut utxos: BTreeSet<Utxo> = values
-            .into_iter()
-            .map(dummy_utxo_from_value)
-            .collect();
-
         let total = utxos.iter().map(|u| u.value).sum::<u64>();
 
-        if total < target {
-            utxos.insert(dummy_utxo_from_value(target - total));
-        }
+        let target = target.min(total);
 
         let original_utxos = utxos.clone();
 
@@ -502,7 +493,7 @@ proptest! {
     fn greedy_does_not_modify_input_when_fails(
         values in pvec(1u64..1_000_000_000, 1..10),
     ) {
-        let mut utxos: BTreeSet<Utxo> = values
+        let mut utxos: UtxoSet = values
             .into_iter()
             .map(dummy_utxo_from_value)
             .collect();
@@ -604,7 +595,7 @@ proptest! {
 
     #[test]
     fn build_tx_splits_utxos(
-        mut utxos in btree_set(arbitrary::utxo(5_000u64..1_000_000_000), 1..20),
+        mut utxos in arbitrary::utxo_set(5_000u64..1_000_000_000, 1..20),
         dst_pkhash in uniform20(any::<u8>()),
         main_pkhash in uniform20(any::<u8>()),
         fee_per_vbyte in 1000..2000u64,
@@ -645,7 +636,7 @@ proptest! {
 
     #[test]
     fn check_output_order(
-        mut utxos in btree_set(arbitrary::utxo(1_000_000u64..1_000_000_000), 1..20),
+        mut utxos in arbitrary::utxo_set(1_000_000u64..1_000_000_000, 1..20),
         dst_pkhash in uniform20(any::<u8>()),
         main_pkhash in uniform20(any::<u8>()),
         target in 50000..100000u64,
@@ -667,7 +658,7 @@ proptest! {
 
     #[test]
     fn build_tx_handles_change_from_inputs(
-        mut utxos in btree_set(arbitrary::utxo(1_000_000u64..1_000_000_000), 1..20),
+        mut utxos in arbitrary::utxo_set(1_000_000u64..1_000_000_000, 1..20),
         dst_pkhash in uniform20(any::<u8>()),
         main_pkhash in uniform20(any::<u8>()),
         target in 50000..100000u64,
@@ -717,7 +708,7 @@ proptest! {
 
     #[test]
     fn build_tx_does_not_modify_utxos_on_error(
-        mut utxos in btree_set(arbitrary::utxo(5_000u64..1_000_000_000), 1..20),
+        mut utxos in arbitrary::utxo_set(5_000u64..1_000_000_000, 1..20),
         dst_pkhash in uniform20(any::<u8>()),
         main_pkhash in uniform20(any::<u8>()),
         fee_per_vbyte in 1000..2000u64,
@@ -1003,7 +994,7 @@ proptest! {
 
     #[test]
     fn test_fee_range(
-        utxos in btree_set(arbitrary::utxo(5_000u64..1_000_000_000), 20..40),
+        utxos in arbitrary::utxo_set(5_000u64..1_000_000_000, 20..40),
         amount in 0_u64..15_000, //can be covered by UTXOs
         fee_per_vbyte in 2000..10000u64,
     ) {

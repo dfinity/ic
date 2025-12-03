@@ -16,6 +16,7 @@ pub struct Ext4Builder {
     output_path: PathBuf,
     partition_size: PartitionSize,
     label: Option<String>,
+    mke2fs_path: Option<PathBuf>,
 }
 
 impl Ext4Builder {
@@ -24,7 +25,8 @@ impl Ext4Builder {
     /// * `output_path` - Path where the final ext4 image will be written
     /// * `partition_size` - Size of the partition
     /// * `label` - Optional volume label for the filesystem
-    pub fn new(output_path: impl Into<PathBuf>, partition_size: PartitionSize, label: Option<String>) -> Result<Self> {
+    /// * `mke2fs_path` - Optional path to mke2fs binary (defaults to system mke2fs)
+    pub fn new(output_path: impl Into<PathBuf>, partition_size: PartitionSize, label: Option<String>, mke2fs_path: Option<PathBuf>) -> Result<Self> {
         let tar_file = NamedTempFile::new().context("Failed to create temporary tar file")?;
         let tar_builder = TarBuilder::new(Builder::new(tar_file));
 
@@ -33,6 +35,7 @@ impl Ext4Builder {
             output_path: output_path.into(),
             partition_size,
             label,
+            mke2fs_path,
         })
     }
 }
@@ -47,7 +50,11 @@ impl FilesystemBuilder for Ext4Builder {
         tar_builder.finish()?;
         let tar_file = tar_builder.into_inner()?;
 
-        let output = Command::new("/ic/e2fsprogs/build/misc/mke2fs")
+        let mke2fs_binary = self.mke2fs_path
+            .as_deref()
+            .unwrap_or_else(|| std::path::Path::new("mke2fs"));
+
+        let output = Command::new(mke2fs_binary)
             .arg("-t")
             .arg("ext4")
             .arg("-E")

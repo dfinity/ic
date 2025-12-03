@@ -28,6 +28,11 @@ fn ensure_root() {
     }
 }
 
+/// Get the mke2fs binary path from environment variable if available
+fn get_mke2fs_path() -> Option<PathBuf> {
+    std::env::var("MKE2FS_BIN").ok().map(PathBuf::from)
+}
+
 /// Test fixture for creating filesystem images and mounting them
 #[allow(dead_code)]
 struct ImageFixture {
@@ -64,6 +69,7 @@ impl ImageFixture {
             file_contexts: None,
             strip_paths: vec![],
             extra_files: vec![],
+            mke2fs_path: get_mke2fs_path(),
         })?;
 
         Ok(Self {
@@ -104,6 +110,7 @@ impl ImageFixture {
             file_contexts: None,
             strip_paths: vec![],
             extra_files: vec![],
+            mke2fs_path: get_mke2fs_path(),
         })?;
 
         Ok(Self {
@@ -127,6 +134,7 @@ impl ImageFixture {
             file_contexts: None,
             strip_paths: vec![],
             extra_files: vec![],
+            mke2fs_path: get_mke2fs_path(),
         })?;
 
         Ok(Self {
@@ -343,6 +351,7 @@ async fn test_create_fat32_with_label() -> Result<()> {
         file_contexts: None,
         strip_paths: vec![],
         extra_files: vec![],
+        mke2fs_path: get_mke2fs_path(),
     })?;
 
     // Verify label
@@ -678,6 +687,7 @@ fn test_invalid_partition_size() {
         file_contexts: None,
         strip_paths: vec![],
         extra_files: vec![],
+        mke2fs_path: get_mke2fs_path(),
     });
 
     assert!(result.is_err(), "Should fail without partition size");

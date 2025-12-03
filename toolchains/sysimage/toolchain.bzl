@@ -269,13 +269,15 @@ def _icos_image_impl_rule_impl(ctx):
         args.append(input_target.files.to_list()[0].path + ":" + install_target)
         inputs.extend(input_target.files.to_list())
 
+    args.extend(["--mke2fs", ctx.executable._mke2fs.path])
+
     _run_with_icos_wrapper(
         ctx,
         executable = ctx.executable._tool.path,
         arguments = args,
         inputs = inputs,
         outputs = outputs,
-        tools = [ctx.attr._tool.files_to_run],
+        tools = [ctx.attr._tool.files_to_run, ctx.attr._mke2fs.files_to_run],
     )
 
     return [DefaultInfo(files = depset(outputs))]
@@ -300,6 +302,11 @@ _icos_image_impl_rule = _icos_build_rule(
         ),
         "_tool": attr.label(
             default = "//rs/ic_os/build_tools/build_filesystem:build_filesystem",
+            executable = True,
+            cfg = "exec",
+        ),
+        "_mke2fs": attr.label(
+            default = "@e2fsprogs//:mke2fs",
             executable = True,
             cfg = "exec",
         ),

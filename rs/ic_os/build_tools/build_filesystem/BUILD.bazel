@@ -38,6 +38,14 @@ rust_binary(
 rust_test(
     name = "build_filesystem_test",
     crate = ":build_filesystem",
+    data = select({
+        "@platforms//os:linux": ["@e2fsprogs//:mke2fs"],
+        "//conditions:default": [],
+    }),
+    env = select({
+        "@platforms//os:linux": {"MKE2FS_BIN": "$(rootpath @e2fsprogs//:mke2fs)"},
+        "//conditions:default": {},
+    }),
     # Integration tests require root privileges to mount filesystems (Linux only)
     tags = ["local"],
 )

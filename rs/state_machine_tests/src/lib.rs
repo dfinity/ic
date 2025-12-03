@@ -2702,11 +2702,12 @@ impl StateMachine {
         if let Some(SignatureSecretKey::VetKD(k)) =
             self.chain_key_subnet_secret_keys.get(&context.key_id())
         {
-            let vetkd_context: Vec<u8> =
-                context.derivation_path.iter().flatten().cloned().collect();
+            assert_eq!(context.derivation_path.len(), 1);
+            const EMPTY_VEC_REF: &Vec<u8> = &vec![];
+            let vetkd_context = context.derivation_path.first().unwrap_or(EMPTY_VEC_REF);
             let encrypted_key = k.vetkd_protocol(
                 context.request.sender.get().as_slice(),
-                &vetkd_context,
+                vetkd_context,
                 context.vetkd_args().input.as_ref(),
                 &context.vetkd_args().transport_public_key,
                 &[42; 32],
@@ -2867,8 +2868,8 @@ impl StateMachine {
         }
     }
 
-    /// Advances time by 1ns (to make sure time is strictly monotone)
-    /// and triggers a single round of execution with block payload as an input.
+    /// Advances time by 1ns (to make sure that time is strictly monotonic)
+    /// and triggers a single round of execution with the given payload as input.
     pub fn execute_payload(&self, payload: PayloadBuilder) -> Height {
         let batch_number = self.message_routing.expected_batch_height();
 
@@ -3248,7 +3249,7 @@ impl StateMachine {
         );
     }
 
-    // Enable checkpoints and make a tick to write a checkpoint.
+    /// Enables checkpoints and makes a tick to write a checkpoint.
     pub fn checkpointed_tick(&self) {
         let checkpoint_interval_length = self.checkpoint_interval_length.load(Ordering::Relaxed);
         self.set_checkpoints_enabled(true);

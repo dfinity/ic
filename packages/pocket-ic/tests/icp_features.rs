@@ -128,14 +128,14 @@ fn test_canister_migration() {
     res.0.unwrap();
 
     let status = || {
-        let res = update_candid::<_, (Vec<MigrationStatus>,)>(
+        let res = update_candid::<_, (Option<MigrationStatus>,)>(
             &pic,
             canister_migration_orchestrator,
             "migration_status",
             (migrate_canister_args.clone(),),
         )
         .unwrap();
-        res.0.last().unwrap().clone()
+        res.0.unwrap()
     };
     loop {
         pic.advance_time(Duration::from_secs(10));
