@@ -25,7 +25,7 @@ pub fn canister_post_upgrade(
 
     // Registry data migrations should be implemented as follows:
     let mutation_batches_due_to_data_migrations = {
-        let mut mutations = fix_node_operators_corrupted(registry);
+        let mutations = fix_node_operators_corrupted(registry);
         if mutations.is_empty() {
             0 // No mutations required for this data migration.
         } else {
@@ -62,52 +62,54 @@ pub fn canister_post_upgrade(
 }
 
 fn fix_node_operators_corrupted(registry: &Registry) -> Vec<RegistryMutation> {
-    let create_mutation = |principal_id_str: &str,
-                           modify_record: fn(&mut NodeOperatorRecord, PrincipalId)|
-     -> Result<RegistryMutation, String> {
-        let node_operator_id = PrincipalId::from_str(principal_id_str)
-            .map_err(|e| format!("Failed to parse principal ID {}: {}", principal_id_str, e))?;
+    let create_node_operator_mutation =
+        |principal_id_str: &str,
+         modify_record: fn(&mut NodeOperatorRecord, PrincipalId)|
+         -> Result<RegistryMutation, String> {
+            let node_operator_id = PrincipalId::from_str(principal_id_str)
+                .map_err(|e| format!("Failed to parse principal ID {}: {}", principal_id_str, e))?;
 
-        let registry_value = registry
-            .get(
-                make_node_operator_record_key(node_operator_id).as_bytes(),
-                registry.latest_version(),
-            )
-            .ok_or(format!(
-                "Failed to find NodeOperatorRecord for operator {}",
-                node_operator_id
-            ))?;
-        let mut record =
-            NodeOperatorRecord::decode(registry_value.value.as_slice()).map_err(|e| {
-                format!(
-                    "Failed to decode NodeOperatorRecord for operator {}: {}",
-                    node_operator_id, e
+            let registry_value = registry
+                .get(
+                    make_node_operator_record_key(node_operator_id).as_bytes(),
+                    registry.latest_version(),
                 )
-            })?;
+                .ok_or(format!(
+                    "Failed to find NodeOperatorRecord for operator {}",
+                    node_operator_id
+                ))?;
 
-        modify_record(&mut record, node_operator_id);
+            let mut record =
+                NodeOperatorRecord::decode(registry_value.value.as_slice()).map_err(|e| {
+                    format!(
+                        "Failed to decode NodeOperatorRecord for operator {}: {}",
+                        node_operator_id, e
+                    )
+                })?;
 
-        Ok(update(
-            make_node_operator_record_key(node_operator_id),
-            record.encode_to_vec(),
-        ))
-    };
+            modify_record(&mut record, node_operator_id);
+
+            Ok(update(
+                make_node_operator_record_key(node_operator_id),
+                record.encode_to_vec(),
+            ))
+        };
 
     let mut mutations = Vec::new();
 
-    // Fix 3nu7r - ujq4k
-    // 3nu7r missed the update to max_rewardable_nodes during migration
-    // ujq4k got ovewritten by 3nu7r value.
-    if let Ok(mutation) = create_mutation(
+    // 3nu7r - ujq4k -------------------------------------------------------------------------------
+
+    if let Ok(mutation) = create_node_operator_mutation(
         "3nu7r-l6i5c-jlmhi-fmmhm-4wcw4-ndlwb-yovrx-o3wxh-suzew-hvbbo-7qe",
         |record, principal_id_key| {
-            record.node_operator_principal_id = principal_id_key.encode_to_vec();
+            record.node_operator_principal_id = principal_id_key.to_vec();
             record.max_rewardable_nodes = btreemap! { NodeRewardType::Type1dot1.to_string() => 19 };
         },
     ) {
         mutations.push(mutation);
     };
-    if let Ok(mutation) = create_mutation(
+
+    if let Ok(mutation) = create_node_operator_mutation(
         "ujq4k-55epc-pg2bt-jt2f5-6vaq3-diru7-edprm-42rd2-j7zzd-yjaai-2qe",
         |record, _| {
             record.rewardable_nodes = btreemap! { NodeRewardType::Type1dot1.to_string() => 9 };
@@ -116,32 +118,33 @@ fn fix_node_operators_corrupted(registry: &Registry) -> Vec<RegistryMutation> {
         mutations.push(mutation);
     }
 
-    // Fix bmlhw - spsu4
-    // bmlhw missed the update to max_rewardable_nodes during migration
-    // spsu4 got ovewritten by bmlhw value.
-    if let Ok(mutation) = create_mutation(
+    // bmlhw - spsu4 -------------------------------------------------------------------------------
+
+    if let Ok(mutation) = create_node_operator_mutation(
         "bmlhw-kinr6-7cyv5-3o3v6-ic6tw-pnzk3-jycod-6d7sw-owaft-3b6k3-kqe",
         |record, principal_id_key| {
-            record.node_operator_principal_id = principal_id_key.encode_to_vec();
+            record.node_operator_principal_id = principal_id_key.to_vec();
             record.max_rewardable_nodes = btreemap! { NodeRewardType::Type1.to_string() => 14 };
         },
     ) {
         mutations.push(mutation);
     }
-    if let Ok(mutation) = create_mutation(
+
+    if let Ok(mutation) = create_node_operator_mutation(
         "spsu4-5hl4t-bfubp-qvoko-jprw4-wt7ou-nlnbk-gb5ib-aqnoo-g4gl6-kae",
-        |record, _id| {
+        |record, _| {
             record.rewardable_nodes = btreemap! { NodeRewardType::Type1dot1.to_string() => 14 };
         },
     ) {
         mutations.push(mutation);
     }
 
-    // Fix redpf - 2rqo7
-    if let Ok(mutation) = create_mutation(
+    // redpf ---------------------------------------------------------------------------------------
+
+    if let Ok(mutation) = create_node_operator_mutation(
         "redpf-rrb5x-sa2it-zhbh7-q2fsp-bqlwz-4mf4y-tgxmj-g5y7p-ezjtj-5qe",
-        |record, id| {
-            record.node_operator_principal_id = id.encode_to_vec();
+        |record, principal_id_key| {
+            record.node_operator_principal_id = principal_id_key.to_vec();
         },
     ) {
         mutations.push(mutation);
@@ -284,106 +287,6 @@ mod test {
             RegistryCanisterStableStorage::decode(stable_storage_bytes.as_slice())
                 .expect("Error decoding from stable.");
         canister_post_upgrade(&mut new_registry, registry_storage);
-    }
-
-    #[test]
-    fn test_fill_node_operators_swiss_subnet_max_rewardable_nodes_correctly() {
-        let mut registry = invariant_compliant_registry(0);
-        let mut node_operator_additions = Vec::new();
-
-        let no_1 = PrincipalId::from_str(
-            "q4gds-li2kf-dhmi6-vmtxg-zrgep-3te7r-2a4ji-nszwv-66biu-dkl6k-eqe",
-        )
-        .unwrap();
-
-        let record_no_1 = NodeOperatorRecord {
-            node_operator_principal_id: no_1.clone().to_vec(),
-            dc_id: "dummy_dc_id_1".to_string(),
-            ipv6: Some("dummy_ipv6_1".to_string()),
-            // Empty rewardable nodes, should be filled in by the migration
-            max_rewardable_nodes: btreemap! {},
-            ..NodeOperatorRecord::default()
-        };
-
-        node_operator_additions.push(insert(
-            make_node_operator_record_key(no_1),
-            record_no_1.encode_to_vec(),
-        ));
-
-        registry.apply_mutations_for_test(node_operator_additions);
-        let mutations = fill_swiss_subnet_node_operators_max_rewardable_nodes(&registry);
-        assert_eq!(mutations.len(), 1);
-        registry.apply_mutations_for_test(mutations);
-
-        let record = registry.get_node_operator_or_panic(no_1);
-
-        let expected_record = NodeOperatorRecord {
-            max_rewardable_nodes: btreemap! {"type3.1".to_string() => 1},
-            ..record_no_1
-        };
-
-        assert_eq!(
-            record, expected_record,
-            "Assertion for NodeOperator {no_1} failed"
-        );
-    }
-
-    #[test]
-    fn test_fill_node_operators_swiss_subnet_max_rewardable_nodes_leave_other_no_unmodified() {
-        let mut registry = invariant_compliant_registry(0);
-        let mut node_operator_additions = Vec::new();
-
-        // This node operator is not in the swiss subnet mapping
-        let no_1 = PrincipalId::from_str(
-            "xph6u-z3z2t-s7hh7-gtlxh-bbgbx-aatlm-eab4o-bsank-nqruh-3ub4q-sae",
-        )
-        .unwrap();
-
-        let record_no_1 = NodeOperatorRecord {
-            node_operator_principal_id: no_1.clone().to_vec(),
-            dc_id: "dummy_dc_id_1".to_string(),
-            ipv6: Some("dummy_ipv6_1".to_string()),
-            // Empty rewardable nodes, should be filled in by the migration
-            max_rewardable_nodes: btreemap! {},
-            ..NodeOperatorRecord::default()
-        };
-
-        node_operator_additions.push(insert(
-            make_node_operator_record_key(no_1),
-            record_no_1.encode_to_vec(),
-        ));
-
-        registry.apply_mutations_for_test(node_operator_additions);
-        let mutations = fill_swiss_subnet_node_operators_max_rewardable_nodes(&registry);
-        assert_eq!(mutations.len(), 0);
-    }
-
-    #[test]
-    fn test_fill_node_operators_swiss_subnet_leave_untouched_not_empty_max_rewardable_nodes() {
-        let mut registry = invariant_compliant_registry(0);
-        let mut node_operator_additions = Vec::new();
-
-        let no_1 = PrincipalId::from_str(
-            "yedtm-rm5av-s256v-zzi4w-7lxen-koqg6-pzak3-rjzko-xfu2c-dw7eo-bae",
-        )
-        .unwrap();
-
-        let record_no_1 = NodeOperatorRecord {
-            node_operator_principal_id: no_1.clone().to_vec(),
-            dc_id: "dummy_dc_id_1".to_string(),
-            ipv6: Some("dummy_ipv6_1".to_string()),
-            max_rewardable_nodes: btreemap! {"type3.1".to_string() => 1},
-            ..NodeOperatorRecord::default()
-        };
-
-        node_operator_additions.push(insert(
-            make_node_operator_record_key(no_1),
-            record_no_1.encode_to_vec(),
-        ));
-
-        registry.apply_mutations_for_test(node_operator_additions);
-        let mutations = fill_swiss_subnet_node_operators_max_rewardable_nodes(&registry);
-        assert_eq!(mutations.len(), 0);
     }
 
     #[test]
