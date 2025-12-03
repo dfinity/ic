@@ -1167,21 +1167,17 @@ mod test {
                         };
 
                         // We make sure that the service returns the correct number of transactions for each account
-                        search_transactions_request.account_identifier = Some(
+                        search_transactions_request.account_identifier =
                             match rosetta_blocks[0].block.transaction.operation {
-                                IcrcOperation::Transfer { from, .. } => from,
-                                IcrcOperation::Mint { to, .. } => to,
-                                IcrcOperation::Burn { from, .. } => from,
-                                IcrcOperation::Approve { from, .. } => from,
+                                IcrcOperation::Transfer { from, .. } => Some(from.into()),
+                                IcrcOperation::Mint { to, .. } => Some(to.into()),
+                                IcrcOperation::Burn { from, .. } => Some(from.into()),
+                                IcrcOperation::Approve { from, .. } => Some(from.into()),
                                 IcrcOperation::FeeCollector {
                                     fee_collector: _,
                                     caller: _,
-                                } => {
-                                    panic!("FeeCollector107 not implemented")
-                                }
-                            }
-                            .into(),
-                        );
+                                } => None,
+                            };
 
                         let num_of_transactions_with_account = rosetta_blocks
                             .iter()
@@ -1228,9 +1224,7 @@ mod test {
                                 IcrcOperation::FeeCollector {
                                     fee_collector: _,
                                     caller: _,
-                                } => {
-                                    panic!("FeeCollector107 not implemented")
-                                }
+                                } => false, // Search for fee collector tx is not supported
                             })
                             .count();
 
