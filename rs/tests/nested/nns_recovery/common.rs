@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use anyhow::bail;
+use hostos_tool::recovery_utils::build_recovery_upgrader_command;
 use ic_consensus_system_test_subnet_recovery::utils::{
     AdminAndUserKeys, BACKUP_USERNAME, assert_subnet_is_broken, break_nodes,
     get_admin_keys_and_generate_backup_keys,
@@ -498,10 +499,8 @@ async fn simulate_node_provider_action(
         img_version_hash,
         artifacts_hash
     );
-    let recovery_upgrader_command = format!(
-        "sudo -n /opt/ic/bin/guestos-recovery-upgrader.sh version={} version-hash={} recovery-hash={}",
-        img_version, img_version_hash, artifacts_hash
-    );
+    let recovery_upgrader_command =
+        build_recovery_upgrader_command(img_version, img_version_hash, artifacts_hash);
     host.block_on_bash_script_async(&recovery_upgrader_command)
         .await
         .expect("Failed to run guestos-recovery-upgrader");

@@ -5613,6 +5613,7 @@ name = "guestos_recovery_tui"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "ic_os_recovery_utils",
  "ratatui",
  "tui-textarea",
 ]
@@ -16154,6 +16155,10 @@ dependencies = [
  "slog",
  "tokio",
 ]
+
+[[package]]
+name = "ic_os_recovery_utils"
+version = "0.1.0"
 
 [[package]]
 name = "ic_principal"

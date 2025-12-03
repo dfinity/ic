@@ -1,6 +1,7 @@
 mod ui;
 
 use anyhow::{Context, Result};
+use hostos_tool::recovery_utils::build_recovery_upgrader_command;
 use ratatui::crossterm::event::{
     DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers,
 };
@@ -27,9 +28,6 @@ const HASH_LENGTH: usize = 64; // SHA256 hash length (hex characters)
 // Process monitoring constants
 const MAX_ERROR_LINES: usize = 30; // Maximum number of error lines to display
 const PROCESS_POLL_INTERVAL_MS: u64 = 100; // Polling interval for process monitoring
-
-// Script paths
-const RECOVERY_UPGRADER_SCRIPT: &str = "/opt/ic/bin/guestos-recovery-upgrader.sh";
 
 // ============================================================================
 // Types and Data Structures
@@ -764,12 +762,13 @@ impl GuestOSRecoveryApp {
 // ============================================================================
 
 fn build_upgrader_command(params: &RecoveryParams) -> Command {
-    let mut cmd = Command::new("sudo");
-    cmd.arg("-n")
-        .arg(RECOVERY_UPGRADER_SCRIPT)
-        .arg(format!("version={}", params.version))
-        .arg(format!("version-hash={}", params.version_hash))
-        .arg(format!("recovery-hash={}", params.recovery_hash));
+    let full_command = build_recovery_upgrader_command(
+        &params.version,
+        &params.version_hash,
+        &params.recovery_hash,
+    );
+    let mut cmd = Command::new("sh");
+    cmd.arg("-c").arg(full_command);
     cmd
 }
 

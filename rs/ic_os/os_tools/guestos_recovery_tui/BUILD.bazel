@@ -7,6 +7,7 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     crate_name = "guestos_recovery_tui",
     deps = [
+        "//rs/ic_os/os_tools/hostos_tool:hostos_tool_lib",
         "@crate_index//:anyhow",
         "@crate_index//:ratatui",
         "@crate_index//:tui-textarea",

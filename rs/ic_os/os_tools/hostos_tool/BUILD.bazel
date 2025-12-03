@@ -33,6 +33,13 @@ rust_binary(
     deps = DEPENDENCIES + ["//rs/ic_os/config:config_lib"],
 )
 
+rust_library(
+    name = "hostos_tool_lib",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "hostos_tool",
+    deps = DEPENDENCIES + ["//rs/ic_os/config:config_lib"],
+)
+
 rust_binary(
     name = "hostos_tool_dev",
     srcs = glob(["src/**/*.rs"]),
