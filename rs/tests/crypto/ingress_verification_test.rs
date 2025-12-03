@@ -694,7 +694,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv, api_ver: usize) 
             };
 
             /*
-            This is testing two different scenarious, one of which should succeed and the
+            This is testing two different scenarios, one of which should succeed and the
             other should fail:
 
             - With the mgmt canister principal as the target for mgmt canister calls
