@@ -20,6 +20,7 @@ use std::{collections::HashMap, sync::Arc};
 
 pub mod call_canister;
 pub mod create_service_nervous_system;
+mod decode_candid_args_to_self_describing_value;
 pub mod deregister_known_neuron;
 pub mod execute_nns_function;
 pub mod fulfill_subnet_rental_request;
@@ -180,10 +181,16 @@ impl ValidProposalAction {
     /// canister.
     pub async fn to_self_describing(
         &self,
-        _env: Arc<dyn Environment>,
+        env: Arc<dyn Environment>,
     ) -> Result<SelfDescribingProposalAction, GovernanceError> {
         match self {
             ValidProposalAction::Motion(motion) => Ok(motion.to_self_describing_action()),
+            ValidProposalAction::ApproveGenesisKyc(approve_genesis_kyc) => {
+                Ok(approve_genesis_kyc.to_self_describing_action())
+            }
+            ValidProposalAction::ExecuteNnsFunction(execute_nns_function) => {
+                execute_nns_function.to_self_describing_action(env).await
+            }
             _ => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 "Self describing proposal actions are not supported for this proposal action yet.",

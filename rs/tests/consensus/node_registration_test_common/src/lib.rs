@@ -125,6 +125,7 @@ EOT
         sudo cp /tmp/node_operator_private_key.pem /var/lib/ic/data/node_operator_private_key.pem
         sudo chmod a+r /var/lib/ic/data/node_operator_private_key.pem
         sudo systemctl start ic-crypto-csp
+        sudo systemctl restart generate-ic-config
         sudo systemctl start ic-replica
         "#
     .to_string();
