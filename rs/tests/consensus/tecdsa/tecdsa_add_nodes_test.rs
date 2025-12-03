@@ -145,7 +145,8 @@ fn test(env: TestEnv) {
             idkg_keys.as_slice(),
             &log,
         );
-        // Turn off pre-signature generation on both subnets, so we can check that the stash is purged during recovery
+        // Turn off pre-signature generation, so we can check that the stash is purged
+        // during the membership change
         info!(log, "Disabling pre-signature generation");
         block_on(set_pre_signature_stash_size(
             &governance,
