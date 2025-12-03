@@ -12,13 +12,13 @@ use serde::{Deserialize, Serialize};
 use crate::registry::Registry;
 
 struct NodeApprovalManager {
-    approved: HashMap<PrincipalId, VecDeque<PrincipalId>>,
+    _approved: HashMap<PrincipalId, VecDeque<PrincipalId>>,
 }
 
 impl NodeApprovalManager {
     fn new() -> Self {
         Self {
-            approved: HashMap::new(),
+            _approved: HashMap::new(),
         }
     }
 }
@@ -59,10 +59,11 @@ impl Registry {
     fn do_approve_add_node_payload_inner(
         &mut self,
         payload: ApproveAddNodePayload,
-        caller: PrincipalId,
-        node_approval_manager: &mut NodeApprovalManager,
+        _caller: PrincipalId,
+        _node_approval_manager: &mut NodeApprovalManager,
     ) -> Result<(), ApprovePayloadError> {
-        // TODO: Verify payload integrity
+        // Verify payload integrity
+        payload.validate()?;
 
         // TODO: Prevent approving a node that has already been queued for registration.
 
@@ -152,15 +153,20 @@ mod tests {
     #[test]
     fn disallow_empty_payload() {
         let payload = ApproveAddNodePayload { node_id: None };
+        let caller = PrincipalId::new_user_test_id(1);
+        let mut node_approval_manager = NodeApprovalManager::new();
 
-        let result = payload.validate();
+        let mut registry = Registry::new();
+
+        let result =
+            registry.do_approve_add_node_payload_inner(payload, caller, &mut node_approval_manager);
 
         let expected_err = ApprovePayloadError::MissingNodeId;
         assert_eq!(result, Err(expected_err))
     }
 
     #[test]
-    fn valid_payload_size() {
+    fn valid_payload() {
         let payload = ApproveAddNodePayload {
             node_id: Some(PrincipalId::new_node_test_id(1)),
         };
@@ -168,5 +174,21 @@ mod tests {
         let result = payload.validate();
 
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn e2e_test() {
+        let payload = ApproveAddNodePayload {
+            node_id: Some(PrincipalId::new_node_test_id(1)),
+        };
+        let caller = PrincipalId::new_user_test_id(1);
+        let mut node_approval_manager = NodeApprovalManager::new();
+
+        let mut registry = Registry::new();
+
+        let response =
+            registry.do_approve_add_node_payload_inner(payload, caller, &mut node_approval_manager);
+
+        assert!(response.is_ok());
     }
 }
