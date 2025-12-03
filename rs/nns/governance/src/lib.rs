@@ -208,7 +208,7 @@ thread_local! {
         = const { Cell::new(true) };
 
     static ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS: Cell<bool>
-        = const { Cell::new(cfg!(feature = "test")) };
+        = const { Cell::new(false) };
 }
 
 thread_local! {

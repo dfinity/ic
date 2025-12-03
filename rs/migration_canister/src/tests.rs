@@ -28,7 +28,7 @@ fn test() {
         caller,
     );
     insert_request(RequestState::Accepted { request });
-    assert!(find_request(source, target).len() == 1);
+    assert!(find_request(source, target).is_some());
 }
 
 #[test]

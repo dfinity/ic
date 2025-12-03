@@ -998,7 +998,7 @@ impl Buffer {
         self.dirty_pages.iter().map(|(i, p)| (*i, p))
     }
 
-    pub fn into_page_map(&self) -> PageMap {
+    pub fn to_page_map(&self) -> PageMap {
         let mut page_map = self.page_map.clone();
         page_map.update(&self.dirty_pages().collect::<Vec<_>>());
         page_map

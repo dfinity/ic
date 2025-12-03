@@ -15,6 +15,7 @@ use std::{
 pub mod audit;
 pub mod eventlog;
 pub mod invariants;
+pub mod utxos;
 
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
@@ -23,6 +24,7 @@ use crate::reimbursement::{
     ReimbursedWithdrawalResult, WithdrawalReimbursementReason,
 };
 use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
+use crate::state::utxos::UtxoSet;
 use crate::updates::update_balance::SuspendedUtxo;
 use crate::{
     ECDSAPublicKey, GetUtxosCache, Network, Timestamp, WithdrawalFee, address::BitcoinAddress,
@@ -494,7 +496,7 @@ pub struct CkBtcMinterState {
     pub btc_checker_principal: Option<CanisterId>,
 
     /// The set of UTXOs unused in pending transactions.
-    pub available_utxos: BTreeSet<Utxo>,
+    pub available_utxos: UtxoSet,
 
     /// The mapping from output points to the ledger accounts to which they
     /// belong.
