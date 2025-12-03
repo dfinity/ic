@@ -4,18 +4,7 @@ use crate::{
     temporarily_disable_declare_alternative_replica_virtual_machine_software_set_proposals,
     temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals,
 };
-
-#[track_caller]
-fn assert_contains_all_key_words(observed_str: &str, key_words: &[&str]) {
-    for key_word in key_words {
-        assert!(
-            observed_str.contains(key_word),
-            "Expected string to contain {:?}, but it was not found.\nActual string: {:?}",
-            key_word,
-            observed_str
-        );
-    }
-}
+use ic_nervous_system_common_test_utils::assert_contains_all_key_words;
 
 #[test]
 fn test_validate_chip_ids_empty() {
