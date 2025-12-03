@@ -662,7 +662,7 @@ pub fn requests_with_delegation_loop(env: TestEnv, api_ver: usize) {
     });
 }
 
-// Tests delgation handling to requests sent to the management canister
+// Tests delegation handling for requests sent to the management canister
 pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv, api_ver: usize) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
@@ -714,16 +714,18 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv, api_ver: usize) 
                 for _ in 0..=delegation_count {
                     let id_type = GenericIdentityType::random_incl_canister(&canister, rng);
                     identities.push(GenericIdentity::new(id_type, rng));
-                    if include_mgmt_canister_id {
-                        targets.push(random_canister_ids_including(
+                    let target_canister_ids = if include_mgmt_canister_id {
+                        random_canister_ids_including(
                             &mgmt_canister,
                             targets_per_delegation,
                             1,
                             rng,
-                        ));
+                        )
                     } else {
-                        targets.push(random_canister_ids(targets_per_delegation, rng));
-                    }
+                        random_canister_ids(targets_per_delegation, rng);
+                    };
+
+                    targets.push(target_canister_ids);
                 }
 
                 let delegations = create_delegations_with_targets(&identities, &targets);
