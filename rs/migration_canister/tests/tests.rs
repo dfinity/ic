@@ -251,7 +251,7 @@ async fn get_status(
     pic: &PocketIc,
     sender: Principal,
     args: &MigrateCanisterArgs,
-) -> Vec<MigrationStatus> {
+) -> Option<MigrationStatus> {
     let res = pic
         .update_call(
             MIGRATION_CANISTER_ID.into(),
@@ -261,7 +261,7 @@ async fn get_status(
         )
         .await
         .unwrap();
-    Decode!(&res, Vec<MigrationStatus>).unwrap()
+    Decode!(&res, Option<MigrationStatus>).unwrap()
 }
 
 /// Advances time by a second and executes enough ticks that the state machine
@@ -593,7 +593,7 @@ async fn replay_call_after_migration() {
 
     loop {
         let status = get_status(&pic, sender, &args).await;
-        if let MigrationStatus::Succeeded { .. } = status[0] {
+        if let MigrationStatus::Succeeded { .. } = status.unwrap() {
             break;
         }
         // We proceed in small steps here so that
@@ -1156,7 +1156,7 @@ async fn status_correct() {
 
     let status = get_status(&pic, sender, &args).await;
     assert_eq!(
-        status[0],
+        status.unwrap(),
         MigrationStatus::InProgress {
             status: "Accepted".to_string()
         }
@@ -1165,7 +1165,7 @@ async fn status_correct() {
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     assert_eq!(
-        status[0],
+        status.unwrap(),
         MigrationStatus::InProgress {
             status: "ControllersChanged".to_string()
         }
@@ -1174,7 +1174,7 @@ async fn status_correct() {
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     assert_eq!(
-        status[0],
+        status.unwrap(),
         MigrationStatus::InProgress {
             status: "StoppedAndReady".to_string()
         }
@@ -1183,7 +1183,7 @@ async fn status_correct() {
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     assert_eq!(
-        status[0],
+        status.unwrap(),
         MigrationStatus::InProgress {
             status: "RenamedTarget".to_string()
         }
@@ -1192,7 +1192,7 @@ async fn status_correct() {
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     assert_eq!(
-        status[0],
+        status.unwrap(),
         MigrationStatus::InProgress {
             status: "UpdatedRoutingTable".to_string()
         }
@@ -1201,7 +1201,7 @@ async fn status_correct() {
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     assert_eq!(
-        status[0],
+        status.unwrap(),
         MigrationStatus::InProgress {
             status: "RoutingTableChangeAccepted".to_string()
         }
@@ -1210,7 +1210,7 @@ async fn status_correct() {
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     assert_eq!(
-        status[0],
+        status.unwrap(),
         MigrationStatus::InProgress {
             status: "SourceDeleted".to_string()
         }
@@ -1219,7 +1219,7 @@ async fn status_correct() {
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     assert_eq!(
-        status[0],
+        status.unwrap(),
         MigrationStatus::InProgress {
             status: "RestoredControllers".to_string()
         }
@@ -1249,7 +1249,7 @@ async fn after_validation_source_not_stopped() {
     advance(&pic).await;
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
-    let MigrationStatus::Failed { ref reason, .. } = status[0] else {
+    let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
         panic!()
     };
     assert_eq!(reason, &"Source is not stopped.".to_string());
@@ -1278,7 +1278,7 @@ async fn after_validation_target_not_stopped() {
     advance(&pic).await;
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
-    let MigrationStatus::Failed { ref reason, .. } = status[0] else {
+    let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
         panic!()
     };
     assert_eq!(reason, &"Target is not stopped.".to_string());
@@ -1319,7 +1319,7 @@ async fn after_validation_target_has_snapshot() {
     advance(&pic).await;
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
-    let MigrationStatus::Failed { ref reason, .. } = status[0] else {
+    let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
         panic!()
     };
     assert_eq!(reason, &"Target has snapshots.".to_string());
@@ -1361,7 +1361,7 @@ async fn after_validation_insufficient_cycles() {
     advance(&pic).await;
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
-    let MigrationStatus::Failed { ref reason, .. } = status[0] else {
+    let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
         panic!()
     };
     assert!(reason.contains("Source does not have sufficient cycles"));
@@ -1391,7 +1391,7 @@ async fn failure_controllers_restored() {
     advance(&pic).await;
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
-    let MigrationStatus::Failed { .. } = status[0] else {
+    let MigrationStatus::Failed { .. } = status.unwrap() else {
         panic!()
     };
     let mut source_controllers_after = pic.get_controllers(source).await;
@@ -1430,8 +1430,8 @@ async fn success_controllers_restored() {
         advance(&pic).await;
     }
     let status = get_status(&pic, sender, &args).await;
-    let MigrationStatus::Succeeded { .. } = status[0] else {
-        panic!("status: {:?}", status[0]);
+    let MigrationStatus::Succeeded { .. } = status.as_ref().unwrap() else {
+        panic!("status: {:?}", status.unwrap());
     };
     let mut source_controllers_after = pic.get_controllers(source).await;
     source_controllers_after.sort();
@@ -1494,7 +1494,7 @@ async fn parallel_migrations() {
             },
         )
         .await;
-        let MigrationStatus::InProgress { ref status } = status[0] else {
+        let MigrationStatus::InProgress { ref status } = status.unwrap() else {
             panic!()
         };
         assert_eq!(status, "SourceDeleted");

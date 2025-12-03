@@ -258,7 +258,7 @@ crate.spec(
 )
 crate.spec(
     package = "cc",
-    version = "=1.2.22",
+    version = "=1.2.48",
 )
 crate.spec(
     package = "cddl",
@@ -1850,11 +1850,11 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^38.0.3",
+    version = "^39.0.1",
 )
 crate.spec(
     package = "wasmtime-environ",
-    version = "^38.0.3",
+    version = "^39.0.1",
 )
 crate.spec(
     package = "wast",

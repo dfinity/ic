@@ -201,6 +201,7 @@ impl CanisterLog {
         self.records.get()
     }
 
+    /// Returns mutable reference to the canister log records.
     pub fn records_mut(&mut self) -> &mut VecDeque<CanisterLogRecord> {
         self.records.get_mut()
     }

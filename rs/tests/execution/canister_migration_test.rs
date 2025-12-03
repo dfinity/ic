@@ -431,13 +431,13 @@ async fn test_async(env: TestEnv) {
 
     assert_eq!(decoded_result, Ok(()));
 
-    // The migration canister has a step where it waits for 5 minutes, so we give it a minute more than that.
-    println!("Wait over 5 minutes for processing.");
+    // The migration canister has a step where it waits for 6 minutes, so we give it a minute more than that.
+    println!("Wait 7 minutes for processing.");
 
     retry_with_msg_async!(
-        "Wait 5m for migration canister to process",
+        "Wait 7m for migration canister to process",
         &logger,
-        Duration::from_secs(360),
+        Duration::from_secs(420),
         Duration::from_secs(10),
         || async {
             let status = nns_agent
@@ -446,13 +446,14 @@ async fn test_async(env: TestEnv) {
                 .call_and_wait()
                 .await
                 .expect("Failed to call migration_status.");
-            let decoded_status = Decode!(&status, Vec<MigrationStatus>)
-                .expect("Failed to decode response from migration_status.");
+            let decoded_status = Decode!(&status, Option<MigrationStatus>)
+                .expect("Failed to decode response from migration_status.")
+                .expect("There should be a migration status available.");
 
-            if matches!(decoded_status[0], MigrationStatus::Succeeded { .. }) {
+            if matches!(decoded_status, MigrationStatus::Succeeded { .. }) {
                 Ok(())
             } else {
-                bail!("Not ready. Status: {:?}", decoded_status[0])
+                bail!("Not ready. Status: {:?}", decoded_status)
             }
         }
     )
