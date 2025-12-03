@@ -34,12 +34,10 @@ fn main() -> Result<()> {
         .with_setup(setup)
         .add_parallel(
             SystemTestSubGroup::new()
-                .add_test(systest!(requests_with_delegations; 2))
-                .add_test(systest!(requests_with_delegations; 3))
+                .add_test(systest!(requests_with_delegations))
                 .add_test(systest!(requests_with_delegations_with_targets; 2))
                 .add_test(systest!(requests_with_delegations_with_targets; 3))
-                .add_test(systest!(requests_with_delegation_loop; 2))
-                .add_test(systest!(requests_with_delegation_loop; 3))
+                .add_test(systest!(requests_with_delegation_loop))
                 .add_test(systest!(requests_to_mgmt_canister_with_delegations))
                 .add_test(systest!(requests_with_invalid_expiry))
                 .add_test(systest!(requests_with_canister_signature)),
@@ -84,6 +82,16 @@ impl<'a> GenericIdentityType<'a> {
             2 => Self::Canister(canister),
             3 => Self::WebAuthnEcdsaSecp256r1,
             4 => Self::WebAuthnRsaPkcs1,
+            _ => Self::Ed25519,
+        }
+    }
+
+    fn random<R: Rng + CryptoRng>(rng: &mut R) -> Self {
+        match rng.r#gen::<usize>() % 5 {
+            0 => Self::EcdsaSecp256k1,
+            1 => Self::EcdsaSecp256r1,
+            2 => Self::WebAuthnEcdsaSecp256r1,
+            3 => Self::WebAuthnRsaPkcs1,
             _ => Self::Ed25519,
         }
     }
@@ -348,7 +356,7 @@ impl<'a> CanisterSigner<'a> {
 // Test requests with delegations without targets
 //
 // This tests with various numbers of delegations (including no delegations)
-pub fn requests_with_delegations(env: TestEnv, api_ver: usize) {
+pub fn requests_with_delegations(env: TestEnv) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
     let agent = node.build_default_agent();
@@ -368,8 +376,8 @@ pub fn requests_with_delegations(env: TestEnv, api_ver: usize) {
                 "canister_id" => format!("{:?}", canister.canister_id())
             );
 
-            let test_info = TestInformation {
-                api_ver,
+            let mut test_info = TestInformation {
+                api_ver: 0,
                 url: node_url,
                 canister_id: canister_id_from_principal(&canister.canister_id()),
             };
@@ -387,20 +395,39 @@ pub fn requests_with_delegations(env: TestEnv, api_ver: usize) {
                 let sender = &identities[0];
                 let signer = &identities[identities.len() - 1];
 
-                let query_result =
-                    perform_query_call_with_delegations(&test_info, sender, signer, &delegations)
-                        .await;
-                let update_result =
-                    perform_update_call_with_delegations(&test_info, sender, signer, &delegations)
-                        .await;
+                for api_ver in ALL_UPDATE_API_VERSIONS {
+                    test_info.api_ver = *api_ver;
+                    let update_result = perform_update_call_with_delegations(
+                        &test_info,
+                        sender,
+                        signer,
+                        &delegations,
+                    )
+                    .await;
 
-                if delegation_count <= 20 {
-                    assert_eq!(query_result, 200);
-                    let expected_update = if test_info.api_ver == 2 { 202 } else { 200 };
-                    assert_eq!(update_result, expected_update);
-                } else {
-                    assert_eq!(query_result, 400);
-                    assert_eq!(update_result, 400);
+                    if delegation_count <= 20 {
+                        let expected_update = if test_info.api_ver == 2 { 202 } else { 200 };
+                        assert_eq!(update_result, expected_update);
+                    } else {
+                        assert_eq!(update_result, 400);
+                    }
+                }
+
+                for api_ver in ALL_QUERY_API_VERSIONS {
+                    test_info.api_ver = *api_ver;
+                    let query_result = perform_query_call_with_delegations(
+                        &test_info,
+                        sender,
+                        signer,
+                        &delegations,
+                    )
+                    .await;
+
+                    if delegation_count <= 20 {
+                        assert_eq!(query_result, 200);
+                    } else {
+                        assert_eq!(query_result, 400);
+                    }
                 }
             }
         }
@@ -573,7 +600,7 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
 }
 
 // Tests for handling of delegation loops
-pub fn requests_with_delegation_loop(env: TestEnv, api_ver: usize) {
+pub fn requests_with_delegation_loop(env: TestEnv) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
     let agent = node.build_default_agent();
@@ -595,66 +622,53 @@ pub fn requests_with_delegation_loop(env: TestEnv, api_ver: usize) {
 
             let canister_id = canister_id_from_principal(&canister.canister_id());
 
-            let test_info = TestInformation {
-                api_ver,
+            let mut test_info = TestInformation {
+                api_ver: 0,
                 url: node_url,
                 canister_id,
             };
 
-            // Test case: A self-loop in delegations should be detected and rejected
-            {
-                let mut identities = vec![];
+            // Both a self-loop and an indirect cycle in delegations should be rejected
+            let ids_to_generate = 3;
+            for duplicated_id_index in [
+                ids_to_generate - 1, /* self-loop */
+                ids_to_generate - 2, /* indirect cycle */
+            ] {
+                let mut identities: Vec<_> = (0..ids_to_generate)
+                    .map(|_| GenericIdentity::new(GenericIdentityType::random(rng), rng))
+                    .collect();
 
-                for _ in 0..4 {
-                    let id_type = GenericIdentityType::random_incl_canister(&canister, rng);
-                    identities.push(GenericIdentity::new(id_type, rng));
-                }
-
-                // Duplicate the last identity, causing a delegation loop
-                identities.push(identities[identities.len() - 1].clone());
-
-                let delegations = create_delegations(&identities);
-
-                let sender = &identities[0];
-                let signer = &identities[identities.len() - 1];
-
-                let query_result =
-                    perform_query_call_with_delegations(&test_info, sender, signer, &delegations)
-                        .await;
-                let update_result =
-                    perform_update_call_with_delegations(&test_info, sender, signer, &delegations)
-                        .await;
-
-                assert_eq!(query_result, 400);
-                assert_eq!(update_result, 400);
-            }
-
-            // Test case: An indirect cycle in delegations should be detected and rejected
-            {
-                let mut identities = vec![];
-
-                for _ in 0..4 {
-                    let id_type = GenericIdentityType::random_incl_canister(&canister, rng);
-                    identities.push(GenericIdentity::new(id_type, rng));
-                }
-
-                // Duplicate the second identity, causing an indirect loop
-                identities.push(identities[1].clone());
+                identities.push(identities[duplicated_id_index].clone());
 
                 let delegations = create_delegations(&identities);
 
-                let sender = &identities[0];
-                let signer = &identities[identities.len() - 1];
+                let sender = &identities.first().unwrap();
+                let signer = &identities.last().unwrap();
 
-                let query_result =
-                    perform_query_call_with_delegations(&test_info, sender, signer, &delegations)
-                        .await;
-                let update_result =
-                    perform_update_call_with_delegations(&test_info, sender, signer, &delegations)
-                        .await;
+                for api_ver in ALL_QUERY_API_VERSIONS {
+                    test_info.api_ver = *api_ver;
+                    let query_result = perform_query_call_with_delegations(
+                        &test_info,
+                        sender,
+                        signer,
+                        &delegations,
+                    )
+                    .await;
+                    assert_eq!(query_result, 400);
+                }
 
-                assert_eq!(query_result, 400);
-                assert_eq!(update_result, 400);
+                for api_ver in ALL_UPDATE_API_VERSIONS {
+                    test_info.api_ver = *api_ver;
+                    let update_result = perform_update_call_with_delegations(
+                        &test_info,
+                        sender,
+                        signer,
+                        &delegations,
+                    )
+                    .await;
+
+                    assert_eq!(update_result, 400);
+                }
             }
         }
     });
@@ -741,7 +755,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                                 Encode!(&CanisterIdRecord {
                                     canister_id: canister_id.into()
                                 })
-                                    .unwrap(),
+                                .unwrap(),
                             ),
                             sender: Blob(sender.principal().as_slice().to_vec()),
                             ingress_expiry: expiry_time().as_nanos() as u64,
@@ -760,8 +774,8 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                         Some(delegations.to_vec()),
                         signature,
                     )
-                        .await
-                        .status();
+                    .await
+                    .status();
 
                     if include_mgmt_canister_id {
                         assert_eq!(update_status, 200);
@@ -780,7 +794,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                                 Encode!(&CanisterIdRecord {
                                     canister_id: canister_id.into()
                                 })
-                                    .unwrap(),
+                                .unwrap(),
                             ),
                             sender: Blob(sender.principal().as_slice().to_vec()),
                             ingress_expiry: expiry_time().as_nanos() as u64,
@@ -799,7 +813,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                         Some(delegations.to_vec()),
                         signature,
                     )
-                        .await;
+                    .await;
 
                     let query_status = query.status();
                     println!("Resp = {}", hex::encode(query.bytes().await.unwrap()));
