@@ -3,7 +3,7 @@ use crate::{pb::v1::RegistryCanisterStableStorage, registry::Registry};
 use ic_base_types::PrincipalId;
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-use ic_registry_keys::{NODE_OPERATOR_RECORD_KEY_PREFIX, make_node_operator_record_key};
+use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::{pb::v1::RegistryMutation, update};
 use maplit::btreemap;
 use prost::Message;
