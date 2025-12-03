@@ -28,9 +28,6 @@ pub fn canister_post_upgrade(
     // Registry data migrations should be implemented as follows:
     let mutation_batches_due_to_data_migrations = {
         let mut mutations = fix_node_operators_corrupted(registry);
-        mutations.extend(fill_swiss_subnet_node_operators_max_rewardable_nodes(
-            registry,
-        ));
         if mutations.is_empty() {
             0 // No mutations required for this data migration.
         } else {
@@ -102,131 +99,90 @@ pub fn canister_post_upgrade(
 fn fix_node_operators_corrupted(registry: &Registry) -> Vec<RegistryMutation> {
     let mut mutations = Vec::new();
 
-    let no_3nu7r =
+    let node_operator_id =
         PrincipalId::from_str("3nu7r-l6i5c-jlmhi-fmmhm-4wcw4-ndlwb-yovrx-o3wxh-suzew-hvbbo-7qe")
             .unwrap();
-    let no_spsu4 =
-        PrincipalId::from_str("spsu4-5hl4t-bfubp-qvoko-jprw4-wt7ou-nlnbk-gb5ib-aqnoo-g4gl6-kae")
-            .unwrap();
-    let no_ujq4k =
+    let mut record = get_node_operator_record(&node_operator_id, registry).unwrap();
+
+    record.node_operator_principal_id = node_operator_id.encode_to_vec();
+    record.max_rewardable_nodes = btreemap! { NodeRewardType::Type1dot1.to_string() => 19 };
+
+    mutations.push(update(
+        make_node_operator_record_key(node_operator_id),
+        record.encode_to_vec(),
+    ));
+
+    let node_operator_id =
         PrincipalId::from_str("ujq4k-55epc-pg2bt-jt2f5-6vaq3-diru7-edprm-42rd2-j7zzd-yjaai-2qe")
             .unwrap();
+    let mut record = get_node_operator_record(&node_operator_id, registry).unwrap();
 
-    for (k, mut record) in
-        get_key_family::<NodeOperatorRecord>(registry, NODE_OPERATOR_RECORD_KEY_PREFIX).into_iter()
-    {
-        let mut affected = false;
-        let node_operator_id_k = match PrincipalId::from_str(&k) {
-            Ok(node_operator_id_k) => node_operator_id_k,
-            _ => {
-                ic_cdk::println!(
-                    "Failed to parse NodeOperatorRecord key {} into PrincipalId. Skipping.",
-                    k
-                );
-                continue;
-            }
-        };
-        let node_operator_id_v = match PrincipalId::try_from(&record.node_operator_principal_id) {
-            Ok(node_operator_id_k) => node_operator_id_k,
-            _ => {
-                ic_cdk::println!(
-                    "Failed to parse NodeOperatorRecord principal ID {:?} into PrincipalId. Skipping.",
-                    record.node_operator_principal_id
-                );
-                continue;
-            }
-        };
-        // This fixes the principal ID mismatch issue on all instances.
-        if node_operator_id_k != node_operator_id_v {
-            ic_cdk::println!(
-                "Found corrupted NodeOperatorRecord for operator {}. Fixing principal ID mismatch.",
-                node_operator_id_k
-            );
-            record.node_operator_principal_id = node_operator_id_k.to_vec();
-            affected = true;
-        }
+    record.rewardable_nodes = btreemap! { NodeRewardType::Type1dot1.to_string() => 9 };
 
-        // 3nu7r missed the update to max_rewardable_nodes during migration because
-        // not present in node_operator_id_v.
-        if node_operator_id_k == no_3nu7r {
-            ic_cdk::println!("Fix max_rewardable_nodes for 3nu7r");
-            record.max_rewardable_nodes = btreemap! { NodeRewardType::Type1dot1.to_string() => 19 };
-            affected = true;
-        }
+    mutations.push(update(
+        make_node_operator_record_key(node_operator_id),
+        record.encode_to_vec(),
+    ));
 
-        // ujq4k got ovewritten by 3nu7r value and now has wrong rewardable_nodes.
-        if node_operator_id_k == no_ujq4k {
-            ic_cdk::println!("Fix rewardable_nodes for ujq4k");
-            record.rewardable_nodes = btreemap! { NodeRewardType::Type1dot1.to_string() => 9 };
-            affected = true;
-        }
+    let node_operator_id =
+        PrincipalId::from_str("bmlhw-kinr6-7cyv5-3o3v6-ic6tw-pnzk3-jycod-6d7sw-owaft-3b6k3-kqe")
+            .unwrap();
+    let mut record = get_node_operator_record(&node_operator_id, registry).unwrap();
 
-        // spsu4 got ovewritten by bmlhw value and now has wrong rewardable_nodes.
-        if node_operator_id_k == no_spsu4 {
-            ic_cdk::println!("Fix rewardable_nodes for spsu4");
-            record.rewardable_nodes = btreemap! { NodeRewardType::Type1dot1.to_string() => 14 };
-            affected = true;
-        }
+    record.node_operator_principal_id = node_operator_id.encode_to_vec();
+    record.max_rewardable_nodes = btreemap! { NodeRewardType::Type1.to_string() => 14 };
 
-        if affected {
-            mutations.push(update(
-                make_node_operator_record_key(node_operator_id_k),
-                record.encode_to_vec(),
-            ));
-        }
-    }
+    mutations.push(update(
+        make_node_operator_record_key(node_operator_id),
+        record.encode_to_vec(),
+    ));
+
+    let node_operator_id =
+        PrincipalId::from_str("spsu4-5hl4t-bfubp-qvoko-jprw4-wt7ou-nlnbk-gb5ib-aqnoo-g4gl6-kae")
+            .unwrap();
+    let mut record = get_node_operator_record(&node_operator_id, registry).unwrap();
+
+    record.rewardable_nodes = btreemap! { NodeRewardType::Type1dot1.to_string() => 14 };
+
+    mutations.push(update(
+        make_node_operator_record_key(node_operator_id),
+        record.encode_to_vec(),
+    ));
+
+    let node_operator_id =
+        PrincipalId::from_str("redpf-rrb5x-sa2it-zhbh7-q2fsp-bqlwz-4mf4y-tgxmj-g5y7p-ezjtj-5qe")
+            .unwrap();
+    let mut record = get_node_operator_record(&node_operator_id, registry).unwrap();
+
+    record.node_operator_principal_id = node_operator_id.encode_to_vec();
+
+    mutations.push(update(
+        make_node_operator_record_key(node_operator_id),
+        record.encode_to_vec(),
+    ));
 
     mutations
 }
 
-fn fill_swiss_subnet_node_operators_max_rewardable_nodes(
+fn get_node_operator_record(
+    node_operator_id: &PrincipalId,
     registry: &Registry,
-) -> Vec<RegistryMutation> {
-    let mut mutations = Vec::new();
-
-    for (operator, max_rewardable_nodes) in MAX_REWARDABLE_NODES_MAPPING.iter() {
-        let registry_value = match registry.get(
-            make_node_operator_record_key(*operator).as_bytes(),
+) -> Result<NodeOperatorRecord, String> {
+    let registry_value = registry
+        .get(
+            make_node_operator_record_key(*node_operator_id).as_bytes(),
             registry.latest_version(),
-        ) {
-            Some(record) => record,
-            None => {
-                ic_cdk::println!(
-                    "Failed to find NodeOperatorRecord for operator {}",
-                    operator
-                );
-                continue;
-            }
-        };
-
-        let mut node_operator_record =
-            match NodeOperatorRecord::decode(registry_value.value.as_slice()) {
-                Ok(node_operator_record) => node_operator_record,
-                _ => {
-                    ic_cdk::println!(
-                        "Failed to decode NodeOperatorRecord for operator {}",
-                        operator
-                    );
-                    continue;
-                }
-            };
-
-        // This avoids re-modifying existing max_rewardable_nodes entries.
-        if !node_operator_record.max_rewardable_nodes.is_empty() {
-            continue;
-        }
-
-        node_operator_record.max_rewardable_nodes = max_rewardable_nodes
-            .iter()
-            .map(|(node_reward_type, count)| (node_reward_type.to_string(), *count))
-            .collect();
-        mutations.push(update(
-            make_node_operator_record_key(*operator),
-            node_operator_record.encode_to_vec(),
-        ));
-    }
-
-    mutations
+        )
+        .ok_or(Err(format!(
+            "Failed to find NodeOperatorRecord for operator {}",
+            node_operator_id
+        )))?;
+    NodeOperatorRecord::decode(registry_value.value.as_slice()).map_err(|e| {
+        format!(
+            "Failed to decode NodeOperatorRecord for operator {}: {}",
+            node_operator_id, e
+        )
+    })
 }
 
 #[cfg(test)]
