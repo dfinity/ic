@@ -3,19 +3,21 @@ use crate::canister_state::system_state::log_memory_store::{
     index_table::{IndexEntry, IndexTable},
     log_record::LogRecord,
     memory::{MemoryAddress, MemoryPosition, MemorySize},
-    ring_buffer::{DATA_REGION_OFFSET, HEADER_OFFSET, INDEX_TABLE_OFFSET, RESULT_MAX_SIZE},
+    ring_buffer::{HEADER_OFFSET, INDEX_TABLE_OFFSET, RESULT_MAX_SIZE},
 };
 use crate::page_map::{Buffer, PageMap};
+use std::cell::Cell;
 
 pub(super) struct StructIO {
     buffer: Buffer,
-    // TODO: add caching for header and index table.
+    cache_header: Cell<Option<Header>>,
 }
 
 impl StructIO {
     pub fn new(page_map: PageMap) -> Self {
         Self {
             buffer: Buffer::new(page_map),
+            cache_header: Cell::new(None),
         }
     }
 
@@ -24,6 +26,9 @@ impl StructIO {
     }
 
     pub fn load_header(&self) -> Header {
+        if let Some(cached_header) = self.cache_header.get() {
+            return cached_header;
+        }
         let (magic, addr) = self.read_raw_bytes::<3>(HEADER_OFFSET);
         let (version, addr) = self.read_raw_u8(addr);
         let (index_table_pages, addr) = self.read_raw_u16(addr);
@@ -35,7 +40,7 @@ impl StructIO {
         let (data_tail, addr) = self.read_raw_u64(addr);
         let (next_idx, addr) = self.read_raw_u64(addr);
         let (max_timestamp, _addr) = self.read_raw_u64(addr);
-        Header {
+        let header = Header {
             magic,
             version,
             index_table_pages,
@@ -47,10 +52,13 @@ impl StructIO {
             data_tail: MemoryPosition::new(data_tail),
             next_idx,
             max_timestamp,
-        }
+        };
+        self.cache_header.set(Some(header));
+        header
     }
 
     pub fn save_header(&mut self, header: &Header) {
+        self.cache_header.set(Some(*header));
         let mut addr = HEADER_OFFSET;
         addr = self.write_raw_bytes(addr, &header.magic);
         addr = self.write_raw_u8(addr, header.version);
@@ -147,7 +155,7 @@ impl StructIO {
         if !h.is_alive(position) {
             return None;
         }
-        let (offset, capacity) = (DATA_REGION_OFFSET, h.data_capacity);
+        let (offset, capacity) = (h.data_offset, h.data_capacity);
         let (idx, timestamp, len, _position) = self.load_record_header(position, offset, capacity);
         Some(LogRecord {
             idx,
@@ -162,7 +170,7 @@ impl StructIO {
         if !h.is_alive(position) {
             return None;
         }
-        let (offset, capacity) = (DATA_REGION_OFFSET, h.data_capacity);
+        let (offset, capacity) = (h.data_offset, h.data_capacity);
         let (idx, timestamp, len, position) = self.load_record_header(position, offset, capacity);
         let (content, _position) =
             self.read_wrapped_vec(position, MemorySize::new(len as u64), offset, capacity);
@@ -175,7 +183,8 @@ impl StructIO {
     }
 
     pub fn save_record(&mut self, position: MemoryPosition, record: &LogRecord) {
-        let (offset, capacity) = (DATA_REGION_OFFSET, self.load_header().data_capacity);
+        let h = self.load_header();
+        let (offset, capacity) = (h.data_offset, h.data_capacity);
         let position = self.write_wrapped_u64(position, record.idx, offset, capacity);
         let position = self.write_wrapped_u64(position, record.timestamp, offset, capacity);
         let position = self.write_wrapped_u32(position, record.len, offset, capacity);
@@ -446,6 +455,7 @@ mod tests {
             };
 
             let mut io = StructIO::new(PageMap::new_for_testing());
+            // Update header to make the record "alive"
             let mut header = Header::new(data_capacity);
             header.data_head = position;
             let size = MemorySize::new(original.bytes_len() as u64);
@@ -458,5 +468,40 @@ mod tests {
 
             assert_eq!(original, loaded);
         }
+    }
+
+    #[test]
+    fn test_custom_data_offset() {
+        let mut io = StructIO::new(PageMap::new_for_testing());
+        let data_capacity = MemorySize::new(100);
+        let custom_offset = MemoryAddress::new(5000); // Different from DATA_REGION_OFFSET
+        let mut header = Header::new(data_capacity);
+        header.data_offset = custom_offset;
+        io.save_header(&header);
+
+        let record = LogRecord {
+            idx: 1,
+            timestamp: 100,
+            len: 5,
+            content: b"hello".to_vec(),
+        };
+        io.save_record(MemoryPosition::new(0), &record);
+
+        // Update header to make the record "alive"
+        let size = MemorySize::new(record.bytes_len() as u64);
+        header.data_tail = header.advance_position(MemoryPosition::new(0), size);
+        header.data_size = size;
+        io.save_header(&header);
+
+        // Verify that we can load it back using the header's offset.
+        let loaded = io.load_record(MemoryPosition::new(0)).expect("should load");
+        assert_eq!(loaded.content, b"hello");
+
+        // Verify that it was actually written at the custom offset.
+        // The record header is 8+8+4 = 20 bytes.
+        // The content is 5 bytes.
+        // So we expect data at custom_offset + 20.
+        let (content, _) = io.read_raw_bytes::<5>(custom_offset + MemorySize::new(20));
+        assert_eq!(&content, b"hello");
     }
 }
