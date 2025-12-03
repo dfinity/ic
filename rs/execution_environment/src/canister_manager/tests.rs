@@ -4934,6 +4934,19 @@ where
 }
 
 #[test]
+fn take_canister_snapshot_and_uninstall_code_clears_canister_state() {
+    let uninstall_code = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        let args = TakeCanisterSnapshotArgs::new(canister_id, None, Some(true), None);
+        test.subnet_message("take_canister_snapshot", args.encode())
+            .unwrap();
+        test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+            .unwrap();
+    };
+
+    operation_clears_canister_state(uninstall_code, true);
+}
+
+#[test]
 fn uninstall_code_clears_canister_state() {
     let uninstall_code = |test: &mut ExecutionTest, canister_id: CanisterId| {
         test.uninstall_code(canister_id).unwrap();

@@ -326,7 +326,36 @@ fn canister_history_tracks_upgrade() {
 }
 
 #[test]
-fn canister_history_tracks_uninstall() {
+fn canister_history_tracks_uninstall_code_directly() {
+    let op = |env: &StateMachine, canister_id: CanisterId, sender: PrincipalId| {
+        let canister_id_record: CanisterIdRecord = canister_id.into();
+        env.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::UninstallCode,
+            canister_id_record.encode(),
+        )
+        .unwrap();
+    };
+
+    canister_history_tracks_uninstall_code(op);
+}
+
+#[test]
+fn canister_history_tracks_uninstall_code_via_take_canister_snapshot() {
+    let op = |env: &StateMachine, canister_id: CanisterId, sender: PrincipalId| {
+        let args: TakeCanisterSnapshotArgs =
+            TakeCanisterSnapshotArgs::new(canister_id, None, Some(true), None);
+        env.take_canister_snapshot_as(args, sender).unwrap();
+    };
+
+    canister_history_tracks_uninstall_code(op);
+}
+
+fn canister_history_tracks_uninstall_code<F>(f: F)
+where
+    F: FnOnce(&StateMachine, CanisterId, PrincipalId),
+{
     let mut now = std::time::SystemTime::now();
     let (env, test_canister, test_canister_sha256) = test_setup(SubnetType::Application, now);
 
@@ -388,14 +417,7 @@ fn canister_history_tracks_uninstall() {
     // uninstall code via ingress from user_id1
     now += Duration::from_secs(5);
     env.set_time(now);
-    let canister_id_record: CanisterIdRecord = canister_id.into();
-    env.execute_ingress_as(
-        user_id1,
-        ic00::IC_00,
-        Method::UninstallCode,
-        canister_id_record.encode(),
-    )
-    .unwrap();
+    f(&env, canister_id, user_id1);
     // check canister history
     reference_change_entries.push(CanisterChange::new(
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
