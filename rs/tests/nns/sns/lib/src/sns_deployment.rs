@@ -23,7 +23,6 @@ use ic_system_test_driver::{
     },
     canister_requests,
     driver::{
-        farm::HostFeature,
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
