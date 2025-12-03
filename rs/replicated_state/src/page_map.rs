@@ -948,7 +948,7 @@ impl Buffer {
             let page_contents: &PageBytes = if let Some(bytes) = self.dirty_pages.get(&page) {
                 bytes
             } else {
-                let cache_hit = cache.as_ref().map_or(false, |(p, _)| *p == page);
+                let cache_hit = cache.as_ref().is_some_and(|(p, _)| *p == page);
                 if !cache_hit {
                     *cache = Some((page, *self.page_map.get_page(page)));
                 }
