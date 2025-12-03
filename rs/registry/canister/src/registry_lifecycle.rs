@@ -1,4 +1,5 @@
 use crate::certification::recertify_registry;
+use crate::max_rewardable_nodes_mapping::MAX_REWARDABLE_NODES_MAPPING;
 use crate::{pb::v1::RegistryCanisterStableStorage, registry::Registry};
 use ic_base_types::PrincipalId;
 use ic_protobuf::registry::node::v1::NodeRewardType;

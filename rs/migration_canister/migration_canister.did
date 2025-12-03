@@ -1,4 +1,3 @@
-type ListEventsArgs = record { page_size : nat64; page_index : nat64 };
 type MigrationStatus = variant {
   Failed : record { time : nat64; reason : text };
   Succeeded : record { time : nat64 };
@@ -33,9 +32,6 @@ type MigrationCanisterInitArgs = record { allowlist : opt vec principal };
 service : (MigrationCanisterInitArgs) -> {
   disable_api : () -> (MigrationCanisterResult);
   enable_api : () -> (MigrationCanisterResult);
-  list_events : (ListEventsArgs) -> (vec MigrationStatus) query;
   migrate_canister : (MigrateCanisterArgs) -> (ValidationResult);
-  // The same `(canister_id, replace_canister_id)` pair might be processed again after a failure
-  // and thus we return a vector.
-  migration_status : (MigrateCanisterArgs) -> (vec MigrationStatus) query;
+  migration_status : (MigrateCanisterArgs) -> (opt MigrationStatus) query;
 }

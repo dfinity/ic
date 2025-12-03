@@ -1395,7 +1395,7 @@ impl ReplicatedState {
         }
 
         // Retain only one copy of the refund pool, on subnet A'. Refund messages have
-        // no explicit origin, so it doesn't matter which of the two subnets they
+        // no explicit origin, so it does not matter which of the two subnets they
         // originate from.
         if metadata.own_subnet_id != subnet_id {
             refunds = RefundPool::default();
@@ -1437,19 +1437,16 @@ impl ReplicatedState {
         // Destructure `self` in order for the compiler to enforce an explicit decision
         // whenever new fields are added.
         //
-        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS A `match`!
         let Self {
             canister_states,
             metadata,
             subnet_queues,
             consensus_queue: _,
             refunds: _,
-            epoch_query_stats: _,
+            epoch_query_stats,
             canister_snapshots: _,
         } = self;
-
-        // Reset query stats after subnet split
-        self.epoch_query_stats = RawQueryStats::default();
 
         metadata
             .split_from
@@ -1481,6 +1478,9 @@ impl ReplicatedState {
             |canister_id| canister_states.contains_key(&canister_id),
             subnet_queues,
         );
+
+        // Reset query stats after subnet split.
+        *epoch_query_stats = RawQueryStats::default();
     }
 
     /// Records the loss of `cycles` due to dropping messages (e.g. late best-effort
