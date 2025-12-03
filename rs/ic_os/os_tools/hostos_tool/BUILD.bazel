@@ -6,7 +6,10 @@ rust_library(
     name = "recovery_utils",
     srcs = ["src/recovery_utils.rs"],
     crate_name = "hostos_tool_recovery_utils",
-    visibility = ["//rs:system-tests-pkg"],
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
 )
 
 DEPENDENCIES = [
