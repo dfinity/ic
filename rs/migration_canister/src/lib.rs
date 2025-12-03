@@ -117,19 +117,6 @@ impl Request {
         }
         None
     }
-
-    /// Dummy value to serve as a bound in composite bounds.
-    pub fn low_bound() -> Self {
-        Self {
-            source: Principal::management_canister(),
-            source_subnet: Principal::management_canister(),
-            source_original_controllers: vec![],
-            target: Principal::management_canister(),
-            target_subnet: Principal::management_canister(),
-            target_original_controllers: vec![],
-            caller: Principal::management_canister(),
-        }
-    }
 }
 
 impl Display for Request {
