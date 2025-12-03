@@ -16126,7 +16126,6 @@ name = "ic_device"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "devicemapper",
  "gpt",
  "loopdev-3",
