@@ -1128,7 +1128,7 @@ impl CanisterManager {
             freeze_threshold.get(),
             reserved_cycles_limit.map(|x| x.get()),
             log_visibility,
-            log_memory_limit.get(),
+            log_memory_limit as u64,
             self.cycles_account_manager
                 .idle_cycles_burned_rate(
                     memory_allocation,
