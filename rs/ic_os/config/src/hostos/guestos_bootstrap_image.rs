@@ -140,12 +140,6 @@ impl BootstrapOptions {
                     bootstrap_dir.path().join("nns_public_key_override.pem"),
                 )
                 .context("Failed to copy NNS public key override")?;
-                // NODE-1653: remove once rolled out to all nodes. Exists to pass downgrade tests
-                fs::copy(
-                    nns_public_key_override,
-                    bootstrap_dir.path().join("nns_public_key.pem"),
-                )
-                .context("Failed to copy NNS public key")?;
             }
 
             if let Some(accounts_ssh_authorized_keys) = &self.accounts_ssh_authorized_keys {
