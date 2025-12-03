@@ -9,7 +9,6 @@ use std::process::{Command, Output, Stdio};
 use tempfile::{NamedTempFile, TempDir, tempdir};
 
 use crate::Partition;
-use crate::exes::{debugfs, faketime};
 use crate::gpt;
 
 const STORE_NAME: &str = "backing_store";
@@ -23,8 +22,6 @@ pub struct ExtPartition {
 impl Partition for ExtPartition {
     /// Open an ext4 partition for writing, via debugfs
     fn open(image: PathBuf, index: Option<u32>) -> Result<Self> {
-        let _ = debugfs().context("debugfs is needed to open ext4 partitions")?;
-
         if let Some(index) = index {
             let offset = gpt::get_partition_offset(&image, index)?;
             let length = gpt::get_partition_length(&image, index)?;
@@ -45,8 +42,6 @@ impl Partition for ExtPartition {
 
     /// Open an ext4 partition for writing, via debugfs, using explicit offset and length
     fn open_range(image: PathBuf, offset_bytes: u64, length_bytes: u64) -> Result<Self> {
-        let _ = debugfs().context("debugfs is needed to open ext4 partitions")?;
-
         let backing_dir = tempdir()?;
         let output_path = backing_dir.path().join(STORE_NAME);
 
@@ -97,15 +92,11 @@ impl Partition for ExtPartition {
 
     /// Copy a file into place
     fn write_file(&mut self, input: &Path, output: &Path) -> Result<()> {
-        let mut cmd = Command::new(faketime().context("faketime is needed to write files")?)
+        let mut cmd = Command::new("faketime")
             .args([
                 "-f",
                 "1970-1-1 0:0:0",
-                // debugfs has already been ensured.
-                debugfs()
-                    .context("debugfs is needed to write files")?
-                    .to_str()
-                    .unwrap(),
+                "/usr/sbin/debugfs",
                 "-w",
                 (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
                 "-f",
@@ -140,7 +131,7 @@ impl Partition for ExtPartition {
         );
 
         // Use debugfs to dump the entire filesystem
-        let out = Command::new(debugfs().context("debugfs is needed to extract contents")?)
+        let out = Command::new("/usr/sbin/debugfs")
             .args([
                 "-R",
                 &format!("rdump / {}", output.display()),
@@ -172,8 +163,7 @@ impl Partition for ExtPartition {
         };
 
         // run the underlying debugfs operation
-        // debugfs has already been ensured.
-        let mut cmd = Command::new(debugfs().context("debugfs is needed to read files")?)
+        let mut cmd = Command::new("/usr/sbin/debugfs")
             .args([
                 (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
                 "-f",
@@ -214,26 +204,21 @@ impl ExtPartition {
         mode: usize,
         context: Option<&str>,
     ) -> Result<()> {
-        let mut cmd =
-            Command::new(faketime().context("faketime is needed to fix metadata in files")?)
-                .args([
-                    "-f",
-                    "1970-1-1 0:0:0",
-                    // debugfs has already been ensured.
-                    debugfs()
-                        .context("debugfs is needed to write files")?
-                        .to_str()
-                        .unwrap(),
-                    "-w",
-                    (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
-                    "-f",
-                    "-",
-                ])
-                .stdin(Stdio::piped())
-                .stdout(Stdio::null())
-                .stderr(Stdio::piped())
-                .spawn()
-                .context("failed to run debugfs")?;
+        let mut cmd = Command::new("faketime")
+            .args([
+                "-f",
+                "1970-1-1 0:0:0",
+                "/usr/sbin/debugfs",
+                "-w",
+                (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
+                "-f",
+                "-",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .context("failed to run debugfs")?;
 
         let mut stdin = cmd.stdin.as_mut().unwrap();
 

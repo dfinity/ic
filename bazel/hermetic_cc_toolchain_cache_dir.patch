@@ -1,0 +1,63 @@
+# work around race condition in zig: https://github.com/ziglang/zig/issues/23993
+diff --git a/toolchain/defs.bzl b/toolchain/defs.bzl
+index 88978ee..6456bb5 100644
+--- a/toolchain/defs.bzl
++++ b/toolchain/defs.bzl
+@@ -184,7 +184,7 @@ def _zig_repository_impl(repository_ctx):
+     cache_prefix = repository_ctx.os.environ.get("HERMETIC_CC_TOOLCHAIN_CACHE_PREFIX", "")
+     if cache_prefix == "":
+         if host_os == "windows":
+-            cache_prefix = "C:\\\\Temp\\\\zig-cache"
++            fail("windows is not supported")
+         elif host_os == "macos":
+             cache_prefix = "/var/tmp/zig-cache"
+         elif host_os == "linux":
+diff --git a/toolchain/zig-wrapper.zig b/toolchain/zig-wrapper.zig
+index 42f84d5..acac7de 100644
+--- a/toolchain/zig-wrapper.zig
++++ b/toolchain/zig-wrapper.zig
+@@ -201,6 +201,22 @@ fn spawnAndStripUnix(arena: mem.Allocator, params: ExecParams) u8 {
+     return code;
+ }
+
++fn makeSuffix(allocator: std.mem.Allocator, pwd: []const u8) ![]const u8 {
++    var it = std.mem.tokenize(u8, pwd, "/");
++
++    while (it.next()) |segment| {
++        if (std.mem.startsWith(u8, segment, "k8-opt-")) {
++            var hasher = std.hash.Wyhash.init(0);
++            hasher.update(segment);
++            const hash_value = hasher.final();
++            return std.fmt.allocPrint(allocator, "config-{x}", .{hash_value});
++        }
++    }
++
++    // no "k8-opt-" found
++    return std.fmt.allocPrint(allocator, "config-catchall", .{});
++}
++
+ // argv_it is an object that has such method:
+ //     fn next(self: *Self) ?[]const u8
+ // in non-testing code it is *process.ArgIterator.
+@@ -257,9 +273,19 @@ fn parseArgs(
+     var env = process.getEnvMap(arena) catch |err|
+         return parseFatal(arena, "error getting env: {s}", .{@errorName(err)});
+
++    // Get the current working directory (PWD)
++    const allocator = std.heap.page_allocator;
++    const pwd = std.fs.cwd().realpathAlloc(allocator, ".") catch {
++        std.process.exit(1);
++    };
++    defer allocator.free(pwd);
++
++    const suffix = try makeSuffix(arena, pwd);
++    const cache_dir = try std.fmt.allocPrint(arena, "{s}/{s}", .{ CACHE_DIR, suffix });
++
+     try env.put("ZIG_LIB_DIR", zig_lib_dir);
+-    try env.put("ZIG_LOCAL_CACHE_DIR", CACHE_DIR);
+-    try env.put("ZIG_GLOBAL_CACHE_DIR", CACHE_DIR);
++    try env.put("ZIG_LOCAL_CACHE_DIR", cache_dir);
++    try env.put("ZIG_GLOBAL_CACHE_DIR", cache_dir);
+
+     // args is the path to the zig binary and args to it.
+     var args = ArrayListUnmanaged([]const u8){};
