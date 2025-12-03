@@ -264,7 +264,7 @@ const CANISTER_RANGE_B: CanisterIdRange = CanisterIdRange {
 
 /// Returns a test fixture for subnet splitting tests with mocks for Demux,
 /// Scheduler, and StreamBuilder. The mocks ensure that only expected calls are
-/// made, and in the expected order.
+/// made, and they are made in the expected order.
 fn split_fixture() -> StateMachineTestFixture {
     // Initial state, with 2 canisters.
     let mut initial_state = ReplicatedState::new(SUBNET_A, SubnetType::Application);
@@ -384,6 +384,7 @@ fn test_online_split(new_subnet_id: SubnetId, other_subnet_id: SubnetId) -> Repl
     state_after_split
 }
 
+/// Tests a *subnet A* -> *subnet A'* online split.
 #[test]
 fn test_online_split_subnet_a() {
     let state_after_split = test_online_split(SUBNET_A, SUBNET_B);
@@ -394,6 +395,7 @@ fn test_online_split_subnet_a() {
     );
 }
 
+/// Tests a *subnet A* -> *subnet B* online split.
 #[test]
 fn test_online_split_subnet_b() {
     let state_after_split = test_online_split(SUBNET_B, SUBNET_A);

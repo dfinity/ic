@@ -731,15 +731,11 @@ impl SystemMetadata {
     ///  * `unflushed_checkpoint_ops` contains both arbitrary pending operations;
     ///    and delete operations for the snapshots of non-local canisters. It is
     ///    therefore preserved untouched.
-    pub fn online_split<F>(
+    pub fn online_split(
         self,
         subnet_id: SubnetId,
-        is_local_canister: F,
         subnet_queues: &mut CanisterQueues,
-    ) -> Result<Self, String>
-    where
-        F: Fn(CanisterId) -> bool,
-    {
+    ) -> Result<Self, String> {
         // Destructure `self` in order for the compiler to enforce an explicit decision
         // whenever new fields are added.
         //
@@ -773,6 +769,14 @@ impl SystemMetadata {
         assert_eq!(None, split_from);
         assert_eq!(0, heap_delta_estimate.get());
         assert!(expected_compiled_wasms.is_empty());
+
+        let is_local_canister = |canister_id: CanisterId| {
+            network_topology
+                .routing_table
+                .lookup_entry(canister_id)
+                .map(|(_range, subnet_id)| subnet_id)
+                == Some(subnet_id)
+        };
 
         // TODO(DSM-51): Set the split marker to the original subnet ID (that of subnet A).
         // split_from = Some(own_subnet_id);
@@ -952,7 +956,7 @@ impl SystemMetadata {
             CanisterCall::Request(request) => {
                 // Rejecting a request from a canister.
                 let response = Response {
-                    originator: request.sender(),
+                    originator: request.sender,
                     respondent: request.receiver,
                     originator_reply_callback: request.sender_reply_callback,
                     refund: request.payment,

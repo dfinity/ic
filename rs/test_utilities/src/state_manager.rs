@@ -107,7 +107,7 @@ fn initial_state() -> Labeled<Arc<ReplicatedState>> {
     Labeled::new(
         INITIAL_STATE_HEIGHT,
         Arc::new(ReplicatedState::new(
-            subnet_test_id(1),
+            subnet_test_id(169),
             SubnetType::Application,
         )),
     )

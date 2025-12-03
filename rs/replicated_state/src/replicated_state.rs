@@ -1605,11 +1605,7 @@ impl ReplicatedState {
         //
         // Prunes the ingress history. And, on *subnet A'* rejects in-progress management
         // calls targeting canisters migrated to *subnet B*.
-        metadata = metadata.online_split(
-            subnet_id,
-            |canister_id| lookup_subnet(&canister_id) == Some(subnet_id),
-            &mut subnet_queues,
-        )?;
+        metadata = metadata.online_split(subnet_id, &mut subnet_queues)?;
 
         Ok(Self {
             canister_states,
