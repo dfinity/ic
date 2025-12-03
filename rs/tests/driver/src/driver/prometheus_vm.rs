@@ -347,14 +347,23 @@ chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
 /// configuring its scraping targets based on the latest IC topology
 /// and finally downloading its data directory.
 pub trait HasPrometheus {
+    /// Same as `sync_with_prometheus_result` but panics in case it fails.
+    fn sync_with_prometheus(&self);
     /// Retrieves a topology snapshot, converts it into p8s scraping target
     /// JSON files and scps them to the prometheus VM.
-    fn sync_with_prometheus(&self);
+    fn sync_with_prometheus_result(&self) -> Result<()>;
+
+    /// Same as `sync_with_prometheus_by_name_result` but panics in case it fails.
+    fn sync_with_prometheus_by_name(&self, name: &str, playnet_domain: Option<String>);
 
     /// Retrieves a topology snapshot by name, converts it into p8s scraping target
     /// JSON files and scps them to the prometheus VM. If `playnet_domain` is specified, add a
     /// scraping target for NNS canisters (currently only the ICP ledger) to the prometheus VM.
-    fn sync_with_prometheus_by_name(&self, name: &str, playnet_domain: Option<String>);
+    fn sync_with_prometheus_by_name_result(
+        &self,
+        name: &str,
+        playnet_domain: Option<String>,
+    ) -> Result<()>;
 
     /// Downloads prometheus' data directory to the test artifacts
     /// such that we can run a local p8s on that later.
@@ -367,34 +376,42 @@ pub trait HasPrometheus {
 
 impl HasPrometheus for TestEnv {
     fn sync_with_prometheus(&self) {
-        self.sync_with_prometheus_by_name("", None)
+        self.sync_with_prometheus_result().unwrap()
+    }
+
+    fn sync_with_prometheus_result(&self) -> Result<()> {
+        self.sync_with_prometheus_by_name_result("", None)
     }
 
     fn sync_with_prometheus_by_name(&self, name: &str, playnet_domain: Option<String>) {
+        self.sync_with_prometheus_by_name_result(name, playnet_domain)
+            .unwrap()
+    }
+
+    fn sync_with_prometheus_by_name_result(
+        &self,
+        name: &str,
+        playnet_domain: Option<String>,
+    ) -> Result<()> {
         let vm_name = PROMETHEUS_VM_NAME.to_string();
         // Write the scraping target JSON files to the local prometheus config directory.
         let prometheus_config_dir = self.get_universal_vm_config_dir(&vm_name);
         let group_name = GroupSetup::read_attribute(self).infra_group_name;
+        let topology_snapshot = self.safe_topology_snapshot_by_name(name)?;
         sync_prometheus_config_dir(
             prometheus_config_dir.clone(),
             group_name.clone(),
-            self.topology_snapshot_by_name(name),
+            topology_snapshot,
             &playnet_domain,
-        )
-        .expect("Failed to synchronize prometheus config with the latest IC topology!");
+        )?;
         sync_prometheus_config_dir_with_ic_gateways(
             self,
             prometheus_config_dir.clone(),
             group_name,
-        )
-        .expect(
-            "Failed to synchronize prometheus config with the last deployments of the ic-gateways",
-        );
+        )?;
         // Setup an SSH session to the prometheus VM which we'll use to scp the JSON files.
-        let deployed_prometheus_vm = self.get_deployed_universal_vm(&vm_name).unwrap();
-        let session = deployed_prometheus_vm
-            .block_on_ssh_session()
-            .unwrap_or_else(|e| panic!("Failed to setup SSH session to {vm_name} because: {e:?}!"));
+        let deployed_prometheus_vm = self.get_deployed_universal_vm(&vm_name)?;
+        let session = deployed_prometheus_vm.block_on_ssh_session()?;
         // scp the scraping target JSON files to prometheus VM.
         let mut target_json_files = vec![
             REPLICA_PROMETHEUS_TARGET,
@@ -417,6 +434,7 @@ impl HasPrometheus for TestEnv {
             let to = Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(file);
             scp_send_to(self.logger(), &session, &from, &to, 0o644);
         }
+        Ok(())
     }
 
     fn download_prometheus_data_dir_if_exists(&self) {
