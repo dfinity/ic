@@ -76,7 +76,7 @@ impl Registry {
         // update the approved nodes for onboarding for the node operator.
         //
         // NOTICE: Keep in mind that this code will be used by UTOPIA and capacity
-        // calculations are done differently there and on a regular IC.
+        // calculations are done differently there compared to a regular IC.
         //
         // Spare capacity (in this context) is calculated as follows:
         //    spare = total_capacity - (nodes_in_registry + nodes_currently_approved)
