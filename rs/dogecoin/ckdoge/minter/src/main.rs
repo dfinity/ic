@@ -30,6 +30,9 @@ fn init(args: MinterArg) {
             #[cfg(feature = "self_check")]
             ok_or_die(check_invariants())
         }
+        MinterArg::Upgrade(_) => {
+            panic!("expected InitArgs got UpgradeArgs");
+        }
     }
 }
 
