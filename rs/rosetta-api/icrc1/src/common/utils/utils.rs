@@ -698,7 +698,7 @@ pub fn rosetta_core_block_to_icrc1_block(
             )
         },
         fee_collector_block_index: block_metadata.fee_collector_block_index,
-        btype: None, // TODO: implement panic!("FeeCollector107 not implemented")
+        btype: block_metadata.btype,
     })
 }
 

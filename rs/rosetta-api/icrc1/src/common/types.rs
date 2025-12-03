@@ -307,6 +307,9 @@ pub struct BlockMetadata {
     // The Rosetta API standard field for timestamp is required in milliseconds
     // To ensure a lossless conversion we need to store the nano seconds for the timestamp
     pub block_created_at_nano_seconds: u64,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub btype: Option<String>,
 }
 
 impl TryFrom<BlockMetadata> for ObjectMap {
@@ -345,6 +348,7 @@ impl BlockMetadata {
             effective_fee: block
                 .effective_fee
                 .map(|fee| Amount::new(BigInt::from(fee), currency)),
+            btype: block.btype,
         })
     }
 }
