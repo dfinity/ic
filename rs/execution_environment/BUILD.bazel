@@ -346,12 +346,16 @@ rust_ic_bench(
     ]),
     deps = [
         # Keep sorted.
+        "//rs/replicated_state",
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
+        "//rs/test_utilities/types",
         "//rs/types/base_types",
         "//rs/types/types",
+        "//rs/types/wasm_types",
         "@crate_index//:criterion",
         "@crate_index//:lazy_static",
+        "@crate_index//:wat",
     ],
 )
 
