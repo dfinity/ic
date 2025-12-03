@@ -77,10 +77,8 @@ fn schedule_timers() {
 
 const SPAWN_NEURONS_INTERVAL: Duration = Duration::from_secs(60);
 fn schedule_spawn_neurons() {
-    ic_cdk_timers::set_timer_interval(SPAWN_NEURONS_INTERVAL, || {
-        ic_cdk::futures::spawn_017_compat(async {
-            governance_mut().maybe_spawn_neurons().await;
-        });
+    ic_cdk_timers::set_timer_interval(SPAWN_NEURONS_INTERVAL, async || {
+        governance_mut().maybe_spawn_neurons().await;
     });
 }
 
@@ -88,10 +86,8 @@ fn schedule_spawn_neurons() {
 const VOTE_PROCESSING_INTERVAL: Duration = Duration::from_secs(3);
 
 fn schedule_vote_processing() {
-    ic_cdk_timers::set_timer_interval(VOTE_PROCESSING_INTERVAL, || {
-        ic_cdk::futures::spawn_017_compat(async {
-            governance_mut().process_voting_state_machines().await;
-        });
+    ic_cdk_timers::set_timer_interval(VOTE_PROCESSING_INTERVAL, async || {
+        governance_mut().process_voting_state_machines().await;
     });
 }
 

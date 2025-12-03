@@ -156,19 +156,17 @@ fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Error> {
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Error> {
+fn main() -> Result<(), Error> {
     let cli = Cli::parse();
 
     // Open config partition
-    let mut config = FatPartition::open(cli.image_path.clone(), Some(3)).await?;
+    let mut config = FatPartition::open(cli.image_path.clone(), Some(3))?;
 
     // Print previous config.ini
     println!("Previous config.ini:\n---");
     let previous_config = String::from_utf8(
         config
             .read_file(Path::new("/config.ini"))
-            .await
             .context("failed to print previous config")?,
     )?;
     println!("{previous_config}");
@@ -205,7 +203,6 @@ async fn main() -> Result<(), Error> {
     write_config(config_ini.path(), &settings).context("failed to write config file")?;
     config
         .write_file(config_ini.path(), Path::new("/config.ini"))
-        .await
         .context("failed to copy config file")?;
 
     // Print updated config.ini
@@ -213,7 +210,6 @@ async fn main() -> Result<(), Error> {
     let updated_config = String::from_utf8(
         config
             .read_file(Path::new("/config.ini"))
-            .await
             .context("failed to read updated config")?,
     )?;
     println!("{updated_config}");
@@ -222,7 +218,6 @@ async fn main() -> Result<(), Error> {
     if let Some(key_path) = cli.node_operator_private_key {
         config
             .write_file(&key_path, Path::new("/node_operator_private_key.pem"))
-            .await
             .context("failed to write node_operator_private_key.pem")?;
 
         // Print updated node_operator_private_key.pem
@@ -230,7 +225,6 @@ async fn main() -> Result<(), Error> {
         let updated_key = String::from_utf8(
             config
                 .read_file(Path::new("/node_operator_private_key.pem"))
-                .await
                 .context("failed to read updated node operator private key")?,
         )?;
         println!("{updated_key}");
@@ -241,7 +235,6 @@ async fn main() -> Result<(), Error> {
     let previous_admin_keys = String::from_utf8(
         config
             .read_file(Path::new("ssh_authorized_keys/admin"))
-            .await
             .context("failed to print previous config")?,
     )?;
     println!("{previous_admin_keys}");
@@ -253,7 +246,6 @@ async fn main() -> Result<(), Error> {
 
         config
             .write_file(public_keys.path(), Path::new("/ssh_authorized_keys/admin"))
-            .await
             .context("failed to copy public keys")?;
 
         // Print updated SSH keys
@@ -261,23 +253,21 @@ async fn main() -> Result<(), Error> {
         let updated_admin_keys = String::from_utf8(
             config
                 .read_file(Path::new("/ssh_authorized_keys/admin"))
-                .await
                 .context("failed to read updated admin keys")?,
         )?;
         println!("{updated_admin_keys}");
     }
 
     // Close config partition
-    config.close().await?;
+    config.close()?;
 
     // Open data partition
-    let mut data = ExtPartition::open(cli.image_path.clone(), Some(4)).await?;
+    let mut data = ExtPartition::open(cli.image_path.clone(), Some(4))?;
 
     // Print previous deployment.json
     println!("Previous deployment.json:\n---");
     let previous_deployment = String::from_utf8(
         data.read_file(Path::new("/deployment.json"))
-            .await
             .context("failed to print previous deployment config")?,
     )?;
     println!("{previous_deployment}");
@@ -289,14 +279,12 @@ async fn main() -> Result<(), Error> {
     update_deployment(deployment_json.path(), &cli.deployment)
         .context("failed to write deployment config file")?;
     data.write_file(deployment_json.path(), Path::new("/deployment.json"))
-        .await
         .context("failed to copy deployment config file")?;
 
     // Print updated deployment.json
     println!("Updated deployment.json:\n---");
     let updated_deployment = String::from_utf8(
         data.read_file(Path::new("/deployment.json"))
-            .await
             .context("failed to read updated deployment config")?,
     )?;
     println!("{updated_deployment}");
@@ -309,21 +297,19 @@ async fn main() -> Result<(), Error> {
         fs::set_permissions(nns_key.path(), Permissions::from_mode(0o644))?;
 
         data.write_file(nns_key.path(), Path::new("/nns_public_key_override.pem"))
-            .await
             .context("failed to copy nns key file")?;
 
         // Print updated NNS key
         println!("Updated nns_public_key_override.pem:\n---");
         let updated_nns_key = String::from_utf8(
             data.read_file(Path::new("/nns_public_key_override.pem"))
-                .await
                 .context("failed to read updated nns key")?,
         )?;
         println!("{updated_nns_key}");
     }
 
     // Close data partition
-    data.close().await?;
+    data.close()?;
 
     Ok(())
 }

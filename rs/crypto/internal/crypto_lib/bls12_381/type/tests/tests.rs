@@ -694,6 +694,7 @@ fn test_g2_deserialize_rejects_infinity_bit_with_nonzero_x() {
 
     assert!(G2Affine::deserialize(&g2_bytes).is_err());
     assert!(G2Affine::deserialize_unchecked(&g2_bytes).is_err());
+    assert!(G2Affine::deserialize_cached(&g2_bytes).is_err());
 }
 
 #[test]
@@ -723,11 +724,13 @@ fn test_g2_deserialize_rejects_out_of_range_x_value() {
         hex::decode("9a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").unwrap();
 
     assert!(G2Affine::deserialize_unchecked(&invalid_x0).is_err());
+    assert!(G2Affine::deserialize_cached(&invalid_x0).is_err());
 
     let invalid_x1 =
         hex::decode("8000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab").unwrap();
 
     assert!(G2Affine::deserialize_unchecked(&invalid_x1).is_err());
+    assert!(G2Affine::deserialize_cached(&invalid_x1).is_err());
 }
 
 #[test]
@@ -1988,6 +1991,36 @@ test_point_operation!(muln, [g1, g2], {
             .fold(Projective::identity(), |accum, (p, s)| accum + p * s);
 
         let computed = Projective::muln_vartime(&points[..], &scalars[..]);
+
+        assert_eq!(computed, reference_val);
+    }
+});
+
+test_point_operation!(muln_affine, [g1, g2], {
+    let rng = &mut reproducible_rng();
+
+    assert_eq!(
+        Projective::muln_affine_vartime(&[], &[]),
+        Projective::identity()
+    );
+
+    for t in 1..100 {
+        let mut points = Vec::with_capacity(t);
+        let mut scalars = Vec::with_capacity(t);
+
+        for _ in 0..t {
+            points.push(Projective::biased(rng));
+            scalars.push(Scalar::biased(rng));
+        }
+
+        let points = Projective::batch_normalize(&points);
+
+        let reference_val = points
+            .iter()
+            .zip(scalars.iter())
+            .fold(Projective::identity(), |accum, (p, s)| accum + p * s);
+
+        let computed = Projective::muln_affine_vartime(&points[..], &scalars[..]);
 
         assert_eq!(computed, reference_val);
     }

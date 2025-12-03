@@ -34,7 +34,7 @@ use ic_replicated_state::metadata_state::ApiBoundaryNodeEntry;
 use ic_replicated_state::{
     DroppedMessageMetrics, NetworkTopology, ReplicatedState, SubnetTopology,
 };
-use ic_types::batch::{Batch, BatchSummary, CanisterCyclesCostSchedule};
+use ic_types::batch::{Batch, BatchContent, BatchSummary, CanisterCyclesCostSchedule};
 use ic_types::crypto::{KeyPurpose, threshold_sig::ThresholdSigPublicKey};
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::registry::RegistryClientError;
@@ -1255,8 +1255,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
 impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<RegistryClient_> {
     #[instrument(skip_all)]
     fn process_batch(&self, batch: Batch) {
-        let _process_batch_start = Instant::now();
         let since = Instant::now();
+        let _process_batch_start = since;
 
         // Fetch the mutable tip from StateManager
         let mut state = match self
@@ -1357,6 +1357,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         if certification_scope == CertificationScope::Full {
             state_after_round.garbage_collect_canister_queues();
         }
+        state_after_round.metadata.subnet_metrics.num_canisters =
+            state_after_round.canister_states.len() as u64;
         let total_memory_usage = self.observe_canisters_memory_usage(&state_after_round);
         state_after_round
             .metadata
@@ -1442,7 +1444,10 @@ impl BatchProcessor for FakeBatchProcessorImpl {
         state.metadata.batch_time = time;
 
         // Get only ingress out of the batch_messages
-        let signed_ingress_msgs = batch.messages.signed_ingress_msgs;
+        let signed_ingress_msgs = match batch.content {
+            BatchContent::Data { batch_messages, .. } => batch_messages.signed_ingress_msgs,
+            BatchContent::Splitting { .. } => unimplemented!("Subnet splitting is not yet enabled"),
+        };
 
         // Treat all ingress messages as already executed.
         let all_ingress_execution_results = signed_ingress_msgs.into_iter().map(|ingress| {

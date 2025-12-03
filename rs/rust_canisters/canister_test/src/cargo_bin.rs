@@ -1,9 +1,11 @@
 use crate::canister::Wasm;
 use cargo_metadata::MetadataCommand;
 use escargot::CargoBuild;
+use std::collections::BTreeMap;
 use std::env;
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::time::SystemTime;
 
 /// This allows you to write multi canister tests by building multiple wasm
@@ -135,6 +137,40 @@ impl Project {
     /// We also ignore linker arguments during this compilation because they
     /// generally don't play well with the WASM linker.
     fn compile_cargo_bin(&self, package: Option<&str>, bin_name: &str, features: &[&str]) -> Wasm {
+        // Cache compiled canisters to avoid running `cargo build` repeatedly.
+        #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+        struct WasmKey {
+            package: Option<String>,
+            bin_name: String,
+            features: Vec<String>,
+        }
+        static COMPILED_CANISTERS: Mutex<BTreeMap<WasmKey, PathBuf>> = Mutex::new(BTreeMap::new());
+
+        let key = WasmKey {
+            package: package.map(|s| s.to_string()),
+            bin_name: bin_name.to_string(),
+            features: features.iter().map(|s| s.to_string()).collect(),
+        };
+        // There is a race condition here, but we don't really care.
+        let path = if let Some(path) = COMPILED_CANISTERS.lock().unwrap().get(&key) {
+            path.clone()
+        } else {
+            let path = self.compile_cargo_bin_impl(package, bin_name, features);
+            COMPILED_CANISTERS.lock().unwrap().insert(key, path.clone());
+            path
+        };
+
+        // Strip debug info to reduce Wasm binary size. We want to avoid unnecessary
+        // test failures due to oversized canister binaries.
+        Wasm::from_file(path).strip_debug_info()
+    }
+
+    fn compile_cargo_bin_impl(
+        &self,
+        package: Option<&str>,
+        bin_name: &str,
+        features: &[&str],
+    ) -> PathBuf {
         let since_start_secs = {
             let s = SystemTime::now();
             move || (SystemTime::now().duration_since(s).unwrap()).as_secs_f32()
@@ -178,8 +214,7 @@ impl Project {
             .run()
             .expect("Cargo failed to compile the wasm binary");
 
-        let wasm = Wasm::from_file(binary.path()).strip_debug_info();
         eprintln!("Compiling {} took {:.1} s", bin_name, since_start_secs());
-        wasm
+        binary.path().to_path_buf()
     }
 }

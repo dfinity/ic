@@ -1,5 +1,5 @@
 use crate::{
-    canister_manager::{types::AddCanisterChangeToHistory, uninstall_canister},
+    canister_manager::uninstall_canister,
     execution_environment::{
         ExecuteCanisterResult, ExecutionEnvironment, RoundInstructions, RoundLimits,
         as_num_instructions, as_round_instructions, execute_canister,
@@ -934,7 +934,6 @@ impl SchedulerImpl {
                         canister,
                         None, /* we're at the end of a round so no need to update round limits */
                         state_time,
-                        AddCanisterChangeToHistory::No,
                         Arc::clone(&self.fd_factory),
                     ));
                     canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
@@ -1564,10 +1563,10 @@ impl Scheduler for SchedulerImpl {
                         };
                     self.metrics
                         .canister_log_memory_usage_v2
-                        .observe(canister.system_state.canister_log.used_space() as f64);
+                        .observe(canister.system_state.canister_log.bytes_used() as f64);
                     self.metrics
                         .canister_log_memory_usage_v3
-                        .observe(canister.system_state.canister_log.used_space() as f64);
+                        .observe(canister.system_state.canister_log.bytes_used() as f64);
                     for memory_usage in canister.system_state.canister_log.take_delta_log_sizes() {
                         self.metrics
                             .canister_log_delta_memory_usage
