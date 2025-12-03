@@ -67,6 +67,7 @@ pub(crate) struct NodeRegistration {
     key_handler: Arc<dyn NodeRegistrationCrypto>,
     local_store: Arc<dyn LocalStore>,
     signer: Box<dyn Signer>,
+    display_qr_code: bool,
 }
 
 impl NodeRegistration {
@@ -117,6 +118,12 @@ impl NodeRegistration {
             key_handler,
             local_store,
             signer,
+            // Eventually, this value will be deduced from the `registration` config.
+            //
+            // After the More secure key management for node operators feature is
+            // fully complete and tested, this will be the default, and will be
+            // removed.
+            display_qr_code: cfg!(test),
         }
     }
 
@@ -145,7 +152,23 @@ impl NodeRegistration {
     async fn retry_register_node(&mut self) {
         let add_node_payload = self.assemble_add_node_message().await;
 
+        // Will contain information need for the node operator
+        // to approve the add node payload for onboarding.
+        let node_information_for_onboarding = format!(
+            "Node id: {}\nQR code:\n{}",
+            self.node_id,
+            match encode_as_qrcode(self.node_id) {
+                Ok(code) => code,
+                Err(e) => e.to_string(),
+            }
+        );
+
         while !self.is_node_registered().await {
+            if self.display_qr_code {
+                info!(self.log, "{}", node_information_for_onboarding);
+                UtilityCommand::notify_host(&node_information_for_onboarding, 1);
+            }
+
             let message = "Node registration not complete. Trying to register it".to_string();
             warn!(self.log, "{}", message);
             UtilityCommand::notify_host(&message, 1);
@@ -731,7 +754,7 @@ mod tests {
 "
         .to_string();
 
-        let normalize = |s: String| -> String {
+        let normalize = |s: &str| -> String {
             s.lines()
                 .map(|line| line.trim().to_string())
                 .filter(|line| !line.is_empty())
@@ -740,11 +763,11 @@ mod tests {
         };
 
         assert_eq!(
-            normalize(expected),
-            normalize(encoded),
+            normalize(&expected),
+            normalize(&encoded),
             "Expected something like:\n{}\nBut got something like:\n{}",
-            normalize(expected),
-            normalize(encoded)
+            normalize(&expected),
+            normalize(&encoded)
         );
     }
 

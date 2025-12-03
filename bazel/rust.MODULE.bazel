@@ -1191,9 +1191,9 @@ crate.spec(
     version = "^1.0.3",
 )
 crate.spec(
+    default_features = False,
     package = "qrcode",
     version = "0.14.1",
-    default_features = False,
 )
 crate.spec(
     default_features = False,
