@@ -1996,6 +1996,36 @@ test_point_operation!(muln, [g1, g2], {
     }
 });
 
+test_point_operation!(muln_affine, [g1, g2], {
+    let rng = &mut reproducible_rng();
+
+    assert_eq!(
+        Projective::muln_affine_vartime(&[], &[]),
+        Projective::identity()
+    );
+
+    for t in 1..100 {
+        let mut points = Vec::with_capacity(t);
+        let mut scalars = Vec::with_capacity(t);
+
+        for _ in 0..t {
+            points.push(Projective::biased(rng));
+            scalars.push(Scalar::biased(rng));
+        }
+
+        let points = Projective::batch_normalize(&points);
+
+        let reference_val = points
+            .iter()
+            .zip(scalars.iter())
+            .fold(Projective::identity(), |accum, (p, s)| accum + p * s);
+
+        let computed = Projective::muln_affine_vartime(&points[..], &scalars[..]);
+
+        assert_eq!(computed, reference_val);
+    }
+});
+
 test_point_operation!(batch_normalize, [g1, g2], {
     let rng = &mut reproducible_rng();
 

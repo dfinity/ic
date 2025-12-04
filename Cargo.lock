@@ -15090,6 +15090,7 @@ dependencies = [
  "ic-universal-canister",
  "ic-wasm-types",
  "maplit",
+ "num-traits",
  "prometheus 0.13.4",
  "strum 0.26.3",
  "strum_macros 0.26.4",
@@ -16126,7 +16127,6 @@ name = "ic_device"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "devicemapper",
  "gpt",
  "loopdev-3",
@@ -16701,7 +16701,6 @@ dependencies = [
  "clap 4.5.27",
  "partition_tools",
  "tempfile",
- "tokio",
 ]
 
 [[package]]
