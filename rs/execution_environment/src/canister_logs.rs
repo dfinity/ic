@@ -26,10 +26,21 @@ pub(crate) fn fetch_canister_logs(
     // Check if the sender has permission to access logs
     check_log_visibility_permission(&sender, canister.log_visibility(), canister.controllers())?;
 
-    let records = canister.system_state.canister_log.records();
-    let canister_log_records = match fetch_canister_logs_filter {
-        FlagStatus::Disabled => records.iter().cloned().collect(),
-        FlagStatus::Enabled => filter_records(&args, records)?,
+    let canister_log_records = if canister.system_state.log_memory_store.is_empty() {
+        // TODO: remove this branch when migration is done.
+        let records = canister.system_state.canister_log.records();
+        match fetch_canister_logs_filter {
+            FlagStatus::Disabled => records.iter().cloned().collect(),
+            FlagStatus::Enabled => filter_records(&args, records)?,
+        }
+    } else {
+        canister
+            .system_state
+            .log_memory_store
+            .records(match fetch_canister_logs_filter {
+                FlagStatus::Disabled => None,
+                FlagStatus::Enabled => args.filter,
+            })
     };
 
     Ok(FetchCanisterLogsResponse {

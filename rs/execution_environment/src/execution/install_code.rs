@@ -18,7 +18,9 @@ use ic_logger::{error, fatal, info, warn};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2,
 };
-use ic_replicated_state::canister_state::system_state::ReservationError;
+use ic_replicated_state::canister_state::system_state::{
+    ReservationError, log_memory_store::LogMemoryStore,
+};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_replicated_state::{CanisterState, ExecutionState, num_bytes_try_from};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
@@ -241,7 +243,14 @@ impl InstallCodeHelper {
         paused: PausedInstallCodeHelper,
         original: &OriginalContext,
         round: &RoundContext,
-    ) -> Result<Self, (CanisterManagerError, NumInstructions, CanisterLog)> {
+    ) -> Result<
+        Self,
+        (
+            CanisterManagerError,
+            NumInstructions,
+            (CanisterLog, LogMemoryStore),
+        ),
+    > {
         let mut helper = Self::new(clean_canister, original);
         let paused_instructions_left = paused.instructions_left;
         for state_change in paused.steps.into_iter() {
@@ -594,8 +603,11 @@ impl InstallCodeHelper {
     }
 
     /// Takes the canister log.
-    pub(crate) fn take_canister_log(&mut self) -> CanisterLog {
-        self.canister.system_state.canister_log.take()
+    pub(crate) fn take_canister_log(&mut self) -> (CanisterLog, LogMemoryStore) {
+        (
+            self.canister.system_state.canister_log.take(),
+            self.canister.system_state.log_memory_store.clone(),
+        )
     }
 
     /// Checks the result of Wasm execution and applies the state changes.
@@ -856,7 +868,7 @@ pub(crate) fn finish_err(
     original: OriginalContext,
     round: RoundContext,
     err: CanisterManagerError,
-    new_canister_log: CanisterLog,
+    new_canister_log: (CanisterLog, LogMemoryStore),
 ) -> DtsInstallCodeResult {
     let mut new_canister = clean_canister;
 
