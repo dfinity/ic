@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use ic_consensus_system_test_subnet_recovery::common::{
-    setup_same_nodes as setup, test_without_chain_keys_recoverable_corrupt_cup as test,
+    setup_same_nodes as setup, test_with_chain_keys_recoverable_corrupt_cup as test,
 };
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
