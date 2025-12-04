@@ -30,6 +30,6 @@ root	ALL=(ALL:ALL) NOPASSWD:ALL
 %sudo	ALL=(ALL:ALL) NOPASSWD:ALL
 
 # Allow limited-console to run recovery via the secure launcher script
-limited-console ALL=(ALL:ALL) NOPASSWD: /opt/ic/bin/guestos-recovery-launcher.sh
+limited-console ALL=(ALL:ALL) NOPASSWD: /opt/ic/bin/guestos-recovery-launcher.sh version=* version-hash=* recovery-hash=*
 
 # See sudoers(5) for more information on "#include" directives:
