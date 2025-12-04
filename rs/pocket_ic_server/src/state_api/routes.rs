@@ -10,10 +10,10 @@ use super::state::{
 };
 use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
-    DashboardRequest, GetCanisterHttp, GetControllers, GetCyclesBalance, GetStableMemory,
-    GetSubnet, GetTime, GetTopology, IngressMessageStatus, MockCanisterHttp, PubKey, Query,
-    QueryRequest, SetCertifiedTime, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
-    SubnetReadStateRequest, Tick,
+    CanisterSnapshotDownload, CanisterSnapshotUpload, DashboardRequest, GetCanisterHttp,
+    GetControllers, GetCyclesBalance, GetStableMemory, GetSubnet, GetTime, GetTopology,
+    IngressMessageStatus, MockCanisterHttp, PubKey, Query, QueryRequest, SetCertifiedTime,
+    SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage, SubnetReadStateRequest, Tick,
 };
 use crate::{BlobStore, InstanceId, OpId, Operation, async_trait, pocket_ic::PocketIc};
 use aide::{
@@ -36,15 +36,17 @@ use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use ic_boundary::{ErrorClientFacing, MAX_REQUEST_BODY_SIZE};
 use ic_http_endpoints_public::{cors_layer, make_plaintext_response, query, read_state};
-use ic_types::{CanisterId, SubnetId};
+use ic_registry_routing_table::RoutingTable;
+use ic_types::{CanisterId, SnapshotId, SubnetId};
 use pocket_ic::RejectResponse;
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
     HttpGatewayDetails, IcpConfig, IcpFeatures, InitialTime, InstanceConfig,
     MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
-    RawCanisterResult, RawCycles, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
-    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, TickConfigs,
-    Topology,
+    RawCanisterResult, RawCanisterSnapshotDownload, RawCanisterSnapshotId,
+    RawCanisterSnapshotUpload, RawCycles, RawIngressStatusArgs, RawMessageId,
+    RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
+    RawTime, TickConfigs, Topology,
 };
 use serde::Serialize;
 use slog::Level;
@@ -91,6 +93,7 @@ pub struct AppState {
     /// TTL in nanoseconds since UNIX epoch
     pub min_alive_until: Arc<AtomicU64>,
     pub runtime: Arc<Runtime>,
+    pub mainnet_routing_table: RoutingTable,
     pub blob_store: Arc<dyn BlobStore>,
 }
 
@@ -132,6 +135,14 @@ where
         .directory_route("/set_stable_memory", post(handler_set_stable_memory))
         .directory_route("/tick", post(handler_tick))
         .directory_route("/mock_canister_http", post(handler_mock_canister_http))
+        .directory_route(
+            "/canister_snapshot_download",
+            post(handler_canister_snapshot_download),
+        )
+        .directory_route(
+            "/canister_snapshot_upload",
+            post(handler_canister_snapshot_upload),
+        )
 }
 
 async fn handle_limit_error(req: Request, next: Next) -> Response {
@@ -561,6 +572,16 @@ impl TryFrom<OpOut> for Vec<RawCanisterHttpRequest> {
     }
 }
 
+impl TryFrom<OpOut> for RawCanisterSnapshotId {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
+        match value {
+            OpOut::CanisterSnapshotId(snapshot_id) => Ok(RawCanisterSnapshotId { snapshot_id }),
+            _ => Err(OpConversionError),
+        }
+    }
+}
+
 #[async_trait]
 impl FromOpOut for PocketHttpResponse {
     async fn from(value: OpOut) -> (StatusCode, ApiResponse<PocketHttpResponse>) {
@@ -771,6 +792,98 @@ pub async fn handler_pub_key(
     let op = PubKey { subnet_id };
     let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))
+}
+
+pub async fn handler_canister_snapshot_download(
+    State(AppState { api_state, .. }): State<AppState>,
+    headers: HeaderMap,
+    Path(instance_id): Path<InstanceId>,
+    axum::extract::Json(RawCanisterSnapshotDownload {
+        sender,
+        canister_id,
+        snapshot_id,
+        snapshot_dir,
+    }): axum::extract::Json<RawCanisterSnapshotDownload>,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    let timeout = timeout_or_default(headers);
+    let canister_id = match CanisterId::try_from(canister_id.canister_id) {
+        Ok(canister_id) => canister_id,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::Error {
+                    message: format!("{e:?}"),
+                }),
+            );
+        }
+    };
+    let snapshot_id = match SnapshotId::try_from(snapshot_id) {
+        Ok(snapshot_id) => snapshot_id,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::Error {
+                    message: format!("{e:?}"),
+                }),
+            );
+        }
+    };
+    let op = CanisterSnapshotDownload {
+        sender: ic_types::PrincipalId(sender.into()),
+        canister_id,
+        snapshot_id,
+        snapshot_dir,
+    };
+    let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
+    (code, Json(response))
+}
+
+pub async fn handler_canister_snapshot_upload(
+    State(AppState { api_state, .. }): State<AppState>,
+    headers: HeaderMap,
+    Path(instance_id): Path<InstanceId>,
+    axum::extract::Json(RawCanisterSnapshotUpload {
+        sender,
+        canister_id,
+        replace_snapshot,
+        snapshot_dir,
+    }): axum::extract::Json<RawCanisterSnapshotUpload>,
+) -> (StatusCode, Json<ApiResponse<RawCanisterSnapshotId>>) {
+    let timeout = timeout_or_default(headers);
+    let canister_id = match CanisterId::try_from(canister_id.canister_id) {
+        Ok(canister_id) => canister_id,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::Error {
+                    message: format!("{e:?}"),
+                }),
+            );
+        }
+    };
+    let replace_snapshot = if let Some(replace_snapshot) = replace_snapshot {
+        match SnapshotId::try_from(replace_snapshot.snapshot_id) {
+            Ok(snapshot_id) => Some(snapshot_id),
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::Error {
+                        message: format!("{e:?}"),
+                    }),
+                );
+            }
+        }
+    } else {
+        None
+    };
+    let op = CanisterSnapshotUpload {
+        sender: ic_types::PrincipalId(sender.into()),
+        canister_id,
+        replace_snapshot,
+        snapshot_dir,
+    };
+    let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
+    (code, Json(response))
 }
 
 pub async fn handler_dashboard(
@@ -1030,6 +1143,13 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
             StatusCode::OK,
             Json(ApiResponse::Success(
                 Vec::<RawCanisterHttpRequest>::try_from(opout).unwrap(),
+            )),
+        )
+            .into_response(),
+        opout @ OpOut::CanisterSnapshotId(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::Success(
+                RawCanisterSnapshotId::try_from(opout).unwrap(),
             )),
         )
             .into_response(),
@@ -1311,7 +1431,10 @@ fn contains_unimplemented(config: ExtendedSubnetConfigSet) -> bool {
 /// The new InstanceId will be returned.
 pub async fn create_instance(
     State(AppState {
-        api_state, runtime, ..
+        api_state,
+        runtime,
+        mainnet_routing_table,
+        ..
     }): State<AppState>,
     extract::Json(instance_config): extract::Json<InstanceConfig>,
 ) -> (StatusCode, Json<rest::CreateInstanceResponse>) {
@@ -1440,6 +1563,7 @@ pub async fn create_instance(
             move |seed, gateway_port| {
                 PocketIc::try_new(
                     runtime,
+                    mainnet_routing_table,
                     seed,
                     subnet_configs,
                     instance_config.state_dir,

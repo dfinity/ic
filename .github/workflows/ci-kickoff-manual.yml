@@ -11,8 +11,39 @@ on:
         description: 'The PR number' # this is used for posting comments with the CI link
         required: true
         default: ''
+      confirm:
+        description: 'Check this box to confirm you have reviewed the PR at the specified commit'
+        required: true
+        type: boolean
 
 jobs:
+  get-pr-base-ref:
+    name: Get PR Base Ref
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      base-ref: ${{ steps.fetch.outputs.base_ref }}
+    steps:
+      - name: Fetch PR Base Ref
+        id: fetch
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const prNumber = parseInt('${{ inputs.pr-number }}', 10);
+            if (isNaN(prNumber)) {
+              core.setFailed('Invalid pr-number input');
+              return;
+            }
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            core.info(`PR #${prNumber} base ref: ${pr.base.ref}`);
+            core.setOutput('base_ref', pr.base.ref);
+
   ci-main:
     name: CI Main
     uses: ./.github/workflows/ci-main.yml
@@ -25,10 +56,13 @@ jobs:
 
   ci-pr-only:
     name: CI PR Only
+    needs: [get-pr-base-ref]
     uses: ./.github/workflows/ci-pr-only.yml
     secrets: inherit
     with:
       commit-sha: ${{ inputs.commit-sha }}
+      base-ref: ${{ needs.get-pr-base-ref.outputs.base-ref }}
+      pr-number: ${{ inputs.pr-number }}
     permissions:
       contents: read
       pull-requests: write

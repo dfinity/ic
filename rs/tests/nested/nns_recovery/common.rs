@@ -38,7 +38,7 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use ic_types::ReplicaVersion;
-use nested::util::{get_host_boot_id_async, setup_ic_infrastructure};
+use nested::util::setup_ic_infrastructure;
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
 use slog::{Logger, info};
@@ -477,48 +477,7 @@ async fn simulate_node_provider_action(
     artifacts_hash: &str,
     upgrade_version: &ReplicaVersion,
 ) {
-    let host_boot_id_pre_reboot = get_host_boot_id_async(host).await;
-
-    // Trigger HostOS reboot and run guestos-recovery-upgrader
-    info!(
-        logger,
-        "Remounting /boot as read-write, updating boot_args file and rebooting host {}",
-        host.vm_name(),
-    );
-    let boot_args_command = format!(
-        "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={} version-hash={} recovery-hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot && sudo reboot",
-        &img_version, &img_version_hash, &artifacts_hash
-    );
-    host.block_on_bash_script_async(&boot_args_command)
-        .await
-        .expect("Failed to update boot_args file and reboot host");
-
-    // Wait for HostOS to reboot by checking that its boot ID changes
-    retry_with_msg_async!(
-        format!(
-            "Waiting until the host's boot ID changes from its pre reboot value of '{}'",
-            host_boot_id_pre_reboot
-        ),
-        &logger,
-        secs(5 * 60),
-        secs(5),
-        || async {
-            let host_boot_id = get_host_boot_id_async(host).await;
-            if host_boot_id != host_boot_id_pre_reboot {
-                info!(
-                    logger,
-                    "Host boot ID changed from '{}' to '{}'", host_boot_id_pre_reboot, host_boot_id
-                );
-                Ok(())
-            } else {
-                bail!("Host boot ID is still '{}'", host_boot_id_pre_reboot)
-            }
-        }
-    )
-    .await
-    .unwrap();
-
-    // Once HostOS is back up, spoof its DNS such that it downloads the GuestOS image from the UVM
+    // Spoof the HostOS DNS such that it downloads the GuestOS image from the UVM
     let server_ipv6 = impersonate_upstreams::get_upstreams_uvm_ipv6(env);
     info!(
         logger,
@@ -530,7 +489,24 @@ async fn simulate_node_provider_action(
         .await
         .expect("Failed to spoof HostOS DNS");
 
-    // Once GuestOS is launched, we still need to spoof its DNS for the same reason as HostOS
+    // Run guestos-recovery-upgrader directly, bypassing the limited-console manual recovery TUI
+    info!(
+        logger,
+        "Running guestos-recovery-upgrader on GuestOS {} with version={}, version-hash={}, recovery-hash={}",
+        host.vm_name(),
+        img_version,
+        img_version_hash,
+        artifacts_hash
+    );
+    let recovery_upgrader_command = format!(
+        "sudo -n /opt/ic/bin/guestos-recovery-upgrader.sh version={} version-hash={} recovery-hash={}",
+        img_version, img_version_hash, artifacts_hash
+    );
+    host.block_on_bash_script_async(&recovery_upgrader_command)
+        .await
+        .expect("Failed to run guestos-recovery-upgrader");
+
+    // Spoof the GuestOS DNS such that it downloads the recovery artifacts from the UVM
     let guest = host.get_guest_ssh().unwrap();
     info!(
         logger,
@@ -545,7 +521,7 @@ async fn simulate_node_provider_action(
     // Wait until the node has booted the expected GuestOS version
     retry_with_msg_async!(
         format!(
-            "Waiting until GuestOS {} reboots on the upgrade version {}",
+            "Waiting until GuestOS {} boots on the upgrade version {}",
             host.vm_name(),
             upgrade_version
         ),

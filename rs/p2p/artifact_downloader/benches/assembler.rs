@@ -22,6 +22,7 @@ use ic_types::{
     consensus::{
         Block, BlockPayload, BlockProposal, ConsensusMessage, DataPayload, Payload, Rank,
         dkg::{DkgDataPayload, DkgSummary},
+        idkg::IDkgMessage,
     },
     messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress},
     time::UNIX_EPOCH,
@@ -58,6 +59,7 @@ fn set_up_assembler(
 ) -> FetchStrippedConsensusArtifact {
     let mock_transport = MockTransport::new();
     let consensus_pool = MockValidatedPoolReader::<ConsensusMessage>::default();
+    let idkg_pool = MockValidatedPoolReader::<IDkgMessage>::default();
     let ingress_pool = FakeIngressPool {
         ingresses: ingress_messages
             .into_iter()
@@ -73,6 +75,7 @@ fn set_up_assembler(
         handle,
         Arc::new(RwLock::new(consensus_pool)),
         Arc::new(RwLock::new(ingress_pool)),
+        Arc::new(RwLock::new(idkg_pool)),
         Arc::new(mock_bouncer_factory),
         MetricsRegistry::new(),
         NODE_1,
@@ -135,6 +138,10 @@ fn disassemble(criterion: &mut Criterion) {
     for (ingresses_count, ingress_size) in [
         (1, 1),
         (1000, 1),
+        (1000, 4 * 1024),
+        (1000, 8 * 1024),
+        (1000, 16 * 1024),
+        (1000, 32 * 1024),
         (2, 2_000_000),
         (4, 2_000_000),
         (8, 2_000_000),
@@ -174,6 +181,10 @@ fn assemble(criterion: &mut Criterion) {
     for (ingresses_count, ingress_size) in [
         (1, 1),
         (1000, 1),
+        (1000, 4 * 1024),
+        (1000, 8 * 1024),
+        (1000, 16 * 1024),
+        (1000, 32 * 1024),
         (2, 2_000_000),
         (4, 2_000_000),
         (8, 2_000_000),

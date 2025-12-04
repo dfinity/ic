@@ -221,8 +221,7 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
 
     let g1 = &instance.g1_gen;
 
-    let y0_g1_tbl =
-        G1Projective::compute_mul2_tbl(&G1Projective::from(&y0), &G1Projective::from(g1));
+    let y0_g1_tbl = G1Projective::compute_mul2_affine_tbl(&y0, g1);
 
     let beta = Scalar::batch_random_array::<NUM_ZK_REPETITIONS, R>(rng);
     let bb = g1.batch_mul_array(&beta);
@@ -442,12 +441,7 @@ pub fn verify_chunking(
         let acc = Scalar::muln_vartime(&nizk.z_s, &xpowers);
 
         let rhs = G1Projective::muln_affine_vartime(&instance.public_keys, &nizk.z_r)
-            + G1Projective::mul2(
-                &G1Projective::from(&nizk.y0),
-                &nizk.z_beta,
-                &G1Projective::from(g1),
-                &acc,
-            );
+            + G1Projective::mul2_affine_vartime(&nizk.y0, &nizk.z_beta, g1, &acc);
 
         if lhs != rhs {
             return Err(ZkProofChunkingError::InvalidProof);
