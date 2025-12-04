@@ -642,11 +642,11 @@ mod tests {
             IDkgTranscriptId::new(SUBNET_2, transcript_id.id(), transcript_id.source_height());
         assert_ne!(transcript_id, dealing_2.content.transcript_id);
         // Both dealing have the same dealer index
-        let node_indes = 1;
+        let node_index = 1;
 
         let idkg = fake_idkg_payload_with_dealings(vec![
-            (dealing_1.clone(), node_indes),
-            (dealing_2.clone(), node_indes),
+            (dealing_1.clone(), node_index),
+            (dealing_2.clone(), node_index),
         ]);
         let block_proposal = fake_block_proposal_with_ingresses_and_idkg(vec![], Some(idkg), false);
         let consensus_message = ConsensusMessage::BlockProposal(block_proposal.clone());
@@ -662,8 +662,8 @@ mod tests {
 
         // insert back the missing messages
         for message in [
-            StrippedMessage::IDkgDealing(dealing_1.message_id(), node_indes, dealing_1),
-            StrippedMessage::IDkgDealing(dealing_2.message_id(), node_indes, dealing_2),
+            StrippedMessage::IDkgDealing(dealing_1.message_id(), node_index, dealing_1),
+            StrippedMessage::IDkgDealing(dealing_2.message_id(), node_index, dealing_2),
         ] {
             assembler.try_insert_stripped_message(message).unwrap();
         }
