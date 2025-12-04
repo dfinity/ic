@@ -181,6 +181,13 @@ pub struct Args {
     /// If enabled, reduces memory usage but may impact performance.
     #[arg(long = "flush-cache-shrink-mem", default_value = "false")]
     pub flush_cache_shrink_mem: bool,
+
+    /// Batch size for account balance synchronization. This controls how many blocks
+    /// are loaded into memory at once when updating account balances.
+    /// Lower values reduce memory usage but may slow down sync.
+    /// Default is 100000 blocks per batch.
+    #[arg(long = "balance-sync-batch-size")]
+    pub balance_sync_batch_size: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -197,6 +204,7 @@ pub struct ParsedConfig {
     pub watchdog_timeout_seconds: u64,
     pub sqlite_max_cache_kb: Option<i64>,
     pub flush_cache_shrink_mem: bool,
+    pub balance_sync_batch_size: Option<u64>,
 }
 
 impl ParsedConfig {
@@ -243,6 +251,7 @@ impl ParsedConfig {
             watchdog_timeout_seconds: args.watchdog_timeout_seconds,
             sqlite_max_cache_kb: args.sqlite_max_cache_kb,
             flush_cache_shrink_mem: args.flush_cache_shrink_mem,
+            balance_sync_batch_size: args.balance_sync_batch_size,
         })
     }
 
@@ -322,6 +331,7 @@ mod tests {
             watchdog_timeout_seconds: 60,
             sqlite_max_cache_kb: None,
             flush_cache_shrink_mem: false,
+            balance_sync_batch_size: Some(100000),
         }
     }
 

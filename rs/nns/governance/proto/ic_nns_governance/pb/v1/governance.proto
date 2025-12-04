@@ -2632,24 +2632,24 @@ message FinalizeDisburseMaturity {
 }
 
 // An ICRC-3-like value.
-message Value {
+message SelfDescribingValue {
   oneof value {
     bytes blob = 1;
     string text = 2;
     // nat/int are stored as bytes since candid Nat/Int does not have equivalent protobuf types.
     bytes nat = 3;
     bytes int = 4;
-    ValueArray array = 5;
-    ValueMap map = 6;
+    SelfDescribingValueArray array = 5;
+    SelfDescribingValueMap map = 6;
   }
 }
 
-message ValueArray {
-  repeated Value values = 1;
+message SelfDescribingValueArray {
+  repeated SelfDescribingValue values = 1;
 }
 
-message ValueMap {
-  map<string, Value> values = 1;
+message SelfDescribingValueMap {
+  map<string, SelfDescribingValue> values = 1;
 }
 
 // Proposal action that is self-describing. It can be understood without the schema of a specific
@@ -2657,5 +2657,5 @@ message ValueMap {
 message SelfDescribingProposalAction {
   string type_name = 1;
   string type_description = 2;
-  Value value = 3;
+  SelfDescribingValue value = 3;
 }

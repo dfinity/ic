@@ -8,7 +8,7 @@ proc-macro = true
 
 [dependencies]
 quote = "1"
-syn = { version = "1.0.109", features = ["parsing", "derive"] }
+syn = { workspace = true }
 
 [dev-dependencies]
 candid = { workspace = true }

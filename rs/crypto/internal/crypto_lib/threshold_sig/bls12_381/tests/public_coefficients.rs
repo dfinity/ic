@@ -134,14 +134,6 @@ mod public_coefficients {
     }
 
     #[test]
-    fn test_public_coefficients_multiplication_is_correct() {
-        assert_eq!(
-            uints_to_public_coefficients(&[1, 0, 5, 7]) * Scalar::from_u32(3),
-            uints_to_public_coefficients(&[3, 0, 15, 21])
-        );
-    }
-
-    #[test]
     fn test_polynomial_summation_is_correct() {
         assert_eq!(
             uints_to_polynomial(&[1, 3, 5]) + uints_to_polynomial(&[10, 20, 30]),

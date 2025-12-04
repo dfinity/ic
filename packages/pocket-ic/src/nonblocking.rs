@@ -515,7 +515,7 @@ impl PocketIc {
                 .unwrap()
             }
             CreateHttpGatewayResponse::Error { message } => {
-                panic!("Failed to crate http gateway: {message}")
+                panic!("Failed to create http gateway: {message}")
             }
         }
     }

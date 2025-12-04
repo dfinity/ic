@@ -13,6 +13,7 @@ use helpers::{
     get_node_record_pb, get_proposer_and_sender, get_subnet_ids, get_subnet_record_with_details,
     parse_proposal_url, shortened_pid_string, shortened_subnet_string,
 };
+use ic_admin::get_routing_table;
 use ic_btc_interface::{Fees, Flag, SetConfigRequest};
 use ic_canister_client::{Agent, Sender};
 use ic_canister_client_sender::SigKeys;
@@ -79,9 +80,7 @@ use ic_protobuf::registry::{
     node_rewards::v2::{NodeRewardRate, UpdateNodeRewardsTableProposalPayload},
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
-    routing_table::v1::{
-        CanisterMigrations, RoutingTable, routing_table::Entry as RoutingTableEntry,
-    },
+    routing_table::v1::CanisterMigrations,
     subnet::v1::{SubnetListRecord, SubnetRecord as SubnetRecordProto},
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
@@ -91,11 +90,11 @@ use ic_registry_client_helpers::{
     ecdsa_keys::EcdsaKeysRegistry, hostos_version::HostosRegistry, subnet::SubnetRegistry,
 };
 use ic_registry_keys::{
-    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, CANISTER_RANGES_PREFIX, FirewallRulesScope,
-    NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
-    ROOT_SUBNET_ID_KEY, get_node_operator_id_from_record_key, get_node_record_node_id,
-    is_node_operator_record_key, is_node_record_key, make_api_boundary_node_record_key,
-    make_blessed_replica_versions_key, make_canister_migrations_record_key, make_crypto_node_key,
+    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, FirewallRulesScope, NODE_OPERATOR_RECORD_KEY_PREFIX,
+    NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
+    get_node_operator_id_from_record_key, get_node_record_node_id, is_node_operator_record_key,
+    is_node_record_key, make_api_boundary_node_record_key, make_blessed_replica_versions_key,
+    make_canister_migrations_record_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
@@ -117,7 +116,6 @@ use ic_sns_wasm::pb::v1::{
 use ic_types::{
     CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
     crypto::{KeyPurpose, threshold_sig::ThresholdSigPublicKey},
-    subnet_id_try_from_protobuf,
 };
 use indexmap::IndexMap;
 use itertools::izip;
@@ -4255,7 +4253,13 @@ async fn main() {
             .await;
         }
         SubCommand::GetRoutingTable => {
-            print_routing_table(reachable_nns_urls);
+            let (routing_table, version) = get_routing_table(reachable_nns_urls);
+            if opts.json {
+                let routing_table_json = serde_json::to_string_pretty(&routing_table).unwrap();
+                println!("{}", routing_table_json);
+            } else {
+                print_routing_table(&routing_table, version);
+            }
         }
         SubCommand::GetEcdsaSigningSubnets => {
             let registry_client = make_registry_client(
@@ -6012,80 +6016,22 @@ fn get_api_boundary_node_ids(nns_url: Vec<Url>) -> Vec<String> {
         .collect::<Vec<_>>()
 }
 
-fn print_routing_table(nns_urls: Vec<Url>) -> Vec<(SubnetId, CanisterIdRange)> {
-    let registry_client = RegistryClientImpl::new(
-        Arc::new(NnsDataProvider::new(
-            tokio::runtime::Handle::current(),
-            nns_urls,
-        )),
-        None,
-    );
+fn print_routing_table(routing_table: &Vec<(CanisterIdRange, SubnetId)>, version: RegistryVersion) {
+    println!("Routing table. Most recent version is {version}");
 
-    registry_client
-        .try_polling_latest_version(usize::MAX)
-        .unwrap();
-
-    let latest_version = registry_client.get_latest_version();
-
-    println!("Routing table. Most recent version is {latest_version}");
-
-    let keys = registry_client
-        .get_key_family(CANISTER_RANGES_PREFIX, latest_version)
-        .unwrap();
-
-    for routing_table_key in keys.iter() {
-        let routing_table_value = registry_client
-            .get_versioned_value(routing_table_key, latest_version)
-            .unwrap()
-            .value
-            .unwrap();
-        let routing_table = RoutingTable::decode(&routing_table_value[..]).unwrap();
-
-        for RoutingTableEntry { range, subnet_id } in routing_table.entries {
-            let subnet_id = subnet_id_try_from_protobuf(
-                subnet_id.expect("subnet_id is missing from routing table entry"),
-            )
-            .unwrap();
-            println!("Subnet: {subnet_id}");
-            let range = CanisterIdRange::try_from(
-                range.expect("range is missing from routing table entry"),
-            )
-            .expect("failed to parse range");
-            println!(
-                "    Range start: {} (0x{})",
-                range.start,
-                hex::encode(range.start.get_ref().as_slice())
-            );
-            println!(
-                "    Range end:   {} (0x{})",
-                range.end,
-                hex::encode(range.end.get_ref().as_slice())
-            );
-        }
+    for (range, subnet_id) in routing_table {
+        println!("Subnet: {subnet_id}");
+        println!(
+            "    Range start: {} (0x{})",
+            range.start,
+            hex::encode(range.start.get_ref().as_slice())
+        );
+        println!(
+            "    Range end:   {} (0x{})",
+            range.end,
+            hex::encode(range.end.get_ref().as_slice())
+        );
     }
-
-    keys.iter()
-        .flat_map(|key| {
-            let value = registry_client
-                .get_versioned_value(key, latest_version)
-                .unwrap()
-                .value
-                .unwrap();
-            let routing_table = RoutingTable::decode(&value[..]).unwrap();
-            routing_table.entries
-        })
-        .map(|RoutingTableEntry { range, subnet_id }| {
-            let subnet_id = subnet_id_try_from_protobuf(
-                subnet_id.expect("subnet_id is missing from routing table entry"),
-            )
-            .unwrap();
-            let range = CanisterIdRange::try_from(
-                range.expect("range is missing from routing table entry"),
-            )
-            .expect("failed to parse range");
-            (subnet_id, range)
-        })
-        .collect()
 }
 
 /// Writes a threshold signing public key to the given path.

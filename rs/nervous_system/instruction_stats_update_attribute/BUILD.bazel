@@ -6,7 +6,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "@crate_index//:quote",
-    "@crate_index//:syn-1.0.109",
+    "@crate_index//:syn",
 ]
 
 DEV_DEPENDENCIES = [

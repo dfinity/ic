@@ -4513,20 +4513,20 @@ pub struct NeuronVote {
 }
 
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
-pub enum Value {
+pub enum SelfDescribingValue {
     Blob(Vec<u8>),
     Text(String),
     Nat(Nat),
     Int(Int),
-    Array(Vec<Value>),
-    Map(HashMap<String, Value>),
+    Array(Vec<SelfDescribingValue>),
+    Map(HashMap<String, SelfDescribingValue>),
 }
 
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
 pub struct SelfDescribingProposalAction {
     pub type_name: Option<String>,
     pub type_description: Option<String>,
-    pub value: Option<Value>,
+    pub value: Option<SelfDescribingValue>,
 }
 
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]

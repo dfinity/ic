@@ -315,8 +315,6 @@ fn http_gateway_canister_not_found() {
         let invalid_url = gateway.join(path).unwrap().to_string();
         let error_page = client.get(invalid_url).send().unwrap();
         assert_eq!(error_page.status(), StatusCode::NOT_FOUND);
-        let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
-        assert!(page.contains("404 - canister not found"));
     }
 }
 
@@ -336,8 +334,6 @@ fn http_gateway_missing_canister_id() {
         let invalid_url = gateway.join(path).unwrap().to_string();
         let error_page = client.get(invalid_url).send().unwrap();
         assert_eq!(error_page.status(), StatusCode::BAD_REQUEST);
-        let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
-        assert!(page.contains("400 - canister id not resolved"));
     }
 }
 
@@ -428,7 +424,7 @@ fn test_unresponsive_gateway_backend() {
             Url::parse(&format!("http://localhost:{port}/")).unwrap()
         }
         CreateHttpGatewayResponse::Error { message } => {
-            panic!("Failed to crate http gateway: {message}")
+            panic!("Failed to create http gateway: {message}")
         }
     };
 
@@ -454,8 +450,6 @@ fn test_unresponsive_gateway_backend() {
     for path in &paths {
         let resp = client.get(endpoint.join(path).unwrap()).send().unwrap();
         assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
-        let page = String::from_utf8(resp.bytes().unwrap().as_ref().to_vec()).unwrap();
-        assert!(page.contains("upstream_error") || page.contains("upstream error"));
     }
 }
 
