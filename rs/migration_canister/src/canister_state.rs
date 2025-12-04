@@ -43,13 +43,8 @@ pub fn migrations_disabled() -> bool {
     DISABLED.with_borrow(|x| *x.get())
 }
 
-/// Excludes failed requests.
-pub fn num_active_requests() -> u64 {
-    REQUESTS.with_borrow(|req| {
-        req.iter()
-            .filter(|x| !matches!(x.key(), RequestState::Failed { .. }))
-            .count() as u64
-    })
+pub fn num_requests() -> u64 {
+    REQUESTS.with_borrow(|req| req.len())
 }
 
 pub fn set_allowlist(arg: Option<Vec<Principal>>) {
