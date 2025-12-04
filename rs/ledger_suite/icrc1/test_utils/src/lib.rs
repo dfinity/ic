@@ -153,7 +153,7 @@ fn operation_strategy<Tokens: TokensType>(
             .prop_map(move |(caller, fee_collector)| Operation::FeeCollector {
                 fee_collector,
                 caller,
-            });            
+            });
 
         prop_oneof![
             mint_strategy,
