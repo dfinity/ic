@@ -254,7 +254,6 @@ pub fn test_with_chain_keys(env: TestEnv) {
     // not be able to see the recovery CUP in the registry
     let corrupt_cup =
         if env.topology_snapshot().unassigned_nodes().count() == APP_NODES + UNASSIGNED_NODES {
-            // TODO: in that case, also test that changes in the registry are not picked up
             CupCorruption::CorruptedIncludingInvalidNiDkgId
         } else {
             CupCorruption::NotCorrupted
