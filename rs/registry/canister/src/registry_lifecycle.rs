@@ -114,8 +114,8 @@ fn fix_node_operators_corrupted(registry: &Registry) -> Vec<RegistryMutation> {
 
     match create_node_operator_mutation(
         "ujq4k-55epc-pg2bt-jt2f5-6vaq3-diru7-edprm-42rd2-j7zzd-yjaai-2qe",
-        // Dummy mutation that should just increase the version and get the updates
-        |_record, _| {},
+        // Dummy mutation that should just increase the registry version
+        |_, _| {},
     ) {
         Ok(mutation) => mutations.push(mutation),
         Err(e) => ic_cdk::println!("Error creating mutation for ujq4k: {}", e),
@@ -138,7 +138,8 @@ fn fix_node_operators_corrupted(registry: &Registry) -> Vec<RegistryMutation> {
 
     match create_node_operator_mutation(
         "spsu4-5hl4t-bfubp-qvoko-jprw4-wt7ou-nlnbk-gb5ib-aqnoo-g4gl6-kae",
-        |record, _| {},
+        // Dummy mutation that should just increase the registry version
+        |_, _| {},
     ) {
         Ok(mutation) => mutations.push(mutation),
         Err(e) => ic_cdk::println!("Error creating mutation for spsu4: {}", e),
