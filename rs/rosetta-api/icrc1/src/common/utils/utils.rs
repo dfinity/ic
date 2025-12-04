@@ -283,7 +283,7 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                     expected_allowance: self.expected_allowance,
                     expires_at: self.expires_at,
                 }},
-                IcrcOperation::FeeCollector => crate::common::storage::types::IcrcOperation::FeeCollector{                    
+                IcrcOperation::FeeCollector => crate::common::storage::types::IcrcOperation::FeeCollector{
                     fee_collector: self.fee_collector,
                     caller: self.caller,
                 },
@@ -367,7 +367,7 @@ pub fn rosetta_core_operations_to_icrc1_operation(
             OperationType::Fee => {
                 let fee = operation
                     .amount
-                    .context("Amount field needs to be populated for Approve operation")?;            
+                    .context("Amount field needs to be populated for Approve operation")?;
                 // The fee inside of icrc1 operation is always the fee set by the user
                 let icrc1_operation_fee_set = match operation.metadata {
                     Some(metadata) => {
@@ -394,14 +394,15 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                 icrc1_operation_builder.with_spender_accountidentifier(spender)
             }
             OperationType::FeeCollector => {
-                let metadata = operation.metadata.context("metadata should be set for fee collector operations")?;
+                let metadata = operation
+                    .metadata
+                    .context("metadata should be set for fee collector operations")?;
                 let fc_metadata = FeeCollectorMetadata::try_from(metadata)?;
                 icrc1_operation_builder
                     .with_icrc_operation(IcrcOperation::FeeCollector)
                     .with_fee_collector(fc_metadata.fee_collector)
-                    .with_caller(fc_metadata.caller)
-                         
-            }            
+                    .with_caller(fc_metadata.caller)                         
+            }
         };
     }
     icrc1_operation_builder.build()
@@ -651,7 +652,7 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                     }
                     .try_into()?,
                 ),
-            ));            
+            ));
         }
     };
 
