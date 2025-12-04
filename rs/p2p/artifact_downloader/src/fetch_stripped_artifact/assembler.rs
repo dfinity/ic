@@ -637,11 +637,11 @@ mod tests {
         let dealing_1 = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_1);
         let transcript_id = dealing_1.idkg_dealing().transcript_id;
         let mut dealing_2 = dealing_1.clone();
-        // Both dealing have the same transcript id, apart from the subnet id
+        // Both dealings have the same transcript id, apart from the subnet id
         dealing_2.content.transcript_id =
             IDkgTranscriptId::new(SUBNET_2, transcript_id.id(), transcript_id.source_height());
         assert_ne!(transcript_id, dealing_2.content.transcript_id);
-        // Both dealing have the same dealer index
+        // Both dealings have the same dealer index
         let node_index = 1;
 
         let idkg = fake_idkg_payload_with_dealings(vec![
@@ -781,7 +781,7 @@ mod tests {
         let dealing_1 = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_1);
         let transcript_id_1 = dealing_1.idkg_dealing().transcript_id;
         let mut dealing_2 = dealing_1.clone();
-        // Both dealing have the same transcript id, apart from the subnet id
+        // Both dealings have the same transcript id, apart from the subnet id
         let transcript_id_2 = IDkgTranscriptId::new(
             SUBNET_2,
             transcript_id_1.id(),
