@@ -494,7 +494,7 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                 ),
                 DelegationTest::accept(
                     "One delegation with the canister ID and one with no target restriction",
-                    vec![vec![], vec![canister_id]],
+                    vec![vec![canister_id], vec![]],
                 ),
                 DelegationTest::accept(
                     "Delegation with different targets (10), including the canister ID",
@@ -1270,7 +1270,7 @@ async fn perform_read_state_with_delegations(
 
         let _response = send_request(
             /*api_ver=*/ 3,
-            &test,
+            test,
             "call",
             content,
             sender.public_key_der(),
