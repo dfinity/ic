@@ -713,7 +713,9 @@ mod test {
 
         state = controller_recovery(&mut ic00, state, canister_id, new_controllers.clone()).await;
         assert_eq!(state, ControllerRecoveryState::TotalNumChangesBefore(0));
-        state = controller_recovery(&mut ic00, state, canister_id, new_controllers).await;
+        state = controller_recovery(&mut ic00, state, canister_id, new_controllers.clone()).await;
         assert_eq!(state, ControllerRecoveryState::Done);
+
+        assert_eq!(*ic00.controllers.get(&canister_id).unwrap(), new_controllers);
     }
 }
