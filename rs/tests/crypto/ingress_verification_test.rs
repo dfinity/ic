@@ -23,7 +23,7 @@ use ic_types::{CanisterId, PrincipalId, Time};
 use ic_universal_canister::wasm;
 use rand::{CryptoRng, Rng, SeedableRng, rngs::StdRng};
 use reqwest::{StatusCode, Url};
-use slog::{debug, info};
+use slog::debug;
 
 const ALL_QUERY_API_VERSIONS: &[usize] = &[2, 3];
 const ALL_UPDATE_API_VERSIONS: &[usize] = &[2, 3, 4];
@@ -55,7 +55,6 @@ pub fn setup(env: TestEnv) {
 
 #[derive(Clone, Debug)]
 struct TestInformation {
-    api_ver: usize,
     url: Url,
     canister_id: CanisterId,
 }
@@ -376,7 +375,6 @@ pub fn requests_with_delegations(env: TestEnv) {
             );
 
             let mut test_info = TestInformation {
-                api_ver: 0,
                 url: node_url,
                 canister_id: canister_id_from_principal(&canister.canister_id()),
             };
@@ -394,9 +392,9 @@ pub fn requests_with_delegations(env: TestEnv) {
                 let sender = &identities[0];
                 let signer = &identities[identities.len() - 1];
 
-                for api_ver in ALL_UPDATE_API_VERSIONS {
-                    test_info.api_ver = *api_ver;
+                for &api_ver in ALL_UPDATE_API_VERSIONS {
                     let update_result = perform_update_call_with_delegations(
+                        api_ver,
                         &test_info,
                         sender,
                         signer,
@@ -405,16 +403,16 @@ pub fn requests_with_delegations(env: TestEnv) {
                     .await;
 
                     if delegation_count <= 20 {
-                        let expected_update = if test_info.api_ver == 2 { 202 } else { 200 };
+                        let expected_update = if api_ver == 2 { 202 } else { 200 };
                         assert_eq!(update_result, expected_update);
                     } else {
                         assert_eq!(update_result, 400);
                     }
                 }
 
-                for api_ver in ALL_QUERY_API_VERSIONS {
-                    test_info.api_ver = *api_ver;
+                for &api_ver in ALL_QUERY_API_VERSIONS {
                     let query_result = perform_query_call_with_delegations(
+                        api_ver,
                         &test_info,
                         sender,
                         signer,
@@ -457,7 +455,6 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
             let canister_id = canister_id_from_principal(&canister.canister_id());
 
             let mut test_info = TestInformation {
-                api_ver: 0,
                 url: node_url,
                 canister_id,
             };
@@ -563,10 +560,9 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                 let sender = &identities[0];
                 let signer = &identities[identities.len() - 1];
 
-                for api_ver in ALL_QUERY_API_VERSIONS {
-                    test_info.api_ver = *api_ver;
+                for &api_ver in ALL_QUERY_API_VERSIONS {
                     let query_result =
-                        perform_query_call_with_delegations(&test_info, sender, signer, &delegations)
+                        perform_query_call_with_delegations(api_ver, &test_info, sender, signer, &delegations)
                         .await;
 
                     if scenario.expect_success {
@@ -576,10 +572,9 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                     }
                 }
 
-                for api_ver in ALL_READ_STATE_API_VERSIONS {
-                    test_info.api_ver = *api_ver;
+                for &api_ver in ALL_READ_STATE_API_VERSIONS {
                     let read_state_result =
-                        perform_read_state_with_delegations(&test_info, sender, signer, &delegations)
+                        perform_read_state_with_delegations(api_ver, &test_info, sender, signer, &delegations)
                         .await;
 
                     if scenario.expect_success {
@@ -590,10 +585,9 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                     }
                 }
 
-                for api_ver in ALL_UPDATE_API_VERSIONS {
-                    test_info.api_ver = *api_ver;
+                for &api_ver in ALL_UPDATE_API_VERSIONS {
                     let update_result =
-                        perform_update_call_with_delegations(&test_info, sender, signer, &delegations)
+                        perform_update_call_with_delegations(api_ver, &test_info, sender, signer, &delegations)
                         .await;
 
                     if scenario.expect_success {
@@ -632,7 +626,6 @@ pub fn requests_with_delegation_loop(env: TestEnv) {
             let canister_id = canister_id_from_principal(&canister.canister_id());
 
             let mut test_info = TestInformation {
-                api_ver: 0,
                 url: node_url,
                 canister_id,
             };
@@ -654,9 +647,9 @@ pub fn requests_with_delegation_loop(env: TestEnv) {
                 let sender = &identities.first().unwrap();
                 let signer = &identities.last().unwrap();
 
-                for api_ver in ALL_QUERY_API_VERSIONS {
-                    test_info.api_ver = *api_ver;
+                for &api_ver in ALL_QUERY_API_VERSIONS {
                     let query_result = perform_query_call_with_delegations(
+                        api_ver,
                         &test_info,
                         sender,
                         signer,
@@ -666,9 +659,9 @@ pub fn requests_with_delegation_loop(env: TestEnv) {
                     assert_eq!(query_result, 400);
                 }
 
-                for api_ver in ALL_UPDATE_API_VERSIONS {
-                    test_info.api_ver = *api_ver;
+                for &api_ver in ALL_UPDATE_API_VERSIONS {
                     let update_result = perform_update_call_with_delegations(
+                        api_ver,
                         &test_info,
                         sender,
                         signer,
@@ -709,7 +702,6 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
             let mgmt_canister = canister_id_from_principal(&Principal::management_canister());
 
             let mut test_info = TestInformation {
-                api_ver: 0,
                 url: node_url,
                 canister_id: mgmt_canister,
             };
@@ -754,7 +746,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                 let sender = &identities[0];
                 let signer = &identities[identities.len() - 1];
 
-                for api_ver in ALL_UPDATE_API_VERSIONS {
+                for &api_ver in ALL_UPDATE_API_VERSIONS {
                     // Test behavior with update
                     let content = HttpCallContent::Call {
                         update: HttpCanisterUpdate {
@@ -774,8 +766,8 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
 
                     let signature = signer.sign_update(&content);
 
-                    test_info.api_ver = *api_ver;
                     let update_status = send_request(
+                        api_ver,
                         &test_info,
                         "call",
                         content,
@@ -793,7 +785,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                     }
                 }
 
-                for api_ver in ALL_QUERY_API_VERSIONS {
+                for &api_ver in ALL_QUERY_API_VERSIONS {
                     // Test behavior with query
                     let content = HttpQueryContent::Query {
                         query: HttpUserQuery {
@@ -813,8 +805,8 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
 
                     let signature = signer.sign_query(&content);
 
-                    test_info.api_ver = *api_ver;
                     let query = send_request(
+                        api_ver,
                         &test_info,
                         "query",
                         content,
@@ -858,7 +850,6 @@ pub fn requests_with_invalid_expiry(env: TestEnv) {
             );
 
             let mut test_info = TestInformation {
-                api_ver: 999, // To be set later...
                 url: node_url,
                 canister_id: canister_id_from_principal(&canister.canister_id()),
             };
@@ -869,26 +860,23 @@ pub fn requests_with_invalid_expiry(env: TestEnv) {
             let id = GenericIdentity::new(id_type, rng);
 
             for expiry in [0_u64, u64::MAX] {
-                for api_ver in [2, 3] {
-                    test_info.api_ver = api_ver;
+                for &api_ver in ALL_QUERY_API_VERSIONS {
                     assert_eq!(
-                        perform_query_with_expiry(&test_info, &id, &id, expiry).await,
+                        perform_query_with_expiry(api_ver, &test_info, &id, &id, expiry).await,
                         400,
                         "query should be rejected for expiry={expiry} and api_ver={api_ver}"
                     );
                 }
-                for api_ver in [2, 3, 4] {
-                    test_info.api_ver = api_ver;
+                for &api_ver in ALL_UPDATE_API_VERSIONS {
                     assert_eq!(
-                        perform_update_with_expiry(&test_info, &id, &id, expiry).await,
+                        perform_update_with_expiry(api_ver, &test_info, &id, &id, expiry).await,
                         400,
                         "update should be rejected for expiry={expiry} and api_ver={api_ver}"
                     );
                 }
-                for api_ver in [2, 3] {
-                    test_info.api_ver = api_ver;
+                for &api_ver in ALL_READ_STATE_API_VERSIONS {
                     assert_eq!(
-                        perform_read_state_with_expiry(&test_info, &id, &id, expiry).await,
+                        perform_read_state_with_expiry(api_ver, &test_info, &id, &id, expiry).await,
                         400,
                         "read_state should be rejected for expiry={expiry} and api_ver={api_ver}"
                     );
@@ -922,31 +910,27 @@ pub fn requests_with_canister_signature(env: TestEnv) {
             for seed in [vec![], random_n_bytes(rng.gen_range(1..=32), rng)] {
                 // Single canister identity for sender and signer, no delegations
                 let id = GenericIdentity::new_canister(CanisterSigner::new(&c1, seed.clone()));
-                let mut test_info = TestInformation {
-                    api_ver: 999, // To be set later...
+                let test_info = TestInformation {
                     url: node_url.clone(),
                     canister_id: canister_id_from_principal(&c1.canister_id()),
                 };
-                for api_ver in ALL_QUERY_API_VERSIONS {
-                    test_info.api_ver = *api_ver;
+                for &api_ver in ALL_QUERY_API_VERSIONS {
                     assert_eq!(
-                        perform_query_call_with_delegations(&test_info, &id, &id, &[]).await,
+                        perform_query_call_with_delegations(api_ver, &test_info, &id, &id, &[]).await,
                         200,
                         "query should succeed for api_ver={api_ver} and seed={seed:?}"
                     );
                 }
                 for &api_ver in ALL_UPDATE_API_VERSIONS {
-                    test_info.api_ver = api_ver;
                     assert_eq!(
-                        perform_update_call_with_delegations(&test_info, &id, &id, &[]).await,
+                        perform_update_call_with_delegations(api_ver, &test_info, &id, &id, &[]).await,
                         if api_ver == 2 { 202 } else { 200 },
                         "update should succeed for api_ver={api_ver} and seed={seed:?}"
                     );
                 }
-                for api_ver in ALL_READ_STATE_API_VERSIONS {
-                    test_info.api_ver = *api_ver;
+                for &api_ver in ALL_READ_STATE_API_VERSIONS {
                     assert_eq!(
-                        perform_read_state_call_with_delegations(&test_info, &id, &id, &[]).await,
+                        perform_read_state_call_with_delegations(api_ver, &test_info, &id, &id, &[]).await,
                         200,
                         "read_state should succeed for api_ver={api_ver} and seed={seed:?}"
                     );
@@ -971,31 +955,27 @@ pub fn requests_with_canister_signature(env: TestEnv) {
                 GenericIdentity::new_canister(CanisterSigner::new(&c1, wrong_seed.to_vec())),
                 GenericIdentity::new_canister(CanisterSigner::new(&c2, seed.to_vec())), // wrong canister
             ] {
-                let mut test_info = TestInformation {
-                    api_ver: 999, // To be set later...
+                let test_info = TestInformation {
                     url: node_url.clone(),
                     canister_id: canister_id_from_principal(&c1.canister_id()),
                 };
-                for api_ver in ALL_QUERY_API_VERSIONS {
-                    test_info.api_ver = *api_ver;
+                for &api_ver in ALL_QUERY_API_VERSIONS {
                     assert_eq!(
-                        perform_query_call_with_delegations(&test_info, &sender, &id, &[]).await,
+                        perform_query_call_with_delegations(api_ver, &test_info, &sender, &id, &[]).await,
                         400,
                         "query should be rejected for api_ver={api_ver}"
                     );
                 }
                 for &api_ver in ALL_UPDATE_API_VERSIONS {
-                    test_info.api_ver = api_ver;
                     assert_eq!(
-                        perform_update_call_with_delegations(&test_info, &sender, &id, &[]).await,
+                        perform_update_call_with_delegations(api_ver, &test_info, &sender, &id, &[]).await,
                         400,
                         "update should be rejected for api_ver={api_ver}"
                     );
                 }
-                for api_ver in ALL_READ_STATE_API_VERSIONS {
-                    test_info.api_ver = *api_ver;
+                for &api_ver in ALL_READ_STATE_API_VERSIONS {
                     assert_eq!(
-                        perform_read_state_call_with_delegations(&test_info, &sender, &id, &[])
+                        perform_read_state_call_with_delegations(api_ver, &test_info, &sender, &id, &[])
                             .await,
                         400,
                         "read_state should be rejected for api_ver={api_ver}"
@@ -1010,31 +990,27 @@ pub fn requests_with_canister_signature(env: TestEnv) {
                 CanisterSigner::new(&c1, b"seed".to_vec())
                     .with_random_certificate_signature(rng.r#gen()),
             );
-            let mut test_info = TestInformation {
-                api_ver: 999, // To be set later...
+            let test_info = TestInformation {
                 url: node_url.clone(),
                 canister_id: canister_id_from_principal(&c1.canister_id()),
             };
-            for api_ver in ALL_QUERY_API_VERSIONS {
-                test_info.api_ver = *api_ver;
+            for &api_ver in ALL_QUERY_API_VERSIONS {
                 assert_eq!(
-                    perform_query_call_with_delegations(&test_info, &id, &id, &[]).await,
+                    perform_query_call_with_delegations(api_ver, &test_info, &id, &id, &[]).await,
                     400,
                     "query should be rejected for api_ver={api_ver} with invalid certificate signature"
                 );
             }
             for &api_ver in ALL_UPDATE_API_VERSIONS {
-                test_info.api_ver = api_ver;
                 assert_eq!(
-                    perform_update_call_with_delegations(&test_info, &id, &id, &[]).await,
+                    perform_update_call_with_delegations(api_ver, &test_info, &id, &id, &[]).await,
                     400,
                     "update should be rejected for api_ver={api_ver} with invalid certificate signature"
                 );
             }
-            for api_ver in ALL_READ_STATE_API_VERSIONS {
-                test_info.api_ver = *api_ver;
+            for &api_ver in ALL_READ_STATE_API_VERSIONS {
                 assert_eq!(
-                    perform_read_state_call_with_delegations(&test_info, &id, &id, &[]).await,
+                    perform_read_state_call_with_delegations(api_ver, &test_info, &id, &id, &[]).await,
                     400,
                     "read_state should be rejected for api_ver={api_ver} with invalid certificate signature"
                 );
@@ -1138,6 +1114,7 @@ fn sign_delegation(delegation: Delegation, identity: &GenericIdentity<'_>) -> Si
 }
 
 async fn send_request<C: serde::ser::Serialize>(
+    api_ver: usize,
     test: &TestInformation,
     req_type: &'static str,
     content: C,
@@ -1157,7 +1134,7 @@ async fn send_request<C: serde::ser::Serialize>(
 
     let url = format!(
         "{}api/v{}/canister/{}/{}",
-        test.url, test.api_ver, test.canister_id, req_type
+        test.url, api_ver, test.canister_id, req_type
     );
 
     client
@@ -1170,6 +1147,7 @@ async fn send_request<C: serde::ser::Serialize>(
 }
 
 async fn perform_query_call_with_delegations(
+    api_ver: usize,
     test: &TestInformation,
     sender: &GenericIdentity<'_>,
     signer: &GenericIdentity<'_>,
@@ -1189,6 +1167,7 @@ async fn perform_query_call_with_delegations(
     let signature = signer.sign_query(&content);
 
     let response = send_request(
+        api_ver,
         test,
         "query",
         content,
@@ -1202,6 +1181,7 @@ async fn perform_query_call_with_delegations(
 }
 
 async fn perform_update_call_with_delegations(
+    api_ver: usize,
     test: &TestInformation,
     sender: &GenericIdentity<'_>,
     signer: &GenericIdentity<'_>,
@@ -1221,6 +1201,7 @@ async fn perform_update_call_with_delegations(
     let signature = signer.sign_update(&content);
 
     send_request(
+        api_ver,
         test,
         "call",
         content,
@@ -1233,6 +1214,7 @@ async fn perform_update_call_with_delegations(
 }
 
 async fn perform_read_state_with_delegations(
+    api_ver: usize,
     test: &TestInformation,
     sender: &GenericIdentity<'_>,
     signer: &GenericIdentity<'_>,
@@ -1260,14 +1242,10 @@ async fn perform_read_state_with_delegations(
         // Always use a v3 call to test read state request since the call is sync,
         // otherwise we have to wait until the call executes before checking the read state, which
         // requires a potentially flaky retry loop.
-        let test_v3 = {
-            let mut tv3 = test.clone();
-            tv3.api_ver = 3;
-            tv3
-        };
 
         let _response = send_request(
-            &test_v3,
+            /*api_ver=*/3,
+            &test,
             "call",
             content,
             sender.public_key_der(),
@@ -1293,6 +1271,7 @@ async fn perform_read_state_with_delegations(
     let signature = signer.sign_read_state(&content);
 
     let response = send_request(
+        api_ver,
         test,
         "read_state",
         content,
@@ -1306,6 +1285,7 @@ async fn perform_read_state_with_delegations(
 }
 
 async fn perform_read_state_call_with_delegations(
+    api_ver: usize,
     test: &TestInformation,
     sender: &GenericIdentity<'_>,
     signer: &GenericIdentity<'_>,
@@ -1323,6 +1303,7 @@ async fn perform_read_state_call_with_delegations(
     let signature = signer.sign_read_state(&content);
 
     send_request(
+        api_ver,
         test,
         "read_state",
         content,
@@ -1335,6 +1316,7 @@ async fn perform_read_state_call_with_delegations(
 }
 
 async fn perform_query_with_expiry(
+    api_ver: usize,
     test: &TestInformation,
     sender: &GenericIdentity<'_>,
     signer: &GenericIdentity<'_>,
@@ -1354,6 +1336,7 @@ async fn perform_query_with_expiry(
     let signature = signer.sign_query(&content);
 
     send_request(
+        api_ver,
         test,
         "query",
         content,
@@ -1366,6 +1349,7 @@ async fn perform_query_with_expiry(
 }
 
 async fn perform_update_with_expiry(
+    api_ver: usize,
     test: &TestInformation,
     sender: &GenericIdentity<'_>,
     signer: &GenericIdentity<'_>,
@@ -1385,6 +1369,7 @@ async fn perform_update_with_expiry(
     let signature = signer.sign_update(&content);
 
     send_request(
+        api_ver,
         test,
         "call",
         content,
@@ -1397,6 +1382,7 @@ async fn perform_update_with_expiry(
 }
 
 async fn perform_read_state_with_expiry(
+    api_ver: usize,
     test: &TestInformation,
     sender: &GenericIdentity<'_>,
     signer: &GenericIdentity<'_>,
@@ -1414,6 +1400,7 @@ async fn perform_read_state_with_expiry(
     let signature = signer.sign_read_state(&content);
 
     send_request(
+        api_ver,
         test,
         "read_state",
         content,
