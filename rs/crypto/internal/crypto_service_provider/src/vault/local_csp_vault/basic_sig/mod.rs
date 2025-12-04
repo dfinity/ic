@@ -126,13 +126,12 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             .sks_read_lock()
             .get(&key_id)
             .ok_or(CspBasicSignatureError::SecretKeyNotFound(key_id))?;
-        let CspSecretKey::Ed25519(secret_key) = &secret_key else {
+        let CspSecretKey::Ed25519(sk_bytes) = &secret_key else {
             return Err(CspBasicSignatureError::WrongSecretKeyType {
                 secret_key_variant: secret_key.enum_variant().to_string(),
             });
         };
-
-        let sig_bytes = ed25519::sign(message, secret_key);
+        let sig_bytes = ed25519::sign(message, sk_bytes);
         Ok(CspSignature::Ed25519(sig_bytes))
     }
 }
