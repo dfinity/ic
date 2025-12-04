@@ -1,4 +1,5 @@
 # work around race condition in zig: https://github.com/ziglang/zig/issues/23993
+# hermetic_cc_toolchain ticket: https://github.com/uber/hermetic_cc_toolchain/issues/224
 diff --git a/toolchain/defs.bzl b/toolchain/defs.bzl
 index 88978ee..6456bb5 100644
 --- a/toolchain/defs.bzl
