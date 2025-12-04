@@ -17,7 +17,11 @@ impl RecoveryUpgraderCommand {
     }
 
     pub fn to_shell_string(&self) -> String {
-        let escaped_args: Vec<String> = self.args.iter().map(|arg| shell_quote(arg)).collect();
+        let escaped_args: Vec<String> = self
+            .args
+            .iter()
+            .map(|arg| shell_escape::escape(arg.as_str().into()).to_string())
+            .collect();
         format!("sudo {RECOVERY_LAUNCHER_PATH} {}", escaped_args.join(" "))
     }
 }
@@ -33,8 +37,4 @@ pub fn build_recovery_upgrader_command(
         format!("recovery-hash={recovery_hash}"),
     ];
     RecoveryUpgraderCommand { args }
-}
-
-fn shell_quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\\''"))
 }
