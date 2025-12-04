@@ -4,7 +4,8 @@
 //! process several requests concurrently.
 
 use crate::{
-    CYCLES_COST_PER_MIGRATION, EventType, RecoveryState, RequestState, ValidationError,
+    CYCLES_COST_PER_MIGRATION, ControllerRecoveryState, EventType, RecoveryState, RequestState,
+    ValidationError,
     canister_state::{
         MethodGuard,
         events::insert_event,
@@ -87,7 +88,7 @@ pub async fn process_accepted(
         })
         .map_failure(|reason| RequestState::Failed {
             request: request.clone(),
-            recovery_state: RecoveryState::done(),
+            recovery_state: RecoveryState::restore_source(),
             reason,
         });
     if !res.is_success() {
@@ -102,7 +103,7 @@ pub async fn process_accepted(
         })
         .map_failure(|reason| RequestState::Failed {
             request,
-            recovery_state: RecoveryState::restore_source(),
+            recovery_state: RecoveryState::restore_both(),
             reason,
         })
 }
@@ -179,12 +180,16 @@ pub async fn process_controllers_changed(
     get_canister_info(request.source)
         .await
         .map_success(|canister_info_result| RequestState::StoppedAndReady {
-            request,
+            request: request.clone(),
             stopped_since: time(),
             canister_version,
             canister_history_total_num: canister_info_result.total_num_changes,
         })
-        .or_retry()
+        .map_failure(|()| RequestState::Failed {
+            request,
+            recovery_state: RecoveryState::restore_both(),
+            reason: "Source has been deleted".to_string(),
+        })
 }
 
 pub async fn process_stopped(
@@ -364,6 +369,54 @@ pub async fn process_all_failed() {
     );
 }
 
+async fn controller_recovery(
+    state: ControllerRecoveryState,
+    canister_id: Principal,
+    controllers: Vec<Principal>,
+) -> ControllerRecoveryState {
+    match state {
+        ControllerRecoveryState::NoProgress => match get_canister_info(canister_id).await {
+            ProcessingResult::Success(canister_info) => {
+                if canister_info.controllers == vec![canister_self()] {
+                    ControllerRecoveryState::TotalNumChangesBefore(canister_info.total_num_changes)
+                } else {
+                    ControllerRecoveryState::Done
+                }
+            }
+            ProcessingResult::NoProgress => ControllerRecoveryState::NoProgress,
+            ProcessingResult::FatalFailure(()) => ControllerRecoveryState::Done,
+        },
+        ControllerRecoveryState::TotalNumChangesBefore(total_num_changes) => {
+            match get_canister_info(canister_id).await {
+                ProcessingResult::Success(canister_info) => {
+                    if canister_info.total_num_changes > total_num_changes {
+                        ControllerRecoveryState::Done
+                    } else {
+                        let res = set_original_controllers(
+                            canister_id,
+                            controllers.clone(),
+                            Principal::management_canister(),
+                        )
+                        .await;
+                        match res {
+                            ProcessingResult::Success(_) => ControllerRecoveryState::Done,
+                            ProcessingResult::NoProgress => {
+                                ControllerRecoveryState::TotalNumChangesBefore(total_num_changes)
+                            }
+                            ProcessingResult::FatalFailure(()) => ControllerRecoveryState::Done,
+                        }
+                    }
+                }
+                ProcessingResult::NoProgress => {
+                    ControllerRecoveryState::TotalNumChangesBefore(total_num_changes)
+                }
+                ProcessingResult::FatalFailure(()) => ControllerRecoveryState::Done,
+            }
+        }
+        ControllerRecoveryState::Done => ControllerRecoveryState::Done,
+    }
+}
+
 /// Accepts a `Failed` request, returns `EventType::Failed` or
 /// `RequestState::Failed` with updated recovery state.
 async fn process_failed(request: RequestState) -> ProcessingResult<EventType, RequestState> {
@@ -377,43 +430,18 @@ async fn process_failed(request: RequestState) -> ProcessingResult<EventType, Re
         return ProcessingResult::NoProgress;
     };
 
-    if recovery_state.restore_source_controllers {
-        let res1 = set_original_controllers(
-            request.source,
-            request.source_original_controllers.clone(),
-            request.source_subnet,
-        )
-        .await;
-        match res1 {
-            ProcessingResult::Success(_) => {
-                recovery_state.restore_source_controllers = false;
-            }
-            ProcessingResult::NoProgress => println!(
-                "Error: no progress when restoring controllers of canister {}",
-                request.source
-            ),
-            ProcessingResult::FatalFailure(ref reason) => println!("Error: {}", reason),
-        };
-    }
-
-    if recovery_state.restore_target_controllers {
-        let res2 = set_original_controllers(
-            request.target,
-            request.target_original_controllers.clone(),
-            request.target_subnet,
-        )
-        .await;
-        match res2 {
-            ProcessingResult::Success(_) => {
-                recovery_state.restore_target_controllers = false;
-            }
-            ProcessingResult::NoProgress => println!(
-                "Error: no progress when restoring controllers of canister {}",
-                request.target
-            ),
-            ProcessingResult::FatalFailure(ref reason) => println!("Error: {}", reason),
-        };
-    }
+    recovery_state.restore_source_controllers = controller_recovery(
+        recovery_state.restore_source_controllers,
+        request.source,
+        request.source_original_controllers.clone(),
+    )
+    .await;
+    recovery_state.restore_target_controllers = controller_recovery(
+        recovery_state.restore_target_controllers,
+        request.target,
+        request.target_original_controllers.clone(),
+    )
+    .await;
 
     if recovery_state.is_done() {
         ProcessingResult::Success(EventType::Failed { request, reason })

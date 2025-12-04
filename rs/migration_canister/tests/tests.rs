@@ -1348,6 +1348,7 @@ async fn after_validation_source_not_stopped() {
     advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
+    advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
         panic!()
@@ -1374,6 +1375,7 @@ async fn after_validation_target_not_stopped() {
     migrate_canister(&pic, sender, &args).await.unwrap();
     // validation succeeded. now we break migration by interfering.
     pic.start_canister(target, Some(sender)).await.unwrap();
+    advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
@@ -1415,6 +1417,7 @@ async fn after_validation_target_has_snapshot() {
         .await
         .unwrap();
 
+    advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
@@ -1460,6 +1463,7 @@ async fn after_validation_insufficient_cycles() {
     advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
+    advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
         panic!()
@@ -1487,6 +1491,7 @@ async fn failure_controllers_restored() {
     migrate_canister(&pic, sender, &args).await.unwrap();
     // Validation succeeded. Now we break migration by interfering.
     pic.start_canister(source, Some(sender)).await.unwrap();
+    advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;

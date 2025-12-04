@@ -150,42 +150,57 @@ impl Display for Request {
     }
 }
 
+/// Represents the recovery state for controllers of either source or target.
+/// Such a recovery is needed for a failed request to hand control
+/// back to the original controllers of source or target, respectively.
+#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ControllerRecoveryState {
+    /// Controller recovery is pending and no progress has been made so far.
+    NoProgress,
+    /// Controller recovery has been confirmed to be necessary (the migration canister
+    /// is the only controller) and the canister history has the specified
+    /// number of changes in total (used to derive if controller recovery
+    /// succeeded).
+    TotalNumChangesBefore(u64),
+    /// Controller recovery has completed (or it was not needed to be performed at all).
+    Done,
+}
+
 /// Represents the recovery state of a `Request` in `RequestState::Failed`,
 /// i.e., whether controllers of source and target must still be restored.
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecoveryState {
     /// If set to `true`, then the controllers of the source canister
     /// are still to be restored.
-    pub restore_source_controllers: bool,
+    pub restore_source_controllers: ControllerRecoveryState,
     /// If set to `true`, then the controllers of the target canister
     /// are still to be restored.
-    pub restore_target_controllers: bool,
+    pub restore_target_controllers: ControllerRecoveryState,
 }
 
 impl RecoveryState {
-    pub fn done() -> Self {
-        Self {
-            restore_source_controllers: false,
-            restore_target_controllers: false,
-        }
-    }
-
     pub fn restore_source() -> Self {
         Self {
-            restore_source_controllers: true,
-            restore_target_controllers: false,
+            restore_source_controllers: ControllerRecoveryState::NoProgress,
+            restore_target_controllers: ControllerRecoveryState::Done,
         }
     }
 
     pub fn restore_both() -> Self {
         Self {
-            restore_source_controllers: true,
-            restore_target_controllers: true,
+            restore_source_controllers: ControllerRecoveryState::NoProgress,
+            restore_target_controllers: ControllerRecoveryState::NoProgress,
         }
     }
 
     pub fn is_done(&self) -> bool {
-        !self.restore_source_controllers && !self.restore_target_controllers
+        matches!(
+            self.restore_source_controllers,
+            ControllerRecoveryState::Done
+        ) && matches!(
+            self.restore_target_controllers,
+            ControllerRecoveryState::Done
+        )
     }
 }
 

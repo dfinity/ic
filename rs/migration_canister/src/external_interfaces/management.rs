@@ -3,7 +3,7 @@ use std::convert::Infallible;
 use candid::{CandidType, Principal, Reserved};
 use ic_cdk::{
     api::{canister_self, canister_version},
-    call::Call,
+    call::{Call, CallFailed, Error as CallError, RejectCode},
     management_canister::{
         CanisterInfoArgs, CanisterInfoResult, canister_info, list_canister_snapshots,
     },
@@ -35,7 +35,7 @@ pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResul
             controllers: Some(vec![canister_self()]),
         },
     };
-    match Call::unbounded_wait(Principal::management_canister(), "update_settings")
+    match Call::bounded_wait(Principal::management_canister(), "update_settings")
         .with_arg(args)
         .await
     {
@@ -56,33 +56,36 @@ pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResul
     }
 }
 
-/// This is a success if the call is a success OR if it fails with "we are not controller"
+/// This is a success if the call is a success.
 pub async fn set_original_controllers(
     canister_id: Principal,
     controllers: Vec<Principal>,
     subnet_id: Principal,
-) -> ProcessingResult<(), String> {
+) -> ProcessingResult<(), ()> {
     let args = UpdateSettingsArgs {
         canister_id,
         settings: CanisterSettings {
             controllers: Some(controllers),
         },
     };
-    match Call::unbounded_wait(subnet_id, "update_settings")
+    match Call::bounded_wait(subnet_id, "update_settings")
         .with_arg(args)
         .await
     {
         Ok(_) => ProcessingResult::Success(()),
-        Err(ref e) => match e {
-            ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(_)
-            | ic_cdk::call::CallFailed::CallPerformFailed(_) => ProcessingResult::NoProgress,
-            ic_cdk::call::CallFailed::CallRejected(call_rejected) => {
-                ProcessingResult::FatalFailure(format!(
-                    "Failed to restore controllers of canister {canister_id} on subnet {subnet_id}: {}",
-                    call_rejected
-                ))
+        Err(ref e) => {
+            println!("Call `update_settings` for {} failed: {:?}", canister_id, e);
+            match e {
+                CallFailed::CallRejected(e) => {
+                    if e.reject_code() == Ok(RejectCode::DestinationInvalid) {
+                        ProcessingResult::FatalFailure(())
+                    } else {
+                        ProcessingResult::NoProgress
+                    }
+                }
+                _ => ProcessingResult::NoProgress,
             }
-        },
+        }
     }
 }
 
@@ -170,9 +173,7 @@ pub async fn canister_status(
 // ========================================================================= //
 // `canister_info`
 
-pub async fn get_canister_info(
-    canister_id: Principal,
-) -> ProcessingResult<CanisterInfoResult, Infallible> {
+pub async fn get_canister_info(canister_id: Principal) -> ProcessingResult<CanisterInfoResult, ()> {
     let args = CanisterInfoArgs {
         canister_id,
         num_requested_changes: None,
@@ -181,8 +182,17 @@ pub async fn get_canister_info(
     match canister_info(&args).await {
         Ok(canister_info) => ProcessingResult::Success(canister_info),
         Err(e) => {
-            println!("Call `canister_info` for {}, failed: {:?}", canister_id, e);
-            ProcessingResult::NoProgress
+            println!("Call `canister_info` for {} failed: {:?}", canister_id, e);
+            match e {
+                CallError::CallRejected(e) => {
+                    if e.reject_code() == Ok(RejectCode::DestinationInvalid) {
+                        ProcessingResult::FatalFailure(())
+                    } else {
+                        ProcessingResult::NoProgress
+                    }
+                }
+                _ => ProcessingResult::NoProgress,
+            }
         }
     }
 }
@@ -299,7 +309,7 @@ pub async fn get_registry_version(subnet_id: Principal) -> ProcessingResult<u64,
         },
         Err(e) => {
             println!(
-                "Call `subnet_info` for subnet: {}, failed: {:?}",
+                "Call `subnet_info` for subnet: {} failed: {:?}",
                 subnet_id, e
             );
             ProcessingResult::NoProgress
