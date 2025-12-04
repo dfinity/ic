@@ -1,5 +1,6 @@
 type MinterArg = variant {
     Init : InitArgs;
+    Upgrade : opt UpgradeArgs;
 };
 
 // The initialization parameters of the minter canister.
@@ -29,6 +30,26 @@ type InitArgs = record {
 
     /// The minter's operation mode.
     mode : Mode;
+
+    /// The expiration duration (in seconds) for cached entries in the get_utxos cache.
+    get_utxos_cache_expiration_seconds: opt nat64;
+};
+
+// The upgrade parameters of the minter canister.
+type UpgradeArgs = record {
+    // The minimal amount of ckDOGE that can be converted to DOGE.
+    retrieve_doge_min_amount : opt nat64;
+
+    /// Maximum time in nanoseconds that a transaction should spend in the queue
+    /// before being sent.
+    max_time_in_queue_nanos : opt nat64;
+
+    /// The minimum number of confirmations required for the minter to
+    /// accept a Dogecoin transaction.
+    min_confirmations : opt nat32;
+
+    /// The minter's operation mode.
+    mode : opt Mode;
 
     /// The expiration duration (in seconds) for cached entries in the get_utxos cache.
     get_utxos_cache_expiration_seconds: opt nat64;

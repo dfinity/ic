@@ -30,6 +30,9 @@ fn init(args: MinterArg) {
             #[cfg(feature = "self_check")]
             ok_or_die(check_invariants())
         }
+        MinterArg::Upgrade(_) => {
+            panic!("expected InitArgs got UpgradeArgs");
+        }
     }
 }
 
@@ -52,8 +55,18 @@ fn timer() {
 }
 
 #[post_upgrade]
-fn post_upgrade() {
-    todo!("XC-495")
+fn post_upgrade(minter_arg: Option<MinterArg>) {
+    let upgrade_args = match minter_arg {
+        Some(MinterArg::Init(_)) => {
+            panic!("expected Option<UpgradeArgs> got InitArgs.")
+        }
+        Some(MinterArg::Upgrade(upgrade_arg)) => {
+            upgrade_arg.map(ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs::from)
+        }
+        None => None,
+    };
+    ic_ckbtc_minter::lifecycle::upgrade::post_upgrade(upgrade_args, &DOGECOIN_CANISTER_RUNTIME);
+    setup_tasks();
 }
 
 #[update]
