@@ -80,3 +80,7 @@ path = "sr_app_no_upgrade_with_chain_keys_test.rs"
 [[bin]]
 name = "ic-systest-subnet-recovery-app-large-with-chain-keys"
 path = "sr_app_large_with_chain_keys_test.rs"
+
+[[bin]]
+name = "ic-systest-subnet-recovery-app-same-nodes-recoverable-corrupt-cup"
+path = "sr_app_same_nodes_recoverable_corrupt_test_test.rs"
