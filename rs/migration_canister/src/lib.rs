@@ -156,11 +156,7 @@ impl Display for Request {
 /// i.e., whether controllers of source and target must still be restored.
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecoveryState {
-    /// If set to `true`, then the controllers of the source canister
-    /// are still to be restored.
     pub restore_source_controllers: ControllerRecoveryState,
-    /// If set to `true`, then the controllers of the target canister
-    /// are still to be restored.
     pub restore_target_controllers: ControllerRecoveryState,
 }
 
