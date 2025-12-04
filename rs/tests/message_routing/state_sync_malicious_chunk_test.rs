@@ -55,7 +55,7 @@ const NOTARY_DELAY: Duration = Duration::from_millis(100);
 
 const DKG_INTERVAL_LARGE: u64 = 199;
 const NUM_CANISTERS: usize = 8;
-const SIZE_LEVEL: usize = 8;
+const CANISTER_SIZE_GIB: u64 = 1;
 
 fn main() -> Result<()> {
     let config = Config::new(NUM_NODES);
@@ -229,7 +229,7 @@ async fn test_async(env: TestEnv, config: Config) {
     rejoin_test_large_state(
         env,
         config.allowed_failures,
-        SIZE_LEVEL,
+        CANISTER_SIZE_GIB,
         NUM_CANISTERS,
         DKG_INTERVAL_LARGE,
         rejoin_node.clone(),

@@ -188,7 +188,6 @@ pub struct CanisterStateBits {
     pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
     pub total_query_stats: TotalQueryStats,
     pub log_visibility: LogVisibilityV2,
-    pub log_memory_limit: NumBytes,
     pub canister_log: CanisterLog,
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,

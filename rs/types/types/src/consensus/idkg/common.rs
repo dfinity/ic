@@ -1172,7 +1172,7 @@ impl BuildSignatureInputsError {
 pub enum ThresholdSigInputs<'a> {
     Ecdsa(ThresholdEcdsaSigInputs<'a>),
     Schnorr(ThresholdSchnorrSigInputs<'a>),
-    VetKd(VetKdArgs),
+    VetKd(VetKdArgs<'a>),
 }
 
 impl ThresholdSigInputs<'_> {
@@ -1180,7 +1180,7 @@ impl ThresholdSigInputs<'_> {
         match self {
             ThresholdSigInputs::Ecdsa(inputs) => inputs.caller(),
             ThresholdSigInputs::Schnorr(inputs) => inputs.caller(),
-            ThresholdSigInputs::VetKd(inputs) => &inputs.context.caller,
+            ThresholdSigInputs::VetKd(inputs) => inputs.context.caller,
         }
     }
 

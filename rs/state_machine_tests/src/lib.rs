@@ -2702,11 +2702,12 @@ impl StateMachine {
         if let Some(SignatureSecretKey::VetKD(k)) =
             self.chain_key_subnet_secret_keys.get(&context.key_id())
         {
-            let vetkd_context: Vec<u8> =
-                context.derivation_path.iter().flatten().cloned().collect();
+            assert_eq!(context.derivation_path.len(), 1);
+            const EMPTY_VEC_REF: &Vec<u8> = &vec![];
+            let vetkd_context = context.derivation_path.first().unwrap_or(EMPTY_VEC_REF);
             let encrypted_key = k.vetkd_protocol(
                 context.request.sender.get().as_slice(),
-                &vetkd_context,
+                vetkd_context,
                 context.vetkd_args().input.as_ref(),
                 &context.vetkd_args().transport_public_key,
                 &[42; 32],
@@ -3763,11 +3764,11 @@ impl StateMachine {
     }
 
     /// Create a canister snapshot.
-    pub fn take_canister_snapshot(
+    pub fn take_canister_snapshot_as(
         &self,
         args: TakeCanisterSnapshotArgs,
+        sender: PrincipalId,
     ) -> Result<CanisterSnapshotResponse, UserError> {
-        let sender = self.get_controller(&args.get_canister_id());
         self.execute_ingress_as(
             sender,
             ic00::IC_00,
@@ -3780,6 +3781,15 @@ impl StateMachine {
                 panic!("take_canister_snapshot call rejected: {reason}")
             }
         })?
+    }
+
+    /// Create a canister snapshot.
+    pub fn take_canister_snapshot(
+        &self,
+        args: TakeCanisterSnapshotArgs,
+    ) -> Result<CanisterSnapshotResponse, UserError> {
+        let sender = self.get_controller(&args.get_canister_id());
+        self.take_canister_snapshot_as(args, sender)
     }
 
     /// Load the canister state from a canister snapshot.

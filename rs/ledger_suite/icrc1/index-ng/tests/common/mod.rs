@@ -59,11 +59,15 @@ pub fn default_archive_options() -> ArchiveOptions {
 
 #[allow(dead_code)]
 pub fn index_ng_wasm() -> Vec<u8> {
-    ic_test_utilities_load_wasm::load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ic-icrc1-index-ng",
-        &[],
-    )
+    let index_ng_wasm_path = std::env::var("IC_ICRC1_INDEX_NG_WASM_PATH").expect(
+        "The Index-ng wasm path must be set using the env variable IC_ICRC1_INDEX_NG_WASM_PATH",
+    );
+    std::fs::read(&index_ng_wasm_path).unwrap_or_else(|e| {
+        panic!(
+            "failed to load Wasm file from path {} (env var IC_ICRC1_INDEX_NG_WASM_PATH): {}",
+            index_ng_wasm_path, e
+        )
+    })
 }
 
 pub fn install_ledger(
