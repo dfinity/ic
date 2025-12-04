@@ -8,7 +8,7 @@ version.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
+dfn_http_metrics = { path = "../rust_canisters/dfn_http_metrics" }
 futures = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
