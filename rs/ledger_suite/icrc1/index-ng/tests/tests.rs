@@ -1478,7 +1478,7 @@ fn test_fee_collector_107_irregular_op() {
 
     add_custom_block(0, tx_fields);
     let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
-        .expect_err("unrecognized block parsed successfully by index");
+        .expect_err("unrecognized block with btype '107feecol' but unrecognized tx.op parsed successfully by index");
     let expected_log_msg = format!("Unknown operation name {}", UNRECOGNIZED_OP_NAME);
     assert!(
         index_err_logs.contains(&expected_log_msg),
@@ -1520,7 +1520,9 @@ fn test_fee_collector_107_mthd_instead_of_op() {
 
     add_custom_block(0, tx_fields);
     let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
-        .expect_err("unrecognized block parsed successfully by index");
+        .expect_err(
+            "unrecognized block with '107feecol' but tx.mthd instead of tx.op parsed successfully by index",
+        );
     let expected_log_msg = "missing field `op`";
     assert!(
         index_err_logs.contains(expected_log_msg),
@@ -1560,7 +1562,9 @@ fn test_block_with_no_btype_and_unrecognized_op() {
 
     add_custom_block(0, tx_fields);
     let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
-        .expect_err("unrecognized block parsed successfully by index");
+        .expect_err(
+            "unrecognized block with tx.op 'non_standard_op_name' parsed successfully by index",
+        );
     let expected_log_msg = format!("Unknown operation name {}", UNRECOGNIZED_OP_NAME);
     assert!(
         index_err_logs.contains(&expected_log_msg),
@@ -1596,7 +1600,7 @@ fn test_block_with_no_btype_and_no_op() {
 
     add_custom_block(0, tx_fields);
     let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
-        .expect_err("unrecognized block parsed successfully by index");
+        .expect_err("unrecognized block with no btype and no tx.op parsed successfully by index");
     let expected_log_msg = "missing field `op`";
     assert!(
         index_err_logs.contains(expected_log_msg),
