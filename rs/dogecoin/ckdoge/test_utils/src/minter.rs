@@ -288,6 +288,8 @@ impl MinterCanister {
                 Some(NNS_ROOT_PRINCIPAL),
             )
             .expect("BUG: failed to upgrade minter");
+        // run immediate tasks after upgrade, like refreshing fee percentiles.
+        self.env.tick();
     }
 }
 
