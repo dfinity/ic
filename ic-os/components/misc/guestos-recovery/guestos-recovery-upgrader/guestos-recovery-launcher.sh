@@ -4,10 +4,30 @@ set -e
 # Wrapper script to launch the guestos-recovery-upgrader with hardened systemd-run restrictions.
 # This script is intended to be run by limited-console via sudo.
 
+validate_argument() {
+    local arg="$1"
+    # Only allow known parameters with hexadecimal values
+    if [[ "$arg" =~ ^version=[a-f0-9]{40}$ ]] \
+        || [[ "$arg" =~ ^version-hash=[a-f0-9]{64}$ ]] \
+        || [[ "$arg" =~ ^recovery-hash=[a-f0-9]{64}$ ]]; then
+        return 0
+    else
+        echo "ERROR: Invalid argument format: $arg" >&2
+        return 1
+    fi
+}
+
 if [ $# -eq 0 ]; then
     echo "Usage: $0 version=<version> version-hash=<hash> [recovery-hash=<hash>]"
     exit 1
 fi
+
+for arg in "$@"; do
+    if ! validate_argument "$arg"; then
+        echo "Arguments must be: version=<40-char-hex> version-hash=<64-char-hex> [recovery-hash=<64-char-hex>]"
+        exit 1
+    fi
+done
 
 exec /usr/bin/systemd-run \
     --unit=guestos-recovery-upgrader \
