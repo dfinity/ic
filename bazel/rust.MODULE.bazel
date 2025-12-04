@@ -1192,6 +1192,11 @@ crate.spec(
 )
 crate.spec(
     default_features = False,
+    package = "qrcode",
+    version = "0.14.1",
+)
+crate.spec(
+    default_features = False,
     features = [
         "ring",
         "log",
