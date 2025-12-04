@@ -500,7 +500,8 @@ async fn simulate_node_provider_action(
         artifacts_hash
     );
     let recovery_upgrader_command =
-        build_recovery_upgrader_command(img_version, img_version_hash, artifacts_hash);
+        build_recovery_upgrader_command(img_version, img_version_hash, artifacts_hash)
+            .to_shell_string();
     host.block_on_bash_script_async(&recovery_upgrader_command)
         .await
         .expect("Failed to run guestos-recovery-upgrader");

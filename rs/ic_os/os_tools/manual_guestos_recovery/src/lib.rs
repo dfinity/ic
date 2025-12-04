@@ -12,7 +12,7 @@ use ratatui::crossterm::terminal::{
 use ratatui::{Frame, Terminal, backend::CrosstermBackend};
 use recovery_utils::build_recovery_upgrader_command;
 use std::io::{self, BufRead, BufReader, IsTerminal, Read};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -220,13 +220,13 @@ pub struct RecoveryTask {
 
 impl RecoveryTask {
     pub fn start(params: &RecoveryParams) -> Result<Self> {
-        let recovery_command = build_recovery_upgrader_command(
+        let mut cmd = build_recovery_upgrader_command(
             &params.version,
             &params.version_hash,
             &params.recovery_hash,
-        );
-        let mut cmd = Command::new("sh");
-        cmd.arg("-c").arg(recovery_command);
+        )
+        .to_command();
+
         cmd.stdout(Stdio::piped());
         // Redirect stderr to null to avoid cluttering the TUI output
         cmd.stderr(Stdio::null());
