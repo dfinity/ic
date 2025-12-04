@@ -954,7 +954,6 @@ macro_rules! define_affine_and_projective_types {
                     Self { tbl }
                 }
 
-
                 /// Perform scalar multiplication using the precomputed table
                 fn mul(&self, scalar: &Scalar) -> $projective {
                     let s = scalar.serialize();
@@ -966,6 +965,24 @@ macro_rules! define_affine_and_projective_types {
 
                         let b = Self::get_window(&s, Self::WINDOW_BITS*i);
                         accum += Self::ct_select(tbl_for_i, b as usize);
+                    }
+
+                    <$projective>::new(accum)
+                }
+
+                /// Perform scalar multiplication using the precomputed table
+                fn mul_vartime(&self, scalar: &Scalar) -> $projective {
+                    let s = scalar.serialize();
+
+                    let mut accum = <ic_bls12_381::$projective>::identity();
+
+                    for i in 0..Self::WINDOWS {
+                        let tbl_for_i = &self.tbl[Self::WINDOW_ELEMENTS*i..Self::WINDOW_ELEMENTS*(i+1)];
+
+                        let b = Self::get_window(&s, Self::WINDOW_BITS*i);
+                        if b > 0 {
+                            accum += tbl_for_i[(b - 1) as usize]; // variable time table lookup
+                        }
                     }
 
                     <$projective>::new(accum)
@@ -1090,6 +1107,19 @@ macro_rules! define_affine_and_projective_types {
                     tbl.mul(scalar)
                 } else {
                     <$projective>::from(self).windowed_mul(scalar)
+                }
+            }
+
+            /// Perform variable time point multiplication
+            ///
+            /// Warning: this function leaks information about the scalars via
+            /// memory-based side channels. Do not use this function with secret
+            /// scalars.
+            pub fn mul_vartime(&self, scalar: &Scalar) -> $projective {
+                if let Some(ref tbl) = self.precomputed {
+                    tbl.mul_vartime(scalar)
+                } else {
+                    <$projective>::from(self).windowed_mul_vartime(scalar)
                 }
             }
 
@@ -1246,6 +1276,23 @@ macro_rules! define_affine_and_projective_types {
                 let mut result = Vec::with_capacity(scalars.len());
                 for scalar in scalars {
                     result.push(self * scalar);
+                }
+                $projective::batch_normalize(&result)
+            }
+
+            /// Batch multiplication
+            ///
+            /// Warning: this function leaks information about the scalars via
+            /// memory-based side channels. Do not use this function with secret
+            /// scalars.
+            pub fn batch_mul_vartime(&self, scalars: &[Scalar]) -> Vec<Self> {
+                // It might be possible to optimize this function by taking advantage of
+                // the fact that we are using the same point for several multiplications,
+                // for example by using larger precomputed tables
+
+                let mut result = Vec::with_capacity(scalars.len());
+                for scalar in scalars {
+                    result.push(self.mul_vartime(scalar));
                 }
                 $projective::batch_normalize(&result)
             }
@@ -2014,6 +2061,43 @@ macro_rules! declare_windowed_scalar_mul_ops_for {
 
                 accum
             }
+
+            pub(crate) fn windowed_mul_vartime(&self, scalar: &Scalar) -> Self {
+                // Configurable window size: can be in 1..=8
+                type Window = WindowInfo<$window>;
+
+                // Derived constants
+                const TABLE_SIZE: usize = Window::ELEMENTS;
+
+                let mut tbl = Self::identities(TABLE_SIZE);
+
+                for i in 1..TABLE_SIZE {
+                    tbl[i] = if i % 2 == 0 {
+                        tbl[i / 2].double()
+                    } else {
+                        &tbl[i - 1] + self
+                    };
+                }
+
+                let s = scalar.serialize();
+
+                let mut accum = Self::identity();
+
+                for i in 0..Window::WINDOWS {
+                    if i > 0 {
+                        for _ in 0..Window::SIZE {
+                            accum = accum.double();
+                        }
+                    }
+
+                    let w = Window::extract(&s, i);
+                    if w > 0 {
+                        accum += &tbl[w as usize]; // variable time table lookup
+                    }
+                }
+
+                accum
+            }
         }
 
         impl std::ops::Mul<&Scalar> for &$typ {
@@ -2295,6 +2379,15 @@ impl Gt {
 
         let tag = self.tag();
         extract4(&tag, 0) ^ extract4(&tag, 32)
+    }
+
+    /// Perform variable time point multiplication
+    ///
+    /// Warning: this function leaks information about the scalars via
+    /// memory-based side channels. Do not use this function with secret
+    /// scalars.
+    pub fn mul_vartime(&self, scalar: &Scalar) -> Self {
+        self.windowed_mul_vartime(scalar)
     }
 
     /// Return the result of g*val where g is the standard generator
