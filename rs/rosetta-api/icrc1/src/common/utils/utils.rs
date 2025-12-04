@@ -9,7 +9,7 @@ use crate::{
     },
 };
 use anyhow::{Context, bail};
-use candid::{Principal,Nat};
+use candid::{Nat, Principal};
 use icrc_ledger_types::icrc1::account::Account;
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use num_bigint::BigInt;
@@ -401,7 +401,7 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                 icrc1_operation_builder
                     .with_icrc_operation(IcrcOperation::FeeCollector)
                     .with_fee_collector(fc_metadata.fee_collector)
-                    .with_caller(fc_metadata.caller)                         
+                    .with_caller(fc_metadata.caller)
             }
         };
     }
