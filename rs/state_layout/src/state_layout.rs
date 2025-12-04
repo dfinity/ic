@@ -2298,8 +2298,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
             self.vmemory_0(),
             self.stable_memory(),
             self.wasm_chunk_store(),
-            // TODO: clarify if that's correct!
-            // log_memory_store is not included in snapshots
+            // log_memory_store is not included in canister snapshots.
         ]
         .into_iter()
         {
@@ -2337,7 +2336,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
         }
     }
 
-    // log_memory_store is not included in snapshots
+    // log_memory_store is not included in canister snapshots.
 }
 
 impl<P> SnapshotLayout<P>
