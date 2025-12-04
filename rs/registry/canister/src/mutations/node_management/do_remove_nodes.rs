@@ -70,9 +70,7 @@ impl Registry {
                 // 7. Finally, generate the following mutations:
                 //   * Delete the node
                 //   * Delete entries for node encryption keys
-                let mutations = make_remove_node_registry_mutations(self, node_to_remove);
-
-                mutations
+                 make_remove_node_registry_mutations(self, node_to_remove)
         }).collect();
 
         // 8. Create node operator update mutations
@@ -214,6 +212,22 @@ mod tests {
         // Verify node operator allowance was incremented by 2
         let updated_operator = get_node_operator_record(&registry, node_operator_id).unwrap();
         assert_eq!(updated_operator.node_allowance, initial_allowance + 2);
+
+        // Verify that there was only a single mutation in the latest version
+        let latest_version = registry.latest_version();
+        let key = make_node_operator_record_key(node_operator_id);
+        let number_of_mutations_for_operator = registry
+            .store
+            .get(key.as_bytes())
+            .map(|all_mutations| {
+                all_mutations
+                    .iter()
+                    .filter(|mutation| mutation.version == latest_version)
+                    .count()
+            })
+            .unwrap();
+
+        assert_eq!(number_of_mutations_for_operator, 1);
     }
 
     #[test]
