@@ -250,39 +250,28 @@ struct TestConfig {
 }
 
 pub fn test_with_chain_keys(env: TestEnv) {
+    // Test the unrecoverable corrupt CUP case when recovering on failover nodes because nodes will
+    // not be able to see the recovery CUP in the registry
+    let corrupt_cup =
+        if env.topology_snapshot().unassigned_nodes().count() == APP_NODES + UNASSIGNED_NODES {
+            // TODO: in that case, also test that changes in the registry are not picked up
+            CupCorruption::CorruptedIncludingInvalidNiDkgId
+        } else {
+            CupCorruption::NotCorrupted
+        };
     app_subnet_recovery_test(
         env,
         TestConfig {
             subnet_size: APP_NODES,
             upgrade: true,
             chain_key: true,
-            corrupt_cup: CupCorruption::NotCorrupted,
-            local_recovery: false,
-        },
-    );
-}
-
-pub fn test_without_chain_keys(env: TestEnv) {
-    // Test the unrecoverable corrupt CUP case when recovering on failover nodes because nodes will
-    // not be able to see the recovery CUP in the registry
-    let corrupt_cup = if env.topology_snapshot().unassigned_nodes().count() > 0 {
-        CupCorruption::CorruptedIncludingInvalidNiDkgId
-    } else {
-        CupCorruption::NotCorrupted
-    };
-    app_subnet_recovery_test(
-        env,
-        TestConfig {
-            subnet_size: APP_NODES,
-            upgrade: true,
-            chain_key: false,
             corrupt_cup,
             local_recovery: false,
         },
     );
 }
 
-pub fn test_without_chain_keys_recoverable_corrupt_cup(env: TestEnv) {
+pub fn test_with_chain_keys_recoverable_corrupt_cup(env: TestEnv) {
     app_subnet_recovery_test(
         env,
         TestConfig {
@@ -292,6 +281,19 @@ pub fn test_without_chain_keys_recoverable_corrupt_cup(env: TestEnv) {
             // A corrupted CUP whose NiDkgId can still be parsed can tell nodes to which subnet they
             // belong to, see the recovery CUP, and thus allow the recovery on the same nodes.
             corrupt_cup: CupCorruption::CorruptedWithValidNiDkgId,
+            local_recovery: false,
+        },
+    );
+}
+
+pub fn test_without_chain_keys(env: TestEnv) {
+    app_subnet_recovery_test(
+        env,
+        TestConfig {
+            subnet_size: APP_NODES,
+            upgrade: true,
+            chain_key: false,
+            corrupt_cup: CupCorruption::NotCorrupted,
             local_recovery: false,
         },
     );
@@ -484,9 +486,11 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     print_source_and_app_and_unassigned_nodes(&env, &logger, source_subnet_id);
 
-    // Only check that the pre-signature stash is purged in one test case (chain keys + corrupt CUP)
-    let check_pre_signature_stash_is_purged =
-        cfg.chain_key && cfg.corrupt_cup && STORE_PRE_SIGNATURES_IN_STATE;
+    // Only check that the pre-signature stash is purged in one test case (chain keys + recoverable
+    // corrupt CUP)
+    let check_pre_signature_stash_is_purged = cfg.chain_key
+        && matches!(cfg.corrupt_cup, CupCorruption::CorruptedWithValidNiDkgId)
+        && STORE_PRE_SIGNATURES_IN_STATE;
     if check_pre_signature_stash_is_purged {
         // The stash size should be `PRE_SIGNATURES_TO_CREATE_IN_ADVANCE` initially
         await_pre_signature_stash_size(

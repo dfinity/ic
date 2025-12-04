@@ -102,7 +102,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "sr_app_same_nodes_recoverable_corrupt_cup_test",
+    name = "sr_app_recoverable_corrupt_cup_with_chain_keys_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
         "colocate",
