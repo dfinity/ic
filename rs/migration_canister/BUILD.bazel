@@ -7,6 +7,7 @@ rust_library(
     name = "ic_migration_canister",
     srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = [
+        "@crate_index//:async-trait",
         "@crate_index//:strum_macros",
     ],
     deps = [
@@ -30,6 +31,7 @@ rust_canister(
     srcs = glob(["src/**/*.rs"]),
     crate_root = "src/lib.rs",
     proc_macro_deps = [
+        "@crate_index//:async-trait",
         "@crate_index//:strum_macros",
     ],
     service_file = ":migration_canister.did",
@@ -54,6 +56,7 @@ rust_test(
     srcs = glob(["src/**/*.rs"]),
     compile_data = [":migration_canister.did"],
     proc_macro_deps = [
+        "@crate_index//:async-trait",
         "@crate_index//:strum_macros",
     ],
     deps = [
@@ -70,6 +73,7 @@ rust_test(
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",
         "@crate_index//:strum",
+        "@crate_index//:tokio",
     ],
 )
 

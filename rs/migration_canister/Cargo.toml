@@ -7,6 +7,7 @@ name = "ic-migration-canister"
 version.workspace = true
 
 [dependencies]
+async-trait = { workspace = true }
 candid = { workspace = true }
 futures = { workspace = true }
 ic-cdk = { workspace = true }

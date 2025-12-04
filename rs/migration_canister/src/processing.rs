@@ -20,14 +20,58 @@ use crate::{
         registry::migrate_canister,
     },
 };
+use async_trait::async_trait;
 use candid::Principal;
 use futures::future::join_all;
+use ic_cdk::management_canister::CanisterInfoResult;
 use ic_cdk::{
     api::{canister_self, time},
     println,
 };
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
 use std::{future::Future, iter::zip};
+
+#[async_trait]
+trait ManagementCanister: Send + Sync {
+    async fn get_canister_info(
+        &self,
+        canister_id: Principal,
+    ) -> ProcessingResult<CanisterInfoResult, ()>;
+
+    fn canister_self(&self) -> Principal;
+
+    async fn set_original_controllers(
+        &mut self,
+        canister_id: Principal,
+        controllers: Vec<Principal>,
+        subnet_id: Principal,
+    ) -> ProcessingResult<(), ()>;
+}
+
+struct ProductionManagementCanister;
+
+#[async_trait]
+impl ManagementCanister for ProductionManagementCanister {
+    async fn get_canister_info(
+        &self,
+        canister_id: Principal,
+    ) -> ProcessingResult<CanisterInfoResult, ()> {
+        get_canister_info(canister_id).await
+    }
+
+    fn canister_self(&self) -> Principal {
+        canister_self()
+    }
+
+    async fn set_original_controllers(
+        &mut self,
+        canister_id: Principal,
+        controllers: Vec<Principal>,
+        subnet_id: Principal,
+    ) -> ProcessingResult<(), ()> {
+        set_original_controllers(canister_id, controllers, subnet_id).await
+    }
+}
 
 /// Given a lock tag, a filter predicate on `RequestState` and a processor function,
 /// invokes the processor on all requests in the given state concurrently and
@@ -369,15 +413,16 @@ pub async fn process_all_failed() {
     );
 }
 
-async fn controller_recovery(
+async fn controller_recovery<IC: ManagementCanister>(
+    ic00: &mut IC,
     state: ControllerRecoveryState,
     canister_id: Principal,
     controllers: Vec<Principal>,
 ) -> ControllerRecoveryState {
     match state {
-        ControllerRecoveryState::NoProgress => match get_canister_info(canister_id).await {
+        ControllerRecoveryState::NoProgress => match ic00.get_canister_info(canister_id).await {
             ProcessingResult::Success(canister_info) => {
-                if canister_info.controllers == vec![canister_self()] {
+                if canister_info.controllers == vec![ic00.canister_self()] {
                     ControllerRecoveryState::TotalNumChangesBefore(canister_info.total_num_changes)
                 } else {
                     ControllerRecoveryState::Done
@@ -387,17 +432,18 @@ async fn controller_recovery(
             ProcessingResult::FatalFailure(()) => ControllerRecoveryState::Done,
         },
         ControllerRecoveryState::TotalNumChangesBefore(total_num_changes) => {
-            match get_canister_info(canister_id).await {
+            match ic00.get_canister_info(canister_id).await {
                 ProcessingResult::Success(canister_info) => {
                     if canister_info.total_num_changes > total_num_changes {
                         ControllerRecoveryState::Done
                     } else {
-                        let res = set_original_controllers(
-                            canister_id,
-                            controllers.clone(),
-                            Principal::management_canister(),
-                        )
-                        .await;
+                        let res = ic00
+                            .set_original_controllers(
+                                canister_id,
+                                controllers.clone(),
+                                Principal::management_canister(),
+                            )
+                            .await;
                         match res {
                             ProcessingResult::Success(_) => ControllerRecoveryState::Done,
                             ProcessingResult::NoProgress => {
@@ -431,12 +477,14 @@ async fn process_failed(request: RequestState) -> ProcessingResult<EventType, Re
     };
 
     recovery_state.restore_source_controllers = controller_recovery(
+        &mut ProductionManagementCanister,
         recovery_state.restore_source_controllers,
         request.source,
         request.source_original_controllers.clone(),
     )
     .await;
     recovery_state.restore_target_controllers = controller_recovery(
+        &mut ProductionManagementCanister,
         recovery_state.restore_target_controllers,
         request.target,
         request.target_original_controllers.clone(),
@@ -570,5 +618,102 @@ impl ProcessingResult<EventType, RequestState> {
                 insert_request(fail_state);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::ControllerRecoveryState;
+    use crate::processing::{ManagementCanister, ProcessingResult, controller_recovery};
+    use async_trait::async_trait;
+    use candid::Principal;
+    use ic_cdk::management_canister::CanisterInfoResult;
+    use std::collections::BTreeMap;
+
+    const MIGRATION_CANISTER_ID: Principal =
+        Principal::from_slice(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x11, 0x01, 0x01]);
+    const CANISTER_ID: Principal =
+        Principal::from_slice(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x01]);
+
+    struct MockManagementCanister {
+        controllers: BTreeMap<Principal, Vec<Principal>>,
+        total_num_changes: BTreeMap<Principal, u64>,
+    }
+
+    #[async_trait]
+    impl ManagementCanister for MockManagementCanister {
+        async fn get_canister_info(
+            &self,
+            canister_id: Principal,
+        ) -> ProcessingResult<CanisterInfoResult, ()> {
+            match self.controllers.get(&canister_id) {
+                Some(controllers) => {
+                    let canister_info = CanisterInfoResult {
+                        total_num_changes: *self.total_num_changes.get(&canister_id).unwrap(),
+                        recent_changes: vec![],
+                        module_hash: None,
+                        controllers: controllers.clone(),
+                    };
+                    ProcessingResult::Success(canister_info)
+                }
+                None => ProcessingResult::FatalFailure(()),
+            }
+        }
+
+        fn canister_self(&self) -> Principal {
+            MIGRATION_CANISTER_ID
+        }
+
+        async fn set_original_controllers(
+            &mut self,
+            canister_id: Principal,
+            new_controllers: Vec<Principal>,
+            _subnet_id: Principal,
+        ) -> ProcessingResult<(), ()> {
+            match self.controllers.get_mut(&canister_id) {
+                Some(controllers) => {
+                    *controllers = new_controllers;
+                    *self.total_num_changes.get_mut(&canister_id).unwrap() += 1;
+                    ProcessingResult::Success(())
+                }
+                None => ProcessingResult::FatalFailure(()),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn controller_recovery_canister_deleted() {
+        let mut state = ControllerRecoveryState::NoProgress;
+        let canister_id = CANISTER_ID;
+        let new_controllers = vec![Principal::anonymous()];
+
+        let mut ic00 = MockManagementCanister {
+            controllers: BTreeMap::new(),
+            total_num_changes: BTreeMap::new(),
+        };
+
+        state = controller_recovery(&mut ic00, state, canister_id, new_controllers).await;
+        assert_eq!(state, ControllerRecoveryState::Done);
+    }
+
+    #[tokio::test]
+    async fn controller_recovery_canister_happy_path() {
+        let mut state = ControllerRecoveryState::NoProgress;
+        let canister_id = CANISTER_ID;
+        let new_controllers = vec![Principal::anonymous()];
+
+        let mut controllers = BTreeMap::new();
+        controllers.insert(canister_id, vec![MIGRATION_CANISTER_ID]);
+        let mut total_num_changes = BTreeMap::new();
+        total_num_changes.insert(canister_id, 0);
+        let mut ic00 = MockManagementCanister {
+            controllers,
+            total_num_changes,
+        };
+
+        state = controller_recovery(&mut ic00, state, canister_id, new_controllers.clone()).await;
+        assert_eq!(state, ControllerRecoveryState::TotalNumChangesBefore(0));
+        state = controller_recovery(&mut ic00, state, canister_id, new_controllers).await;
+        assert_eq!(state, ControllerRecoveryState::Done);
     }
 }

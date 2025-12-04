@@ -153,7 +153,7 @@ impl Display for Request {
 /// Represents the recovery state for controllers of either source or target.
 /// Such a recovery is needed for a failed request to hand control
 /// back to the original controllers of source or target, respectively.
-#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ControllerRecoveryState {
     /// Controller recovery is pending and no progress has been made so far.
     NoProgress,
