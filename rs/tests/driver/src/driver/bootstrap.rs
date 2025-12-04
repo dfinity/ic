@@ -533,7 +533,6 @@ fn create_guestos_config_for_node(
         node_reward_type: None,
         mgmt_mac,
         deployment_environment,
-        use_nns_public_key: false,
         nns_urls,
         use_node_operator_private_key: true,
         enable_trusted_execution_environment: false,

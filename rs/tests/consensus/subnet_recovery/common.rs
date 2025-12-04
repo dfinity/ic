@@ -47,7 +47,8 @@ use ic_consensus_system_test_utils::{
     },
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    create_new_subnet_with_keys, make_key_ids_for_all_schemes, run_chain_key_signature_test,
+    await_pre_signature_stash_size, create_new_subnet_with_keys, make_key_ids_for_all_schemes,
+    run_chain_key_signature_test, set_pre_signature_stash_size,
 };
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -66,7 +67,10 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env_api::scp_send_to;
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::util::*;
-use ic_types::{Height, ReplicaVersion, SubnetId, consensus::CatchUpPackage};
+use ic_types::{
+    Height, ReplicaVersion, SubnetId,
+    consensus::{CatchUpPackage, idkg::STORE_PRE_SIGNATURES_IN_STATE},
+};
 use prost::Message;
 use slog::{Logger, info};
 use std::{
@@ -90,6 +94,7 @@ const DKG_INTERVAL_LARGE: u64 = 124;
 const IC_ADMIN_REMOTE_PATH: &str = "/var/lib/admin/ic-admin";
 
 pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+const PRE_SIGNATURES_TO_CREATE_IN_ADVANCE: u32 = 5;
 
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
@@ -101,7 +106,7 @@ fn setup(env: TestEnv, cfg: SetupConfig) {
         .map(|key_id| KeyConfig {
             max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
-                3
+                PRE_SIGNATURES_TO_CREATE_IN_ADVANCE
             } else {
                 0
             },
@@ -384,6 +389,9 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         nns_node.node_id,
         nns_node.get_ip_addr()
     );
+    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
+
     let agent = nns_node.with_default_agent(|agent| async move { agent });
     let nns_canister = block_on(MessageCanister::new(
         &agent,
@@ -404,6 +412,11 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     assert!(cfg.chain_key >= create_new_subnet);
 
     let key_ids = make_key_ids_for_all_schemes();
+    let idkg_keys = key_ids
+        .iter()
+        .filter(|k| k.is_idkg_key())
+        .cloned()
+        .collect::<Vec<_>>();
     let chain_key_pub_keys = cfg.chain_key.then(|| {
         info!(
             logger,
@@ -470,6 +483,39 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     );
 
     print_source_and_app_and_unassigned_nodes(&env, &logger, source_subnet_id);
+
+    // Only check that the pre-signature stash is purged in one test case (chain keys + corrupt CUP)
+    let check_pre_signature_stash_is_purged =
+        cfg.chain_key && cfg.corrupt_cup && STORE_PRE_SIGNATURES_IN_STATE;
+    if check_pre_signature_stash_is_purged {
+        // The stash size should be `PRE_SIGNATURES_TO_CREATE_IN_ADVANCE` initially
+        await_pre_signature_stash_size(
+            &app_subnet,
+            PRE_SIGNATURES_TO_CREATE_IN_ADVANCE as usize,
+            idkg_keys.as_slice(),
+            &logger,
+        );
+        // Turn off pre-signature generation on both subnets, so we can check that the stash is purged during recovery
+        info!(logger, "Disabling pre-signature generation");
+        block_on(set_pre_signature_stash_size(
+            &governance,
+            app_subnet.subnet_id,
+            key_ids.as_slice(),
+            /* max_parallel_pre_signatures */ 0,
+            /* max_stash_size */ PRE_SIGNATURES_TO_CREATE_IN_ADVANCE,
+            /* key_rotation_period */ None,
+            &logger,
+        ));
+        block_on(set_pre_signature_stash_size(
+            &governance,
+            source_subnet_id,
+            key_ids.as_slice(),
+            /* max_parallel_pre_signatures */ 0,
+            /* max_stash_size */ PRE_SIGNATURES_TO_CREATE_IN_ADVANCE,
+            /* key_rotation_period */ None,
+            &logger,
+        ));
+    };
 
     let unassigned_nodes_ids = env
         .topology_snapshot()
@@ -723,6 +769,22 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
             "Node {} finalization height: {:?}", node.node_id, height
         );
         assert!(height > Height::from(1000));
+    }
+
+    if check_pre_signature_stash_is_purged {
+        info!(logger, "Checking that the pre-signature stash is purged");
+        // After recovery the stash should be purged
+        await_pre_signature_stash_size(&app_subnet, 0, idkg_keys.as_slice(), &logger);
+        // Re-enable pre-signature generation
+        block_on(set_pre_signature_stash_size(
+            &governance,
+            app_subnet.subnet_id,
+            key_ids.as_slice(),
+            /* max_parallel_pre_signatures */ 10,
+            /* max_stash_size */ PRE_SIGNATURES_TO_CREATE_IN_ADVANCE,
+            /* key_rotation_period */ None,
+            &logger,
+        ));
     }
 
     if cfg.chain_key {

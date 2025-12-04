@@ -12,6 +12,7 @@ Runbook::
 . Add all X unassigned nodes to System subnet via proposal.
 . Assert that node membership has changed.
 . Assert that the key was reshared due to the new membership
+. Assert that the pre-signature stash was purged.
 . Assert that all nodes are making progress
 . Assert that chain key signing continues to work with the same public key as before.
 
@@ -29,8 +30,9 @@ use ic_consensus_system_test_utils::{
     rw_message::cert_state_makes_progress_with_retries,
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    DKG_INTERVAL, enable_chain_key_signing, get_public_key_and_test_signature,
-    get_public_key_with_logger, make_key_ids_for_all_schemes,
+    DKG_INTERVAL, await_pre_signature_stash_size, enable_chain_key_signing,
+    get_public_key_and_test_signature, get_public_key_with_logger, make_key_ids_for_all_schemes,
+    set_pre_signature_stash_size,
 };
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -50,13 +52,14 @@ use ic_system_test_driver::{
     systest,
     util::*,
 };
-use ic_types::Height;
+use ic_types::{Height, consensus::idkg::STORE_PRE_SIGNATURES_IN_STATE};
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use slog::{Logger, info};
 use std::collections::BTreeMap;
 
 const NODES_COUNT: usize = 4;
 const UNASSIGNED_NODES_COUNT: usize = 3;
+const PRE_SIGNATURES_TO_CREATE_IN_ADVANCE: u32 = 5;
 
 const MASTER_KEY_TRANSCRIPTS_CREATED: &str = "consensus_master_key_transcripts_created";
 
@@ -107,6 +110,11 @@ fn test(env: TestEnv) {
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
     let key_ids = make_key_ids_for_all_schemes();
+    let idkg_keys = key_ids
+        .iter()
+        .filter(|k| k.is_idkg_key())
+        .cloned()
+        .collect::<Vec<_>>();
     block_on(async {
         enable_chain_key_signing(&governance, nns_subnet.subnet_id, key_ids.clone(), &log).await;
     });
@@ -128,6 +136,27 @@ fn test(env: TestEnv) {
                 assert_metric_sum(&nns, key_id, NODES_COUNT, &log).await;
             }
         });
+    }
+    if STORE_PRE_SIGNATURES_IN_STATE {
+        // The stash size should be `PRE_SIGNATURES_TO_CREATE_IN_ADVANCE` initially
+        await_pre_signature_stash_size(
+            &nns_subnet,
+            PRE_SIGNATURES_TO_CREATE_IN_ADVANCE as usize,
+            idkg_keys.as_slice(),
+            &log,
+        );
+        // Turn off pre-signature generation, so we can check that the stash is purged
+        // during the membership change
+        info!(log, "Disabling pre-signature generation");
+        block_on(set_pre_signature_stash_size(
+            &governance,
+            nns_subnet.subnet_id,
+            key_ids.as_slice(),
+            /* max_parallel_pre_signatures */ 0,
+            /* max_stash_size */ PRE_SIGNATURES_TO_CREATE_IN_ADVANCE,
+            /* key_rotation_period */ None,
+            &log,
+        ));
     }
     info!(
         log,
@@ -185,6 +214,21 @@ fn test(env: TestEnv) {
             /*timeout=*/ secs(100),
             /*backoff=*/ secs(3),
         );
+    }
+
+    if STORE_PRE_SIGNATURES_IN_STATE {
+        // The stash size should be 0 after the nodes are added
+        await_pre_signature_stash_size(&nns_subnet, 0, idkg_keys.as_slice(), &log);
+        // Re-enable pre-signature generation
+        block_on(set_pre_signature_stash_size(
+            &governance,
+            nns_subnet.subnet_id,
+            key_ids.as_slice(),
+            /* max_parallel_pre_signatures */ 10,
+            /* max_stash_size */ PRE_SIGNATURES_TO_CREATE_IN_ADVANCE,
+            /* key_rotation_period */ None,
+            &log,
+        ));
     }
 
     info!(log, "Run through signature test.");

@@ -1075,10 +1075,17 @@ fn execute_response_cleanup(
             FuncRef::QueryClosure(cleanup_closure)
         }
     };
+
+    let reject_code = match &original.message.response_payload {
+        Payload::Data(_) => 0,
+        Payload::Reject(context) => context.code() as i32,
+    };
+
     let result = round.hypervisor.execute_dts(
         ApiType::Cleanup {
             caller: original.call_origin.get_principal(),
             time: original.time,
+            reject_code,
             call_context_instructions_executed: original.instructions_executed,
         },
         helper.canister().execution_state.as_ref().unwrap(),
