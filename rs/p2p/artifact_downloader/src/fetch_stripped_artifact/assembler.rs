@@ -10,11 +10,11 @@ use ic_interfaces::p2p::consensus::{
 };
 use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::types::v1 as pb;
 use ic_protobuf::{
     proxy::ProxyDecodeError,
     registry::subnet::v1::{IDkgDealing as IDkgDealingProto, IDkgSignedDealingTuple},
 };
+use ic_protobuf::{proxy::try_from_option_field, types::v1 as pb};
 use ic_quic_transport::Transport;
 use ic_types::{
     CountBytes, NodeId, NodeIndex,
@@ -26,7 +26,7 @@ use ic_types::{
     },
     crypto::{
         Signed,
-        canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing},
+        canister_threshold_sig::idkg::{IDkgDealing, IDkgTranscriptId, SignedIDkgDealing},
     },
     messages::SignedIngress,
     node_id_into_protobuf,
@@ -359,7 +359,7 @@ pub(crate) enum AssemblyError {
     #[error("The block proposal is missing an IDKG dealing with id {0:?}")]
     MissingIDkgDealing(IDkgArtifactId),
     #[error("The block proposal is missing an IDKG transcript with id {0}")]
-    MissingIDkgTranscript(u64),
+    MissingIDkgTranscript(IDkgTranscriptId),
     #[error("The block proposal is missing an IDKG dealer with node index {0}")]
     MissingIDkgNodeIndex(NodeIndex),
     #[error("The block proposal cannot be deserialized {0}")]
@@ -508,11 +508,12 @@ impl BlockProposalAssembler {
         let reconstructed_ingress_payload_proto =
             pb::IngressPayload::from(reconstructed_ingress_payload);
 
-        let mut idkg_dealings = BTreeMap::<u64, BTreeMap<NodeIndex, SignedIDkgDealing>>::new();
+        let mut idkg_dealings =
+            BTreeMap::<IDkgTranscriptId, BTreeMap<NodeIndex, SignedIDkgDealing>>::new();
         for ((dealer_index, dealing_id), signed_dealing) in signed_dealings {
             let signed_dealing = signed_dealing
                 .ok_or_else(|| AssemblyError::MissingIDkgDealing(dealing_id.clone()))?;
-            let transcript_id = dealing_id.prefix().group_tag();
+            let transcript_id = signed_dealing.idkg_dealing().transcript_id;
             idkg_dealings
                 .entry(transcript_id)
                 .or_default()
@@ -523,16 +524,16 @@ impl BlockProposalAssembler {
             block.ingress_payload = Some(reconstructed_ingress_payload_proto);
             if let Some(idkg) = block.idkg_payload.as_mut() {
                 for transcript in &mut idkg.idkg_transcripts {
-                    let Some(transcript_id) = transcript.transcript_id.as_ref() else {
-                        return Err(AssemblyError::DeserializationFailed(
-                            ProxyDecodeError::MissingField("transcript_id"),
-                        ));
-                    };
+                    let transcript_id =
+                        try_from_option_field(transcript.transcript_id.as_ref(), "transcript_id")
+                            .map_err(AssemblyError::DeserializationFailed)?;
                     for dealing in &mut transcript.verified_dealings {
                         let dealer_index = dealing.dealer_index;
                         let found_dealing = idkg_dealings
-                            .get_mut(&transcript_id.id)
-                            .ok_or_else(|| AssemblyError::MissingIDkgTranscript(transcript_id.id))?
+                            .get_mut(&transcript_id)
+                            .ok_or_else(|| {
+                                AssemblyError::MissingIDkgTranscript(transcript_id.clone())
+                            })?
                             .remove(&dealer_index)
                             .ok_or_else(|| AssemblyError::MissingIDkgNodeIndex(dealer_index))?;
                         dealing.signed_dealing_tuple = Some(idkg_dealing_proto(found_dealing));
@@ -576,6 +577,7 @@ mod tests {
         fake_stripped_block_proposal_with_messages,
     };
     use crate::fetch_stripped_artifact::types::rpc::GetIngressMessageInBlockResponse;
+    use assert_matches::assert_matches;
     use bytes::Bytes;
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
     use ic_interfaces::p2p::consensus::BouncerValue;
@@ -586,7 +588,7 @@ mod tests {
     use ic_protobuf::proxy::ProtoProxy;
     use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_types::consensus::idkg::IDkgObject;
-    use ic_types_test_utils::ids::{NODE_1, NODE_2};
+    use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_2};
 
     use super::*;
 
@@ -620,6 +622,48 @@ mod tests {
             StrippedMessage::Ingress(ingress_id_2, ingress_2),
             StrippedMessage::IDkgDealing(dealing_1.message_id(), 1, dealing_1),
             StrippedMessage::IDkgDealing(dealing_2.message_id(), 2, dealing_2),
+        ] {
+            assembler.try_insert_stripped_message(message).unwrap();
+        }
+
+        // try to reassemble the block
+        let assembled_block = assembler.try_assemble().unwrap();
+
+        assert_eq!(assembled_block, block_proposal);
+    }
+
+    #[test]
+    fn strip_assemble_roundtrip_same_transcript_id_test() {
+        let dealing_1 = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_1);
+        let transcript_id = dealing_1.idkg_dealing().transcript_id;
+        let mut dealing_2 = dealing_1.clone();
+        // Both dealing have the same transcript id, apart from the subnet id
+        dealing_2.content.transcript_id =
+            IDkgTranscriptId::new(SUBNET_2, transcript_id.id(), transcript_id.source_height());
+        assert_ne!(transcript_id, dealing_2.content.transcript_id);
+        // Both dealing have the same dealer index
+        let node_indes = 1;
+
+        let idkg = fake_idkg_payload_with_dealings(vec![
+            (dealing_1.clone(), node_indes),
+            (dealing_2.clone(), node_indes),
+        ]);
+        let block_proposal = fake_block_proposal_with_ingresses_and_idkg(vec![], Some(idkg), false);
+        let consensus_message = ConsensusMessage::BlockProposal(block_proposal.clone());
+
+        // strip the block
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped_block_proposal) =
+            consensus_message.strip()
+        else {
+            panic!("Didn't properly strip the block proposal");
+        };
+
+        let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
+
+        // insert back the missing messages
+        for message in [
+            StrippedMessage::IDkgDealing(dealing_1.message_id(), node_indes, dealing_1),
+            StrippedMessage::IDkgDealing(dealing_2.message_id(), node_indes, dealing_2),
         ] {
             assembler.try_insert_stripped_message(message).unwrap();
         }
@@ -691,6 +735,97 @@ mod tests {
             AssemblyError::MissingIDkgDealing(id) if id == dealing_2.message_id() => (),
             _ => panic!("Wrong error"),
         }
+    }
+
+    #[test]
+    fn strip_assemble_fails_when_missing_dealer_id_test() {
+        let dealing_1 = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_1);
+        let dealing_2 = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_2);
+        let idkg =
+            fake_idkg_payload_with_dealings(vec![(dealing_1.clone(), 1), (dealing_2.clone(), 2)]);
+        let block_proposal = fake_block_proposal_with_ingresses_and_idkg(vec![], Some(idkg), false);
+        let consensus_message = ConsensusMessage::BlockProposal(block_proposal.clone());
+
+        // strip the block
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped_block_proposal) =
+            consensus_message.strip()
+        else {
+            panic!("Didn't properly strip the block proposal");
+        };
+
+        // A malicious node sends us a stripped proposal with a missing dealing ID:
+        stripped_block_proposal
+            .stripped_idkg_dealings
+            .stripped_dealings
+            .remove(1);
+
+        let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
+
+        // insert back only the missing message
+        assembler
+            .try_insert_idkg_dealing_message(dealing_1.message_id(), dealing_1)
+            .unwrap();
+        let err = assembler
+            .try_insert_idkg_dealing_message(dealing_2.message_id(), dealing_2)
+            .unwrap_err();
+        assert_matches!(err, InsertionError::NotNeeded);
+
+        // try to reassemble the block
+        let assembly_error = assembler.try_assemble().unwrap_err();
+
+        assert_matches!(assembly_error, AssemblyError::MissingIDkgNodeIndex(2));
+    }
+
+    #[test]
+    fn strip_assemble_fails_when_missing_transcript_id_test() {
+        let dealing_1 = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_1);
+        let transcript_id_1 = dealing_1.idkg_dealing().transcript_id;
+        let mut dealing_2 = dealing_1.clone();
+        // Both dealing have the same transcript id, apart from the subnet id
+        let transcript_id_2 = IDkgTranscriptId::new(
+            SUBNET_2,
+            transcript_id_1.id(),
+            transcript_id_1.source_height(),
+        );
+        dealing_2.content.transcript_id = transcript_id_2;
+        assert_ne!(transcript_id_1, transcript_id_2);
+        let node_index = 1;
+
+        let idkg = fake_idkg_payload_with_dealings(vec![
+            (dealing_1.clone(), node_index),
+            (dealing_2.clone(), node_index),
+        ]);
+        let block_proposal = fake_block_proposal_with_ingresses_and_idkg(vec![], Some(idkg), false);
+        let consensus_message = ConsensusMessage::BlockProposal(block_proposal.clone());
+
+        // strip the block
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped_block_proposal) =
+            consensus_message.strip()
+        else {
+            panic!("Didn't properly strip the block proposal");
+        };
+
+        // A malicious node sends us a stripped proposal with a missing transcript ID:
+        stripped_block_proposal
+            .stripped_idkg_dealings
+            .stripped_dealings
+            .remove(1);
+
+        let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
+
+        // insert back only the missing message
+        assembler
+            .try_insert_idkg_dealing_message(dealing_1.message_id(), dealing_1)
+            .unwrap();
+        let err = assembler
+            .try_insert_idkg_dealing_message(dealing_2.message_id(), dealing_2)
+            .unwrap_err();
+        assert_matches!(err, InsertionError::NotNeeded);
+
+        // try to reassemble the block
+        let assembly_error = assembler.try_assemble().unwrap_err();
+
+        assert_matches!(assembly_error, AssemblyError::MissingIDkgTranscript(t) if t == transcript_id_2);
     }
 
     #[test]
