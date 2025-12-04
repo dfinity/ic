@@ -441,6 +441,64 @@ fn should_estimate_withdrawal_fee() {
     );
 }
 
+mod post_upgrade {
+    use ic_ckdoge_minter_test_utils::flow::withdrawal::assert_uses_utxos;
+    use ic_ckdoge_minter_test_utils::{
+        DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, MEDIAN_TRANSACTION_FEE, MinterCanister,
+        RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, only_one, utxo_with_value,
+    };
+    use icrc_ledger_types::icrc1::account::Account;
+
+    #[test]
+    fn should_deposit_and_withdraw_with_interleaved_upgrades() {
+        fn upgrade_and_check<F: Fn(&MinterCanister)>(minter: &MinterCanister, check: F) {
+            check(minter);
+            minter.upgrade(None);
+            check(minter)
+        }
+
+        let setup = Setup::default().with_median_fee_percentile(MEDIAN_TRANSACTION_FEE);
+
+        let minter = setup.minter();
+        let account = Account {
+            owner: USER_PRINCIPAL,
+            subaccount: Some([42_u8; 32]),
+        };
+        let utxo = utxo_with_value(RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE);
+
+        minter.upgrade(None);
+
+        setup
+            .deposit_flow()
+            .minter_get_dogecoin_deposit_address(account)
+            .dogecoin_simulate_transaction(vec![utxo.clone()])
+            .minter_update_balance()
+            .expect_mint();
+
+        upgrade_and_check(&minter, |m| {
+            assert_eq!(m.get_known_utxos(account), vec![utxo.clone()]);
+        });
+
+        setup
+            .withdrawal_flow()
+            .ledger_approve_minter(account, RETRIEVE_DOGE_MIN_AMOUNT)
+            .minter_retrieve_doge_with_approval(RETRIEVE_DOGE_MIN_AMOUNT, DOGECOIN_ADDRESS_1)
+            .expect_withdrawal_request_accepted()
+            .dogecoin_await_transaction()
+            .assert_sent_transactions(|sent| assert_uses_utxos(only_one(sent), vec![utxo.clone()]))
+            .minter_await_finalized_single_transaction();
+
+        upgrade_and_check(&minter, |m| {
+            assert_eq!(m.get_known_utxos(account), vec![]);
+            assert_eq!(
+                m.get_known_utxos(m.id()).len(),
+                1,
+                "BUG: expected change output"
+            );
+        });
+    }
+}
+
 #[test]
 fn should_get_logs() {
     let setup = Setup::default();

@@ -1,15 +1,16 @@
-use crate::MAX_TIME_IN_QUEUE;
 use crate::events::MinterEventAssert;
+use crate::{MAX_TIME_IN_QUEUE, NNS_ROOT_PRINCIPAL};
 use candid::{Decode, Encode, Principal};
 use canlog::LogEntry;
-use ic_ckdoge_minter::candid_api::{EstimateWithdrawalFeeError, MinterInfo, WithdrawalFee};
 use ic_ckdoge_minter::{
     EstimateFeeArg, Event, EventType, Priority, Txid, UpdateBalanceArgs, UpdateBalanceError, Utxo,
     UtxoStatus,
     candid_api::{
-        GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeStatusRequest,
-        RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
+        EstimateWithdrawalFeeError, GetDogeAddressArgs, MinterInfo, RetrieveDogeOk,
+        RetrieveDogeStatus, RetrieveDogeStatusRequest, RetrieveDogeWithApprovalArgs,
+        RetrieveDogeWithApprovalError, WithdrawalFee,
     },
+    lifecycle::init::{MinterArg, UpgradeArgs},
 };
 use ic_management_canister_types::{CanisterId, CanisterStatusResult};
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
@@ -301,6 +302,20 @@ impl MinterCanister {
 
     pub fn id(&self) -> CanisterId {
         self.id
+    }
+
+    pub fn upgrade(&self, upgrade_args: Option<UpgradeArgs>) {
+        let minter_args = MinterArg::Upgrade(upgrade_args);
+        self.env
+            .upgrade_canister(
+                self.id,
+                crate::minter_wasm(),
+                Encode!(&minter_args).unwrap(),
+                Some(NNS_ROOT_PRINCIPAL),
+            )
+            .expect("BUG: failed to upgrade minter");
+        // run immediate tasks after upgrade, like refreshing fee percentiles.
+        self.env.tick();
     }
 }
 
