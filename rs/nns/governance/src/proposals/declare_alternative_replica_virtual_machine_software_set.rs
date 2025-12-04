@@ -103,11 +103,13 @@ impl DeclareAlternativeReplicaVirtualMachineSoftwareSet {
 fn validate_chip_ids(chip_ids: &[Vec<u8>]) -> Vec<String> {
     let mut defects = Vec::new();
 
+    // Must be nonempty.
     if chip_ids.is_empty() {
         defects.push("chip_ids must not be empty".to_string());
         return defects;
     }
 
+    // Each element must be of length 64.
     for (i, chip_id) in chip_ids.iter().enumerate() {
         if chip_id.len() != 64 {
             defects.push(format!(
@@ -207,16 +209,15 @@ fn validate_guest_launch_measurement(
         ));
     }
 
-    // Require metadata.
-    let metadata = match &measurement.metadata {
-        Some(ok) => ok,
-        None => {
-            defects.push("metadata must be present".to_string());
-            return defects;
-        }
-    };
-    // Kernel command line must be nonempty.
-    if metadata.kernel_cmdline.is_empty() {
+    // kernel_cmdline must be nonempty, even though metadata is optional.
+    let ok = measurement
+        .metadata
+        .as_ref()
+        // kernel_cmdline must be nonempty.
+        .map(|metadata| !metadata.kernel_cmdline.is_empty())
+        // Absent metadata is ok though.
+        .unwrap_or(true);
+    if !ok {
         defects.push("metadata.kernel_cmdline must not be empty".to_string());
     }
 

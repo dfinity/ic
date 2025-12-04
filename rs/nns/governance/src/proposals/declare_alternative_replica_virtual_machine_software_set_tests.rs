@@ -133,12 +133,13 @@ fn test_validate_base_guest_launch_measurements_multiple_defects() {
                     kernel_cmdline: "console=ttyS0".to_string(),
                 }),
             },
-            // Missing metadata
+            // Missing metadata. This is ok.
             GuestLaunchMeasurement {
                 measurement: vec![0u8; 48],
                 metadata: None,
             },
-            // Empty kernel_cmdline
+            // Empty kernel_cmdline. This is NOT ok, even though metadata is
+            // optional.
             GuestLaunchMeasurement {
                 measurement: vec![0u8; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
@@ -150,15 +151,12 @@ fn test_validate_base_guest_launch_measurements_multiple_defects() {
 
     let defects = validate_base_guest_launch_measurements(&Some(measurements));
 
-    assert_eq!(defects.len(), 3, "{defects:#?}");
+    assert_eq!(defects.len(), 2, "{defects:#?}");
 
     assert_contains_all_key_words(&defects[0], &["guest_launch_measurements[1]", "48", "32"]);
+
     assert_contains_all_key_words(
         &defects[1],
-        &["guest_launch_measurements[2]", "metadata", "present"],
-    );
-    assert_contains_all_key_words(
-        &defects[2],
         &["guest_launch_measurements[3]", "kernel_cmdline", "empty"],
     );
 }
@@ -204,8 +202,7 @@ fn test_validate_guest_launch_measurement_no_metadata() {
         metadata: None,
     };
     let defects = validate_guest_launch_measurement(&measurement);
-    assert_eq!(defects.len(), 1, "{defects:#?}");
-    assert_contains_all_key_words(&defects[0], &["metadata", "present"]);
+    assert!(defects.is_empty(), "{defects:#?}");
 }
 
 #[test]
@@ -232,14 +229,13 @@ fn test_validate_guest_launch_measurement_multiple_defects() {
         temporarily_enable_declare_alternative_replica_virtual_machine_software_set_proposals();
 
     let measurement = GuestLaunchMeasurement {
-        measurement: vec![0u8; 32], // Wrong size
-        metadata: None,             // Missing metadata
+        measurement: vec![0u8; 32], // Wrong size.
+        metadata: None,             // No metadata.
     };
     let defects = validate_guest_launch_measurement(&measurement);
-    // Should report measurement size error, then early return on missing metadata
-    assert_eq!(defects.len(), 2, "{defects:#?}");
+    // Should report measurement size error. Metadata missing is allowed though.
+    assert_eq!(defects.len(), 1, "{defects:#?}");
     assert_contains_all_key_words(&defects[0], &["48"]);
-    assert_contains_all_key_words(&defects[1], &["metadata", "present"]);
 }
 
 #[test]
