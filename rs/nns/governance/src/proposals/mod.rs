@@ -207,6 +207,12 @@ impl ValidProposalAction {
             ValidProposalAction::ExecuteNnsFunction(execute_nns_function) => {
                 execute_nns_function.to_self_describing_action(env).await
             }
+            ValidProposalAction::RegisterKnownNeuron(register_known_neuron) => {
+                Ok(register_known_neuron.to_self_describing_action())
+            }
+            ValidProposalAction::DeregisterKnownNeuron(deregister_known_neuron) => {
+                Ok(deregister_known_neuron.to_self_describing_action())
+            }
             _ => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 "Self describing proposal actions are not supported for this proposal action yet.",

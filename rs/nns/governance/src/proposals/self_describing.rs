@@ -1,7 +1,7 @@
 use crate::pb::v1::{
     ApproveGenesisKyc, Motion, SelfDescribingProposalAction, SelfDescribingValue,
     SelfDescribingValueArray, SelfDescribingValueMap,
-    self_describing_value::Value::{Array, Map, Text},
+    self_describing_value::Value::{self, Array, Map, Text},
 };
 
 use ic_base_types::PrincipalId;
@@ -52,7 +52,7 @@ impl LocallyDescribableProposalAction for ApproveGenesisKyc {
 
     fn to_self_describing_value(&self) -> SelfDescribingValue {
         ValueBuilder::new()
-            .add_array_field("principals", self.principals.clone())
+            .add_field("principals", self.principals.clone())
             .build()
     }
 }
@@ -74,20 +74,26 @@ impl ValueBuilder {
         self
     }
 
-    pub fn add_array_field(
+    /// Given an `value: Option<T>`, if `value` is `Some(inner)`, add the `inner` to the builder. If
+    /// `value` is `None`, add an empty array to the builder. This is useful for cases where a field
+    /// is designed to be required, while we want to still add an empty field to the builder in case
+    /// of a bug.
+    pub fn add_field_with_empty_as_fallback(
         mut self,
         key: impl ToString,
-        values: impl IntoIterator<Item = impl Into<SelfDescribingValue>>,
+        value: Option<impl Into<SelfDescribingValue>>,
     ) -> Self {
-        self.fields.insert(
-            key.to_string(),
-            SelfDescribingValue {
-                value: Some(Array(SelfDescribingValueArray {
-                    values: values.into_iter().map(Into::into).collect(),
-                })),
-            },
-        );
-        self
+        if let Some(value) = value {
+            self.add_field(key, value)
+        } else {
+            self.fields.insert(
+                key.to_string(),
+                SelfDescribingValue {
+                    value: Some(Array(SelfDescribingValueArray { values: vec![] })),
+                },
+            );
+            self
+        }
     }
 
     pub fn build(self) -> SelfDescribingValue {
@@ -125,6 +131,46 @@ where
             })),
         }
     }
+}
+
+impl<T: Into<SelfDescribingValue>> From<Vec<T>> for SelfDescribingValue {
+    fn from(value: Vec<T>) -> Self {
+        SelfDescribingValue {
+            value: Some(Array(SelfDescribingValueArray {
+                values: value.into_iter().map(Into::into).collect(),
+            })),
+        }
+    }
+}
+
+/// A trait for types that can be converted to a SelfDescribingValue as an unsigned integer. This is
+/// used because we can't do `impl<T: Into<candid::Nat>> From<T> for SelfDescribingValue` because of
+/// potential conflicts.
+pub(crate) trait ToSelfDescribingNat: Into<candid::Nat> {}
+
+impl<T: ToSelfDescribingNat> From<T> for SelfDescribingValue {
+    fn from(value: T) -> Self {
+        SelfDescribingValue {
+            value: Some(to_self_describing_nat(value)),
+        }
+    }
+}
+
+// Types we want to be able to convert to a SelfDescribingValue as an unsigned integer.
+impl ToSelfDescribingNat for u64 {}
+
+pub(crate) fn to_self_describing_nat(n: impl Into<candid::Nat>) -> Value {
+    let n = n.into();
+    let mut bytes = Vec::new();
+    n.encode(&mut bytes).expect("Failed to encode Nat");
+    Value::Nat(bytes)
+}
+
+pub(crate) fn to_self_describing_int(i: impl Into<candid::Int>) -> Value {
+    let i = i.into();
+    let mut bytes = Vec::new();
+    i.encode(&mut bytes).expect("Failed to encode Int");
+    Value::Int(bytes)
 }
 
 #[path = "self_describing_tests.rs"]
