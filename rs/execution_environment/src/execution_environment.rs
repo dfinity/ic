@@ -1586,7 +1586,7 @@ impl ExecutionEnvironment {
                                                 sender,
                                                 &state,
                                                 args,
-                                                self.config.fetch_canister_logs_filter,
+                                                self.config.log_memory_store_feature,
                                             )
                                         })
                                         .map(|resp| {

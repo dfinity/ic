@@ -75,7 +75,7 @@ fn readable_logs_without_backtraces(
 
 fn setup_env_with(
     replicated_inter_canister_log_fetch: FlagStatus,
-    fetch_canister_logs_filter: FlagStatus,
+    log_memory_store_feature: FlagStatus,
 ) -> StateMachine {
     let subnet_type = SubnetType::Application;
     let mut subnet_config = SubnetConfig::new(subnet_type);
@@ -86,7 +86,7 @@ fn setup_env_with(
         subnet_config,
         ExecutionConfig {
             replicated_inter_canister_log_fetch,
-            fetch_canister_logs_filter,
+            log_memory_store_feature,
             ..Default::default()
         },
     );
@@ -99,10 +99,10 @@ fn setup_env_with(
 
 fn setup_env() -> StateMachine {
     let replicated_inter_canister_log_fetch = FlagStatus::Disabled;
-    let fetch_canister_logs_filter = FlagStatus::Disabled;
+    let log_memory_store_feature = FlagStatus::Disabled;
     setup_env_with(
         replicated_inter_canister_log_fetch,
-        fetch_canister_logs_filter,
+        log_memory_store_feature,
     )
 }
 
