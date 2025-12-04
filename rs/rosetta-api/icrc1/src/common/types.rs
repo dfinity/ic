@@ -411,7 +411,10 @@ impl TryFrom<FeeCollectorMetadata> for ObjectMap {
                     v
                 ),
             },
-            Err(err) => anyhow::bail!("Could not convert FeeCollectorMetadata to ObjectMap: {:?}", err),
+            Err(err) => anyhow::bail!(
+                "Could not convert FeeCollectorMetadata to ObjectMap: {:?}",
+                err
+            ),
         }
     }
 }
