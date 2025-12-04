@@ -11,6 +11,7 @@ use strum_macros::Display;
 
 use crate::{
     canister_state::{events::num_successes_in_past_24_h, num_active_requests},
+    controller_recovery::ControllerRecoveryState,
     processing::{
         process_accepted, process_all_by_predicate, process_all_failed, process_all_succeeded,
         process_controllers_changed, process_renamed, process_routing_table,
@@ -21,6 +22,7 @@ use crate::{
 pub use crate::migration_canister::{MigrateCanisterArgs, MigrationStatus};
 
 mod canister_state;
+mod controller_recovery;
 mod external_interfaces;
 mod migration_canister;
 mod privileged;
@@ -148,22 +150,6 @@ impl Display for Request {
         }
         write!(f, "] }}")
     }
-}
-
-/// Represents the recovery state for controllers of either source or target.
-/// Such a recovery is needed for a failed request to hand control
-/// back to the original controllers of source or target, respectively.
-#[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ControllerRecoveryState {
-    /// Controller recovery is pending and no progress has been made so far.
-    NoProgress,
-    /// Controller recovery has been confirmed to be necessary (the migration canister
-    /// is the only controller) and the canister history has the specified
-    /// number of changes in total (used to derive if controller recovery
-    /// succeeded).
-    TotalNumChangesBefore(u64),
-    /// Controller recovery has completed (or it was not needed to be performed at all).
-    Done,
 }
 
 /// Represents the recovery state of a `Request` in `RequestState::Failed`,

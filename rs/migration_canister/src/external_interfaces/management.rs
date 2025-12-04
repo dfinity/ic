@@ -28,6 +28,9 @@ struct UpdateSettingsArgs {
     pub settings: CanisterSettings,
 }
 
+/// This is a success if the call is a success
+/// and a fatal failure otherwise.
+/// We never retry this due to potential data races.
 pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResult<(), String> {
     let args = UpdateSettingsArgs {
         canister_id,
@@ -42,22 +45,18 @@ pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResul
         Ok(_) => ProcessingResult::Success(()),
         Err(e) => {
             println!("Call `update_settings` for {} failed: {:?}", canister_id, e);
-            match e {
-                ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(_)
-                | ic_cdk::call::CallFailed::CallPerformFailed(_) => ProcessingResult::NoProgress,
-                ic_cdk::call::CallFailed::CallRejected(call_rejected) => {
-                    ProcessingResult::FatalFailure(format!(
-                        "Failed to set controller of canister {canister_id}: {}",
-                        call_rejected
-                    ))
-                }
-            }
+            ProcessingResult::FatalFailure(format!(
+                "Failed to set controller of canister {canister_id}: {e}",
+            ))
         }
     }
 }
 
-/// This is a success if the call is a success.
-pub async fn set_original_controllers(
+/// This is a success if the call is a success
+/// and a fatal failure if the canister does not exist.
+/// If applicable, failures due to the callet not being a controller of the given canister
+/// should be detected separately using `canister_info`.
+pub async fn set_controllers(
     canister_id: Principal,
     controllers: Vec<Principal>,
     subnet_id: Principal,
@@ -173,6 +172,8 @@ pub async fn canister_status(
 // ========================================================================= //
 // `canister_info`
 
+/// This is a success if the call is a success
+/// and a fatal failure if the canister does not exist.
 pub async fn get_canister_info(canister_id: Principal) -> ProcessingResult<CanisterInfoResult, ()> {
     let args = CanisterInfoArgs {
         canister_id,

@@ -62,6 +62,7 @@ rust_test(
     deps = [
         # Keep sorted.
         "//rs/limits",
+        "//rs/nns/constants",
         "@crate_index//:candid",
         "@crate_index//:candid_parser",
         "@crate_index//:futures",
@@ -70,6 +71,7 @@ rust_test(
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic_stable_structures_next",
         "@crate_index//:itertools",
+        "@crate_index//:rand",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",
         "@crate_index//:strum",
