@@ -1,10 +1,13 @@
-use crate::pb::v1::{
-    SelfDescribingValue, SelfDescribingValueArray, SelfDescribingValueMap,
-    self_describing_value::Value,
+use crate::{
+    pb::v1::{
+        SelfDescribingValue, SelfDescribingValueArray, SelfDescribingValueMap,
+        self_describing_value::Value,
+    },
+    proposals::self_describing::{to_self_describing_int, to_self_describing_nat},
 };
 
 use candid::{
-    IDLValue, Int, Nat,
+    IDLValue,
     types::value::{IDLField, VariantValue},
 };
 use candid_parser::{IDLArgs, IDLProg, TypeEnv, check_prog};
@@ -145,20 +148,6 @@ fn convert_variant_to_self_describing(
         map.insert(label, generic_val);
         Map(SelfDescribingValueMap { values: map })
     }
-}
-
-fn to_self_describing_nat(n: impl Into<Nat>) -> Value {
-    let n = n.into();
-    let mut bytes = Vec::new();
-    n.encode(&mut bytes).expect("Failed to encode Nat");
-    Value::Nat(bytes)
-}
-
-fn to_self_describing_int(i: impl Into<Int>) -> Value {
-    let i = i.into();
-    let mut bytes = Vec::new();
-    i.encode(&mut bytes).expect("Failed to encode Int");
-    Value::Int(bytes)
 }
 
 #[path = "decode_candid_args_to_self_describing_value_tests.rs"]
