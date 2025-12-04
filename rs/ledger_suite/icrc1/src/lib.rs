@@ -4,6 +4,7 @@ pub mod endpoints;
 pub mod hash;
 pub(crate) mod known_tags;
 
+use candid::Principal;
 use ciborium::tag::Required;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
 use ic_ledger_core::{
@@ -20,61 +21,37 @@ use serde::{Deserialize, Serialize};
 
 use std::collections::BTreeMap;
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
-#[serde(bound = "")]
-#[serde(tag = "op")]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub enum Operation<Tokens: TokensType> {
-    #[serde(rename = "mint")]
     Mint {
-        #[serde(with = "compact_account")]
         to: Account,
-        #[serde(rename = "amt")]
         amount: Tokens,
+        fee: Option<Tokens>,
     },
-    #[serde(rename = "xfer")]
     Transfer {
-        #[serde(with = "compact_account")]
         from: Account,
-        #[serde(with = "compact_account")]
         to: Account,
-        #[serde(
-            default,
-            skip_serializing_if = "Option::is_none",
-            with = "compact_account::opt"
-        )]
         spender: Option<Account>,
-        #[serde(rename = "amt")]
         amount: Tokens,
-        #[serde(skip_serializing_if = "Option::is_none")]
         fee: Option<Tokens>,
     },
-    #[serde(rename = "burn")]
     Burn {
-        #[serde(with = "compact_account")]
         from: Account,
-        #[serde(
-            default,
-            skip_serializing_if = "Option::is_none",
-            with = "compact_account::opt"
-        )]
         spender: Option<Account>,
-        #[serde(rename = "amt")]
         amount: Tokens,
-    },
-    #[serde(rename = "approve")]
-    Approve {
-        #[serde(with = "compact_account")]
-        from: Account,
-        #[serde(with = "compact_account")]
-        spender: Account,
-        #[serde(rename = "amt")]
-        amount: Tokens,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        expected_allowance: Option<Tokens>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        expires_at: Option<u64>,
-        #[serde(skip_serializing_if = "Option::is_none")]
         fee: Option<Tokens>,
+    },
+    Approve {
+        from: Account,
+        spender: Account,
+        amount: Tokens,
+        expected_allowance: Option<Tokens>,
+        expires_at: Option<u64>,
+        fee: Option<Tokens>,
+    },
+    FeeCollector {
+        fee_collector: Option<Account>,
+        caller: Option<Principal>,
     },
 }
 
@@ -113,8 +90,10 @@ struct FlattenedTransaction<Tokens: TokensType> {
     #[serde(with = "compact_account::opt")]
     spender: Option<Account>,
 
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "amt")]
-    amount: Tokens,
+    amount: Option<Tokens>,
 
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -127,6 +106,15 @@ struct FlattenedTransaction<Tokens: TokensType> {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     expires_at: Option<u64>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(with = "compact_account::opt")]
+    fee_collector: Option<Account>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    caller: Option<Principal>,
 }
 
 impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<Tokens> {
@@ -138,12 +126,18 @@ impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<T
                 from: value
                     .from
                     .ok_or("`from` field required for `burn` operation")?,
-                amount: value.amount,
+                amount: value
+                    .amount
+                    .ok_or("`amount` required for `burn` operations")?,
                 spender: value.spender,
+                fee: value.fee,
             },
             "mint" => Operation::Mint {
                 to: value.to.ok_or("`to` field required for `mint` operation")?,
-                amount: value.amount,
+                amount: value
+                    .amount
+                    .ok_or("`amount` required for `mint` operations")?,
+                fee: value.fee,
             },
             "xfer" => Operation::Transfer {
                 from: value
@@ -151,7 +145,9 @@ impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<T
                     .ok_or("`from` field required for `xfer` operation")?,
                 spender: value.spender,
                 to: value.to.ok_or("`to` field required for `xfer` operation")?,
-                amount: value.amount,
+                amount: value
+                    .amount
+                    .ok_or("`amount` required for `xfer` operations")?,
                 fee: value.fee,
             },
             "approve" => Operation::Approve {
@@ -161,10 +157,16 @@ impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<T
                 spender: value
                     .spender
                     .ok_or("`spender` field required for `approve` operation")?,
-                amount: value.amount,
+                amount: value
+                    .amount
+                    .ok_or("`amount` required for `approve` operations")?,
                 expected_allowance: value.expected_allowance,
                 expires_at: value.expires_at,
                 fee: value.fee,
+            },
+            "107set_fee_collector" => Operation::FeeCollector {
+                fee_collector: value.fee_collector,
+                caller: value.caller,
             },
             unknown_op => return Err(format!("Unknown operation name {unknown_op}")),
         };
@@ -188,6 +190,7 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 Mint { .. } => "mint",
                 Transfer { .. } => "xfer",
                 Approve { .. } => "approve",
+                FeeCollector { .. } => "107set_fee_collector",
             }
             .into(),
             from: match &t.operation {
@@ -207,11 +210,15 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 Burn { amount, .. }
                 | Mint { amount, .. }
                 | Transfer { amount, .. }
-                | Approve { amount, .. } => amount.clone(),
+                | Approve { amount, .. } => Some(amount.clone()),
+                FeeCollector { .. } => None,
             },
             fee: match &t.operation {
-                Transfer { fee, .. } | Approve { fee, .. } => fee.to_owned(),
-                _ => None,
+                Transfer { fee, .. }
+                | Approve { fee, .. }
+                | Mint { fee, .. }
+                | Burn { fee, .. } => fee.to_owned(),
+                FeeCollector { .. } => None,
             },
             expected_allowance: match &t.operation {
                 Approve {
@@ -221,6 +228,14 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
             },
             expires_at: match &t.operation {
                 Approve { expires_at, .. } => expires_at.to_owned(),
+                _ => None,
+            },
+            fee_collector: match &t.operation {
+                FeeCollector { fee_collector, .. } => fee_collector.to_owned(),
+                _ => None,
+            },
+            caller: match &t.operation {
+                FeeCollector { caller, .. } => caller.to_owned(),
                 _ => None,
             },
         }
@@ -253,6 +268,7 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                 from,
                 spender,
                 amount,
+                fee: None,
             },
             created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
             memo: memo.map(Memo::from),
@@ -355,7 +371,11 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                 from,
                 spender,
                 amount,
+                fee,
             } => {
+                if fee.is_some() {
+                    return Err(TxApplyError::BurnOrMintFee);
+                }
                 if spender.is_some() && from != &spender.unwrap() {
                     let allowance = context.approvals().allowance(from, &spender.unwrap(), now);
                     if allowance.amount < *amount {
@@ -372,7 +392,12 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                         .expect("bug: cannot use allowance");
                 }
             }
-            Operation::Mint { to, amount } => context.balances_mut().mint(to, amount.clone())?,
+            Operation::Mint { to, amount, fee } => {
+                if fee.is_some() {
+                    return Err(TxApplyError::BurnOrMintFee);
+                }
+                context.balances_mut().mint(to, amount.clone())?;
+            }
             Operation::Approve {
                 from,
                 spender,
@@ -403,6 +428,9 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                     return Err(e);
                 }
             }
+            Operation::FeeCollector { .. } => {
+                panic!("FeeCollector107 not implemented")
+            }
         }
         Ok(())
     }
@@ -416,7 +444,11 @@ impl<Tokens: TokensType> Transaction<Tokens> {
         memo: Option<Memo>,
     ) -> Self {
         Self {
-            operation: Operation::Mint { to, amount },
+            operation: Operation::Mint {
+                to,
+                amount,
+                fee: None,
+            },
             created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
             memo,
         }
@@ -445,81 +477,6 @@ impl<Tokens: TokensType> Transaction<Tokens> {
     }
 }
 
-impl<Tokens: TokensType> TryFrom<icrc_ledger_types::icrc3::transactions::Transaction>
-    for Transaction<Tokens>
-{
-    type Error = String;
-    fn try_from(
-        value: icrc_ledger_types::icrc3::transactions::Transaction,
-    ) -> Result<Self, Self::Error> {
-        if let Some(mint) = value.mint {
-            let amount = Tokens::try_from(mint.amount)
-                .map_err(|_| "Could not convert Nat to Tokens".to_string())?;
-            let operation = Operation::Mint {
-                to: mint.to,
-                amount,
-            };
-            return Ok(Self {
-                operation,
-                created_at_time: mint.created_at_time,
-                memo: mint.memo,
-            });
-        }
-        if let Some(burn) = value.burn {
-            let amount = Tokens::try_from(burn.amount)
-                .map_err(|_| "Could not convert Nat to Tokens".to_string())?;
-            let operation = Operation::Burn {
-                from: burn.from,
-                spender: burn.spender,
-                amount,
-            };
-            return Ok(Self {
-                operation,
-                created_at_time: burn.created_at_time,
-                memo: burn.memo,
-            });
-        }
-        if let Some(transfer) = value.transfer {
-            let amount = Tokens::try_from(transfer.amount)
-                .map_err(|_| "Could not convert Nat to Tokens".to_string())?;
-            match transfer.fee {
-                Some(fee) => {
-                    let fee = Tokens::try_from(fee)
-                        .map_err(|_| "Could not convert Nat to Tokens".to_string())?;
-
-                    let operation = Operation::Transfer {
-                        to: transfer.to,
-                        amount,
-                        from: transfer.from,
-                        spender: transfer.spender,
-                        fee: Some(fee),
-                    };
-                    return Ok(Self {
-                        operation,
-                        created_at_time: transfer.created_at_time,
-                        memo: transfer.memo,
-                    });
-                }
-                None => {
-                    let operation = Operation::Transfer {
-                        to: transfer.to,
-                        amount,
-                        from: transfer.from,
-                        spender: transfer.spender,
-                        fee: None,
-                    };
-                    return Ok(Self {
-                        operation,
-                        created_at_time: transfer.created_at_time,
-                        memo: transfer.memo,
-                    });
-                }
-            }
-        }
-        Err("Transaction has neither mint, burn nor transfer operation".to_owned())
-    }
-}
-
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[serde(bound = "")]
 pub struct Block<Tokens: TokensType> {
@@ -545,6 +502,10 @@ pub struct Block<Tokens: TokensType> {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "fee_col_block")]
     pub fee_collector_block_index: Option<u64>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "btype")]
+    pub btype: Option<String>,
 }
 
 type TaggedBlock<Tokens> = Required<Block<Tokens>, 55799>;
@@ -598,6 +559,9 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
         let effective_fee = match &transaction.operation {
             Operation::Transfer { fee, .. } => fee.is_none().then_some(effective_fee),
             Operation::Approve { fee, .. } => fee.is_none().then_some(effective_fee),
+            Operation::FeeCollector { .. } => {
+                panic!("FeeCollector107 not implemented")
+            }
             _ => None,
         };
         let (fee_collector, fee_collector_block_index) = match fee_collector {
@@ -615,6 +579,7 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
             timestamp: timestamp.as_nanos_since_unix_epoch(),
             fee_collector,
             fee_collector_block_index,
+            btype: None,
         }
     }
 }

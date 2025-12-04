@@ -612,7 +612,7 @@ impl ValidatedSnapshotMetadata {
         if raw.wasm_module_size > WASM_MAX_SIZE.get() {
             return Err(MetadataValidationError::WasmModuleTooLarge);
         }
-        if raw.wasm_memory_size as usize % WASM_PAGE_SIZE_IN_BYTES != 0 {
+        if !(raw.wasm_memory_size as usize).is_multiple_of(WASM_PAGE_SIZE_IN_BYTES) {
             return Err(MetadataValidationError::WasmMemoryNotPageAligned);
         }
         match wasm_mode {
@@ -627,7 +627,7 @@ impl ValidatedSnapshotMetadata {
                 }
             }
         }
-        if raw.stable_memory_size as usize % WASM_PAGE_SIZE_IN_BYTES != 0 {
+        if !(raw.stable_memory_size as usize).is_multiple_of(WASM_PAGE_SIZE_IN_BYTES) {
             return Err(MetadataValidationError::StableMemoryNotPageAligned);
         }
         if raw.stable_memory_size > MAX_STABLE_MEMORY_IN_BYTES {

@@ -163,7 +163,9 @@ impl Drop for IncompleteState {
                     .sub(dropped_chunks as i64);
             }
             DownloadState::Complete => {
-                // state sync duration already recorded earlier in make_checkpoint
+                // State sync duration already recorded:
+                // - in make_checkpoint() if the checkpoint already existed
+                // - after deliver_state_sync() if the checkpoint was successfully synced and delivered
             }
         }
 
@@ -327,7 +329,7 @@ impl IncompleteState {
             .with_label_values(&[LABEL_PREALLOCATE_FILES])
             .start_timer();
 
-        let num_files_to_hardlink = diff_script.map_or(0, |ds| ds.copy_files.len());
+        let num_files_to_hardlink = diff_script.map_or(0, |ds| ds.hardlink_files.len());
         info!(
             log,
             "state sync: preallocate_layout_files for {} out of {} files ({} files to be hardlinked)",
@@ -342,7 +344,7 @@ impl IncompleteState {
         match diff_script {
             Some(ds) => {
                 for (idx, file) in manifest.file_table.iter().enumerate() {
-                    if ds.copy_files.contains_key(&idx) {
+                    if ds.hardlink_files.contains_key(&idx) {
                         continue;
                     }
                     let parent = file
@@ -468,7 +470,7 @@ impl IncompleteState {
         info!(
             log,
             "state sync: hardlink_files for {} files {} validation",
-            diff_script.copy_files.len(),
+            diff_script.hardlink_files.len(),
             if self.should_validate(validate_data) {
                 "with"
             } else {
@@ -479,7 +481,7 @@ impl IncompleteState {
         let corrupted_chunks = Arc::new(Mutex::new(Vec::new()));
 
         thread_pool.scoped(|scope| {
-            for (new_index, old_index) in diff_script.copy_files.iter() {
+            for (new_index, old_index) in diff_script.hardlink_files.iter() {
                 let src_path = root_old.join(&manifest_old.file_table[*old_index].relative_path);
                 let dst_path = root_new.join(&manifest_new.file_table[*new_index].relative_path);
                 let corrupted_chunks = Arc::clone(&corrupted_chunks);
@@ -959,15 +961,11 @@ impl IncompleteState {
         match state_layout.promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, height) {
             Ok(_) => {
                 let elapsed = started_at.elapsed();
-                metrics
-                    .state_sync_metrics
-                    .duration
-                    .with_label_values(&["ok"])
-                    .observe(elapsed.as_secs_f64());
-
                 info!(
                     log,
-                    "Successfully completed sync of state {} in {:?}", height, elapsed
+                    "state sync: elapsed since start: {:?}, successfully made checkpoint at height {}",
+                    elapsed,
+                    height
                 );
                 true
             }
@@ -1168,7 +1166,7 @@ impl IncompleteState {
                 (diff_script.zeros_chunks * crate::state_sync::types::DEFAULT_CHUNK_SIZE) as u64;
 
             let hardlink_files_bytes: u64 = diff_script
-                .copy_files
+                .hardlink_files
                 .keys()
                 .map(|i| manifest_new.file_table[*i].size_bytes)
                 .sum();
@@ -1540,6 +1538,12 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             manifest.clone(),
                             Arc::new(meta_manifest.clone()),
                         );
+                        self.metrics
+                            .state_sync_metrics
+                            .duration
+                            .with_label_values(&["ok"])
+                            .observe(self.started_at.elapsed().as_secs_f64());
+
                         self.state = DownloadState::Complete;
                         Ok(())
                     } else {
@@ -1733,6 +1737,12 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         manifest.clone(),
                         Arc::new(meta_manifest.clone()),
                     );
+                    self.metrics
+                        .state_sync_metrics
+                        .duration
+                        .with_label_values(&["ok"])
+                        .observe(self.started_at.elapsed().as_secs_f64());
+
                     self.state = DownloadState::Complete;
 
                     // Delay delivery of artifact

@@ -47,6 +47,7 @@ rust_library(
         "//rs/utils/lru_cache",
         "@crate_index//:anyhow",
         "@crate_index//:bincode",
+        "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:itertools",
         "@crate_index//:libc",
@@ -161,7 +162,6 @@ rust_ic_test_suite_with_extra_srcs(
     ] + glob([
         "tests/compressed/*",
         "tests/instrumentation-test-data/*",
-        "tests/round-trip-test-data/*",
     ]),
     env = dict(ENV.items() + [
         ("CARGO_MANIFEST_DIR", "rs/embedders"),

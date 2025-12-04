@@ -6,6 +6,12 @@ Wants=generate-ic-config.service
 # Replica & orchestrator need ic-crypto-csp service running.
 After=ic-crypto-csp.service
 Wants=ic-crypto-csp.service
+ConditionPathExists=/run/config/guest_vm_type/default
+# Network-online.target and systemd-journal-gatewayd.service shutdown dependencies are necessary for observing late reboot logs
+After=network-online.target
+Wants=network-online.target
+After=systemd-journal-gatewayd.service
+Wants=systemd-journal-gatewayd.service
 
 [Service]
 UMask=026
@@ -18,8 +24,6 @@ ExecStart=/opt/ic/bin/orchestrator --replica-binary-dir /var/lib/ic/data/images 
 LimitNOFILE=16777216
 Restart=always
 RestartSec=10
-# Don't run in UpgradeVM
-ExecCondition=/bin/bash -c '[[ "$(jq -r ".guest_vm_type" /run/config/config.json)" =~ ^(default|null)$ ]]'
 
 [Install]
 WantedBy=multi-user.target

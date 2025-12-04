@@ -625,6 +625,11 @@ message Proposal {
   // 2000 bytes.
   string url = 2;
 
+  // A self-describing action that can be understood without the schema of a specific proposal type.
+  // This is populated and stored at the time of proposal creation and does not change as the
+  // proposal type evolves.
+  SelfDescribingProposalAction self_describing_action = 30;
+
   // This section describes the action that the proposal proposes to
   // take.
   oneof action {
@@ -983,7 +988,10 @@ message GovernanceError {
     ERROR_TYPE_UNSPECIFIED = 0;
     // The operation was successfully completed.
     ERROR_TYPE_OK = 1;
-    // This operation is not available, e.g., not implemented.
+    // There have been too many instances of this operation recently. In
+    // practice, this usually just means that another instance of this operation
+    // is currently in flight, but another reason this might come up is rate
+    // limiting.
     ERROR_TYPE_UNAVAILABLE = 2;
     // The caller is not authorized to perform this operation.
     ERROR_TYPE_NOT_AUTHORIZED = 3;
@@ -2147,9 +2155,8 @@ message Governance {
   // Map of proposal IDs to their topics for those garbage collected.
   map<uint64, Topic> topic_of_garbage_collected_proposals = 29;
 
-  // First proposal id to record voting history for known neurons.
-  // TODO(NNS1-4227): clean up after all proposals before this id have votes finalized.
-  ic_nns_common.pb.v1.ProposalId first_proposal_id_to_record_voting_history = 30;
+  reserved 30;
+  reserved "first_proposal_id_to_record_voting_history";
 
   reserved 6;
   reserved "authz";
@@ -2187,47 +2194,6 @@ message XdrConversionRate {
   optional uint64 xdr_permyriad_per_icp = 2;
 }
 
-// Proposals with restricted voting are not included unless the caller
-// is allowed to vote on them.
-//
-// The actual ballots of the proposal are restricted to ballots cast
-// by the caller.
-message ListProposalInfo {
-  // Limit on the number of [ProposalInfo] to return. If no value is
-  // specified, or if a value greater than 100 is specified, 100
-  // will be used.
-  uint32 limit = 1;
-  // If specified, only return proposals that are strictly earlier than
-  // the specified proposal according to the proposal ID. If not
-  // specified, start with the most recent proposal.
-  ic_nns_common.pb.v1.ProposalId before_proposal = 2;
-  // Exclude proposals with a topic in this list. This is particularly
-  // useful to exclude proposals on the topics TOPIC_EXCHANGE_RATE and
-  // TOPIC_KYC which most users are not likely to be interested in
-  // seeing.
-  repeated Topic exclude_topic = 3;
-  // Include proposals that have a reward status in this list (see
-  // [ProposalRewardStatus] for more information). If this list is
-  // empty, no restriction is applied. For example, many users listing
-  // proposals will only be interested in proposals for which they can
-  // receive voting rewards, i.e., with reward status
-  // PROPOSAL_REWARD_STATUS_ACCEPT_VOTES.
-  repeated ProposalRewardStatus include_reward_status = 4;
-  // Include proposals that have a status in this list (see
-  // [ProposalStatus] for more information). If this list is empty, no
-  // restriction is applied.
-  repeated ProposalStatus include_status = 5;
-  // Include all ManageNeuron proposals regardless of the visibility of the
-  // proposal to the caller principal. Note that exclude_topic is still
-  // respected even when this option is set to true.
-  optional bool include_all_manage_neuron_proposals = 6;
-  // Omits "large fields" from the response. Currently only omits the
-  // `logo` and `token_logo` field of CreateServiceNervousSystem proposals. This
-  // is useful to improve download times and to ensure that the response to the
-  // request doesn't exceed the message size limit.
-  optional bool omit_large_fields = 7;
-}
-
 // A response to "ListKnownNeurons"
 message ListKnownNeuronsResponse {
   // List of known neurons.
@@ -2240,10 +2206,33 @@ message ListNodeProvidersResponse {
   repeated NodeProvider node_providers = 1;
 }
 
-// The monthly Node Provider rewards as of a point in time.
+// Date UTC used in NodeProviderRewards to define their validity boundaries
+message DateUtc {
+  uint32 year = 1;
+  uint32 month = 2;
+  uint32 day = 3;
+}
+
+// The monthly Node Provider rewards, representing the distribution of rewards for a specific time period.
+//
+// Prior to the introduction of the performance-based reward algorithm, rewards were computed from a
+// single registry snapshot (identified by `registry_version`). After performance-based rewards were enabled,
+// rewards depend on node metrics collected over a date range, making `start_date` and `end_date` essential
+// for defining the covered period. In this case, `registry_version` is no longer set.
+//
+// Summary of field usage:
+// - Before performance-based rewards: `registry_version` is Some; `start_date` and `end_date` are None.
+// - After performance-based rewards:  `start_date` and `end_date` are Some; `registry_version` is None.
 message MonthlyNodeProviderRewards {
   // The time when the rewards were calculated.
   uint64 timestamp = 1;
+
+  // The start date (included) that these rewards cover.
+  optional DateUtc start_date = 8;
+
+  // The end date (included) that these rewards cover.
+  optional DateUtc end_date = 9;
+
   // The Rewards calculated and rewarded.
   repeated RewardNodeProvider rewards = 2;
 
@@ -2261,6 +2250,9 @@ message MonthlyNodeProviderRewards {
 
   // The registry version used to calculate these rewards at the time the rewards were calculated.
   optional uint64 registry_version = 6;
+
+  // Rewards calculation algorithm version used to calculate rewards.
+  optional uint32 algorithm_version = 10;
 
   // The list of node_provieders at the time when the rewards were calculated.
   repeated NodeProvider node_providers = 7;
@@ -2637,4 +2629,33 @@ message FinalizeDisburseMaturity {
 
   // The account identifer to which to transfer the ICPs.
   ic_ledger.pb.v1.AccountIdentifier to_account_identifier = 5;
+}
+
+// An ICRC-3-like value.
+message SelfDescribingValue {
+  oneof value {
+    bytes blob = 1;
+    string text = 2;
+    // nat/int are stored as bytes since candid Nat/Int does not have equivalent protobuf types.
+    bytes nat = 3;
+    bytes int = 4;
+    SelfDescribingValueArray array = 5;
+    SelfDescribingValueMap map = 6;
+  }
+}
+
+message SelfDescribingValueArray {
+  repeated SelfDescribingValue values = 1;
+}
+
+message SelfDescribingValueMap {
+  map<string, SelfDescribingValue> values = 1;
+}
+
+// Proposal action that is self-describing. It can be understood without the schema of a specific
+// proposal type.
+message SelfDescribingProposalAction {
+  string type_name = 1;
+  string type_description = 2;
+  SelfDescribingValue value = 3;
 }

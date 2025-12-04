@@ -19,7 +19,7 @@ use ic_nervous_system_root::{
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_common::{
     access_control::{check_caller_is_governance, check_caller_is_sns_w},
-    types::CallCanisterProposal,
+    types::CallCanisterRequest,
 };
 use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID,
@@ -191,8 +191,8 @@ async fn stop_or_start_nns_canister(request: StopOrStartCanisterRequest) {
         .unwrap() // For compatibility.
 }
 
-#[update(hidden = true)]
-fn call_canister(proposal: CallCanisterProposal) {
+#[update]
+fn call_canister(proposal: CallCanisterRequest) {
     check_caller_is_governance();
     // Starts the proposal execution, which will continue after this function has returned.
     let future = canister_management::call_canister(proposal);

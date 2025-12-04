@@ -131,10 +131,10 @@ system_test(
 system_test_nns(
     name = "canister_migration_test",
     enable_mainnet_nns_variant = False,
-    env = UNIVERSAL_CANISTER_ENV | {
-        "MIGRATION_CANISTER_WASM_PATH": "$(rootpath //rs/migration_canister:migration-canister)",
-    },
-    test_timeout = "eternal",
+    env = UNIVERSAL_CANISTER_ENV,
+    tags = [
+        "long_test",
+    ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/nns/constants",
@@ -147,11 +147,13 @@ system_test_nns(
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
+        "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:ic-utils",
         "@crate_index//:serde",
         "@crate_index//:slog",
         "@crate_index//:tokio",
+        "@crate_index//:tokio-util",
     ],
 )
 

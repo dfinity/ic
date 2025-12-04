@@ -131,6 +131,8 @@ const LABEL_PREALLOCATE: &str = "preallocate";
 const LABEL_PREALLOCATE_DIRECTORIES: &str = "preallocate_directories";
 const LABEL_PREALLOCATE_FILES: &str = "preallocate_files";
 const LABEL_STATE_SYNC_MAKE_CHECKPOINT: &str = "state_sync_make_checkpoint";
+const LABEL_LOAD_AND_VALIDATE_CHECKPOINT: &str = "load_and_validate_checkpoint";
+const LABEL_ON_SYNCED_CHECKPOINT: &str = "on_synced_checkpoint";
 const LABEL_FETCH_META_MANIFEST_CHUNK: &str = "fetch_meta_manifest_chunk";
 const LABEL_FETCH_MANIFEST_CHUNK: &str = "fetch_manifest_chunk";
 const LABEL_FETCH_STATE_CHUNK: &str = "fetch_state_chunk";
@@ -642,7 +644,7 @@ impl StateSyncMetrics {
 
         let step_duration = metrics_registry.histogram_vec(
             "state_sync_step_duration_seconds",
-            "Duration of state sync sub-steps in seconds indexed by step ('hardlink_files', 'copy_chunks', 'fetch', 'state_sync_make_checkpoint', 'preallocate_directories', 'preallocate_files')",
+            "Duration of state sync sub-steps in seconds indexed by step ('hardlink_files', 'copy_chunks', 'fetch', 'state_sync_make_checkpoint', 'preallocate_directories', 'preallocate_files', 'load_and_validate_checkpoint', 'on_synced_checkpoint')",
             // 0.1s, 0.2s, 0.5s, 1s, 2s, 5s, …, 1000s, 2000s, 5000s
             decimal_buckets(-1, 3),
             &["step"],
@@ -656,6 +658,8 @@ impl StateSyncMetrics {
             LABEL_STATE_SYNC_MAKE_CHECKPOINT,
             LABEL_PREALLOCATE_DIRECTORIES,
             LABEL_PREALLOCATE_FILES,
+            LABEL_LOAD_AND_VALIDATE_CHECKPOINT,
+            LABEL_ON_SYNCED_CHECKPOINT,
         ] {
             step_duration.with_label_values(&[*step]);
         }
@@ -881,7 +885,7 @@ impl Drop for StateManagerImpl {
         // Make sure the tip thread didn't panic. Otherwise we may be blind to it in tests.
         // If the tip thread panics after the latest communication with tip_channel the test returns
         // success.
-        self.flush_tip_channel();
+        self.flush_all();
     }
 }
 
@@ -1218,6 +1222,12 @@ impl StateManagerImpl {
     /// Finish all asynchronous checkpointing operations, including checkpoint verification and manifest computation.
     pub fn flush_tip_channel(&self) {
         flush_tip_channel(&self.tip_channel)
+    }
+
+    /// Finish all asynchronous operations.
+    pub fn flush_all(&self) {
+        self.flush_tip_channel();
+        self.state_layout().flush_checkpoint_removal_channel();
     }
 
     /// Height for the initial default state.
@@ -3368,6 +3378,12 @@ impl StateReader for StateManagerImpl {
                     Arc::new(initial_state(self.own_subnet_id, self.own_subnet_type).take()),
                 )
             })
+    }
+
+    fn get_latest_certified_state(&self) -> Option<Labeled<Arc<Self::State>>> {
+        let reader = self.certified_state_reader()?;
+
+        Some(Labeled::new(reader.get_height(), reader.state))
     }
 
     fn get_state_at(&self, height: Height) -> StateManagerResult<Labeled<Arc<Self::State>>> {

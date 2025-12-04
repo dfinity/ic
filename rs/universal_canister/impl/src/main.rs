@@ -448,6 +448,10 @@ fn eval(ops_bytes: OpsBytes) {
                 let request_size = stack.pop_int64();
                 stack.push_blob(api::cost_http_request(request_size, max_res_bytes));
             }
+            Ops::CostHttpRequestV2 => {
+                let params = stack.pop_blob();
+                stack.push_blob(api::cost_http_request_v2(&params));
+            }
             Ops::CostSignWithEcdsa => {
                 let ecdsa_curve = stack.pop_int();
                 let key_name = stack.pop_blob();
@@ -500,6 +504,13 @@ fn eval(ops_bytes: OpsBytes) {
                 stack.push_blob(api::root_key());
             }
             Ops::SetOnLowWasmMemoryMethod => set_on_low_wasm_memory_method(stack.pop_blob()),
+            Ops::WasmMemoryGrow => {
+                #[cfg(target_arch = "wasm32")]
+                {
+                    let pages = stack.pop_int();
+                    core::arch::wasm32::memory_grow(0, pages as usize);
+                }
+            }
         }
     }
 }

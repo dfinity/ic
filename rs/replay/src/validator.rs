@@ -6,7 +6,7 @@ use std::{
 
 use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, dkg_pool::DkgPoolImpl};
 use ic_config::{Config, artifact_pool::ArtifactPoolConfig};
-use ic_consensus::consensus::{ValidatorMetrics, validator::Validator};
+use ic_consensus::consensus::validator::Validator;
 use ic_consensus_certification::CertificationCrypto;
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
@@ -138,7 +138,7 @@ impl ReplayValidator {
             Arc::new(dkg_pool) as Arc<_>,
             Arc::new(thread_pool),
             log.clone(),
-            ValidatorMetrics::new(metrics_registry.clone()),
+            &metrics_registry,
             time_source.clone(),
         );
 

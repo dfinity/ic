@@ -10,6 +10,7 @@ Wants=cryptsetup-pre.target
 Before=cryptsetup.target
 Conflicts=umount.target
 Before=umount.target
+ConditionPathExists=/run/config/guest_vm_type/default
 
 [Install]
 WantedBy=local-fs.target
@@ -19,5 +20,3 @@ Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/setup-data-encryption.sh
 ExecStop=/usr/bin/systemd-cryptsetup detach 'vda10-crypt'
-# Don't run in UpgradeVM
-ExecCondition=/bin/bash -c '[[ "$(jq -r ".guest_vm_type" /run/config/config.json)" =~ ^(default|null)$ ]]'

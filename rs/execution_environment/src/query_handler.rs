@@ -10,6 +10,7 @@ mod tests;
 
 use crate::execution_environment::full_subnet_memory_capacity;
 use crate::{
+    CanisterManager,
     canister_logs::fetch_canister_logs,
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
@@ -22,6 +23,7 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     QueryExecutionError, QueryExecutionInput, QueryExecutionResponse, QueryExecutionService,
+    TransformExecutionInput, TransformExecutionService,
 };
 use ic_interfaces_state_manager::{Labeled, StateReader};
 use ic_logger::ReplicaLogger;
@@ -51,10 +53,15 @@ use std::{
 use tokio::sync::oneshot;
 use tower::{Service, util::BoxCloneService};
 
-pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
+pub(crate) use self::query_scheduler::QueryScheduler;
 use ic_management_canister_types_private::{
     CanisterIdRecord, FetchCanisterLogsRequest, Payload, QueryMethod,
 };
+
+pub struct DataCertificateWithDelegationMetadata {
+    pub data_certificate: Vec<u8>,
+    pub certificate_delegation_metadata: Option<CertificateDelegationMetadata>,
+}
 
 /// Convert an object into CBOR binary.
 fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
@@ -102,6 +109,7 @@ fn label<T: Into<Label>>(t: T) -> Label {
 pub struct InternalHttpQueryHandler {
     log: ReplicaLogger,
     hypervisor: Arc<Hypervisor>,
+    canister_manager: Arc<CanisterManager>,
     own_subnet_type: SubnetType,
     config: Config,
     metrics: QueryHandlerMetrics,
@@ -115,6 +123,7 @@ impl InternalHttpQueryHandler {
     pub(crate) fn new(
         log: ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
+        canister_manager: Arc<CanisterManager>,
         own_subnet_type: SubnetType,
         config: Config,
         metrics_registry: &MetricsRegistry,
@@ -128,6 +137,7 @@ impl InternalHttpQueryHandler {
         Self {
             log,
             hypervisor,
+            canister_manager,
             own_subnet_type,
             config,
             metrics: QueryHandlerMetrics::new(metrics_registry),
@@ -167,8 +177,7 @@ impl InternalHttpQueryHandler {
         &self,
         query: Query,
         state: Labeled<Arc<ReplicatedState>>,
-        data_certificate: Vec<u8>,
-        certificate_delegation_metadata: Option<CertificateDelegationMetadata>,
+        data_certificate_with_delegation_metadata: Option<DataCertificateWithDelegationMetadata>,
         enable_query_stats_tracking: bool,
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
@@ -207,8 +216,7 @@ impl InternalHttpQueryHandler {
                                 )
                             })?;
                     let since = Instant::now(); // Start logging execution time.
-                    let response = crate::canister_manager::get_canister_status(
-                        Arc::clone(&self.cycles_account_manager),
+                    let response = self.canister_manager.get_canister_status(
                         query.source(),
                         canister,
                         state
@@ -249,6 +257,11 @@ impl InternalHttpQueryHandler {
         // If a valid cache entry found, the result will be immediately returned.
         // Otherwise, the key will be kept for the `push` below.
         let cache_entry_key = if self.config.query_caching == FlagStatus::Enabled {
+            let certificate_delegation_metadata = data_certificate_with_delegation_metadata
+                .as_ref()
+                .and_then(|data_certificate_with_delegation_metadata| {
+                    data_certificate_with_delegation_metadata.certificate_delegation_metadata
+                });
             let key = query_cache::EntryKey::new(&query, certificate_delegation_metadata);
             let state = state.get_ref().as_ref();
             if let Some(result) =
@@ -265,11 +278,19 @@ impl InternalHttpQueryHandler {
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
         let subnet_available_memory = full_subnet_memory_capacity(&self.config);
+        // Letting the canister use the full subnet memory reservation
+        // is fine as we do not persist state modifications.
+        let subnet_memory_reservation = self.config.subnet_memory_reservation;
         // We apply the (rather high) subnet soft limit for callbacks because the
         // instruction limit for the whole composite query tree imposes a much lower
         // implicit bound anyway.
         let subnet_available_callbacks = self.config.subnet_callback_soft_limit as i64;
 
+        let data_certificate = data_certificate_with_delegation_metadata.map(
+            |data_certificate_with_delegation_metadata| {
+                data_certificate_with_delegation_metadata.data_certificate
+            },
+        );
         let mut context = query_context::QueryContext::new(
             &self.log,
             self.hypervisor.as_ref(),
@@ -281,6 +302,7 @@ impl InternalHttpQueryHandler {
             data_certificate,
             subnet_available_memory,
             subnet_available_callbacks,
+            subnet_memory_reservation,
             self.config.canister_guaranteed_callback_quota as u64,
             self.max_instructions_per_query,
             self.config.max_query_call_graph_depth,
@@ -343,7 +365,7 @@ pub(crate) struct HttpQueryHandler {
 }
 
 impl HttpQueryHandler {
-    pub(crate) fn new_service(
+    pub(crate) fn new_query_service(
         internal: Arc<InternalHttpQueryHandler>,
         query_scheduler: QueryScheduler,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -351,6 +373,23 @@ impl HttpQueryHandler {
         namespace: &str,
         enable_query_stats_tracking: bool,
     ) -> QueryExecutionService {
+        BoxCloneService::new(Self {
+            internal,
+            state_reader,
+            query_scheduler,
+            metrics: Arc::new(HttpQueryHandlerMetrics::new(metrics_registry, namespace)),
+            enable_query_stats_tracking,
+        })
+    }
+
+    pub(crate) fn new_transform_service(
+        internal: Arc<InternalHttpQueryHandler>,
+        query_scheduler: QueryScheduler,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+        metrics_registry: &MetricsRegistry,
+        namespace: &str,
+        enable_query_stats_tracking: bool,
+    ) -> TransformExecutionService {
         BoxCloneService::new(Self {
             internal,
             state_reader,
@@ -418,13 +457,78 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                             .height_diff_during_query_scheduling
                             .observe(height_diff as f64);
 
+                        let data_certificate_with_delegation_metadata =
+                            DataCertificateWithDelegationMetadata {
+                                data_certificate: cert,
+                                certificate_delegation_metadata,
+                            };
+
                         let response = internal.query(
                             query,
                             state,
-                            cert,
-                            certificate_delegation_metadata,
+                            Some(data_certificate_with_delegation_metadata),
                             enable_query_stats_tracking,
                         );
+
+                        Ok((response, time))
+                    }
+                    None => Err(QueryExecutionError::CertifiedStateUnavailable),
+                };
+
+                let _ = tx.send(Ok(result));
+            }
+            start.elapsed()
+        });
+        Box::pin(async move {
+            rx.await
+                .expect("The sender was dropped before sending the message.")
+        })
+    }
+}
+
+impl Service<TransformExecutionInput> for HttpQueryHandler {
+    type Response = QueryExecutionResponse;
+    type Error = Infallible;
+    #[allow(clippy::type_complexity)]
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, TransformExecutionInput { query }: TransformExecutionInput) -> Self::Future {
+        let internal = Arc::clone(&self.internal);
+        let state_reader = Arc::clone(&self.state_reader);
+        let (tx, rx) = oneshot::channel();
+        let canister_id = query.receiver;
+        let latest_certified_height_pre_schedule = state_reader.latest_certified_height();
+        let http_query_handler_metrics = Arc::clone(&self.metrics);
+        let enable_query_stats_tracking = self.enable_query_stats_tracking;
+        self.query_scheduler.push(canister_id, move || {
+            let start = std::time::Instant::now();
+            if !tx.is_closed() {
+                // We managed to upgrade the weak pointer, so the query was not cancelled.
+                // Canceling the query after this point will have no effect: the query will
+                // be executed anyway. That is fine because the execution will take O(ms).
+
+                // Retrieving the state must be done here in the query handler, and should be immediately used.
+                // Otherwise, retrieving the state in the Query service in `http_endpoints` can lead to queries being queued up,
+                // with a reference to older states which can cause out-of-memory crashes.
+
+                let result = match state_reader.get_latest_certified_state() {
+                    Some(state) => {
+                        let time = state.get_ref().metadata.batch_time;
+
+                        let certified_height_used_for_execution = state.height();
+                        let height_diff = certified_height_used_for_execution
+                            .get()
+                            .saturating_sub(latest_certified_height_pre_schedule.get());
+                        http_query_handler_metrics
+                            .height_diff_during_query_scheduling
+                            .observe(height_diff as f64);
+
+                        let response =
+                            internal.query(query, state, None, enable_query_stats_tracking);
 
                         Ok((response, time))
                     }

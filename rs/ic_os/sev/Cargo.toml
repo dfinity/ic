@@ -2,10 +2,6 @@
 name = "ic_sev"
 edition.workspace = true
 
-[[bin]]
-name = "sev_active"
-path = "src/bin/sev_active.rs"
-
 [dependencies]
 anyhow = { workspace = true }
 base64 = { workspace = true }
@@ -13,7 +9,6 @@ der = { workspace = true }
 hkdf = { workspace = true }
 mockall = { workspace = true }
 p384 = { workspace = true }
-raw-cpuid = { workspace = true }
 rand = { workspace = true }
 rsa = { workspace = true }
 reqwest = { workspace = true }

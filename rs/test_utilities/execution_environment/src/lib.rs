@@ -8,7 +8,7 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::{
     WasmtimeEmbedder,
     wasm_utils::{compile, decoding::decode_wasm},
@@ -17,9 +17,9 @@ use ic_embedders::{
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
-    CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment,
-    ExecutionServicesForTesting, Hypervisor, IngressFilterMetrics, InternalHttpQueryHandler,
-    RoundInstructions, RoundLimits, execute_canister,
+    CompilationCostHandling, DataCertificateWithDelegationMetadata, ExecuteMessageResult,
+    ExecutionEnvironment, ExecutionServicesForTesting, Hypervisor, IngressFilterMetrics,
+    InternalHttpQueryHandler, RoundInstructions, RoundLimits, execute_canister,
 };
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -47,6 +47,7 @@ use ic_replicated_state::{
     PageIndex, ReplicatedState, SubnetTopology,
     canister_state::{
         NextExecution, execution_state::SandboxMemory, execution_state::WasmExecutionMode,
+        system_state::CyclesUseCase,
     },
     page_map::{
         PAGE_SIZE, PageMap, TestPageAllocatorFileDescriptorImpl,
@@ -68,8 +69,8 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         CallbackId, CanisterCall, CanisterMessage, CanisterTask,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MessageId, Query, QuerySource, RequestOrResponse,
-        Response,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MessageId, Payload as ResponsePayload, Query,
+        QuerySource, RequestOrResponse, Response,
     },
     time::UNIX_EPOCH,
 };
@@ -78,6 +79,8 @@ use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
 use ic_wasm_types::BinaryEncodedWasm;
 use maplit::{btreemap, btreeset};
+use num_traits::ops::saturating::SaturatingAdd;
+use prometheus::IntCounter;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     convert::TryFrom,
@@ -234,6 +237,8 @@ pub struct ExecutionTest {
     message_id: u64,
     // The memory available in the subnet.
     subnet_available_memory: SubnetAvailableMemory,
+    // The memory reserved for executing response handlers.
+    subnet_memory_reservation: NumBytes,
     // The pool of callbacks available on the subnet.
     subnet_available_callbacks: i64,
     // The number of instructions executed so far per canister.
@@ -263,6 +268,7 @@ pub struct ExecutionTest {
     caller_canister_id: Option<CanisterId>,
     chain_key_data: ChainKeyData,
     replica_version: ReplicaVersion,
+    canister_snapshot_baseline_instructions: NumInstructions,
 
     // The actual implementation.
     exec_env: Arc<ExecutionEnvironment>,
@@ -325,6 +331,10 @@ impl ExecutionTest {
             .unwrap()
     }
 
+    pub fn max_instructions_per_message(&self) -> NumInstructions {
+        self.instruction_limits.message()
+    }
+
     pub fn canister_wasm_execution_mode(&self, canister_id: CanisterId) -> WasmExecutionMode {
         // In case of any error or missing state, default to Wasm32.
         if let Some(state) = self.state.as_ref()
@@ -380,6 +390,24 @@ impl ExecutionTest {
         Cycles::new(self.execution_cost.values().map(|x| x.get()).sum())
     }
 
+    pub fn canister_snapshot_cost(&self, canister_id: CanisterId) -> Cycles {
+        let canister = self.canister_state(canister_id);
+        let new_snapshot_size = canister.snapshot_size_bytes();
+        let instructions = self
+            .canister_snapshot_baseline_instructions
+            .saturating_add(&new_snapshot_size.get().into());
+        self.cycles_account_manager.execution_cost(
+            instructions,
+            self.subnet_size(),
+            self.cost_schedule(),
+            // For the `take_canister_snapshot` operation, it does not matter if this is a Wasm64 or Wasm32 module
+            // since the number of instructions charged depends on constant set fee and snapshot size
+            // and Wasm64 does not bring any additional overhead for this operation.
+            // The only overhead is during execution time.
+            WasmExecutionMode::Wasm32,
+        )
+    }
+
     pub fn canister_execution_cost(&self, canister_id: CanisterId) -> Cycles {
         *self
             .execution_cost
@@ -388,10 +416,15 @@ impl ExecutionTest {
     }
 
     pub fn idle_cycles_burned_per_day(&self, canister_id: CanisterId) -> Cycles {
-        let memory_usage = self.execution_state(canister_id).memory_usage()
-            + self
-                .canister_state(canister_id)
-                .canister_history_memory_usage();
+        let memory_usage = self.canister_state(canister_id).memory_usage();
+        self.idle_cycles_burned_per_day_for_memory_usage(canister_id, memory_usage)
+    }
+
+    pub fn idle_cycles_burned_per_day_for_memory_usage(
+        &self,
+        canister_id: CanisterId,
+        memory_usage: NumBytes,
+    ) -> Cycles {
         let memory_allocation = self
             .canister_state(canister_id)
             .system_state
@@ -485,11 +518,19 @@ impl ExecutionTest {
 
     pub fn reduced_wasm_compilation_fee(&self, wasm: &[u8]) -> Cycles {
         let cost = wasm_compilation_cost(wasm);
+        self.convert_instructions_to_cycles(
+            cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost),
+            WasmExecutionMode::Wasm32, // In this case it does not matter if it is a Wasm64 or Wasm32 canister.
+        )
+    }
+
+    pub fn convert_instructions_to_cycles(
+        &self,
+        instructions: NumInstructions,
+        mode: WasmExecutionMode,
+    ) -> Cycles {
         self.cycles_account_manager()
-            .convert_instructions_to_cycles(
-                cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost),
-                WasmExecutionMode::Wasm32, // In this case it does not matter if it is a Wasm64 or Wasm32 canister.
-            )
+            .convert_instructions_to_cycles(instructions, mode)
     }
 
     pub fn install_code_reserved_execution_cycles(&self) -> Cycles {
@@ -542,6 +583,14 @@ impl ExecutionTest {
 
     pub fn ingress_status(&self, message_id: &MessageId) -> IngressStatus {
         self.state().get_ingress_status(message_id).clone()
+    }
+
+    pub fn ingress_result(&self, message_id: &MessageId) -> Result<WasmResult, UserError> {
+        match self.ingress_state(message_id) {
+            IngressState::Completed(res) => Ok(res),
+            IngressState::Failed(err) => Err(err),
+            status => panic!("Unexpected ingress status: {:?}", status),
+        }
     }
 
     pub fn ingress_state(&self, message_id: &MessageId) -> IngressState {
@@ -717,24 +766,6 @@ impl ExecutionTest {
         self.subnet_message(Method::UpdateSettings, payload)
     }
 
-    pub fn canister_update_memory_allocation_and_wasm_memory_threshold(
-        &mut self,
-        canister_id: CanisterId,
-        memory_allocation: NumBytes,
-        wasm_memory_threshold: NumBytes,
-    ) -> Result<WasmResult, UserError> {
-        let payload = UpdateSettingsArgs {
-            canister_id: canister_id.into(),
-            settings: CanisterSettingsArgsBuilder::new()
-                .with_memory_allocation(memory_allocation.get())
-                .with_wasm_memory_threshold(wasm_memory_threshold.get())
-                .build(),
-            sender_canister_version: None,
-        }
-        .encode();
-        self.subnet_message(Method::UpdateSettings, payload)
-    }
-
     /// Sends an `install_code` message to the IC management canister.
     /// Consider using higher-level helpers like `canister_from_wat()`.
     pub fn install_code(&mut self, args: InstallCodeArgs) -> Result<WasmResult, UserError> {
@@ -795,6 +826,21 @@ impl ExecutionTest {
             Ok(WasmResult::Reject(err)) => panic!("Unexpected reject: {}", err),
             Err(err) => Err(err),
         }
+    }
+
+    /// Updates the settings of the given canister.
+    pub fn update_settings(
+        &mut self,
+        canister_id: CanisterId,
+        settings: CanisterSettingsArgs,
+    ) -> Result<WasmResult, UserError> {
+        let payload = UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            settings,
+            sender_canister_version: None,
+        }
+        .encode();
+        self.subnet_message(Method::UpdateSettings, payload)
     }
 
     /// Updates the freezing threshold of the given canister.
@@ -1129,6 +1175,7 @@ impl ExecutionTest {
             subnet_available_memory: self.subnet_available_memory,
             subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used,
+            subnet_memory_reservation: self.subnet_memory_reservation,
         };
         let instruction_limits = InstructionLimits::new(
             self.instruction_limit_without_dts,
@@ -1189,7 +1236,6 @@ impl ExecutionTest {
         canister_id: CanisterId,
         method_name: S,
         method_payload: Vec<u8>,
-        data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
         let state = Arc::new(self.state.take().unwrap());
 
@@ -1203,8 +1249,7 @@ impl ExecutionTest {
         let result = self.query_handler.query(
             query,
             Labeled::new(Height::from(0), Arc::clone(&state)),
-            data_certificate,
-            /*certification_delegation_metadata=*/ None,
+            None,
             true,
         );
 
@@ -1239,7 +1284,7 @@ impl ExecutionTest {
 
         let query = Query {
             source: QuerySource::User {
-                user_id: user_test_id(0),
+                user_id: self.user_id,
                 ingress_expiry: 0,
                 nonce: None,
             },
@@ -1272,6 +1317,7 @@ impl ExecutionTest {
             subnet_available_memory: self.subnet_available_memory,
             subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used,
+            subnet_memory_reservation: self.subnet_memory_reservation,
         };
         let result = self.exec_env.execute_canister_response(
             canister,
@@ -1383,6 +1429,7 @@ impl ExecutionTest {
             subnet_available_memory: self.subnet_available_memory,
             subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used,
+            subnet_memory_reservation: self.subnet_memory_reservation,
         };
 
         let (new_state, instructions_used) = self.exec_env.execute_subnet_message(
@@ -1438,6 +1485,7 @@ impl ExecutionTest {
             subnet_available_memory: self.subnet_available_memory,
             subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used,
+            subnet_memory_reservation: self.subnet_memory_reservation,
         };
         for canister_id in canister_ids {
             let network_topology = Arc::new(state.metadata.network_topology.clone());
@@ -1518,6 +1566,7 @@ impl ExecutionTest {
                     subnet_available_memory: self.subnet_available_memory,
                     subnet_available_callbacks: self.subnet_available_callbacks,
                     compute_allocation_used,
+                    subnet_memory_reservation: self.subnet_memory_reservation,
                 };
                 let (new_state, instructions_used) = self.exec_env.resume_install_code(
                     state,
@@ -1543,6 +1592,7 @@ impl ExecutionTest {
                     subnet_available_memory: self.subnet_available_memory,
                     subnet_available_callbacks: self.subnet_available_callbacks,
                     compute_allocation_used,
+                    subnet_memory_reservation: self.subnet_memory_reservation,
                 };
                 let result = execute_canister(
                     &self.exec_env,
@@ -1738,11 +1788,14 @@ impl ExecutionTest {
         // Currently, this height is only used for query stats collection and it doesn't matter which one we pass in here.
         // Even if consensus was running, it could be that all queries are actually running at height 0. The state passed in to
         // the query handler shouldn't have the height encoded, so there shouldn't be a mismatch between the two.
+        let data_certificate_with_delegation_metadata = DataCertificateWithDelegationMetadata {
+            data_certificate,
+            certificate_delegation_metadata,
+        };
         self.query_handler.query(
             query,
             Labeled::new(Height::from(0), state),
-            data_certificate,
-            certificate_delegation_metadata,
+            Some(data_certificate_with_delegation_metadata),
             true,
         )
     }
@@ -1832,6 +1885,61 @@ impl ExecutionTest {
 
     pub fn get_own_subnet_id(&self) -> SubnetId {
         self.cycles_account_manager.get_subnet_id()
+    }
+
+    pub fn subnet_memory_saturation(&self) -> ResourceSaturation {
+        self.exec_env
+            .subnet_memory_saturation(&self.subnet_available_memory)
+    }
+
+    pub fn expected_storage_reservation_cycles(
+        &self,
+        subnet_memory_saturation: &ResourceSaturation,
+        allocated_bytes: NumBytes,
+    ) -> Cycles {
+        self.cycles_account_manager.storage_reservation_cycles(
+            allocated_bytes,
+            subnet_memory_saturation,
+            self.subnet_size(),
+            self.cost_schedule(),
+        )
+    }
+
+    pub fn prepayment_for_response_execution(&self, mode: WasmExecutionMode) -> Cycles {
+        self.cycles_account_manager
+            .prepayment_for_response_execution(self.subnet_size(), self.cost_schedule(), mode)
+    }
+
+    pub fn refund_for_response_transmission(&self, response: &ResponsePayload) -> Cycles {
+        let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
+        let prepayment_for_response_transmission = self
+            .cycles_account_manager
+            .prepayment_for_response_transmission(self.subnet_size(), self.cost_schedule());
+        self.cycles_account_manager
+            .refund_for_response_transmission(
+                &no_op_logger(),
+                &no_op_counter,
+                response,
+                prepayment_for_response_transmission,
+                self.subnet_size(),
+                self.cost_schedule(),
+            )
+    }
+
+    pub fn consume_cycles(&mut self, canister_id: CanisterId, cycles: Cycles) {
+        let cost_schedule = self.cost_schedule();
+        let cycles_account_manager = self.cycles_account_manager.clone();
+        let system_state = &mut self.canister_state_mut(canister_id).system_state;
+        cycles_account_manager
+            .consume_with_threshold(
+                system_state,
+                cycles,
+                Cycles::zero(),
+                CyclesUseCase::Memory,
+                false,
+                cost_schedule,
+            )
+            .unwrap();
     }
 }
 
@@ -2541,6 +2649,9 @@ impl ExecutionTestBuilder {
         let subnet_available_memory = execution_services
             .execution_environment
             .scaled_subnet_available_memory(&state);
+        let subnet_memory_reservation = execution_services
+            .execution_environment
+            .scaled_subnet_memory_reservation();
         ExecutionTest {
             state: Some(state),
             message_id: 0,
@@ -2549,6 +2660,7 @@ impl ExecutionTestBuilder {
             xnet_messages: vec![],
             lost_messages: vec![],
             subnet_available_memory,
+            subnet_memory_reservation,
             subnet_available_callbacks: self.execution_config.subnet_callback_soft_limit as i64,
             time: self.time,
             dirty_heap_page_overhead,
@@ -2592,6 +2704,10 @@ impl ExecutionTestBuilder {
             log: self.log,
             checkpoint_files: vec![],
             replica_version: self.replica_version,
+            canister_snapshot_baseline_instructions: self
+                .subnet_config
+                .scheduler_config
+                .canister_snapshot_baseline_instructions,
         }
     }
 }
@@ -2699,13 +2815,13 @@ pub fn wasm_compilation_cost(wasm: &[u8]) -> NumInstructions {
 // This function copies the behavior of the actual logging cost computation in
 // rs/embedders/src/wasmtime_embedder/linker.rs.
 fn logging_charge_bytes(message_num_bytes: usize) -> usize {
-    const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 4 * 1024;
-    const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
-    let capacity = MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE;
+    const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * 1024;
+    const TEST_BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
+    let capacity = TEST_DEFAULT_LOG_MEMORY_LIMIT;
     let remaining_space = capacity;
     let allocated_num_bytes = message_num_bytes.min(capacity);
     let transmitted_num_bytes = message_num_bytes.min(remaining_space);
-    2 * allocated_num_bytes + BYTE_TRANSMISSION_COST_FACTOR * transmitted_num_bytes
+    2 * allocated_num_bytes + TEST_BYTE_TRANSMISSION_COST_FACTOR * transmitted_num_bytes
 }
 
 /// Helper function to compute the cost of logging during `debug_print` and `trap`.

@@ -39,23 +39,11 @@ mod tests;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CspBasicSignatureError {
-    SecretKeyNotFound {
-        algorithm: AlgorithmId,
-        key_id: KeyId,
-    },
-    UnsupportedAlgorithm {
-        algorithm: AlgorithmId,
-    },
-    WrongSecretKeyType {
-        algorithm: AlgorithmId,
-        secret_key_variant: String,
-    },
-    MalformedSecretKey {
-        algorithm: AlgorithmId,
-    },
-    TransientInternalError {
-        internal_error: String,
-    },
+    PublicKeyNotFound,
+    MalformedPublicKey(String),
+    SecretKeyNotFound(KeyId),
+    WrongSecretKeyType { secret_key_variant: String },
+    TransientInternalError { internal_error: String },
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -158,9 +146,6 @@ pub enum CspTlsSignError {
         secret_key_variant: String,
     },
     MalformedSecretKey {
-        error: String,
-    },
-    SigningFailed {
         error: String,
     },
     TransientInternalError {
@@ -417,9 +402,7 @@ pub trait BasicSignatureCspVault {
     /// Signs the given message using the specified algorithm and key ID.
     ///
     /// # Arguments
-    /// * `algorithm_id` specifies the signature algorithm
     /// * `message` is the message to be signed
-    /// * `key_id` determines the private key to sign with
     /// # Returns
     /// The computed signature.
     /// # Note
@@ -430,12 +413,7 @@ pub trait BasicSignatureCspVault {
     /// of the message digest uses secret key data as an input, and so
     /// cannot be computed outside of the CspVault (cf. PureEdDSA in
     /// [RFC 8032](https://tools.ietf.org/html/rfc8032#section-5.1.6))
-    fn sign(
-        &self,
-        algorithm_id: AlgorithmId,
-        message: Vec<u8>,
-        key_id: KeyId,
-    ) -> Result<CspSignature, CspBasicSignatureError>;
+    fn sign(&self, message: Vec<u8>) -> Result<CspSignature, CspBasicSignatureError>;
 
     /// Generates a node signing public/private key pair.
     ///

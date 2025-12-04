@@ -568,11 +568,11 @@ mod retain {
         assert_eq!(key_store.retain(|_, _| true, selected_scope), Ok(()));
         assert_eq!(key_store.retain(|_, _| false, selected_scope), Ok(()));
         assert_eq!(
-            key_store.retain(move |id, _| (id == &id_to_retain), selected_scope),
+            key_store.retain(move |id, _| id == &id_to_retain, selected_scope),
             Ok(())
         );
         assert_eq!(
-            key_store.retain(move |_, value| (value == &value_to_retain), selected_scope),
+            key_store.retain(move |_, value| value == &value_to_retain, selected_scope),
             Ok(())
         );
     }
@@ -591,7 +591,7 @@ mod retain {
         let initial_modified_time = file_modified_time_in_nanoseconds(&file);
 
         assert_eq!(
-            key_store.retain(move |id, _| (id == &key_id), selected_scope),
+            key_store.retain(move |id, _| id == &key_id, selected_scope),
             Ok(())
         );
         assert!(key_store.contains(&key_id));
@@ -615,7 +615,7 @@ mod retain {
             .expect("insert should succeed");
 
         assert_eq!(
-            key_store.retain(move |id, _| (id == &key_id_to_retain), selected_scope),
+            key_store.retain(move |id, _| id == &key_id_to_retain, selected_scope),
             Ok(())
         );
         assert!(!key_store.contains(&key_id));
@@ -636,7 +636,7 @@ mod retain {
 
         assert_eq!(
             key_store.retain(
-                move |_, value| (value == &key_value_to_retain),
+                move |_, value| value == &key_value_to_retain,
                 selected_scope
             ),
             Ok(())
@@ -658,7 +658,7 @@ mod retain {
             .expect("insert should succeed");
 
         assert_eq!(
-            key_store.retain(move |id, _| (id == &key_id), different_scope),
+            key_store.retain(move |id, _| id == &key_id, different_scope),
             Ok(())
         );
         assert!(key_store.contains(&key_id));
@@ -757,10 +757,10 @@ mod retain_would_modify_keystore {
         assert!(!key_store.retain_would_modify_keystore(|_, _| false, selected_scope));
         assert!(
             !key_store
-                .retain_would_modify_keystore(move |id, _| (id == &id_to_retain), selected_scope)
+                .retain_would_modify_keystore(move |id, _| id == &id_to_retain, selected_scope)
         );
         assert!(!key_store.retain_would_modify_keystore(
-            move |_, value| (value == &value_to_retain),
+            move |_, value| value == &value_to_retain,
             selected_scope
         ));
     }
@@ -779,10 +779,8 @@ mod retain_would_modify_keystore {
             .expect("insert should succeed");
 
         assert!(
-            key_store.retain_would_modify_keystore(
-                move |id, _| (id == &key_id_to_retain),
-                selected_scope
-            )
+            key_store
+                .retain_would_modify_keystore(move |id, _| id == &key_id_to_retain, selected_scope)
         );
     }
 
@@ -800,7 +798,7 @@ mod retain_would_modify_keystore {
             .expect("insert should succeed");
 
         assert!(key_store.retain_would_modify_keystore(
-            move |_, value| (value == &key_value_to_retain),
+            move |_, value| value == &key_value_to_retain,
             selected_scope
         ));
     }
@@ -819,7 +817,7 @@ mod retain_would_modify_keystore {
             .expect("insert should succeed");
 
         assert!(
-            !key_store.retain_would_modify_keystore(move |id, _| (id == &key_id), different_scope)
+            !key_store.retain_would_modify_keystore(move |id, _| id == &key_id, different_scope)
         );
     }
 

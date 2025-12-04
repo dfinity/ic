@@ -55,6 +55,22 @@ const HTTP_HEADERS_TOTAL_MAX_SIZE: usize = 48 * KIB;
 /// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
 const HTTP_HEADERS_ELEMENT_MAX_SIZE: usize = 16 * KIB; // name + value = 8KiB + 8KiB
 
+/// The numeric representation for the Legacy pricing version.
+pub const PRICING_VERSION_LEGACY: u32 = 1;
+/// The numeric representation for the Pay-As-You-Go pricing version.
+pub const PRICING_VERSION_PAY_AS_YOU_GO: u32 = 2;
+
+/// The default pricing version for HTTP outcalls.
+///
+/// If the field is missing, this is the version that will be assumed by the replica.
+/// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
+pub const DEFAULT_HTTP_OUTCALLS_PRICING_VERSION: u32 = PRICING_VERSION_LEGACY;
+
+/// A set of all allowed pricing versions for HTTP outcalls.
+///
+/// If the pricing version provided in the request is not in this set, the request will use the default pricing version.
+pub const ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS: &[u32] = &[PRICING_VERSION_LEGACY];
+
 /// HTTP headers bounded by total size.
 pub type BoundedHttpHeaders = BoundedVec<
     HTTP_HEADERS_MAX_NUMBER,
@@ -76,6 +92,7 @@ pub type BoundedHttpHeaders = BoundedVec<
 ///     context : blob;
 ///   };
 ///   is_replicated : opt bool;
+///   pricing_version : opt nat32;
 /// }
 /// ```
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
@@ -88,6 +105,7 @@ pub struct CanisterHttpRequestArgs {
     pub method: HttpMethod,
     pub transform: Option<TransformContext>,
     pub is_replicated: Option<bool>,
+    pub pricing_version: Option<u32>,
 }
 
 impl Payload<'_> for CanisterHttpRequestArgs {}
@@ -123,6 +141,7 @@ fn test_http_headers_max_number() {
             method: HttpMethod::GET,
             transform: None,
             is_replicated: None,
+            pricing_version: None,
         };
 
         // Act.
@@ -176,6 +195,7 @@ fn test_http_headers_max_total_size() {
             method: HttpMethod::GET,
             transform: None,
             is_replicated: None,
+            pricing_version: None,
         };
 
         // Act.
@@ -223,6 +243,7 @@ fn test_http_headers_max_element_size() {
             method: HttpMethod::GET,
             transform: None,
             is_replicated: None,
+            pricing_version: None,
         };
 
         // Act.

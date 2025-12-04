@@ -1,12 +1,10 @@
 use candid::Principal;
 use ic_btc_interface::Utxo;
-use ic_canister_log::export as export_logs;
 use ic_cdk::{init, post_upgrade, query, update};
-use ic_ckbtc_minter::dashboard::build_dashboard;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
-use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
+use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
 use ic_ckbtc_minter::state::eventlog::Event;
 use ic_ckbtc_minter::state::{
     BtcRetrievalStatusV2, RetrieveBtcStatus, RetrieveBtcStatusV2, read_state,
@@ -21,14 +19,13 @@ use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs,
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
-use ic_ckbtc_minter::{IC_CANISTER_RUNTIME, MinterInfo};
+use ic_ckbtc_minter::{BuildTxError, CanisterRuntime, IC_CANISTER_RUNTIME, MinterInfo};
 use ic_ckbtc_minter::{
     state::eventlog::{EventType, GetEventsArg},
-    storage, {Log, LogEntry, Priority},
+    storage,
 };
-use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_http_types::{HttpRequest, HttpResponse};
 use icrc_ledger_types::icrc1::account::Account;
-use std::str::FromStr;
 
 #[init]
 fn init(args: MinterArg) {
@@ -94,7 +91,7 @@ async fn refresh_fee_percentiles() {
         Some(guard) => guard,
         None => return,
     };
-    let _ = ic_ckbtc_minter::estimate_fee_per_vbyte().await;
+    let _ = ic_ckbtc_minter::estimate_fee_per_vbyte(&IC_CANISTER_RUNTIME).await;
 }
 
 fn check_postcondition<T>(t: T) -> T {
@@ -114,7 +111,7 @@ fn timer() {
     // ic_ckbtc_minter::timer invokes ic_cdk::spawn
     // which must be wrapped in in_executor_context
     // as required by the new ic-cdk-executor.
-    ic_cdk::futures::in_executor_context(|| {
+    ic_cdk::futures::internals::in_executor_context(|| {
         #[cfg(feature = "self_check")]
         ok_or_die(check_invariants());
 
@@ -179,12 +176,7 @@ fn retrieve_btc_status_v2_by_account(target: Option<Account>) -> Vec<BtcRetrieva
 
 #[query]
 fn get_known_utxos(args: UpdateBalanceArgs) -> Vec<Utxo> {
-    read_state(|s| {
-        s.known_utxos_for_account(&Account {
-            owner: args.owner.unwrap_or(ic_cdk::api::msg_caller()),
-            subaccount: args.subaccount,
-        })
-    })
+    ic_ckbtc_minter::queries::get_known_utxos(args)
 }
 
 #[update]
@@ -206,20 +198,37 @@ async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusRes
 #[update]
 async fn upload_events(events: Vec<Event>) {
     for event in events {
-        storage::record_event_v0(event.payload, &IC_CANISTER_RUNTIME);
+        storage::record_event(event.payload, &IC_CANISTER_RUNTIME);
     }
 }
 
 #[query]
 fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
-    read_state(|s| {
+    match read_state(|s| {
+        let fee_estimator = IC_CANISTER_RUNTIME.fee_estimator(s);
+        let withdrawal_amount = arg.amount.unwrap_or(s.fee_based_retrieve_btc_min_amount);
         ic_ckbtc_minter::estimate_retrieve_btc_fee(
             &s.available_utxos,
-            arg.amount,
-            s.estimate_median_fee_per_vbyte()
+            withdrawal_amount,
+            s.last_median_fee_per_vbyte
                 .expect("Bitcoin current fee percentiles not retrieved yet."),
+            &fee_estimator,
         )
-    })
+    }) {
+        Ok(fee) => fee,
+        Err(BuildTxError::NotEnoughFunds) => {
+            panic!("ERROR: withdrawal amount is too large for the minter")
+        }
+        Err(e @ BuildTxError::DustOutput { .. } | e @ BuildTxError::AmountTooLow) => panic!(
+            "BUG: withdrawal amount is too low ({e:?}), but the withdrawal amount should be large enough to prevent this"
+        ),
+        Err(BuildTxError::InvalidTransaction(
+            e @ InvalidTransactionError::TooManyInputs { .. },
+        )) => panic!(
+            "ERROR: the minter cannot currently process such a large withdrawal amount because it would require too many inputs ({e:?}), \
+            resulting in the transaction being potentially non-standard"
+        ),
+    }
 }
 
 #[query]
@@ -242,86 +251,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         ic_cdk::trap("update call rejected");
     }
 
-    if req.path() == "/metrics" {
-        let mut writer =
-            ic_metrics_encoder::MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
-
-        match encode_metrics(&mut writer) {
-            Ok(()) => HttpResponseBuilder::ok()
-                .header("Content-Type", "text/plain; version=0.0.4")
-                .header("Cache-Control", "no-store")
-                .with_body_and_content_length(writer.into_inner())
-                .build(),
-            Err(err) => {
-                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
-                    .build()
-            }
-        }
-    } else if req.path() == "/dashboard" {
-        let account_to_utxos_start = match req.raw_query_param("account_to_utxos_start") {
-            Some(arg) => match u64::from_str(arg) {
-                Ok(value) => value,
-                Err(_) => {
-                    return HttpResponseBuilder::bad_request()
-                        .with_body_and_content_length(
-                            "failed to parse the 'account_to_utxos_start' parameter",
-                        )
-                        .build();
-                }
-            },
-            None => 0,
-        };
-        let dashboard: Vec<u8> = build_dashboard(account_to_utxos_start);
-        HttpResponseBuilder::ok()
-            .header("Content-Type", "text/html; charset=utf-8")
-            .with_body_and_content_length(dashboard)
-            .build()
-    } else if req.path() == "/logs" {
-        use serde_json;
-
-        let max_skip_timestamp = match req.raw_query_param("time") {
-            Some(arg) => match u64::from_str(arg) {
-                Ok(value) => value,
-                Err(_) => {
-                    return HttpResponseBuilder::bad_request()
-                        .with_body_and_content_length("failed to parse the 'time' parameter")
-                        .build();
-                }
-            },
-            None => 0,
-        };
-
-        let mut entries: Log = Default::default();
-        for entry in export_logs(&ic_ckbtc_minter::logs::P0) {
-            entries.entries.push(LogEntry {
-                timestamp: entry.timestamp,
-                counter: entry.counter,
-                priority: Priority::P0,
-                file: entry.file.to_string(),
-                line: entry.line,
-                message: entry.message,
-            });
-        }
-        for entry in export_logs(&ic_ckbtc_minter::logs::P1) {
-            entries.entries.push(LogEntry {
-                timestamp: entry.timestamp,
-                counter: entry.counter,
-                priority: Priority::P1,
-                file: entry.file.to_string(),
-                line: entry.line,
-                message: entry.message,
-            });
-        }
-        entries
-            .entries
-            .retain(|entry| entry.timestamp >= max_skip_timestamp);
-        HttpResponseBuilder::ok()
-            .header("Content-Type", "application/json; charset=utf-8")
-            .with_body_and_content_length(serde_json::to_string(&entries).unwrap_or_default())
-            .build()
-    } else {
-        HttpResponseBuilder::not_found().build()
-    }
+    ic_ckbtc_minter::queries::http_request(req)
 }
 
 #[query]

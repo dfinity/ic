@@ -6,6 +6,7 @@ type Transaction = record {
   kind : text;
   mint : opt Mint;
   approve : opt Approve;
+  fee_collector : opt FeeCollector;
   timestamp : nat64;
   transfer : opt Transfer
 };
@@ -21,19 +22,27 @@ type Approve = record {
   spender : Account
 };
 
+type FeeCollector = record {
+  caller : opt principal;
+  fee_collector : opt Account;
+  ts : opt nat64
+};
+
 type Burn = record {
   from : Account;
   memo : opt vec nat8;
   created_at_time : opt nat64;
   amount : nat;
-  spender : opt Account
+  spender : opt Account;
+  fee : opt nat
 };
 
 type Mint = record {
   to : Account;
   memo : opt vec nat8;
   created_at_time : opt nat64;
-  amount : nat
+  amount : nat;
+  fee : opt nat
 };
 
 type Transfer = record {

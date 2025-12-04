@@ -92,7 +92,7 @@ where
     values.sort_unstable();
     let mid = values.len() / 2;
 
-    if values.len() % 2 == 0 {
+    if values.len().is_multiple_of(2) {
         let left = values
             .get(mid.saturating_sub(1))
             .cloned()

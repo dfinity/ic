@@ -17,6 +17,12 @@ const UPGRADE_GUEST_VM_DOMAIN_NAME: &str = "upgrade-guestos";
 const DEFAULT_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/guestos-serial.log";
 const UPGRADE_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/upgrade-guestos-serial.log";
 
+#[cfg(not(feature = "dev"))]
+const DEFAULT_VM_MEMORY_GB: u32 = 490;
+#[cfg(not(feature = "dev"))]
+const DEFAULT_VM_VCPUS: u32 = 64;
+const UPGRADE_VM_MEMORY_GB: u32 = 4;
+
 #[derive(Debug)]
 pub struct DirectBootConfig {
     /// The kernel file
@@ -90,6 +96,7 @@ pub fn generate_vm_config(
     media_path: &Path,
     direct_boot: Option<DirectBootConfig>,
     disk_device: &Path,
+    serial_log_path: &Path,
     guest_vm_type: GuestVMType,
 ) -> Result<String> {
     let node_type = match guest_vm_type {
@@ -103,26 +110,18 @@ pub fn generate_vm_config(
         node_type,
     );
 
-    let cpu_domain = if config.hostos_settings.vm_cpu == "qemu" {
-        "qemu"
-    } else {
-        "kvm"
-    };
+    let (cpu_domain, total_vm_memory, nr_of_vcpus) = vm_resources(config);
 
     // We need 4GB for the upgrade VM. We subtract that from the total memory. This is not
     // necessary when SEV is disabled (since no upgrade VM is needed) but mixed subnets that
     // contain nodes with and without SEV should have the same memory settings for consistency
     // across nodes.
-    const UPGRADE_VM_MEMORY_GB: u32 = 4;
     ensure!(
-        config.hostos_settings.vm_memory >= UPGRADE_VM_MEMORY_GB,
-        "GuestOS VM memory must be at least {}GB but is {}GB.",
-        UPGRADE_VM_MEMORY_GB,
-        config.hostos_settings.vm_memory,
+        total_vm_memory >= UPGRADE_VM_MEMORY_GB,
+        "GuestOS VM memory must be at least {UPGRADE_VM_MEMORY_GB}GB but is {total_vm_memory}GB."
     );
-
     let vm_memory = match guest_vm_type {
-        GuestVMType::Default => config.hostos_settings.vm_memory - UPGRADE_VM_MEMORY_GB,
+        GuestVMType::Default => total_vm_memory - UPGRADE_VM_MEMORY_GB,
         GuestVMType::Upgrade => UPGRADE_VM_MEMORY_GB,
     };
 
@@ -130,10 +129,10 @@ pub fn generate_vm_config(
         domain_name: vm_domain_name(guest_vm_type).to_string(),
         domain_uuid: vm_domain_uuid(guest_vm_type).to_string(),
         disk_device: disk_device.to_path_buf(),
-        cpu_domain: cpu_domain.to_string(),
-        console_log_path: serial_log_path(guest_vm_type).display().to_string(),
+        cpu_domain,
+        console_log_path: serial_log_path.display().to_string(),
         vm_memory,
-        nr_of_vcpus: config.hostos_settings.vm_nr_of_vcpus,
+        nr_of_vcpus,
         mac_address,
         config_media_path: media_path.to_path_buf(),
         direct_boot,
@@ -141,6 +140,25 @@ pub fn generate_vm_config(
     }
     .render()
     .context("Failed to render GuestOS VM XML template")
+}
+
+#[cfg(feature = "dev")]
+fn vm_resources(config: &HostOSConfig) -> (String, u32, u32) {
+    let cpu_domain = if config.hostos_settings.hostos_dev_settings.vm_cpu == "qemu" {
+        "qemu".to_string()
+    } else {
+        "kvm".to_string()
+    };
+
+    let total_vm_memory = config.hostos_settings.hostos_dev_settings.vm_memory;
+    let vm_nr_of_vcpus = config.hostos_settings.hostos_dev_settings.vm_nr_of_vcpus;
+
+    (cpu_domain, total_vm_memory, vm_nr_of_vcpus)
+}
+
+#[cfg(not(feature = "dev"))]
+fn vm_resources(_config: &HostOSConfig) -> (String, u32, u32) {
+    ("kvm".to_string(), DEFAULT_VM_MEMORY_GB, DEFAULT_VM_VCPUS)
 }
 
 pub fn vm_domain_name(guest_vm_type: GuestVMType) -> &'static str {
@@ -168,8 +186,8 @@ pub fn serial_log_path(guest_vm_type: GuestVMType) -> &'static Path {
 mod tests {
     use super::*;
     use config_types::{
-        DeploymentEnvironment, DeterministicIpv6Config, HostOSConfig, HostOSSettings, ICOSSettings,
-        Ipv4Config, Ipv6Config, Logging, NetworkSettings,
+        DeploymentEnvironment, DeterministicIpv6Config, HostOSConfig, HostOSDevSettings,
+        HostOSSettings, ICOSSettings, Ipv4Config, Ipv6Config, NetworkSettings,
     };
     use goldenfile::Mint;
     use std::env;
@@ -196,19 +214,23 @@ mod tests {
                 node_reward_type: Some("type3.1".to_string()),
                 mgmt_mac: "00:11:22:33:44:55".parse().unwrap(),
                 deployment_environment: DeploymentEnvironment::Testnet,
-                logging: Logging {},
-                use_nns_public_key: false,
                 nns_urls: vec![url::Url::parse("https://example.com").unwrap()],
                 use_node_operator_private_key: false,
                 enable_trusted_execution_environment: false,
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: Default::default(),
             },
+            #[allow(deprecated)]
             hostos_settings: HostOSSettings {
-                vm_memory: 490,
+                vm_memory: 16,
                 vm_cpu: "qemu".to_string(),
                 vm_nr_of_vcpus: 56,
                 verbose: false,
+                hostos_dev_settings: HostOSDevSettings {
+                    vm_memory: 16,
+                    vm_cpu: "qemu".to_string(),
+                    vm_nr_of_vcpus: 56,
+                },
             },
             guestos_settings: Default::default(),
         }
@@ -278,6 +300,7 @@ mod tests {
             Path::new("/tmp/config.img"),
             direct_boot,
             Path::new("/dev/guest_disk"),
+            Path::new("/var/serial/console.txt"),
             guest_vm_type,
         )
         .unwrap();
@@ -288,10 +311,16 @@ mod tests {
     fn test_generate_vm_config_qemu() {
         test_vm_config(
             "guestos_vm_qemu.xml",
+            #[allow(deprecated)]
             HostOSSettings {
-                vm_memory: 490,
+                vm_memory: 16,
                 vm_cpu: "qemu".to_string(),
                 vm_nr_of_vcpus: 56,
+                hostos_dev_settings: HostOSDevSettings {
+                    vm_memory: 16,
+                    vm_cpu: "qemu".to_string(),
+                    vm_nr_of_vcpus: 56,
+                },
                 ..HostOSSettings::default()
             },
             /*enable_trusted_execution_environment=*/ false,
@@ -304,10 +333,16 @@ mod tests {
     fn test_generate_vm_config_upgrade_guestos() {
         test_vm_config(
             "upgrade_guestos.xml",
+            #[allow(deprecated)]
             HostOSSettings {
-                vm_memory: 490,
+                vm_memory: 16,
                 vm_cpu: "qemu".to_string(),
                 vm_nr_of_vcpus: 64,
+                hostos_dev_settings: HostOSDevSettings {
+                    vm_memory: 16,
+                    vm_cpu: "qemu".to_string(),
+                    vm_nr_of_vcpus: 64,
+                },
                 ..HostOSSettings::default()
             },
             /*enable_trusted_execution_environment=*/ true,
@@ -320,10 +355,16 @@ mod tests {
     fn test_generate_vm_config_kvm() {
         test_vm_config(
             "guestos_vm_kvm.xml",
+            #[allow(deprecated)]
             HostOSSettings {
-                vm_memory: 490,
+                vm_memory: 16,
                 vm_cpu: "kvm".to_string(),
                 vm_nr_of_vcpus: 56,
+                hostos_dev_settings: HostOSDevSettings {
+                    vm_memory: 16,
+                    vm_cpu: "kvm".to_string(),
+                    vm_nr_of_vcpus: 56,
+                },
                 ..HostOSSettings::default()
             },
             /*enable_trusted_execution_environment=*/ false,
@@ -336,10 +377,16 @@ mod tests {
     fn test_generate_vm_config_sev() {
         test_vm_config(
             "guestos_vm_sev.xml",
+            #[allow(deprecated)]
             HostOSSettings {
-                vm_memory: 490,
+                vm_memory: 16,
                 vm_cpu: "kvm".to_string(),
                 vm_nr_of_vcpus: 56,
+                hostos_dev_settings: HostOSDevSettings {
+                    vm_memory: 16,
+                    vm_cpu: "kvm".to_string(),
+                    vm_nr_of_vcpus: 56,
+                },
                 ..HostOSSettings::default()
             },
             /*enable_trusted_execution_environment=*/ true,

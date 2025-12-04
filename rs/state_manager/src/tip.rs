@@ -85,11 +85,16 @@ pub(crate) struct PageMapToFlush {
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum TipRequest {
     /// Create checkpoint from the current tip for the given height.
+    ///
     /// Sends the created checkpoint and the ReplicatedState switched to the
     /// checkpoint or error into the sender.
-    /// Serializes protos to the newly created checkpoint after sending to `sender`
-    /// State: latest_checkpoint_state = tip_folder_state
-    ///        tip_folder_state = default
+    /// Serializes protos to the newly created checkpoint after sending to `sender`.
+    ///
+    /// State:
+    /// ```text
+    ///     latest_checkpoint_state = tip_folder_state
+    ///     tip_folder_state = default
+    /// ```
     TipToCheckpointAndSwitch {
         height: Height,
         state: ReplicatedState,
@@ -103,13 +108,15 @@ pub(crate) enum TipRequest {
         >,
     },
     /// Filter canisters in tip. Remove ones not present in the set.
-    /// State: tip_folder_state.has_filtered_canisters = true
+    ///
+    /// State: `tip_folder_state.has_filtered_canisters = true`
     FilterTipCanisters {
         height: Height,
         ids: BTreeSet<CanisterId>,
     },
     /// Flush PageMaps's unflushed delta on disc.
-    /// State: tip_folder_state.has_pagemaps = Some(height)
+    ///
+    /// State: `tip_folder_state.has_pagemaps = Some(height)`
     FlushPageMapDelta {
         height: Height,
         pagemaps: Vec<PageMapToFlush>,
@@ -117,13 +124,15 @@ pub(crate) enum TipRequest {
     },
     /// Reset tip folder to the checkpoint with given height.
     /// Merge overlays in tip folder if necessary.
-    /// State: tip_folder_state = latest_checkpoint_state
+    ///
+    /// State: `tip_folder_state = latest_checkpoint_state`
     ResetTipAndMerge {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
         pagemaptypes: Vec<PageMapType>,
     },
     /// Compute manifest, store result into states and persist metadata as result.
-    /// State: latest_checkpoint_state.has_manifest = true
+    ///
+    /// State: `latest_checkpoint_state.has_manifest = true`
     ComputeManifest {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
         base_manifest_info: Option<crate::manifest::BaseManifestInfo>,
@@ -132,7 +141,8 @@ pub(crate) enum TipRequest {
     },
     /// Validate the checkpointed state is valid and identical to the execution state.
     /// Crash if diverges.
-    /// State: latest_checkpoint_state.verified = true
+    ///
+    /// State: `latest_checkpoint_state.verified = true`
     ValidateReplicatedStateAndFinalize {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
         reference_state: Arc<ReplicatedState>,
@@ -140,7 +150,8 @@ pub(crate) enum TipRequest {
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     },
     /// Wait for the message to be executed and notify back via sender.
-    /// State: *
+    ///
+    /// State: `*`
     Wait { sender: Sender<()> },
 }
 
@@ -1077,6 +1088,10 @@ fn serialize_protos_to_checkpoint_readwrite(
         .subnet_queues()
         .serialize((state.subnet_queues()).into())?;
 
+    checkpoint_readwrite
+        .refunds()
+        .serialize((state.refunds()).into())?;
+
     checkpoint_readwrite.stats().serialize(Stats {
         query_stats: state.query_stats().as_query_stats(),
     })?;
@@ -1484,6 +1499,9 @@ fn handle_compute_manifest_request(
         ..bundled_manifest
     };
 
+    // Removing or changing the log below could make upgrade system tests fail, as they check for
+    // their existence before a reboot. Information about the computed root hash in logs is useful
+    // in certain recovery scenarios and should be kept.
     info!(
         log,
         "Computed root hash {:?} of state @{}",

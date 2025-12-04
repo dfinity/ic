@@ -1376,7 +1376,7 @@ mod tests {
                             logger,
                             &env,
                             &inputs.receivers().clone(),
-                            &ThresholdSigInputs::Schnorr(inputs),
+                            &ThresholdSigInputs::Schnorr(inputs.as_ref()),
                         );
                     }
                     MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
@@ -2091,9 +2091,12 @@ mod tests {
                     .nodes
                     .filter_by_receivers(&sig_inputs)
                     .map(|receiver| {
-                        receiver.load_tschnorr_sig_transcripts(&sig_inputs);
-                        let share = ThresholdSchnorrSigner::create_sig_share(receiver, &sig_inputs)
-                            .expect("failed to create sig share");
+                        receiver.load_tschnorr_sig_transcripts(&sig_inputs.as_ref());
+                        let share = ThresholdSchnorrSigner::create_sig_share(
+                            receiver,
+                            &sig_inputs.as_ref(),
+                        )
+                        .expect("failed to create sig share");
                         SchnorrSigShare {
                             signer_id: receiver.id(),
                             request_id: req_id,
@@ -2116,8 +2119,11 @@ mod tests {
                 // Signature completion should succeed now.
                 let r1 = sig_builder.get_completed_signature(callback_id, &context);
                 // Compare to combined signature returned by crypto environment
-                let r2 =
-                    CombinedSignature::Schnorr(run_tschnorr_protocol(&env, &sig_inputs, &mut rng));
+                let r2 = CombinedSignature::Schnorr(run_tschnorr_protocol(
+                    &env,
+                    &sig_inputs.as_ref(),
+                    &mut rng,
+                ));
                 assert_matches!(r1, Some(ref s) if s == &r2);
 
                 // If the context's nonce hasn't been set yet, no signature should be completed
@@ -2148,7 +2154,7 @@ mod tests {
                         height,
                     }),
                     pseudo_random_id: [1; 32],
-                    derivation_path: Arc::new(vec![]),
+                    derivation_path: Arc::new(vec![vec![]]),
                     batch_time: UNIX_EPOCH,
                     matched_pre_signature: None,
                     nonce: None,

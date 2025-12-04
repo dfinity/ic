@@ -668,11 +668,19 @@ pub trait IDkgBlockReader: Send + Sync {
         &self,
     ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_>;
 
-    /// Looks up the transcript for the given transcript ref.
+    /// Looks up and clones the transcript for the given transcript ref.
     fn transcript(
         &self,
         transcript_ref: &TranscriptRef,
-    ) -> Result<IDkgTranscript, TranscriptLookupError>;
+    ) -> Result<IDkgTranscript, TranscriptLookupError> {
+        self.transcript_as_ref(transcript_ref).cloned()
+    }
+
+    /// Looks up the transcript for the given transcript ref.
+    fn transcript_as_ref(
+        &self,
+        transcript_ref: &TranscriptRef,
+    ) -> Result<&IDkgTranscript, TranscriptLookupError>;
 
     /// Iterate over all IDkgPayloads above the given height.
     fn iter_above(&self, height: Height) -> Box<dyn Iterator<Item = &IDkgPayload> + '_>;
@@ -1163,16 +1171,16 @@ impl BuildSignatureInputsError {
 #[allow(clippy::large_enum_variant)]
 pub enum ThresholdSigInputs<'a> {
     Ecdsa(ThresholdEcdsaSigInputs<'a>),
-    Schnorr(ThresholdSchnorrSigInputs),
-    VetKd(VetKdArgs),
+    Schnorr(ThresholdSchnorrSigInputs<'a>),
+    VetKd(VetKdArgs<'a>),
 }
 
 impl ThresholdSigInputs<'_> {
     pub fn caller(&self) -> &PrincipalId {
         match self {
             ThresholdSigInputs::Ecdsa(inputs) => inputs.caller(),
-            ThresholdSigInputs::Schnorr(inputs) => &inputs.derivation_path().caller,
-            ThresholdSigInputs::VetKd(inputs) => &inputs.context.caller,
+            ThresholdSigInputs::Schnorr(inputs) => inputs.caller(),
+            ThresholdSigInputs::VetKd(inputs) => inputs.context.caller,
         }
     }
 
@@ -1231,6 +1239,20 @@ impl PreSignature {
             PreSignature::Ecdsa(_) => None,
             PreSignature::Schnorr(schnorr) => Some(schnorr.clone()),
         }
+    }
+
+    /// Return all IDkgTranscripts included in this pre-signature.
+    pub fn iter_idkg_transcripts(&self) -> impl Iterator<Item = &IDkgTranscript> {
+        let refs = match self {
+            PreSignature::Ecdsa(pre_sig) => vec![
+                pre_sig.kappa_unmasked(),
+                pre_sig.lambda_masked(),
+                pre_sig.kappa_times_lambda(),
+                pre_sig.key_times_lambda(),
+            ],
+            PreSignature::Schnorr(pre_sig) => vec![pre_sig.blinder_unmasked()],
+        };
+        refs.into_iter()
     }
 }
 

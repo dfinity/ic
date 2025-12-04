@@ -1,13 +1,16 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use config::guestos::bootstrap_ic_node::populate_nns_public_key;
 use config::guestos::{bootstrap_ic_node::bootstrap_ic_node, generate_ic_config};
 use config::serialize_and_write_config;
 use config::setupos::config_ini::{ConfigIniSettings, get_config_ini_settings};
-use config::setupos::deployment_json::get_deployment_settings;
+use config::setupos::deployment_json::{VmResources, get_deployment_settings};
 use config_types::*;
+use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
 use regex::Regex;
 use std::path::{Path, PathBuf};
+use url::Url;
 
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
@@ -32,8 +35,8 @@ pub enum Commands {
     },
     /// Bootstrap IC Node from a bootstrap package
     BootstrapICNode {
-        #[arg(long, default_value = config::DEFAULT_BOOTSTRAP_TAR_PATH, value_name = "bootstrap.tar")]
-        bootstrap_tar_path: PathBuf,
+        #[arg(long, default_value = config::DEFAULT_BOOTSTRAP_DIR, value_name = "bootstrap_dir")]
+        bootstrap_dir: PathBuf,
     },
     /// Generate IC configuration from template and guestos config
     GenerateICConfig {
@@ -41,6 +44,10 @@ pub enum Commands {
         guestos_config_json_path: PathBuf,
         #[arg(long, default_value = config::DEFAULT_IC_JSON5_OUTPUT_PATH, value_name = "ic.json5")]
         output_path: PathBuf,
+    },
+    PopulateNnsPublicKey {
+        #[arg(long, default_value = config::DEFAULT_BOOTSTRAP_DIR, value_name = "bootstrap_dir")]
+        bootstrap_dir: PathBuf,
     },
 }
 
@@ -74,6 +81,9 @@ pub fn main() -> Result<()> {
                 enable_trusted_execution_environment,
             } = get_config_ini_settings(&config_ini_path)?;
 
+            // get deployment.json variables
+            let deployment_json_settings = get_deployment_settings(&deployment_json_path)?;
+
             // create NetworkSettings
             let deterministic_config = DeterministicIpv6Config {
                 prefix: ipv6_prefix,
@@ -102,10 +112,8 @@ pub fn main() -> Result<()> {
                 domain_name,
             };
 
-            // get deployment.json variables
-            let deployment_json_settings = get_deployment_settings(&deployment_json_path)?;
-
-            let mgmt_mac = resolve_mgmt_mac(deployment_json_settings.deployment.mgmt_mac)?;
+            let mgmt_mac =
+                resolve_mgmt_mac(deployment_json_settings.deployment.mgmt_mac.as_deref())?;
 
             if let Some(ref node_reward_type) = node_reward_type {
                 let node_reward_type_pattern = Regex::new(r"^type[0-9]+(\.[0-9])?$")?;
@@ -119,39 +127,23 @@ pub fn main() -> Result<()> {
                 println!("Node reward type is not set. Skipping validation.");
             }
 
-            let icos_settings = ICOSSettings {
+            let use_node_operator_private_key =
+                Path::new("/config/node_operator_private_key.pem").exists();
+            let use_ssh_authorized_keys = Path::new("/config/ssh_authorized_keys").exists();
+
+            let setupos_config = assemble_setupos_config(
                 node_reward_type,
                 mgmt_mac,
-                deployment_environment: deployment_json_settings.deployment.deployment_environment,
-                logging: Logging {},
-                use_nns_public_key: false,
-                nns_urls: deployment_json_settings.nns.urls.clone(),
-                use_node_operator_private_key: Path::new("/config/node_operator_private_key.pem")
-                    .exists(),
+                deployment_json_settings.deployment.deployment_environment,
+                &deployment_json_settings.nns.urls,
+                deployment_json_settings.dev_vm_resources,
                 enable_trusted_execution_environment,
-                use_ssh_authorized_keys: Path::new("/config/ssh_authorized_keys").exists(),
-                icos_dev_settings: ICOSDevSettings::default(),
-            };
-
-            let setupos_settings = SetupOSSettings;
-
-            let hostos_settings = HostOSSettings {
-                vm_memory: deployment_json_settings.vm_resources.memory,
-                vm_cpu: deployment_json_settings.vm_resources.cpu,
-                vm_nr_of_vcpus: deployment_json_settings.vm_resources.nr_of_vcpus,
+                use_node_operator_private_key,
+                use_ssh_authorized_keys,
                 verbose,
-            };
-
-            let guestos_settings = GuestOSSettings::default();
-
-            let setupos_config = SetupOSConfig {
-                config_version: CONFIG_VERSION.to_string(),
                 network_settings,
-                icos_settings,
-                setupos_settings,
-                hostos_settings,
-                guestos_settings,
-            };
+            );
+
             // SetupOSConfig is safe to log; it does not contain any secret material
             println!("SetupOSConfig: {setupos_config:?}");
 
@@ -192,9 +184,13 @@ pub fn main() -> Result<()> {
 
             Ok(())
         }
-        Some(Commands::BootstrapICNode { bootstrap_tar_path }) => {
-            println!("Bootstrap IC Node from: {}", bootstrap_tar_path.display());
-            bootstrap_ic_node(&bootstrap_tar_path)
+        Some(Commands::BootstrapICNode { bootstrap_dir }) => {
+            println!("Bootstrap IC Node from: {}", bootstrap_dir.display());
+            bootstrap_ic_node(&bootstrap_dir)
+        }
+        Some(Commands::PopulateNnsPublicKey { bootstrap_dir }) => {
+            println!("Populating NNS key from: {}", bootstrap_dir.display());
+            populate_nns_public_key(&bootstrap_dir)
         }
         Some(Commands::GenerateICConfig {
             guestos_config_json_path,
@@ -210,5 +206,55 @@ pub fn main() -> Result<()> {
             println!("No command provided. Use --help for usage information.");
             Ok(())
         }
+    }
+}
+
+pub fn assemble_setupos_config(
+    node_reward_type: Option<String>,
+    mgmt_mac: MacAddr6,
+    deployment_environment: DeploymentEnvironment,
+    nns_urls: &[Url],
+    dev_vm_resources: VmResources,
+    enable_trusted_execution_environment: bool,
+    use_node_operator_private_key: bool,
+    use_ssh_authorized_keys: bool,
+    verbose: bool,
+    network_settings: NetworkSettings,
+) -> SetupOSConfig {
+    let icos_settings = ICOSSettings {
+        node_reward_type,
+        mgmt_mac,
+        deployment_environment,
+        nns_urls: nns_urls.to_vec(),
+        use_node_operator_private_key,
+        enable_trusted_execution_environment,
+        use_ssh_authorized_keys,
+        icos_dev_settings: ICOSDevSettings::default(),
+    };
+
+    let setupos_settings = SetupOSSettings;
+
+    #[allow(deprecated)]
+    let hostos_settings = HostOSSettings {
+        vm_memory: dev_vm_resources.memory,
+        vm_cpu: dev_vm_resources.cpu.clone(),
+        vm_nr_of_vcpus: dev_vm_resources.nr_of_vcpus,
+        verbose,
+        hostos_dev_settings: HostOSDevSettings {
+            vm_memory: dev_vm_resources.memory,
+            vm_cpu: dev_vm_resources.cpu,
+            vm_nr_of_vcpus: dev_vm_resources.nr_of_vcpus,
+        },
+    };
+
+    let guestos_settings = GuestOSSettings::default();
+
+    SetupOSConfig {
+        config_version: CONFIG_VERSION.to_string(),
+        network_settings,
+        icos_settings,
+        setupos_settings,
+        hostos_settings,
+        guestos_settings,
     }
 }

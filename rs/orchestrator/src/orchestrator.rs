@@ -160,19 +160,11 @@ impl Orchestrator {
         let metrics = Arc::new(metrics);
         let mut task_tracker = TaskTracker::new(metrics.clone(), logger.clone());
 
-        let registry_replicator = Arc::new(RegistryReplicator::new_from_config(
-            logger.clone(),
-            Some(node_id),
-            config,
-        ));
+        let registry_replicator = Arc::new(
+            RegistryReplicator::new_from_config(logger.clone(), Some(node_id), config).await,
+        );
 
-        let (nns_urls, nns_pub_key) =
-            registry_replicator.parse_registry_access_info_from_config(config);
-
-        match registry_replicator
-            .start_polling(nns_urls, nns_pub_key, cancellation_token)
-            .await
-        {
+        match registry_replicator.start_polling(cancellation_token) {
             Ok(future) => task_tracker.spawn("registry_replicator", future),
             Err(err) => {
                 metrics
@@ -592,7 +584,7 @@ impl Orchestrator {
 
         if let Some(upgrade) = self.upgrade.take() {
             self.task_tracker.spawn(
-                "upgrade",
+                "GuestOS_upgrade",
                 upgrade_checks(
                     Arc::clone(&self.subnet_assignment),
                     upgrade,

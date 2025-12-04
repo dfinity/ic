@@ -300,7 +300,7 @@ fn main() -> io::Result<()> {
                 // Exit roughly every 8 seconds.
                 tokio::time::sleep(Duration::from_millis(500)).await;
                 let r: u8 = rand::random();
-                if r % 16 == 0 {
+                if r.is_multiple_of(16) {
                     // Exit immediately without cleaning up.
                     unsafe {
                         libc::_exit(1);

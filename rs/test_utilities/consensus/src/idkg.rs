@@ -1,8 +1,10 @@
 use ic_crypto_test_utils_canister_threshold_sigs::{
     CanisterThresholdSigTestEnvironment, IDkgParticipants, ThresholdEcdsaSigInputsOwned,
-    generate_ecdsa_presig_quadruple, generate_key_transcript, setup_unmasked_random_params,
+    ThresholdSchnorrSigInputsOwned, generate_ecdsa_presig_quadruple, generate_key_transcript,
+    setup_unmasked_random_params,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_test_utils_vetkd::VetKdArgsOwned;
 use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
 use ic_management_canister_types_private::{
@@ -38,7 +40,7 @@ use ic_types::{
     crypto::{
         AlgorithmId, ExtendedDerivationPath,
         canister_threshold_sig::{
-            SchnorrPreSignatureTranscript, ThresholdSchnorrSigInputs,
+            SchnorrPreSignatureTranscript,
             idkg::{
                 IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
                 IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
@@ -47,7 +49,6 @@ use ic_types::{
         threshold_sig::ni_dkg::{
             NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
-        vetkd::VetKdArgs,
     },
     messages::{CallbackId, Payload},
     time::UNIX_EPOCH,
@@ -276,7 +277,7 @@ pub fn fake_signature_request_context_from_id(
     let context = SignWithThresholdContext {
         request: RequestBuilder::new().build(),
         args: fake_signature_request_args(key_id, height, Some(pre_sig_id), rv),
-        derivation_path: Arc::new(vec![]),
+        derivation_path: Arc::new(vec![vec![]]),
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [request_id.callback_id.get() as u8; 32],
         matched_pre_signature: Some((pre_sig_id, height)),
@@ -439,8 +440,8 @@ impl From<&ThresholdEcdsaSigInputsOwned> for TestPreSigRef {
     }
 }
 
-impl From<&ThresholdSchnorrSigInputs> for TestPreSigRef {
-    fn from(inputs: &ThresholdSchnorrSigInputs) -> TestPreSigRef {
+impl From<&ThresholdSchnorrSigInputsOwned> for TestPreSigRef {
+    fn from(inputs: &ThresholdSchnorrSigInputsOwned) -> TestPreSigRef {
         let height = Height::from(0);
         let pre_signature = inputs.presig_transcript();
         let key = inputs.key_transcript();
@@ -785,16 +786,16 @@ pub fn create_pre_sig_ref(caller: u8, key_id: &IDkgMasterPublicKeyId) -> TestPre
 #[allow(clippy::large_enum_variant)]
 pub enum ThresholdSigInputsOwned {
     Ecdsa(ThresholdEcdsaSigInputsOwned),
-    Schnorr(ThresholdSchnorrSigInputs),
-    VetKd(VetKdArgs),
+    Schnorr(ThresholdSchnorrSigInputsOwned),
+    VetKd(VetKdArgsOwned),
 }
 
 impl ThresholdSigInputsOwned {
     pub fn as_ref<'a>(&'a self) -> ThresholdSigInputs<'a> {
         match self {
             ThresholdSigInputsOwned::Ecdsa(i) => ThresholdSigInputs::Ecdsa(i.as_ref()),
-            ThresholdSigInputsOwned::Schnorr(i) => ThresholdSigInputs::Schnorr(i.clone()),
-            ThresholdSigInputsOwned::VetKd(i) => ThresholdSigInputs::VetKd(i.clone()),
+            ThresholdSigInputsOwned::Schnorr(i) => ThresholdSigInputs::Schnorr(i.as_ref()),
+            ThresholdSigInputsOwned::VetKd(i) => ThresholdSigInputs::VetKd(i.as_ref()),
         }
     }
 }
@@ -832,17 +833,15 @@ pub fn create_threshold_sig_inputs(
                 PreSigId(1),
                 RegistryVersion::from(1),
             );
-            ThresholdSigInputsOwned::Schnorr(
-                ThresholdSchnorrSigInputs::new(
-                    &path,
-                    &[1; 64],
-                    None,
-                    rnd,
-                    pre_sig.pre_signature.as_ref().clone(),
-                    pre_sig.key_transcript.as_ref().clone(),
-                )
-                .unwrap(),
-            )
+            ThresholdSigInputsOwned::Schnorr(ThresholdSchnorrSigInputsOwned::new(
+                path.caller,
+                path.derivation_path,
+                vec![1; 64],
+                None,
+                rnd.get(),
+                pre_sig.pre_signature.as_ref().clone(),
+                pre_sig.key_transcript.as_ref().clone(),
+            ))
         }
         MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
     }

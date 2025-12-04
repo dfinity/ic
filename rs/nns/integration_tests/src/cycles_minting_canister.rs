@@ -2,17 +2,17 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Canister;
 use cycles_minting_canister::{
-    AuthorizedSubnetsResponse, BAD_REQUEST_CYCLES_PENALTY, CanisterSettingsArgs,
-    ChangeSubnetTypeAssignmentArgs, CreateCanister, CreateCanisterError, MEANINGFUL_MEMOS,
-    MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES, MEMO_TOP_UP_CANISTER, NotifyCreateCanister,
-    NotifyError, NotifyErrorCode, NotifyMintCyclesArg, NotifyMintCyclesSuccess, NotifyTopUp,
-    SubnetListWithType, SubnetTypesToSubnetsResponse, UpdateSubnetTypeArgs,
+    AuthorizedSubnetsResponse, BAD_REQUEST_CYCLES_PENALTY, ChangeSubnetTypeAssignmentArgs,
+    CreateCanister, CreateCanisterError, MEANINGFUL_MEMOS, MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES,
+    MEMO_TOP_UP_CANISTER, NotifyCreateCanister, NotifyError, NotifyErrorCode, NotifyMintCyclesArg,
+    NotifyMintCyclesSuccess, NotifyTopUp, SubnetListWithType, SubnetTypesToSubnetsResponse,
+    UpdateSubnetTypeArgs,
 };
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
 use ic_ledger_core::tokens::CheckedSub;
-// TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
+// TODO(NNS1-3249): remove temporary alias `Ic00CanisterSettingsArgs`.
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoResponse, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2, EnvironmentVariable,
@@ -1029,7 +1029,7 @@ fn notify_create_canister(
         controller: *TEST_USER1_PRINCIPAL,
         subnet_type: None,
         subnet_selection: None,
-        settings: settings.map(CanisterSettingsArgs::from),
+        settings,
     };
 
     if let WasmResult::Reply(res) = state_machine
@@ -1116,7 +1116,7 @@ fn cmc_create_canister_with_cycles(
 ) -> Result<CanisterId, CreateCanisterError> {
     #[allow(deprecated)]
     let create_args = Encode!(&CreateCanister {
-        settings: settings.map(CanisterSettingsArgs::from),
+        settings,
         subnet_type,
         subnet_selection: None,
     })

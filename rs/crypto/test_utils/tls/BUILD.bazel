@@ -1,11 +1,11 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-ed25519",
     "//packages/ic-secp256r1",
-    "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
     "//rs/crypto/temp_crypto",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tls_interfaces",
@@ -51,10 +51,4 @@ rust_test(
     crate = ":tls",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
-)
-
-rust_test_suite(
-    name = "tls_integration",
-    srcs = glob(["tests/**/*.rs"]),
-    deps = [":tls"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

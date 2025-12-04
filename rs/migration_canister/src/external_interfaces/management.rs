@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 
-use candid::{CandidType, Principal};
+use candid::{CandidType, Principal, Reserved};
 use ic_cdk::{
     api::{canister_self, canister_version},
     call::Call,
@@ -141,12 +141,10 @@ pub struct DefiniteCanisterSettingsArgs {
 
 pub async fn canister_status(
     canister_id: Principal,
-    subnet_id: Principal,
 ) -> ProcessingResult<CanisterStatusResponse, ValidationError> {
     let args = CanisterStatusArgs { canister_id };
 
-    // We have to provide the subnet_id explicitly because `aaaaa-aa` will not always work during migration.
-    match Call::bounded_wait(subnet_id, "canister_status")
+    match Call::bounded_wait(Principal::management_canister(), "canister_status")
         .with_arg(args)
         .await
     {
@@ -154,16 +152,16 @@ pub async fn canister_status(
             Ok(canister_status) => ProcessingResult::Success(canister_status),
             Err(e) => {
                 println!(
-                    "Decoding `CanisterStatusResponse` for canister: {}, subnet: {} failed: {:?}",
-                    canister_id, subnet_id, e
+                    "Decoding `CanisterStatusResponse` for canister: {} failed: {:?}",
+                    canister_id, e
                 );
                 ProcessingResult::NoProgress
             }
         },
         Err(e) => {
             println!(
-                "Call `canister_status` for canister: {}, subnet: {} failed: {:?}",
-                canister_id, subnet_id, e
+                "Call `canister_status` for canister: {} failed: {:?}",
+                canister_id, e
             );
             match e {
                 ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(_)
@@ -212,6 +210,7 @@ pub async fn get_canister_info(
 pub struct RenameCanisterArgs {
     pub canister_id: Principal,
     pub rename_to: RenameToArgs,
+    pub requested_by: Principal,
     pub sender_canister_version: u64,
 }
 
@@ -228,6 +227,7 @@ pub async fn rename_canister(
     target: Principal,
     target_subnet: Principal,
     total_num_changes: u64,
+    requested_by: Principal,
 ) -> ProcessingResult<(), Infallible> {
     let args = RenameCanisterArgs {
         canister_id: target,
@@ -236,6 +236,7 @@ pub async fn rename_canister(
             version: source_version,
             total_num_changes,
         },
+        requested_by,
         sender_canister_version: canister_version(),
     };
 
@@ -266,7 +267,7 @@ pub async fn assert_no_snapshots(canister_id: Principal) -> ProcessingResult<(),
             if snapshots.is_empty() {
                 ProcessingResult::Success(())
             } else {
-                ProcessingResult::FatalFailure(ValidationError::TargetHasSnapshots)
+                ProcessingResult::FatalFailure(ValidationError::TargetHasSnapshots(Reserved))
             }
         }
         Err(e) => {

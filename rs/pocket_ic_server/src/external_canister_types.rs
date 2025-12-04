@@ -86,11 +86,6 @@ pub struct CaptchaConfig {
 }
 
 #[derive(CandidType)]
-pub struct GoogleOpenIdConfig {
-    pub client_id: String,
-}
-
-#[derive(CandidType)]
 pub struct OpenIdConfig {
     pub name: String,
     pub logo: String,
@@ -127,12 +122,10 @@ pub struct InternetIdentityInit {
     pub captcha_config: Option<CaptchaConfig>,
     pub related_origins: Option<Vec<String>>,
     pub new_flow_origins: Option<Vec<String>>,
-    pub openid_google: Option<Option<GoogleOpenIdConfig>>,
     pub openid_configs: Option<Vec<OpenIdConfig>>,
     pub analytics_config: Option<Option<AnalyticsConfig>>,
     pub fetch_root_key: Option<bool>,
     pub enable_dapps_explorer: Option<bool>,
     pub is_production: Option<bool>,
     pub dummy_auth: Option<Option<DummyAuthConfig>>,
-    pub feature_flag_continue_from_another_device: Option<bool>,
 }

@@ -15,13 +15,12 @@ use ic_state_machine_tests::{
 use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use ic_test_utilities_execution_environment::{get_reject, get_reply, wat_canister, wat_fn};
 use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
-use ic_types::{
-    CanisterId, Cycles, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE, NumInstructions, ingress::WasmResult,
-};
+use ic_types::{CanisterId, Cycles, NumInstructions, ingress::WasmResult};
 use more_asserts::{assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
 use std::time::{Duration, SystemTime};
 
+const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * 1024;
 const MAX_LOG_MESSAGE_LEN: usize = 4 * 1024;
 const TIME_STEP: Duration = Duration::from_nanos(111_111);
 
@@ -355,7 +354,7 @@ fn test_fetch_canister_logs_via_inter_canister_update_call_enabled() {
                 call_args()
                     .other_side(FetchCanisterLogsRequest::new(canister_b).encode())
                     .on_reject(wasm().reject_message().reject()),
-                Cycles::new(2_000_000),
+                Cycles::new(50_000_000_000),
             )
             .build(),
     );
@@ -927,7 +926,7 @@ fn test_canister_log_stays_within_limit() {
         wat_canister()
             .update(
                 "test",
-                wat_fn().debug_print(&[42; MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE]),
+                wat_fn().debug_print(&[42; TEST_DEFAULT_LOG_MEMORY_LIMIT]),
             )
             .build_wasm(),
     );
@@ -944,7 +943,7 @@ fn test_canister_log_stays_within_limit() {
             .iter()
             .map(|r| r.data_size())
             .sum::<usize>(),
-        MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE
+        TEST_DEFAULT_LOG_MEMORY_LIMIT
     );
 }
 
@@ -960,8 +959,8 @@ fn test_canister_log_in_state_stays_within_limit() {
             .update(
                 "test",
                 wat_fn()
-                    .debug_print(&[b'd'; MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE])
-                    .trap_with_blob(&[b't'; MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE]),
+                    .debug_print(&[b'd'; TEST_DEFAULT_LOG_MEMORY_LIMIT])
+                    .trap_with_blob(&[b't'; TEST_DEFAULT_LOG_MEMORY_LIMIT]),
             )
             .build_wasm(),
     );
@@ -969,9 +968,9 @@ fn test_canister_log_in_state_stays_within_limit() {
         let _ = env.execute_ingress(canister_id, "test", vec![]);
     }
     // Expect that the total size of the log in canister state is not zero and less than the limit.
-    let log_size = env.canister_log(canister_id).used_space();
+    let log_size = env.canister_log(canister_id).bytes_used();
     assert_lt!(0, log_size);
-    assert_le!(log_size, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE);
+    assert_le!(log_size, TEST_DEFAULT_LOG_MEMORY_LIMIT);
 }
 
 #[test]

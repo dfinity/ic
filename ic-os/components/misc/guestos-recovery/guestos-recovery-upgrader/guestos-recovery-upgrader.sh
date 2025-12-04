@@ -25,19 +25,30 @@ BASE_URLS=(
 
 source /opt/ic/bin/grub.sh
 
-# Helper function to extract a value from /proc/cmdline
-get_cmdline_var() {
-    local var="$1"
-    grep -oP "${var}=[^ ]*" /proc/cmdline | head -n1 | cut -d= -f2-
+# Parse command line arguments in the format key=value
+parse_args() {
+    for arg in "$@"; do
+        case "$arg" in
+            version=*)
+                VERSION="${arg#*=}"
+                ;;
+            version-hash=*)
+                VERSION_HASH="${arg#*=}"
+                ;;
+            recovery-hash=*)
+                RECOVERY_HASH="${arg#*=}"
+                ;;
+        esac
+    done
 }
 
-# Helper function to log messages to console, serial, and logger
+# Helper function to log messages to logger and stdout
 log_message() {
     local message="$1"
-
-    echo "$message" >/dev/tty1 2>/dev/null || true
-    echo "$message" >/dev/ttyS0 2>/dev/null || true
+    # Write to system logger
     logger -t guestos-recovery-upgrader "$message" 2>/dev/null || true
+    # Write to stdout so the TUI can capture it
+    echo "$message"
 }
 
 verify_hash() {
@@ -261,11 +272,18 @@ guestos_upgrade_cleanup() {
 main() {
     log_message "Starting GuestOS Recovery Upgrader"
 
-    VERSION="$(get_cmdline_var version)"
-    VERSION_HASH="$(get_cmdline_var version-hash)"
-    RECOVERY_HASH="$(get_cmdline_var recovery-hash)"
+    VERSION=""
+    VERSION_HASH=""
+    RECOVERY_HASH=""
+    parse_args "$@"
+
+    log_message "Parsed VERSION='$VERSION' VERSION_HASH='$VERSION_HASH' RECOVERY_HASH='$RECOVERY_HASH'"
 
     if [ -z "$VERSION" ] || [ -z "$VERSION_HASH" ]; then
+        log_message "ERROR: version and version-hash parameters are required"
+        log_message "Usage: version=<commit-hash> version-hash=<sha256> [recovery-hash=<sha256>]"
+        # Sleep 15 seconds then repeat error message to ensure visibility after console initialization wipe
+        sleep 15
         log_message "ERROR: version and version-hash parameters are required"
         log_message "Usage: version=<commit-hash> version-hash=<sha256> [recovery-hash=<sha256>]"
         exit 1
@@ -276,7 +294,7 @@ main() {
     if [ -n "$RECOVERY_HASH" ]; then
         log_message "Recovery hash: $RECOVERY_HASH"
     else
-        log_message "Recovery hash not provided (optional)"
+        log_message "Recovery hash not provided (optional for testing)"
     fi
 
     TMPDIR=$(mktemp -d)
@@ -297,11 +315,28 @@ main() {
     fi
 
     extract_upgrade "$TMPDIR"
+
+    log_message "Stopping guestos.service for manual upgrade"
+    systemctl stop guestos.service
+    log_message "GuestOS service stopped"
+
     install_upgrade "$TMPDIR"
 
     log_message "Recovery Upgrader completed successfully"
 
     log_message "Launching GuestOS on the new version..."
+
+    if [ -n "$RECOVERY_HASH" ]; then
+        log_message "Writing recovery hash to file"
+        RECOVERY_FILE="/run/config/guestos_recovery_hash"
+        mkdir -p "$(dirname "$RECOVERY_FILE")"
+        echo "$RECOVERY_HASH" >"$RECOVERY_FILE"
+        log_message "Recovery hash written to $RECOVERY_FILE"
+    fi
+
+    log_message "Restarting guestos.service after manual upgrade installation"
+    systemctl start guestos.service
+    log_message "GuestOS service restarted successfully"
 }
 
-main
+main "$@"

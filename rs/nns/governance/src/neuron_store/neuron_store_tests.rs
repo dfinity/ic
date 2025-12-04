@@ -3,8 +3,6 @@ use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{BallotInfo, Followees, KnownNeuronData, MaturityDisbursement},
     storage::{with_stable_neuron_indexes, with_voting_history_store},
-    temporarily_disable_known_neuron_voting_history,
-    temporarily_enable_known_neuron_voting_history,
 };
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -1017,7 +1015,8 @@ fn test_approve_genesis_kyc_cap_exceeded() {
     }
 }
 
-fn test_record_neuron_vote(enabled: bool) {
+#[test]
+fn test_record_neuron_vote() {
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
     let neuron = simple_neuron_builder(1)
         .with_known_neuron_data(Some(KnownNeuronData {
@@ -1035,7 +1034,6 @@ fn test_record_neuron_vote(enabled: bool) {
             Topic::NetworkEconomics,
             ProposalId { id: 1 },
             Vote::Yes,
-            ProposalId { id: 0 },
         )
         .unwrap();
 
@@ -1053,110 +1051,5 @@ fn test_record_neuron_vote(enabled: bool) {
     let voting_history = with_voting_history_store(|voting_history| {
         voting_history.list_neuron_votes(neuron_id, None, Some(10))
     });
-    if enabled {
-        assert_eq!(voting_history, vec![(ProposalId { id: 1 }, Vote::Yes)]);
-    } else {
-        assert_eq!(voting_history, vec![]);
-    }
-}
-
-#[test]
-fn test_record_neuron_vote_disabled() {
-    let _t = temporarily_disable_known_neuron_voting_history();
-
-    test_record_neuron_vote(false);
-}
-
-#[test]
-fn test_record_neuron_vote_enabled() {
-    let _t = temporarily_enable_known_neuron_voting_history();
-
-    test_record_neuron_vote(true);
-}
-
-#[test]
-fn test_record_neuron_vote_filters_by_first_proposal_id() {
-    let _t = temporarily_enable_known_neuron_voting_history();
-    let mut neuron_store = NeuronStore::new(BTreeMap::new());
-    let neuron = simple_neuron_builder(1)
-        .with_known_neuron_data(Some(KnownNeuronData {
-            name: "my known neuron".to_string(),
-            description: Some("my known neuron description".to_string()),
-            links: vec![],
-            committed_topics: vec![],
-        }))
-        .build();
-    let neuron_id = neuron_store.add_neuron(neuron).unwrap();
-
-    // Record a vote for proposal 1 with threshold at 5
-    // This should NOT be recorded in voting history because proposal_id (1) < threshold (5)
-    neuron_store
-        .record_neuron_vote(
-            neuron_id,
-            Topic::NetworkEconomics,
-            ProposalId { id: 1 },
-            Vote::Yes,
-            ProposalId { id: 5 },
-        )
-        .unwrap();
-
-    // Verify ballot was recorded in recent_ballots
-    let recent_ballots = neuron_store
-        .with_neuron(&neuron_id, |n| n.recent_ballots.clone())
-        .unwrap();
-    assert_eq!(
-        recent_ballots,
-        vec![BallotInfo {
-            proposal_id: Some(ProposalId { id: 1 }),
-            vote: Vote::Yes as i32,
-        }]
-    );
-
-    // Verify it was NOT recorded in voting history
-    let voting_history = with_voting_history_store(|voting_history| {
-        voting_history.list_neuron_votes(neuron_id, None, None)
-    });
-    assert_eq!(voting_history, vec![]);
-
-    // Record a vote for proposal 5 (equal to threshold)
-    // This SHOULD be recorded in voting history because proposal_id (5) >= threshold (5)
-    neuron_store
-        .record_neuron_vote(
-            neuron_id,
-            Topic::NetworkEconomics,
-            ProposalId { id: 5 },
-            Vote::No,
-            ProposalId { id: 5 },
-        )
-        .unwrap();
-
-    // Verify it WAS recorded in voting history
-    let voting_history = with_voting_history_store(|voting_history| {
-        voting_history.list_neuron_votes(neuron_id, None, None)
-    });
-    assert_eq!(voting_history, vec![(ProposalId { id: 5 }, Vote::No)]);
-
-    // Record a vote for proposal 10 (greater than threshold)
-    // This SHOULD be recorded in voting history because proposal_id (10) >= threshold (5)
-    neuron_store
-        .record_neuron_vote(
-            neuron_id,
-            Topic::NetworkEconomics,
-            ProposalId { id: 10 },
-            Vote::Yes,
-            ProposalId { id: 5 },
-        )
-        .unwrap();
-
-    // Verify both proposal 5 and 10 are in voting history (in descending order - most recent first)
-    let voting_history = with_voting_history_store(|voting_history| {
-        voting_history.list_neuron_votes(neuron_id, None, None)
-    });
-    assert_eq!(
-        voting_history,
-        vec![
-            (ProposalId { id: 10 }, Vote::Yes),
-            (ProposalId { id: 5 }, Vote::No)
-        ]
-    );
+    assert_eq!(voting_history, vec![(ProposalId { id: 1 }, Vote::Yes)]);
 }
