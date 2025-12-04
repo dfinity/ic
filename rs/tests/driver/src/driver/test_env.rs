@@ -194,6 +194,9 @@ where
 {
     /// An attribute name is used as a name of a file where the attribute is stored.
     fn attribute_name() -> String;
+    fn attribute_exists(env: &TestEnv) -> bool {
+        env.get_json_path(Self::attribute_name()).exists()
+    }
     fn write_attribute(&self, env: &TestEnv) {
         env.write_json_object(Self::attribute_name(), self)
             .unwrap_or_else(|e| panic!("cannot write {} to TestEnv: {}", Self::attribute_name(), e))
