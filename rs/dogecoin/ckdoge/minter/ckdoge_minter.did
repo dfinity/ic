@@ -19,18 +19,18 @@ type InitArgs = record {
     // The minimal amount of ckDOGE that can be converted to DOGE.
     retrieve_doge_min_amount : nat64;
 
-    /// Maximum time in nanoseconds that a transaction should spend in the queue
-    /// before being sent.
+    // Maximum time in nanoseconds that a transaction should spend in the queue
+    // before being sent.
     max_time_in_queue_nanos : nat64;
 
-    /// The minimum number of confirmations required for the minter to
-    /// accept a Dogecoin transaction.
+    // The minimum number of confirmations required for the minter to
+    // accept a Dogecoin transaction.
     min_confirmations : opt nat32;
 
-    /// The minter's operation mode.
+    // The minter's operation mode.
     mode : Mode;
 
-    /// The expiration duration (in seconds) for cached entries in the get_utxos cache.
+    // The expiration duration (in seconds) for cached entries in the get_utxos cache.
     get_utxos_cache_expiration_seconds: opt nat64;
 };
 
@@ -226,6 +226,16 @@ type EstimateWithdrawalFeeError = variant {
     AmountTooHigh;
 };
 
+type MinterInfo = record {
+    // The minimum number of confirmations required for the minter to
+    // accept a Dogecoin transaction.
+    min_confirmations : nat32;
+
+    // This amount is based on the `retrieve_doge_min_amount` setting during canister
+    // initialization or upgrades, but may vary according to current network fees.
+    retrieve_doge_min_amount : nat64;
+};
+
 type CanisterStatusResponse = record {
   status : CanisterStatusType;
   ready_for_migration : bool;
@@ -330,6 +340,9 @@ service : (minter_arg : MinterArg) -> {
 
     // Returns the status of a withdrawal request.
     retrieve_doge_status : (record { block_index : nat64 }) -> (RetrieveDogeStatus) query;
+
+    // Returns internal minter parameters.
+    get_minter_info : () -> (MinterInfo) query;
 
     // Returns the output of the IC method
     // [`canister_status`](https://internetcomputer.org/docs/references/ic-interface-spec#ic-canister_status)
