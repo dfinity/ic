@@ -63,12 +63,14 @@ rust_test(
     deps = [
         # Keep sorted.
         "//rs/limits",
+        "//rs/rust_canisters/dfn_http_metrics",
         "@crate_index//:candid",
         "@crate_index//:candid_parser",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-management-canister-types",
+        "@crate_index//:ic-metrics-encoder",
         "@crate_index//:ic_stable_structures_next",
         "@crate_index//:itertools",
         "@crate_index//:serde",
