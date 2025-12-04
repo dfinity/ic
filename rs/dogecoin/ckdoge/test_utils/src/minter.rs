@@ -2,7 +2,7 @@ use crate::MAX_TIME_IN_QUEUE;
 use crate::events::MinterEventAssert;
 use candid::{Decode, Encode, Principal};
 use canlog::LogEntry;
-use ic_ckdoge_minter::candid_api::{EstimateWithdrawalFeeError, WithdrawalFee};
+use ic_ckdoge_minter::candid_api::{EstimateWithdrawalFeeError, MinterInfo, WithdrawalFee};
 use ic_ckdoge_minter::{
     EstimateFeeArg, Event, EventType, Priority, Txid, UpdateBalanceArgs, UpdateBalanceError, Utxo,
     UtxoStatus,
@@ -124,6 +124,19 @@ impl MinterCanister {
             )
             .expect("BUG: failed to call get_canister_status");
         Decode!(&call_result, CanisterStatusResult).unwrap()
+    }
+
+    pub fn get_minter_info(&self) -> MinterInfo {
+        let call_result = self
+            .env
+            .update_call(
+                self.id,
+                Principal::anonymous(),
+                "get_minter_info",
+                Encode!().unwrap(),
+            )
+            .expect("BUG: failed to call get_minter_info");
+        Decode!(&call_result, MinterInfo).unwrap()
     }
 
     pub fn estimate_withdrawal_fee(

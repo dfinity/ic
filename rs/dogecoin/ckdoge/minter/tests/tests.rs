@@ -1,10 +1,10 @@
 use candid::Principal;
 use ic_ckdoge_minter::candid_api::{
-    EstimateWithdrawalFeeError, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
-    WithdrawalFee,
+    EstimateWithdrawalFeeError, MinterInfo, RetrieveDogeWithApprovalArgs,
+    RetrieveDogeWithApprovalError, WithdrawalFee,
 };
 use ic_ckdoge_minter_test_utils::{
-    DOGE, DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, MEDIAN_TRANSACTION_FEE,
+    DOGE, DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, MEDIAN_TRANSACTION_FEE, MIN_CONFIRMATIONS,
     RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, assert_trap, utxo_with_value,
     utxos_with_value,
 };
@@ -461,4 +461,35 @@ fn should_get_canister_status() {
     let setup = Setup::default();
     let status = setup.minter().get_canister_status();
     assert_eq!(status.status, CanisterStatusType::Running);
+}
+
+#[test]
+fn should_get_minter_info() {
+    let setup = Setup::default();
+    let minter = setup.minter();
+
+    let minter_info = minter.get_minter_info();
+
+    assert_eq!(
+        minter_info,
+        MinterInfo {
+            min_confirmations: MIN_CONFIRMATIONS,
+            retrieve_doge_min_amount: RETRIEVE_DOGE_MIN_AMOUNT,
+        }
+    );
+
+    let mut setup = setup;
+    for i in 0..8 {
+        setup = setup.with_median_fee_percentile(MEDIAN_TRANSACTION_FEE << i);
+        assert_eq!(setup.minter().get_minter_info(), minter_info);
+    }
+
+    setup = setup.with_median_fee_percentile(MEDIAN_TRANSACTION_FEE << 8);
+    assert_eq!(
+        setup.minter().get_minter_info(),
+        MinterInfo {
+            retrieve_doge_min_amount: RETRIEVE_DOGE_MIN_AMOUNT + RETRIEVE_DOGE_MIN_AMOUNT / 2,
+            ..minter_info
+        }
+    );
 }
