@@ -27,7 +27,7 @@ jobs:
   notify-slack-new-workflow-run:
     name: Notify Slack for new External Contributor Workflow Run
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_run' && github.event.workflow_run.head_repository.full_name != github.repository
+    if: github.event_name == 'workflow_run'
     steps:
       - name: Post to a Slack channel
         id: slack
