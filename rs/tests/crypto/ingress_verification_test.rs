@@ -586,7 +586,7 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                 }
 
                 for &api_ver in ALL_READ_STATE_API_VERSIONS {
-                    let read_state_result = perform_read_state_with_delegations(
+                    let read_state_result = perform_read_state_call_with_delegations(
                         api_ver,
                         &test_info,
                         sender,
@@ -915,7 +915,8 @@ pub fn requests_with_invalid_expiry(env: TestEnv) {
                 }
                 for &api_ver in ALL_READ_STATE_API_VERSIONS {
                     assert_eq!(
-                        perform_read_state_with_expiry(api_ver, &test_info, &id, &id, expiry).await,
+                        perform_read_state_call_with_expiry(api_ver, &test_info, &id, &id, expiry)
+                            .await,
                         400,
                         "read_state should be rejected for expiry={expiry} and api_ver={api_ver}"
                     );
@@ -971,8 +972,14 @@ pub fn requests_with_canister_signature(env: TestEnv) {
                 }
                 for &api_ver in ALL_READ_STATE_API_VERSIONS {
                     assert_eq!(
-                        perform_read_state_with_delegations(api_ver, &test_info, &id, &id, &[])
-                            .await,
+                        perform_read_state_call_with_delegations(
+                            api_ver,
+                            &test_info,
+                            &id,
+                            &id,
+                            &[]
+                        )
+                        .await,
                         200,
                         "read_state should succeed for api_ver={api_ver} and seed={seed:?}"
                     );
@@ -1025,8 +1032,14 @@ pub fn requests_with_canister_signature(env: TestEnv) {
                 }
                 for &api_ver in ALL_READ_STATE_API_VERSIONS {
                     assert_eq!(
-                        perform_read_state_with_delegations(api_ver, &test_info, &sender, &id, &[])
-                            .await,
+                        perform_read_state_call_with_delegations(
+                            api_ver,
+                            &test_info,
+                            &sender,
+                            &id,
+                            &[]
+                        )
+                        .await,
                         400,
                         "read_state should be rejected for api_ver={api_ver}"
                     );
@@ -1060,7 +1073,8 @@ pub fn requests_with_canister_signature(env: TestEnv) {
             }
             for &api_ver in ALL_READ_STATE_API_VERSIONS {
                 assert_eq!(
-                    perform_read_state_with_delegations(api_ver, &test_info, &id, &id, &[]).await,
+                    perform_read_state_call_with_delegations(api_ver, &test_info, &id, &id, &[])
+                        .await,
                     400,
                     "read_state should be rejected for api_ver={api_ver} with invalid certificate signature"
                 );
@@ -1263,7 +1277,7 @@ async fn perform_update_call_with_delegations(
     .status()
 }
 
-async fn perform_read_state_with_delegations(
+async fn perform_read_state_call_with_delegations(
     api_ver: usize,
     test: &TestInformation,
     sender: &GenericIdentity<'_>,
@@ -1400,7 +1414,7 @@ async fn perform_update_with_expiry(
     .status()
 }
 
-async fn perform_read_state_with_expiry(
+async fn perform_read_state_call_with_expiry(
     api_ver: usize,
     test: &TestInformation,
     sender: &GenericIdentity<'_>,
