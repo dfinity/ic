@@ -35,6 +35,7 @@ use ic_consensus_system_test_subnet_recovery::utils::{
     node_with_highest_certification_share_height,
 };
 use ic_limits::DKG_INTERVAL_HEIGHT;
+use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nested_nns_recovery_common::{
     SetupConfig, grant_backup_access_to_all_nns_nodes, replace_nns_with_unassigned_nodes,
 };
@@ -93,6 +94,12 @@ fn log_instructions(env: TestEnv) {
             "NUM_NODES_TO_BREAK is {nb} but needs to be at least {minimum_to_break_subnet} to break a subnet of size {subnet_size}."
         );
     }
+
+    std::fs::write(
+        env.get_path("test_neuron_private_key.pem"),
+        TEST_NEURON_1_OWNER_KEYPAIR.to_pem(),
+    )
+    .unwrap();
 
     let AdminAndUserKeys {
         user_auth: backup_auth,

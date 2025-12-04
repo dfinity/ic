@@ -173,7 +173,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                         cmd_make_trusted_neurons_follow_neuron(time, cmd)
                             .unwrap()
                             .into_iter()
-                            .map(|ingress| ingress.into())
+                            // .map(|ingress| ingress.into())
                             .collect()
                     }
                     _ => Vec::new(),

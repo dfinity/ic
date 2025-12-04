@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "IC_GATEWAY_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_ENV", "SNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "IC_GATEWAY_RUNTIME_DEPS", "MAINNET_ENV", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_ENV", "SNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -336,5 +336,62 @@ system_test_nns(
         "//rs/tests/nested/nns_recovery:common",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
+    ],
+)
+
+system_test_nns(
+    name = "nns_recovery_external_mainnet_state",
+    # env_inherit = ["SSH_AUTH_SOCK"],
+    env = MAINNET_ENV | {
+        "IC_REPLAY_PATH": "$(rootpath //rs/replay:ic-replay)",
+    },
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    uses_guestos_img = False,
+    uses_guestos_mainnet_nns_img = True,
+    uses_guestos_test_update = True,
+    uses_setupos_mainnet_latest_img = True,
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS + [
+        "//rs/tests:recovery/binaries",
+        "//rs/replay:ic-replay",
+    ],
+    deps = [
+        # TODO: fix unnecessary dependencies
+        # Keep sorted.
+        "//rs/canister_client",
+        "//rs/canister_client/sender",
+        "//rs/crypto/utils/threshold_sig_der",
+        "//rs/limits",
+        "//rs/nervous_system/common",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nns/common",
+        "//rs/nns/governance/api",
+        "//rs/nns/test_utils",
+        "//rs/protobuf",
+        "//rs/registry/canister",
+        "//rs/registry/client",
+        "//rs/registry/helpers",
+        "//rs/registry/local_store",
+        # "//rs/registry/nns_data_provider",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/tests/consensus/subnet_recovery:lib",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nested",
+        "//rs/tests/nested/nns_recovery:common",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:base64",
+        "@crate_index//:flate2",
+        "@crate_index//:ic-agent",
+        "@crate_index//:nix",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde",
+        "@crate_index//:slog",
+        "@crate_index//:url",
     ],
 )
