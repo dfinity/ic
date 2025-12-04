@@ -180,6 +180,7 @@ rust_test(
         "@crate_index//:simple_moving_average",
         "@crate_index//:slog",
         "@crate_index//:strum",
+        "@crate_index//:tempfile",
         "@crate_index//:thiserror",
         "@crate_index//:tikv-jemalloc-ctl",
         "@crate_index//:tikv-jemallocator",
