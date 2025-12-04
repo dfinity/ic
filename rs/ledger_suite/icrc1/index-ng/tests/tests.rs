@@ -1455,6 +1455,7 @@ fn test_fee_collector_107_irregular_op() {
 
     let add_custom_block = |block_id: u64, tx_fields: Vec<(&str, ICRC3Value)>| {
         let mut custom_tx_builder = BlockBuilder::new(block_id, block_id)
+            .with_btype("107feecol".to_string())
             .with_fee(Tokens::from(1u64))
             .custom_transaction();
         for tx_field in tx_fields {
@@ -1496,6 +1497,7 @@ fn test_fee_collector_107_mthd_instead_of_op() {
 
     let add_custom_block = |block_id: u64, tx_fields: Vec<(&str, ICRC3Value)>| {
         let mut custom_tx_builder = BlockBuilder::new(block_id, block_id)
+            .with_btype("107feecol".to_string())
             .with_fee(Tokens::from(1u64))
             .custom_transaction();
         for tx_field in tx_fields {
@@ -1515,6 +1517,82 @@ fn test_fee_collector_107_mthd_instead_of_op() {
         ("fee_collector", account_to_icrc3_value(&feecol_107)),
         ("ts", ICRC3Value::Nat(Nat::from(0u64))),
     ];
+
+    add_custom_block(0, tx_fields);
+    let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
+        .expect_err("unrecognized block parsed successfully by index");
+    let expected_log_msg = "missing field `op`";
+    assert!(
+        index_err_logs.contains(expected_log_msg),
+        "index logs did not contain expected string '{}': {}",
+        expected_log_msg,
+        index_err_logs
+    );
+}
+
+#[test]
+fn test_block_with_no_btype_and_unrecognized_op() {
+    const UNRECOGNIZED_OP_NAME: &str = "non_standard_op_name";
+    let env = &StateMachine::new();
+    let ledger_id = install_icrc3_test_ledger(env);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    let add_custom_block = |block_id: u64, tx_fields: Vec<(&str, ICRC3Value)>| {
+        let mut custom_tx_builder = BlockBuilder::new(block_id, block_id)
+            .with_fee(Tokens::from(1u64))
+            .custom_transaction();
+        for tx_field in tx_fields {
+            custom_tx_builder = custom_tx_builder.add_field(tx_field.0, tx_field.1);
+        }
+        let block = custom_tx_builder.build();
+
+        assert_eq!(
+            Nat::from(block_id),
+            add_block(env, ledger_id, &block)
+                .expect("error adding mint block to ICRC-3 test ledger")
+        );
+    };
+
+    let tx_fields = vec![
+        ("op", ICRC3Value::Text(UNRECOGNIZED_OP_NAME.to_string())),
+        ("ts", ICRC3Value::Nat(Nat::from(0u64))),
+    ];
+
+    add_custom_block(0, tx_fields);
+    let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
+        .expect_err("unrecognized block parsed successfully by index");
+    let expected_log_msg = format!("Unknown operation name {}", UNRECOGNIZED_OP_NAME);
+    assert!(
+        index_err_logs.contains(&expected_log_msg),
+        "index logs did not contain expected string '{}': {}",
+        expected_log_msg,
+        index_err_logs
+    );
+}
+
+#[test]
+fn test_block_with_no_btype_and_no_op() {
+    let env = &StateMachine::new();
+    let ledger_id = install_icrc3_test_ledger(env);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    let add_custom_block = |block_id: u64, tx_fields: Vec<(&str, ICRC3Value)>| {
+        let mut custom_tx_builder = BlockBuilder::new(block_id, block_id)
+            .with_fee(Tokens::from(1u64))
+            .custom_transaction();
+        for tx_field in tx_fields {
+            custom_tx_builder = custom_tx_builder.add_field(tx_field.0, tx_field.1);
+        }
+        let block = custom_tx_builder.build();
+
+        assert_eq!(
+            Nat::from(block_id),
+            add_block(env, ledger_id, &block)
+                .expect("error adding mint block to ICRC-3 test ledger")
+        );
+    };
+
+    let tx_fields = vec![("ts", ICRC3Value::Nat(Nat::from(0u64)))];
 
     add_custom_block(0, tx_fields);
     let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
