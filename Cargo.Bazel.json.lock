@@ -1,5 +1,5 @@
 {
-  "checksum": "5c0d947a8af7ca5a798b3421e268b76a87bb5c4648ff7abeaa94e926bb389632",
+  "checksum": "5c80229443064db2a4523125f04d51cbdd2b83b0c8cf6ae28242b2622994dcdc",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22095,6 +22095,10 @@
             {
               "id": "publicsuffix 2.2.3",
               "target": "publicsuffix"
+            },
+            {
+              "id": "qrcode 0.14.1",
+              "target": "qrcode"
             },
             {
               "id": "quickcheck 1.0.3",
@@ -62344,6 +62348,45 @@
       ],
       "license_file": "LICENSE.md"
     },
+    "qrcode 0.14.1": {
+      "name": "qrcode",
+      "version": "0.14.1",
+      "package_url": "https://github.com/kennytm/qrcode-rust",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/qrcode/0.14.1/download",
+          "sha256": "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "qrcode",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "qrcode",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "0.14.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE.txt"
+    },
     "quanta 0.12.3": {
       "name": "quanta",
       "version": "0.12.3",
@@ -97820,6 +97863,7 @@
     "prost-build 0.13.3",
     "protobuf 2.28.0",
     "publicsuffix 2.2.3",
+    "qrcode 0.14.1",
     "quickcheck 1.0.3",
     "quinn 0.11.5",
     "quinn-udp 0.5.5",

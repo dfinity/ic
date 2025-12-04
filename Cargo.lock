@@ -19189,6 +19189,7 @@ dependencies = [
  "nix 0.24.3",
  "prometheus 0.13.4",
  "prost 0.13.4",
+ "qrcode",
  "rand 0.8.5",
  "rcgen 0.13.2",
  "rustls 0.23.27",
@@ -19806,7 +19807,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "10.0.0"
+version = "11.0.0"
 dependencies = [
  "backoff",
  "base64 0.13.1",
@@ -19859,7 +19860,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic-server"
-version = "10.0.0"
+version = "11.0.0"
 dependencies = [
  "aide",
  "askama",
@@ -20625,6 +20626,12 @@ name = "punycode"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e9e1dcb320d6839f6edb64f7a4a59d39b30480d4d1765b56873f7c858538a5fe"
+
+[[package]]
+name = "qrcode"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
 
 [[package]]
 name = "quanta"

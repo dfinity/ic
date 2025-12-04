@@ -118,7 +118,6 @@ system_test_nns(
     name = "pre_signature_stash_management_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,

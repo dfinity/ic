@@ -3815,6 +3815,7 @@ dependencies = [
  "prost-build 0.13.3",
  "protobuf 2.28.0",
  "publicsuffix",
+ "qrcode",
  "quickcheck",
  "quinn",
  "quinn-udp",
@@ -10620,6 +10621,12 @@ name = "punycode"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e9e1dcb320d6839f6edb64f7a4a59d39b30480d4d1765b56873f7c858538a5fe"
+
+[[package]]
+name = "qrcode"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
 
 [[package]]
 name = "quanta"
