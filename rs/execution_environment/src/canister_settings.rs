@@ -15,7 +15,7 @@ mod tests;
 /// which is why it is not part of the replica config.
 const MAX_WASM_MEMORY_LIMIT: u64 = 1 << 48;
 /// Struct used for decoding CanisterSettingsArgs
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub(crate) struct CanisterSettings {
     pub(crate) controllers: Option<Vec<PrincipalId>>,
     pub(crate) compute_allocation: Option<ComputeAllocation>,

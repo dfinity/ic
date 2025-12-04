@@ -588,6 +588,13 @@ impl CanisterManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Result<(), CanisterManagerError> {
+        println!(
+            "updating settings of {} to {:?} at time {}",
+            canister.canister_id(),
+            settings,
+            timestamp_nanos
+        );
+
         let sender = origin.origin();
 
         validate_controller(canister, &sender)?;

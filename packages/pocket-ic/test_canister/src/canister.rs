@@ -12,6 +12,7 @@ use ic_cdk::api::management_canister::http_request::{
 use ic_cdk::api::stable::{stable_grow, stable_size as raw_stable_size, stable_write};
 use ic_cdk::api::{instruction_counter, msg_deadline};
 use ic_cdk::call::{Call, CallFailed};
+use ic_cdk::management_canister::{CanisterSettings, UpdateSettingsArgs};
 use ic_cdk::{inspect_message, query, trap, update};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -544,9 +545,18 @@ fn call_with_deadline(nonce: u64) {
 }
 
 #[update]
-async fn bounded_wait(callee: Principal, nonce: u64) -> u64 {
-    let res = Call::bounded_wait(callee, "call_with_deadline")
-        .with_arg(nonce)
+async fn bounded_wait(canister_id: Principal) -> u64 {
+    ic_cdk::println!("making bounded-wait call to update settings");
+    let settings = CanisterSettings {
+        freezing_threshold: Some(42_u64.into()),
+        ..Default::default()
+    };
+    let args = UpdateSettingsArgs {
+        settings,
+        canister_id,
+    };
+    let res = Call::bounded_wait(Principal::management_canister(), "update_settings")
+        .with_arg(args)
         .await;
     match res {
         Ok(_) => 0,
