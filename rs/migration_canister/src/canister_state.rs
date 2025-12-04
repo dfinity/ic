@@ -43,7 +43,6 @@ pub fn migrations_disabled() -> bool {
     DISABLED.with_borrow(|x| *x.get())
 }
 
-/// Excludes failed requests.
 pub fn num_requests() -> u64 {
     REQUESTS.with_borrow(|req| req.len())
 }
