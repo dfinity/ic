@@ -374,7 +374,7 @@ pub fn requests_with_delegations(env: TestEnv) {
                 "canister_id" => format!("{:?}", canister.canister_id())
             );
 
-            let mut test_info = TestInformation {
+            let test_info = TestInformation {
                 url: node_url,
                 canister_id: canister_id_from_principal(&canister.canister_id()),
             };
@@ -454,7 +454,7 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
 
             let canister_id = canister_id_from_principal(&canister.canister_id());
 
-            let mut test_info = TestInformation {
+            let test_info = TestInformation {
                 url: node_url,
                 canister_id,
             };
@@ -591,7 +591,7 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                         .await;
 
                     if scenario.expect_success {
-                        let expected_update_result = if *api_ver == 2 { 202 } else { 200 };
+                        let expected_update_result = if api_ver == 2 { 202 } else { 200 };
                         assert_eq!(update_result, expected_update_result);
                     } else {
                         assert_eq!(update_result, 400);
@@ -625,7 +625,7 @@ pub fn requests_with_delegation_loop(env: TestEnv) {
 
             let canister_id = canister_id_from_principal(&canister.canister_id());
 
-            let mut test_info = TestInformation {
+            let test_info = TestInformation {
                 url: node_url,
                 canister_id,
             };
@@ -701,7 +701,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
 
             let mgmt_canister = canister_id_from_principal(&Principal::management_canister());
 
-            let mut test_info = TestInformation {
+            let test_info = TestInformation {
                 url: node_url,
                 canister_id: mgmt_canister,
             };
@@ -817,7 +817,6 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                     .await;
 
                     let query_status = query.status();
-                    //println!("Resp = {}", hex::encode(query.bytes().await.unwrap()));
                     if include_mgmt_canister_id {
                         assert_eq!(query_status, 200);
                     } else {
@@ -849,7 +848,7 @@ pub fn requests_with_invalid_expiry(env: TestEnv) {
                 "canister_id" => format!("{:?}", canister.canister_id())
             );
 
-            let mut test_info = TestInformation {
+            let test_info = TestInformation {
                 url: node_url,
                 canister_id: canister_id_from_principal(&canister.canister_id()),
             };
