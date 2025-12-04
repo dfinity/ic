@@ -35,8 +35,7 @@ fn main() -> Result<()> {
         .add_parallel(
             SystemTestSubGroup::new()
                 .add_test(systest!(requests_with_delegations))
-                .add_test(systest!(requests_with_delegations_with_targets; 2))
-                .add_test(systest!(requests_with_delegations_with_targets; 3))
+                .add_test(systest!(requests_with_delegations_with_targets))
                 .add_test(systest!(requests_with_delegation_loop))
                 .add_test(systest!(requests_to_mgmt_canister_with_delegations))
                 .add_test(systest!(requests_with_invalid_expiry))
@@ -435,7 +434,7 @@ pub fn requests_with_delegations(env: TestEnv) {
 }
 
 // Tests for ingress messages with delegations using canister targets
-pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
+pub fn requests_with_delegations_with_targets(env: TestEnv) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
     let agent = node.build_default_agent();
@@ -457,8 +456,8 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
 
             let canister_id = canister_id_from_principal(&canister.canister_id());
 
-            let test_info = TestInformation {
-                api_ver,
+            let mut test_info = TestInformation {
+                api_ver: 0,
                 url: node_url,
                 canister_id,
             };
@@ -564,35 +563,45 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
                 let sender = &identities[0];
                 let signer = &identities[identities.len() - 1];
 
-                let query_result =
-                    perform_query_call_with_delegations(&test_info, sender, signer, &delegations)
-                        .await;
-                let read_state_result =
-                    perform_read_state_with_delegations(&test_info, sender, signer, &delegations)
-                        .await;
-                let update_result =
-                    perform_update_call_with_delegations(&test_info, sender, signer, &delegations)
+                for api_ver in ALL_QUERY_API_VERSIONS {
+                    test_info.api_ver = *api_ver;
+                    let query_result =
+                        perform_query_call_with_delegations(&test_info, sender, signer, &delegations)
                         .await;
 
-                info!(
-                    logger,
-                    "Testing scenario '{}' got {:?}/{:?}/{:?}",
-                    scenario.note,
-                    query_result,
-                    read_state_result,
-                    update_result,
-                );
+                    if scenario.expect_success {
+                        assert_eq!(query_result, 200);
+                    } else {
+                        assert_eq!(query_result, 400);
+                    }
+                }
 
-                if scenario.expect_success {
-                    assert_eq!(query_result, 200);
-                    assert_eq!(read_state_result, 200);
-                    let expected_update_result = if test_info.api_ver == 2 { 202 } else { 200 };
-                    assert_eq!(update_result, expected_update_result);
-                } else {
-                    assert_eq!(query_result, 400);
-                    // Which error code is returned depends on API version and the specific scenario
-                    assert!(read_state_result == 400 || read_state_result == 403);
-                    assert_eq!(update_result, 400);
+                for api_ver in ALL_READ_STATE_API_VERSIONS {
+                    test_info.api_ver = *api_ver;
+                    let read_state_result =
+                        perform_read_state_with_delegations(&test_info, sender, signer, &delegations)
+                        .await;
+
+                    if scenario.expect_success {
+                        assert_eq!(read_state_result, 200);
+                    } else {
+                        // Which error code is returned depends on API version and the specific scenario
+                        assert!(read_state_result == 400 || read_state_result == 403);
+                    }
+                }
+
+                for api_ver in ALL_UPDATE_API_VERSIONS {
+                    test_info.api_ver = *api_ver;
+                    let update_result =
+                        perform_update_call_with_delegations(&test_info, sender, signer, &delegations)
+                        .await;
+
+                    if scenario.expect_success {
+                        let expected_update_result = if api_ver == 2 { 202 } else { 200 };
+                        assert_eq!(update_result, expected_update_result);
+                    } else {
+                        assert_eq!(update_result, 400);
+                    }
                 }
             }
         }
