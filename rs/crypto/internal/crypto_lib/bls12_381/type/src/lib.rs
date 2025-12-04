@@ -958,9 +958,14 @@ macro_rules! define_affine_and_projective_types {
                 fn mul(&self, scalar: &Scalar) -> $projective {
                     let s = scalar.serialize();
 
-                    let mut accum = <ic_bls12_381::$projective>::identity();
+                    let mut accum = {
+                        let i = 0;
+                        let tbl_for_i = &self.tbl[Self::WINDOW_ELEMENTS*i..Self::WINDOW_ELEMENTS*(i+1)];
+                        let b = Self::get_window(&s, Self::WINDOW_BITS*i);
+                        <ic_bls12_381::$projective>::from(Self::ct_select(tbl_for_i, b as usize))
+                    };
 
-                    for i in 0..Self::WINDOWS {
+                    for i in 1..Self::WINDOWS {
                         let tbl_for_i = &self.tbl[Self::WINDOW_ELEMENTS*i..Self::WINDOW_ELEMENTS*(i+1)];
 
                         let b = Self::get_window(&s, Self::WINDOW_BITS*i);
@@ -1577,14 +1582,16 @@ macro_rules! declare_mul2_table_impl {
                 let s1 = a.serialize();
                 let s2 = b.serialize();
 
-                let mut accum = <$projective>::identity();
+                let mut accum = {
+                    let w1 = Window::extract(&s1, 0);
+                    let w2 = Window::extract(&s2, 0);
+                    let window = $tbl_typ::col(w1 as usize) + $tbl_typ::row(w2 as usize);
+                    <$projective>::ct_select(&self.0, window)
+                };
 
-                for i in 0..Window::WINDOWS {
-                    // skip on first iteration: doesn't leak secrets as index is public
-                    if i > 0 {
-                        for _ in 0..Window::SIZE {
-                            accum = accum.double();
-                        }
+                for i in 1..Window::WINDOWS {
+                    for _ in 0..Window::SIZE {
+                        accum = accum.double();
                     }
 
                     let w1 = Window::extract(&s1, i);
@@ -1621,14 +1628,17 @@ macro_rules! declare_mul2_table_impl {
                 let s1 = a.serialize();
                 let s2 = b.serialize();
 
-                let mut accum = <$projective>::identity();
+                let mut accum = {
+                    let w1 = Window::extract(&s1, 0);
+                    let w2 = Window::extract(&s2, 0);
+                    let window = $tbl_typ::col(w1 as usize) + $tbl_typ::row(w2 as usize);
+                    // Variable time lookup
+                    self.0[window].clone()
+                };
 
-                for i in 0..Window::WINDOWS {
-                    // skip on first iteration: doesn't leak secrets as index is public
-                    if i > 0 {
-                        for _ in 0..Window::SIZE {
-                            accum = accum.double();
-                        }
+                for i in 1..Window::WINDOWS {
+                    for _ in 0..Window::SIZE {
+                        accum = accum.double();
                     }
 
                     let w1 = Window::extract(&s1, i);
@@ -1636,7 +1646,9 @@ macro_rules! declare_mul2_table_impl {
                     let window = $tbl_typ::col(w1 as usize) + $tbl_typ::row(w2 as usize);
 
                     // This is the only difference from the constant time version:
-                    accum += &self.0[window];
+                    if window > 0 {
+                        accum += &self.0[window];
+                    }
                 }
 
                 accum
@@ -2030,13 +2042,18 @@ macro_rules! declare_windowed_scalar_mul_ops_for {
                 // Configurable window size: can be in 1..=8
                 type Window = WindowInfo<$window>;
 
-                // Derived constants
-                const TABLE_SIZE: usize = Window::ELEMENTS;
+                /*
+                 * An implicit element of the table is the identity element -
+                 * we skip actually including it in the table since that avoids
+                 * having to read it during each iteration of the loop.
+                 */
+                const TABLE_SIZE: usize = Window::ELEMENTS - 1;
 
                 let mut tbl = Self::identities(TABLE_SIZE);
 
+                tbl[0] = self.clone();
                 for i in 1..TABLE_SIZE {
-                    tbl[i] = if i % 2 == 0 {
+                    tbl[i] = if i % 2 == 1 {
                         tbl[i / 2].double()
                     } else {
                         &tbl[i - 1] + self
@@ -2045,18 +2062,25 @@ macro_rules! declare_windowed_scalar_mul_ops_for {
 
                 let s = scalar.serialize();
 
-                let mut accum = Self::identity();
+                let mut accum = {
+                    let w = Window::extract(&s, 0);
+                    // See comment below regarding the wrapping sub
+                    Self::ct_select(&tbl, (w as usize).wrapping_sub(1))
+                };
 
-                for i in 0..Window::WINDOWS {
-                    // skip on first iteration: doesn't leak secrets as index is public
-                    if i > 0 {
-                        for _ in 0..Window::SIZE {
-                            accum = accum.double();
-                        }
+                for i in 1..Window::WINDOWS {
+                    for _ in 0..Window::SIZE {
+                        accum = accum.double();
                     }
 
                     let w = Window::extract(&s, i);
-                    accum += Self::ct_select(&tbl, w as usize);
+
+                    /*
+                    This wrapping sub means that for w == 0 then usize::MAX is
+                    passed to ct_select - this results in the identity element being
+                    returned since the index is out of range.
+                    */
+                    accum += Self::ct_select(&tbl, (w as usize).wrapping_sub(1));
                 }
 
                 accum
@@ -2081,13 +2105,11 @@ macro_rules! declare_windowed_scalar_mul_ops_for {
 
                 let s = scalar.serialize();
 
-                let mut accum = Self::identity();
+                let mut accum = tbl[Window::extract(&s, 0) as usize].clone();
 
-                for i in 0..Window::WINDOWS {
-                    if i > 0 {
-                        for _ in 0..Window::SIZE {
-                            accum = accum.double();
-                        }
+                for i in 1..Window::WINDOWS {
+                    for _ in 0..Window::SIZE {
+                        accum = accum.double();
                     }
 
                     let w = Window::extract(&s, i);
