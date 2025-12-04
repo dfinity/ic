@@ -181,7 +181,6 @@ members = [
     "rs/ic_os/guest_upgrade/server",
     "rs/ic_os/guest_upgrade/shared",
     "rs/ic_os/guest_upgrade/tests",
-    "rs/ic_os/linux_kernel_command_line",
     "rs/ic_os/metrics_tool",
     "rs/ic_os/network",
     "rs/ic_os/nft_exporter",
@@ -257,6 +256,7 @@ members = [
     "rs/nervous_system/humanize",
     "rs/nervous_system/initial_supply",
     "rs/nervous_system/instruction_stats",
+    "rs/nervous_system/instruction_stats_update_attribute",
     "rs/nervous_system/integration_tests",
     "rs/nervous_system/linear_map",
     "rs/nervous_system/lock",
@@ -277,6 +277,7 @@ members = [
     "rs/nervous_system/timestamp",
     "rs/nervous_system/tools/neuron-subaccount",
     "rs/nervous_system/tools/release-runscript",
+    "rs/nervous_system/tools/signed-canister-reply",
     "rs/nervous_system/tools/submit-motion-proposal",
     "rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
     "rs/nns/cmc",
@@ -607,7 +608,7 @@ bitcoin = { git = "https://github.com/dfinity/rust-dogecoin", rev = "cda2b5ec270
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default-features = false }
 bytes = "1.9.0"
-canbench-rs = "0.2.1"
+canbench-rs = "0.4.0"
 candid = { version = "0.10.20" }
 candid_parser = { version = "0.1.2" }
 chrono = { version = "0.4.42", default-features = false, features = [
@@ -642,7 +643,8 @@ ed25519-dalek = { version = "2.2.0", features = [
     "hazmat",
 ] }
 ethnum = { version = "1.3.2", features = ["serde"] }
-evm_rpc_types = "3.0.0"
+evm_rpc_client = "0.3.0"
+evm_rpc_types = "3.1.0"
 flate2 = "1.0.31"
 fs_extra = "1.2.0"
 futures = "0.3.31"
@@ -673,10 +675,11 @@ ic-agent = { version = "0.40.1", features = ["pem", "ring"] }
 ic-bn-lib = { version = "0.1", features = ["acme-alpn"] }
 ic-bn-lib-common = "0.1"
 ic-btc-interface = "0.2.3"
-ic-canister-sig-creation = "1.3.0"
+ic-canister-runtime = "0.1.0"
+ic-canister-sig-creation = "1.3.1"
 ic-cbor = "3"
-ic-cdk = "0.18.7"
-ic-cdk-timers = "0.12.2"
+ic-cdk = "0.19.0"
+ic-cdk-timers = "1.0.0"
 ic-certificate-verification = "3"
 ic-certification = "3"
 ic-doge-interface = { git = "https://github.com/dfinity/dogecoin-canister", rev = "74e6dc9a10ba64d2dbad013282c26d74cd49863f" }
@@ -685,14 +688,14 @@ ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "92ee522a451
 ic-http-certification = "3.0.3"
 ic-http-gateway = { git = "https://github.com/dfinity/http-gateway", rev = "c17ad1b378df3a85441ce2c6853ec61b6f83f730" }
 ic-identity-hsm = "0.40.1"
-ic-management-canister-types = "0.3.0"
+ic-management-canister-types = "0.5.0"
 ic-response-verification = "3"
 ic-secp256k1 = "0.3.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.40.1" }
 ic-utils = { version = "0.40.1", features = ["raw"] }
-ic-vetkeys = "0.4.0"
+ic-vetkeys = "0.6.0"
 ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
     "groups",
     "pairings",
@@ -773,6 +776,7 @@ prost = "0.13.3"
 prost-build = "0.13.3"
 protobuf = "2.28.0"
 ring = { version = "^0.17.7", features = ["std"] }
+qrcode = { version = "0.14.1", default-features = false }
 quinn = { version = "0.11.5", default-features = false, features = [
     "ring",
     "log",
