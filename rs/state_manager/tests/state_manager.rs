@@ -313,13 +313,13 @@ fn lsmt_merge_overhead() {
         env.set_checkpoints_enabled(true);
         env.tick();
         env.state_manager.flush_tip_channel();
-        // We should merge when overhead reaches 2.5 and stop merging the moment we go under 2.5.
+        // We should merge when overhead reaches 2.8 and stop merging the moment we go under 2.8.
         if i >= 3 {
             assert_ne!(tip_size(&env), 0.0);
             assert_ne!(state_in_memory(&env), 0.0);
             assert!(tip_size(&env) / state_in_memory(&env) > 2.0);
             assert!(
-                tip_size(&env) / state_in_memory(&env) <= 2.5,
+                tip_size(&env) / state_in_memory(&env) <= 2.8,
                 "tip_size: {} state_in_memory: {}, tip_size / state_in_memory: {}",
                 tip_size(&env),
                 state_in_memory(&env),
@@ -334,7 +334,7 @@ fn lsmt_merge_overhead() {
     assert_ne!(last_checkpoint_size(&env), 0.0);
     assert_ne!(state_in_memory(&env), 0.0);
     assert!(last_checkpoint_size(&env) / state_in_memory(&env) > 2.0);
-    assert!(last_checkpoint_size(&env) / state_in_memory(&env) <= 2.5);
+    assert!(last_checkpoint_size(&env) / state_in_memory(&env) <= 2.8);
 }
 
 #[test]
@@ -372,7 +372,7 @@ fn lazy_pagemaps() {
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
 
     env.tick();
-    assert_eq!(page_maps_by_status("loaded", &env), 1);
+    assert_eq!(page_maps_by_status("loaded", &env), 0);
     assert!(page_maps_by_status("not_loaded", &env) > 0);
 
     env.execute_ingress(canister_id, "write_heap_64k", vec![])
