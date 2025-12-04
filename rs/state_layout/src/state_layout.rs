@@ -76,6 +76,7 @@ pub const OVERLAY: &str = "overlay";
 pub const VMEMORY_0: &str = "vmemory_0";
 pub const STABLE_MEMORY: &str = "stable_memory";
 pub const WASM_CHUNK_STORE: &str = "wasm_chunk_store";
+pub const LOG_MEMORY_STORE: &str = "log_memory_store";
 pub const BIN_FILE: &str = "bin";
 
 /// `ReadOnly` is the access policy used for reading checkpoints. We
@@ -188,7 +189,6 @@ pub struct CanisterStateBits {
     pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
     pub total_query_stats: TotalQueryStats,
     pub log_visibility: LogVisibilityV2,
-    pub log_memory_limit: NumBytes,
     pub canister_log: CanisterLog,
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
@@ -309,7 +309,8 @@ struct CheckpointRefData {
 /// │      │       ├── software.wasm
 /// │      │       ├── stable_memory.bin
 /// │      │       ├── vmemory_0.bin
-/// │      │       └── wasm_chunk_store.bin
+/// │      │       ├── wasm_chunk_store.bin
+/// │      │       └── log_memory_store.bin
 /// │      ├── snapshots
 /// │      │   └── <hex(canister_id)>
 /// │      │       └──  <hex(snapshot_id)>
@@ -2197,6 +2198,7 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
             self.vmemory_0(),
             self.stable_memory(),
             self.wasm_chunk_store(),
+            self.log_memory_store(),
         ]
         .into_iter()
         {
@@ -2229,6 +2231,15 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
         PageMapLayout {
             root: self.canister_root.clone(),
             name_stem: WASM_CHUNK_STORE.into(),
+            permissions_tag: PhantomData,
+            _checkpoint: self.checkpoint.clone(),
+        }
+    }
+
+    pub fn log_memory_store(&self) -> PageMapLayout<Permissions> {
+        PageMapLayout {
+            root: self.canister_root.clone(),
+            name_stem: LOG_MEMORY_STORE.into(),
             permissions_tag: PhantomData,
             _checkpoint: self.checkpoint.clone(),
         }
@@ -2287,6 +2298,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
             self.vmemory_0(),
             self.stable_memory(),
             self.wasm_chunk_store(),
+            // log_memory_store is not included in snapshots
         ]
         .into_iter()
         {
@@ -2323,6 +2335,8 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
             _checkpoint: self.checkpoint.clone(),
         }
     }
+
+    // log_memory_store is not included in snapshots.
 }
 
 impl<P> SnapshotLayout<P>

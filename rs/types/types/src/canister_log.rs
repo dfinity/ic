@@ -7,6 +7,8 @@ use std::collections::VecDeque;
 
 #[allow(non_upper_case_globals)]
 const KiB: usize = 1024;
+#[allow(non_upper_case_globals)]
+const MiB: usize = 1024 * KiB;
 
 /// The minimum size of an aggregate canister log buffer.
 pub const MIN_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
@@ -16,8 +18,10 @@ pub const MAX_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 pub const DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 
 /// The maximum size of a delta (per message) canister log buffer.
-pub const MAX_DELTA_LOG_MEMORY_LIMIT: usize = 4 * KiB;
+pub const MAX_DELTA_LOG_MEMORY_LIMIT: usize = 2 * MiB;
 
+// TODO(DSM-11): these metrics should be tracked in aggregate logs only,
+// remove after migration is done.
 /// Upper bound on stored delta-log sizes used for metrics.
 /// Limits memory growth, 10k covers expected per-round
 /// number of messages per canister (and so delta log appends).
@@ -29,9 +33,6 @@ pub const MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES: usize = 2_000_000;
 // Compile-time assertions to ensure the constants are within valid ranges.
 const _: () = assert!(MIN_AGGREGATE_LOG_MEMORY_LIMIT <= DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
 const _: () = assert!(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT <= MAX_AGGREGATE_LOG_MEMORY_LIMIT);
-
-const _: () = assert!(MIN_AGGREGATE_LOG_MEMORY_LIMIT <= MAX_DELTA_LOG_MEMORY_LIMIT);
-const _: () = assert!(MAX_DELTA_LOG_MEMORY_LIMIT <= MAX_AGGREGATE_LOG_MEMORY_LIMIT);
 
 const _: () = assert!(std::mem::size_of::<CanisterLogRecord>() <= MIN_AGGREGATE_LOG_MEMORY_LIMIT);
 
@@ -200,9 +201,7 @@ impl CanisterLog {
         self.records.get()
     }
 
-    // TODO(DSM-11): remove allow(dead_code) when log memory store is used in production.
     /// Returns mutable reference to the canister log records.
-    #[allow(dead_code)]
     pub fn records_mut(&mut self) -> &mut VecDeque<CanisterLogRecord> {
         self.records.get_mut()
     }
@@ -220,6 +219,11 @@ impl CanisterLog {
     /// Returns the used space in the canister log buffer.
     pub fn bytes_used(&self) -> usize {
         self.records.bytes_used
+    }
+
+    /// Returns true if the canister log buffer is empty.
+    pub fn is_empty(&self) -> bool {
+        self.bytes_used() == 0
     }
 
     /// Returns the remaining space in the canister log buffer.
