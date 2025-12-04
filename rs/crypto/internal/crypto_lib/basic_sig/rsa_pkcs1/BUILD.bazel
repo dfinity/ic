@@ -51,7 +51,6 @@ rust_test_suite(
     name = "rsa_pkcs1_integration",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
-    compile_data = glob(["tests/data/*"]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":rsa_pkcs1"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
