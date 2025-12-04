@@ -79,23 +79,6 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
         }
     }
 
-    /// Create a transfer_from operation
-    pub fn transfer_from(
-        self,
-        from: Account,
-        to: Account,
-        spender: Account,
-        amount: Tokens,
-    ) -> TransferBuilder<Tokens> {
-        TransferBuilder {
-            builder: self,
-            from,
-            to,
-            amount,
-            spender: Some(spender),
-        }
-    }
-
     /// Create a mint operation
     pub fn mint(self, to: Account, amount: Tokens) -> MintBuilder<Tokens> {
         MintBuilder {
