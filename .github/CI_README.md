@@ -1,7 +1,7 @@
 GitHub CI for the IC Repo
 
 ## Using custom CI labels
-Note that setting custom CI logic via the pull request title has been deprecated and we now use labels instead. Reference labels that start with `CI_` to see available options.
+CI labels trigger various behavior. You can reference the labels that start with `CI_` and see available options.
 
 Adding a label alone will not trigger CI, you will need to retrigger it by either opening & closing the PR or adding an empty commit with `git commit -m 'retrigger CI' --allow-empty`.
 
