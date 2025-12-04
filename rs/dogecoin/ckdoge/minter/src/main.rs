@@ -178,6 +178,15 @@ fn retrieve_doge_status(req: RetrieveDogeStatusRequest) -> RetrieveDogeStatus {
     })
 }
 
+#[update]
+async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusResult {
+    ic_cdk::management_canister::canister_status(&ic_cdk::management_canister::CanisterStatusArgs {
+        canister_id: ic_cdk::api::canister_self(),
+    })
+    .await
+    .expect("failed to fetch canister status")
+}
+
 // TODO XC-495: Currently events from ckBTC are re-used and it might be worthwhile to split
 // both types of events:
 // 1) ckBTC has some deprecated events only for backwards-compatibility purposes
