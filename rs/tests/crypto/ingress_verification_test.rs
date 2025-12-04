@@ -816,7 +816,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                     .await;
 
                     let query_status = query.status();
-                    println!("Resp = {}", hex::encode(query.bytes().await.unwrap()));
+                    //println!("Resp = {}", hex::encode(query.bytes().await.unwrap()));
                     if include_mgmt_canister_id {
                         assert_eq!(query_status, 200);
                     } else {
