@@ -152,15 +152,12 @@ impl NodeRegistration {
     async fn retry_register_node(&mut self) {
         let add_node_payload = self.assemble_add_node_message().await;
 
-        // Will contain information need for the node operator
+        // Will contain information needed for the node operator
         // to approve the add node payload for onboarding.
         let node_information_for_onboarding = format!(
             "Node id: {}\nQR code:\n{}",
             self.node_id,
-            match encode_as_qrcode(self.node_id) {
-                Ok(code) => code,
-                Err(e) => e.to_string(),
-            }
+            encode_as_qrcode(self.node_id)
         );
 
         while !self.is_node_registered().await {
@@ -715,11 +712,10 @@ fn protobuf_to_vec<M: Message>(entry: M) -> Vec<u8> {
     buf
 }
 
-fn encode_as_qrcode(node_id: NodeId) -> OrchestratorResult<String> {
-    let code = QrCode::new(node_id.to_string())
-        .map_err(|e| OrchestratorError::QrEncodingError(node_id, e))?;
-
-    Ok(code.render::<unicode::Dense1x2>().build())
+fn encode_as_qrcode(node_id: NodeId) -> String {
+    QrCode::new(node_id.to_string())
+        .map(|code| code.render::<unicode::Dense1x2>().build())
+        .unwrap_or_else(|e| format!("Failed to encode the Node ID as a QR Code: {e}"))
 }
 
 #[cfg(test)]
@@ -733,7 +729,7 @@ mod tests {
     fn encoding_node_ids_works() {
         let test_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
 
-        let encoded = encode_as_qrcode(test_node_id).unwrap();
+        let encoded = encode_as_qrcode(test_node_id);
 
         let expected = r"
     █▀▀▀▀▀█ ▀▄█▄ ██▄▀ ▄▄  █▀▀▀▀▀█

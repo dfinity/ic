@@ -4,7 +4,6 @@ use ic_types::{
     Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId, registry::RegistryClientError,
     replica_version::ReplicaVersionParseError,
 };
-use qrcode::types::QrError;
 use std::{
     error::Error,
     fmt, io,
@@ -78,9 +77,6 @@ pub(crate) enum OrchestratorError {
 
     /// The given node is missing a domain name
     DomainNameMissingError(NodeId),
-
-    /// An error occurred during encoding the node id as a qr code
-    QrEncodingError(NodeId, QrError),
 }
 
 impl OrchestratorError {
@@ -169,9 +165,6 @@ impl fmt::Display for OrchestratorError {
             }
             OrchestratorError::DomainNameMissingError(node_id) => {
                 write!(f, "Node {node_id} does not have an associated domain name")
-            }
-            OrchestratorError::QrEncodingError(id, e) => {
-                write!(f, "Failed to encode node id {id} as qr code: {e}")
             }
         }
     }
