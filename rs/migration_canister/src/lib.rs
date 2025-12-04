@@ -10,7 +10,7 @@ use std::{borrow::Cow, fmt::Display, time::Duration};
 use strum_macros::Display;
 
 use crate::{
-    canister_state::{events::num_successes_in_past_24_h, num_requests},
+    canister_state::{limiter::num_successes_in_past_24_h, num_requests},
     processing::{
         process_accepted, process_all_by_predicate, process_all_failed, process_all_succeeded,
         process_controllers_changed, process_renamed, process_routing_table,
@@ -116,19 +116,6 @@ impl Request {
             return Some(tgt_id);
         }
         None
-    }
-
-    /// Dummy value to serve as a bound in composite bounds.
-    pub fn low_bound() -> Self {
-        Self {
-            source: Principal::management_canister(),
-            source_subnet: Principal::management_canister(),
-            source_original_controllers: vec![],
-            target: Principal::management_canister(),
-            target_subnet: Principal::management_canister(),
-            target_original_controllers: vec![],
-            caller: Principal::management_canister(),
-        }
     }
 }
 
