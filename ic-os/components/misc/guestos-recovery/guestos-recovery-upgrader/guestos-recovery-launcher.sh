@@ -18,13 +18,13 @@ validate_argument() {
 }
 
 if [ $# -eq 0 ]; then
-    echo "Usage: $0 version=<version> version-hash=<hash> [recovery-hash=<hash>]"
+    echo "Usage: $0 version=<version> version-hash=<hash> recovery-hash=<hash>"
     exit 1
 fi
 
 for arg in "$@"; do
     if ! validate_argument "$arg"; then
-        echo "Arguments must be: version=<40-char-hex> version-hash=<64-char-hex> [recovery-hash=<64-char-hex>]"
+        echo "Arguments must be: version=<40-char-hex> version-hash=<64-char-hex> recovery-hash=<64-char-hex>"
         exit 1
     fi
 done
