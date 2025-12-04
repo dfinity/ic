@@ -1,14 +1,15 @@
 use crate::mutations::node_management::common::{
-    find_subnet_for_node, get_node_operator_id_for_node, get_node_operator_record,
-    get_subnet_list_record, make_remove_node_registry_mutations,
-    make_update_node_operator_mutation,
+    find_subnet_for_node, get_node_operator_record, get_subnet_list_record,
+    make_remove_node_registry_mutations, make_update_node_operator_mutation,
 };
 use crate::{common::LOG_PREFIX, registry::Registry};
-use candid::{CandidType, Deserialize};
+use candid::{CandidType, Deserialize, Principal};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::NodeId;
+use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_subnet_record_key;
+use ic_types::PrincipalId;
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -19,7 +20,7 @@ impl Registry {
 
         // This hashmap tracks node operators for which mutations have already been
         // determined; increments to node allowance should not be idempotent
-        let mut node_operator_hmap = HashMap::<String, u64>::new();
+        let mut node_operator_hmap = HashMap::<PrincipalId, NodeOperatorRecord>::new();
 
         // 1. De-duplicate the node list
         let mut nodes_to_be_removed = payload.node_ids.clone();
@@ -31,23 +32,22 @@ impl Registry {
         let subnet_list_record = get_subnet_list_record(self);
 
         // 3. Loop through each node
-        let mutations = nodes_to_be_removed
+        let mut mutations : Vec<_> = nodes_to_be_removed
             .into_iter().flat_map(|node_to_remove| {
                 // 4. Skip nodes that are not in the registry.
                 // This tackles the race condition where a node is removed from the registry
                 // by another transaction before this transaction is processed.
-                if self.get_node(node_to_remove).is_none() {
-                    println!("{LOG_PREFIX}do_remove_nodes: node {node_to_remove} not found in registry, skipping");
-                    return vec![];
+                let node_record = match self.get_node(node_to_remove) {
+                    Some(n) => n,
+                    None => {
+                        println!("{LOG_PREFIX}do_remove_nodes: node {node_to_remove} not found in registry, skipping");
+                        return vec![];
+                    }
                 };
 
-                // 5. Find the node operator id for this record
-                // and abort if the node record is not found
-                let node_operator_id = get_node_operator_id_for_node(self, node_to_remove)
-                    .map_err(|e| format!("{LOG_PREFIX}do_remove_nodes: Aborting node removal: {e}"))
-                    .unwrap();
+                let node_operator_id = PrincipalId(Principal::from_slice(&node_record.node_operator_id));
 
-                // 6. Ensure node is not in a subnet
+                // 5. Ensure node is not in a subnet
                 let is_node_in_subnet = find_subnet_for_node(self, node_to_remove, &subnet_list_record);
                 if let Some(subnet_id) = is_node_in_subnet {
                     panic!("{}do_remove_nodes: Cannot remove a node that is a member of a subnet. This node is a member of Subnet: {}",
@@ -56,41 +56,34 @@ impl Registry {
                     );
                 }
 
-                // 7. Retrieve the NO record and increment its node allowance by 1
-                let mut new_node_operator_record = get_node_operator_record(self, node_operator_id)
+                // 6. Retrieve the NO record, cache it and increment its node allowance by 1
+                let new_node_operator_record = node_operator_hmap.entry(node_operator_id).or_insert(get_node_operator_record(self, node_operator_id)
                     .map_err(|err| {
                         format!(
                             "{LOG_PREFIX}do_remove_nodes: Aborting node removal: {err}"
                         )
                     })
-                    .unwrap();
+                    .unwrap());
+                new_node_operator_record.node_allowance += 1;
 
-                // Use the hashmap to track whether the same NO has already been mutated in the same call
-                new_node_operator_record.node_allowance = match node_operator_hmap.get(&node_operator_id.to_string()) {
-                    Some(n) => {
-                        *n + 1
-                    }
-                    None => {
-                        new_node_operator_record.node_allowance + 1
-                    }
-                };
-                node_operator_hmap.insert(node_operator_id.to_string(), new_node_operator_record.node_allowance);
 
-                // 8. Finally, generate the following mutations:
+                // 7. Finally, generate the following mutations:
                 //   * Delete the node
                 //   * Delete entries for node encryption keys
-                //   * Increment NO's allowance by 1
-                let mut mutations = make_remove_node_registry_mutations(self, node_to_remove);
-                // mutation to update node operator value
-                mutations.push(make_update_node_operator_mutation(
-                    node_operator_id,
-                    &new_node_operator_record,
-                ));
+                let mutations = make_remove_node_registry_mutations(self, node_to_remove);
 
                 mutations
         }).collect();
 
-        // 8. Apply mutations after checking invariants
+        // 8. Create node operator update mutations
+        for (node_operator_id, updated_node_operator) in node_operator_hmap {
+            mutations.push(make_update_node_operator_mutation(
+                node_operator_id,
+                &updated_node_operator,
+            ));
+        }
+
+        // 9. Apply mutations after checking invariants
         self.maybe_apply_mutation_internal(mutations);
 
         println!("{LOG_PREFIX}do_remove_nodes finished: {payload:?}");
