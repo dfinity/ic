@@ -146,11 +146,21 @@ fn operation_strategy<Tokens: TokensType>(
                 fee,
             });
 
+        let fee_collector_strategy = (
+            prop::option::of(principal_strategy()),
+            prop::option::of(account_strategy()),
+        )
+            .prop_map(move |(caller, fee_collector)| Operation::FeeCollector {
+                fee_collector,
+                caller,
+            });            
+
         prop_oneof![
             mint_strategy,
             burn_strategy,
             transfer_strategy,
             approve_strategy,
+            fee_collector_strategy,
         ]
     })
 }

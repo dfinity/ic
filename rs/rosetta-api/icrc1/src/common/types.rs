@@ -1,4 +1,6 @@
 use anyhow::Context;
+use candid::Principal;
+use icrc_ledger_types::icrc1::account::Account;
 use axum::{Json, http::StatusCode, response::IntoResponse};
 use candid::Deserialize;
 use num_bigint::BigInt;
@@ -198,6 +200,7 @@ pub enum OperationType {
     Spender,
     Approve,
     Fee,
+    FeeCollector,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -388,5 +391,35 @@ impl TryFrom<ObjectMap> for FeeMetadata {
     fn try_from(o: ObjectMap) -> anyhow::Result<Self> {
         serde_json::from_value(serde_json::Value::Object(o))
             .context("Could not parse FeeMetadata from JSON object")
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct FeeCollectorMetadata {
+    pub fee_collector: Option<Account>,
+    pub caller: Option<Principal>,
+}
+
+impl TryFrom<FeeCollectorMetadata> for ObjectMap {
+    type Error = anyhow::Error;
+    fn try_from(d: FeeCollectorMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(v) => match v {
+                serde_json::Value::Object(ob) => Ok(ob),
+                _ => anyhow::bail!(
+                    "Could not convert FeeCollectorMetadata to ObjectMap. Expected type Object but received: {:?}",
+                    v
+                ),
+            },
+            Err(err) => anyhow::bail!("Could not convert FeeCollectorMetadata to ObjectMap: {:?}", err),
+        }
+    }
+}
+
+impl TryFrom<ObjectMap> for FeeCollectorMetadata {
+    type Error = anyhow::Error;
+    fn try_from(o: ObjectMap) -> anyhow::Result<Self> {
+        serde_json::from_value(serde_json::Value::Object(o))
+            .context("Could not parse FeeCollectorMetadata from JSON object")
     }
 }

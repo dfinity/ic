@@ -508,10 +508,12 @@ mod tests {
 
               // Duplicate the last transaction generated
               let duplicate_tx_block = RosettaBlock::from_generic_block(last_block.get_generic_block(), last_block.index + 1).unwrap();
+              let count_before = storage_client_memory.get_transactions_by_hash(duplicate_tx_block.clone().get_transaction_hash()).unwrap().len();
               storage_client_memory.store_blocks([duplicate_tx_block.clone()].to_vec()).unwrap();
 
-              // The hash of the duplicated transaction should still be the same --> There should be two transactions with the same transaction hash.
-              assert_eq!(storage_client_memory.get_transactions_by_hash(duplicate_tx_block.clone().get_transaction_hash()).unwrap().len(),2);
+              // The hash of the duplicated transaction should still be the same --> There should be one more transaction with the same transaction hash.
+              assert_eq!(storage_client_memory.get_transactions_by_hash(duplicate_tx_block.clone().get_transaction_hash()).unwrap().len(), count_before + 1);
+              //assert_eq!(storage_client_memory.get_transactions_by_hash(duplicate_tx_block.clone().get_transaction_hash()).unwrap().len(),2, "{}", format!("duplicate_tx_block: {:?}, hash {:?}",duplicate_tx_block, duplicate_tx_block.clone().get_transaction_hash()));
               }
            }
 
