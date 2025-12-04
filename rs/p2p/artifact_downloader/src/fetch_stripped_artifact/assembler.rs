@@ -531,9 +531,7 @@ impl BlockProposalAssembler {
                         let dealer_index = dealing.dealer_index;
                         let found_dealing = idkg_dealings
                             .get_mut(&transcript_id)
-                            .ok_or_else(|| {
-                                AssemblyError::MissingIDkgTranscript(transcript_id.clone())
-                            })?
+                            .ok_or_else(|| AssemblyError::MissingIDkgTranscript(transcript_id))?
                             .remove(&dealer_index)
                             .ok_or_else(|| AssemblyError::MissingIDkgNodeIndex(dealer_index))?;
                         dealing.signed_dealing_tuple = Some(idkg_dealing_proto(found_dealing));
