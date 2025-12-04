@@ -1,7 +1,6 @@
 #![allow(deprecated)]
 use candid::{CandidType, Nat, Principal, define_function};
 use ic_cdk::api::call::{RejectionCode, accept_message, arg_data_raw, reject};
-use ic_cdk::api::instruction_counter;
 use ic_cdk::api::management_canister::ecdsa::{
     EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument, EcdsaPublicKeyResponse, SignWithEcdsaArgument,
     ecdsa_public_key as ic_cdk_ecdsa_public_key, sign_with_ecdsa as ic_cdk_sign_with_ecdsa,
@@ -11,6 +10,8 @@ use ic_cdk::api::management_canister::http_request::{
     TransformFunc, http_request as canister_http_outcall,
 };
 use ic_cdk::api::stable::{stable_grow, stable_size as raw_stable_size, stable_write};
+use ic_cdk::api::{instruction_counter, msg_deadline};
+use ic_cdk::call::{Call, CallFailed};
 use ic_cdk::{inspect_message, query, trap, update};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -528,6 +529,31 @@ fn stable_grow_and_fill(pages: u64) {
     }
     for i in 0..pages {
         stable_write((offset + i) << 16, &content);
+    }
+}
+
+#[update]
+fn call_with_deadline(nonce: u64) {
+    let within_deadline = match msg_deadline() {
+        Some(deadline) => time() <= deadline.get(),
+        None => true,
+    };
+    if within_deadline {
+        ic_cdk::print(format!("nonce: {nonce}"));
+    }
+}
+
+#[update]
+async fn bounded_wait(callee: Principal, nonce: u64) -> u64 {
+    let res = Call::bounded_wait(callee, "call_with_deadline")
+        .with_arg(nonce)
+        .await;
+    match res {
+        Ok(_) => 0,
+        Err(CallFailed::CallRejected(e)) => {
+            e.reject_code().expect("Unrecognized reject code") as u64
+        }
+        Err(e) => panic!("Unexpected error: {e}"),
     }
 }
 

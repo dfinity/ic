@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The PocketIC server contains a hard-coded mainnet routing table used if this option is not provided.
 - New CLI option `--fetch-mainnet-routing-table` to specify that the mainnet routing table should be fetched from the mainnet registry
   and written to the file path specified as `--mainnet-routing-table`.
+- The argument of the endpoint `/instances/<instance_id>/update/tick` takes additional optional fields
+  containing the first and last subnet to be executed in the corresponding round.
+  The field `blockmakers` has been flattened into an optional vector of blockmakers per subnet.
 
 
 

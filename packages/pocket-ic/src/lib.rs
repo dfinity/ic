@@ -57,8 +57,8 @@ use crate::{
     common::rest::{
         AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet,
         HttpsConfig, IcpConfig, IcpFeatures, InitialTime, InstanceHttpGatewayConfig, InstanceId,
-        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, RawTime, SubnetId,
-        SubnetKind, SubnetSpec, Topology,
+        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, RawSubnetBlockmakers,
+        RawTickConfigs, RawTime, SubnetId, SubnetKind, SubnetSpec, Topology,
     },
     nonblocking::PocketIc as PocketIcAsync,
 };
@@ -739,7 +739,7 @@ impl PocketIc {
     /// Make the IC produce and progress by one block with custom
     /// configs for the round.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
-    pub fn tick_with_configs(&self, configs: crate::common::rest::TickConfigs) {
+    pub fn tick_with_configs(&self, configs: TickConfigs) {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.tick_with_configs(configs).await })
     }
@@ -1889,6 +1889,49 @@ pub enum IngressStatusResult {
     NotAvailable,
     Forbidden(String),
     Success(Result<Vec<u8>, RejectResponse>),
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct TickConfigs {
+    pub blockmakers: Option<Vec<SubnetBlockmakers>>,
+    pub first_subnet: Option<Principal>,
+    pub last_subnet: Option<Principal>,
+}
+
+impl From<TickConfigs> for RawTickConfigs {
+    fn from(tick_configs: TickConfigs) -> Self {
+        Self {
+            blockmakers: tick_configs.blockmakers.map(|blockmakers| {
+                blockmakers
+                    .into_iter()
+                    .map(|blockmaker| blockmaker.into())
+                    .collect()
+            }),
+            first_subnet: tick_configs.first_subnet.map(|p| p.into()),
+            last_subnet: tick_configs.last_subnet.map(|p| p.into()),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct SubnetBlockmakers {
+    pub subnet: Principal,
+    pub blockmaker: Principal,
+    pub failed_blockmakers: Vec<Principal>,
+}
+
+impl From<SubnetBlockmakers> for RawSubnetBlockmakers {
+    fn from(blockmaker: SubnetBlockmakers) -> Self {
+        Self {
+            subnet: blockmaker.subnet.into(),
+            blockmaker: blockmaker.blockmaker.into(),
+            failed_blockmakers: blockmaker
+                .failed_blockmakers
+                .into_iter()
+                .map(|p| p.into())
+                .collect(),
+        }
+    }
 }
 
 #[cfg(windows)]
