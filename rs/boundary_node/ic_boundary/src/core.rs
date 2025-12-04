@@ -34,7 +34,6 @@ use ic_bn_lib::{
 use ic_bn_lib_common::{
     traits::{http::Client, shed::TypeExtractor},
     types::{
-        acme::AcmeUrl,
         http::{ALPN_ACME, ClientOptions, Metrics as HttpServerMetrics, ServerOptions},
         shed::{ShardedOptions, ShedResponse},
         tls::TlsOptions,
@@ -490,23 +489,23 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     tasks.add_interval("metrics_runner", metrics_runner, 5 * SECOND);
 
     // HTTP Logs Anonymization
-    let salt_fetcher = cli
-        .obs
+    cli.obs
         .obs_log_anonymization_canister_id
         .and_then(|canister_id| {
             agent.as_ref().map(|agent| {
-                Arc::new(AnonymizationSaltFetcher::new(
+                let fetcher = Arc::new(AnonymizationSaltFetcher::new(
                     agent.clone(),
                     canister_id,
                     cli.obs.obs_log_anonymization_poll_interval,
                     anonymization_salt,
                     &metrics_registry,
-                ))
+                ));
+
+                tasks.add("anonymization_salt_fetcher", fetcher.clone());
+
+                fetcher
             })
         });
-    if let Some(v) = &salt_fetcher {
-        tasks.add("anonymization_salt_fetcher", v.clone());
-    }
 
     // Start the tasks
     tasks.start();
@@ -746,17 +745,23 @@ fn setup_tls_resolver_acme(
         .clone()
         .ok_or(anyhow!("hostname not specified"))?;
 
-    let acme_url = if cli.tls_acme_staging {
-        AcmeUrl::LetsEncryptStaging
+    let tls_config = if cli.tls_acme_disable_tls_cert_verification {
+        let cfg = ic_bn_lib::rustls_acme::futures_rustls::rustls::ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(NoopServerCertVerifier::default()))
+            .with_no_client_auth();
+
+        Some(cfg)
     } else {
-        AcmeUrl::LetsEncryptProduction
+        None
     };
 
     let opts = AcmeAlpn::Opts::new(
-        acme_url,
+        cli.tls_acme_url.clone(),
         vec![hostname],
         "mailto:boundary-nodes@dfinity.org".into(),
         path,
+        tls_config,
     );
 
     let acme = Arc::new(AcmeAlpn::AcmeAlpn::new(opts));
@@ -782,8 +787,8 @@ fn setup_tls_resolver(
     }
 
     warn!(
-        "TLS: Trying resolver: ACME ALPN-01 (staging: {})",
-        cli.tls_acme_staging
+        "TLS: Trying resolver: ACME ALPN-01 (URL: {})",
+        cli.tls_acme_url
     );
     match setup_tls_resolver_acme(cli, tasks) {
         Ok(v) => {
@@ -1095,4 +1100,74 @@ pub fn error_source<E: StdError + 'static>(error: &impl StdError) -> Option<&E> 
     }
 
     None
+}
+
+#[cfg(test)]
+mod test {
+    use std::time::Instant;
+
+    use clap::Parser;
+    use http::StatusCode;
+    use ic_bn_lib::tests::pebble::Env;
+
+    use crate::cli::Cli;
+
+    use super::*;
+
+    /// Tests `ic-boundary` startup using ACME certificates obtained from Pebble
+    #[tokio::test]
+    async fn test_startup() {
+        let pebble_env = Env::new().await;
+        let acme_cache_path = tempfile::TempDir::new().unwrap();
+        let acme_url = format!("https://{}/dir", pebble_env.addr_acme());
+
+        let args = &[
+            "",
+            "--listen-https-port",
+            "5001", // Pebble challenges on port 5001 by default
+            "--tls-hostname",
+            "foo.bar", // Pebble's DNS resolves any hostname to 127.0.0.1 by default
+            "--tls-acme-url",
+            &acme_url,
+            "--tls-acme-credentials-path",
+            acme_cache_path.path().to_str().unwrap(),
+            "--tls-acme-disable-tls-cert-verification",
+            "--registry-stub-replica",
+            "127.0.0.1:1443", // Doesn't really matter
+            "--obs-log-stdout",
+        ];
+
+        let cli = Cli::parse_from(args);
+
+        tokio::spawn(async move {
+            if let Err(e) = main(cli).await {
+                panic!("Unable to start ic-boundary: {e}");
+            }
+        });
+
+        let client = reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()
+            .unwrap();
+
+        // Poke ic-boundary until it issues the certificate
+        let start = Instant::now();
+        loop {
+            let req = client.get("https://127.0.0.1:5001/health").build().unwrap();
+            let res = client.execute(req).await;
+            if let Ok(v) = res
+                && v.status() == StatusCode::NO_CONTENT
+            {
+                return;
+            }
+
+            if start.elapsed() > Duration::from_secs(120) {
+                break;
+            }
+
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+
+        panic!("Unable to query ic-boundary: timed out");
+    }
 }
