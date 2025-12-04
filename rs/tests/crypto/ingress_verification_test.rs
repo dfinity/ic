@@ -894,7 +894,10 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
 
                     let read_state_result = response.status();
 
-                    println!("MGMT read state included={} result={}, api_ver={}", include_mgmt_canister_id, read_state_result, api_ver);
+                    println!(
+                        "MGMT read state included={} result={}, api_ver={}",
+                        include_mgmt_canister_id, read_state_result, api_ver
+                    );
                     /*
                     if include_mgmt_canister_id {
                         assert_eq!(read_state_result, 200);
