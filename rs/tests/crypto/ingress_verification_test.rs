@@ -561,9 +561,14 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                 let signer = &identities[identities.len() - 1];
 
                 for &api_ver in ALL_QUERY_API_VERSIONS {
-                    let query_result =
-                        perform_query_call_with_delegations(api_ver, &test_info, sender, signer, &delegations)
-                        .await;
+                    let query_result = perform_query_call_with_delegations(
+                        api_ver,
+                        &test_info,
+                        sender,
+                        signer,
+                        &delegations,
+                    )
+                    .await;
 
                     if scenario.expect_success {
                         assert_eq!(query_result, 200);
@@ -573,9 +578,14 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                 }
 
                 for &api_ver in ALL_READ_STATE_API_VERSIONS {
-                    let read_state_result =
-                        perform_read_state_with_delegations(api_ver, &test_info, sender, signer, &delegations)
-                        .await;
+                    let read_state_result = perform_read_state_with_delegations(
+                        api_ver,
+                        &test_info,
+                        sender,
+                        signer,
+                        &delegations,
+                    )
+                    .await;
 
                     if scenario.expect_success {
                         assert_eq!(read_state_result, 200);
@@ -586,9 +596,14 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                 }
 
                 for &api_ver in ALL_UPDATE_API_VERSIONS {
-                    let update_result =
-                        perform_update_call_with_delegations(api_ver, &test_info, sender, signer, &delegations)
-                        .await;
+                    let update_result = perform_update_call_with_delegations(
+                        api_ver,
+                        &test_info,
+                        sender,
+                        signer,
+                        &delegations,
+                    )
+                    .await;
 
                     if scenario.expect_success {
                         let expected_update_result = if api_ver == 2 { 202 } else { 200 };
@@ -915,21 +930,30 @@ pub fn requests_with_canister_signature(env: TestEnv) {
                 };
                 for &api_ver in ALL_QUERY_API_VERSIONS {
                     assert_eq!(
-                        perform_query_call_with_delegations(api_ver, &test_info, &id, &id, &[]).await,
+                        perform_query_call_with_delegations(api_ver, &test_info, &id, &id, &[])
+                            .await,
                         200,
                         "query should succeed for api_ver={api_ver} and seed={seed:?}"
                     );
                 }
                 for &api_ver in ALL_UPDATE_API_VERSIONS {
                     assert_eq!(
-                        perform_update_call_with_delegations(api_ver, &test_info, &id, &id, &[]).await,
+                        perform_update_call_with_delegations(api_ver, &test_info, &id, &id, &[])
+                            .await,
                         if api_ver == 2 { 202 } else { 200 },
                         "update should succeed for api_ver={api_ver} and seed={seed:?}"
                     );
                 }
                 for &api_ver in ALL_READ_STATE_API_VERSIONS {
                     assert_eq!(
-                        perform_read_state_call_with_delegations(api_ver, &test_info, &id, &id, &[]).await,
+                        perform_read_state_call_with_delegations(
+                            api_ver,
+                            &test_info,
+                            &id,
+                            &id,
+                            &[]
+                        )
+                        .await,
                         200,
                         "read_state should succeed for api_ver={api_ver} and seed={seed:?}"
                     );
@@ -960,22 +984,36 @@ pub fn requests_with_canister_signature(env: TestEnv) {
                 };
                 for &api_ver in ALL_QUERY_API_VERSIONS {
                     assert_eq!(
-                        perform_query_call_with_delegations(api_ver, &test_info, &sender, &id, &[]).await,
+                        perform_query_call_with_delegations(api_ver, &test_info, &sender, &id, &[])
+                            .await,
                         400,
                         "query should be rejected for api_ver={api_ver}"
                     );
                 }
                 for &api_ver in ALL_UPDATE_API_VERSIONS {
                     assert_eq!(
-                        perform_update_call_with_delegations(api_ver, &test_info, &sender, &id, &[]).await,
+                        perform_update_call_with_delegations(
+                            api_ver,
+                            &test_info,
+                            &sender,
+                            &id,
+                            &[]
+                        )
+                        .await,
                         400,
                         "update should be rejected for api_ver={api_ver}"
                     );
                 }
                 for &api_ver in ALL_READ_STATE_API_VERSIONS {
                     assert_eq!(
-                        perform_read_state_call_with_delegations(api_ver, &test_info, &sender, &id, &[])
-                            .await,
+                        perform_read_state_call_with_delegations(
+                            api_ver,
+                            &test_info,
+                            &sender,
+                            &id,
+                            &[]
+                        )
+                        .await,
                         400,
                         "read_state should be rejected for api_ver={api_ver}"
                     );
@@ -1009,7 +1047,8 @@ pub fn requests_with_canister_signature(env: TestEnv) {
             }
             for &api_ver in ALL_READ_STATE_API_VERSIONS {
                 assert_eq!(
-                    perform_read_state_call_with_delegations(api_ver, &test_info, &id, &id, &[]).await,
+                    perform_read_state_call_with_delegations(api_ver, &test_info, &id, &id, &[])
+                        .await,
                     400,
                     "read_state should be rejected for api_ver={api_ver} with invalid certificate signature"
                 );
@@ -1243,7 +1282,7 @@ async fn perform_read_state_with_delegations(
         // requires a potentially flaky retry loop.
 
         let _response = send_request(
-            /*api_ver=*/3,
+            /*api_ver=*/ 3,
             &test,
             "call",
             content,
