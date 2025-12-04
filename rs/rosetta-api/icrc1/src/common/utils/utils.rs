@@ -1,5 +1,5 @@
 use crate::common::storage::types::{IcrcOperation, RosettaBlock};
-use crate::common::types::{FeeMetadata, FeeSetter, FeeCollectorMetadata};
+use crate::common::types::{FeeCollectorMetadata, FeeMetadata, FeeSetter};
 use crate::{
     AppState, MultiTokenAppState,
     common::{
