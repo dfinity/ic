@@ -21,7 +21,7 @@ type Action = variant {
   AddOrRemoveNodeProvider : AddOrRemoveNodeProvider;
   Motion : Motion;
   FulfillSubnetRentalRequest : FulfillSubnetRentalRequest;
-  DeclareAlternativeReplicaVirtualMachineSoftwareSet : DeclareAlternativeReplicaVirtualMachineSoftwareSet;
+  BlessAlternativeGuestOsVersion : BlessAlternativeGuestOsVersion;
 };
 
 type AddHotKey = record {
@@ -1030,7 +1030,7 @@ type ProposalActionRequest = variant {
   AddOrRemoveNodeProvider : AddOrRemoveNodeProvider;
   Motion : Motion;
   FulfillSubnetRentalRequest : FulfillSubnetRentalRequest;
-  DeclareAlternativeReplicaVirtualMachineSoftwareSet : DeclareAlternativeReplicaVirtualMachineSoftwareSet;
+  BlessAlternativeGuestOsVersion : BlessAlternativeGuestOsVersion;
 };
 
 // Creates a rented subnet from a rental request (in the Subnet Rental
@@ -1067,7 +1067,7 @@ type FulfillSubnetRentalRequest = record {
 
 // Declares an approved set of alternative replica virtual machine software for
 // disaster recovery purposes.
-type DeclareAlternativeReplicaVirtualMachineSoftwareSet = record {
+type BlessAlternativeGuestOsVersion = record {
   // AMD Secure Processor chip IDs that are allowed to run this software.
   // Each chip ID must be exactly 64 bytes.
   chip_ids : opt vec blob;

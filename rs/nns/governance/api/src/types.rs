@@ -640,9 +640,7 @@ pub mod proposal {
         /// this alternative software would generally be to bring the system
         /// back to a healthy state, to recover from some kind of disaster, like
         /// a boot loop, or something like that.
-        DeclareAlternativeReplicaVirtualMachineSoftwareSet(
-            super::DeclareAlternativeReplicaVirtualMachineSoftwareSet,
-        ),
+        BlessAlternativeGuestOsVersion(super::BlessAlternativeGuestOsVersion),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -1400,9 +1398,7 @@ pub enum ProposalActionRequest {
     StopOrStartCanister(StopOrStartCanister),
     UpdateCanisterSettings(UpdateCanisterSettings),
     FulfillSubnetRentalRequest(FulfillSubnetRentalRequest),
-    DeclareAlternativeReplicaVirtualMachineSoftwareSet(
-        DeclareAlternativeReplicaVirtualMachineSoftwareSet,
-    ),
+    BlessAlternativeGuestOsVersion(BlessAlternativeGuestOsVersion),
 }
 
 #[derive(
@@ -2680,7 +2676,7 @@ pub struct FulfillSubnetRentalRequest {
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug, Default,
 )]
-pub struct DeclareAlternativeReplicaVirtualMachineSoftwareSet {
+pub struct BlessAlternativeGuestOsVersion {
     pub chip_ids: Option<Vec<Vec<u8>>>,
     pub hexidecimal_recovery_rootfs_fingerprint: Option<String>,
     pub base_guest_launch_measurements: Option<GuestLaunchMeasurements>,

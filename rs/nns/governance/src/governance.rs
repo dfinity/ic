@@ -32,13 +32,12 @@ use crate::{
         self,
         proposal_conversions::{ProposalDisplayOptions, proposal_data_to_info},
         v1::{
-            ArchivedMonthlyNodeProviderRewards, Ballot, CreateServiceNervousSystem,
-            DeclareAlternativeReplicaVirtualMachineSoftwareSet, Followees,
-            FulfillSubnetRentalRequest, GetNeuronsFundAuditInfoRequest,
-            GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
-            InstallCode, KnownNeuron, ListKnownNeuronsResponse, ManageNeuron,
-            MonthlyNodeProviderRewards, Motion, NetworkEconomics, NeuronState,
-            NeuronsFundAuditInfo, NeuronsFundData,
+            ArchivedMonthlyNodeProviderRewards, Ballot, BlessAlternativeGuestOsVersion,
+            CreateServiceNervousSystem, Followees, FulfillSubnetRentalRequest,
+            GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+            Governance as GovernanceProto, GovernanceError, InstallCode, KnownNeuron,
+            ListKnownNeuronsResponse, ManageNeuron, MonthlyNodeProviderRewards, Motion,
+            NetworkEconomics, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
             NeuronsFundParticipation as NeuronsFundParticipationPb,
             NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
             ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
@@ -512,8 +511,8 @@ impl Action {
             Action::StopOrStartCanister(_) => "ACTION_STOP_OR_START_CANISTER",
             Action::UpdateCanisterSettings(_) => "ACTION_UPDATE_CANISTER_SETTINGS",
             Action::FulfillSubnetRentalRequest(_) => "ACTION_FULFILL_SUBNET_RENTAL_REQUEST",
-            Action::DeclareAlternativeReplicaVirtualMachineSoftwareSet(_) => {
-                "ACTION_DECLARE_ALTERNATIVE_REPLICA_VIRTUAL_MACHINE_SOFTWARE_SET"
+            Action::BlessAlternativeGuestOsVersion(_) => {
+                "ACTION_BLESS_ALTERNATIVE_GUEST_OS_VERSION"
             }
         }
     }
@@ -4241,11 +4240,11 @@ impl Governance {
                 self.perform_fulfill_subnet_rental_request(pid, fulfill_subnet_rental_request)
                     .await
             }
-            ValidProposalAction::DeclareAlternativeReplicaVirtualMachineSoftwareSet(
-                declare_alternative_virtual_machine_software_set,
-            ) => self.perform_declare_alternative_virtual_machine_software_set(
+            ValidProposalAction::BlessAlternativeGuestOsVersion(
+                bless_alternative_guest_os_version,
+            ) => self.perform_bless_alternative_guest_os_version(
                 pid,
-                declare_alternative_virtual_machine_software_set,
+                bless_alternative_guest_os_version,
             ),
         }
     }
@@ -4318,12 +4317,12 @@ impl Governance {
         self.set_proposal_execution_status(proposal_id, result);
     }
 
-    fn perform_declare_alternative_virtual_machine_software_set(
+    fn perform_bless_alternative_guest_os_version(
         &mut self,
         proposal_id: u64,
-        declare_alternative_virtual_machine_software_set: DeclareAlternativeReplicaVirtualMachineSoftwareSet,
+        bless_alternative_guest_os_version: BlessAlternativeGuestOsVersion,
     ) {
-        let result = declare_alternative_virtual_machine_software_set.execute();
+        let result = bless_alternative_guest_os_version.execute();
         self.set_proposal_execution_status(proposal_id, result);
     }
 
@@ -4843,9 +4842,9 @@ impl Governance {
             ValidProposalAction::DeregisterKnownNeuron(deregister_known_neuron) => {
                 deregister_known_neuron.validate(&self.neuron_store)
             }
-            ValidProposalAction::DeclareAlternativeReplicaVirtualMachineSoftwareSet(
-                declare_alternative_virtual_machine_software_set,
-            ) => declare_alternative_virtual_machine_software_set.validate(),
+            ValidProposalAction::BlessAlternativeGuestOsVersion(
+                bless_alternative_guest_os_version,
+            ) => bless_alternative_guest_os_version.validate(),
         }
     }
 

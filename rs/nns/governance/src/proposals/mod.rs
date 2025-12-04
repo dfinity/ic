@@ -1,12 +1,12 @@
 use crate::{
     governance::{Environment, LOG_PREFIX},
     pb::v1::{
-        AddOrRemoveNodeProvider, ApproveGenesisKyc, CreateServiceNervousSystem,
-        DeclareAlternativeReplicaVirtualMachineSoftwareSet, DeregisterKnownNeuron,
-        FulfillSubnetRentalRequest, GovernanceError, InstallCode, KnownNeuron, ManageNeuron,
-        Motion, NetworkEconomics, ProposalData, RewardNodeProvider, RewardNodeProviders,
-        SelfDescribingProposalAction, StopOrStartCanister, Topic, UpdateCanisterSettings, Vote,
-        governance_error::ErrorType, proposal::Action,
+        AddOrRemoveNodeProvider, ApproveGenesisKyc, BlessAlternativeGuestOsVersion,
+        CreateServiceNervousSystem, DeregisterKnownNeuron, FulfillSubnetRentalRequest,
+        GovernanceError, InstallCode, KnownNeuron, ManageNeuron, Motion, NetworkEconomics,
+        ProposalData, RewardNodeProvider, RewardNodeProviders, SelfDescribingProposalAction,
+        StopOrStartCanister, Topic, UpdateCanisterSettings, Vote, governance_error::ErrorType,
+        proposal::Action,
     },
     proposals::{
         execute_nns_function::ValidExecuteNnsFunction,
@@ -19,9 +19,9 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{PROTOCOL_CANISTER_IDS, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use std::{collections::HashMap, sync::Arc};
 
+pub mod bless_alternative_guest_os_version;
 pub mod call_canister;
 pub mod create_service_nervous_system;
-pub mod declare_alternative_replica_virtual_machine_software_set;
 pub mod deregister_known_neuron;
 pub mod execute_nns_function;
 pub mod fulfill_subnet_rental_request;
@@ -53,9 +53,7 @@ pub enum ValidProposalAction {
     StopOrStartCanister(StopOrStartCanister),
     UpdateCanisterSettings(UpdateCanisterSettings),
     FulfillSubnetRentalRequest(FulfillSubnetRentalRequest),
-    DeclareAlternativeReplicaVirtualMachineSoftwareSet(
-        DeclareAlternativeReplicaVirtualMachineSoftwareSet,
-    ),
+    BlessAlternativeGuestOsVersion(BlessAlternativeGuestOsVersion),
 }
 
 impl TryFrom<Option<Action>> for ValidProposalAction {
@@ -109,13 +107,11 @@ impl TryFrom<Option<Action>> for ValidProposalAction {
             Action::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => Ok(
                 ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request),
             ),
-            Action::DeclareAlternativeReplicaVirtualMachineSoftwareSet(
-                declare_alternative_virtual_machine_software_set,
-            ) => Ok(
-                ValidProposalAction::DeclareAlternativeReplicaVirtualMachineSoftwareSet(
-                    declare_alternative_virtual_machine_software_set,
-                ),
-            ),
+            Action::BlessAlternativeGuestOsVersion(bless_alternative_guest_os_version) => {
+                Ok(ValidProposalAction::BlessAlternativeGuestOsVersion(
+                    bless_alternative_guest_os_version,
+                ))
+            }
 
             // Obsolete actions
             Action::SetDefaultFollowees(_) => Err(GovernanceError::new_with_message(
@@ -159,9 +155,7 @@ impl ValidProposalAction {
                 update_settings.valid_topic()?
             }
             ValidProposalAction::FulfillSubnetRentalRequest(_) => Topic::SubnetRental,
-            ValidProposalAction::DeclareAlternativeReplicaVirtualMachineSoftwareSet(_) => {
-                Topic::NodeAdmin
-            }
+            ValidProposalAction::BlessAlternativeGuestOsVersion(_) => Topic::NodeAdmin,
         };
         Ok(topic)
     }

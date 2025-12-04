@@ -705,7 +705,7 @@ message Proposal {
     FulfillSubnetRentalRequest fulfill_subnet_rental_request = 28;
     // Allow node operators to manually intervene in case of disaster to run
     // (NNS-approved) new software.
-    DeclareAlternativeReplicaVirtualMachineSoftwareSet declare_alternative_replica_virtual_machine_software_set = 31;
+    BlessAlternativeGuestOsVersion bless_alternative_guest_os_version = 31;
   }
 }
 
@@ -1924,7 +1924,7 @@ message FulfillSubnetRentalRequest {
   string replica_version_id = 2;
 }
 
-message DeclareAlternativeReplicaVirtualMachineSoftwareSet {
+message BlessAlternativeGuestOsVersion {
   repeated bytes chip_ids = 1;
   string hexidecimal_recovery_rootfs_fingerprint = 2;
   GuestLaunchMeasurements base_guest_launch_measurements = 3;

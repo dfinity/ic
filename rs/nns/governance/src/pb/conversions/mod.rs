@@ -455,8 +455,8 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             pb_api::proposal::Action::FulfillSubnetRentalRequest(v) => {
                 pb::proposal::Action::FulfillSubnetRentalRequest(v.into())
             }
-            pb_api::proposal::Action::DeclareAlternativeReplicaVirtualMachineSoftwareSet(v) => {
-                pb::proposal::Action::DeclareAlternativeReplicaVirtualMachineSoftwareSet(v.into())
+            pb_api::proposal::Action::BlessAlternativeGuestOsVersion(v) => {
+                pb::proposal::Action::BlessAlternativeGuestOsVersion(v.into())
             }
         }
     }
@@ -507,9 +507,9 @@ impl From<pb_api::ProposalActionRequest> for pb::proposal::Action {
             pb_api::ProposalActionRequest::FulfillSubnetRentalRequest(v) => {
                 pb::proposal::Action::FulfillSubnetRentalRequest(v.into())
             }
-            pb_api::ProposalActionRequest::DeclareAlternativeReplicaVirtualMachineSoftwareSet(
-                v,
-            ) => pb::proposal::Action::DeclareAlternativeReplicaVirtualMachineSoftwareSet(v.into()),
+            pb_api::ProposalActionRequest::BlessAlternativeGuestOsVersion(v) => {
+                pb::proposal::Action::BlessAlternativeGuestOsVersion(v.into())
+            }
         }
     }
 }
@@ -2693,10 +2693,8 @@ impl From<pb_api::FulfillSubnetRentalRequest> for pb::FulfillSubnetRentalRequest
     }
 }
 
-impl From<pb::DeclareAlternativeReplicaVirtualMachineSoftwareSet>
-    for pb_api::DeclareAlternativeReplicaVirtualMachineSoftwareSet
-{
-    fn from(item: pb::DeclareAlternativeReplicaVirtualMachineSoftwareSet) -> Self {
+impl From<pb::BlessAlternativeGuestOsVersion> for pb_api::BlessAlternativeGuestOsVersion {
+    fn from(item: pb::BlessAlternativeGuestOsVersion) -> Self {
         Self {
             chip_ids: Some(item.chip_ids),
             hexidecimal_recovery_rootfs_fingerprint: Some(
@@ -2709,10 +2707,8 @@ impl From<pb::DeclareAlternativeReplicaVirtualMachineSoftwareSet>
     }
 }
 
-impl From<pb_api::DeclareAlternativeReplicaVirtualMachineSoftwareSet>
-    for pb::DeclareAlternativeReplicaVirtualMachineSoftwareSet
-{
-    fn from(item: pb_api::DeclareAlternativeReplicaVirtualMachineSoftwareSet) -> Self {
+impl From<pb_api::BlessAlternativeGuestOsVersion> for pb::BlessAlternativeGuestOsVersion {
+    fn from(item: pb_api::BlessAlternativeGuestOsVersion) -> Self {
         Self {
             chip_ids: item.chip_ids.unwrap_or_default(),
             hexidecimal_recovery_rootfs_fingerprint: item

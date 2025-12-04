@@ -541,9 +541,7 @@ pub mod proposal {
         /// Allow node operators to manually intervene in case of disaster to run
         /// (NNS-approved) new software.
         #[prost(message, tag = "31")]
-        DeclareAlternativeReplicaVirtualMachineSoftwareSet(
-            super::DeclareAlternativeReplicaVirtualMachineSoftwareSet,
-        ),
+        BlessAlternativeGuestOsVersion(super::BlessAlternativeGuestOsVersion),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -2801,7 +2799,7 @@ pub struct FulfillSubnetRentalRequest {
     PartialEq,
     ::prost::Message,
 )]
-pub struct DeclareAlternativeReplicaVirtualMachineSoftwareSet {
+pub struct BlessAlternativeGuestOsVersion {
     #[prost(bytes = "vec", repeated, tag = "1")]
     pub chip_ids: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     #[prost(string, tag = "2")]

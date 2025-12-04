@@ -1,7 +1,6 @@
 use super::*;
 use crate::{
-    are_declare_alternative_replica_virtual_machine_software_set_proposals_enabled,
-    pb::v1::GuestLaunchMeasurements,
+    are_bless_alternative_guest_os_version_proposals_enabled, pb::v1::GuestLaunchMeasurements,
 };
 
 /// Length of SEV-SNP launch measurements in bytes.
@@ -27,7 +26,7 @@ use crate::{
 /// - Launch measurement details: Section 8.17.3 of the SEV-SNP API specification
 const SEV_SNP_MEASUREMENT_LENGTH: usize = 48;
 
-impl DeclareAlternativeReplicaVirtualMachineSoftwareSet {
+impl BlessAlternativeGuestOsVersion {
     /// Verifies the following:
     ///
     /// 1. chip_ids
@@ -44,11 +43,10 @@ impl DeclareAlternativeReplicaVirtualMachineSoftwareSet {
     ///    a. Noneempty.
     ///    b. Each element is valid per GuestLaunchMeasurement (singular).
     pub(crate) fn validate(&self) -> Result<(), GovernanceError> {
-        if !are_declare_alternative_replica_virtual_machine_software_set_proposals_enabled() {
+        if !are_bless_alternative_guest_os_version_proposals_enabled() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                "DeclareAlternativeReplicaVirtualMachineSoftwareSet proposals are not enabled yet."
-                    .to_string(),
+                "BlessAlternativeGuestOsVersion proposals are not enabled yet.".to_string(),
             ));
         }
 
@@ -70,11 +68,10 @@ impl DeclareAlternativeReplicaVirtualMachineSoftwareSet {
     }
 
     pub(crate) fn execute(&self) -> Result<(), GovernanceError> {
-        if !are_declare_alternative_replica_virtual_machine_software_set_proposals_enabled() {
+        if !are_bless_alternative_guest_os_version_proposals_enabled() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                "DeclareAlternativeReplicaVirtualMachineSoftwareSet proposals are not enabled yet."
-                    .to_string(),
+                "BlessAlternativeGuestOsVersion proposals are not enabled yet.".to_string(),
             ));
         }
 
@@ -225,5 +222,5 @@ fn validate_guest_launch_measurement(
 }
 
 #[cfg(test)]
-#[path = "declare_alternative_replica_virtual_machine_software_set_tests.rs"]
+#[path = "bless_alternative_guest_os_version_tests.rs"]
 mod tests;
