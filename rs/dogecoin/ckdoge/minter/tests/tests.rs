@@ -441,8 +441,11 @@ fn should_estimate_withdrawal_fee() {
 }
 
 mod post_upgrade {
-    use ic_ckdoge_minter_test_utils::{only_one, utxo_with_value, Setup, DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, MEDIAN_TRANSACTION_FEE, RETRIEVE_DOGE_MIN_AMOUNT, USER_PRINCIPAL};
     use ic_ckdoge_minter_test_utils::flow::withdrawal::assert_uses_utxos;
+    use ic_ckdoge_minter_test_utils::{
+        DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, MEDIAN_TRANSACTION_FEE, RETRIEVE_DOGE_MIN_AMOUNT,
+        Setup, USER_PRINCIPAL, only_one, utxo_with_value,
+    };
     use icrc_ledger_types::icrc1::account::Account;
 
     #[test]
