@@ -11,7 +11,7 @@ use ic_ckdoge_minter::{
         RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
     },
 };
-use ic_management_canister_types::CanisterId;
+use ic_management_canister_types::{CanisterId, CanisterStatusResult};
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use icrc_ledger_types::icrc1::account::Account;
 use pocket_ic::common::rest::RawMessageId;
@@ -111,6 +111,19 @@ impl MinterCanister {
     ) -> Result<std::vec::Vec<u8>, RejectResponse> {
         self.env
             .update_call(self.id, sender, "update_balance", Encode!(args).unwrap())
+    }
+
+    pub fn get_canister_status(&self) -> CanisterStatusResult {
+        let call_result = self
+            .env
+            .update_call(
+                self.id,
+                Principal::anonymous(),
+                "get_canister_status",
+                Encode!().unwrap(),
+            )
+            .expect("BUG: failed to call get_canister_status");
+        Decode!(&call_result, CanisterStatusResult).unwrap()
     }
 
     pub fn estimate_withdrawal_fee(

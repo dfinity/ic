@@ -8,6 +8,7 @@ use ic_ckdoge_minter_test_utils::{
     RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, assert_trap, utxo_with_value,
     utxos_with_value,
 };
+use ic_management_canister_types::CanisterStatusType;
 
 #[test]
 fn should_fail_withdrawal() {
@@ -453,4 +454,11 @@ fn should_get_logs() {
         "Expected first log message to be for canister initialization but got: {}",
         init_log.message
     );
+}
+
+#[test]
+fn should_get_canister_status() {
+    let setup = Setup::default();
+    let status = setup.minter().get_canister_status();
+    assert_eq!(status.status, CanisterStatusType::Running);
 }
