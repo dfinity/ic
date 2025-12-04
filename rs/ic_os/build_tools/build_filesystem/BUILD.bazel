@@ -47,7 +47,32 @@ rust_test(
         "//conditions:default": {},
     }),
     # Integration tests require root privileges to mount filesystems (Linux only)
+    # Marked as manual - use build_filesystem_root_test to run with sudo
+    tags = [
+        "local",
+        "manual",
+    ],
+    deps = [
+        "@crate_index//:proptest",
+    ],
+)
+
+sh_test(
+    name = "build_filesystem_root_test",
+    srcs = ["tests/run_rust_test_with_sudo.sh"],
+    data = [
+        ":build_filesystem_test",
+        "@e2fsprogs//:mke2fs",
+    ],
+    env = {
+        "RUST_TEST_BIN": "$(rootpath :build_filesystem_test)",
+        "MKE2FS_BIN": "$(rootpath @e2fsprogs//:mke2fs)",
+    },
+    # This test needs root privileges to mount filesystems
     tags = ["local"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 sh_test(

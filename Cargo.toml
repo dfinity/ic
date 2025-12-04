@@ -823,6 +823,7 @@ serde_cbor = "0.11.2"
 serde_json = { version = "^1.0.107" }
 serde_with = "1.14.0"
 serde_yaml = "0.9.33"
+selinux = "0.5"
 sev = { version = "7.1", default-features = false, features = [
     "crypto_nossl",
     "snp",

@@ -1295,7 +1295,7 @@ version = "0.72.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "993776b509cfb49c750f11b8f07a46fa23e0a1386ffc01fb1e7d343efc387895"
 dependencies = [
- "bitflags 2.9.0",
+ "bitflags 2.10.0",
  "cexpr",
  "clang-sys",
  "itertools 0.13.0",
@@ -1304,7 +1304,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "regex",
- "rustc-hash 2.1.0",
+ "rustc-hash 2.1.1",
  "shlex",
  "syn 2.0.110",
 ]
@@ -1738,13 +1738,12 @@ dependencies = [
  "anyhow",
  "clap 4.5.27",
  "ic_device",
- "nix 0.24.3",
+ "proptest",
  "rand 0.8.5",
  "regex",
  "selinux",
  "tar",
  "tempfile",
- "tokio",
  "walkdir",
 ]
 
@@ -21199,12 +21198,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "reference-counted-singleton"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5daffa8f5ca827e146485577fa9dba9bd9c6921e06e954ab8f6408c10f753086"
-
-[[package]]
 name = "referencing"
 version = "0.32.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -22654,16 +22647,17 @@ dependencies = [
 
 [[package]]
 name = "selinux"
-version = "0.4.6"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0139b2436c81305eb6bda33af151851f75bd62783817b25f44daa371119c30b5"
+checksum = "8f6af114a661557df02e60c25e5cb40779d295ec2e4ae0fd903fe414578b6191"
 dependencies = [
- "bitflags 2.9.0",
+ "bitflags 2.10.0",
+ "errno 0.3.10",
  "libc",
  "once_cell",
- "reference-counted-singleton",
+ "parking_lot",
  "selinux-sys",
- "thiserror 1.0.69",
+ "thiserror 2.0.17",
 ]
 
 [[package]]

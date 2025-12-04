@@ -15,13 +15,13 @@ impl PartitionSize {
 }
 
 impl std::str::FromStr for PartitionSize {
-    type Err = anyhow::Error;
+    type Err = String;
 
     /// Parse a size string like "50M", "1000K", "3G" and return the size in bytes
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let size = s.trim();
         if size.is_empty() {
-            bail!("Size string is empty");
+            return Err("Size string is empty".to_string());
         }
 
         let (number_part, suffix) = if let Some(pos) = size.find(|c: char| c.is_alphabetic()) {
@@ -32,14 +32,14 @@ impl std::str::FromStr for PartitionSize {
 
         let number: u64 = number_part
             .parse()
-            .with_context(|| format!("Failed to parse number from: {}", size))?;
+            .map_err(|_| format!("Failed to parse number from: {size}"))?;
 
         let multiplier = match suffix.to_uppercase().as_str() {
             "" | "B" => 1,
             "K" => 1024,
             "M" => 1024 * 1024,
             "G" => 1024 * 1024 * 1024,
-            _ => bail!("Unsupported size suffix: {}", suffix),
+            _ => return Err(format!("Unsupported size suffix: {suffix}")),
         };
 
         Ok(Self(number * multiplier))
