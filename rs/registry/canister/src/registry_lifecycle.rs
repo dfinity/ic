@@ -115,11 +115,8 @@ fn fix_node_operators_corrupted(registry: &Registry) -> Vec<RegistryMutation> {
 
     match create_node_operator_mutation(
         "ujq4k-55epc-pg2bt-jt2f5-6vaq3-diru7-edprm-42rd2-j7zzd-yjaai-2qe",
-        |record, _| {
-            record.rewardable_nodes = btreemap! {
-                NodeRewardType::Type1dot1.to_string() => 9
-            };
-        },
+        // Dummy mutation that should just increase the version and get the updates
+        |_record, _| {},
     ) {
         Ok(mutation) => mutations.push(mutation),
         Err(e) => ic_cdk::println!("Error creating mutation for ujq4k: {}", e),
@@ -142,17 +139,13 @@ fn fix_node_operators_corrupted(registry: &Registry) -> Vec<RegistryMutation> {
 
     match create_node_operator_mutation(
         "spsu4-5hl4t-bfubp-qvoko-jprw4-wt7ou-nlnbk-gb5ib-aqnoo-g4gl6-kae",
-        |record, _| {
-            record.rewardable_nodes = btreemap! {
-                NodeRewardType::Type1dot1.to_string() => 14
-            };
-        },
+        |record, _| {},
     ) {
         Ok(mutation) => mutations.push(mutation),
         Err(e) => ic_cdk::println!("Error creating mutation for spsu4: {}", e),
     }
 
-    // redpf ---------------------------------------------------------------------------------------
+    // redpf - 2rqo7 -------------------------------------------------------------------------------
 
     match create_node_operator_mutation(
         "redpf-rrb5x-sa2it-zhbh7-q2fsp-bqlwz-4mf4y-tgxmj-g5y7p-ezjtj-5qe",
@@ -162,6 +155,21 @@ fn fix_node_operators_corrupted(registry: &Registry) -> Vec<RegistryMutation> {
     ) {
         Ok(mutation) => mutations.push(mutation),
         Err(e) => ic_cdk::println!("Error creating mutation for redpf: {}", e),
+    }
+
+    match create_node_operator_mutation(
+        "2rqo7-ot2kv-upof3-odw3y-sjckb-qeibt-n56vj-7b4pt-bvrtg-zay53-4qe",
+        |record, _| {
+            record.rewardable_nodes = btreemap! {
+                NodeRewardType::Type1dot1.to_string() => 28
+            };
+            record.max_rewardable_nodes = btreemap! {
+                NodeRewardType::Type1dot1.to_string() => 28
+            };
+        },
+    ) {
+        Ok(mutation) => mutations.push(mutation),
+        Err(e) => ic_cdk::println!("Error creating mutation for 2rqo7: {}", e),
     }
 
     mutations

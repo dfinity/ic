@@ -1,22 +1,20 @@
 // TODO(DRE-6385): Remove this test once PBR is fully rolled out to mainnet.
 use candid::{Decode, Encode};
-use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_cdk::api::call::call_raw;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
+use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
 };
 use ic_nns_governance_api::{
-    ListNodeProvidersResponse, MonthlyNodeProviderRewards, NetworkEconomics, Vote,
-    VotingPowerEconomics,
+    ListNodeProvidersResponse, MonthlyNodeProviderRewards, NetworkEconomics, ProposalActionRequest,
+    RewardNodeProviders, Vote, VotingPowerEconomics,
 };
 use ic_nns_test_utils::state_test_helpers::{
     get_canister_status, manage_network_economics, nns_cast_vote, nns_create_super_powerful_neuron,
-    nns_propose_upgrade_nns_canister, query, query_with_sender,
-    wait_for_canister_upgrade_to_succeed,
+    nns_propose_upgrade_nns_canister, query, wait_for_canister_upgrade_to_succeed,
 };
 use ic_nns_test_utils::state_test_helpers::{
     nns_get_most_recent_monthly_node_provider_rewards, nns_wait_for_proposal_execution,
@@ -26,20 +24,9 @@ use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_
 use ic_node_rewards_canister_api::provider_rewards_calculation::GetNodeProvidersRewardsCalculationRequest;
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-use ic_protobuf::state::queues::v1::response;
-use ic_registry_canister_api::GetNodeProvidersMonthlyXdrRewardsRequest;
-use ic_registry_keys::make_node_operator_record_key;
-use ic_registry_transport::pb::v1::{
-    RegistryGetValueRequest, high_capacity_registry_get_value_response,
-};
-use ic_registry_transport::{
-    Error, dechunkify_get_value_response_content, deserialize_get_value_response,
-    serialize_get_value_request,
-};
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::Tokens;
 use itertools::Itertools;
-use prost::Message;
 use std::cmp::PartialEq;
 use std::collections::BTreeMap;
 use std::fmt::Display;
@@ -208,10 +195,8 @@ fn vote_yes_with_well_known_public_neurons(state_machine: &StateMachine, proposa
 
 #[test]
 fn test_registry_migration_with_golden_state() {
-    let nns_canister_upgrade_sequence: Vec<RegistryCanisterUpdate> = vec![
-        RegistryCanisterUpdate::new("governance"),
-        RegistryCanisterUpdate::new("registry"),
-    ];
+    let nns_canister_upgrade_sequence: Vec<RegistryCanisterUpdate> =
+        vec![RegistryCanisterUpdate::new("registry")];
 
     // Step 1: Prepare the world
 
@@ -249,36 +234,14 @@ fn test_registry_migration_with_golden_state() {
     vote_yes_with_well_known_public_neurons(&state_machine, proposal_id.id);
     nns_wait_for_proposal_execution(&state_machine, proposal_id.id);
 
-    let res = query_with_sender(
-        &state_machine,
-        REGISTRY_CANISTER_ID,
-        "get_node_providers_monthly_xdr_rewards",
-        Encode!(&GetNodeProvidersMonthlyXdrRewardsRequest {
-            registry_version: None,
-        })
-        .unwrap(),
-    )
-    .unwrap();
+    nns_canister_upgrade_sequence.iter().for_each(|canisters| {
+        canisters.update(&state_machine, neuron_controller, neuron_id);
+    });
 
-    let principals_target: Vec<PrincipalId> = vec![
-        "3nu7r-l6i5c-jlmhi-fmmhm-4wcw4-ndlwb-yovrx-o3wxh-suzew-hvbbo-7qe",
-        "ujq4k-55epc-pg2bt-jt2f5-6vaq3-diru7-edprm-42rd2-j7zzd-yjaai-2qe",
-        "bmlhw-kinr6-7cyv5-3o3v6-ic6tw-pnzk3-jycod-6d7sw-owaft-3b6k3-kqe",
-        "spsu4-5hl4t-bfubp-qvoko-jprw4-wt7ou-nlnbk-gb5ib-aqnoo-g4gl6-kae",
-        "redpf-rrb5x-sa2it-zhbh7-q2fsp-bqlwz-4mf4y-tgxmj-g5y7p-ezjtj-5qe",
-    ]
-    .into_iter()
-    .map(|s| PrincipalId::from_str(s).unwrap())
-    .collect();
-
-    for target in principals_target {
-        let key = make_node_operator_record_key(target);
-        let (record, _) =
-            get_value::<NodeOperatorRecord>(&state_machine, &key.as_bytes().to_vec(), None)
-                .unwrap();
-
-        let operator = NodeOperator::try_from(record).unwrap();
-        println!("Fetched NodeOperator key {}: {}", key, operator);
+    state_machine.advance_time(std::time::Duration::from_secs(ONE_MONTH_SECONDS));
+    for _ in 0..100 {
+        state_machine.advance_time(std::time::Duration::from_secs(1));
+        state_machine.tick();
     }
 }
 
@@ -367,38 +330,4 @@ fn fetch_all_node_operators_data(state_machine: &StateMachine) -> Vec<NodeOperat
             .map(move |(_, operator_record)| operator_record.try_into().unwrap())
     })
     .collect()
-}
-
-pub fn get_value<T: Message + Default>(
-    state_machine: &StateMachine,
-    key: &[u8],
-    version: Option<u64>,
-) -> Result<(T, u64), Error> {
-    let current_result: Vec<u8> = query(
-        state_machine,
-        REGISTRY_CANISTER_ID,
-        "get_value",
-        serialize_get_value_request(key.to_vec(), version).unwrap(),
-    )
-    .unwrap();
-
-    let response = deserialize_get_value_response(current_result)?;
-
-    let Some(content) = response.content else {
-        return Err(Error::MalformedMessage(format!(
-            "The `content` field of the get_value response is not populated (key = {key:?}).",
-        )));
-    };
-
-    let content: Vec<u8> = match content {
-        high_capacity_registry_get_value_response::Content::Value(value) => value,
-
-        _ => {
-            panic!("Unexpected content variant in high_capacity_registry_get_value_response");
-        }
-    };
-
-    // Decode the value as proper type
-    let value = T::decode(content.as_slice()).unwrap();
-    Ok((value, response.version))
 }
