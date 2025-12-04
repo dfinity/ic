@@ -571,9 +571,17 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                     .await;
 
                     if scenario.expect_success {
-                        assert_eq!(query_result, 200);
+                        assert_eq!(
+                            query_result, 200,
+                            "Test scenario {} (query) using {api_ver} unexpectedly failed",
+                            scenario.note
+                        );
                     } else {
-                        assert_eq!(query_result, 400);
+                        assert_eq!(
+                            query_result, 400,
+                            "Test scenario {} (query) using {api_ver} unexpectedly succeeded",
+                            scenario.note
+                        );
                     }
                 }
 
@@ -588,10 +596,18 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                     .await;
 
                     if scenario.expect_success {
-                        assert_eq!(read_state_result, 200);
+                        assert_eq!(
+                            read_state_result, 200,
+                            "Test scenario {} (read_state) using {api_ver} unexpectedly failed",
+                            scenario.note
+                        );
                     } else {
                         // Which error code is returned depends on API version and the specific scenario
-                        assert!(read_state_result == 400 || read_state_result == 403);
+                        assert!(
+                            read_state_result == 400 || read_state_result == 403,
+                            "Test scenario {} (read_state) using {api_ver} unexpectedly succeeded",
+                            scenario.note
+                        );
                     }
                 }
 
@@ -607,9 +623,18 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
 
                     if scenario.expect_success {
                         let expected_update_result = if api_ver == 2 { 202 } else { 200 };
-                        assert_eq!(update_result, expected_update_result);
+
+                        assert_eq!(
+                            update_result, expected_update_result,
+                            "Test scenario {} (update) using {api_ver} unexpectedly failed with {update_result}",
+                            scenario.note
+                        );
                     } else {
-                        assert_eq!(update_result, 400);
+                        assert_eq!(
+                            update_result, 400,
+                            "Test scenario {} (update) using {api_ver} unexpectedly returned {update_result}",
+                            scenario.note
+                        );
                     }
                 }
             }
