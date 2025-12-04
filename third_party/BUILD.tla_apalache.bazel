@@ -1,0 +1,28 @@
+# load("@rules_java//java:java_binary.bzl", "java_binary")
+# load("@rules_java//java:java_import.bzl", "java_import")
+
+load("@rules_java//java:java_binary.bzl", "java_binary")
+load("@rules_java//java:java_import.bzl", "java_import")
+
+# apalache-mc executable
+# uses the packaged `.jar` and wraps it in a `java_binary` and
+# let bazel pull in java in any way it pleases.
+package(default_visibility = ["//visibility:public"])
+
+java_import(
+    name = "tla_jar",
+    jars = [
+        "@tla_apalache//:lib/apalache.jar",
+    ],
+)
+
+java_binary(
+    # the name is unconventional but mirrors the internals of the
+    # tla_apalache archive, which provides a `bin/apalache-mc` (which
+    # we don't use here).
+    name = "bin/apalache-mc",
+    # found by running `jar xf /path/to/apalache.jar META-INF/MANIFEST.MF`
+    # and looking for `Main-Class`
+    main_class = "at.forsyte.apalache.tla.Tool",
+    runtime_deps = [":tla_jar"],
+)
