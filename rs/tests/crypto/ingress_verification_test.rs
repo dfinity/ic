@@ -946,14 +946,8 @@ pub fn requests_with_canister_signature(env: TestEnv) {
                 }
                 for &api_ver in ALL_READ_STATE_API_VERSIONS {
                     assert_eq!(
-                        perform_read_state_call_with_delegations(
-                            api_ver,
-                            &test_info,
-                            &id,
-                            &id,
-                            &[]
-                        )
-                        .await,
+                        perform_read_state_with_delegations(api_ver, &test_info, &id, &id, &[])
+                            .await,
                         200,
                         "read_state should succeed for api_ver={api_ver} and seed={seed:?}"
                     );
@@ -1006,14 +1000,8 @@ pub fn requests_with_canister_signature(env: TestEnv) {
                 }
                 for &api_ver in ALL_READ_STATE_API_VERSIONS {
                     assert_eq!(
-                        perform_read_state_call_with_delegations(
-                            api_ver,
-                            &test_info,
-                            &sender,
-                            &id,
-                            &[]
-                        )
-                        .await,
+                        perform_read_state_with_delegations(api_ver, &test_info, &sender, &id, &[])
+                            .await,
                         400,
                         "read_state should be rejected for api_ver={api_ver}"
                     );
@@ -1047,8 +1035,7 @@ pub fn requests_with_canister_signature(env: TestEnv) {
             }
             for &api_ver in ALL_READ_STATE_API_VERSIONS {
                 assert_eq!(
-                    perform_read_state_call_with_delegations(api_ver, &test_info, &id, &id, &[])
-                        .await,
+                    perform_read_state_with_delegations(api_ver, &test_info, &id, &id, &[]).await,
                     400,
                     "read_state should be rejected for api_ver={api_ver} with invalid certificate signature"
                 );
@@ -1320,37 +1307,6 @@ async fn perform_read_state_with_delegations(
     .await;
 
     response.status()
-}
-
-async fn perform_read_state_call_with_delegations(
-    api_ver: usize,
-    test: &TestInformation,
-    sender: &GenericIdentity<'_>,
-    signer: &GenericIdentity<'_>,
-    delegations: &[SignedDelegation],
-) -> StatusCode {
-    let content = HttpReadStateContent::ReadState {
-        read_state: HttpReadState {
-            sender: Blob(sender.principal().as_slice().to_vec()),
-            paths: vec![],
-            ingress_expiry: expiry_time().as_nanos() as u64,
-            nonce: None,
-        },
-    };
-
-    let signature = signer.sign_read_state(&content);
-
-    send_request(
-        api_ver,
-        test,
-        "read_state",
-        content,
-        sender.public_key_der(),
-        Some(delegations.to_vec()),
-        signature,
-    )
-    .await
-    .status()
 }
 
 async fn perform_query_with_expiry(
