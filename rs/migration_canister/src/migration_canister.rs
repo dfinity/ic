@@ -13,9 +13,10 @@ use crate::{
     RequestState, ValidationError,
     canister_state::{
         ValidationGuard, caller_allowed,
-        events::find_last_event,
+        events::{find_last_event, history_len},
+        limiter::num_successes_in_past_24_h,
         migrations_disabled,
-        requests::{find_request, insert_request},
+        requests::{find_request, insert_request, num_requests},
         set_allowlist,
     },
     rate_limited, start_timers,
@@ -118,4 +119,37 @@ fn migration_status(args: MigrateCanisterArgs) -> Option<MigrationStatus> {
     } else {
         None
     }
+}
+
+fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+    w.encode_gauge(
+        "migration_canister_num_requests",
+        num_requests() as f64,
+        "Number of currently ongoing migration requests.",
+    )?;
+
+    w.encode_gauge(
+        "migration_canister_num_successes_in_past_24_h",
+        num_successes_in_past_24_h() as f64,
+        "Number of successful migrations in the past 24 hours.",
+    )?;
+
+    w.encode_gauge(
+        "migration_canister_history_len",
+        history_len() as f64,
+        "Number of entries in the history.",
+    )?;
+
+    w.encode_gauge(
+        "migration_canister_migrations_disabled",
+        migrations_disabled() as u32 as f64,
+        "Wether canister migrations are currently disabled.",
+    )?;
+
+    Ok(())
+}
+
+#[unsafe(export_name = "canister_query http_request")]
+fn http_request() {
+    dfn_http_metrics::serve_metrics(encode_metrics);
 }

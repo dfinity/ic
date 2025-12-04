@@ -51,10 +51,6 @@ pub fn migrations_disabled() -> bool {
     DISABLED.with_borrow(|x| *x.get())
 }
 
-pub fn num_requests() -> u64 {
-    REQUESTS.with_borrow(|req| req.len())
-}
-
 pub fn set_allowlist(arg: Option<Vec<Principal>>) {
     ALLOWLIST.set(arg);
 }
@@ -81,6 +77,10 @@ pub mod requests {
     use candid::Principal;
 
     use crate::{RequestState, canister_state::REQUESTS};
+
+    pub fn num_requests() -> u64 {
+        REQUESTS.with_borrow(|req| req.len())
+    }
 
     pub fn insert_request(request: RequestState) {
         REQUESTS.with_borrow_mut(|r| r.insert(request, ()));
@@ -136,6 +136,10 @@ pub mod events {
         }
         let event = Event { time, event };
         HISTORY.with_borrow_mut(|h| h.insert(event, ()));
+    }
+
+    pub fn history_len() -> u64 {
+        HISTORY.with_borrow(|h| h.len())
     }
 
     pub fn find_last_event(source: Principal, target: Principal) -> Option<Event> {

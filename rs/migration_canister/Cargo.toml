@@ -8,6 +8,7 @@ version.workspace = true
 
 [dependencies]
 candid = { workspace = true }
+dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
 futures = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
@@ -15,6 +16,7 @@ ic-limits = { path ="../limits" }
 ic-stable-structures = "0.7.0"
 itertools = { workspace = true }
 ic-management-canister-types = { workspace = true }
+ic-metrics-encoder = "1"
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 strum = { workspace = true }
