@@ -21,7 +21,7 @@
 set -eEuo pipefail
 
 RUNFILES="$PWD"
-REPO_PATH="$(dirname "$(readlink "$WORKSPACE")")"
+REPO_PATH="$(dirname "$(readlink "$MODULE")")"
 REPO_RESULTS_PATH="${REPO_PATH}/${CANBENCH_RESULTS_PATH}"
 CANBENCH_OUTPUT="$(mktemp -t canbench_output.txt.XXXX)"
 NOISE_THRESHOLD_ARG="${NOISE_THRESHOLD:+--noise-threshold ${NOISE_THRESHOLD}}"

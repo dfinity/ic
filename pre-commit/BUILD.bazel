@@ -6,12 +6,12 @@ sh_test(
     size = "small",
     srcs = ["ruff-lint.sh"],
     data = [
-        "//:WORKSPACE.bazel",
+        "//:MODULE.bazel",
         "//:ruff",
     ],
     env = {
         # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+        "MODULE": "$(rootpath //:MODULE.bazel)",
         "ruff_path": "$(rootpath //:ruff)",
     },
     tags = [
@@ -25,12 +25,12 @@ sh_binary(
     name = "ruff-format",
     srcs = ["ruff-format.sh"],
     data = [
-        "//:WORKSPACE.bazel",
+        "//:MODULE.bazel",
         "//:ruff",
     ],
     env = {
         # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+        "MODULE": "$(rootpath //:MODULE.bazel)",
         "ruff_path": "$(rootpath //:ruff)",
     },
     tags = [
@@ -46,13 +46,13 @@ sh_test(
     size = "small",
     srcs = ["buf.sh"],
     data = [
-        "//:WORKSPACE.bazel",
+        "//:MODULE.bazel",
         "//:buf.yaml",
         "@rules_buf_toolchains//:buf",
     ],
     env = {
         # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+        "MODULE": "$(rootpath //:MODULE.bazel)",
         "buf_path": "$(rootpath @rules_buf_toolchains//:buf)",
         "buf_config": "$(rootpath //:buf.yaml)",
     },
@@ -68,12 +68,12 @@ sh_test(
     size = "small",
     srcs = ["protobuf-format-check.sh"],
     data = [
-        "//:WORKSPACE.bazel",
+        "//:MODULE.bazel",
         "@rules_buf_toolchains//:buf",
     ],
     env = {
         # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+        "MODULE": "$(rootpath //:MODULE.bazel)",
         "buf_path": "$(rootpath @rules_buf_toolchains//:buf)",
     },
     tags = [
@@ -87,12 +87,12 @@ sh_binary(
     name = "protobuf-format",
     srcs = ["protobuf-format.sh"],
     data = [
-        "//:WORKSPACE.bazel",
+        "//:MODULE.bazel",
         "@rules_buf_toolchains//:buf",
     ],
     env = {
         # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+        "MODULE": "$(rootpath //:MODULE.bazel)",
         "buf_path": "$(rootpath @rules_buf_toolchains//:buf)",
     },
     tags = [
@@ -107,14 +107,14 @@ sh_test(
     name = "shfmt-check",
     size = "small",
     srcs = ["shfmt-format.sh"],
-    args = ["$(rootpath //:WORKSPACE.bazel)"],
+    args = ["$(rootpath //:MODULE.bazel)"],
     data = [
-        "//:WORKSPACE.bazel",
+        "//:MODULE.bazel",
         "//:shfmt",
     ],
     env = {
         # Hack to get a path to the actual checkout
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+        "MODULE": "$(rootpath //:MODULE.bazel)",
         "shfmt_path": "$(rootpath //:shfmt)",
         # read by our script to differentiate between write & check
         "SHFMT_CHECK": "1",
@@ -130,12 +130,12 @@ sh_binary(
     name = "shfmt-format",
     srcs = ["shfmt-format.sh"],
     data = [
-        "//:WORKSPACE.bazel",
+        "//:MODULE.bazel",
         "//:shfmt",
     ],
     env = {
         # Hack to get a path to the actual checkout
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+        "MODULE": "$(rootpath //:MODULE.bazel)",
         "shfmt_path": "$(rootpath //:shfmt)",
     },
     tags = [
@@ -149,11 +149,11 @@ sh_test(
     size = "small",
     srcs = ["DFINITY-capitalization.sh"],
     data = [
-        "//:WORKSPACE.bazel",
+        "//:MODULE.bazel",
     ],
     env = {
         # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+        "MODULE": "$(rootpath //:MODULE.bazel)",
     },
     tags = [
         "external",  # force test to be unconditionally executed.
@@ -167,11 +167,11 @@ sh_test(
     size = "small",
     srcs = ["do-not-merge.sh"],
     data = [
-        "//:WORKSPACE.bazel",
+        "//:MODULE.bazel",
     ],
     env = {
         # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+        "MODULE": "$(rootpath //:MODULE.bazel)",
     },
     tags = [
         "external",  # force test to be unconditionally executed.
@@ -184,13 +184,13 @@ sh_test(
     name = "buf-breaking",
     srcs = ["check-incompatibilities.sh"],
     data = [
-        "//:WORKSPACE.bazel",
+        "//:MODULE.bazel",
         "//:buf.yaml",
         "@rules_buf_toolchains//:buf",
     ],
     env = {
         # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+        "MODULE": "$(rootpath //:MODULE.bazel)",
         "buf_config": "$(rootpath //:buf.yaml)",
         "buf_path": "$(rootpath @rules_buf_toolchains//:buf)",
     },

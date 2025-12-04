@@ -2,7 +2,7 @@
 
 set -ueo pipefail
 
-REPO_PATH="$(dirname "$(readlink "$WORKSPACE")")"
+REPO_PATH="$(dirname "$(readlink "$MODULE")")"
 cd "$REPO_PATH"
 
 set +e
