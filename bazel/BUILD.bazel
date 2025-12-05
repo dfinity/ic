@@ -111,11 +111,11 @@ py_test(
     srcs = ["buildifier_test.py"],
     data = [
         ":buildifier.check",
-        "//:WORKSPACE.bazel",
+        "//:MODULE.bazel",
     ],
     env = {
         "BUILDIFIER_CHECK_BIN": "$(location :buildifier.check)",
-        "WORKSPACE": "$(location //:WORKSPACE.bazel)",
+        "MODULE": "$(location //:MODULE.bazel)",
     },
     tags = [
         "external",  # force test to be unconditionally executed.
@@ -129,12 +129,12 @@ sh_test(
     name = "gazelle_test",
     srcs = ["gazelle_test.sh"],
     data = [
-        "//:WORKSPACE.bazel",
+        "//:MODULE.bazel",
         "//:gazelle",
     ],
     env = {
         "GAZELLE_BIN": "$(rootpath //:gazelle)",
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+        "MODULE": "$(rootpath //:MODULE.bazel)",
     },
     tags = [
         "external",  # force test to be unconditionally executed.

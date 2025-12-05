@@ -8,7 +8,7 @@ load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//bazel:canisters.bzl", "wasm_rust_binary_rule")
 
 def rust_canbench(name, results_file, add_test = False, opt = "3", noise_threshold = None, data = [], env = {}, **kwargs):
-    """ Run a Rust benchmark using canbench. 
+    """ Run a Rust benchmark using canbench.
 
     This creates 2 executable rules: :${name} for running the benchmark and :${name}_update for
     updating the results file and optionally a :${name}_test rule.
@@ -43,7 +43,7 @@ def rust_canbench(name, results_file, add_test = False, opt = "3", noise_thresho
         ":{name}_wasm".format(name = name),
         "@crate_index//:canbench__canbench",
         results_file,
-        "//:WORKSPACE.bazel",
+        "//:MODULE.bazel",
         "//:pocket-ic-mainnet",
     ]
     canbench_results_path = "$(rootpath {results_file})".format(results_file = results_file)
@@ -53,7 +53,7 @@ def rust_canbench(name, results_file, add_test = False, opt = "3", noise_thresho
         "CANBENCH_RESULTS_PATH": canbench_results_path,
         "POCKET_IC_BIN": pocket_ic_bin,
         # Hack to escape the sandbox and update the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+        "MODULE": "$(rootpath //:MODULE.bazel)",
     }
 
     if noise_threshold:

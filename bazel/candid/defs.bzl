@@ -22,12 +22,12 @@ def did_git_test(name, did, enable_also_reverse = False, **kwargs):
     sh_test(
         name = name,
         srcs = ["@//bazel/candid:candid-check.sh"],
-        data = ["//rs/tools/check_did", did, "//:WORKSPACE.bazel"],
+        data = ["//rs/tools/check_did", did, "//:MODULE.bazel"],
         env = {
             "DID_CHECK_BIN": "$(rootpath //rs/tools/check_did)",
             "ENABLE_ALSO_REVERSE": "1" if enable_also_reverse else "",
             "DID_PATH": "$(rootpath " + did + ")",
-            "WORKSPACE_FILE": "$(rootpath //:WORKSPACE.bazel)",
+            "WORKSPACE_FILE": "$(rootpath //:MODULE.bazel)",
         },
         env_inherit = ["DID_CHECK_REV"],
         tags = tags,

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 RUFF_PATH="$(readlink "$ruff_path")"
-REPO_PATH="$(dirname "$(readlink "$WORKSPACE")")"
+REPO_PATH="$(dirname "$(readlink "$MODULE")")"
 cd "$REPO_PATH"
 
 if ! "$RUFF_PATH" check . -q || ! "$RUFF_PATH" format . --check -q; then

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SHFMT="$(readlink "$shfmt_path")"
-REPO_PATH="$(dirname "$(readlink "$WORKSPACE")")"
+REPO_PATH="$(dirname "$(readlink "$MODULE")")"
 cd "$REPO_PATH"
 
 SHFMT_CHECK="${SHFMT_CHECK:-}"

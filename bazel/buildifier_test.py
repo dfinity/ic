@@ -5,7 +5,7 @@ import sys
 
 
 def main():
-    workspace_dir = os.path.dirname(os.path.realpath(os.environ["WORKSPACE"]))
+    workspace_dir = os.path.dirname(os.path.realpath(os.environ["MODULE"]))
     if not os.path.isdir(workspace_dir):
         sys.exit("WORKSPACE path '{}' is not directory".format(workspace_dir))
 

@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-BUILD_WORKSPACE_DIRECTORY="$(dirname $(readlink $WORKSPACE))"
+BUILD_WORKSPACE_DIRECTORY="$(dirname $(readlink $MODULE))"
 export BUILD_WORKSPACE_DIRECTORY
 
 if ! "$GAZELLE_BIN" update -mode=diff; then
