@@ -132,5 +132,6 @@ tokio-test = { workspace = true }
 
 [features]
 test = ["ic-sns-swap/test"]
+performance-based-rewards = []
 canbench-rs = ["dep:canbench-rs"]
 tla = ["local_key", "tla_instrumentation", "tla_instrumentation_proc_macros"]
