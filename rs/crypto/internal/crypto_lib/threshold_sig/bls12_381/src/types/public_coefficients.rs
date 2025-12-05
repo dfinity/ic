@@ -127,51 +127,6 @@ impl PublicCoefficients {
             .coefficients()
             .to_vec())
     }
-
-    pub(super) fn remove_zeros(&mut self) {
-        let zeros = self
-            .coefficients
-            .iter()
-            .rev()
-            .take_while(|c| c.0.is_identity())
-            .count();
-        let len = self.coefficients.len() - zeros;
-        self.coefficients.truncate(len)
-    }
-}
-
-impl<B: std::borrow::Borrow<PublicCoefficients>> std::iter::Sum<B> for PublicCoefficients {
-    fn sum<I>(iter: I) -> Self
-    where
-        I: Iterator<Item = B>,
-    {
-        iter.fold(PublicCoefficients::zero(), |a, b| a + b)
-    }
-}
-
-#[allow(clippy::suspicious_op_assign_impl)]
-impl<B: std::borrow::Borrow<PublicCoefficients>> std::ops::AddAssign<B> for PublicCoefficients {
-    fn add_assign(&mut self, rhs: B) {
-        let len = self.coefficients.len();
-        let rhs_len = rhs.borrow().coefficients.len();
-        if rhs_len > len {
-            self.coefficients
-                .resize(rhs_len, PublicKey(G2Affine::identity()));
-        }
-        for (self_c, rhs_c) in self.coefficients.iter_mut().zip(&rhs.borrow().coefficients) {
-            self_c.0 = (G2Projective::from(&self_c.0) + &rhs_c.0).to_affine();
-        }
-        self.remove_zeros();
-    }
-}
-
-impl<B: std::borrow::Borrow<PublicCoefficients>> std::ops::Add<B> for PublicCoefficients {
-    type Output = Self;
-
-    fn add(mut self, rhs: B) -> Self {
-        self += rhs;
-        self
-    }
 }
 
 fn invalid_size(error: std::num::TryFromIntError) -> CryptoError {

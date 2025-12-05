@@ -19,6 +19,7 @@ use rand_chacha::ChaChaRng;
 
 pub mod util {
     use super::*;
+    use ic_crypto_internal_bls12_381_type::G2Projective;
     use ic_crypto_internal_seed::Seed;
 
     // A public key as computed by the holder of the private key is the same as the
@@ -161,11 +162,19 @@ pub mod util {
         message: &[u8],
     ) {
         // Sum public_coefficients and secret keys.
-        let public_coefficients = &generations
-            .iter()
-            .cloned()
-            .map(|(public_coefficients, _)| public_coefficients)
-            .sum::<PublicCoefficients>();
+        let public_coefficients = {
+            let len = generations[0].0.coefficients.len();
+            let mut accum = vec![G2Projective::identity(); len];
+
+            for (pc, _) in generations.iter() {
+                for i in 0..len {
+                    accum[i] += &pc.coefficients[i].0;
+                }
+            }
+
+            let affine = G2Projective::batch_normalize(&accum);
+            PublicCoefficients::new(affine.iter().cloned().map(PublicKey).collect())
+        };
 
         let mut secret_keys = Polynomial::zero();
 
@@ -175,7 +184,7 @@ pub mod util {
 
         let secret_keys = secret_keys.coefficients().to_vec();
 
-        test_valid_public_coefficients(public_coefficients, &secret_keys, threshold, seed, message);
+        test_valid_public_coefficients(&public_coefficients, &secret_keys, threshold, seed, message);
     }
 }
 
