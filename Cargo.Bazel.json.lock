@@ -1,5 +1,5 @@
 {
-  "checksum": "c656cf494147b9c436a7adbc61d8bbcb2e5cd678930a5a0655d78ab64e308690",
+  "checksum": "33f66c3df115a6d962a9b4f075ef6cdc057c62180f69cb3ca903a42a443f7d8c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -2180,6 +2180,85 @@
         "BSD-3-Clause"
       ],
       "license_file": null
+    },
+    "alloca 0.4.0": {
+      "name": "alloca",
+      "version": "0.4.0",
+      "package_url": "https://github.com/playXE/alloca-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/alloca/0.4.0/download",
+          "sha256": "e5a7d05ea6aea7e9e64d25b9156ba2fee3fdd659e34e41063cd2fc7cd020d7f4"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "alloca",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "alloca",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "alloca 0.4.0",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.4.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cc 1.2.48",
+              "target": "cc"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
     },
     "allocator-api2 0.2.21": {
       "name": "allocator-api2",
@@ -16898,15 +16977,10 @@
         ],
         "crate_features": {
           "common": [
-            "async",
-            "async_tokio",
             "cargo_bench_support",
             "default",
-            "futures",
-            "html_reports",
             "plotters",
-            "rayon",
-            "tokio"
+            "rayon"
           ],
           "selects": {}
         },
@@ -16931,10 +17005,6 @@
             {
               "id": "criterion-plot 0.5.0",
               "target": "criterion_plot"
-            },
-            {
-              "id": "futures 0.3.31",
-              "target": "futures"
             },
             {
               "id": "is-terminal 0.4.9",
@@ -16981,10 +17051,6 @@
               "target": "tinytemplate"
             },
             {
-              "id": "tokio 1.48.0",
-              "target": "tokio"
-            },
-            {
               "id": "walkdir 2.5.0",
               "target": "walkdir"
             }
@@ -17002,6 +17068,134 @@
           "selects": {}
         },
         "version": "0.5.1"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "criterion 0.8.0": {
+      "name": "criterion",
+      "version": "0.8.0",
+      "package_url": "https://github.com/criterion-rs/criterion.rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/criterion/0.8.0/download",
+          "sha256": "a0dfe5e9e71bdcf4e4954f7d14da74d1cdb92a3a07686452d1509652684b1aab"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "criterion",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "criterion",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "async",
+            "async_tokio",
+            "cargo_bench_support",
+            "default",
+            "html_reports",
+            "plotters",
+            "rayon"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "alloca 0.4.0",
+              "target": "alloca"
+            },
+            {
+              "id": "anes 0.1.6",
+              "target": "anes"
+            },
+            {
+              "id": "cast 0.3.0",
+              "target": "cast"
+            },
+            {
+              "id": "ciborium 0.2.1",
+              "target": "ciborium"
+            },
+            {
+              "id": "clap 4.5.53",
+              "target": "clap"
+            },
+            {
+              "id": "criterion-plot 0.8.0",
+              "target": "criterion_plot"
+            },
+            {
+              "id": "itertools 0.13.0",
+              "target": "itertools"
+            },
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "oorandom 11.1.3",
+              "target": "oorandom"
+            },
+            {
+              "id": "page_size 0.6.0",
+              "target": "page_size"
+            },
+            {
+              "id": "plotters 0.3.5",
+              "target": "plotters"
+            },
+            {
+              "id": "rayon 1.10.0",
+              "target": "rayon"
+            },
+            {
+              "id": "regex 1.12.2",
+              "target": "regex"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.145",
+              "target": "serde_json"
+            },
+            {
+              "id": "tinytemplate 1.2.1",
+              "target": "tinytemplate"
+            },
+            {
+              "id": "tokio 1.48.0",
+              "target": "tokio"
+            },
+            {
+              "id": "walkdir 2.5.0",
+              "target": "walkdir"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.8.0"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -17056,6 +17250,58 @@
         "version": "0.5.0"
       },
       "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "criterion-plot 0.8.0": {
+      "name": "criterion-plot",
+      "version": "0.8.0",
+      "package_url": "https://github.com/criterion-rs/criterion.rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/criterion-plot/0.8.0/download",
+          "sha256": "5de36c2bee19fba779808f92bf5d9b0fa5a40095c277aba10c458a12b35d21d6"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "criterion_plot",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "criterion_plot",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cast 0.3.0",
+              "target": "cast"
+            },
+            {
+              "id": "itertools 0.13.0",
+              "target": "itertools"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.8.0"
+      },
+      "license": "Apache-2.0 OR MIT",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -21436,7 +21682,7 @@
               "target": "crc32fast"
             },
             {
-              "id": "criterion 0.5.1",
+              "id": "criterion 0.8.0",
               "target": "criterion"
             },
             {
@@ -55123,6 +55369,62 @@
         "version": "0.13.1"
       },
       "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "page_size 0.6.0": {
+      "name": "page_size",
+      "version": "0.6.0",
+      "package_url": "https://github.com/Elzair/page_size_rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/page_size/0.6.0/download",
+          "sha256": "30d5b2194ed13191c1999ae0704b7839fb18384fa22e49b57eeaa97d79ce40da"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "page_size",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "page_size",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(unix)": [
+              {
+                "id": "libc 0.2.177",
+                "target": "libc"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "winapi 0.3.9",
+                "target": "winapi"
+              }
+            ]
+          }
+        },
+        "edition": "2015",
+        "version": "0.6.0"
+      },
+      "license": "MIT/Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -97651,7 +97953,7 @@
     "console 0.11.3",
     "convert_case 0.6.0",
     "crc32fast 1.3.2",
-    "criterion 0.5.1",
+    "criterion 0.8.0",
     "crossbeam 0.8.4",
     "crossbeam-channel 0.5.15",
     "csv 1.2.2",

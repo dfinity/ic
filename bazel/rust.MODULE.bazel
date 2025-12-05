@@ -348,7 +348,7 @@ crate.spec(
         "async_tokio",
     ],
     package = "criterion",
-    version = "^0.5.1",
+    version = "^0.8.0",
 )
 crate.spec(
     package = "crossbeam",
