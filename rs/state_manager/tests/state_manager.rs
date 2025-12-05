@@ -313,18 +313,12 @@ fn lsmt_merge_overhead() {
         env.set_checkpoints_enabled(true);
         env.tick();
         env.state_manager.flush_tip_channel();
-        // We should merge when overhead reaches 2.8 and stop merging the moment we go under 2.8.
+        // We should merge when overhead reaches 2.5 and stop merging the moment we go under 2.5.
         if i >= 3 {
             assert_ne!(tip_size(&env), 0.0);
             assert_ne!(state_in_memory(&env), 0.0);
             assert!(tip_size(&env) / state_in_memory(&env) > 2.0);
-            assert!(
-                tip_size(&env) / state_in_memory(&env) <= 2.8,
-                "tip_size: {} state_in_memory: {}, tip_size / state_in_memory: {}",
-                tip_size(&env),
-                state_in_memory(&env),
-                tip_size(&env) / state_in_memory(&env)
-            );
+            assert!(tip_size(&env) / state_in_memory(&env) <= 2.5);
         }
     }
     // Create a checkpoint from the tip without writing any more data. As we merge in tip, the
@@ -334,7 +328,7 @@ fn lsmt_merge_overhead() {
     assert_ne!(last_checkpoint_size(&env), 0.0);
     assert_ne!(state_in_memory(&env), 0.0);
     assert!(last_checkpoint_size(&env) / state_in_memory(&env) > 2.0);
-    assert!(last_checkpoint_size(&env) / state_in_memory(&env) <= 2.8);
+    assert!(last_checkpoint_size(&env) / state_in_memory(&env) <= 2.5);
 }
 
 #[test]
