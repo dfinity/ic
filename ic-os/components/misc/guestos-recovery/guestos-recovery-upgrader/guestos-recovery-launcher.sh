@@ -7,7 +7,9 @@ set -e
 validate_argument() {
     local arg="$1"
     # Only allow known parameters with hexadecimal values
+    # NOTE: version=RECOVERY_VERSION is allowed as a dummy value for testing purposes.
     if [[ "$arg" =~ ^version=[a-f0-9]{40}$ ]] \
+        || [[ "$arg" == "version=RECOVERY_VERSION" ]] \
         || [[ "$arg" =~ ^version-hash=[a-f0-9]{64}$ ]] \
         || [[ "$arg" =~ ^recovery-hash=[a-f0-9]{64}$ ]]; then
         return 0
