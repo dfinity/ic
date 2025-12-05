@@ -826,6 +826,8 @@ fn should_scrap_one_block_when_at_boundary_with_last_finalized_block() {
         .respond_for_all_with(empty_logs())
         .build()
         .expect_rpc_calls(&cketh);
+
+    cketh.upgrade_minter_with_same_wasm_and_without_upgrade_args();
 }
 
 #[test]
