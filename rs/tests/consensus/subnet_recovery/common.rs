@@ -233,7 +233,7 @@ impl CupCorruption {
         }
     }
 
-    fn can_provision_ssh_keys(&self) -> bool {
+    fn can_determine_subnet_id(&self) -> bool {
         match self {
             CupCorruption::NotCorrupted | CupCorruption::CorruptedWithValidNiDkgId => true,
             CupCorruption::CorruptedIncludingInvalidNiDkgId => false,
@@ -371,10 +371,10 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         ..
     } = get_admin_keys_and_generate_readonly_keys(&env);
     // We can deploy the read-only key only if the CUP is not corrupted in a way that prevents
-    // nodes from provisioning SSH keys.
+    // nodes from determining their subnet ID.
     let ssh_readonly_pub_key_deployed = cfg
         .corrupt_cup
-        .can_provision_ssh_keys()
+        .can_determine_subnet_id()
         .then_some(ssh_readonly_pub_key);
 
     let current_version = get_guestos_img_version();
@@ -814,10 +814,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         }
     }
 
-    if !matches!(
-        cfg.corrupt_cup,
-        CupCorruption::CorruptedIncludingInvalidNiDkgId
-    ) {
+    if cfg.corrupt_cup.can_determine_subnet_id() {
         info!(
             logger,
             "Making sure unassigned nodes deleted their state..."
@@ -832,8 +829,9 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     } else {
         info!(
             logger,
-            "Since the CUP is corrupted unrecoverably, unassigned nodes should not have detected
-             that they became unassigned and should still have their state and CUP. Checking..."
+            "Since the CUP is corrupted in a way that nodes cannot determine their subnet ID,
+             unassigned nodes should not have detected that they became unassigned and should
+             still have their state and CUP. Checking..."
         );
         topology_snapshot.unassigned_nodes().for_each(|n| {
             assert_node_is_assigned_with_ssh_session(
