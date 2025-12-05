@@ -2957,13 +2957,13 @@ fn can_state_sync_from_cache_alone() {
             // The state sync won't complete because all the chunks have to be fetched from scratch.
             //   file idx  |  file size | chunk idx |                         path
             // ------------+------------+---------- +------------------------------------------------------
-            //           0 |          0 |     0     | canister_states/00000000000000640101/log_memory_store.overlay
+            //           0 |       4132 |     0     | canister_states/00000000000000640101/0000000000000001_0000_log_memory_store.overlay
             //           1 |        331 |     1     | canister_states/00000000000000640101/canister.pbuf
             //           2 |         18 |     2     | canister_states/00000000000000640101/software.wasm
             //           3 |          0 |    N/A    | canister_states/00000000000000640101/stable_memory.bin
             //           4 |          0 |    N/A    | canister_states/00000000000000640101/vmemory_0.bin
             //           5 |          0 |    N/A    | canister_states/00000000000000640101/wasm_chunk_store.bin
-            //           6 |          0 |     3     | canister_states/00000000000000c80101/log_memory_store.overlay
+            //           6 |       4132 |     3     | canister_states/00000000000000c80101/0000000000000001_0000_log_memory_store.overlay
             //           7 |        331 |     4     | canister_states/00000000000000c80101/canister.pbuf
             //           8 |         18 |     5     | canister_states/00000000000000c80101/software.wasm
             //           9 |          0 |    N/A    | canister_states/00000000000000c80101/stable_memory.bin
