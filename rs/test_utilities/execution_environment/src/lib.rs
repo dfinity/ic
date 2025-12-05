@@ -19,7 +19,8 @@ pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
     CompilationCostHandling, DataCertificateWithDelegationMetadata, ExecuteMessageResult,
     ExecutionEnvironment, ExecutionServicesForTesting, Hypervisor, IngressFilterMetrics,
-    InternalHttpQueryHandler, RoundInstructions, RoundLimits, execute_canister,
+    InternalHttpQueryHandler, RoundInstructions, RoundLimits, as_num_instructions,
+    execute_canister,
 };
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -1404,15 +1405,16 @@ impl ExecutionTest {
             }
         };
         let maybe_canister_id = get_canister_id_if_install_code(message.clone());
+        let initial_instructions = RoundInstructions::from(i64::MAX);
         let mut round_limits = RoundLimits {
-            instructions: RoundInstructions::from(i64::MAX),
+            instructions: initial_instructions,
             subnet_available_memory: self.subnet_available_memory,
             subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used,
             subnet_memory_reservation: self.subnet_memory_reservation,
         };
 
-        let (new_state, instructions_used) = self.exec_env.execute_subnet_message(
+        let (new_state, message_executed) = self.exec_env.execute_subnet_message(
             message,
             state,
             self.install_code_instruction_limits.clone(),
@@ -1427,8 +1429,10 @@ impl ExecutionTest {
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.state = Some(new_state);
         if let Some(canister_id) = maybe_canister_id
-            && let Some(instructions_used) = instructions_used
+            && message_executed.yes()
         {
+            let instructions_used =
+                as_num_instructions(initial_instructions - round_limits.instructions);
             self.update_execution_stats(
                 canister_id,
                 self.install_code_instruction_limits.message(),
@@ -1541,14 +1545,15 @@ impl ExecutionTest {
             NextExecution::ContinueInstallCode => {
                 canisters.insert(canister_id, canister);
                 state.put_canister_states(canisters);
+                let initial_instructions = RoundInstructions::from(i64::MAX);
                 let mut round_limits = RoundLimits {
-                    instructions: RoundInstructions::from(i64::MAX),
+                    instructions: initial_instructions,
                     subnet_available_memory: self.subnet_available_memory,
                     subnet_available_callbacks: self.subnet_available_callbacks,
                     compute_allocation_used,
                     subnet_memory_reservation: self.subnet_memory_reservation,
                 };
-                let (new_state, instructions_used) = self.exec_env.resume_install_code(
+                let (new_state, message_executed) = self.exec_env.resume_install_code(
                     state,
                     &canister_id,
                     self.install_code_instruction_limits.clone(),
@@ -1558,7 +1563,9 @@ impl ExecutionTest {
                 state = new_state;
                 self.subnet_available_memory = round_limits.subnet_available_memory;
                 self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
-                if let Some(instructions_used) = instructions_used {
+                if message_executed.yes() {
+                    let instructions_used =
+                        as_num_instructions(initial_instructions - round_limits.instructions);
                     self.update_execution_stats(
                         canister_id,
                         self.install_code_instruction_limits.message(),
@@ -1567,8 +1574,9 @@ impl ExecutionTest {
                 }
             }
             NextExecution::StartNew | NextExecution::ContinueLong => {
+                let initial_instructions = RoundInstructions::from(i64::MAX);
                 let mut round_limits = RoundLimits {
-                    instructions: RoundInstructions::from(i64::MAX),
+                    instructions: initial_instructions,
                     subnet_available_memory: self.subnet_available_memory,
                     subnet_available_callbacks: self.subnet_available_callbacks,
                     compute_allocation_used,
