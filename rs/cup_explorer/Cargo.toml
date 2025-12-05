@@ -13,7 +13,6 @@ clap = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../types/base_types/" }
 ic-canister-client = { path = "../canister_client" }
-ic-config = { path = "../config" }
 ic-crypto-for-verification-only = { path = "../crypto/for_verification_only" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
