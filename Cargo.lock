@@ -24080,6 +24080,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slog",
+ "ssh2",
  "url",
  "xrc-mock",
 ]

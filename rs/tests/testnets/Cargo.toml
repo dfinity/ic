@@ -45,6 +45,7 @@ reqwest = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }
+ssh2 = { workspace = true }
 url = { workspace = true }
 xrc-mock = { path = "../../rust_canisters/xrc_mock" }
 
@@ -113,5 +114,5 @@ name = "nns_recovery"
 path = "nns_recovery.rs"
 
 [[bin]]
-name = "nns_recovery_external_mainnet_state"
-path = "nns_recovery_external_mainnet_state.rs"
+name = "mainnet_nns"
+path = "mainnet_nns.rs"

@@ -403,8 +403,6 @@ pub async fn vote_on_proposal(governance_canister: &Canister<'_>, proposal_id: P
         )
         .await
         .expect("Vote failed");
-
-    println!("Unexistent neuron vote result: {:?}", result);
 }
 
 pub async fn vote_and_execute_proposal(

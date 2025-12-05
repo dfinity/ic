@@ -340,9 +340,10 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "nns_recovery_external_mainnet_state",
+    name = "mainnet_nns",
     # env_inherit = ["SSH_AUTH_SOCK"],
     env = MAINNET_ENV | {
+        "IC_RECOVERY_PATH": "$(rootpath //rs/recovery:ic-recovery)",
         "IC_REPLAY_PATH": "$(rootpath //rs/replay:ic-replay)",
     },
     tags = [
@@ -355,6 +356,7 @@ system_test_nns(
     uses_setupos_mainnet_latest_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS + [
         "//rs/tests:recovery/binaries",
+        "//rs/recovery:ic-recovery",
         "//rs/replay:ic-replay",
     ],
     deps = [
@@ -392,6 +394,7 @@ system_test_nns(
         "@crate_index//:reqwest",
         "@crate_index//:serde",
         "@crate_index//:slog",
+        "@crate_index//:ssh2",
         "@crate_index//:url",
     ],
 )

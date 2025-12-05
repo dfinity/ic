@@ -248,11 +248,11 @@ impl AdminHelper {
 
         ic_admin
             .add_positional_argument("propose-to-create-subnet")
-            .add_argument("unit-delay-millis", 2000)
+            .add_argument("unit-delay-millis", 3000)
             .add_argument("subnet-handler-id", "unused")
             .add_argument("replica-version-id", replica_version)
             .add_argument("subnet-id-override", subnet_id_override)
-            .add_argument("dkg-interval-length", 12)
+            .add_argument("dkg-interval-length", 49)
             .add_positional_argument("--is-halted")
             .add_argument("subnet-type", "system")
             .add_argument(
