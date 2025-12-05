@@ -2963,21 +2963,23 @@ fn can_state_sync_from_cache_alone() {
             // The state sync won't complete because all the chunks have to be fetched from scratch.
             //   file idx  |  file size | chunk idx |                         path
             // ------------+------------+---------- +------------------------------------------------------
-            //           0 |        331 |     0     | canister_states/00000000000000640101/canister.pbuf
-            //           1 |         18 |     1     | canister_states/00000000000000640101/software.wasm
-            //           2 |          0 |    N/A    | canister_states/00000000000000640101/stable_memory.bin
-            //           3 |          0 |    N/A    | canister_states/00000000000000640101/vmemory_0.bin
-            //           4 |          0 |    N/A    | canister_states/00000000000000640101/wasm_chunk_store.bin
-            //           5 |        331 |     2     | canister_states/00000000000000c80101/canister.pbuf
-            //           6 |         18 |     3     | canister_states/00000000000000c80101/software.wasm
-            //           7 |          0 |    N/A    | canister_states/00000000000000c80101/stable_memory.bin
-            //           8 |          0 |    N/A    | canister_states/00000000000000c80101/vmemory_0.bin
-            //           9 |          0 |    N/A    | canister_states/00000000000000c80101/wasm_chunk_store.bin
-            //          10 |         97 |     4     | system_metadata.pbuf
+            //           0 |          0 |     0     | canister_states/00000000000000640101/log_memory_store.overlay
+            //           1 |        331 |     1     | canister_states/00000000000000640101/canister.pbuf
+            //           2 |         18 |     2     | canister_states/00000000000000640101/software.wasm
+            //           3 |          0 |    N/A    | canister_states/00000000000000640101/stable_memory.bin
+            //           4 |          0 |    N/A    | canister_states/00000000000000640101/vmemory_0.bin
+            //           5 |          0 |    N/A    | canister_states/00000000000000640101/wasm_chunk_store.bin
+            //           6 |          0 |     3     | canister_states/00000000000000c80101/log_memory_store.overlay
+            //           7 |        331 |     4     | canister_states/00000000000000c80101/canister.pbuf
+            //           8 |         18 |     5     | canister_states/00000000000000c80101/software.wasm
+            //           9 |          0 |    N/A    | canister_states/00000000000000c80101/stable_memory.bin
+            //          10 |          0 |    N/A    | canister_states/00000000000000c80101/vmemory_0.bin
+            //          11 |          0 |    N/A    | canister_states/00000000000000c80101/wasm_chunk_store.bin
+            //          12 |         97 |     6     | system_metadata.pbuf
             // Given the current state layout, the chunk for `software.wasm` of the first canister has the index 1.
             // If there are changes to the state layout that affect the chunk's position in the chunk table,
             // the assertion below will panic and we need to adjust the selected chunk id accordingly for this test.
-            let chunk_table_idx_to_omit = 1;
+            let chunk_table_idx_to_omit = 2;
             let chunk_id_to_omit = ChunkId::new(chunk_table_idx_to_omit as u32 + 1);
             let file_table_idx_to_omit =
                 msg.manifest.chunk_table[chunk_table_idx_to_omit].file_index as usize;
