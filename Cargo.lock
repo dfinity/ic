@@ -9355,7 +9355,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-client",
  "ic-config",
- "ic-crypto",
+ "ic-crypto-for-verification-only",
  "ic-crypto-node-key-generation",
  "ic-crypto-utils-threshold-sig-der",
  "ic-interfaces",
