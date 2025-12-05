@@ -239,6 +239,7 @@ rust_ic_test(
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",
         "@crate_index//:minicbor",
+        "@crate_index//:num-traits",
         "@crate_index//:rand",
         "@crate_index//:regex",
         "@crate_index//:serde_bytes",
