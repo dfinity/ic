@@ -26,12 +26,10 @@ impl TryFrom<&PublicKeyBytes> for PublicKey {
     type Error = CryptoError;
 
     fn try_from(public_key_bytes: &PublicKeyBytes) -> Result<Self, Self::Error> {
-        G2Affine::deserialize(&public_key_bytes.0).map_err(|_| {
-            CryptoError::MalformedPublicKey {
-                algorithm: AlgorithmId::MultiBls12_381,
-                key_bytes: Some(public_key_bytes.0.to_vec()),
-                internal_error: "Point decoding failed".to_string(),
-            }
+        G2Affine::deserialize(&public_key_bytes.0).map_err(|_| CryptoError::MalformedPublicKey {
+            algorithm: AlgorithmId::MultiBls12_381,
+            key_bytes: Some(public_key_bytes.0.to_vec()),
+            internal_error: "Point decoding failed".to_string(),
         })
     }
 }

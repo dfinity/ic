@@ -184,7 +184,13 @@ pub mod util {
 
         let secret_keys = secret_keys.coefficients().to_vec();
 
-        test_valid_public_coefficients(&public_coefficients, &secret_keys, threshold, seed, message);
+        test_valid_public_coefficients(
+            &public_coefficients,
+            &secret_keys,
+            threshold,
+            seed,
+            message,
+        );
     }
 }
 

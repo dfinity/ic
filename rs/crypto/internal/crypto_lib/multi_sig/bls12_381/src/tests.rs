@@ -157,7 +157,11 @@ mod advanced_functionality {
         let (secret_key, public_key) = multi_crypto::keypair_from_seed([1, 2, 3, 4]);
         let point = multi_crypto::hash_message_to_g1(b"abba");
         let signature = multi_crypto::sign_point(&point, &secret_key);
-        assert!(multi_crypto::verify_point(&point.to_affine(), &signature, &public_key));
+        assert!(multi_crypto::verify_point(
+            &point.to_affine(),
+            &signature,
+            &public_key
+        ));
     }
 
     #[test]
@@ -166,7 +170,9 @@ mod advanced_functionality {
         let message = b"bjork";
         let signature = multi_crypto::sign_message(message, &secret_key);
         assert!(multi_crypto::verify_individual_message_signature(
-            message, &signature, &public_key
+            message,
+            &signature,
+            &public_key
         ));
     }
 
