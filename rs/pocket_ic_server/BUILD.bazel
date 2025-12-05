@@ -278,7 +278,7 @@ MAINNET_NNS_CANISTER_ENV = {
         crate_name = "pocket_ic_server",
         proc_macro_deps = MACRO_DEPENDENCIES,
         rustc_env = EXTERNAL_CANISTER_ENV | nns_canister_env,
-        version = "10.0.0",
+        version = "11.0.0",
         deps = LIB_DEPENDENCIES + [":build_script"],
     )
     for (name_suffix, nns_canister_data, nns_canister_env) in [

@@ -65,11 +65,7 @@ mod tests;
 #[tarpc::service]
 pub trait TarpcCspVault {
     // Corresponds to `BasicSignatureCspVault.sign()`.
-    async fn sign(
-        algorithm_id: AlgorithmId,
-        message: ByteBuf,
-        key_id: KeyId,
-    ) -> Result<CspSignature, CspBasicSignatureError>;
+    async fn sign(message: ByteBuf) -> Result<CspSignature, CspBasicSignatureError>;
 
     // Corresponds to `BasicSignatureCspVault.gen_node_signing_key_pair()`.
     async fn gen_node_signing_key_pair() -> Result<CspPublicKey, CspBasicSignatureKeygenError>;

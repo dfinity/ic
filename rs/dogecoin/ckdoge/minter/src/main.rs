@@ -2,7 +2,7 @@ use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
 use ic_ckbtc_minter::{BuildTxError, CanisterRuntime};
-use ic_ckdoge_minter::candid_api::EstimateWithdrawalFeeError;
+use ic_ckdoge_minter::candid_api::{EstimateWithdrawalFeeError, MinterInfo};
 use ic_ckdoge_minter::{
     DOGECOIN_CANISTER_RUNTIME, EstimateFeeArg, Event, EventType, GetEventsArg, UpdateBalanceArgs,
     UpdateBalanceError, Utxo, UtxoStatus,
@@ -189,6 +189,23 @@ fn retrieve_doge_status(req: RetrieveDogeStatusRequest) -> RetrieveDogeStatus {
     ic_ckbtc_minter::state::read_state(|s| {
         RetrieveDogeStatus::from(s.retrieve_btc_status_v2(req.block_index))
     })
+}
+
+#[query]
+fn get_minter_info() -> MinterInfo {
+    ic_ckbtc_minter::state::read_state(|s| MinterInfo {
+        min_confirmations: s.min_confirmations,
+        retrieve_doge_min_amount: s.fee_based_retrieve_btc_min_amount,
+    })
+}
+
+#[update]
+async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusResult {
+    ic_cdk::management_canister::canister_status(&ic_cdk::management_canister::CanisterStatusArgs {
+        canister_id: ic_cdk::api::canister_self(),
+    })
+    .await
+    .expect("failed to fetch canister status")
 }
 
 // TODO XC-495: Currently events from ckBTC are re-used and it might be worthwhile to split

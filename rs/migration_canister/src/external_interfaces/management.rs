@@ -327,12 +327,14 @@ pub struct DeleteCanisterArgs {
     pub canister_id: Principal,
 }
 
+/// This is a success if the call is a success or the canister does not exist,
+/// i.e., a previous call to delete the canister was a success.
 pub async fn delete_canister(
     canister_id: Principal,
     subnet_id: Principal,
 ) -> ProcessingResult<(), Infallible> {
     let args = DeleteCanisterArgs { canister_id };
-    match Call::unbounded_wait(subnet_id, "delete_canister")
+    match Call::bounded_wait(subnet_id, "delete_canister")
         .with_arg(&args)
         .await
     {
@@ -342,7 +344,16 @@ pub async fn delete_canister(
                 "Call `delete_canister` for canister: {}, subnet: {}, failed: {:?}",
                 canister_id, subnet_id, e
             );
-            ProcessingResult::NoProgress
+            match e {
+                CallFailed::CallRejected(e) => {
+                    if e.reject_code() == Ok(RejectCode::DestinationInvalid) {
+                        ProcessingResult::Success(())
+                    } else {
+                        ProcessingResult::NoProgress
+                    }
+                }
+                _ => ProcessingResult::NoProgress,
+            }
         }
     }
 }
