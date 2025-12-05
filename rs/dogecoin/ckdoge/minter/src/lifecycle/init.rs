@@ -102,6 +102,7 @@ impl From<InitArgs> for CkbtcMinterInitArgs {
             #[allow(deprecated)]
             kyt_principal: None,
             get_utxos_cache_expiration_seconds: args.get_utxos_cache_expiration_seconds,
+            min_utxo_consolidation_threshold: None,
         }
     }
 }
