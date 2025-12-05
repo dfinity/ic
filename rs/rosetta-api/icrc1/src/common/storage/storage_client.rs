@@ -405,7 +405,8 @@ mod tests {
     use ic_icrc1::blocks::encoded_block_to_generic_block;
     use ic_icrc1::blocks::generic_block_to_encoded_block;
     use ic_icrc1_test_utils::{
-        arb_amount, blocks_strategy, metadata_strategy, valid_blockchain_with_gaps_strategy,
+        arb_amount, blocks_strategy, metadata_strategy, valid_blockchain_strategy,
+        valid_blockchain_with_gaps_strategy,
     };
     use ic_icrc1_tokens_u64::U64;
     use ic_icrc1_tokens_u256::U256;
@@ -432,7 +433,7 @@ mod tests {
 
     proptest! {
           #[test]
-          fn test_read_and_write_blocks_u64(blockchain in prop::collection::vec(blocks_strategy::<U64>(arb_amount()),0..5)){
+          fn test_read_and_write_blocks_u64(blockchain in valid_blockchain_strategy::<U64>(5)){
            let storage_client_memory = StorageClient::new_in_memory().unwrap();
            let mut rosetta_blocks = vec![];
            for (index,block) in blockchain.into_iter().enumerate(){
@@ -459,7 +460,7 @@ mod tests {
        }
 
        #[test]
-       fn test_read_and_write_blocks_u256(blockchain in prop::collection::vec(blocks_strategy::<U256>(arb_amount()),0..5)){
+       fn test_read_and_write_blocks_u256(blockchain in valid_blockchain_strategy::<U256>(5)){
         let storage_client_memory = StorageClient::new_in_memory().unwrap();
         let mut rosetta_blocks = vec![];
         for (index,block) in blockchain.into_iter().enumerate(){
