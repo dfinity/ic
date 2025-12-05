@@ -15,9 +15,12 @@ Previous ckBTC minter proposal: https://dashboard.internetcomputer.org/proposal/
 ---
 
 ## Motivation
-The ckBTC minter does not accept deposits from or withdrawals to Bitcoin addresses on its internal blocklist.
-This upgrade of the ckBTC minter updates the blocklist based on the latest [OFAC SDN list](https://sanctionslist.ofac.treas.gov/Home/SdnList).
 
+Regular upgrade of the ckBTC minter that contains several improvements:
+
+* Update the minter's internal blocklist based on the latest [OFAC SDN list](https://sanctionslist.ofac.treas.gov/Home/SdnList).
+* Reduce the number of instructions needed to prepare a Bitcoin transaction.
+* Improve the fee estimation of ckBTC withdrawals.
 
 ## Release Notes
 
