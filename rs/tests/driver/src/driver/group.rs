@@ -14,6 +14,7 @@ use crate::driver::{
         dsl::{SubprocessFn, TestFunction},
         event::TaskId,
         plan::{EvalOrder, Plan},
+        prometheus_vm::{HasPrometheus, PrometheusVm},
         report::Outcome,
         task::{DebugKeepaliveTask, EmptyTask},
         task_scheduler::TaskTable,
@@ -67,6 +68,7 @@ const DEBUG_KEEPALIVE_TASK_NAME: &str = "debug_keepalive";
 const REPORT_TASK_NAME: &str = "report";
 const KEEPALIVE_TASK_NAME: &str = "keepalive";
 const UVMS_LOGS_STREAM_TASK_NAME: &str = "uvms_logs_stream";
+const METRICS_TASK_NAME: &str = "metrics";
 const VECTOR_TASK_NAME: &str = "vector_logging";
 const SETUP_TASK_NAME: &str = "setup";
 const TEARDOWN_TASK_NAME: &str = "teardown";
@@ -132,6 +134,12 @@ pub struct CliArgs {
         value_parser = CliArgs::parse_host_feature
     )]
     pub required_host_features: Option<Vec<HostFeature>>,
+
+    #[clap(
+        long = "enable-metrics",
+        help = "If set, a PrometheusVm will be spawned running both p8s configured to scrape the testnet & Grafana."
+    )]
+    pub enable_metrics: bool,
 
     #[clap(long = "no-logs", help = "If set, the vector vm will not be spawned.")]
     pub no_logs: bool,
@@ -206,7 +214,17 @@ impl TestEnvAttribute for SetupResult {
 }
 
 pub fn is_task_visible_to_user(task_id: &TaskId) -> bool {
-    matches!(task_id, TaskId::Test(task_name) if task_name.ne(REPORT_TASK_NAME) && task_name.ne(KEEPALIVE_TASK_NAME) && task_name.ne(UVMS_LOGS_STREAM_TASK_NAME) && task_name.ne(VECTOR_TASK_NAME) && !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX) && !task_name.starts_with("dummy("))
+    matches!(
+        task_id,
+        TaskId::Test(task_name)
+        if task_name.ne(REPORT_TASK_NAME) &&
+           task_name.ne(KEEPALIVE_TASK_NAME) &&
+           task_name.ne(UVMS_LOGS_STREAM_TASK_NAME) &&
+           task_name.ne(METRICS_TASK_NAME) &&
+           task_name.ne(VECTOR_TASK_NAME) &&
+           !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX) &&
+           !task_name.starts_with("dummy(")
+    )
 }
 
 pub struct ComposeContext<'a> {
@@ -718,6 +736,45 @@ impl SystemTestGroup {
             Box::from(EmptyTask::new(keepalive_task_id)) as Box<dyn Task>
         };
 
+        let metrics_task_id = TaskId::Test(String::from(METRICS_TASK_NAME));
+        let metrics_task = if group_ctx.metrics_enabled {
+            let logger = group_ctx.logger().clone();
+            let group_ctx = group_ctx.clone();
+
+            let metrics_task = subproc(
+                metrics_task_id,
+                move || {
+                    debug!(logger, ">>> metrics_fn");
+
+                    let setup_dir = group_ctx.group_dir.join(constants::GROUP_SETUP_DIR);
+                    let env =
+                        TestEnv::new_without_duplicating_logger(setup_dir.clone(), logger.clone());
+                    while !setup_dir.exists() || env.prep_dir("").is_none() {
+                        info!(logger, "Setup and/or prep directories not created yet.");
+                        std::thread::sleep(KEEPALIVE_INTERVAL);
+                    }
+
+                    PrometheusVm::default()
+                        .start(&env)
+                        .expect("failed to start prometheus VM");
+                    loop {
+                        if let Err(e) = env.sync_with_prometheus_result() {
+                            warn!(logger, "Failed to sync with PrometheusVm due to: {:?}", e);
+                        }
+
+                        std::thread::sleep(KEEPALIVE_INTERVAL);
+                    }
+                },
+                &mut compose_ctx,
+                quiet,
+            );
+
+            Box::from(metrics_task) as Box<dyn Task>
+        } else {
+            debug!(group_ctx.logger(), "Not spawning metrics task");
+            Box::from(EmptyTask::new(metrics_task_id)) as Box<dyn Task>
+        };
+
         let logging_task_id = TaskId::Test(String::from(VECTOR_TASK_NAME));
         let log_task = if group_ctx.logs_enabled {
             let logger = group_ctx.logger().clone();
@@ -850,6 +907,13 @@ impl SystemTestGroup {
                 &mut compose_ctx,
             );
 
+            let metrics_plan = compose(
+                Some(metrics_task),
+                EvalOrder::Sequential,
+                vec![logs_plan],
+                &mut compose_ctx,
+            );
+
             let report_plan = Ok(compose(
                 Some(Box::new(EmptyTask::new(TaskId::Test(
                     REPORT_TASK_NAME.to_string(),
@@ -857,13 +921,13 @@ impl SystemTestGroup {
                 EvalOrder::Sequential,
                 vec![if let Some(overall_timeout) = self.overall_timeout {
                     timed(
-                        logs_plan,
+                        metrics_plan,
                         overall_timeout,
                         Some(String::from("::group")),
                         &mut compose_ctx,
                     )
                 } else {
-                    logs_plan
+                    metrics_plan
                 }],
                 &mut compose_ctx,
             ));
@@ -893,6 +957,13 @@ impl SystemTestGroup {
             &mut compose_ctx,
         );
 
+        let metrics_plan = compose(
+            Some(metrics_task),
+            EvalOrder::Sequential,
+            vec![logs_plan],
+            &mut compose_ctx,
+        );
+
         let report_plan = compose(
             Some(Box::new(EmptyTask::new(TaskId::Test(
                 REPORT_TASK_NAME.to_string(),
@@ -917,7 +988,7 @@ impl SystemTestGroup {
         Ok(compose(
             Some(keepalive_task),
             EvalOrder::Parallel,
-            vec![report_plan, logs_plan],
+            vec![report_plan, metrics_plan],
             &mut compose_ctx,
         ))
     }
@@ -942,6 +1013,7 @@ impl SystemTestGroup {
             args.debug_keepalive,
             args.no_farm_keepalive || args.no_group_ttl,
             args.group_base_name,
+            args.enable_metrics,
             !args.no_logs,
             args.exclude_logs,
             args.quiet,
