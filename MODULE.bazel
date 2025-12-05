@@ -896,6 +896,7 @@ http_archive(
 http_file(
     name = "shfmt-x86_64-linux",
     downloaded_file_path = "shfmt",
+    executable = True,
     sha256 = "5741a02a641de7e56b8da170e71a97e58050d66a3cf485fb268d6a5a8bb74afb",
     url = "https://github.com/mvdan/sh/releases/download/v3.6.0/shfmt_v3.6.0_linux_amd64",
 )
@@ -903,6 +904,7 @@ http_file(
 http_file(
     name = "shfmt-aarch64-darwin",
     downloaded_file_path = "shfmt",
+    executable = True,
     sha256 = "633f242246ee0a866c5f5df25cbf61b6af0d5e143555aca32950059cf13d91e0",
     url = "https://github.com/mvdan/sh/releases/download/v3.6.0/shfmt_v3.6.0_darwin_arm64",
 )
@@ -910,6 +912,7 @@ http_file(
 http_file(
     name = "shfmt-x86_64-darwin",
     downloaded_file_path = "shfmt",
+    executable = True,
     sha256 = "b8c9c025b498e2816b62f0b717f6032e9ab49e725a45b8205f52f66318f17185",
     url = "https://github.com/mvdan/sh/releases/download/v3.6.0/shfmt_v3.6.0_darwin_amd64",
 )
