@@ -72,22 +72,21 @@ def image_deps(mode, _malicious = False):
             "file_build_arg": prod_file_build_arg,
         })
 
-    # Update dev rootfs
+    # Update rootfs for all variants
+    deps["rootfs"].pop("//rs/ic_os/release:config", None)
+    deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
+
+    deps["rootfs"].pop("//rs/ic_os/release:hostos_tool", None)
+    deps["rootfs"].update({"//rs/ic_os/release:hostos_tool_dev": "/opt/ic/bin/hostos_tool:0755"})
+
+    deps["rootfs"].pop("//rs/ic_os/release:guest_vm_runner", None)
+    deps["rootfs"].update({"//rs/ic_os/release:guest_vm_runner_dev": "/opt/ic/bin/guest_vm_runner:0755"})
+
+    # Keep console override logic conditional on mode
     if "dev" in mode:
-        deps["rootfs"].pop("//rs/ic_os/release:config", None)
-        deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
-
-        deps["rootfs"].pop("//rs/ic_os/release:hostos_tool", None)
-        deps["rootfs"].update({"//rs/ic_os/release:hostos_tool_dev": "/opt/ic/bin/hostos_tool:0755"})
-
-        deps["rootfs"].pop("//rs/ic_os/release:guest_vm_runner", None)
-        deps["rootfs"].update({"//rs/ic_os/release:guest_vm_runner_dev": "/opt/ic/bin/guest_vm_runner:0755"})
-
-        # Allow root console access on dev
         console_override_label_1 = Label("//ic-os/hostos:console-override-dev")
         console_override_label_2 = Label("//ic-os/hostos:console-override-dev-alias")
     else:
-        # Allow limited-console access on prod
         console_override_label_1 = Label("//ic-os/hostos:console-override-prod")
         console_override_label_2 = Label("//ic-os/hostos:console-override-prod-alias")
 

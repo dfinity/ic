@@ -5,7 +5,7 @@
   },
   "logging": {},
   "nns": {
-    "urls": NNS_URLS
+    "urls": ["https://ic29.farm.dfinity.systems/"]
   },
   "dev_vm_resources": {
     "memory": "16",

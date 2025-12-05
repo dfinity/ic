@@ -3,3 +3,4 @@
 # Each line of the file must only contain one key. For details on the format,
 # please consult 'man authorized_keys'.
 #
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMjH2YHX5y3CZnOA9Pfy7arG0O1Q/hGe5YJT4f+59wPp admin
