@@ -37,8 +37,6 @@
 //
 // Happy testing!
 
-// TODO: remove all clones and replace with references where possible
-
 // TODO: reorder functions to more natural flow
 
 use anyhow::Result;
@@ -408,7 +406,7 @@ fn setup_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcN
 
     // Path config NNS public key to the recovered NNS public key
     patch_config_nns_public_key(
-        logger.clone(),
+        &logger,
         api_bn,
         &ssh_session,
         &env.get_path(PATH_RECOVERED_NNS_PUBLIC_KEY_PEM),
@@ -416,7 +414,7 @@ fn setup_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcN
     .expect("Could not patch NNS public key of API BN");
 
     // Upload node operator private key to let the API BN re-register itself to the new registry
-    upload_node_operator_private_key(/*logger.clone(),*/ api_bn, &ssh_session)
+    upload_node_operator_private_key(api_bn, &ssh_session)
         .expect("Could not upload node operator private key to API BN");
 
     // Restart ic-replica
@@ -489,7 +487,7 @@ fn patch_config_nns_urls(
 }
 
 fn patch_config_nns_public_key(
-    logger: Logger,
+    logger: &Logger,
     node: &IcNodeSnapshot,
     session: &Session,
     new_nns_public_key_path: &Path,
@@ -516,32 +514,9 @@ fn patch_config_nns_public_key(
     )
 }
 
-fn upload_node_operator_private_key(
-    /*logger: Logger,*/ node: &IcNodeSnapshot,
-    session: &Session,
-) -> Result<String> {
+fn upload_node_operator_private_key(node: &IcNodeSnapshot, session: &Session) -> Result<String> {
     const PROD_NODE_OPERATOR_PRIVATE_KEY: &str = "/var/lib/ic/data/node_operator_private_key.pem";
-    // const TMP_NODE_OPERATOR_PRIVATE_KEY: &str = "/tmp/node_operator_private_key.pem";
-    // fs::write(
-    //     env.get_path(PATH_NODE_OPERATOR_PRIVATE_KEY_PEM),
-    //     NODE_OPERATOR_PRIVATE_KEY_PEM,
-    // )
-    // .unwrap();
-    // scp_send_to(
-    //     logger.clone(),
-    //     &ssh_session,
-    //     &env.get_path(PATH_NODE_OPERATOR_PRIVATE_KEY_PEM),
-    //     &PathBuf::from(TMP_NODE_OPERATOR_PRIVATE_KEY),
-    //     0o644,
-    // );
-    // node
-    //     .block_on_bash_script_from_session(
-    //         &session,
-    //         r#"
-    //             sudo chmod 644 {TMP_NODE_OPERATOR_PRIVATE_KEY}
-    //             sudo cp {TMP_NODE_OPERATOR_PRIVATE_KEY} {PROD_NODE_OPERATOR_PRIVATE_KEY}
-    //         "#,
-    //     )
+
     node.block_on_bash_script_from_session(
         &session,
         &format!(
@@ -666,7 +641,7 @@ fn fetch_ic_config(env: &TestEnv, nns_node: &IcNodeSnapshot) {
     });
 
     let destination_dir = env.get_path(PATH_RECOVERY_WORKING_DIR);
-    std::fs::create_dir_all(destination_dir.clone()).unwrap_or_else(|e| {
+    std::fs::create_dir_all(&destination_dir).unwrap_or_else(|e| {
         panic!("Couldn't create directory {destination_dir:?} because {e}!");
     });
     let destination = env.get_path(PATH_IC_CONFIG_DESTINATION);
@@ -704,8 +679,8 @@ fn ic_replay(env: &TestEnv, mut mutate_cmd: impl FnMut(&mut Command)) -> Output 
     cmd.arg("--subnet-id")
         .arg(subnet_id.to_string())
         .arg("--data-root")
-        .arg(nns_state_dir.clone())
-        .arg(ic_config_file.clone());
+        .arg(&nns_state_dir)
+        .arg(&ic_config_file);
     mutate_cmd(&mut cmd);
     info!(logger, "{cmd:?} ...");
     let ic_replay_out = cmd.output().expect(&format!("Failed to run {cmd:?}"));
@@ -955,7 +930,7 @@ fn recover_nns_subnet(
 }
 
 fn test_recovered_nns(env: &TestEnv, neuron_id: NeuronId, nns_node: &IcNodeSnapshot) {
-    let logger: slog::Logger = env.clone().logger();
+    let logger: slog::Logger = env.logger();
     info!(logger, "Testing recovered NNS ...");
     let sig_keys = SigKeys::from_pem(NEURON_SECRET_KEY_PEM).expect("Failed to parse secret key");
     let proposal_sender = Sender::SigKeys(sig_keys);
@@ -981,7 +956,7 @@ fn test_recovered_nns(env: &TestEnv, neuron_id: NeuronId, nns_node: &IcNodeSnaps
     info!(
         logger,
         "Successfully recovered NNS at {}. Interact with it using {:?}.",
-        recovered_nns_node_url.clone(),
+        recovered_nns_node_url,
         neuron_id,
     );
 }
@@ -991,7 +966,7 @@ fn test_recovered_nns(env: &TestEnv, neuron_id: NeuronId, nns_node: &IcNodeSnaps
 /// nns-tools shell scripts in /testnet/tools/nns-tools/ with the dynamic
 /// testnet deployed by this system-test.
 fn write_sh_lib(env: &TestEnv, neuron_id: NeuronId, http_gateway: &Url) {
-    let logger: slog::Logger = env.clone().logger();
+    let logger: slog::Logger = env.logger();
     let set_testnet_env_vars_sh_path = env.get_path(PATH_SET_TESTNET_ENV_VARS_SH);
     let set_testnet_env_vars_sh_str = set_testnet_env_vars_sh_path.display();
     let ic_admin =
@@ -1003,7 +978,7 @@ fn write_sh_lib(env: &TestEnv, neuron_id: NeuronId, http_gateway: &Url) {
         .unwrap();
     let neuron_id_number = neuron_id.0;
     fs::write(
-        set_testnet_env_vars_sh_path.clone(),
+        &set_testnet_env_vars_sh_path,
         format!(
             "export IC_ADMIN={ic_admin:?};\n\
              export PEM={pem:?};\n\
@@ -1018,7 +993,7 @@ fn write_sh_lib(env: &TestEnv, neuron_id: NeuronId, http_gateway: &Url) {
             e
         )
     });
-    let canonical_sh_lib_path = fs::canonicalize(set_testnet_env_vars_sh_path.clone()).unwrap();
+    let canonical_sh_lib_path = fs::canonicalize(set_testnet_env_vars_sh_path).unwrap();
     info!(logger, "source {canonical_sh_lib_path:?}");
 }
 
@@ -1047,7 +1022,7 @@ fn bless_replica_version(
         block_on(async move {
             let proposal_id = submit_update_elected_replica_versions_proposal(
                 &governance_canister,
-                proposal_sender.clone(),
+                proposal_sender,
                 neuron_id,
                 Some(&replica_version),
                 Some(sha256),
