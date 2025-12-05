@@ -11,7 +11,7 @@ use crate::canister_state::system_state::log_memory_store::{
 };
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
-use ic_types::{CanisterLog, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT};
+use ic_types::CanisterLog;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::VecDeque;
@@ -50,9 +50,9 @@ impl LogMemoryStore {
         Self::new_inner(page_map)
     }
 
-    pub fn new_inner(page_map: PageMap) -> Self {
+    fn new_inner(page_map: PageMap) -> Self {
         Self {
-            page_map,
+            page_map: RingBuffer::load_or_default(page_map).to_page_map(),
             delta_log_sizes: VecDeque::new(),
         }
     }
@@ -66,10 +66,7 @@ impl LogMemoryStore {
     }
 
     fn load_ring_buffer(&self) -> RingBuffer {
-        RingBuffer::load_or_new(
-            self.page_map.clone(),
-            MemorySize::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64),
-        )
+        RingBuffer::load_or_default(self.page_map.clone())
     }
 
     /// Returns the total allocated bytes for the ring buffer
@@ -171,6 +168,7 @@ mod tests {
     use super::*;
     use crate::canister_state::system_state::log_memory_store::ring_buffer::RESULT_MAX_SIZE;
     use ic_management_canister_types_private::{DataSize, FetchCanisterLogsRange};
+    use ic_types::DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT;
 
     fn make_canister_record(idx: u64, ts: u64, message: &str) -> CanisterLogRecord {
         CanisterLogRecord {
