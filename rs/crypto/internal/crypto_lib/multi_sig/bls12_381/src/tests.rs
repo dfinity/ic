@@ -5,28 +5,7 @@ use crate::{
     types::IndividualSignature, types::PublicKey, types::SecretKey, types::SecretKeyBytes,
     types::arbitrary,
 };
-use ic_crypto_internal_bls12_381_type::G1Projective;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-
-fn check_single_point_signature_verifies(
-    secret_key: &SecretKey,
-    public_key: &PublicKey,
-    point: &G1Projective,
-) {
-    let signature = multi_crypto::sign_point(point, secret_key);
-    assert!(multi_crypto::verify_point(point, &signature, public_key));
-}
-
-fn check_individual_multi_signature_contribution_verifies(
-    secret_key: &SecretKey,
-    public_key: &PublicKey,
-    message: &[u8],
-) {
-    let signature = multi_crypto::sign_message(message, secret_key);
-    assert!(multi_crypto::verify_individual_message_signature(
-        message, &signature, public_key
-    ));
-}
 
 fn check_multi_signature_verifies(keys: &[(SecretKey, PublicKey)], message: &[u8]) {
     let signatures: Vec<IndividualSignature> = keys
@@ -177,14 +156,20 @@ mod advanced_functionality {
     fn single_point_signature_verifies() {
         let (secret_key, public_key) = multi_crypto::keypair_from_seed([1, 2, 3, 4]);
         let point = multi_crypto::hash_message_to_g1(b"abba");
-        check_single_point_signature_verifies(&secret_key, &public_key, &point);
+        let signature = multi_crypto::sign_point(&point, &secret_key);
+        assert!(multi_crypto::verify_point(&point.to_affine(), &signature, &public_key));
     }
 
     #[test]
     fn individual_multi_signature_contribution_verifies() {
         let (secret_key, public_key) = multi_crypto::keypair_from_seed([1, 2, 3, 4]);
-        check_individual_multi_signature_contribution_verifies(&secret_key, &public_key, b"abba");
+        let message = b"bjork";
+        let signature = multi_crypto::sign_message(message, &secret_key);
+        assert!(multi_crypto::verify_individual_message_signature(
+            message, &signature, &public_key
+        ));
     }
+
     #[test]
     fn pop_verifies() {
         let (secret_key, public_key) = multi_crypto::keypair_from_seed([1, 2, 3, 4]);

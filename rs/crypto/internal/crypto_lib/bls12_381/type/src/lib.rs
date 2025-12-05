@@ -1302,6 +1302,15 @@ macro_rules! define_affine_and_projective_types {
                 let v = scalars.clone().map(|s| self * s);
                 $projective::batch_normalize_array(&v)
             }
+
+            /// Sum some points
+            pub fn sum(pts: &[Self]) -> $projective {
+                let mut sum = ic_bls12_381::$projective::identity();
+                for pt in pts {
+                    sum += pt.inner();
+                }
+                $projective::new(sum)
+            }
         }
 
         paste! {
