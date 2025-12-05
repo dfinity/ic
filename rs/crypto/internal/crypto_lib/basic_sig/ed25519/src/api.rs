@@ -75,10 +75,10 @@ pub enum KeyDecodingError {
 ///
 /// # Errors
 /// * `MalformedSecretKey` if the secret key is malformed
-pub fn sign(msg: &[u8], sk: &types::SecretKeyBytes) -> CryptoResult<types::SignatureBytes> {
+pub fn sign(msg: &[u8], sk: &types::SecretKeyBytes) -> types::SignatureBytes {
     let signing_key = ic_ed25519::PrivateKey::deserialize_raw_32(sk.0.expose_secret());
     let signature = signing_key.sign_message(msg);
-    Ok(types::SignatureBytes(signature))
+    types::SignatureBytes(signature)
 }
 
 /// Verifies a signature using an Ed25519 public key.

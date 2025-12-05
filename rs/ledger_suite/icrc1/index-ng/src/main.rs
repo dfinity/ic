@@ -725,10 +725,8 @@ async fn fetch_blocks_via_icrc3() -> Result<u64, SyncError> {
 }
 
 fn set_build_index_timer(after: Duration) {
-    let timer_id = ic_cdk_timers::set_timer_interval(after, || {
-        ic_cdk::spawn(async {
-            let _ = build_index().await;
-        })
+    let timer_id = ic_cdk_timers::set_timer_interval(after, async || {
+        let _ = build_index().await;
     });
     TIMER_ID.with(|tid| *tid.borrow_mut() = timer_id);
 }
@@ -1013,11 +1011,19 @@ fn decode_encoded_block_or_trap(block_index: BlockIndex64, block: EncodedBlock) 
     })
 }
 
+/// Get the accounts whose balances are affected by the transaction in a block. Any affected
+/// block is returned at most once - in particular, this applies to self-transfers.
 fn get_accounts(block: &Block<Tokens>) -> Vec<Account> {
     match block.transaction.operation {
         Operation::Burn { from, .. } => vec![from],
         Operation::Mint { to, .. } => vec![to],
-        Operation::Transfer { from, to, .. } => vec![from, to],
+        Operation::Transfer { from, to, .. } => {
+            match from == to {
+                // For self-transfers, only return the affected account once.
+                true => vec![from],
+                false => vec![from, to],
+            }
+        }
         Operation::Approve { from, .. } => vec![from],
         Operation::FeeCollector { .. } => vec![],
     }

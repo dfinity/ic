@@ -1,9 +1,8 @@
-use std::path::{Path, PathBuf};
-
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use tempfile::tempdir;
-use tokio::process::Command;
 
 use partition_tools::{
     Partition,
@@ -27,8 +26,7 @@ struct Cli {
     extra_files: Vec<String>,
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let temp_dir = tempdir()?;
@@ -41,15 +39,12 @@ async fn main() -> Result<()> {
         .arg(cli.input)
         .arg("-C")
         .arg(temp_dir.path())
-        .status()
-        .await;
+        .status()?;
 
-    let mut target = ExtPartition::open(temp_file.clone(), cli.index)
-        .await
-        .context(format!(
-            "Failed to open partition file {}",
-            temp_file.clone().display()
-        ))?;
+    let mut target = ExtPartition::open(temp_file.clone(), cli.index).context(format!(
+        "Failed to open partition file {}",
+        temp_file.clone().display()
+    ))?;
 
     let contexts = cli
         .file_contexts
@@ -86,7 +81,6 @@ async fn main() -> Result<()> {
 
         target
             .write_file(source_file, install_target)
-            .await
             .context(format!(
                 "Could not write file {} to {} in partition file {}",
                 source_file.display(),
@@ -95,7 +89,6 @@ async fn main() -> Result<()> {
             ))?;
         target
             .fixup_metadata(install_target, inode_mode, context)
-            .await
             .context(format!(
                 "Could not fix up metadata of file {} in partition file {}",
                 install_target.display(),
@@ -104,7 +97,7 @@ async fn main() -> Result<()> {
     }
 
     // Close data partition
-    target.close().await?;
+    target.close()?;
 
     // TODO: Quick hack to unpack and repack file
     // We use our tool, dflate, to quickly create a sparse, deterministic, tar.
@@ -117,8 +110,7 @@ async fn main() -> Result<()> {
         .arg(&temp_file)
         .arg("--output")
         .arg(&temp_tar)
-        .status()
-        .await;
+        .status()?;
 
     let mut cmd = Command::new("zstd");
     let _ = cmd
@@ -127,8 +119,7 @@ async fn main() -> Result<()> {
         .arg(&temp_tar)
         .arg("-o")
         .arg(cli.output)
-        .status()
-        .await;
+        .status()?;
 
     Ok(())
 }

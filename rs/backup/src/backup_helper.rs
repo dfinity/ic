@@ -4,10 +4,10 @@ use crate::{
 };
 use anyhow::Context;
 use chrono::{DateTime, Utc};
+use ic_interfaces_registry::RegistryClient;
 use ic_recovery::{
     command_helper::exec_cmd, error::RecoveryError, file_sync_helper::download_binary,
 };
-use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_types::{ReplicaVersion, SubnetId};
 use rand::{seq::SliceRandom, thread_rng};
@@ -39,7 +39,7 @@ pub(crate) struct BackupHelper {
     pub(crate) root_dir: PathBuf,
     pub(crate) excluded_dirs: Vec<String>,
     pub(crate) ssh_private_key: String,
-    pub(crate) registry_client: Arc<RegistryClientImpl>,
+    pub(crate) registry_client: Arc<dyn RegistryClient>,
     pub(crate) notification_client: NotificationClient,
     pub(crate) downloads_guard: Arc<Mutex<bool>>,
     pub(crate) hot_disk_resource_threshold_percentage: u32,
@@ -1072,6 +1072,7 @@ fn write_timestamp(dir: &Path, timestamp: DateTime<Utc>) -> anyhow::Result<()> {
 mod tests {
     use std::str::FromStr;
 
+    use ic_registry_client::client::RegistryClientImpl;
     use ic_registry_local_store::LocalStoreImpl;
     use ic_test_utilities_tmpdir::tmpdir;
     use ic_types::PrincipalId;

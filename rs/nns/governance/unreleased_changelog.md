@@ -17,4 +17,6 @@ on the process that this file is part of, see
 
 ## Fixed
 
+- Typo in error message about obsolete proposal type SetDefaultFollowees.
+
 ## Security

@@ -7,6 +7,9 @@ pub mod fees;
 pub mod lifecycle;
 pub mod updates;
 
+#[cfg(test)]
+pub mod test_fixtures;
+
 use crate::address::DogecoinAddress;
 use crate::dogecoin_canister::MillikoinuPerByte;
 use crate::fees::DogecoinFeeEstimator;
@@ -26,7 +29,7 @@ pub use ic_ckbtc_minter::{
     address::BitcoinAddress,
     logs::Priority,
     memo::{BurnMemo, MintMemo, encode as memo_encode},
-    queries::WithdrawalFee,
+    queries::EstimateFeeArg,
     reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason},
     state::eventlog::{Event, EventType, GetEventsArg},
     state::{ChangeOutput, RetrieveBtcRequest},

@@ -21,12 +21,16 @@ use crate::{
     },
 };
 
-/// Given caller-provided data, returns a `Request` that can very likely be processed or an informative error.
+/// Given caller-provided data, returns
+/// - a `Request` that can very likely be processed and
+///   locks that should only be dropped after inserting the `Request`
+///   into canister state;
+/// - or an informative error.
 pub async fn validate_request(
     source: Principal,
     target: Principal,
     caller: Principal,
-) -> Result<Request, ValidationError> {
+) -> Result<(Request, Vec<CanisterGuard>), ValidationError> {
     // We first check if the caller is authorized (i.e.,
     // if the caller is a controller of both the source and target)
     // before acquiring locks for the source and target
@@ -56,10 +60,10 @@ pub async fn validate_request(
     // Now we can acquire the locks
     // to prevent reentrancy bugs across asynchronous calls
     // while validating the source and target.
-    let Ok(_source_guard) = CanisterGuard::new(source) else {
+    let Ok(source_guard) = CanisterGuard::new(source) else {
         return Err(ValidationError::ValidationInProgress { canister: source });
     };
-    let Ok(_target_guard) = CanisterGuard::new(target) else {
+    let Ok(target_guard) = CanisterGuard::new(target) else {
         return Err(ValidationError::ValidationInProgress { canister: target });
     };
 
@@ -101,7 +105,7 @@ pub async fn validate_request(
     source_original_controllers.retain(|e| *e != canister_self());
     let mut target_original_controllers = target_status.settings.controllers;
     target_original_controllers.retain(|e| *e != canister_self());
-    Ok(Request {
+    let request = Request {
         source,
         source_subnet,
         source_original_controllers,
@@ -109,5 +113,7 @@ pub async fn validate_request(
         target_subnet,
         target_original_controllers,
         caller,
-    })
+    };
+
+    Ok((request, vec![source_guard, target_guard]))
 }

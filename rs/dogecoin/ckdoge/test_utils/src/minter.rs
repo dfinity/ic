@@ -1,9 +1,12 @@
-use crate::MAX_TIME_IN_QUEUE;
 use crate::events::MinterEventAssert;
+use crate::{MAX_TIME_IN_QUEUE, NNS_ROOT_PRINCIPAL};
 use candid::{Decode, Encode, Principal};
 use canlog::LogEntry;
+use ic_ckdoge_minter::candid_api::{EstimateWithdrawalFeeError, WithdrawalFee};
+use ic_ckdoge_minter::lifecycle::init::{MinterArg, UpgradeArgs};
 use ic_ckdoge_minter::{
-    Event, EventType, Priority, Txid, UpdateBalanceArgs, UpdateBalanceError, Utxo, UtxoStatus,
+    EstimateFeeArg, Event, EventType, Priority, Txid, UpdateBalanceArgs, UpdateBalanceError, Utxo,
+    UtxoStatus,
     candid_api::{
         GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeStatusRequest,
         RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
@@ -109,6 +112,25 @@ impl MinterCanister {
     ) -> Result<std::vec::Vec<u8>, RejectResponse> {
         self.env
             .update_call(self.id, sender, "update_balance", Encode!(args).unwrap())
+    }
+
+    pub fn estimate_withdrawal_fee(
+        &self,
+        withdrawal_amount: u64,
+    ) -> Result<WithdrawalFee, EstimateWithdrawalFeeError> {
+        let call_result = self
+            .env
+            .query_call(
+                self.id,
+                Principal::anonymous(),
+                "estimate_withdrawal_fee",
+                Encode!(&EstimateFeeArg {
+                    amount: Some(withdrawal_amount)
+                })
+                .unwrap(),
+            )
+            .expect("BUG: failed to call estimate_withdrawal_fee");
+        Decode!(&call_result, Result<WithdrawalFee, EstimateWithdrawalFeeError>).unwrap()
     }
 
     pub fn retrieve_doge_status(&self, ledger_burn_index: u64) -> RetrieveDogeStatus {
@@ -254,6 +276,20 @@ impl MinterCanister {
 
     pub fn id(&self) -> CanisterId {
         self.id
+    }
+
+    pub fn upgrade(&self, upgrade_args: Option<UpgradeArgs>) {
+        let minter_args = MinterArg::Upgrade(upgrade_args);
+        self.env
+            .upgrade_canister(
+                self.id,
+                crate::minter_wasm(),
+                Encode!(&minter_args).unwrap(),
+                Some(NNS_ROOT_PRINCIPAL),
+            )
+            .expect("BUG: failed to upgrade minter");
+        // run immediate tasks after upgrade, like refreshing fee percentiles.
+        self.env.tick();
     }
 }
 

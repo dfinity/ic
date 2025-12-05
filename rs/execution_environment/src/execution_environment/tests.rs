@@ -1049,6 +1049,8 @@ fn get_canister_status_memory_metrics_snapshots_size() {
         TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         }
         .encode(),
     )
@@ -1699,7 +1701,8 @@ fn canister_snapshots_after_split() {
     );
 
     // Take canister snapshot for each canister.
-    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id_1, None);
+    let args: TakeCanisterSnapshotArgs =
+        TakeCanisterSnapshotArgs::new(canister_id_1, None, None, None);
     test.inject_call_to_ic00(
         Method::TakeCanisterSnapshot,
         Encode!(&args).unwrap(),
@@ -1707,7 +1710,8 @@ fn canister_snapshots_after_split() {
     );
     test.execute_subnet_message();
 
-    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id_2, None);
+    let args: TakeCanisterSnapshotArgs =
+        TakeCanisterSnapshotArgs::new(canister_id_2, None, None, None);
     test.inject_call_to_ic00(
         Method::TakeCanisterSnapshot,
         Encode!(&args).unwrap(),
