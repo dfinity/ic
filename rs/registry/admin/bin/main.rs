@@ -679,6 +679,7 @@ struct ConvertNumericNodeIdtoPrincipalIdCmd {
 #[derive(Parser)]
 struct GetRoutingTableCmd {
     /// The registry version to use. Defaults to the latest registry version.
+    #[clap(long)]
     registry_version: Option<u64>,
 }
 

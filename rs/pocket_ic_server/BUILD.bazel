@@ -287,12 +287,14 @@ MAINNET_NNS_CANISTER_ENV = {
     ]
 ]
 
+# The latest registry version to bump the hard-coded registry version can be determined using:
+# `bazel run //rs/registry/admin:ic-admin -- get-registry-version`
 genrule(
     name = "mainnet_routing_table",
     testonly = True,
     srcs = [],
     outs = ["mainnet_routing_table.json"],
-    cmd = "$(location //rs/registry/admin:ic-admin) get-routing-table --json > $@",
+    cmd = "$(location //rs/registry/admin:ic-admin) get-routing-table --json --registry-version 55267 > $@",
     tags = ["requires-network"],
     tools = ["//rs/registry/admin:ic-admin"],
 )
