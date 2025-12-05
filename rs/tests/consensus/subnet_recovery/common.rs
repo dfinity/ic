@@ -872,10 +872,10 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
     }
 }
 
-// Corrupt the latest cup of all subnet nodes by changing the CUP's replica version field for "soft"
-// corruptions where the NiDkgId can still be parsed. This will change the hash of the block, thus
-// making the CUP non-deserializable.
-// For "hard" corruptions, we change the NiDkgId field itself.
+// Corrupt the latest cup of all subnet nodes by changing the CUP's replica version field for
+// recoverable corruptions where the NiDkgId can still be parsed. This will change the hash of the
+// block, thus making the CUP non-deserializable.
+// For unrecoverable corruptions, we change the NiDkgId field itself.
 fn corrupt_latest_cup(
     subnet: &SubnetSnapshot,
     cup_corruption: &CupCorruption,
