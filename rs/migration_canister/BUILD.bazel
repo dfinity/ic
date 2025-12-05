@@ -102,6 +102,7 @@ rust_test(
     deps = [
         # Keep sorted
         "//packages/pocket-ic",
+        "//packages/ic-http-types",
         "//rs/nns/common",
         "//rs/nns/constants",
         "//rs/nns/governance/api",
@@ -119,6 +120,7 @@ rust_test(
         "@crate_index//:itertools",
         "@crate_index//:reqwest",
         "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
         "@crate_index//:serde_cbor",
         "@crate_index//:strum",
         "@crate_index//:tempfile",

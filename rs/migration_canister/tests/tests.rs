@@ -264,6 +264,29 @@ async fn get_status(
     Decode!(&res, Option<MigrationStatus>).unwrap()
 }
 
+async fn fetch_metrics(pic: &PocketIc) -> String {
+    let http_request = ic_http_types::HttpRequest {
+        method: "GET".to_string(),
+        url: "/metrics".to_string(),
+        headers: vec![],
+        body: serde_bytes::ByteBuf::default(),
+    };
+
+    let res = pic
+        .query_call(
+            MIGRATION_CANISTER_ID.into(),
+            Principal::anonymous(),
+            "http_request",
+            Encode!(&http_request).unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let response = Decode!(&res, ic_http_types::HttpResponse).unwrap();
+
+    String::from_utf8(response.body.into_vec()).unwrap()
+}
+
 /// Advances time by a second and executes enough ticks that the state machine
 /// can make progress.
 async fn advance(pic: &PocketIc) {
@@ -556,6 +579,12 @@ async fn replay_call_after_migration() {
     let source = sources[0];
     let target = targets[0];
 
+    assert!(
+        fetch_metrics(&pic)
+            .await
+            .contains("migration_canister_num_successes_in_past_24_h 0")
+    );
+
     // We deploy the universal canister WASM
     // to both the "source" and "target" canisters
     // so that we can call the "source" canister ID
@@ -602,6 +631,12 @@ async fn replay_call_after_migration() {
         pic.tick().await;
     }
 
+    assert!(
+        fetch_metrics(&pic)
+            .await
+            .contains("migration_canister_num_successes_in_past_24_h 1")
+    );
+
     // We restart the "source" canister right away.
     pic.start_canister(source, Some(sender)).await.unwrap();
 
@@ -610,6 +645,21 @@ async fn replay_call_after_migration() {
     assert_eq!(resp.status(), reqwest::StatusCode::BAD_REQUEST);
     let message = String::from_utf8(resp.bytes().await.unwrap().to_vec()).unwrap();
     assert!(message.contains("Invalid request expiry"));
+    assert!(
+        fetch_metrics(&pic)
+            .await
+            .contains("migration_canister_num_successes_in_past_24_h 1")
+    );
+}
+
+#[tokio::test]
+async fn metrics() {
+    let Setup { pic, .. } = setup(Settings::default()).await;
+
+    let metrics = fetch_metrics(&pic).await;
+
+    assert!(metrics.contains("migration_canister_num_successes_in_past_24_h 0"));
+    assert!(metrics.contains("migration_canister_migrations_disabled 0"));
 }
 
 async fn concurrent_migration(

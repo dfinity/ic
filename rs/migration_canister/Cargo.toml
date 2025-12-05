@@ -24,15 +24,17 @@ strum_macros = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-pocket-ic = { path = "../../packages/pocket-ic" }
-tempfile = { workspace = true }
-tokio = { workspace = true }
+canister-test = { path = "../rust_canisters/canister_test" }
 ic-base-types = { path = "../types/base_types" }
+ic-http-types = { path = "../../packages/ic-http-types" }
 ic-management-canister-types = { workspace = true }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-nns-test-utils = { path = "../nns/test_utils" }
 ic-transport-types = { workspace = true }
+ic-universal-canister = { path = "../universal_canister/lib" }
+pocket-ic = { path = "../../packages/pocket-ic" }
 registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
-canister-test = { path = "../rust_canisters/canister_test" }
-ic-universal-canister = { path = "../universal_canister/lib" }
-ic-management-canister-types-private = { path = "../types/management_canister_types" }
+serde_bytes = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }

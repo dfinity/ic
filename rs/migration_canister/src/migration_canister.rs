@@ -143,7 +143,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     w.encode_gauge(
         "migration_canister_migrations_disabled",
         migrations_disabled() as u32 as f64,
-        "Wether canister migrations are currently disabled.",
+        "Whether canister migrations are currently disabled.",
     )?;
 
     Ok(())
