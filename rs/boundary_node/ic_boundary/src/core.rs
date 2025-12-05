@@ -1134,7 +1134,6 @@ mod test {
             "--tls-acme-disable-tls-cert-verification",
             "--registry-stub-replica",
             "127.0.0.1:1443", // Doesn't really matter
-            "--obs-log-stdout",
         ];
 
         let cli = Cli::parse_from(args);

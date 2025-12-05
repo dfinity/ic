@@ -105,6 +105,14 @@ rust_binary(
 rust_test(
     name = "ic_boundary_test",
     crate = ":ic-boundary",
+    data = [
+        "//:pebble",
+        "//:pebble-challtestsrv",
+    ],
+    env = {
+        "PEBBLE": "$(rootpath //:pebble)",
+        "CHALLTESTSRV": "$(rootpath //:pebble-challtestsrv)",
+    },
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:async-trait",

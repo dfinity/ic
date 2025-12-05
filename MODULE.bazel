@@ -825,12 +825,77 @@ http_file(
     url = "https://github.com/dfinity/candid/releases/download/2023-11-16/didc-macos",
 )
 
+# pebble & pebble dns server for Boundary Nodes ACME tests
+
+http_archive(
+    name = "pebble-aarch64-darwin",
+    build_file = "@//third_party:BUILD.pebble.bazel",
+    sha256 = "39e07d63dc776521f2ffe0584e5f4f081c984ac02742c882b430891d89f0c866",
+    strip_prefix = "pebble-darwin-arm64/darwin/arm64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-darwin-arm64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-x86_64-darwin",
+    build_file = "@//third_party:BUILD.pebble.bazel",
+    sha256 = "9b9625651f8ce47706235179503fec149f8f38bce2b2554efe8c0f2a021f877c",
+    strip_prefix = "pebble-darwin-amd64/darwin/amd64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-darwin-amd64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-aarch64-linux",
+    build_file = "@//third_party:BUILD.pebble.bazel",
+    sha256 = "0e70f2537353f61cbf06aa54740bf7f7bb5f963ba00e909f23af5f85bc13fd1a",
+    strip_prefix = "pebble-linux-arm64/linux/arm64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-linux-arm64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-x86_64-linux",
+    build_file = "@//third_party:BUILD.pebble.bazel",
+    sha256 = "34595d915bbc2fc827affb3f58593034824df57e95353b031c8d5185724485ce",
+    strip_prefix = "pebble-linux-amd64/linux/amd64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-linux-amd64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-challtestsrv-aarch64-darwin",
+    build_file = "@//third_party:BUILD.pebble-challtestsrv.bazel",
+    sha256 = "1bc5a6cfa062d9756e98d67825daf67f61dd655bcb6025efca2138fe836c9bbc",
+    strip_prefix = "pebble-challtestsrv-darwin-arm64/darwin/arm64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-darwin-arm64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-challtestsrv-x86_64-darwin",
+    build_file = "@//third_party:BUILD.pebble-challtestsrv.bazel",
+    sha256 = "3d1343b1bbe892145fd2da70be36e67b149e482fbff897e109b8053f4f790f40",
+    strip_prefix = "pebble-challtestsrv-darwin-amd64/darwin/amd64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-darwin-amd64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-challtestsrv-aarch64-linux",
+    build_file = "@//third_party:BUILD.pebble-challtestsrv.bazel",
+    sha256 = "99a276aac8ceac121859b799708218e6dc57d7ca1dc1b8b5b586246b3c4160e6",
+    strip_prefix = "pebble-challtestsrv-linux-arm64/linux/arm64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-linux-arm64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-challtestsrv-x86_64-linux",
+    build_file = "@//third_party:BUILD.pebble-challtestsrv.bazel",
+    sha256 = "a817449d1f05ae58bcb7bf073b4cebe5d31512f859ba4b83951bd825d28d2114",
+    strip_prefix = "pebble-challtestsrv-linux-amd64/linux/amd64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-linux-amd64.tar.gz",
+)
+
 ## shfmt, for formatting bash code
 
 http_file(
     name = "shfmt-x86_64-linux",
     downloaded_file_path = "shfmt",
-    executable = True,
     sha256 = "5741a02a641de7e56b8da170e71a97e58050d66a3cf485fb268d6a5a8bb74afb",
     url = "https://github.com/mvdan/sh/releases/download/v3.6.0/shfmt_v3.6.0_linux_amd64",
 )
@@ -838,7 +903,6 @@ http_file(
 http_file(
     name = "shfmt-aarch64-darwin",
     downloaded_file_path = "shfmt",
-    executable = True,
     sha256 = "633f242246ee0a866c5f5df25cbf61b6af0d5e143555aca32950059cf13d91e0",
     url = "https://github.com/mvdan/sh/releases/download/v3.6.0/shfmt_v3.6.0_darwin_arm64",
 )
@@ -846,7 +910,6 @@ http_file(
 http_file(
     name = "shfmt-x86_64-darwin",
     downloaded_file_path = "shfmt",
-    executable = True,
     sha256 = "b8c9c025b498e2816b62f0b717f6032e9ab49e725a45b8205f52f66318f17185",
     url = "https://github.com/mvdan/sh/releases/download/v3.6.0/shfmt_v3.6.0_darwin_amd64",
 )
