@@ -232,7 +232,6 @@ fn setup(env: TestEnv) {
         env_clone
             .get_deployed_ic_gateway(IC_GATEWAY_VM_NAME)
             .unwrap()
-            .get_public_url()
     });
 
     // When the aux host is ready, we send it to the other thread so that it can start the recovery
@@ -240,9 +239,17 @@ fn setup(env: TestEnv) {
     let deployed_universal_vm = env.get_deployed_universal_vm(AUX_NODE_NAME).unwrap();
     tx_aux_node.send(deployed_universal_vm).unwrap();
 
+    let http_gateway = deploy_gateway_thread.join().unwrap();
     let neuron_id = recover_nns_thread.join().unwrap();
-    let http_gateway_url = deploy_gateway_thread.join().unwrap();
+    // After the NNS has been recovered and the API BN fixed, we should restart the HTTP gateway to
+    // reconnect to the patched API BN.
+    // Alternatively, we could start deploying the HTTP gateway only now. But deploying it in
+    // parallel earlier and only having to restart the container now is faster.
+    http_gateway
+        .block_on_bash_script("docker restart ic-gateway")
+        .unwrap();
 
+    let http_gateway_url = http_gateway.get_public_url();
     info!(
         env.logger(),
         "NNS Dapp: https://{MAINNET_NNS_DAPP_CANISTER_ID}.{domain}",
