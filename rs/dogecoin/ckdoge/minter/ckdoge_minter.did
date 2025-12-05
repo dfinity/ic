@@ -20,18 +20,18 @@ type InitArgs = record {
     // The minimal amount of ckDOGE that can be converted to DOGE.
     retrieve_doge_min_amount : nat64;
 
-    /// Maximum time in nanoseconds that a transaction should spend in the queue
-    /// before being sent.
+    // Maximum time in nanoseconds that a transaction should spend in the queue
+    // before being sent.
     max_time_in_queue_nanos : nat64;
 
-    /// The minimum number of confirmations required for the minter to
-    /// accept a Dogecoin transaction.
+    // The minimum number of confirmations required for the minter to
+    // accept a Dogecoin transaction.
     min_confirmations : opt nat32;
 
-    /// The minter's operation mode.
+    // The minter's operation mode.
     mode : Mode;
 
-    /// The expiration duration (in seconds) for cached entries in the get_utxos cache.
+    // The expiration duration (in seconds) for cached entries in the get_utxos cache.
     get_utxos_cache_expiration_seconds: opt nat64;
 };
 
@@ -247,6 +247,73 @@ type EstimateWithdrawalFeeError = variant {
     AmountTooHigh;
 };
 
+type MinterInfo = record {
+    // The minimum number of confirmations required for the minter to
+    // accept a Dogecoin transaction.
+    min_confirmations : nat32;
+
+    // This amount is based on the `retrieve_doge_min_amount` setting during canister
+    // initialization or upgrades, but may vary according to current network fees.
+    retrieve_doge_min_amount : nat64;
+};
+
+type CanisterStatusResponse = record {
+  status : CanisterStatusType;
+  ready_for_migration : bool;
+  version : nat64;
+  memory_size : nat;
+  cycles : nat;
+  settings : DefiniteCanisterSettings;
+  idle_cycles_burned_per_day : nat;
+  module_hash : opt vec nat8;
+  query_stats : QueryStats;
+  reserved_cycles : nat;
+  memory_metrics : MemoryMetrics;
+};
+
+type QueryStats = record {
+  response_payload_bytes_total : nat;
+  num_instructions_total : nat;
+  num_calls_total : nat;
+  request_payload_bytes_total : nat;
+};
+
+type MemoryMetrics = record {
+    wasm_memory_size : nat;
+    stable_memory_size : nat;
+    global_memory_size : nat;
+    wasm_binary_size : nat;
+    custom_sections_size : nat;
+    canister_history_size : nat;
+    wasm_chunk_store_size : nat;
+    snapshots_size : nat;
+};
+
+type CanisterStatusType = variant { stopped; stopping; running };
+
+type DefiniteCanisterSettings = record {
+  freezing_threshold : nat;
+  controllers : vec principal;
+  memory_allocation : nat;
+  compute_allocation : nat;
+  reserved_cycles_limit : nat;
+  log_visibility: log_visibility;
+  wasm_memory_limit : nat;
+  wasm_memory_threshold : nat;
+  environment_variables : vec environment_variable;
+};
+
+type log_visibility = variant {
+    controllers;
+    public;
+    allowed_viewers : vec principal;
+};
+
+type environment_variable = record {
+    name: text;
+    value: text;
+};
+
 service : (minter_arg : MinterArg) -> {
     // Returns the Dogecoin address to which the owner should send DOGE
     // before converting the amount to ckDOGE using the [update_balance]
@@ -292,6 +359,13 @@ service : (minter_arg : MinterArg) -> {
     //   using [icrc2_approve] on the ckDOGE ledger.
     retrieve_doge_with_approval : (RetrieveDogeWithApprovalArgs) -> (variant { Ok : RetrieveDogeOk; Err : RetrieveDogeWithApprovalError });
 
-    /// Returns the status of a withdrawal request.
+    // Returns the status of a withdrawal request.
     retrieve_doge_status : (record { block_index : nat64 }) -> (RetrieveDogeStatus) query;
+
+    // Returns internal minter parameters.
+    get_minter_info : () -> (MinterInfo) query;
+
+    // Returns the output of the IC method
+    // [`canister_status`](https://internetcomputer.org/docs/references/ic-interface-spec#ic-canister_status)
+    get_canister_status : () -> (CanisterStatusResponse);
 }
