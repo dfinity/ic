@@ -187,7 +187,7 @@ mod test {
         registry_lifecycle::Registry,
     };
     use ic_base_types::PrincipalId;
-    use ic_registry_transport::{insert, pb::v1::high_capacity_registry_value::Content};
+    use ic_registry_transport::insert;
     use maplit::btreemap;
     use std::str::FromStr;
 
