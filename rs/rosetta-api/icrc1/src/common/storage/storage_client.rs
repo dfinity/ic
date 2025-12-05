@@ -514,7 +514,6 @@ mod tests {
 
               // The hash of the duplicated transaction should still be the same --> There should be one more transaction with the same transaction hash.
               assert_eq!(storage_client_memory.get_transactions_by_hash(duplicate_tx_block.clone().get_transaction_hash()).unwrap().len(), count_before + 1);
-              //assert_eq!(storage_client_memory.get_transactions_by_hash(duplicate_tx_block.clone().get_transaction_hash()).unwrap().len(),2, "{}", format!("duplicate_tx_block: {:?}, hash {:?}",duplicate_tx_block, duplicate_tx_block.clone().get_transaction_hash()));
               }
            }
 
