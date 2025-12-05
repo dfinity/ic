@@ -250,21 +250,13 @@ struct TestConfig {
 }
 
 pub fn test_with_chain_keys(env: TestEnv) {
-    // Test the unrecoverable corrupt CUP case when recovering on failover nodes because nodes will
-    // not be able to see the recovery CUP in the registry
-    let corrupt_cup =
-        if env.topology_snapshot().unassigned_nodes().count() == APP_NODES + UNASSIGNED_NODES {
-            CupCorruption::CorruptedIncludingInvalidNiDkgId
-        } else {
-            CupCorruption::NotCorrupted
-        };
     app_subnet_recovery_test(
         env,
         TestConfig {
             subnet_size: APP_NODES,
             upgrade: true,
             chain_key: true,
-            corrupt_cup,
+            corrupt_cup: CupCorruption::NotCorrupted,
             local_recovery: false,
         },
     );
@@ -286,13 +278,20 @@ pub fn test_with_chain_keys_recoverable_corrupt_cup(env: TestEnv) {
 }
 
 pub fn test_without_chain_keys(env: TestEnv) {
+    // Test the unrecoverable corrupt CUP case when recovering on failover nodes because nodes will
+    // not be able to see the recovery CUP in the registry
+    let corrupt_cup = if env.topology_snapshot().unassigned_nodes().count() > 0 {
+        CupCorruption::CorruptedIncludingInvalidNiDkgId
+    } else {
+        CupCorruption::NotCorrupted
+    };
     app_subnet_recovery_test(
         env,
         TestConfig {
             subnet_size: APP_NODES,
             upgrade: true,
             chain_key: false,
-            corrupt_cup: CupCorruption::NotCorrupted,
+            corrupt_cup,
             local_recovery: false,
         },
     );
