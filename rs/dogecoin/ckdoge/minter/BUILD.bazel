@@ -128,5 +128,6 @@ rust_ic_test(
         "//rs/dogecoin/ckdoge/test_utils",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
+        "@crate_index//:ic-management-canister-types",
     ],
 )
