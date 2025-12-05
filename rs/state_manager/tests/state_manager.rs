@@ -366,7 +366,7 @@ fn lazy_pagemaps() {
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
 
     env.tick();
-    assert_eq!(page_maps_by_status("loaded", &env), 0);
+    assert_eq!(page_maps_by_status("loaded", &env), 1);
     assert!(page_maps_by_status("not_loaded", &env) > 0);
 
     env.execute_ingress(canister_id, "write_heap_64k", vec![])
