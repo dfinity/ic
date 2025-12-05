@@ -101,8 +101,8 @@ rust_test(
     ],
     deps = [
         # Keep sorted
-        "//packages/pocket-ic",
         "//packages/ic-http-types",
+        "//packages/pocket-ic",
         "//rs/nns/common",
         "//rs/nns/constants",
         "//rs/nns/governance/api",
