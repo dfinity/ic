@@ -2021,7 +2021,7 @@ fn canister_status_of_deleted_canister() {
 }
 
 #[test]
-fn deleteing_already_deleted_canister() {
+fn deleting_already_deleted_canister() {
     let mut test = ExecutionTestBuilder::new().build();
 
     let canister_id = test.create_canister(*INITIAL_CYCLES);
