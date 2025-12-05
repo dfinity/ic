@@ -47,6 +47,7 @@ fn init(args: MinterArg) {
 fn setup_tasks() {
     schedule_now(TaskType::ProcessLogic(true), &IC_CANISTER_RUNTIME);
     schedule_now(TaskType::RefreshFeePercentiles, &IC_CANISTER_RUNTIME);
+    schedule_now(TaskType::ConsolidateUtxos, &IC_CANISTER_RUNTIME);
 }
 
 #[cfg(feature = "self_check")]
@@ -92,18 +93,6 @@ async fn refresh_fee_percentiles() {
         None => return,
     };
     let _ = ic_ckbtc_minter::estimate_fee_per_vbyte(&IC_CANISTER_RUNTIME).await;
-}
-
-#[cfg(feature = "self_check")]
-#[update]
-async fn consolidate_utxos(threshold: usize) -> Result<u64, String> {
-    let _guard = match ic_ckbtc_minter::guard::TimerLogicGuard::new() {
-        Some(guard) => guard,
-        None => return Err("guard rejection".to_string()),
-    };
-    ic_ckbtc_minter::consolidate_utxos(&IC_CANISTER_RUNTIME, threshold)
-        .await
-        .map_err(|err| format!("{:?}", err))
 }
 
 fn check_postcondition<T>(t: T) -> T {

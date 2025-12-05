@@ -69,6 +69,7 @@ fn default_init_args() -> CkbtcMinterInitArgs {
         kyt_principal: None,
         kyt_fee: None,
         get_utxos_cache_expiration_seconds: None,
+        min_utxo_consolidation_threshold: None,
     }
 }
 
@@ -934,20 +935,6 @@ impl CkBtcSetup {
         .unwrap();
     }
 
-    pub fn consolidate_utxos(&self, threshold: usize) -> Result<u64, String> {
-        let message_id = self
-            .env
-            .send_ingress_safe(
-                self.caller,
-                self.minter_id,
-                "consolidate_utxos",
-                Encode!(&threshold).unwrap(),
-            )
-            .expect("failed to submit consolidate_utxos ingress");
-        let result = self.env.await_ingress(message_id, 100_000).unwrap();
-        Decode!(&assert_reply(result), Result<u64, String>).unwrap()
-    }
-
     pub fn estimate_withdrawal_fee(&self, amount: Option<u64>) -> WithdrawalFee {
         self.refresh_fee_percentiles();
         Decode!(
@@ -1307,7 +1294,7 @@ impl CkBtcSetup {
                 }
             }
         }
-        self.print_minter_logs();
+        self.print_minter_canister_logs();
         panic!(
             "the minter did not submit a transaction in {max_ticks} ticks; last status {last_status:?}"
         )
@@ -1323,6 +1310,20 @@ impl CkBtcSetup {
             println!(
                 "{} {}:{} {}",
                 entry.timestamp, entry.file, entry.line, entry.message
+            );
+        }
+    }
+
+    pub fn print_minter_canister_logs(&self) {
+        let log = self.env.canister_log(self.minter_id);
+        let mut records = log.records().iter().collect::<Vec<_>>();
+        records.sort_by(|a, b| a.idx.cmp(&b.idx));
+        for entry in records {
+            println!(
+                "[{}] {}: {}",
+                entry.timestamp_nanos,
+                entry.idx,
+                String::from_utf8_lossy(&entry.content)
             );
         }
     }
@@ -1856,15 +1857,12 @@ fn test_transaction_resubmission_finalize_middle() {
 #[test]
 fn test_utxo_consolidation() {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use num_traits::ToPrimitive;
 
     const COUNT: usize = MAX_NUM_INPUTS_IN_TRANSACTION * 2;
-    const THRESHOLD: usize = MAX_NUM_INPUTS_IN_TRANSACTION + 1;
 
     let ckbtc = CkBtcSetup::new();
     let user = Principal::from(ckbtc.caller);
-
-    // Test failure due to too few available utxos.
-    assert_matches!(ckbtc.consolidate_utxos(THRESHOLD), Err(err) if err == "TooFewAvailableUtxos");
 
     // Step 1: create many Utxos to trigger consolidation
     let mut utxo_values: [u64; COUNT] = [0; COUNT];
@@ -1878,10 +1876,8 @@ fn test_utxo_consolidation() {
         .check_minter_metrics()
         .assert_contains_metric_matching(format!("ckbtc_minter_utxos_available {COUNT} \\d+"));
 
-    // Test failure due to fee account having insufficient funds.
-    assert_matches!(ckbtc.consolidate_utxos(THRESHOLD), Err(err) if err.contains("InsufficientFunds"));
     // Mint some ckbtc to fee account.
-    let _ = ckbtc.transfer(
+    let result = ckbtc.transfer(
         Principal::from(ckbtc.minter_id),
         Account {
             owner: ckbtc.minter_id.into(),
@@ -1889,13 +1885,28 @@ fn test_utxo_consolidation() {
         },
         1_000_000,
     );
+    let transfer_index = result.0.to_u64().unwrap();
 
-    // Step 2: trigger consolidation
-    let block_index = ckbtc.consolidate_utxos(THRESHOLD).unwrap();
-    ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
+    // Step 2: upgrade to trigger consolidation task by setting a lower threshold.
+    // upgrade
+    let upgrade_args = UpgradeArgs {
+        min_utxo_consolidation_threshold: Some(1 + MAX_NUM_INPUTS_IN_TRANSACTION as u64),
+        ..Default::default()
+    };
+    let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
+    ckbtc
+        .env
+        .upgrade_canister(
+            ckbtc.minter_id,
+            minter_wasm(),
+            Encode!(&minter_arg).unwrap(),
+        )
+        .expect("Failed to upgrade the minter canister");
 
-    // Step 3: wait for the consolidation transaction to be submitted
-    let txid = ckbtc.await_btc_transaction(block_index, 10);
+    // Step 3: wait for the consolidation transaction to be submitted.
+    // Expect the corresponding burn index to transfer_index + 1.
+    let burn_index = transfer_index + 1;
+    let txid = ckbtc.await_btc_transaction(burn_index, MAX_NUM_INPUTS_IN_TRANSACTION * 6);
     let mempool = ckbtc.mempool();
     let tx = mempool
         .get(&txid)
@@ -1909,7 +1920,7 @@ fn test_utxo_consolidation() {
 
     // Step 4: finalize the new transaction
     ckbtc.finalize_transaction(tx);
-    assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
+    assert_eq!(ckbtc.await_finalization(burn_index, 10), txid);
     ckbtc.minter_self_check();
 
     let new_count = COUNT - MAX_NUM_INPUTS_IN_TRANSACTION + 2;

@@ -1393,11 +1393,11 @@ pub enum ConsolidateUtxoError {
 /// share the same logic as a retrieve_btc request.
 pub async fn consolidate_utxos<R: CanisterRuntime>(
     runtime: &R,
-    min_consolidation_utxo_required: usize,
 ) -> Result<u64, ConsolidateUtxoError> {
     // TODO DEFI-2551: make this configurable
     const MIN_CONSOLIDATION_INTERVAL: Duration = Duration::from_secs(24 * 3600);
-
+    let min_consolidation_utxo_required =
+        read_state(|s| s.min_utxo_consolidation_threshold) as usize;
     assert!(min_consolidation_utxo_required > MAX_NUM_INPUTS_IN_TRANSACTION);
     // Return early if number of available UTXOs is below consolidation threshold.
     if read_state(|s| s.available_utxos.len() < min_consolidation_utxo_required) {
@@ -1419,7 +1419,6 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
         mutate_state(|s| s.last_consolidate_utxos_request_created_time_ns = last_submission);
     });
 
-    // Select UTXOs to consolidate. Note that they are not removed from available_utxos yet.
     let input_utxos = mutate_state(|s| select_utxos_to_consolidate(&mut s.available_utxos));
     let restore_utxos = |utxos| {
         mutate_state(|s| {
