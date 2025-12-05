@@ -343,6 +343,7 @@ system_test_nns(
     name = "mainnet_nns",
     # env_inherit = ["SSH_AUTH_SOCK"],
     env = MAINNET_ENV | {
+        # TODO (CON-1624): Remove those dependencies once changes reached mainnet NNS
         "IC_RECOVERY_PATH": "$(rootpath //rs/recovery:ic-recovery)",
         "IC_REPLAY_PATH": "$(rootpath //rs/replay:ic-replay)",
     },
@@ -356,6 +357,7 @@ system_test_nns(
     uses_setupos_mainnet_latest_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS + [
         "//rs/tests:recovery/binaries",
+        # TODO (CON-1624): Remove those dependencies once changes reached mainnet NNS
         "//rs/recovery:ic-recovery",
         "//rs/replay:ic-replay",
     ],

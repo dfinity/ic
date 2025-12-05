@@ -737,55 +737,12 @@ fn with_trusted_neurons_following_neuron_for_tests(env: &TestEnv, neuron_id: Neu
 }
 
 fn fetch_mainnet_ic_replay(env: &TestEnv) {
+    // TODO (CON-1624): fetch the mainnet version of ic-replay
     std::fs::copy(
         get_dependency_path(std::env::var("IC_REPLAY_PATH").unwrap()),
         env.get_path(PATH_IC_REPLAY),
     )
     .unwrap();
-
-    // TODO: uncomment me
-    // let logger = env.logger();
-    // let version = get_mainnet_nns_revision().unwrap();
-    // let mainnet_ic_replica_url =
-    //     format!("https://download.dfinity.systems/ic/{version}/release/ic-replay.gz");
-    // let ic_replay_path = env.get_path(IC_REPLAY);
-    // let ic_replay_gz_path = env.get_path("ic-replay.gz");
-    // // let mut tmp_file = tempfile::tempfile().unwrap();
-    // info!(
-    //     logger,
-    //     "Downloading {mainnet_ic_replica_url:?} to {ic_replay_gz_path:?} ..."
-    // );
-    // let response = reqwest::blocking::get(mainnet_ic_replica_url.clone())
-    //     .unwrap_or_else(|e| panic!("Failed to download {mainnet_ic_replica_url:?} because {e:?}"));
-    // if !response.status().is_success() {
-    //     panic!("Failed to download {mainnet_ic_replica_url}");
-    // }
-    // let bytes = response.bytes().unwrap();
-    // let mut content = Cursor::new(bytes);
-    // let mut ic_replay_gz_file = File::create(ic_replay_gz_path.clone()).unwrap();
-    // std::io::copy(&mut content, &mut ic_replay_gz_file).unwrap_or_else(|e| {
-    //     panic!("Can't copy {mainnet_ic_replica_url} to {ic_replay_gz_path:?} because {e:?}")
-    // });
-    // info!(
-    //     logger,
-    //     "Downloaded {mainnet_ic_replica_url:?} to {ic_replay_gz_path:?}. Uncompressing to {ic_replay_path:?} ..."
-    // );
-    // let ic_replay_gz_file = File::open(ic_replay_gz_path.clone()).unwrap();
-    // let mut gz = GzDecoder::new(&ic_replay_gz_file);
-    // let mut ic_replay_file = OpenOptions::new()
-    //     .create(true)
-    //     .truncate(false)
-    //     .write(true)
-    //     .mode(0o755)
-    //     .open(ic_replay_path.clone())
-    //     .unwrap();
-    // std::io::copy(&mut gz, &mut ic_replay_file).unwrap_or_else(|e| {
-    //     panic!("Can't uncompress {ic_replay_gz_path:?} to {ic_replay_path:?} because {e:?}")
-    // });
-    // info!(
-    //     logger,
-    //     "Uncompressed {ic_replay_gz_path:?} to {ic_replay_path:?}"
-    // );
 }
 
 fn setup_test_neuron(env: &TestEnv) -> NeuronId {
@@ -795,53 +752,12 @@ fn setup_test_neuron(env: &TestEnv) -> NeuronId {
 }
 
 fn fetch_mainnet_ic_recovery(env: &TestEnv) {
+    // TODO (CON-1624): fetch the mainnet version of ic-recovery
     std::fs::copy(
         get_dependency_path(std::env::var("IC_RECOVERY_PATH").unwrap()),
         env.get_path(PATH_IC_RECOVERY),
     )
     .unwrap();
-
-    // let logger = env.logger();
-    // let version = get_mainnet_nns_revision().unwrap();
-    // let mainnet_ic_recovery_url =
-    //     format!("https://download.dfinity.systems/ic/{version}/release/ic-recovery.gz");
-    // let ic_recovery_path = env.get_path(PATH_IC_RECOVERY);
-    // let ic_recovery_gz_path = env.get_path("ic-recovery.gz");
-    // info!(
-    //     logger,
-    //     "Downloading {mainnet_ic_recovery_url:?} to {ic_recovery_gz_path:?} ..."
-    // );
-    // let response = reqwest::blocking::get(mainnet_ic_recovery_url.clone())
-    //     .unwrap_or_else(|e| panic!("Failed to download {mainnet_ic_recovery_url:?} because {e:?}"));
-    // if !response.status().is_success() {
-    //     panic!("Failed to download {mainnet_ic_recovery_url}");
-    // }
-    // let bytes = response.bytes().unwrap();
-    // let mut content = Cursor::new(bytes);
-    // let mut ic_recovery_gz_file = File::create(ic_recovery_gz_path.clone()).unwrap();
-    // std::io::copy(&mut content, &mut ic_recovery_gz_file).unwrap_or_else(|e| {
-    //     panic!("Can't copy {mainnet_ic_recovery_url} to {ic_recovery_gz_path:?} because {e:?}")
-    // });
-    // info!(
-    //     logger,
-    //     "Downloaded {mainnet_ic_recovery_url:?} to {ic_recovery_gz_path:?}. Uncompressing to {ic_recovery_path:?} ..."
-    // );
-    // let ic_recovery_gz_file = File::open(ic_recovery_gz_path.clone()).unwrap();
-    // let mut gz = GzDecoder::new(&ic_recovery_gz_file);
-    // let mut ic_recovery_file = OpenOptions::new()
-    //     .create(true)
-    //     .truncate(false)
-    //     .write(true)
-    //     .mode(0o755)
-    //     .open(ic_recovery_path.clone())
-    //     .unwrap();
-    // std::io::copy(&mut gz, &mut ic_recovery_file).unwrap_or_else(|e| {
-    //     panic!("Can't uncompress {ic_recovery_gz_path:?} to {ic_recovery_path:?} because {e:?}")
-    // });
-    // info!(
-    //     logger,
-    //     "Uncompressed {ic_recovery_gz_path:?} to {ic_recovery_path:?}"
-    // );
 }
 
 fn recover_nns_subnet(
