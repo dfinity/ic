@@ -1063,22 +1063,6 @@ impl CkBtcSetup {
         .unwrap()
     }
 
-    pub fn get_available_utxos_count(&self) -> usize {
-        Decode!(
-            &assert_reply(
-                self.env
-                    .query(
-                        self.minter_id,
-                        "get_available_utxos_count",
-                        Encode!().unwrap()
-                    )
-                    .expect("failed to query balance on the ledger")
-            ),
-            usize
-        )
-        .unwrap()
-    }
-
     pub fn get_known_utxos(&self, account: impl Into<Account>) -> Vec<Utxo> {
         let account = account.into();
         Decode!(
@@ -1426,7 +1410,7 @@ impl CkBtcSetup {
         .expect("minter self-check failed")
     }
 
-    pub fn check_minter_metrics(self) -> MetricsAssert<Self> {
+    pub fn check_minter_metrics(&self) -> MetricsAssert<&Self> {
         MetricsAssert::from_http_query(self)
     }
 
@@ -1472,7 +1456,7 @@ impl CkBtcSetup {
     }
 }
 
-impl CanisterHttpQuery<UserError> for CkBtcSetup {
+impl CanisterHttpQuery<UserError> for &CkBtcSetup {
     fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
         self.env
             .query(self.minter_id, "http_request", request)
@@ -1890,7 +1874,9 @@ fn test_utxo_consolidation() {
         *x = rng.gen_range(BitcoinFeeEstimator::MINTER_ADDRESS_P2WPKH_DUST_LIMIT..100_000_000);
     }
     ckbtc.deposit_utxos_with_value(user, &utxo_values);
-    assert_eq!(ckbtc.get_available_utxos_count(), COUNT);
+    ckbtc
+        .check_minter_metrics()
+        .assert_contains_metric_matching(format!("ckbtc_minter_utxos_available {COUNT} \\d+"));
 
     // Test failure due to fee account having insufficient funds.
     assert_matches!(ckbtc.consolidate_utxos(THRESHOLD), Err(err) if err.contains("InsufficientFunds"));
@@ -1926,10 +1912,10 @@ fn test_utxo_consolidation() {
     assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
     ckbtc.minter_self_check();
 
-    assert_eq!(
-        ckbtc.get_available_utxos_count(),
-        COUNT - MAX_NUM_INPUTS_IN_TRANSACTION + 2
-    );
+    let new_count = COUNT - MAX_NUM_INPUTS_IN_TRANSACTION + 2;
+    ckbtc
+        .check_minter_metrics()
+        .assert_contains_metric_matching(format!("ckbtc_minter_utxos_available {new_count} \\d+"));
 }
 
 #[test]

@@ -106,12 +106,6 @@ async fn consolidate_utxos(threshold: usize) -> Result<u64, String> {
         .map_err(|err| format!("{:?}", err))
 }
 
-#[cfg(feature = "self_check")]
-#[query]
-async fn get_available_utxos_count() -> usize {
-    read_state(|s| s.available_utxos.len())
-}
-
 fn check_postcondition<T>(t: T) -> T {
     #[cfg(feature = "self_check")]
     ok_or_die(check_invariants());
