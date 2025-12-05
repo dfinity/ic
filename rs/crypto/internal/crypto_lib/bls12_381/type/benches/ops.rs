@@ -333,6 +333,14 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
         )
     });
 
+    group.bench_function("multiply_vartime", |b| {
+        b.iter_batched_ref(
+            || (random_g1(rng).to_affine(), random_scalar(rng)),
+            |(pt, scalar)| pt.mul_vartime(scalar),
+            BatchSize::SmallInput,
+        )
+    });
+
     group.bench_function("batch_mul(32)", |b| {
         b.iter_batched_ref(
             || (random_g1(rng).to_affine(), n_random_scalar(32, rng)),
@@ -362,6 +370,23 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
                 )
             },
             |(pt, scalar)| pt.clone() * scalar.clone(),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("multiply vartime with precompute", |b| {
+        b.iter_batched_ref(
+            || {
+                (
+                    {
+                        let mut pt = random_g1(rng).to_affine();
+                        pt.precompute();
+                        pt
+                    },
+                    random_scalar(rng),
+                )
+            },
+            |(pt, scalar)| pt.mul_vartime(scalar),
             BatchSize::SmallInput,
         )
     });
@@ -524,6 +549,14 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
         )
     });
 
+    group.bench_function("multiply vartime", |b| {
+        b.iter_batched_ref(
+            || (random_g2(rng).to_affine(), random_scalar(rng)),
+            |(pt, scalar)| pt.mul_vartime(scalar),
+            BatchSize::SmallInput,
+        )
+    });
+
     group.bench_function("batch_mul(32)", |b| {
         b.iter_batched_ref(
             || (random_g2(rng).to_affine(), n_random_scalar(32, rng)),
@@ -553,6 +586,23 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
                 )
             },
             |(pt, scalar)| pt.clone() * scalar.clone(),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("multiply vartime with precompute", |b| {
+        b.iter_batched_ref(
+            || {
+                (
+                    {
+                        let mut pt = random_g2(rng).to_affine();
+                        pt.precompute();
+                        pt
+                    },
+                    random_scalar(rng),
+                )
+            },
+            |(pt, scalar)| pt.mul_vartime(scalar),
             BatchSize::SmallInput,
         )
     });

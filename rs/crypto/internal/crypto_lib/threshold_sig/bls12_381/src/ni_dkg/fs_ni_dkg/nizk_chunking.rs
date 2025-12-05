@@ -375,7 +375,7 @@ pub fn verify_chunking(
         rhs = g1 ^ z_r_i | i <- [1..n]]
          */
 
-        let rhs = g1.batch_mul(&nizk.z_r);
+        let rhs = g1.batch_mul_vartime(&nizk.z_r);
 
         let lhs = {
             let mut lhs = Vec::with_capacity(e.len());
@@ -403,7 +403,7 @@ pub fn verify_chunking(
         // Verify: product [bb_k ^ x^k | k <- [1..l]] * dd_0 == g1 ^ z_beta
         let lhs = G1Projective::muln_affine_vartime(&nizk.bb, &xpowers) + &nizk.dd[0];
 
-        let rhs = g1 * &nizk.z_beta;
+        let rhs = g1.mul_vartime(&nizk.z_beta);
         if lhs != rhs {
             return Err(ZkProofChunkingError::InvalidProof);
         }

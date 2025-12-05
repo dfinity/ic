@@ -168,6 +168,30 @@ alias(
     }),
 )
 
+### pebble & pebble DNS, used in Boundary Nodes ACME testing
+
+alias(
+    name = "pebble",
+    actual = select({
+        "@bazel_tools//src/conditions:darwin_x86_64": "@pebble-x86_64-darwin//:pebble-bin",
+        "@bazel_tools//src/conditions:darwin_arm64": "@pebble-aarch64-darwin//:pebble-bin",
+        "@bazel_tools//src/conditions:linux_x86_64": "@pebble-x86_64-linux//:pebble-bin",
+        "@bazel_tools//src/conditions:linux_aarch64": "@pebble-aarch64-linux//:pebble-bin",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
+alias(
+    name = "pebble-challtestsrv",
+    actual = select({
+        "@bazel_tools//src/conditions:darwin_x86_64": "@pebble-challtestsrv-x86_64-darwin//:pebble-challtestsrv-bin",
+        "@bazel_tools//src/conditions:darwin_arm64": "@pebble-challtestsrv-aarch64-darwin//:pebble-challtestsrv-bin",
+        "@bazel_tools//src/conditions:linux_x86_64": "@pebble-challtestsrv-x86_64-linux//:pebble-challtestsrv-bin",
+        "@bazel_tools//src/conditions:linux_aarch64": "@pebble-challtestsrv-aarch64-linux//:pebble-challtestsrv-bin",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
 ### didc, used in fuzz testing
 
 alias(

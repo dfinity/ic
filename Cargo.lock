@@ -1278,7 +1278,7 @@ dependencies = [
  "bitflags 2.10.0",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.10.5",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -6187,7 +6187,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.5.9",
+ "socket2 0.4.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -6752,9 +6752,9 @@ dependencies = [
 
 [[package]]
 name = "ic-bn-lib"
-version = "0.1.4"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66746cb6f1df32057e5e1ff1bb37c211c9291c3726366f2db5ded805ac273b19"
+checksum = "3599e9508f07699776ec5b1a834441894662d7f71cd79a2aba944b190e606adf"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -6947,6 +6947,7 @@ dependencies = [
  "simple_moving_average",
  "slog",
  "strum 0.26.3",
+ "tempfile",
  "thiserror 2.0.17",
  "tikv-jemalloc-ctl",
  "tikv-jemallocator",
@@ -7707,6 +7708,7 @@ dependencies = [
  "ic-ckbtc-minter",
  "ic-ckdoge-minter-test-utils",
  "ic-http-types",
+ "ic-management-canister-types 0.5.0",
  "ic-secp256k1 0.3.0",
  "icrc-ledger-types",
  "pocket-ic",
@@ -9353,8 +9355,7 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-canister-client",
- "ic-config",
- "ic-crypto",
+ "ic-crypto-for-verification-only",
  "ic-crypto-node-key-generation",
  "ic-crypto-utils-threshold-sig-der",
  "ic-interfaces",
@@ -9367,9 +9368,6 @@ dependencies = [
  "ic-types",
  "prost 0.13.4",
  "serde",
- "slog",
- "slog-async",
- "slog-term",
  "tempfile",
  "tokio",
  "url",
@@ -19187,6 +19185,7 @@ dependencies = [
  "nix 0.24.3",
  "prometheus 0.13.4",
  "prost 0.13.4",
+ "qrcode",
  "rand 0.8.5",
  "rcgen 0.13.2",
  "rustls 0.23.27",
@@ -19804,7 +19803,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "10.0.0"
+version = "11.0.0"
 dependencies = [
  "backoff",
  "base64 0.13.1",
@@ -19857,7 +19856,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic-server"
-version = "10.0.0"
+version = "11.0.0"
 dependencies = [
  "aide",
  "askama",
@@ -20413,7 +20412,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22505a5c94da8e3b7c2996394d1c933236c4d743e81a410bcca4e6989fc066a4"
 dependencies = [
  "bytes",
- "heck 0.5.0",
+ "heck 0.4.1",
  "itertools 0.12.1",
  "log",
  "multimap",
@@ -20433,8 +20432,8 @@ version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0f3e5beed80eb580c68e2c600937ac2c4eedabdfd5ef1e5b7ea4f3fba84497b"
 dependencies = [
- "heck 0.5.0",
- "itertools 0.13.0",
+ "heck 0.4.1",
+ "itertools 0.10.5",
  "log",
  "multimap",
  "once_cell",
@@ -20467,7 +20466,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "157c5a9d7ea5c2ed2d9fb8f495b64759f7816c7eaea54ba3978f0d63000162e3"
 dependencies = [
  "anyhow",
- "itertools 0.13.0",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "syn 2.0.110",
@@ -20480,7 +20479,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9120690fafc389a67ba3803df527d0ec9cbbc9cc45e4cc20b332996dfb672425"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "syn 2.0.110",
@@ -20623,6 +20622,12 @@ name = "punycode"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e9e1dcb320d6839f6edb64f7a4a59d39b30480d4d1765b56873f7c858538a5fe"
+
+[[package]]
+name = "qrcode"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
 
 [[package]]
 name = "quanta"
@@ -23280,7 +23285,7 @@ version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03c3c6b7927ffe7ecaa769ee0e3994da3b8cafc8f444578982c83ecb161af917"
 dependencies = [
- "heck 0.5.0",
+ "heck 0.4.1",
  "proc-macro2",
  "quote",
  "syn 2.0.110",
