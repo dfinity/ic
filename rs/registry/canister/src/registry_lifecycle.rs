@@ -352,7 +352,6 @@ mod test {
             dc_id: "dummy_dc_id_3nu7r".to_string(),
             ipv6: Some("dummy_ipv6_3nu7r".to_string()),
             // Empty max rewardable nodes, should be filled in by the migration
-            max_rewardable_nodes: btreemap! {},
             ..NodeOperatorRecord::default()
         };
         node_operator_additions.push(insert(
@@ -369,8 +368,7 @@ mod test {
             node_operator_principal_id: node_operator_ujq4k.to_vec(),
             dc_id: "dummy_dc_id_ujq4k".to_string(),
             ipv6: Some("dummy_ipv6_ujq4k".to_string()),
-            // wrong rewardable nodes, should be fixed by the migration
-            rewardable_nodes: btreemap! {"type1.1".to_string() => 19},
+            rewardable_nodes: btreemap! {"type1.1".to_string() => 9},
             max_rewardable_nodes: btreemap! {"type1.1".to_string() => 9},
             ..NodeOperatorRecord::default()
         };
@@ -388,9 +386,7 @@ mod test {
             node_operator_principal_id: node_operator_bmlhw.to_vec(),
             dc_id: "dummy_dc_id_bmlhw".to_string(),
             ipv6: Some("dummy_ipv6_bmlhw".to_string()),
-            // wrong rewardable nodes, should be fixed by the migration
-            rewardable_nodes: btreemap! {"type1".to_string() => 14},
-            max_rewardable_nodes: btreemap! {"type1.1".to_string() => 14},
+            // Empty max rewardable nodes, should be filled in by the migration
             ..NodeOperatorRecord::default()
         };
         node_operator_additions.push(insert(
@@ -407,7 +403,6 @@ mod test {
             node_operator_principal_id: node_operator_spsu4.to_vec(),
             dc_id: "dummy_dc_id_spsu4".to_string(),
             ipv6: Some("dummy_ipv6_spsu4".to_string()),
-            // wrong rewardable nodes, should be fixed by the migration
             rewardable_nodes: btreemap! {"type1".to_string() => 14},
             max_rewardable_nodes: btreemap! {"type1.1".to_string() => 14},
             ..NodeOperatorRecord::default()
@@ -430,7 +425,6 @@ mod test {
             node_operator_principal_id: node_operator_redpf_v.to_vec(), // WRONG principal ID
             dc_id: "dummy_dc_id_redpf".to_string(),
             ipv6: Some("dummy_ipv6_redpf".to_string()),
-            max_rewardable_nodes: btreemap! {},
             ..NodeOperatorRecord::default()
         };
         node_operator_additions.push(insert(
