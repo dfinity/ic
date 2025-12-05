@@ -626,28 +626,24 @@ pub struct UploadAndRestartStep {
 }
 
 impl UploadAndRestartStep {
-    const CMD_STOP_REPLICA: &str = "sudo systemctl stop ic-replica;";
+    const CMD_STOP_REPLICA: &str = "systemctl stop ic-replica;";
     // Note that on older versions of IC-OS this service does not exist.
     // So try this operation, but ignore possible failure if service
     // does not exist on the affected version.
     const CMD_RESTART_REPLICA: &str = "\
-        (sudo systemctl restart setup-permissions || true);\
-        sudo systemctl start ic-replica;\
-        sudo systemctl status ic-replica;";
+        (systemctl restart setup-permissions || true);\
+        systemctl start ic-replica;\
+        systemctl status ic-replica;";
 
     /// Sets the right state permissions on `target`, by copying the
     /// permissions of the src path, removing executable permission and
     /// giving read permissions for the target path to group and others.
     fn cmd_set_permissions(src: &str, target: &str) -> String {
         let mut set_permissions = String::new();
-        set_permissions.push_str(&format!("sudo chmod -R --reference={src} {target};"));
-        set_permissions.push_str(&format!("sudo chown -R --reference={src} {target};"));
-        set_permissions.push_str(&format!(
-            r"sudo find {target} -type f -exec chmod a-x {{}} \;;"
-        ));
-        set_permissions.push_str(&format!(
-            r"sudo find {target} -type f -exec chmod go+r {{}} \;;"
-        ));
+        set_permissions.push_str(&format!("chmod -R --reference={src} {target};"));
+        set_permissions.push_str(&format!("chown -R --reference={src} {target};"));
+        set_permissions.push_str(&format!(r"find {target} -type f -exec chmod a-x {{}} \;;"));
+        set_permissions.push_str(&format!(r"find {target} -type f -exec chmod go+r {{}} \;;"));
         set_permissions
     }
 }
@@ -702,9 +698,9 @@ impl Step for UploadAndRestartStep {
                 format!("{ic_checkpoints_path}/$(ls {ic_checkpoints_path} | sort | tail -1)");
             // path and name of checkpoint after replay
             let copy_to = format!("{upload_dir}/{CHECKPOINTS}/{max_checkpoint}");
-            let cp = format!("sudo cp -r {copy_from} {copy_to}");
+            let cp = format!("cp -r {copy_from} {copy_to}");
             let cmd_create_and_copy_checkpoint_dir = format!(
-                "sudo mkdir -p {upload_dir}/{CHECKPOINTS}; {cp}; sudo chown -R {account} {upload_dir};"
+                "mkdir -p {upload_dir}/{CHECKPOINTS}; {cp}; chown -R {account} {upload_dir};"
             );
 
             let ssh_helper = SshHelper::new(
@@ -734,7 +730,7 @@ impl Step for UploadAndRestartStep {
 
             let cmd_set_permissions = Self::cmd_set_permissions(&ic_state_path, &upload_dir);
             let cmd_replace_state =
-                format!("sudo rm -r {ic_state_path}; sudo mv {upload_dir} {ic_state_path};");
+                format!("rm -r {ic_state_path}; mv {upload_dir} {ic_state_path};");
 
             info!(self.logger, "Restarting replica...");
             ssh_helper.ssh(Self::CMD_STOP_REPLICA.to_string())?;
@@ -758,15 +754,13 @@ impl Step for UploadAndRestartStep {
             // rsync is needed, and thus no checkpoint copying.
             let backup_path = format!("{}/{}", self.work_dir.display(), OLD_IC_STATE);
             info!(self.logger, "Moving original state into {}...", backup_path);
-            let mut cmd_backup_state = Command::new("sudo");
-            cmd_backup_state.arg("mv");
+            let mut cmd_backup_state = Command::new("mv");
             cmd_backup_state.arg(&ic_state_path);
             cmd_backup_state.arg(backup_path);
             confirm_exec_cmd(&mut cmd_backup_state, log)?;
 
             info!(self.logger, "Moving state locally...");
-            let mut mv_to_target = Command::new("sudo");
-            mv_to_target.arg("mv");
+            let mut mv_to_target = Command::new("mv");
             mv_to_target.arg(src);
             mv_to_target.arg(ic_state_path);
             confirm_exec_cmd(&mut mv_to_target, log)?;
@@ -845,7 +839,7 @@ impl Step for StopReplicaStep {
             self.require_confirmation,
             self.key_file.clone(),
         );
-        ssh_helper.ssh("sudo systemctl stop ic-replica".to_string())?;
+        ssh_helper.ssh("systemctl stop ic-replica".to_string())?;
         Ok(())
     }
 }
@@ -982,20 +976,20 @@ impl UploadCUPAndTarStep {
         format!(
             r#"
 cd {};
-OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/ic_registry_local_store);
-GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/ic_registry_local_store);
+OWNER_UID=$(stat -c '%u' /var/lib/ic/data/ic_registry_local_store);
+GROUP_UID=$(stat -c '%g' /var/lib/ic/data/ic_registry_local_store);
 mkdir ic_registry_local_store;
 tar -xf ic_registry_local_store.tar.zst -C ic_registry_local_store;
-sudo chown -R "$OWNER_UID:$GROUP_UID" ic_registry_local_store;
-OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/cups);
-GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/cups);
-sudo chown -R "$OWNER_UID:$GROUP_UID" cup.proto;
-sudo systemctl stop ic-replica;
-sudo rsync -a --delete ic_registry_local_store/ /var/lib/ic/data/ic_registry_local_store/;
-sudo cp cup.proto /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb;
-sudo systemctl restart setup-permissions || true ;
-sudo systemctl start ic-replica;
-sudo systemctl status ic-replica;
+chown -R "$OWNER_UID:$GROUP_UID" ic_registry_local_store;
+OWNER_UID=$(stat -c '%u' /var/lib/ic/data/cups);
+GROUP_UID=$(stat -c '%g' /var/lib/ic/data/cups);
+chown -R "$OWNER_UID:$GROUP_UID" cup.proto;
+systemctl stop ic-replica;
+rsync -a --delete ic_registry_local_store/ /var/lib/ic/data/ic_registry_local_store/;
+cp cup.proto /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb;
+systemctl restart setup-permissions || true ;
+systemctl start ic-replica;
+systemctl status ic-replica;
 "#,
             UploadCUPAndTarStep::get_upload_dir_name(),
         )
@@ -1035,7 +1029,7 @@ impl Step for UploadCUPAndTarStep {
 
         info!(self.logger, "Uploading to {}", self.node_ip);
         let upload_dir = UploadCUPAndTarStep::get_upload_dir_name();
-        ssh_helper.ssh(format!("sudo rm -rf {upload_dir} && mkdir {upload_dir}"))?;
+        ssh_helper.ssh(format!("rm -rf {upload_dir} && mkdir {upload_dir}"))?;
 
         let target = format!("{}@[{}]:{}/", SshUser::Admin, self.node_ip, upload_dir);
 
