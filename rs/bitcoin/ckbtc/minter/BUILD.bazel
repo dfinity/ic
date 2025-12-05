@@ -225,6 +225,7 @@ rust_ic_test(
         "//rs/bitcoin/checker:btc_checker_lib",
         "//rs/bitcoin/mock",
         "//rs/config",
+        "//rs/crypto/test_utils/reproducible_rng",
         "//rs/ledger_suite/icrc1",
         "//rs/ledger_suite/icrc1/ledger",
         "//rs/rust_canisters/canister_test",

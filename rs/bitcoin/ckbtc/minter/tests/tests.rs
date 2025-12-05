@@ -1871,6 +1871,8 @@ fn test_transaction_resubmission_finalize_middle() {
 
 #[test]
 fn test_utxo_consolidation() {
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+
     const COUNT: usize = MAX_NUM_INPUTS_IN_TRANSACTION * 2;
     const THRESHOLD: usize = MAX_NUM_INPUTS_IN_TRANSACTION + 1;
 
@@ -1882,7 +1884,7 @@ fn test_utxo_consolidation() {
 
     // Step 1: create many Utxos to trigger consolidation
     let mut utxo_values: [u64; COUNT] = [0; COUNT];
-    let mut rng = rand::thread_rng();
+    let mut rng = reproducible_rng();
     for x in utxo_values.iter_mut() {
         use rand::Rng;
         *x = rng.gen_range(BitcoinFeeEstimator::MINTER_ADDRESS_P2WPKH_DUST_LIMIT..100_000_000);

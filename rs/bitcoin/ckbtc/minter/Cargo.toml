@@ -57,6 +57,7 @@ flate2 = { workspace = true }
 ic-agent = { workspace = true }
 ic-bitcoin-canister-mock = { path = "../../mock" }
 ic-config = { path = "../../../config" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
 ic-icrc1-ledger = { path = "../../../ledger_suite/icrc1/ledger" }
 ic-metrics-assert = { path = "../../../../packages/ic-metrics-assert" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }

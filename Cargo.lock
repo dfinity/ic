@@ -7658,6 +7658,7 @@ dependencies = [
  "ic-cdk",
  "ic-config",
  "ic-crypto-sha2",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-dummy-getrandom-for-wasm",
  "ic-http-types",
  "ic-icrc1",
