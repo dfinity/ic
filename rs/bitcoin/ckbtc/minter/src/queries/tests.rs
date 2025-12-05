@@ -112,7 +112,7 @@ proptest! {
         });
 
         let expected: DecodeLedgerMemoResult = Ok(Some(DecodedMemo::Mint(Some(MintMemo::from(mint_memo)))));
-        assert_eq!(result, expected, "Decoded Memo mismatch: {:?} vs {:?}", result, expected);
+        prop_assert_eq!(result, expected, "Decoded Memo mismatch: {:?} vs {:?}", result, expected);
     }
 
     #[test]
@@ -132,6 +132,6 @@ proptest! {
         });
 
         let expected: DecodeLedgerMemoResult = Ok(Some(DecodedMemo::Burn(Some(BurnMemo::from(burn_memo)))));
-        assert_eq!(result, expected, "Decoded Memo mismatch: {:?} vs {:?}", result, expected);
+        prop_assert_eq!(result, expected, "Decoded Memo mismatch: {:?} vs {:?}", result, expected);
     }
 }
