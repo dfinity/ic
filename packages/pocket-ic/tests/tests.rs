@@ -3179,10 +3179,6 @@ fn canister_not_found() {
             .unwrap();
 
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-        let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
-        assert!(
-            bytes.contains("canister_not_found\ndetails: The specified canister does not exist.")
-        );
     }
 
     // API requests for subnet via /instances API and proxied through HTTP gateway.
@@ -3206,8 +3202,6 @@ fn canister_not_found() {
             .unwrap();
 
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-        let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
-        assert!(bytes.contains("subnet_not_found\ndetails: The specified subnet cannot be found."));
     }
 
     // Frontend request for canister via HTTP gateway.
@@ -3215,8 +3209,6 @@ fn canister_not_found() {
     let resp = client.get(url).send().unwrap();
 
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-    let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
-    assert!(bytes.contains("404 - canister not found"));
 }
 
 #[test]

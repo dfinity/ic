@@ -31,10 +31,11 @@ use std::str::FromStr;
 use strum::EnumString;
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.9.0";
+pub const CONFIG_VERSION: &str = "1.10.0";
 
 /// List of field paths that have been removed and should not be reused.
-pub static RESERVED_FIELD_PATHS: &[&str] = &["icos_settings.logging"];
+pub static RESERVED_FIELD_PATHS: &[&str] =
+    &["icos_settings.logging", "icos_settings.use_nns_public_key"];
 
 pub type ConfigMap = HashMap<String, String>;
 
@@ -115,9 +116,6 @@ pub struct ICOSSettings {
     pub mgmt_mac: MacAddr6,
     #[serde_as(as = "DisplayFromStr")]
     pub deployment_environment: DeploymentEnvironment,
-    // NODE-1653: remove field after next HostOS/GuestOS upgrade reaches NNS
-    #[serde(default)]
-    pub use_nns_public_key: bool,
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
     pub use_node_operator_private_key: bool,
@@ -378,7 +376,6 @@ mod tests {
             "icos_settings": {
                 "mgmt_mac": "00:00:00:00:00:00",
                 "deployment_environment": "testnet",
-                "use_nns_public_key": false,
                 "nns_urls": [],
                 "use_node_operator_private_key": false,
                 "use_ssh_authorized_keys": false,
@@ -416,7 +413,6 @@ mod tests {
                 node_reward_type: None,
                 mgmt_mac: "00:00:00:00:00:00".parse()?,
                 deployment_environment: DeploymentEnvironment::Testnet,
-                use_nns_public_key: false,
                 nns_urls: vec![],
                 use_node_operator_private_key: false,
                 enable_trusted_execution_environment: false,

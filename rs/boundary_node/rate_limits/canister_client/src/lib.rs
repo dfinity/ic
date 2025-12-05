@@ -59,15 +59,15 @@ pub async fn submit_config(
             }
 
             AddConfigError::InvalidInputConfig(x) => {
-                bail!("rules file is malformed: {}", x.to_string());
+                bail!("rules file is malformed: {x}");
             }
 
             AddConfigError::PolicyViolation(x) => {
-                bail!("rules violate a policy: {}", x.to_string());
+                bail!("rules violate a policy: {x}");
             }
 
             AddConfigError::Internal(x) => {
-                bail!("unexpected error: {}", x.to_string());
+                bail!("unexpected error: {x}");
             }
         }
     }

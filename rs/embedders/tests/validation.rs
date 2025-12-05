@@ -1260,7 +1260,7 @@ fn wasm_with_fixed_sizes(code_section_size: u32, data_section_size: u32) -> Bina
 
 #[test]
 fn large_code_section_rejected() {
-    let wasm = wasm_with_fixed_sizes(11 * KB * KB + 10, 0);
+    let wasm = wasm_with_fixed_sizes(12 * KB * KB + 10, 0);
     let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger());
     let result = validate_and_instrument_for_testing(&embedder, &wasm);
     assert_matches!(
