@@ -116,7 +116,8 @@ fn fix_node_operators_corrupted(registry: &Registry) -> Vec<RegistryMutation> {
     match create_node_operator_mutation(
         registry,
         "ujq4k-55epc-pg2bt-jt2f5-6vaq3-diru7-edprm-42rd2-j7zzd-yjaai-2qe",
-        // Dummy mutation that should just increase the registry version
+        // Dummy mutation used to increase the registry version for this record so that clients
+        // can reconcile the record with the last record present in the registry
         |_, _| {},
     ) {
         Ok(mutation) => mutations.push(mutation),
@@ -142,7 +143,8 @@ fn fix_node_operators_corrupted(registry: &Registry) -> Vec<RegistryMutation> {
     match create_node_operator_mutation(
         registry,
         "spsu4-5hl4t-bfubp-qvoko-jprw4-wt7ou-nlnbk-gb5ib-aqnoo-g4gl6-kae",
-        // Dummy mutation that should just increase the registry version
+        // Dummy mutation used to increase the registry version for this record so that clients
+        // can reconcile the record with the last record present in the registry
         |_, _| {},
     ) {
         Ok(mutation) => mutations.push(mutation),
