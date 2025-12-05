@@ -5,7 +5,6 @@ use std::{
 
 use ic_canister_client::{Agent, Sender};
 use ic_config::crypto::CryptoConfig;
-use ic_crypto::CryptoComponent;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::types::v1 as pb;
@@ -24,7 +23,7 @@ use url::Url;
 
 use crate::{
     registry::{RegistryCanisterClient, get_nodes},
-    util::{http_url, make_logger},
+    util::http_url,
 };
 
 pub mod registry;
@@ -165,13 +164,7 @@ pub fn verify(
     ic_crypto_node_key_generation::generate_node_keys_once(&crypto_config, Some(handle.clone()))
         .expect("error generating node public keys");
     let client_clone = Arc::clone(&client);
-    let crypto = Arc::new(CryptoComponent::new(
-        &crypto_config,
-        Some(handle),
-        client_clone,
-        make_logger().into(),
-        None,
-    ));
+    let crypto = Arc::new(ic_crypto_for_verification_only::new(client_clone));
 
     println!("\nReading CUP file at {cup_path:?}");
     let bytes = std::fs::read(cup_path).expect("Failed to read file");

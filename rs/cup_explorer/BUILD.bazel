@@ -6,7 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_client",
     "//rs/config",
-    "//rs/crypto",
+    "//rs/crypto/for_verification_only",
     "//rs/crypto/node_key_generation",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/interfaces",
