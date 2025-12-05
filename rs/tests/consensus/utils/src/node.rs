@@ -58,8 +58,8 @@ pub fn get_node_certified_height(node: &IcNodeSnapshot, log: Logger) -> Height {
 }
 
 /// Assert that the given node has a state and local CUP within the next 5 minutes.
-pub fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) {
-    assert_node_is_unassigned_with_ssh_session(node, None, logger)
+pub fn assert_node_is_assigned(node: &IcNodeSnapshot, logger: &Logger) {
+    assert_node_is_assigned_with_ssh_session(node, None, logger)
 }
 
 /// Assert that the given node has a state and local CUP within the next 5 minutes.
