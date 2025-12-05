@@ -1,5 +1,5 @@
 {
-  "checksum": "5c80229443064db2a4523125f04d51cbdd2b83b0c8cf6ae28242b2622994dcdc",
+  "checksum": "c656cf494147b9c436a7adbc61d8bbcb2e5cd678930a5a0655d78ab64e308690",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21640,7 +21640,7 @@
               "target": "ic_agent"
             },
             {
-              "id": "ic-bn-lib 0.1.4",
+              "id": "ic-bn-lib 0.1.6",
               "target": "ic_bn_lib"
             },
             {
@@ -34968,14 +34968,14 @@
       ],
       "license_file": null
     },
-    "ic-bn-lib 0.1.4": {
+    "ic-bn-lib 0.1.6": {
       "name": "ic-bn-lib",
-      "version": "0.1.4",
+      "version": "0.1.6",
       "package_url": "https://github.com/dfinity/ic-bn-lib",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-bn-lib/0.1.4/download",
-          "sha256": "66746cb6f1df32057e5e1ff1bb37c211c9291c3726366f2db5ded805ac273b19"
+          "url": "https://static.crates.io/crates/ic-bn-lib/0.1.6/download",
+          "sha256": "3599e9508f07699776ec5b1a834441894662d7f71cd79a2aba944b190e606adf"
         }
       },
       "targets": [
@@ -35329,11 +35329,13 @@
           ],
           "selects": {}
         },
-        "version": "0.1.4"
+        "version": "0.1.6"
       },
-      "license": null,
-      "license_ids": [],
-      "license_file": "LICENSE"
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
     },
     "ic-bn-lib-common 0.1.0": {
       "name": "ic-bn-lib-common",
@@ -36441,7 +36443,7 @@
               "target": "fqdn"
             },
             {
-              "id": "ic-bn-lib 0.1.4",
+              "id": "ic-bn-lib 0.1.6",
               "target": "ic_bn_lib"
             },
             {
@@ -36583,7 +36585,7 @@
               "target": "humantime"
             },
             {
-              "id": "ic-bn-lib 0.1.4",
+              "id": "ic-bn-lib 0.1.6",
               "target": "ic_bn_lib"
             },
             {
@@ -36771,7 +36773,7 @@
               "target": "fqdn"
             },
             {
-              "id": "ic-bn-lib 0.1.4",
+              "id": "ic-bn-lib 0.1.6",
               "target": "ic_bn_lib"
             },
             {
@@ -37127,7 +37129,7 @@
               "target": "humantime"
             },
             {
-              "id": "ic-bn-lib 0.1.4",
+              "id": "ic-bn-lib 0.1.6",
               "target": "ic_bn_lib"
             },
             {
@@ -97703,7 +97705,7 @@
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.12",
     "ic-agent 0.40.1",
-    "ic-bn-lib 0.1.4",
+    "ic-bn-lib 0.1.6",
     "ic-bn-lib-common 0.1.0",
     "ic-btc-interface 0.2.3",
     "ic-canister-log 0.2.0",

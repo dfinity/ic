@@ -118,12 +118,10 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     async fn sign(
         self,
         _: context::Context,
-        algorithm_id: AlgorithmId,
         msg: ByteBuf,
-        key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError> {
         let vault = self.local_csp_vault;
-        let job = move || vault.sign(algorithm_id, msg.into_vec(), key_id);
+        let job = move || vault.sign(msg.into_vec());
         execute_on_thread_pool(&self.thread_pool, job).await
     }
 

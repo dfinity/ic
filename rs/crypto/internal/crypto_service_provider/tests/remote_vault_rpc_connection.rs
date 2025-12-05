@@ -2,7 +2,6 @@ use crate::MessageLength::{Small, TooLarge};
 use assert_matches::assert_matches;
 use ic_config::logger::Config as LoggerConfig;
 use ic_crypto_internal_csp::api::CspCreateMEGaKeyError;
-use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::CspSignature;
 use ic_crypto_internal_csp::vault::api::CspBasicSignatureError::TransientInternalError;
 use ic_crypto_internal_csp::vault::api::{
@@ -16,7 +15,6 @@ use ic_crypto_temp_crypto_vault::RemoteVaultEnvironment;
 use ic_logger::{ReplicaLogger, info, new_logger, new_replica_logger_from_config};
 use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
 use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
-use ic_types::crypto::AlgorithmId;
 use slog::Level;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -37,22 +35,21 @@ fn should_reconnect_after_request_from_client_cannot_be_sent_because_too_large()
     let client_cannot_send_large_request = vault_client_with_short_timeouts(&env)
         .with_max_frame_length(MAX_FRAME_LENGTH_FOR_TEST)
         .build_expecting_ok();
-    let node_signing_public_key = client_cannot_send_large_request
+    let _node_signing_public_key = client_cannot_send_large_request
         .gen_node_signing_key_pair()
         .expect("failed generating node signing key pair");
-    let key_id = KeyId::from(&node_signing_public_key);
 
-    let signature = sign_message(Small, key_id, &client_cannot_send_large_request);
+    let signature = sign_message(Small, &client_cannot_send_large_request);
     assert_matches!(signature, Ok(_));
 
-    let signature = sign_message(TooLarge, key_id, &client_cannot_send_large_request);
+    let signature = sign_message(TooLarge, &client_cannot_send_large_request);
     assert_matches!(signature, Err(TransientInternalError {internal_error})
         if internal_error.contains("the client failed to send the request")
         && internal_error.contains("Caused by: could not write to the transport")
         && internal_error.contains("Caused by: frame size too big")
     );
 
-    let signature = sign_message(Small, key_id, &client_cannot_send_large_request);
+    let signature = sign_message(Small, &client_cannot_send_large_request);
     assert_matches!(signature, Ok(_));
 }
 
@@ -68,18 +65,17 @@ fn should_reconnect_after_request_from_client_cannot_be_received_by_server_becau
         .new_vault_client_builder()
         .with_rpc_timeouts(Duration::from_secs(3))
         .build_expecting_ok();
-    let node_signing_public_key = client
+    let _node_signing_public_key = client
         .gen_node_signing_key_pair()
         .expect("failed generating node signing key pair");
-    let key_id = KeyId::from(&node_signing_public_key);
 
-    let signature_before_error = sign_message(Small, key_id, &client);
+    let signature_before_error = sign_message(Small, &client);
     assert_matches!(signature_before_error, Ok(_));
 
-    let signature = sign_message(TooLarge, key_id, &client);
+    let signature = sign_message(TooLarge, &client);
     assert_matches!(signature, Err(TransientInternalError {internal_error}) if internal_error.contains("the request exceeded its deadline"));
 
-    let signature_after_error = sign_message(Small, key_id, &client);
+    let signature_after_error = sign_message(Small, &client);
     assert_eq!(signature_before_error, signature_after_error);
 }
 
@@ -147,12 +143,11 @@ fn should_reconnect_with_existing_client_after_server_killed_and_restarted() {
     let client = vault_client_with_short_timeouts(&env)
         .with_logger(new_logger!(&logger))
         .build_expecting_ok();
-    let node_signing_public_key = client
+    let _node_signing_public_key = client
         .gen_node_signing_key_pair()
         .expect("failed generating node signing key pair");
-    let key_id = KeyId::from(&node_signing_public_key);
 
-    let signature_before_shutdown = sign_message(Small, key_id, &client);
+    let signature_before_shutdown = sign_message(Small, &client);
     assert_matches!(signature_before_shutdown, Ok(_));
 
     env.shutdown_server_now();
@@ -169,10 +164,10 @@ fn should_reconnect_with_existing_client_after_server_killed_and_restarted() {
     let _ensure_env_is_not_dropped = Arc::clone(&env);
 
     //will block until connection is back
-    let signature_during_shutdown = sign_message(Small, key_id, &client);
+    let signature_during_shutdown = sign_message(Small, &client);
     assert_eq!(signature_before_shutdown, signature_during_shutdown);
 
-    let signature_after_restart = sign_message(Small, key_id, &client);
+    let signature_after_restart = sign_message(Small, &client);
     assert_eq!(signature_before_shutdown, signature_after_restart);
 }
 
@@ -186,16 +181,15 @@ fn should_connect_with_new_client_after_server_killed_and_restarted() {
     let client = vault_client_with_short_timeouts(&env)
         .with_logger(logger)
         .build_expecting_ok();
-    let node_signing_public_key = client
+    let _node_signing_public_key = client
         .gen_node_signing_key_pair()
         .expect("failed generating node signing key pair");
-    let key_id = KeyId::from(&node_signing_public_key);
 
     env.shutdown_server_now();
     env.restart_server();
     let client = vault_client_with_short_timeouts(&env).build_expecting_ok();
 
-    let signature = sign_message(Small, key_id, &client);
+    let signature = sign_message(Small, &client);
     assert_matches!(signature, Ok(_));
 }
 
@@ -247,18 +241,16 @@ impl MessageLength {
 
 fn sign_message(
     message_length: MessageLength,
-    key_id: KeyId,
     client: &RemoteCspVault,
 ) -> Result<CspSignature, CspBasicSignatureError> {
-    sign_message_of_length(message_length.number_of_bytes(), key_id, client)
+    sign_message_of_length(message_length.number_of_bytes(), client)
 }
 
 fn sign_message_of_length(
     number_of_bytes: usize,
-    key_id: KeyId,
     client: &RemoteCspVault,
 ) -> Result<CspSignature, CspBasicSignatureError> {
-    client.sign(AlgorithmId::Ed25519, vec![0_u8; number_of_bytes], key_id)
+    client.sign(vec![0_u8; number_of_bytes])
 }
 
 /// Activate [tracing](https://github.com/tokio-rs/tracing) used by the
