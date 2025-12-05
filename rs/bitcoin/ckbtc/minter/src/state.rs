@@ -152,15 +152,7 @@ impl SubmittedWithdrawalRequests {
         }
     }
 
-    pub fn is_empty(&self) -> bool {
-        match self {
-            Self::ToConfirm { requests } => requests.is_empty(),
-            Self::ToCancel { requests, .. } => requests.is_empty(),
-            Self::ToConsolidate { .. } => true,
-        }
-    }
-
-    pub fn len(&self) -> usize {
+    pub fn count_retrieve_btc_request(&self) -> usize {
         match self {
             Self::ToConfirm { requests } => requests.len(),
             Self::ToCancel { requests, .. } => requests.len(),
@@ -900,7 +892,7 @@ impl CkBtcMinterState {
             + self
                 .submitted_transactions
                 .iter()
-                .map(|tx| tx.requests.len())
+                .map(|tx| tx.requests.count_retrieve_btc_request())
                 .sum::<usize>()
     }
 
@@ -991,7 +983,6 @@ impl CkBtcMinterState {
                 })
             }
             SubmittedWithdrawalRequests::ToConsolidate { request } => {
-                ic_cdk::println!("finalize_ransaction {:?}", request);
                 self.push_finalized_request(FinalizedBtcRequest {
                     request: request.into(),
                     state: FinalizedStatus::Confirmed { txid: *txid },
@@ -1560,18 +1551,6 @@ impl CkBtcMinterState {
 
         let my_txs = as_sorted_vec(self.submitted_transactions.iter().cloned(), |tx| tx.txid);
         let other_txs = as_sorted_vec(other.submitted_transactions.iter().cloned(), |tx| tx.txid);
-        if my_txs != other_txs {
-            log!(
-                Priority::Info,
-                "my_txs = {}, other_txs = {}",
-                my_txs.len(),
-                other_txs.len()
-            );
-            let my_txs_str = format!("{:?}", my_txs);
-            let other_txs_str = format!("{:?}", other_txs);
-            log!(Priority::Info, "my_txs = {}", &my_txs_str[..1000]);
-            log!(Priority::Info, "other_txs = {}", &other_txs_str[..1000]);
-        }
         ensure_eq!(my_txs, other_txs, "submitted_transactions do not match");
 
         ensure_eq!(

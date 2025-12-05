@@ -1419,13 +1419,6 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
         mutate_state(|s| s.last_consolidate_utxos_request_created_time_ns = last_submission);
     });
 
-    let ecdsa_public_key = updates::get_btc_address::init_ecdsa_public_key().await;
-
-    // TODO DEFI-2552: use 25% percentile
-    let fee_millisatoshi_per_vbyte = estimate_fee_per_vbyte(runtime)
-        .await
-        .ok_or(ConsolidateUtxoError::EstimateFeeNotAvailable)?;
-
     // Select UTXOs to consolidate. Note that they are not removed from available_utxos yet.
     let input_utxos = mutate_state(|s| select_utxos_to_consolidate(&mut s.available_utxos));
     let restore_utxos = |utxos| {
@@ -1435,6 +1428,13 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
             }
         })
     };
+
+    let ecdsa_public_key = updates::get_btc_address::init_ecdsa_public_key().await;
+
+    // TODO DEFI-2552: use 25% percentile
+    let fee_millisatoshi_per_vbyte = estimate_fee_per_vbyte(runtime)
+        .await
+        .ok_or(ConsolidateUtxoError::EstimateFeeNotAvailable)?;
 
     // There will be two outputs: 1 normal output and 1 change output, each about
     // half of the total value of the input UTXOs. It could be made into just one
