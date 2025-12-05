@@ -38,7 +38,7 @@ use anyhow::bail;
 use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
-    node::assert_node_is_unassigned_with_ssh_session,
+    node::{assert_node_is_assigned_with_ssh_session, assert_node_is_unassigned_with_ssh_session},
     rw_message::{install_nns_and_check_progress, store_message},
     set_sandbox_env_vars,
     ssh_access::{disable_ssh_access_to_node, wait_until_authentication_is_granted},
@@ -814,13 +814,35 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         }
     }
 
-    info!(
-        logger,
-        "Making sure unassigned nodes deleted their state..."
-    );
-    topology_snapshot.unassigned_nodes().for_each(|n| {
-        assert_node_is_unassigned_with_ssh_session(&n, admin_ssh_sessions.get(&n.node_id), &logger);
-    });
+    if !matches!(
+        cfg.corrupt_cup,
+        CupCorruption::CorruptedIncludingInvalidNiDkgId
+    ) {
+        info!(
+            logger,
+            "Making sure unassigned nodes deleted their state..."
+        );
+        topology_snapshot.unassigned_nodes().for_each(|n| {
+            assert_node_is_unassigned_with_ssh_session(
+                &n,
+                admin_ssh_sessions.get(&n.node_id),
+                &logger,
+            );
+        });
+    } else {
+        info!(
+            logger,
+            "Since the CUP is corrupted unrecoverably, unassigned nodes should not have detected
+             that they became unassigned and should still have their state and CUP. Checking..."
+        );
+        topology_snapshot.unassigned_nodes().for_each(|n| {
+            assert_node_is_assigned_with_ssh_session(
+                &n,
+                admin_ssh_sessions.get(&n.node_id),
+                &logger,
+            );
+        });
+    }
 }
 
 fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, logger: &Logger) {

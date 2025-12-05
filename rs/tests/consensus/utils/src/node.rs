@@ -58,7 +58,17 @@ pub fn get_node_certified_height(node: &IcNodeSnapshot, log: Logger) -> Height {
 }
 
 /// Assert that the given node has a state and local CUP within the next 5 minutes.
-pub fn assert_node_is_assigned(node: &IcNodeSnapshot, logger: &Logger) {
+pub fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) {
+    assert_node_is_unassigned_with_ssh_session(node, None, logger)
+}
+
+/// Assert that the given node has a state and local CUP within the next 5 minutes.
+/// Reuses the provided SSH session if given, otherwise creates a new one.
+pub fn assert_node_is_assigned_with_ssh_session(
+    node: &IcNodeSnapshot,
+    existing_session: Option<&Session>,
+    logger: &Logger,
+) {
     info!(
         logger,
         "Asserting that node {} has a state and local CUP.",
@@ -73,9 +83,10 @@ pub fn assert_node_is_assigned(node: &IcNodeSnapshot, logger: &Logger) {
         [ -f /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb ] && \
         echo "assigned" || echo "unassigned"
     "#;
-    let s = node
-        .block_on_ssh_session()
-        .expect("Failed to establish SSH session");
+    let s = existing_session.cloned().unwrap_or_else(|| {
+        node.block_on_ssh_session()
+            .expect("Failed to establish SSH session")
+    });
 
     ic_system_test_driver::retry_with_msg!(
         format!("check if node {} is assigned", node.node_id),
