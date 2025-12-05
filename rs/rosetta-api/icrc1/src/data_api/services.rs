@@ -1167,17 +1167,27 @@ mod test {
                         };
 
                         // We make sure that the service returns the correct number of transactions for each account
-                        search_transactions_request.account_identifier =
-                            match rosetta_blocks[0].block.transaction.operation {
-                                IcrcOperation::Transfer { from, .. } => Some(from.into()),
-                                IcrcOperation::Mint { to, .. } => Some(to.into()),
-                                IcrcOperation::Burn { from, .. } => Some(from.into()),
-                                IcrcOperation::Approve { from, .. } => Some(from.into()),
-                                IcrcOperation::FeeCollector {
-                                    fee_collector: _,
-                                    caller: _,
-                                } => None,
-                            };
+                        for block in &rosetta_blocks {
+                            search_transactions_request.account_identifier =
+                                match block.block.transaction.operation {
+                                    IcrcOperation::Transfer { from, .. } => Some(from.into()),
+                                    IcrcOperation::Mint { to, .. } => Some(to.into()),
+                                    IcrcOperation::Burn { from, .. } => Some(from.into()),
+                                    IcrcOperation::Approve { from, .. } => Some(from.into()),
+                                    IcrcOperation::FeeCollector {
+                                        fee_collector: _,
+                                        caller: _,
+                                    } => None,
+                                };
+                            if search_transactions_request.account_identifier.is_some() {
+                                break;
+                            }
+                        }
+                        if search_transactions_request.account_identifier.is_none() {
+                            // Only fee collector blocks found, we cannot search for transactions by accounts.
+                            // This situation is similar to blockchain.is_empty() above.
+                            return Ok(());
+                        }
 
                         let num_of_transactions_with_account = rosetta_blocks
                             .iter()
@@ -1224,7 +1234,7 @@ mod test {
                                 IcrcOperation::FeeCollector {
                                     fee_collector: _,
                                     caller: _,
-                                } => false, // Search for fee collector tx is not supported
+                                } => false,
                             })
                             .count();
 
