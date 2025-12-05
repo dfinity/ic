@@ -74,25 +74,30 @@ impl ValueBuilder {
         self
     }
 
+    /// Adds a field with an empty array value. This is useful for fields that don't have a meaningful
+    /// payload (e.g., StartDissolving, StopDissolving).
+    pub fn add_empty_field(self, key: impl ToString) -> Self {
+        self.add_field(
+            key,
+            SelfDescribingValue {
+                value: Some(Array(SelfDescribingValueArray { values: vec![] })),
+            },
+        )
+    }
+
     /// Given an `value: Option<T>`, if `value` is `Some(inner)`, add the `inner` to the builder. If
     /// `value` is `None`, add an empty array to the builder. This is useful for cases where a field
     /// is designed to be required, while we want to still add an empty field to the builder in case
     /// of a bug.
     pub fn add_field_with_empty_as_fallback(
-        mut self,
+        self,
         key: impl ToString,
         value: Option<impl Into<SelfDescribingValue>>,
     ) -> Self {
         if let Some(value) = value {
             self.add_field(key, value)
         } else {
-            self.fields.insert(
-                key.to_string(),
-                SelfDescribingValue {
-                    value: Some(Array(SelfDescribingValueArray { values: vec![] })),
-                },
-            );
-            self
+            self.add_empty_field(key)
         }
     }
 
@@ -171,6 +176,7 @@ impl<T: ToSelfDescribingNat> From<T> for SelfDescribingValue {
 
 // Types we want to be able to convert to a SelfDescribingValue as an unsigned integer.
 impl ToSelfDescribingNat for u64 {}
+impl ToSelfDescribingNat for u32 {}
 
 pub(crate) fn to_self_describing_nat(n: impl Into<candid::Nat>) -> Value {
     let n = n.into();
