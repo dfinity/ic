@@ -467,6 +467,7 @@ impl CanisterState {
         NumBytes::new(self.system_state.log_memory_store.total_allocated_bytes() as u64)
     }
 
+    /// Returns the memory usage of the snapshots in bytes.
     pub fn snapshots_memory_usage(&self) -> NumBytes {
         self.system_state.snapshots_memory_usage
     }
