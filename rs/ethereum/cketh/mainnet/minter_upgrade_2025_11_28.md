@@ -2,9 +2,9 @@
 
 Repository: `https://github.com/dfinity/ic.git`
 
-Git hash: `948d5b9260494ec3e6c9bc9db499f34d52ba6c7f`
+Git hash: `d13be5a27b3331c4dc8831593eed0e3ec08b260f`
 
-New compressed Wasm hash: `6b2b43a714e5b0800c694d8637c2c0fd4e5f5f115d1933fffd7a8045492472a7`
+New compressed Wasm hash: `bec1be12f91dd141262cabfe2033183b717d2f6ddcee3f39ab52a11df2a39dcb`
 
 Upgrade args hash: `0fee102bd16b053022b69f2c65fd5e2f41d150ce9c214ac8731cfaf496ebda4e`
 
@@ -22,7 +22,8 @@ This upgrade of the ckETH minter updates the blocklist based on the latest [OFAC
 ## Release Notes
 
 ```
-git log --format='%C(auto) %h %s' bb6e758c739768ef6713f9f3be2df47884544900..948d5b9260494ec3e6c9bc9db499f34d52ba6c7f -- rs/ethereum/cketh/minter
+git log --format='%C(auto) %h %s' bb6e758c739768ef6713f9f3be2df47884544900..d13be5a27b3331c4dc8831593eed0e3ec08b260f -- rs/ethereum/cketh/minter
+b6af146665 chore: ic-cdk v0.19 & ic-cdk-timers v1.0.0 (#7494)
 348680b6ba chore: Update the ckBTC and ckETH blocklists (#7639)
 ccf0893ffa refactor(cketh/ckerc20): use `evm_rpc_client` in ckETH minter (#7112)
 fc7f7307be refactor(cketh/ckerc20): multi RPC results reduction (#7152)
@@ -46,7 +47,7 @@ b9221277cd chore: bumping edition to 2024 (#6715)
 
 ```
 git fetch
-git checkout 948d5b9260494ec3e6c9bc9db499f34d52ba6c7f
+git checkout d13be5a27b3331c4dc8831593eed0e3ec08b260f
 didc encode '()' | xxd -r -p | sha256sum
 ```
 
@@ -56,7 +57,7 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 
 ```
 git fetch
-git checkout 948d5b9260494ec3e6c9bc9db499f34d52ba6c7f
+git checkout d13be5a27b3331c4dc8831593eed0e3ec08b260f
 "./ci/container/build-ic.sh" "--canisters"
 sha256sum ./artifacts/canisters/ic-cketh-minter.wasm.gz
 ```
