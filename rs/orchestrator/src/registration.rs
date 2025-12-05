@@ -31,6 +31,7 @@ use ic_sys::utility_command::UtilityCommand;
 use ic_types::{NodeId, RegistryVersion, SubnetId, crypto::KeyPurpose, messages::MessageId};
 use idna::domain_to_ascii_strict;
 use prost::Message;
+use qrcode::{QrCode, render::unicode};
 use rand::prelude::*;
 use std::{
     net::IpAddr,
@@ -67,6 +68,7 @@ pub(crate) struct NodeRegistration {
     key_handler: Arc<dyn NodeRegistrationCrypto>,
     local_store: Arc<dyn LocalStore>,
     signer: Box<dyn Signer>,
+    display_qr_code: bool,
 }
 
 impl NodeRegistration {
@@ -117,6 +119,12 @@ impl NodeRegistration {
             key_handler,
             local_store,
             signer,
+            // Eventually, this value will be deduced from the `registration` config.
+            //
+            // After the More secure key management for node operators feature is
+            // fully complete and tested, this will be the default, and will be
+            // removed.
+            display_qr_code: cfg!(test),
         }
     }
 
@@ -136,6 +144,14 @@ impl NodeRegistration {
     async fn retry_register_node(&mut self) {
         let add_node_payload = self.assemble_add_node_message().await;
 
+        // Will contain information needed for the node operator
+        // to approve the add node payload for onboarding.
+        let node_information_for_onboarding = format!(
+            "Node id: {}\nQR code:\n{}",
+            self.node_id,
+            encode_as_qrcode(self.node_id)
+        );
+
         // Any changes to the registry are replicated after some delay, so we sleep between attempts
         // for that amount of time.
         let sleep_duration = Duration::from_millis(
@@ -153,6 +169,11 @@ impl NodeRegistration {
                 format!("node-id {}: {}", self.node_id, message).as_str(),
                 1,
             );
+
+            if self.display_qr_code {
+                info!(self.log, "{}", node_information_for_onboarding);
+                UtilityCommand::notify_host(&node_information_for_onboarding, 1);
+            }
 
             if let Err(error_message) = self.do_register_node(&add_node_payload).await {
                 warn!(self.log, "{}", error_message);
@@ -768,11 +789,60 @@ fn protobuf_to_vec<M: Message>(entry: M) -> Vec<u8> {
     buf
 }
 
+fn encode_as_qrcode(node_id: NodeId) -> String {
+    QrCode::new(node_id.to_string())
+        .map(|code| code.render::<unicode::Dense1x2>().build())
+        .unwrap_or_else(|e| format!("Failed to encode the Node ID as a QR Code: {e}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use ic_sys::utility_command::UtilityCommand;
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_types::PrincipalId;
+
+    #[test]
+    fn encoding_node_ids_works() {
+        let test_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
+
+        let encoded = encode_as_qrcode(test_node_id);
+
+        let expected = r"
+    █▀▀▀▀▀█ ▀▄█▄ ██▄▀ ▄▄  █▀▀▀▀▀█
+    █ ███ █ ▄▄ █▄ ▀  ▀    █ ███ █
+    █ ▀▀▀ █ █▄  █   ▄▀▀▄  █ ▀▀▀ █
+    ▀▀▀▀▀▀▀ █▄█ ▀▄▀▄█▄█ ▀ ▀▀▀▀▀▀▀
+    █▄▄ █ ▀██ ▄▄██▄ ▄▀▀▀▀▀████▄▄█
+    ▄▄▄██▄▀  ▀▄▄█ ▄ ▀▄  ▀▀█ ▄▄▀▀▀
+    ▀ ▄ ▄ ▀▄▀▄▀██▀▀▀▀▀▄▀▀▀▄ ▄▄ ▀█
+    ▄██▄▄█▀▀██▄ ▄█▀█▄█▄ ▀▀█▄ ▀ ▄▀
+    ▄█ ▄ ▀▀▀   ▄▀█▄ ▄█▄▀▀▀▄▄▄▀  █
+      █▀▄▄▀█ █▄█▀ ▄ ▀█▄ █▀█▄ █  ▀
+    ▀▀  ▀ ▀ ▄▀ ▄█▀▀▀▀▄█▄█▀▀▀█▀ ▄▄
+    █▀▀▀▀▀█ ▀█ █▄█▀█▄ ▀▀█ ▀ █▄ ▀▀
+    █ ███ █ ▀▄▀▄▄█▄ ▄ ▄▀██▀▀▀▄▄▄▀
+    █ ▀▀▀ █  █ ▄█▀  ▀█▄ ▄█▄▄▄█ ██
+    ▀▀▀▀▀▀▀ ▀▀ ▀ ▀▀▀▀ ▀ ▀▀  ▀▀ ▀
+"
+        .to_string();
+
+        let normalize = |s: &str| -> String {
+            s.lines()
+                .map(|line| line.trim().to_string())
+                .filter(|line| !line.is_empty())
+                .map(|line| format!("{line}\n"))
+                .collect()
+        };
+
+        assert_eq!(
+            normalize(&expected),
+            normalize(&encoded),
+            "Expected something like:\n{}\nBut got something like:\n{}",
+            normalize(&expected),
+            normalize(&encoded)
+        );
+    }
 
     #[test]
     fn default_http_config_endpoint_succeeds() {

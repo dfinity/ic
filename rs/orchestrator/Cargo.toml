@@ -67,6 +67,7 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 url = { workspace = true }
+qrcode = { workspace = true }
 
 [dev-dependencies]
 async-stream = { workspace = true }

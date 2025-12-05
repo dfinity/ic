@@ -15,14 +15,24 @@ pub struct ProtoPaths<'a> {
 
 impl ProtoPaths<'_> {
     fn to_vec(&self) -> Vec<&Path> {
+        let Self {
+            base_types,
+            governance,
+            ledger,
+            nervous_system,
+            nns_common,
+            sns_root,
+            sns_swap,
+        } = self;
+
         vec![
-            self.base_types,
-            self.governance,
-            self.ledger,
-            self.nervous_system,
-            self.nns_common,
-            self.sns_root,
-            self.sns_swap,
+            base_types,
+            governance,
+            ledger,
+            nervous_system,
+            nns_common,
+            sns_root,
+            sns_swap,
         ]
     }
 }

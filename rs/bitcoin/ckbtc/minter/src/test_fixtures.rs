@@ -2,6 +2,7 @@ use crate::address::BitcoinAddress;
 use crate::fees::BitcoinFeeEstimator;
 use crate::lifecycle::init::InitArgs;
 use crate::queries::WithdrawalFee;
+use crate::state::utxos::UtxoSet;
 use crate::{
     BuildTxError, ECDSAPublicKey, GetUtxosResponse, IC_CANISTER_RUNTIME, Network, Timestamp,
     lifecycle, state, tx,
@@ -10,7 +11,6 @@ use candid::Principal;
 use ic_base_types::CanisterId;
 use ic_btc_interface::{OutPoint, Satoshi, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
-use std::collections::BTreeSet;
 use std::time::Duration;
 
 pub const NOW: Timestamp = Timestamp::new(1733145560 * 1_000_000_000);
@@ -141,7 +141,7 @@ pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
 }
 
 pub fn build_bitcoin_unsigned_transaction(
-    available_utxos: &mut BTreeSet<Utxo>,
+    available_utxos: &mut UtxoSet,
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: BitcoinAddress,
     fee_per_vbyte: u64,
@@ -218,6 +218,7 @@ pub mod mock {
 }
 
 pub mod arbitrary {
+    use crate::state::utxos::UtxoSet;
     use crate::{
         WithdrawalFee,
         address::BitcoinAddress,
@@ -411,6 +412,33 @@ pub mod arbitrary {
             value: amount,
             height: any::<u32>(),
         })
+    }
+
+    pub fn utxo_set(
+        amount: impl Strategy<Value = Satoshi> + Clone,
+        size: impl Into<SizeRange>,
+    ) -> impl Strategy<Value = UtxoSet> {
+        (proptest::collection::btree_set(outpoint(), size))
+            .prop_flat_map(move |outpoints| {
+                let num_utxos = outpoints.len();
+                (
+                    Just(outpoints),
+                    proptest::collection::vec(amount.clone(), num_utxos),
+                    proptest::collection::vec(any::<u32>(), num_utxos),
+                )
+            })
+            .prop_map(|(outpoints, amounts, heights)| {
+                outpoints
+                    .into_iter()
+                    .zip(amounts)
+                    .zip(heights)
+                    .map(|((outpoint, amount), height)| Utxo {
+                        outpoint,
+                        value: amount,
+                        height,
+                    })
+                    .collect::<UtxoSet>()
+            })
     }
 
     pub fn account() -> impl Strategy<Value = Account> {

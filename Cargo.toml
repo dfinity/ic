@@ -181,7 +181,6 @@ members = [
     "rs/ic_os/guest_upgrade/server",
     "rs/ic_os/guest_upgrade/shared",
     "rs/ic_os/guest_upgrade/tests",
-    "rs/ic_os/linux_kernel_command_line",
     "rs/ic_os/metrics_tool",
     "rs/ic_os/network",
     "rs/ic_os/nft_exporter",
@@ -257,6 +256,7 @@ members = [
     "rs/nervous_system/humanize",
     "rs/nervous_system/initial_supply",
     "rs/nervous_system/instruction_stats",
+    "rs/nervous_system/instruction_stats_update_attribute",
     "rs/nervous_system/integration_tests",
     "rs/nervous_system/linear_map",
     "rs/nervous_system/lock",
@@ -277,6 +277,7 @@ members = [
     "rs/nervous_system/timestamp",
     "rs/nervous_system/tools/neuron-subaccount",
     "rs/nervous_system/tools/release-runscript",
+    "rs/nervous_system/tools/signed-canister-reply",
     "rs/nervous_system/tools/submit-motion-proposal",
     "rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
     "rs/nns/cmc",
@@ -775,6 +776,7 @@ prost = "0.13.3"
 prost-build = "0.13.3"
 protobuf = "2.28.0"
 ring = { version = "^0.17.7", features = ["std"] }
+qrcode = { version = "0.14.1", default-features = false }
 quinn = { version = "0.11.5", default-features = false, features = [
     "ring",
     "log",

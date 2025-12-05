@@ -451,6 +451,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
             &cli,
             &metrics_registry,
             http_metrics.clone(),
+            &mut tasks,
         )
         .context("unable to setup HTTPS")?;
 
@@ -731,7 +732,10 @@ fn setup_tls_resolver_stub(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>
     Ok(Arc::new(resolver))
 }
 
-fn setup_tls_resolver_acme(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Error> {
+fn setup_tls_resolver_acme(
+    cli: &cli::Tls,
+    tasks: &mut TaskManager,
+) -> Result<Arc<dyn ResolvesServerCert>, Error> {
     let path = cli
         .tls_acme_credentials_path
         .clone()
@@ -755,12 +759,18 @@ fn setup_tls_resolver_acme(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>
         path,
     );
 
-    Ok(Arc::new(AcmeAlpn::AcmeAlpn::new(opts)))
+    let acme = Arc::new(AcmeAlpn::AcmeAlpn::new(opts));
+    tasks.add("acme_alpn", acme.clone());
+
+    Ok(acme)
 }
 
 /// Try to load the static resolver first, then ACME one.
 /// This is needed for integration tests where we cannot easily separate test/prod environments
-fn setup_tls_resolver(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Error> {
+fn setup_tls_resolver(
+    cli: &cli::Tls,
+    tasks: &mut TaskManager,
+) -> Result<Arc<dyn ResolvesServerCert>, Error> {
     warn!("TLS: Trying resolver: static files");
     match setup_tls_resolver_stub(cli) {
         Ok(v) => {
@@ -775,7 +785,7 @@ fn setup_tls_resolver(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Err
         "TLS: Trying resolver: ACME ALPN-01 (staging: {})",
         cli.tls_acme_staging
     );
-    match setup_tls_resolver_acme(cli) {
+    match setup_tls_resolver_acme(cli, tasks) {
         Ok(v) => {
             warn!("TLS: ACME resolver loaded");
             return Ok(v);
@@ -793,10 +803,11 @@ fn setup_https(
     cli: &Cli,
     registry: &Registry,
     metrics: HttpServerMetrics,
+    tasks: &mut TaskManager,
 ) -> Result<bnhttp::Server, Error> {
     use ic_bn_lib::tls;
 
-    let resolver = setup_tls_resolver(&cli.tls).context("unable to setup TLS resolver")?;
+    let resolver = setup_tls_resolver(&cli.tls, tasks).context("unable to setup TLS resolver")?;
 
     let tls_opts = TlsOptions {
         additional_alpn: vec![ALPN_ACME.to_vec()],

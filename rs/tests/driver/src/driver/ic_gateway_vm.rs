@@ -34,7 +34,7 @@ pub const IC_GATEWAY_VM_NAME: &str = "ic-gateway";
 const IC_GATEWAY_VM_FILE: &str = "vm.json";
 const IMAGE_PATH: &str = "rs/tests/ic_gateway_uvm_config_image.zst";
 const IC_GATEWAY_VMS_DIR: &str = "ic_gateway_vms";
-const PLAYNET_FILE: &str = "playnet.json";
+const PLAYNET_URL_FILE: &str = "playnet_url.json";
 const IC_GATEWAY_AAAA_RECORDS_CREATED_EVENT_NAME: &str = "ic_gateway_aaaa_records_created_event";
 const IC_GATEWAY_A_RECORDS_CREATED_EVENT_NAME: &str = "ic_gateway_a_records_created_event";
 const READY_TIMEOUT: Duration = Duration::from_secs(360);
@@ -155,10 +155,8 @@ impl IcGatewayVm {
         uvm_ipv4: Option<Ipv4Addr>,
     ) -> Result<Playnet> {
         let logger = env.logger();
-        let playnet_file = env.get_json_path(PLAYNET_FILE);
-
-        let mut playnet = if playnet_file.exists() {
-            let playnet: Playnet = env.read_json_object(PLAYNET_FILE)?;
+        let mut playnet = if Playnet::attribute_exists(env) {
+            let playnet: Playnet = Playnet::read_attribute(env);
             info!(
                 logger,
                 "Using existing playnet: {}", playnet.playnet_cert.playnet
@@ -180,7 +178,7 @@ impl IcGatewayVm {
         }
 
         // Write/overwrite file
-        env.write_json_object(PLAYNET_FILE, &playnet)?;
+        playnet.write_attribute(env);
 
         Ok(playnet)
     }
@@ -291,10 +289,16 @@ docker run --name=ic-gateway -d \
 
 /// Playnet configuration structure.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-struct Playnet {
-    playnet_cert: PlaynetCertificate,
-    aaaa_records: Vec<Ipv6Addr>,
-    a_records: Vec<Ipv4Addr>,
+pub struct Playnet {
+    pub playnet_cert: PlaynetCertificate,
+    pub aaaa_records: Vec<Ipv6Addr>,
+    pub a_records: Vec<Ipv4Addr>,
+}
+
+impl TestEnvAttribute for Playnet {
+    fn attribute_name() -> String {
+        String::from("playnet")
+    }
 }
 
 /// Emits log events for IC gateway A and AAAA records.
@@ -355,15 +359,18 @@ impl HasIcGatewayVm for TestEnv {
             );
         }
 
-        let playnet_path = ic_gateway_abs_dir.join(PLAYNET_FILE);
-        let playnet: Url = self
-            .read_json_object(&playnet_path)
-            .with_context(|| format!("Failed to read playnet file: {}", playnet_path.display()))?;
+        let playnet_url_path = ic_gateway_abs_dir.join(PLAYNET_URL_FILE);
+        let playnet_url: Url = self.read_json_object(&playnet_url_path).with_context(|| {
+            format!(
+                "Failed to read playnet URL file: {}",
+                playnet_url_path.display()
+            )
+        })?;
 
-        let https_url = playnet
+        let https_url = playnet_url
             .scheme()
             .eq("https")
-            .then(|| playnet.clone())
+            .then(|| playnet_url.clone())
             .context("Expected a TLS URL")?;
 
         let vm = self
@@ -401,11 +408,11 @@ impl HasIcGatewayVm for TestEnv {
     fn write_deployed_ic_gateway(
         &self,
         name: &str,
-        playnet: &Url,
+        playnet_url: &Url,
         allocated_vm: &AllocatedVm,
     ) -> Result<()> {
         let path = Path::new(IC_GATEWAY_VMS_DIR).join(name);
-        self.write_json_object(path.join(PLAYNET_FILE), playnet)?;
+        self.write_json_object(path.join(PLAYNET_URL_FILE), playnet_url)?;
         self.write_json_object(path.join(IC_GATEWAY_VM_FILE), allocated_vm)
     }
 }

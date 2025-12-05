@@ -1,6 +1,5 @@
-use crate::{
-    certification::recertify_registry, pb::v1::RegistryCanisterStableStorage, registry::Registry,
-};
+use crate::certification::recertify_registry;
+use crate::{pb::v1::RegistryCanisterStableStorage, registry::Registry};
 
 pub fn canister_post_upgrade(
     registry: &mut Registry,
@@ -18,8 +17,7 @@ pub fn canister_post_upgrade(
 
     // Registry data migrations should be implemented as follows:
     let mutation_batches_due_to_data_migrations = {
-        let mutations: Vec<_> = vec![];
-
+        let mutations = vec![];
         if mutations.is_empty() {
             0 // No mutations required for this data migration.
         } else {
