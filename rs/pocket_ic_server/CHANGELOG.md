@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- New CLI option `--mainnet-registry-version` to specify the mainnet registry version to use for fetching the mainnet routing table
+  using the existing CLI option `--fetch-mainnet-routing-table`. Defaults to the latest registry version.
+
+
+
 ## 11.0.0 - 2025-12-05
 
 ### Added
