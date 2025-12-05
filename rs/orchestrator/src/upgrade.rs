@@ -204,13 +204,13 @@ impl Upgrade {
 
         // Determine the subnet_id using the local CUP.
         let maybe_local_cup_proto = self.cup_provider.get_local_cup_proto();
-        let (subnet_id, maybe_local_cup) = 'block: {
+        let (subnet_id, maybe_local_cup) = 'block_subnet_id_local_cup: {
             let Some(cup_proto) = maybe_local_cup_proto.as_ref() else {
                 // If there is no local CUP, we check the registry for subnet assignment.
                 match self.registry.get_subnet_id(latest_registry_version) {
                     Ok(subnet_id) => {
                         info!(self.logger, "Assignment to subnet {} detected", subnet_id);
-                        break 'block (subnet_id, None);
+                        break 'block_subnet_id_local_cup (subnet_id, None);
                     }
                     Err(OrchestratorError::NodeUnassignedError(_, _)) => {
                         match self
@@ -230,7 +230,7 @@ impl Upgrade {
 
             match CatchUpPackage::try_from(cup_proto) {
                 Ok(cup) => match get_subnet_id(&*self.registry.registry_client, &cup) {
-                    Ok(subnet_id) => break 'block (subnet_id, Some(cup)),
+                    Ok(subnet_id) => break 'block_subnet_id_local_cup (subnet_id, Some(cup)),
                     Err(err) => {
                         return UpgradeCheckResult::ErrorAsUnknown(
                             OrchestratorError::UpgradeError(format!(
