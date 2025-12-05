@@ -7,7 +7,7 @@ use super::super::types::{
 };
 use crate::crypto::hash_message_to_g1;
 use crate::types::PublicKey;
-use ic_crypto_internal_bls12_381_type::{G2Projective, LagrangeCoefficients, NodeIndices, Scalar};
+use ic_crypto_internal_bls12_381_type::{G2Affine, LagrangeCoefficients, NodeIndices, Scalar};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::error::InvalidArgumentError;
@@ -354,12 +354,16 @@ mod resharing_util {
     /// Given multiple public keys (y values) at different points (which give x
     /// values) interpolate the value at zero.
     pub fn interpolate_public_key(shares: &[PublicKey]) -> PublicKey {
-        let shares: Vec<(NodeIndex, G2Projective)> = shares
+        let shares: Vec<(NodeIndex, G2Affine)> = shares
             .iter()
             .enumerate()
             .map(|(index, share)| ((index as NodeIndex), share.0.clone()))
             .collect();
-        PublicKey(PublicCoefficients::interpolate_g2(&shares).unwrap())
+        PublicKey(
+            PublicCoefficients::interpolate_g2(&shares)
+                .unwrap()
+                .to_affine(),
+        )
     }
 
     /// For each active new receiver, this provides a single encrypted secret
