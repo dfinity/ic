@@ -1452,6 +1452,29 @@ fn test_fee_collector_107() {
     assert_eq!(4, icrc1_balance_of(env, index_id, feecol_107));
 }
 
+fn add_custom_block(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    block_id: u64,
+    btype: Option<&str>,
+    tx_fields: Vec<(&str, ICRC3Value)>,
+) {
+    let mut block_builder = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1u64));
+    if let Some(btype) = btype {
+        block_builder = block_builder.with_btype(String::from(btype));
+    }
+    let mut custom_tx_builder = block_builder.custom_transaction();
+    for tx_field in tx_fields {
+        custom_tx_builder = custom_tx_builder.add_field(tx_field.0, tx_field.1);
+    }
+    let block = custom_tx_builder.build();
+
+    assert_eq!(
+        Nat::from(block_id),
+        add_block(env, ledger_id, &block).expect("error adding mint block to ICRC-3 test ledger")
+    );
+}
+
 #[test]
 fn test_fee_collector_107_irregular_op() {
     const UNRECOGNIZED_OP_NAME: &str = "non_standard_fee_col_setter_endpoint_method_name";
@@ -1461,30 +1484,13 @@ fn test_fee_collector_107_irregular_op() {
     let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
     let feecol_107 = account(102, 0);
 
-    let add_custom_block = |block_id: u64, tx_fields: Vec<(&str, ICRC3Value)>| {
-        let mut custom_tx_builder = BlockBuilder::new(block_id, block_id)
-            .with_btype("107feecol".to_string())
-            .with_fee(Tokens::from(1u64))
-            .custom_transaction();
-        for tx_field in tx_fields {
-            custom_tx_builder = custom_tx_builder.add_field(tx_field.0, tx_field.1);
-        }
-        let block = custom_tx_builder.build();
-
-        assert_eq!(
-            Nat::from(block_id),
-            add_block(env, ledger_id, &block)
-                .expect("error adding mint block to ICRC-3 test ledger")
-        );
-    };
-
     let tx_fields = vec![
         ("op", ICRC3Value::Text(UNRECOGNIZED_OP_NAME.to_string())),
         ("fee_collector", account_to_icrc3_value(&feecol_107)),
         ("ts", ICRC3Value::Nat(Nat::from(0u64))),
     ];
 
-    add_custom_block(0, tx_fields);
+    add_custom_block(env, ledger_id, 0, Some("107feecol"), tx_fields);
     let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
         .expect_err("unrecognized block with btype '107feecol' but unrecognized tx.op parsed successfully by index");
     let expected_log_msg = format!("Unknown operation name {}", UNRECOGNIZED_OP_NAME);
@@ -1503,30 +1509,13 @@ fn test_fee_collector_107_mthd_instead_of_op() {
     let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
     let feecol_107 = account(102, 0);
 
-    let add_custom_block = |block_id: u64, tx_fields: Vec<(&str, ICRC3Value)>| {
-        let mut custom_tx_builder = BlockBuilder::new(block_id, block_id)
-            .with_btype("107feecol".to_string())
-            .with_fee(Tokens::from(1u64))
-            .custom_transaction();
-        for tx_field in tx_fields {
-            custom_tx_builder = custom_tx_builder.add_field(tx_field.0, tx_field.1);
-        }
-        let block = custom_tx_builder.build();
-
-        assert_eq!(
-            Nat::from(block_id),
-            add_block(env, ledger_id, &block)
-                .expect("error adding mint block to ICRC-3 test ledger")
-        );
-    };
-
     let tx_fields = vec![
         ("mthd", ICRC3Value::Text("107set_fee_collector".to_string())),
         ("fee_collector", account_to_icrc3_value(&feecol_107)),
         ("ts", ICRC3Value::Nat(Nat::from(0u64))),
     ];
 
-    add_custom_block(0, tx_fields);
+    add_custom_block(env, ledger_id, 0, Some("107feecol"), tx_fields);
     let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
         .expect_err(
             "unrecognized block with '107feecol' but tx.mthd instead of tx.op parsed successfully by index",
@@ -1547,28 +1536,12 @@ fn test_block_with_no_btype_and_unrecognized_op() {
     let ledger_id = install_icrc3_test_ledger(env);
     let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
-    let add_custom_block = |block_id: u64, tx_fields: Vec<(&str, ICRC3Value)>| {
-        let mut custom_tx_builder = BlockBuilder::new(block_id, block_id)
-            .with_fee(Tokens::from(1u64))
-            .custom_transaction();
-        for tx_field in tx_fields {
-            custom_tx_builder = custom_tx_builder.add_field(tx_field.0, tx_field.1);
-        }
-        let block = custom_tx_builder.build();
-
-        assert_eq!(
-            Nat::from(block_id),
-            add_block(env, ledger_id, &block)
-                .expect("error adding mint block to ICRC-3 test ledger")
-        );
-    };
-
     let tx_fields = vec![
         ("op", ICRC3Value::Text(UNRECOGNIZED_OP_NAME.to_string())),
         ("ts", ICRC3Value::Nat(Nat::from(0u64))),
     ];
 
-    add_custom_block(0, tx_fields);
+    add_custom_block(env, ledger_id, 0, None, tx_fields);
     let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
         .expect_err(
             "unrecognized block with tx.op 'non_standard_op_name' parsed successfully by index",
@@ -1588,25 +1561,9 @@ fn test_block_with_no_btype_and_no_op() {
     let ledger_id = install_icrc3_test_ledger(env);
     let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
-    let add_custom_block = |block_id: u64, tx_fields: Vec<(&str, ICRC3Value)>| {
-        let mut custom_tx_builder = BlockBuilder::new(block_id, block_id)
-            .with_fee(Tokens::from(1u64))
-            .custom_transaction();
-        for tx_field in tx_fields {
-            custom_tx_builder = custom_tx_builder.add_field(tx_field.0, tx_field.1);
-        }
-        let block = custom_tx_builder.build();
-
-        assert_eq!(
-            Nat::from(block_id),
-            add_block(env, ledger_id, &block)
-                .expect("error adding mint block to ICRC-3 test ledger")
-        );
-    };
-
     let tx_fields = vec![("ts", ICRC3Value::Nat(Nat::from(0u64)))];
 
-    add_custom_block(0, tx_fields);
+    add_custom_block(env, ledger_id, 0, None, tx_fields);
     let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
         .expect_err("unrecognized block with no btype and no tx.op parsed successfully by index");
     let expected_log_msg = "missing field `op`";
