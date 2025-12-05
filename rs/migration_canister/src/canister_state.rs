@@ -141,7 +141,7 @@ pub mod events {
             });
         }
         let event = Event { time, event };
-        let args: CanisterMigrationArgs = (&event).into();
+        let args = CanisterMigrationArgs::from(&event);
         let idx = HISTORY.with_borrow_mut(|h| {
             let idx = h.len();
             h.insert(idx, event);
