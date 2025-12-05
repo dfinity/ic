@@ -2,9 +2,9 @@
 
 Repository: `https://github.com/dfinity/ic.git`
 
-Git hash: `948d5b9260494ec3e6c9bc9db499f34d52ba6c7f`
+Git hash: `d13be5a27b3331c4dc8831593eed0e3ec08b260f`
 
-New compressed Wasm hash: `f8c7560dcf16d4025cf02110049034cb1a872ccb005a18675870a12423007523`
+New compressed Wasm hash: `fb6bd17ca009b3ee4f509ab7972b8b84ada3444c700b35ad03603103f806aace`
 
 Upgrade args hash: `0fee102bd16b053022b69f2c65fd5e2f41d150ce9c214ac8731cfaf496ebda4e`
 
@@ -22,7 +22,15 @@ This upgrade of the ckBTC minter updates the blocklist based on the latest [OFAC
 ## Release Notes
 
 ```
-git log --format='%C(auto) %h %s' b6cf1a858dfa1634e763eff203a709afbd1d8bb0..948d5b9260494ec3e6c9bc9db499f34d52ba6c7f -- rs/bitcoin/ckbtc/minter
+git log --format='%C(auto) %h %s' b6cf1a858dfa1634e763eff203a709afbd1d8bb0..d13be5a27b3331c4dc8831593eed0e3ec08b260f -- rs/bitcoin/ckbtc/minter
+03befefb98 feat(ckdoge): Upgrade of minter (#7933)
+bc357afaa3 perf(ckbtc): Reduce the number of instructions to build an unsigned transaction by a factor 5x to 600x (#7866)
+2c177cd030 perf(ckbtc): canbench `build_unsigned_transaction_from_inputs` (#7782)
+c98c9cee89 feat(ckdoge): add `estimate_withdrawal_fee` query endpoint (#7801)
+b6af146665 chore: ic-cdk v0.19 & ic-cdk-timers v1.0.0 (#7494)
+3f92b30bf1 test(ckbtc): update mainnet events for test purposes (#7789)
+1f8f7bd405 fix(ckbtc): improve transaction fee estimation (#7741)
+00a5f4688d fix(ckdoge): use correct transaction fees  (#7660)
 0f2ecf9aac chore: use versioned name for duplicated crates (#7687)
 d55e60b347 fix(ckdoge): finalization of transactions sent by the minter (#7589)
 5feafc544f feat(ckdoge): `get_known_utxos` endpoint (#7627)
@@ -50,7 +58,7 @@ b9221277cd chore: bumping edition to 2024 (#6715)
 
 ```
 git fetch
-git checkout 948d5b9260494ec3e6c9bc9db499f34d52ba6c7f
+git checkout d13be5a27b3331c4dc8831593eed0e3ec08b260f
 didc encode '()' | xxd -r -p | sha256sum
 ```
 
@@ -60,7 +68,7 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 
 ```
 git fetch
-git checkout 948d5b9260494ec3e6c9bc9db499f34d52ba6c7f
+git checkout d13be5a27b3331c4dc8831593eed0e3ec08b260f
 "./ci/container/build-ic.sh" "--canisters"
 sha256sum ./artifacts/canisters/ic-ckbtc-minter.wasm.gz
 ```
