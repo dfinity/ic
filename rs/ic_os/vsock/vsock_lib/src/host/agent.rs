@@ -106,6 +106,7 @@ async fn create_hostos_upgrade_file(
     file_path: &str,
     target_hash: &str,
 ) -> Result<(), String> {
+    println!("Starting download from: {}", upgrade_url);
     let file_downloader = FileDownloader::new_with_timeout(None, Duration::from_secs(120));
 
     file_downloader
