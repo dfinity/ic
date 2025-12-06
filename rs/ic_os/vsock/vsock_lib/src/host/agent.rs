@@ -135,12 +135,22 @@ fn run_upgrade() -> Response {
 
 async fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
     println!("Trying to fetch hostOS upgrade file from request: {upgrade_data:?}");
-    create_hostos_upgrade_file(
+
+    match create_hostos_upgrade_file(
         &upgrade_data.url,
         UPGRADE_FILE_PATH,
         &upgrade_data.target_hash,
     )
-    .await?;
+    .await
+    {
+        Ok(_) => {
+            println!("Download completed, starting upgrade installation...");
+        }
+        Err(e) => {
+            eprintln!("Download failed: {}", e);
+            return Err(e);
+        }
+    }
 
     println!("Starting upgrade...");
     run_upgrade()
