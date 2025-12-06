@@ -6,6 +6,7 @@ use crate::canister_state::system_state::log_memory_store::{
 };
 use crate::page_map::{PAGE_SIZE, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, DataSize, FetchCanisterLogsFilter};
+use ic_types::DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT;
 
 // PageMap file layout.
 // Header layout constants.
@@ -57,11 +58,12 @@ impl RingBuffer {
         Self { io }
     }
 
-    /// Returns an existing ring buffer if present, or initializes a new one.
-    pub fn load_or_new(page_map: PageMap, data_capacity: MemorySize) -> Self {
+    /// Returns an existing ring buffer if present, or initializes a new one with default data capacity.
+    pub fn load_or_default(page_map: PageMap) -> Self {
         let io = StructIO::new(page_map);
         if io.load_header().magic != *MAGIC {
             // Not initialized yet — set up a new header.
+            let data_capacity = MemorySize::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64);
             return Self::new(io.to_page_map(), data_capacity);
         }
 

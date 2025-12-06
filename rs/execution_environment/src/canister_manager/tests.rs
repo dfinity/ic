@@ -5385,7 +5385,8 @@ fn chunk_store_methods_succeed_from_canister_itself() {
     }
 }
 
-const EMPTY_CANISTER_MEMORY_USAGE: NumBytes = NumBytes::new(222);
+const LOG_MEMORY_STORE_MEMORY_USAGE: u64 = 4096 + 4096 + 4096; // header, index table, ring buffer.
+const EMPTY_CANISTER_MEMORY_USAGE: NumBytes = NumBytes::new(222 + LOG_MEMORY_STORE_MEMORY_USAGE);
 
 #[test]
 fn empty_canister_memory_usage() {
