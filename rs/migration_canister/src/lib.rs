@@ -11,6 +11,7 @@ use strum_macros::Display;
 
 use crate::{
     canister_state::{limiter::num_successes_in_past_24_h, num_requests},
+    controller_recovery::ControllerRecoveryState,
     processing::{
         process_accepted, process_all_by_predicate, process_all_failed, process_all_succeeded,
         process_controllers_changed, process_renamed, process_routing_table,
@@ -21,6 +22,7 @@ use crate::{
 pub use crate::migration_canister::{MigrateCanisterArgs, MigrationStatus};
 
 mod canister_state;
+mod controller_recovery;
 mod external_interfaces;
 mod migration_canister;
 mod privileged;
@@ -137,6 +139,40 @@ impl Display for Request {
     }
 }
 
+/// Represents the recovery state of a `Request` in `RequestState::Failed`,
+/// i.e., whether controllers of source and target must still be restored.
+#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecoveryState {
+    pub restore_source_controllers: ControllerRecoveryState,
+    pub restore_target_controllers: ControllerRecoveryState,
+}
+
+impl RecoveryState {
+    pub fn restore_source() -> Self {
+        Self {
+            restore_source_controllers: ControllerRecoveryState::NoProgress,
+            restore_target_controllers: ControllerRecoveryState::Done,
+        }
+    }
+
+    pub fn restore_both() -> Self {
+        Self {
+            restore_source_controllers: ControllerRecoveryState::NoProgress,
+            restore_target_controllers: ControllerRecoveryState::NoProgress,
+        }
+    }
+
+    pub fn is_done(&self) -> bool {
+        matches!(
+            self.restore_source_controllers,
+            ControllerRecoveryState::Done
+        ) && matches!(
+            self.restore_target_controllers,
+            ControllerRecoveryState::Done
+        )
+    }
+}
+
 /// Represents the state a `Request` is currently in and contains all data necessary
 /// to transition to the next state (and sometimes data for a future state).
 ///
@@ -242,7 +278,11 @@ pub enum RequestState {
     /// We stay in this state until the controllers have been restored and then
     /// transition to a `Failed` state in the `HISTORY`.
     #[strum(to_string = "RequestState::Failed {{ request: {request}, reason: {reason} }}")]
-    Failed { request: Request, reason: String },
+    Failed {
+        request: Request,
+        recovery_state: RecoveryState,
+        reason: String,
+    },
 }
 
 impl RequestState {
