@@ -672,7 +672,7 @@ hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.12", features = ["full"] }
 ic0 = "1.0.0"
 ic-agent = { version = "0.40.1", features = ["pem", "ring"] }
-ic-bn-lib = { version = "0.1.6", features = ["acme-alpn"] }
+ic-bn-lib = { version = "0.1.7", features = ["acme-alpn"] }
 ic-bn-lib-common = "0.1"
 ic-btc-interface = "0.2.3"
 ic-canister-runtime = "0.1.0"
