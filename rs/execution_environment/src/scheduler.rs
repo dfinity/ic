@@ -1676,6 +1676,10 @@ impl Scheduler for SchedulerImpl {
             final_state
         }
     }
+
+    fn checkpoint_round_with_no_execution(&self, state: &mut ReplicatedState) {
+        self.finish_round(state, ExecutionRoundType::CheckpointRound);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////
