@@ -1,16 +1,16 @@
 //! Implementations of IDkgProtocol related to dealings
 
-use crate::sign::basic_sig::{BasicSigVerifierInternal, BasicSignerInternal};
+use crate::sign::basic_sig::{self, BasicSigVerifierInternal};
 use crate::sign::canister_threshold_sig::idkg::utils::{
     MegaKeyFromRegistryError, fetch_idkg_dealing_encryption_public_key_from_registry,
     key_id_from_mega_public_key_or_panic, retrieve_mega_public_key_from_registry,
 };
-use ic_base_types::RegistryVersion;
 use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::vault::api::{
-    CspVault, IDkgCreateDealingVaultError, IDkgDealingInternalBytes,
+    BasicSignatureCspVault, CspVault, IDkgCreateDealingVaultError, IDkgDealingInternalBytes,
     IDkgTranscriptOperationInternalBytes,
 };
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     IDkgDealingInternal, IDkgTranscriptOperationInternal, publicly_verify_dealing,
 };
@@ -30,12 +30,12 @@ use std::sync::Arc;
 #[cfg(test)]
 mod tests;
 
-pub fn create_dealing<C: CspSigner>(
-    csp_client: &C,
-    vault: &Arc<dyn CspVault>,
+pub fn create_dealing(
+    vault: &dyn CspVault,
     self_node_id: &NodeId,
     registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
+    metrics: &CryptoMetrics,
 ) -> Result<SignedIDkgDealing, IDkgCreateDealingError> {
     let self_index =
         params
@@ -77,23 +77,16 @@ pub fn create_dealing<C: CspSigner>(
         internal_dealing_raw: internal_dealing.into_vec(),
     };
 
-    sign_dealing(
-        csp_client,
-        registry,
-        unsigned_dealing,
-        *self_node_id,
-        params.registry_version(),
-    )
+    sign_dealing(unsigned_dealing, *self_node_id, vault, metrics)
 }
 
-fn sign_dealing<S: CspSigner>(
-    csp_signer: &S,
-    registry: &dyn RegistryClient,
+fn sign_dealing(
     dealing: IDkgDealing,
     signer: NodeId,
-    registry_version: RegistryVersion,
+    vault: &dyn BasicSignatureCspVault,
+    metrics: &CryptoMetrics,
 ) -> Result<SignedIDkgDealing, IDkgCreateDealingError> {
-    BasicSignerInternal::sign_basic(csp_signer, registry, &dealing, signer, registry_version)
+    basic_sig::sign(&dealing, vault, metrics)
         .map(|signature| SignedIDkgDealing {
             signature: BasicSignature { signature, signer },
             content: dealing,

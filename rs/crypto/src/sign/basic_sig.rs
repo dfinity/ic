@@ -1,8 +1,10 @@
 use super::*;
 use ic_crypto_internal_csp::api::CspSigner;
-use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::SigConverter;
-use ic_crypto_internal_csp::vault::api::PublicRandomSeedGeneratorError;
+use ic_crypto_internal_csp::vault::api::{
+    BasicSignatureCspVault, CspBasicSignatureError, PublicRandomSeedGeneratorError,
+};
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult};
 
 #[cfg(test)]
 mod tests;
@@ -106,23 +108,24 @@ impl BasicSigVerifierInternal {
     }
 }
 
-pub struct BasicSignerInternal {}
+pub fn sign<H: Signable>(
+    message: &H,
+    vault: &dyn BasicSignatureCspVault,
+    metrics: &CryptoMetrics,
+) -> CryptoResult<BasicSigOf<H>> {
+    let message_bytes = message.as_signed_bytes();
+    let message_bytes_len = message_bytes.len();
 
-impl BasicSignerInternal {
-    pub fn sign_basic<S: CspSigner, H: Signable>(
-        csp_signer: &S,
-        registry: &dyn RegistryClient,
-        message: &H,
-        signer: NodeId,
-        registry_version: RegistryVersion,
-    ) -> CryptoResult<BasicSigOf<H>> {
-        let pk_proto =
-            key_from_registry(registry, signer, KeyPurpose::NodeSigning, registry_version)?;
-        let algorithm_id = AlgorithmId::from(pk_proto.algorithm);
-        let csp_pk = CspPublicKey::try_from(pk_proto)?;
-        let key_id = KeyId::from(&csp_pk);
-        let csp_sig = csp_signer.sign(algorithm_id, message.as_signed_bytes(), key_id)?;
+    let result = vault
+        .sign(message_bytes)
+        .map_err(|e: CspBasicSignatureError| CryptoError::from(e));
 
-        Ok(BasicSigOf::new(BasicSig(csp_sig.as_ref().to_vec())))
-    }
+    metrics.observe_parameter_size(
+        MetricsDomain::BasicSignature,
+        "sign_basic",
+        "message",
+        message_bytes_len,
+        MetricsResult::from(&result),
+    );
+    Ok(BasicSigOf::new(BasicSig(result?.as_ref().to_vec())))
 }
