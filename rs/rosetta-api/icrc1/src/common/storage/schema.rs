@@ -91,6 +91,19 @@ pub fn create_tables(connection: &Connection) -> Result<()> {
         [],
     )?;
 
+    // Fee Collectors 107 table
+    connection.execute(
+        r#"
+        CREATE TABLE IF NOT EXISTS fee_collectors_107 (
+            block_idx INTEGER NOT NULL PRIMARY KEY,
+            caller_principal BLOB,
+            fee_collector_principal BLOB,
+            fee_collector_subaccount BLOB
+        )
+        "#,
+        [],
+    )?;
+
     create_indexes(connection)
 }
 
@@ -116,14 +129,6 @@ pub fn create_indexes(connection: &Connection) -> Result<()> {
         r#"
         CREATE INDEX IF NOT EXISTS block_hash_index
         ON blocks(hash)
-        "#,
-        [],
-    )?;
-
-    connection.execute(
-        r#"
-        CREATE INDEX IF NOT EXISTS block_operation_type
-        ON blocks(operation_type)
         "#,
         [],
     )?;

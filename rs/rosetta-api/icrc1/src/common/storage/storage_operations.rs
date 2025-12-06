@@ -559,10 +559,10 @@ pub fn store_blocks(
                 caller,
             } => (
                 "107feecol",
-                caller,
                 None,
-                fee_collector.map(|fc| fc.owner),
-                fee_collector.map(|fc| *fc.effective_subaccount()),
+                None,
+                None,
+                None,
                 None,
                 None,
                 Nat::from(0u64),
@@ -605,6 +605,16 @@ pub fn store_blocks(
                         ":transaction_created_at_time":transaction_created_at_time_i64,
                         ":approval_expires_at":approval_expires_at_i64
                     })?;
+        if operation_type == "107feecol" {
+            insert_tx.prepare_cached(
+        "INSERT OR IGNORE INTO fee_collectors_107 (block_idx, caller_principal, fee_collector_principal, fee_collector_subaccount) VALUES (:block_idx, :caller_principal, :fee_collector_principal, :fee_collector_subaccount)")?
+                    .execute(named_params! {
+                        ":block_idx":rosetta_block.index,
+                        ":caller_principal":from_principal.map(|x| x.as_slice().to_vec()),
+                        ":fee_collector_principal":to_principal.map(|x| x.as_slice().to_vec()),
+                        ":fee_collector_subaccount":to_subaccount,
+                    })?;
+        }
     }
     insert_tx.commit()?;
     Ok(())
@@ -654,7 +664,7 @@ pub fn get_fee_collector_107_for_idx(
     block_idx: u64,
 ) -> anyhow::Result<Option<Option<Account>>> {
     let command = format!(
-        "SELECT to_principal,to_subaccount FROM blocks WHERE idx <= {block_idx} AND operation_type = '107feecol' ORDER BY idx DESC LIMIT 1"
+        "SELECT fee_collector_principal,fee_collector_subaccount FROM fee_collectors_107 WHERE block_idx < {block_idx} ORDER BY block_idx DESC LIMIT 1"
     );
     let mut stmt = connection.prepare_cached(&command)?;
     read_single_fee_collector_107(&mut stmt, params![])
