@@ -1,11 +1,11 @@
 use crate::MetadataEntry;
 use crate::common::storage::types::{RosettaBlock, RosettaCounter};
 use anyhow::{Context, bail};
-use candid::Nat;
+use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_ledger_core::tokens::Zero;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
-use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use num_bigint::BigUint;
 use rusqlite::Connection;
 use rusqlite::{CachedStatement, Params, named_params, params};
@@ -111,7 +111,15 @@ pub fn get_fee_collector_from_block(
     rosetta_block: &RosettaBlock,
     connection: &Connection,
 ) -> anyhow::Result<Option<Account>> {
-    // First check if the fee collector is directly specified in the block
+    // First check if we have a 107 fee collector
+    if let Some(fee_collector_107) = get_fee_collector_107_for_idx(connection, rosetta_block.index)?
+    {
+        return Ok(fee_collector_107);
+    }
+
+    // FeeCollector 107 does not apply to this block, see if there is a legacy fee collector
+
+    // Check if the fee collector is directly specified in the block
     if let Some(fee_collector) = rosetta_block.get_fee_collector() {
         return Ok(Some(fee_collector));
     }
@@ -265,6 +273,7 @@ pub fn update_account_balances(
     // For faster inserts, keep a cache of the account balances within a batch range in memory
     // This also makes the inserting of the account balances batchable and therefore faster
     let mut account_balances_cache: HashMap<Account, BTreeMap<u64, Nat>> = HashMap::new();
+    let mut dummy_principals = vec![];
 
     // As long as there are blocks to be fetched, keep on iterating over the blocks in the database with the given BATCH_SIZE interval
     while !rosetta_blocks.is_empty() {
@@ -342,11 +351,23 @@ pub fn update_account_balances(
                         .unwrap_or(Nat(BigUint::zero()));
                     debit(
                         from,
-                        fee,
+                        fee.clone(),
                         rosetta_block.index,
                         connection,
                         &mut account_balances_cache,
                     )?;
+
+                    if let Some(Some(collector)) =
+                        get_fee_collector_107_for_idx(connection, rosetta_block.index)?
+                    {
+                        credit(
+                            collector,
+                            fee,
+                            rosetta_block.index,
+                            connection,
+                            &mut account_balances_cache,
+                        )?;
+                    }
                 }
                 crate::common::storage::types::IcrcOperation::Transfer {
                     from,
@@ -390,6 +411,15 @@ pub fn update_account_balances(
                         )?;
                     }
                 }
+                crate::common::storage::types::IcrcOperation::FeeCollector {
+                    fee_collector: _,
+                    caller: _,
+                } => {
+                    // Since we use the account_balances table to determine the synced height
+                    // and since there is no credit or debit operation for the fee collector block,
+                    // we have to add a dummy principal with the block index, to indicate the synced height
+                    dummy_principals.push((rosetta_block.index, [107u8; 30]));
+                }
             }
         }
 
@@ -406,6 +436,16 @@ pub fn update_account_balances(
                         ":amount": new_balance.to_string(),
                     })?;
             }
+        }
+        for (block_idx, principal) in &dummy_principals {
+            insert_tx
+                    .prepare_cached("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (:block_idx, :principal, :subaccount, :amount)")?
+                    .execute(named_params! {
+                        ":block_idx": block_idx,
+                        ":principal": principal,
+                        ":subaccount": [0u8;32],
+                        ":amount": "0",
+                    })?;
         }
         insert_tx.commit()?;
 
@@ -514,6 +554,22 @@ pub fn store_blocks(
                 fee,
                 expires_at,
             ),
+            crate::common::storage::types::IcrcOperation::FeeCollector {
+                fee_collector,
+                caller,
+            } => (
+                "107feecol",
+                caller,
+                None,
+                fee_collector.map(|fc| fc.owner),
+                fee_collector.map(|fc| *fc.effective_subaccount()),
+                None,
+                None,
+                Nat::from(0u64),
+                None,
+                None,
+                None,
+            ),
         };
 
         // SQLite doesn't support unsigned 64-bit integers. We need to convert the timestamps to signed
@@ -549,6 +605,16 @@ pub fn store_blocks(
                         ":transaction_created_at_time":transaction_created_at_time_i64,
                         ":approval_expires_at":approval_expires_at_i64
                     })?;
+        if operation_type == "107feecol" {
+            insert_tx.prepare_cached(
+        "INSERT OR IGNORE INTO fee_collectors_107 (block_idx, caller_principal, fee_collector_principal, fee_collector_subaccount) VALUES (:block_idx, :caller_principal, :fee_collector_principal, :fee_collector_subaccount)")?
+                    .execute(named_params! {
+                        ":block_idx":rosetta_block.index,
+                        ":caller_principal":from_principal.map(|x| x.as_slice().to_vec()),
+                        ":fee_collector_principal":to_principal.map(|x| x.as_slice().to_vec()),
+                        ":fee_collector_subaccount":to_subaccount,
+                    })?;
+        }
     }
     insert_tx.commit()?;
     Ok(())
@@ -590,6 +656,18 @@ fn get_block_at_next_idx(
     );
     let mut stmt = connection.prepare_cached(&command)?;
     read_single_block(&mut stmt, params![])
+}
+
+// Returns ICRC-107 fee collector that has effect on block at `block_idx`
+pub fn get_fee_collector_107_for_idx(
+    connection: &Connection,
+    block_idx: u64,
+) -> anyhow::Result<Option<Option<Account>>> {
+    let command = format!(
+        "SELECT fee_collector_principal,fee_collector_subaccount FROM fee_collectors_107 WHERE block_idx < {block_idx} ORDER BY block_idx DESC LIMIT 1"
+    );
+    let mut stmt = connection.prepare_cached(&command)?;
+    read_single_fee_collector_107(&mut stmt, params![])
 }
 
 // Returns a RosettaBlock if the block hash exists in the database, else returns None.
@@ -833,6 +911,52 @@ where
     let mut result = vec![];
     for block in blocks {
         result.push(block?);
+    }
+    Ok(result)
+}
+
+fn read_single_fee_collector_107<P>(
+    stmt: &mut CachedStatement,
+    params: P,
+) -> anyhow::Result<Option<Option<Account>>>
+where
+    P: Params,
+{
+    let fcs: Vec<Option<Account>> = read_fee_collectors_107(stmt, params)?;
+    if fcs.len() == 1 {
+        // Return the fee collector if only one was found
+        Ok(Some(fcs[0]))
+    } else if fcs.is_empty() {
+        // Return None if no fee collector was found
+        Ok(None)
+    } else {
+        // If more than one fee collector was found return an error
+        bail!("Multiple fee collectors found with given parameters".to_owned(),)
+    }
+}
+
+// Executes the constructed statement that reads the 107 fee collectors.
+fn read_fee_collectors_107<P>(
+    stmt: &mut CachedStatement,
+    params: P,
+) -> anyhow::Result<Vec<Option<Account>>>
+where
+    P: Params,
+{
+    let fee_collectors = stmt.query_map(params, |row| {
+        let owner_bytes: Option<Vec<u8>> = row.get(0)?;
+        let subaccount: Option<Subaccount> = row.get(1)?;
+        match owner_bytes {
+            Some(owner_bytes) => Ok(Some(Account {
+                owner: Principal::from_slice(&owner_bytes),
+                subaccount,
+            })),
+            None => Ok(None),
+        }
+    })?;
+    let mut result = vec![];
+    for fc in fee_collectors {
+        result.push(fc?);
     }
     Ok(result)
 }

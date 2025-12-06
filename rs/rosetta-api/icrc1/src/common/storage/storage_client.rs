@@ -405,7 +405,8 @@ mod tests {
     use ic_icrc1::blocks::encoded_block_to_generic_block;
     use ic_icrc1::blocks::generic_block_to_encoded_block;
     use ic_icrc1_test_utils::{
-        arb_amount, blocks_strategy, metadata_strategy, valid_blockchain_with_gaps_strategy,
+        arb_amount, blocks_strategy, metadata_strategy, valid_blockchain_strategy,
+        valid_blockchain_with_gaps_strategy,
     };
     use ic_icrc1_tokens_u64::U64;
     use ic_icrc1_tokens_u256::U256;
@@ -432,7 +433,7 @@ mod tests {
 
     proptest! {
           #[test]
-          fn test_read_and_write_blocks_u64(blockchain in prop::collection::vec(blocks_strategy::<U64>(arb_amount()),0..5)){
+          fn test_read_and_write_blocks_u64(blockchain in valid_blockchain_strategy::<U64>(5)){
            let storage_client_memory = StorageClient::new_in_memory().unwrap();
            let mut rosetta_blocks = vec![];
            for (index,block) in blockchain.into_iter().enumerate(){
@@ -459,7 +460,7 @@ mod tests {
        }
 
        #[test]
-       fn test_read_and_write_blocks_u256(blockchain in prop::collection::vec(blocks_strategy::<U256>(arb_amount()),0..5)){
+       fn test_read_and_write_blocks_u256(blockchain in valid_blockchain_strategy::<U256>(5)){
         let storage_client_memory = StorageClient::new_in_memory().unwrap();
         let mut rosetta_blocks = vec![];
         for (index,block) in blockchain.into_iter().enumerate(){
@@ -508,10 +509,11 @@ mod tests {
 
               // Duplicate the last transaction generated
               let duplicate_tx_block = RosettaBlock::from_generic_block(last_block.get_generic_block(), last_block.index + 1).unwrap();
+              let count_before = storage_client_memory.get_transactions_by_hash(duplicate_tx_block.clone().get_transaction_hash()).unwrap().len();
               storage_client_memory.store_blocks([duplicate_tx_block.clone()].to_vec()).unwrap();
 
-              // The hash of the duplicated transaction should still be the same --> There should be two transactions with the same transaction hash.
-              assert_eq!(storage_client_memory.get_transactions_by_hash(duplicate_tx_block.clone().get_transaction_hash()).unwrap().len(),2);
+              // The hash of the duplicated transaction should still be the same --> There should be one more transaction with the same transaction hash.
+              assert_eq!(storage_client_memory.get_transactions_by_hash(duplicate_tx_block.clone().get_transaction_hash()).unwrap().len(), count_before + 1);
               }
            }
 
