@@ -1,5 +1,5 @@
 {
-  "checksum": "fc3bdfb8ac6964f5749436cf1c56e4f79216ca42a6d935269c9cbf5357157e51",
+  "checksum": "aabc8c5c7865af79ba2227ec21f54d063eab96e8cad31a80a62de9c6709ce0ab",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22304,6 +22304,10 @@
             {
               "id": "sha3 0.10.8",
               "target": "sha3"
+            },
+            {
+              "id": "shell-escape 0.1.5",
+              "target": "shell_escape"
             },
             {
               "id": "signal-hook 0.3.17",
@@ -74282,6 +74286,45 @@
       ],
       "license_file": "LICENSE"
     },
+    "shell-escape 0.1.5": {
+      "name": "shell-escape",
+      "version": "0.1.5",
+      "package_url": "https://github.com/sfackler/shell-escape",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/shell-escape/0.1.5/download",
+          "sha256": "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "shell_escape",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "shell_escape",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "0.1.5"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "shell-words 1.1.0": {
       "name": "shell-words",
       "version": "1.1.0",
@@ -97876,6 +97919,7 @@
     "sev 7.1.0",
     "sha2 0.10.9",
     "sha3 0.10.8",
+    "shell-escape 0.1.5",
     "signal-hook 0.3.17",
     "signature 2.2.0",
     "simple_asn1 0.6.2",
