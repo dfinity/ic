@@ -218,10 +218,9 @@ fn compute_transcript(
                 .iter()
                 .map(|pts| pts.1.coefficients[i].0.clone())
                 .collect::<Vec<_>>();
-            combined.push(crate::types::PublicKey(G2Projective::muln_vartime(
-                &points,
-                &coefficients,
-            )));
+            combined.push(crate::types::PublicKey(
+                G2Projective::muln_affine_vartime(&points, &coefficients).to_affine(),
+            ));
         }
 
         let combined_public_coefficients = threshold_types::PublicCoefficients::new(combined);

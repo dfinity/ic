@@ -3,7 +3,8 @@
 use crate::crypto::public_key_from_secret_key;
 use crate::types::{Polynomial, PublicKey, ThresholdError};
 use ic_crypto_internal_bls12_381_type::{
-    G1Projective, G2Projective, LagrangeCoefficients, NodeIndex, NodeIndices, Scalar,
+    G1Affine, G1Projective, G2Affine, G2Projective, LagrangeCoefficients, NodeIndex, NodeIndices,
+    Scalar,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
@@ -58,13 +59,13 @@ impl PublicCoefficients {
         let first = coefficients.next().map(|pk| pk.0.clone());
         match first {
             None => G2Projective::identity(),
-            Some(ans) => {
-                let mut ans: G2Projective = ans;
+            Some(first) => {
+                let mut result = G2Projective::from(first);
                 for coeff in coefficients {
-                    ans *= x;
-                    ans += &coeff.0;
+                    result *= x;
+                    result += &coeff.0;
                 }
-                ans
+                result
             }
         }
     }
@@ -77,12 +78,12 @@ impl PublicCoefficients {
     /// # Returns
     /// The generator `g` of G1 multiplied by to the constant term of the interpolated polynomial `f(x)`. If `samples` contains multiple entries for the same scalar `x`, only the first sample contributes toward the interpolation and the subsequent entries are discarded.
     pub fn interpolate_g1(
-        samples: &[(NodeIndex, G1Projective)],
+        samples: &[(NodeIndex, G1Affine)],
     ) -> Result<G1Projective, ThresholdError> {
         let all_x: Vec<NodeIndex> = samples.iter().map(|(x, _)| *x).collect();
         let coefficients = Self::lagrange_coefficients_at_zero(&all_x)?;
         let pts: Vec<_> = samples.iter().map(|(_, pt)| pt.clone()).collect();
-        Ok(G1Projective::muln_vartime(&pts, &coefficients))
+        Ok(G1Projective::muln_affine_vartime(&pts, &coefficients))
     }
 
     /// Given a list of samples `(x, f(x) * g)` for a polynomial `f` in the scalar field, and a generator g of G2 returns
@@ -93,12 +94,12 @@ impl PublicCoefficients {
     /// # Returns
     /// The generator `g` of G2 multiplied by to the constant term of the interpolated polynomial `f(x)`, i.e. `f(0)`. If `samples` contains multiple entries for the same scalar `x`, only the first sample contributes toward the interpolation and the subsequent entries are discarded.
     pub fn interpolate_g2(
-        samples: &[(NodeIndex, G2Projective)],
+        samples: &[(NodeIndex, G2Affine)],
     ) -> Result<G2Projective, ThresholdError> {
         let all_x: Vec<NodeIndex> = samples.iter().map(|(x, _)| *x).collect();
         let coefficients = Self::lagrange_coefficients_at_zero(&all_x)?;
         let pts: Vec<_> = samples.iter().map(|(_, pt)| pt.clone()).collect();
-        Ok(G2Projective::muln_vartime(&pts, &coefficients))
+        Ok(G2Projective::muln_affine_vartime(&pts, &coefficients))
     }
 
     /// Compute the Lagrange coefficients at x=0.
@@ -125,51 +126,6 @@ impl PublicCoefficients {
         Ok(LagrangeCoefficients::at_zero(&indices)
             .coefficients()
             .to_vec())
-    }
-
-    pub(super) fn remove_zeros(&mut self) {
-        let zeros = self
-            .coefficients
-            .iter()
-            .rev()
-            .take_while(|c| c.0.is_identity())
-            .count();
-        let len = self.coefficients.len() - zeros;
-        self.coefficients.truncate(len)
-    }
-}
-
-impl<B: std::borrow::Borrow<PublicCoefficients>> std::iter::Sum<B> for PublicCoefficients {
-    fn sum<I>(iter: I) -> Self
-    where
-        I: Iterator<Item = B>,
-    {
-        iter.fold(PublicCoefficients::zero(), |a, b| a + b)
-    }
-}
-
-#[allow(clippy::suspicious_op_assign_impl)]
-impl<B: std::borrow::Borrow<PublicCoefficients>> std::ops::AddAssign<B> for PublicCoefficients {
-    fn add_assign(&mut self, rhs: B) {
-        let len = self.coefficients.len();
-        let rhs_len = rhs.borrow().coefficients.len();
-        if rhs_len > len {
-            self.coefficients
-                .resize(rhs_len, PublicKey(G2Projective::identity()));
-        }
-        for (self_c, rhs_c) in self.coefficients.iter_mut().zip(&rhs.borrow().coefficients) {
-            self_c.0.add_assign(&rhs_c.0);
-        }
-        self.remove_zeros();
-    }
-}
-
-impl<B: std::borrow::Borrow<PublicCoefficients>> std::ops::Add<B> for PublicCoefficients {
-    type Output = Self;
-
-    fn add(mut self, rhs: B) -> Self {
-        self += rhs;
-        self
     }
 }
 
@@ -243,7 +199,7 @@ impl From<&PublicCoefficients> for PublicKey {
             .coefficients
             .first()
             .cloned()
-            .unwrap_or_else(|| PublicKey(G2Projective::identity()))
+            .unwrap_or_else(|| PublicKey(G2Affine::identity()))
     }
 }
 
@@ -256,7 +212,7 @@ impl TryFrom<&PublicCoefficientsBytes> for PublicKey {
             .coefficients
             .first()
             .map(PublicKey::try_from)
-            .unwrap_or_else(|| Ok(PublicKey(G2Projective::identity())))?)
+            .unwrap_or_else(|| Ok(PublicKey(G2Affine::identity())))?)
     }
 }
 
@@ -271,7 +227,7 @@ pub fn pub_key_bytes_from_pub_coeff_bytes(
         .coefficients
         .first()
         .cloned()
-        .unwrap_or_else(|| PublicKeyBytes::from(PublicKey(G2Projective::identity())))
+        .unwrap_or_else(|| PublicKeyBytes::from(PublicKey(G2Affine::identity())))
 }
 
 // The internal PublicCoefficients are a duplicate of InternalPublicCoefficients
