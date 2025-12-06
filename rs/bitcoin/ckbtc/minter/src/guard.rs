@@ -136,6 +136,7 @@ mod tests {
             kyt_principal: None,
             kyt_fee: None,
             get_utxos_cache_expiration_seconds: None,
+            min_utxo_consolidation_threshold: None,
         }
     }
 

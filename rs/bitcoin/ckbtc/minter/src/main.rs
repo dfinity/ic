@@ -47,6 +47,7 @@ fn init(args: MinterArg) {
 fn setup_tasks() {
     schedule_now(TaskType::ProcessLogic(true), &IC_CANISTER_RUNTIME);
     schedule_now(TaskType::RefreshFeePercentiles, &IC_CANISTER_RUNTIME);
+    schedule_now(TaskType::ConsolidateUtxos, &IC_CANISTER_RUNTIME);
 }
 
 #[cfg(feature = "self_check")]
@@ -67,7 +68,7 @@ fn check_invariants() -> Result<(), String> {
 
         let events: Vec<_> = storage::events().collect();
         let recovered_state = replay::<CheckInvariantsImpl>(events.clone().into_iter())
-            .unwrap_or_else(|e| panic!("failed to replay log {events:?}: {e:?}"));
+            .unwrap_or_else(|e| panic!("failed to replay log ({e:?}): {events:?}"));
 
         recovered_state.check_invariants()?;
 

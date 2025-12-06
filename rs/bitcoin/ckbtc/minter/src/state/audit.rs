@@ -1,8 +1,9 @@
 //! State modifications that should end up in the event log.
 
 use super::{
-    CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, LedgerBurnIndex, RetrieveBtcRequest,
-    SubmittedBtcTransaction, SuspendedReason, WithdrawalCancellation,
+    CkBtcMinterState, ConsolidateUtxosRequest, FinalizedBtcRequest, FinalizedStatus,
+    LedgerBurnIndex, RetrieveBtcRequest, SubmittedBtcTransaction, SuspendedReason,
+    WithdrawalCancellation,
     eventlog::{EventType, ReplacedReason},
 };
 use crate::reimbursement::{ReimburseWithdrawalTask, WithdrawalReimbursementReason};
@@ -22,7 +23,7 @@ pub fn accept_retrieve_btc_request<R: CanisterRuntime>(
         EventType::AcceptedRetrieveBtcRequest(request.clone()),
         runtime,
     );
-    state.pending_retrieve_btc_requests.push(request.clone());
+    state.pending_btc_requests.push(request.clone().into());
     if let Some(account) = request.reimbursement_account {
         state
             .retrieve_btc_account_to_block_indices
@@ -33,6 +34,21 @@ pub fn accept_retrieve_btc_request<R: CanisterRuntime>(
     if let Some(kyt_provider) = request.kyt_provider {
         *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.check_fee;
     }
+}
+
+pub fn accept_consolidate_utxos_request<R: CanisterRuntime>(
+    request: ConsolidateUtxosRequest,
+    runtime: &R,
+) {
+    record_event(
+        EventType::AcceptedConsolidateUtxosRequest(request.clone()),
+        runtime,
+    );
+    // Note that here it shouldn't add the request to state.pending_btc_request
+    // like what was done in accept_retrieve_btc_request. This is because
+    // a ConsolidateUtxoRequest is accepted only *after* the transaction is
+    // built (and will then be signed and submitted), which means it is
+    // should not be in pending status.
 }
 
 pub fn add_utxos<R: CanisterRuntime>(
@@ -67,8 +83,8 @@ pub fn remove_retrieve_btc_request<R: CanisterRuntime>(
         runtime,
     );
 
-    state.push_finalized_request(FinalizedBtcRetrieval {
-        request,
+    state.push_finalized_request(FinalizedBtcRequest {
+        request: request.into(),
         state: status,
     });
 }
@@ -80,7 +96,7 @@ pub fn sent_transaction<R: CanisterRuntime>(
 ) {
     record_event(
         EventType::SentBtcTransaction {
-            request_block_indices: tx.requests.iter().map(|r| r.block_index).collect(),
+            request_block_indices: tx.requests.iter_block_index().collect(),
             txid: tx.txid,
             utxos: tx.used_utxos.clone(),
             change_output: tx.change_output.clone(),

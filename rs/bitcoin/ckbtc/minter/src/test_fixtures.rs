@@ -38,6 +38,7 @@ pub fn init_args() -> InitArgs {
         kyt_principal: None,
         kyt_fee: None,
         get_utxos_cache_expiration_seconds: None,
+        min_utxo_consolidation_threshold: None,
     }
 }
 
@@ -471,20 +472,42 @@ pub mod arbitrary {
         }
 
         fn init_args() -> impl Strategy<Value = InitArgs> {
-            prop_struct!(InitArgs {
-                btc_network: btc_network(),
-                ecdsa_key_name: ".*",
-                retrieve_btc_min_amount: any::<u64>(),
-                ledger_id: canister_id(),
-                max_time_in_queue_nanos: any::<u64>(),
-                min_confirmations: option::of(any::<u32>()),
-                mode: mode(),
-                check_fee: option::of(any::<u64>()),
-                kyt_fee: option::of(any::<u64>()),
-                btc_checker_principal: option::of(canister_id()),
-                kyt_principal: option::of(canister_id()),
-                get_utxos_cache_expiration_seconds: option::of(any::<u64>()),
-            })
+            // The number of fields in InitArgs exceeds the max tuple depth Strategy supports.
+            // The workaround is to use the strategy for UpgradeArgs to help.
+            (
+                btc_network(),
+                canister_id(),
+                ".*",
+                0..u64::MAX,
+                0..u64::MAX,
+                mode(),
+                upgrade_args(),
+            )
+                .prop_map(
+                    |(
+                        btc_network,
+                        ledger_id,
+                        ecdsa_key_name,
+                        retrieve_btc_min_amount,
+                        max_time_in_queue_nanos,
+                        mode,
+                        args,
+                    )| InitArgs {
+                        btc_network,
+                        ledger_id,
+                        ecdsa_key_name,
+                        retrieve_btc_min_amount,
+                        max_time_in_queue_nanos,
+                        mode,
+                        min_confirmations: args.min_confirmations,
+                        check_fee: args.check_fee,
+                        kyt_fee: args.kyt_fee,
+                        btc_checker_principal: args.btc_checker_principal,
+                        kyt_principal: args.kyt_principal,
+                        get_utxos_cache_expiration_seconds: args.get_utxos_cache_expiration_seconds,
+                        min_utxo_consolidation_threshold: args.min_utxo_consolidation_threshold,
+                    },
+                )
         }
 
         fn upgrade_args() -> impl Strategy<Value = UpgradeArgs> {
@@ -498,6 +521,7 @@ pub mod arbitrary {
                 btc_checker_principal: option::of(canister_id()),
                 kyt_principal: option::of(canister_id()),
                 get_utxos_cache_expiration_seconds: option::of(any::<u64>()),
+                min_utxo_consolidation_threshold: option::of(any::<u64>()),
             })
         }
 
