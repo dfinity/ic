@@ -77,6 +77,12 @@ pub enum ValidationError {
     },
 }
 
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+struct CanisterMigrationArgs {
+    pub source: Principal,
+    pub target: Principal,
+}
+
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Request {
     source: Principal,
@@ -134,6 +140,15 @@ impl Display for Request {
             write!(f, "{}, ", x)?;
         }
         write!(f, "] }}")
+    }
+}
+
+impl From<&Request> for CanisterMigrationArgs {
+    fn from(request: &Request) -> Self {
+        Self {
+            source: request.source,
+            target: request.target,
+        }
     }
 }
 
@@ -303,6 +318,28 @@ impl Display for Event {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Event {{ time: {}, event: {} }}", self.time, self.event)
     }
+}
+
+impl From<&Event> for CanisterMigrationArgs {
+    fn from(x: &Event) -> Self {
+        x.event.request().into()
+    }
+}
+
+impl Storable for CanisterMigrationArgs {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Owned(to_vec(&self).expect("Canister migration argument serialization failed"))
+    }
+
+    fn into_bytes(self) -> Vec<u8> {
+        self.to_bytes().to_vec()
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        from_slice(&bytes).expect("Canister migration argument deserialization failed")
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 impl Storable for Request {
