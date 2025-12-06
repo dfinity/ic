@@ -144,7 +144,7 @@ async fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
     .await
     {
         Ok(_) => {
-            println!("Download completed, starting upgrade installation...");
+            eprintln!("Download completed, starting upgrade installation...");
         }
         Err(e) => {
             eprintln!("Download failed: {}", e);
