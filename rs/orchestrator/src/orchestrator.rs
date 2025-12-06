@@ -11,7 +11,7 @@ use crate::{
     registration::NodeRegistration,
     registry_helper::RegistryHelper,
     ssh_access_manager::SshAccessManager,
-    upgrade::{OrchestratorControlFlow, Upgrade},
+    upgrade::{Upgrade, UpgradeCheckResult},
 };
 use backoff::ExponentialBackoffBuilder;
 use get_if_addrs::get_if_addrs;
@@ -390,35 +390,35 @@ impl Orchestrator {
             // in case it gets stuck in an unexpected situation for longer than 15 minutes.
             const UPGRADE_TIMEOUT: Duration = Duration::from_secs(60 * 15);
 
-            // Since the orchestrator is just starting, the last flow must have been a `Stop`
-            let mut last_flow = OrchestratorControlFlow::Stop;
+            // Since the orchestrator is just starting, the last upgrade check must have been a `Stop`
+            let mut last_upgrade_result = UpgradeCheckResult::Stop;
 
             loop {
                 match tokio::time::timeout(UPGRADE_TIMEOUT, upgrade.check_for_upgrade()).await {
-                    Ok(Ok(control_flow)) => {
+                    Ok(upgrade_result) => {
+                        // Update the subnet assignment based on the latest upgrade result.
+                        *subnet_assignment.write().unwrap() = upgrade_result.as_subnet_assignment();
+
+                        if let Err(err) = upgrade_result.as_result() {
+                            warn!(log, "Check for upgrade failed: {err}");
+                            upgrade.metrics.failed_consecutive_upgrade_checks.inc();
+                            continue;
+                        }
+
+                        // Starting from here, the upgrade check was successful.
                         upgrade.metrics.failed_consecutive_upgrade_checks.reset();
 
-                        match control_flow {
-                            OrchestratorControlFlow::Assigned(subnet_id)
-                            | OrchestratorControlFlow::Leaving(subnet_id) => {
-                                *subnet_assignment.write().unwrap() =
-                                    SubnetAssignment::Assigned(subnet_id);
-                            }
-                            OrchestratorControlFlow::Unassigned => {
-                                *subnet_assignment.write().unwrap() = SubnetAssignment::Unassigned;
-                            }
-                            OrchestratorControlFlow::Stop => {
-                                // Wake up all orchestrator tasks and instruct them to stop.
-                                cancellation_token.cancel();
-                                break;
-                            }
+                        if matches!(upgrade_result, UpgradeCheckResult::Stop) {
+                            // Wake up all orchestrator tasks and instruct them to stop.
+                            cancellation_token.cancel();
+                            break;
                         }
 
                         let node_id = upgrade.node_id();
-                        match (&last_flow, &control_flow) {
+                        match (&last_upgrade_result, &upgrade_result) {
                             (
-                                OrchestratorControlFlow::Assigned(subnet_id),
-                                OrchestratorControlFlow::Leaving(_),
+                                UpgradeCheckResult::Assigned(subnet_id),
+                                UpgradeCheckResult::Leaving(_),
                             ) => {
                                 UtilityCommand::notify_host(
                                     &format!(
@@ -431,8 +431,8 @@ impl Orchestrator {
                                 );
                             }
                             (
-                                OrchestratorControlFlow::Leaving(subnet_id),
-                                OrchestratorControlFlow::Unassigned,
+                                UpgradeCheckResult::Leaving(subnet_id),
+                                UpgradeCheckResult::Unassigned,
                             ) => {
                                 UtilityCommand::notify_host(
                                     &format!(
@@ -444,11 +444,7 @@ impl Orchestrator {
                             // Other transitions are not important at the moment.
                             _ => {}
                         }
-                        last_flow = control_flow;
-                    }
-                    Ok(Err(err)) => {
-                        warn!(log, "Check for upgrade failed: {err}");
-                        upgrade.metrics.failed_consecutive_upgrade_checks.inc();
+                        last_upgrade_result = upgrade_result;
                     }
                     Err(err) => {
                         warn!(log, "Check for upgrade timed out: {err}");
