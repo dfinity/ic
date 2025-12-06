@@ -76,6 +76,7 @@ pub fn initialize_registry_local_store(path: &Path, root_public_key: Vec<u8>) {
 
 pub fn get_routing_table(
     nns_urls: Vec<Url>,
+    registry_version: Option<RegistryVersion>,
 ) -> (Vec<(CanisterIdRange, SubnetId)>, RegistryVersion) {
     let registry_client = RegistryClientImpl::new(
         Arc::new(NnsDataProvider::new(
@@ -89,17 +90,17 @@ pub fn get_routing_table(
         .try_polling_latest_version(usize::MAX)
         .unwrap();
 
-    let latest_version = registry_client.get_latest_version();
+    let version = registry_version.unwrap_or_else(|| registry_client.get_latest_version());
 
     let keys = registry_client
-        .get_key_family(CANISTER_RANGES_PREFIX, latest_version)
+        .get_key_family(CANISTER_RANGES_PREFIX, version)
         .unwrap();
 
     let routing_table = keys
         .iter()
         .flat_map(|key| {
             let value = registry_client
-                .get_versioned_value(key, latest_version)
+                .get_versioned_value(key, version)
                 .unwrap()
                 .value
                 .unwrap();
@@ -118,5 +119,5 @@ pub fn get_routing_table(
             (range, subnet_id)
         })
         .collect();
-    (routing_table, latest_version)
+    (routing_table, version)
 }
