@@ -5,7 +5,7 @@ use crate::external_canister_types::{
 };
 use crate::state_api::routes::into_api_response;
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
-use crate::{BlobStore, OpId, Operation, SubnetBlockmaker};
+use crate::{BlobStore, OpId, Operation, SubnetBlockmakers};
 use askama::Template;
 use async_trait::async_trait;
 use axum::{
@@ -137,7 +137,7 @@ use pocket_ic::common::rest::{
     CanisterHttpResponse, ExtendedSubnetConfigSet, IcpConfig, IcpConfigFlag, IcpFeatures,
     IcpFeaturesConfig, IncompleteStateFlag, MockCanisterHttpResponse, RawAddCycles,
     RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
-    SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
+    SubnetInstructionConfig, SubnetKind, Topology,
 };
 use pocket_ic::{ErrorCode, RejectCode, RejectResponse, copy_dir};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
@@ -3537,16 +3537,14 @@ impl Operation for PubKey {
 
 #[derive(Clone, Debug)]
 pub struct Tick {
-    pub configs: TickConfigs,
+    pub blockmakers: Vec<SubnetBlockmakers>,
+    pub first_subnet: Option<SubnetId>,
+    pub last_subnet: Option<SubnetId>,
 }
 
 impl Tick {
-    fn validate_blockmakers_per_subnet(
-        &self,
-        pic: &mut PocketIc,
-        subnets_blockmaker: &[SubnetBlockmaker],
-    ) -> Result<(), OpOut> {
-        for subnet_blockmaker in subnets_blockmaker {
+    fn validate_blockmakers(&self, pic: &PocketIc) -> Result<(), OpOut> {
+        for subnet_blockmaker in &self.blockmakers {
             if subnet_blockmaker
                 .failed_blockmakers
                 .contains(&subnet_blockmaker.blockmaker)
@@ -3577,38 +3575,76 @@ impl Tick {
 
 impl Operation for Tick {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        let blockmakers_per_subnet = self.configs.blockmakers.as_ref().map(|cfg| {
-            cfg.blockmakers_per_subnet
-                .iter()
-                .cloned()
-                .map(SubnetBlockmaker::from)
-                .collect_vec()
-        });
-
-        if let Some(ref bm_per_subnet) = blockmakers_per_subnet
-            && let Err(error) = self.validate_blockmakers_per_subnet(pic, bm_per_subnet)
-        {
+        if let Err(error) = self.validate_blockmakers(pic) {
             return error;
         }
 
-        for subnet in pic.subnets.get_all() {
-            let subnet_id = subnet.get_subnet_id();
-            let blockmaker_metrics = blockmakers_per_subnet.as_ref().and_then(|bm_per_subnet| {
-                bm_per_subnet
-                    .iter()
-                    .find(|bm| bm.subnet == subnet_id)
-                    .map(|bm| BlockmakerMetrics {
-                        blockmaker: bm.blockmaker,
-                        failed_blockmakers: bm.failed_blockmakers.clone(),
-                    })
-            });
+        if let Some(first_subnet) = self.first_subnet
+            && let Some(last_subnet) = self.last_subnet
+            && first_subnet == last_subnet
+        {
+            return OpOut::Error(PocketIcError::InvalidTickConfigs(
+                "The first and last subnet must be different.".to_string(),
+            ));
+        }
+
+        let get_state_machine = |subnet_id: Option<SubnetId>| {
+            if let Some(subnet_id) = subnet_id {
+                match pic.subnets.get(subnet_id) {
+                    Some(state_machine) => Ok(Some(state_machine)),
+                    None => Err(OpOut::Error(PocketIcError::SubnetNotFound(
+                        subnet_id.get().0,
+                    ))),
+                }
+            } else {
+                Ok(None)
+            }
+        };
+        let first_state_machine = match get_state_machine(self.first_subnet) {
+            Ok(res) => res,
+            Err(e) => return e,
+        };
+        let last_state_machine = match get_state_machine(self.last_subnet) {
+            Ok(res) => res,
+            Err(e) => return e,
+        };
+
+        let tick_subnet = |state_machine: Arc<StateMachine>| {
+            let subnet_id = state_machine.get_subnet_id();
+            let blockmaker_metrics = self
+                .blockmakers
+                .iter()
+                .find(|bm| bm.subnet == subnet_id)
+                .map(|bm| BlockmakerMetrics {
+                    blockmaker: bm.blockmaker,
+                    failed_blockmakers: bm.failed_blockmakers.clone(),
+                });
 
             match blockmaker_metrics {
-                Some(metrics) => subnet
-                    .state_machine
-                    .execute_round_with_blockmaker_metrics(metrics),
-                None => subnet.state_machine.execute_round(),
+                Some(metrics) => state_machine.execute_round_with_blockmaker_metrics(metrics),
+                None => state_machine.execute_round(),
             }
+        };
+
+        if let Some(state_machine) = first_state_machine {
+            tick_subnet(state_machine);
+        }
+        for subnet in pic.subnets.get_all() {
+            let subnet_id = subnet.state_machine.get_subnet_id();
+            if let Some(first_subnet_id) = self.first_subnet
+                && subnet_id == first_subnet_id
+            {
+                continue;
+            }
+            if let Some(last_subnet_id) = self.last_subnet
+                && subnet_id == last_subnet_id
+            {
+                continue;
+            }
+            tick_subnet(subnet.state_machine.clone());
+        }
+        if let Some(state_machine) = last_state_machine {
+            tick_subnet(state_machine);
         }
 
         OpOut::NoOutput

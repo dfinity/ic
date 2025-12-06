@@ -15,7 +15,9 @@ use crate::pocket_ic::{
     IngressMessageStatus, MockCanisterHttp, PubKey, Query, QueryRequest, SetCertifiedTime,
     SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage, SubnetReadStateRequest, Tick,
 };
-use crate::{BlobStore, InstanceId, OpId, Operation, async_trait, pocket_ic::PocketIc};
+use crate::{
+    BlobStore, InstanceId, OpId, Operation, SubnetBlockmakers, async_trait, pocket_ic::PocketIc,
+};
 use aide::{
     NoApi,
     axum::ApiRouter,
@@ -34,10 +36,11 @@ use axum_extra::headers;
 use axum_extra::headers::HeaderMapExt;
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
+use candid::Principal;
 use ic_boundary::{ErrorClientFacing, MAX_REQUEST_BODY_SIZE};
 use ic_http_endpoints_public::{cors_layer, make_plaintext_response, query, read_state};
 use ic_registry_routing_table::RoutingTable;
-use ic_types::{CanisterId, SnapshotId, SubnetId};
+use ic_types::{CanisterId, PrincipalId, SnapshotId, SubnetId};
 use pocket_ic::RejectResponse;
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
@@ -46,7 +49,7 @@ use pocket_ic::common::rest::{
     RawCanisterResult, RawCanisterSnapshotDownload, RawCanisterSnapshotId,
     RawCanisterSnapshotUpload, RawCycles, RawIngressStatusArgs, RawMessageId,
     RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
-    RawTime, TickConfigs, Topology,
+    RawTickConfigs, RawTime, Topology,
 };
 use serde::Serialize;
 use slog::Level;
@@ -1392,11 +1395,28 @@ pub async fn handler_tick(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
-    axum::extract::Json(ticks_configs): axum::extract::Json<TickConfigs>,
+    axum::extract::Json(tick_configs): axum::extract::Json<RawTickConfigs>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
     let timeout = timeout_or_default(headers);
+    let blockmakers = tick_configs
+        .blockmakers
+        .map(|blockmakers| {
+            blockmakers
+                .into_iter()
+                .map(SubnetBlockmakers::from)
+                .collect()
+        })
+        .unwrap_or_default();
+    let to_subnet_id = |subnet_id: RawSubnetId| {
+        let subnet_principal: Principal = subnet_id.into();
+        SubnetId::from(PrincipalId(subnet_principal))
+    };
+    let first_subnet = tick_configs.first_subnet.map(to_subnet_id);
+    let last_subnet = tick_configs.last_subnet.map(to_subnet_id);
     let op = Tick {
-        configs: ticks_configs,
+        blockmakers,
+        first_subnet,
+        last_subnet,
     };
     let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))

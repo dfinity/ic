@@ -796,3 +796,84 @@ the generic PocketIC library API, e.g., `PocketIc::update_call_with_effective_pr
 - and the `payload` argument should be the Candid-encoded binary input to the new management canister endpoint
   (the type of the `payload` argument can either be obtained from a corresponding branch of the public `ic-management-canister-types` crate
   or be defined manually).
+
+## Bounded-wait calls
+
+When making bounded-wait calls, it is important to test error handling by the caller after getting a timeout,
+considering that the callee might have processed the message before or after the deadline.
+To facilitate testing such scenarios, PocketIC allows the test author to specify the first and last subnet executed in a round.
+
+This way, it is possible to make the caller receive a timeout while the callee processes the message before the deadline:
+- submit an ingress message to the caller which triggers a bounded-wait call to the callee;
+- execute a round (a.k.a. "tick") in which the caller subnet is executed first and the callee subnet is executed last;
+- advance time beyond the deadline (e.g., by 600s exceeding the default deadline of 300s);
+- await the result of the ingress message to the caller by executing further rounds.
+
+Because the callee subnet is executed after the caller subnet, the callee subnet *typically* (assuming no heavy load in the PocketIC instance)
+processes the message in the same round before advancing time beyond the deadline.
+
+It is also possible to make the caller receive a timeout while the callee processes the message after the deadline.
+To this end, the caller subnet must be executed after the callee subnet
+(by setting the callee subnet to be the first subnet and the caller subnet to be the last subnet)
+so that the callee subnet does not process the message before advancing time beyond the deadline.
+
+For example, consider a canister with the following two methods:
+```
+#[update]
+fn call_with_deadline(nonce: u64) {
+    let within_deadline = match msg_deadline() {
+        Some(deadline) => time() <= deadline.get(),
+        None => true,
+    };
+    if within_deadline {
+        ic_cdk::print(format!("nonce: {nonce}"));
+    }
+}
+
+#[update]
+async fn bounded_wait(callee: Principal, nonce: u64) -> u64 {
+    let res = Call::bounded_wait(callee, "call_with_deadline")
+        .with_arg(nonce)
+        .await;
+    match res {
+        Ok(_) => 0,
+        Err(CallFailed::CallRejected(e)) => {
+            e.reject_code().expect("Unrecognized reject code") as u64
+        }
+        Err(e) => panic!("Unexpected error: {e}"),
+    }
+}
+```
+
+We could then define the following test scenario:
+```
+// submit an ingress message to the caller which triggers a bounded-wait call to the callee
+let msg_id = pic
+    .submit_call(
+        caller_id,
+        Principal::anonymous(),
+        "bounded_wait",
+        Encode!(&callee_id, &nonce).unwrap(),
+    )
+    .unwrap();
+
+// execute a round (a.k.a. "tick") in which the caller subnet is executed first and the callee subnet is executed last
+let tick_configs = TickConfigs {
+    blockmakers: None,
+    first_subnet: Some(caller_subnet),
+    last_subnet: Some(callee_subnet),
+};
+pic.tick_with_configs(tick_configs);
+
+// advance time beyond the deadline
+pic.advance_time(Duration::from_secs(600));
+
+// await the result of the ingress message which is
+// the reject code 6 (timeout) observed by the caller
+let res = pic.await_call(msg_id).unwrap();
+let code = Decode!(&res, u64).unwrap();
+assert_eq!(code, 6);
+```
+
+In this case, the callee processes the message before the deadline and thus
+the callee logs the nonce.
