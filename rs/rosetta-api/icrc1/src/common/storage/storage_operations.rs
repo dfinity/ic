@@ -559,10 +559,10 @@ pub fn store_blocks(
                 caller,
             } => (
                 "107feecol",
+                caller,
                 None,
-                None,
-                None,
-                None,
+                fee_collector.map(|fc| fc.owner),
+                fee_collector.map(|fc| *fc.effective_subaccount()),
                 None,
                 None,
                 Nat::from(0u64),
