@@ -882,165 +882,115 @@ fn test_error_backoff() {
     });
 }
 
-#[test]
-fn test_sync_to_fee_collector_107_block() {
-    let rt = Runtime::new().unwrap();
-    let setup = Setup::builder()
-        .with_custom_ledger_wasm(icrc3_test_ledger())
+async fn set_fee_col_107(
+    agent: &Agent,
+    env: &RosettaTestingEnvironment,
+    ledger_canister_id: &Principal,
+    start_index: u64,
+    prev_block_hash: Option<Vec<u8>>,
+    fee_col: Option<Account>,
+) -> (u64, Vec<u8>) {
+    let mut builder = BlockBuilder::<Tokens>::new(start_index, start_index);
+    if let Some(prev_block_hash) = prev_block_hash {
+        builder = builder.with_parent_hash(prev_block_hash);
+    }
+    let fee_col_block = builder
+        .with_btype("107feecol".to_string())
+        .fee_collector(fee_col, None, None)
         .build();
+    let block_index = add_block(agent, ledger_canister_id, &fee_col_block)
+        .await
+        .expect("failed to add block");
+    assert_eq!(block_index, Nat::from(start_index));
 
-    rt.block_on(async {
-        let env = RosettaTestingEnvironmentBuilder::new(&setup).build().await;
+    let latest_rosetta_block = wait_for_rosetta_block(
+        &env.rosetta_client,
+        env.network_identifier.clone(),
+        start_index,
+    )
+    .await
+    .expect("Unable to call wait_for_rosetta_block");
+    assert_eq!(latest_rosetta_block, start_index);
 
-        let agent = get_custom_agent(Arc::new(test_identity()), setup.port).await;
-
-        let fc_account = Account {
-            owner: PrincipalId::new_user_test_id(12).into(),
-            subaccount: None,
-        };
-
-        let block0 = BlockBuilder::<Tokens>::new(0, 0)
-            .with_btype("107feecol".to_string())
-            .fee_collector(Some(fc_account), None, None)
-            .build();
-
-        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block0)
-            .await
-            .expect("failed to add block");
-        assert_eq!(block_index, Nat::from(0u64));
-
-        let block_index =
-            wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 0).await;
-        assert_eq!(block_index.unwrap(), 0);
-
-        let block1 = BlockBuilder::new(2, 2)
-            .with_parent_hash(block0.hash().to_vec())
-            .with_fee(Tokens::from(123u64))
-            .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
-            .build();
-
-        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block1)
-            .await
-            .expect("failed to add block");
-        assert_eq!(block_index, Nat::from(1u64));
-
-        let block2 = BlockBuilder::<Tokens>::new(1, 1)
-            .with_btype("107feecol".to_string())
-            .with_parent_hash(block1.hash().to_vec())
-            .fee_collector(Some(fc_account), None, None)
-            .build();
-
-        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block2)
-            .await
-            .expect("failed to add block");
-        assert_eq!(block_index, Nat::from(2u64));
-
-        let block_index =
-            wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 2).await;
-        assert_eq!(block_index.unwrap(), 2);
-    });
+    (start_index + 1, fee_col_block.hash().to_vec())
 }
 
-#[test]
-fn test_fee_collector_107_smoke() {
-    let rt = Runtime::new().unwrap();
-    let setup = Setup::builder()
-        .with_custom_ledger_wasm(icrc3_test_ledger())
+async fn transfer_and_check_collected_fees(
+    agent: &Agent,
+    env: &RosettaTestingEnvironment,
+    ledger_canister_id: &Principal,
+    start_index: u64,
+    prev_block_hash: Option<Vec<u8>>,
+    legacy_fee_col: Account,
+    expected_balances: Vec<(Account, u64)>,
+) -> (u64, Vec<u8>) {
+    let mut idx = start_index;
+    let mut builder = BlockBuilder::new(idx, idx);
+    if let Some(prev_block_hash) = prev_block_hash {
+        builder = builder.with_parent_hash(prev_block_hash);
+    }
+    let mint = builder
+        .with_fee(Tokens::from(1u64))
+        .with_fee_collector(legacy_fee_col)
+        .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
         .build();
+    let block_index = add_block(agent, ledger_canister_id, &mint)
+        .await
+        .expect("failed to add block");
+    assert_eq!(block_index, Nat::from(idx));
+    idx += 1;
 
-    rt.block_on(async {
-        let env = RosettaTestingEnvironmentBuilder::new(&setup).build().await;
+    let transfer = BlockBuilder::new(idx, idx)
+        .with_parent_hash(mint.hash().to_vec())
+        .with_fee_collector_block(start_index)
+        .with_fee(Tokens::from(1u64))
+        .transfer(*TEST_ACCOUNT, *TEST_ACCOUNT, Tokens::from(1u64))
+        .build();
+    let block_index = add_block(agent, ledger_canister_id, &transfer)
+        .await
+        .expect("failed to add block");
+    assert_eq!(block_index, Nat::from(idx));
+    idx += 1;
 
-        let agent = get_custom_agent(Arc::new(test_identity()), setup.port).await;
+    let approve = BlockBuilder::new(idx, idx)
+        .with_parent_hash(transfer.hash().to_vec())
+        .with_fee_collector_block(start_index)
+        .with_fee(Tokens::from(1u64))
+        .approve(*TEST_ACCOUNT, *TEST_ACCOUNT, Tokens::from(u64::MAX))
+        .build();
+    let block_index = add_block(agent, ledger_canister_id, &approve)
+        .await
+        .expect("failed to add block");
+    assert_eq!(block_index, Nat::from(idx));
+    idx += 1;
 
-        let fc_account = Account {
-            owner: PrincipalId::new_user_test_id(12).into(),
-            subaccount: None,
-        };
+    let transfer_from = BlockBuilder::new(idx, idx)
+        .with_parent_hash(approve.hash().to_vec())
+        .with_fee(Tokens::from(1u64))
+        .transfer(*TEST_ACCOUNT, *TEST_ACCOUNT, Tokens::from(1u64))
+        .with_spender(*TEST_ACCOUNT)
+        .build();
+    let block_index = add_block(agent, ledger_canister_id, &transfer_from)
+        .await
+        .expect("failed to add block");
+    assert_eq!(block_index, Nat::from(idx));
 
-        let block0 = BlockBuilder::new(0, 0)
-            .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
-            .build();
-
-        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block0)
-            .await
-            .expect("failed to add block");
-        assert_eq!(block_index, Nat::from(0u64));
-
-        let block_index =
-            wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 0).await;
-        assert_eq!(block_index.unwrap(), 0);
-
-        let block1 = BlockBuilder::<Tokens>::new(1, 1)
-            .with_btype("107feecol".to_string())
-            .with_parent_hash(block0.hash().to_vec())
-            .fee_collector(Some(fc_account), None, None)
-            .build();
-
-        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block1)
-            .await
-            .expect("failed to add block");
-        assert_eq!(block_index, Nat::from(1u64));
-
-        let block2 = BlockBuilder::new(2, 2)
-            .with_parent_hash(block1.hash().to_vec())
-            .with_fee(Tokens::from(123u64))
-            .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
-            .build();
-
-        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block2)
-            .await
-            .expect("failed to add block");
-        assert_eq!(block_index, Nat::from(2u64));
-
-        let block_index =
-            wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 2).await;
-        assert_eq!(block_index.unwrap(), 2);
-
+    for (account, balance) in expected_balances {
         assert_rosetta_balance(
-            fc_account,
-            2,
-            123u64,
+            account,
+            idx,
+            balance,
             &env.rosetta_client,
             env.network_identifier.clone(),
         )
         .await;
+    }
 
-        let block3 = BlockBuilder::<Tokens>::new(3, 3)
-            .with_btype("107feecol".to_string())
-            .with_parent_hash(block2.hash().to_vec())
-            .fee_collector(None, None, None)
-            .build();
-
-        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block3)
-            .await
-            .expect("failed to add block");
-        assert_eq!(block_index, Nat::from(3u64));
-
-        let block4 = BlockBuilder::new(4, 4)
-            .with_parent_hash(block3.hash().to_vec())
-            .with_fee(Tokens::from(123u64))
-            .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
-            .build();
-
-        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block4)
-            .await
-            .expect("failed to add block");
-        assert_eq!(block_index, Nat::from(4u64));
-
-        assert_rosetta_balance(
-            fc_account,
-            4,
-            123u64,
-            &env.rosetta_client,
-            env.network_identifier.clone(),
-        )
-        .await;
-    });
+    (idx + 1, transfer_from.hash().to_vec())
 }
 
 #[test]
-fn test_fee_collector_107_ignore_legacy() {
+fn test_fee_collector_107() {
     let rt = Runtime::new().unwrap();
     let setup = Setup::builder()
         .with_custom_ledger_wasm(icrc3_test_ledger())
@@ -1051,123 +1001,98 @@ fn test_fee_collector_107_ignore_legacy() {
 
         let agent = get_custom_agent(Arc::new(test_identity()), setup.port).await;
 
-        let fc_legacy_account = Account {
+        let fc_legacy = Account {
             owner: PrincipalId::new_user_test_id(111).into(),
             subaccount: None,
         };
 
-        let fc_107_account = Account {
+        let fc_107 = Account {
             owner: PrincipalId::new_user_test_id(107).into(),
             subaccount: None,
         };
 
-        let block0 = BlockBuilder::new(0, 0)
-            .with_fee_collector(fc_legacy_account)
-            .with_fee(Tokens::from(1u64))
-            .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
-            .build();
-
-        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block0)
-            .await
-            .expect("failed to add block");
-        assert_eq!(block_index, Nat::from(0u64));
-
-        let block_index =
-            wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 0).await;
-        assert_eq!(block_index.unwrap(), 0);
-
-        assert_rosetta_balance(
-            fc_legacy_account,
+        // There are 4 transactions with fees, but approve fees are not collected
+        // by the legacy fee collector and transfer from does not specify
+        // the fee collector or its index.
+        let (block_index, block_hash) = transfer_and_check_collected_fees(
+            &agent,
+            &env,
+            &env.icrc1_ledger_id,
             0,
-            1u64,
-            &env.rosetta_client,
-            env.network_identifier.clone(),
+            None,
+            fc_legacy,
+            [(fc_legacy, 2), (fc_107, 0)].to_vec(),
         )
         .await;
 
-        let block1 = BlockBuilder::<Tokens>::new(1, 1)
-            .with_btype("107feecol".to_string())
-            .with_parent_hash(block0.hash().to_vec())
-            .fee_collector(Some(fc_107_account), None, None)
-            .build();
-
-        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block1)
-            .await
-            .expect("failed to add block");
-        assert_eq!(block_index, Nat::from(1u64));
-
-        let block2 = BlockBuilder::new(2, 2)
-            .with_parent_hash(block1.hash().to_vec())
-            .with_fee_collector(fc_legacy_account)
-            .with_fee(Tokens::from(1u64))
-            .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
-            .build();
-
-        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block2)
-            .await
-            .expect("failed to add block");
-        assert_eq!(block_index, Nat::from(2u64));
-
-        let block_index =
-            wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 2).await;
-        assert_eq!(block_index.unwrap(), 2);
-
-        assert_rosetta_balance(
-            fc_107_account,
-            2,
-            1u64,
-            &env.rosetta_client,
-            env.network_identifier.clone(),
+        let (block_index, block_hash) = set_fee_col_107(
+            &agent,
+            &env,
+            &env.icrc1_ledger_id,
+            block_index,
+            Some(block_hash),
+            Some(fc_107),
         )
         .await;
 
-        assert_rosetta_balance(
-            fc_legacy_account,
-            2,
-            1u64,
-            &env.rosetta_client,
-            env.network_identifier.clone(),
+        // The 107 fee collector should collect all 4 fees.
+        let (block_index, block_hash) = transfer_and_check_collected_fees(
+            &agent,
+            &env,
+            &env.icrc1_ledger_id,
+            block_index,
+            Some(block_hash),
+            fc_legacy,
+            [(fc_legacy, 2), (fc_107, 4)].to_vec(),
         )
         .await;
 
-        let block3 = BlockBuilder::<Tokens>::new(3, 3)
-            .with_btype("107feecol".to_string())
-            .with_parent_hash(block2.hash().to_vec())
-            .fee_collector(None, None, None)
-            .build();
-
-        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block3)
-            .await
-            .expect("failed to add block");
-        assert_eq!(block_index, Nat::from(3u64));
-
-        let block4 = BlockBuilder::new(4, 4)
-            .with_fee_collector_block(0)
-            .with_parent_hash(block3.hash().to_vec())
-            .with_fee(Tokens::from(123u64))
-            .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
-            .build();
-
-        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block4)
-            .await
-            .expect("failed to add block");
-        assert_eq!(block_index, Nat::from(4u64));
-
-        assert_rosetta_balance(
-            fc_107_account,
-            4,
-            1u64,
-            &env.rosetta_client,
-            env.network_identifier.clone(),
+        let (block_index, block_hash) = set_fee_col_107(
+            &agent,
+            &env,
+            &env.icrc1_ledger_id,
+            block_index,
+            Some(block_hash),
+            None,
         )
         .await;
 
-        assert_rosetta_balance(
-            fc_legacy_account,
-            4,
-            1u64,
-            &env.rosetta_client,
-            env.network_identifier.clone(),
+        // Fee collecor was set to None, no fees should be collectes.
+        let (block_index, block_hash) = transfer_and_check_collected_fees(
+            &agent,
+            &env,
+            &env.icrc1_ledger_id,
+            block_index,
+            Some(block_hash),
+            fc_legacy,
+            [(fc_legacy, 2), (fc_107, 4)].to_vec(),
+        )
+        .await;
+
+        let fc_107_new = Account {
+            owner: PrincipalId::new_user_test_id(108).into(),
+            subaccount: None,
+        };
+
+        let (block_index, block_hash) = set_fee_col_107(
+            &agent,
+            &env,
+            &env.icrc1_ledger_id,
+            block_index,
+            Some(block_hash),
+            Some(fc_107_new),
+        )
+        .await;
+
+        // The new fee collector should collect all fees.
+        transfer_and_check_collected_fees(
+            &agent,
+            &env,
+            &env.icrc1_ledger_id,
+            block_index,
+            Some(block_hash),
+            fc_legacy,
+            [(fc_legacy, 2), (fc_107, 4), (fc_107_new, 4)].to_vec(),
         )
         .await;
     });
