@@ -151,9 +151,9 @@ impl InstallCodeHelper {
         self.canister.system_state.certified_data = Vec::new();
     }
 
-    pub fn clear_log(&mut self) {
+    pub fn clear_log_obsolete(&mut self) {
         self.steps.push(InstallCodeStep::ClearLog);
-        self.canister.clear_log();
+        self.canister.clear_log_obsolete();
     }
 
     pub fn deactivate_global_timer(&mut self) {
@@ -769,7 +769,7 @@ impl InstallCodeHelper {
                 Ok(())
             }
             InstallCodeStep::ClearLog => {
-                self.clear_log();
+                self.clear_log_obsolete();
                 Ok(())
             }
             InstallCodeStep::DeactivateGlobalTimer => {

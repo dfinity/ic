@@ -564,6 +564,7 @@ impl SystemState {
         environment_variables: BTreeMap<String, String>,
         metrics: &dyn CheckpointLoadingMetrics,
     ) -> Self {
+        let log_memory_limit = 4096; // TODO: properly populate. 
         let system_state = Self {
             controllers,
             canister_id,
@@ -588,7 +589,10 @@ impl SystemState {
             ),
             log_visibility,
             canister_log,
-            log_memory_store: LogMemoryStore::from_checkpoint(log_memory_store_data),
+            log_memory_store: LogMemoryStore::from_checkpoint(
+                log_memory_store_data,
+                log_memory_limit,
+            ),
             wasm_memory_limit,
             next_snapshot_id,
             snapshots_memory_usage,

@@ -595,9 +595,8 @@ impl CanisterState {
     }
 
     /// Clears the canister log.
-    pub fn clear_log(&mut self) {
+    pub fn clear_log_obsolete(&mut self) {
         self.system_state.canister_log.clear();
-        self.system_state.log_memory_store.clear();
     }
 
     /// Sets the new canister log.
@@ -614,7 +613,6 @@ impl CanisterState {
             .as_ref()
             .map_or(NumBytes::new(0), |es| es.heap_delta())
             + self.system_state.wasm_chunk_store.heap_delta()
-            + self.system_state.log_memory_store.heap_delta()
     }
 
     /// Updates status of `OnLowWasmMemory` hook.
