@@ -40,28 +40,28 @@ fn test_validate_chip_ids_wrong_length() {
 }
 
 #[test]
-fn test_validate_hexadecimal_recovery_rootfs_fingerprint_valid() {
+fn test_validate_rootfs_hash_valid() {
     let _guard = temporarily_enable_bless_alternative_guest_os_version_proposals();
 
-    let defects = validate_hexadecimal_recovery_rootfs_fingerprint("0123456789abcdefABCDEF");
+    let defects = validate_rootfs_hash("0123456789abcdefABCDEF");
     assert!(defects.is_empty(), "{defects:#?}");
 }
 
 #[test]
-fn test_validate_hexadecimal_recovery_rootfs_fingerprint_invalid() {
+fn test_validate_rootfs_hash_invalid() {
     let _guard = temporarily_enable_bless_alternative_guest_os_version_proposals();
 
-    let defects = validate_hexadecimal_recovery_rootfs_fingerprint("not-hex!");
+    let defects = validate_rootfs_hash("not-hex!");
     assert_eq!(defects.len(), 1, "{defects:#?}");
     assert_contains_all_key_words(&defects[0], &["hexadecimal", "not-hex!"]);
 }
 
 #[test]
-fn test_validate_hexadecimal_recovery_rootfs_fingerprint_empty_is_invalid() {
+fn test_validate_rootfs_hash_empty_is_invalid() {
     let _guard = temporarily_enable_bless_alternative_guest_os_version_proposals();
 
     // Empty fingerprint should be rejected
-    let defects = validate_hexadecimal_recovery_rootfs_fingerprint("");
+    let defects = validate_rootfs_hash("");
     assert_eq!(defects.len(), 1, "{defects:#?}");
     assert_contains_all_key_words(&defects[0], &["empty"]);
 }
@@ -229,7 +229,7 @@ fn test_bless_alternative_guest_os_version_validate_valid() {
 
     let proposal = BlessAlternativeGuestOsVersion {
         chip_ids: vec![vec![0u8; 64]],
-        hexidecimal_recovery_rootfs_fingerprint: "abc123".to_string(),
+        rootfs_hash: "abc123".to_string(),
         base_guest_launch_measurements: Some(GuestLaunchMeasurements {
             guest_launch_measurements: vec![GuestLaunchMeasurement {
                 measurement: vec![0u8; 48],
@@ -248,9 +248,9 @@ fn test_bless_alternative_guest_os_version_validate_multiple_errors() {
     let _guard = temporarily_enable_bless_alternative_guest_os_version_proposals();
 
     let proposal = BlessAlternativeGuestOsVersion {
-        chip_ids: vec![],                                                // Empty
-        hexidecimal_recovery_rootfs_fingerprint: "not-hex!".to_string(), // Invalid
-        base_guest_launch_measurements: None,                            // Missing
+        chip_ids: vec![],                     // Empty
+        rootfs_hash: "not-hex!".to_string(),  // Invalid
+        base_guest_launch_measurements: None, // Missing
     };
 
     let result = proposal.validate().unwrap_err();
@@ -279,7 +279,7 @@ fn test_bless_alternative_guest_os_version_disabled() {
 
     let proposal = BlessAlternativeGuestOsVersion {
         chip_ids: vec![vec![0u8; 64]],
-        hexidecimal_recovery_rootfs_fingerprint: "abc123".to_string(),
+        rootfs_hash: "abc123".to_string(),
         base_guest_launch_measurements: Some(GuestLaunchMeasurements {
             guest_launch_measurements: vec![GuestLaunchMeasurement {
                 measurement: vec![0u8; 48],

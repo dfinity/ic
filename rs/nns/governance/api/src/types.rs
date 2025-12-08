@@ -2678,7 +2678,7 @@ pub struct FulfillSubnetRentalRequest {
 )]
 pub struct BlessAlternativeGuestOsVersion {
     pub chip_ids: Option<Vec<Vec<u8>>>,
-    pub hexidecimal_recovery_rootfs_fingerprint: Option<String>,
+    pub rootfs_hash: Option<String>,
     pub base_guest_launch_measurements: Option<GuestLaunchMeasurements>,
 }
 

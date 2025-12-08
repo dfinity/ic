@@ -33,11 +33,10 @@ impl BlessAlternativeGuestOsVersion {
     ///    a. Nonempty.
     ///    b. Each element is itself of length 64.
     ///
-    /// 2. hexidecimal_recovery_rootfs_fingerprint - Contains only hexidecimal
-    ///    characters, i.e. 0-9, A-F (lower case is also allowed). Presumably,
-    ///    this would contain a SHA-256 hash, which are 32 bytes in length, so
-    ///    this would be 64 characters long, but this is not required, nor is it
-    ///    enforced.
+    /// 2. rootfs_hash - Contains only hexidecimal characters, i.e. 0-9, A-F
+    ///    (lower case is also allowed). Presumably, this would contain a
+    ///    SHA-256 hash, which are 32 bytes in length, so this would be 64
+    ///    characters long, but this is not required, nor is it enforced.
     ///
     /// 3. base_guest_launch_measurements
     ///    a. Noneempty.
@@ -53,9 +52,7 @@ impl BlessAlternativeGuestOsVersion {
         let mut defects = Vec::new();
 
         defects.extend(validate_chip_ids(&self.chip_ids));
-        defects.extend(validate_hexadecimal_recovery_rootfs_fingerprint(
-            &self.hexidecimal_recovery_rootfs_fingerprint,
-        ));
+        defects.extend(validate_rootfs_hash(&self.rootfs_hash));
         defects.extend(validate_base_guest_launch_measurements(
             &self.base_guest_launch_measurements,
         ));
@@ -120,17 +117,17 @@ fn validate_chip_ids(chip_ids: &[Vec<u8>]) -> Vec<String> {
     defects
 }
 
-/// Validates hexidecimal_recovery_rootfs_fingerprint field.
+/// Validates rootfs_hash field.
 ///
 /// Returns a list of defects (empty if valid):
 /// - Must not be empty
 /// - Must contain only hexadecimal characters (0-9, A-F, a-f)
-fn validate_hexadecimal_recovery_rootfs_fingerprint(hexidecimal_fingerprint: &str) -> Vec<String> {
+fn validate_rootfs_hash(hexidecimal_fingerprint: &str) -> Vec<String> {
     let mut defects = Vec::new();
 
     // Must not be empty.
     if hexidecimal_fingerprint.is_empty() {
-        defects.push("hexidecimal_recovery_rootfs_fingerprint must not be empty".to_string());
+        defects.push("rootfs_hash must not be empty".to_string());
     }
 
     // Must consist of only hexidecimal characters.
@@ -139,7 +136,7 @@ fn validate_hexadecimal_recovery_rootfs_fingerprint(hexidecimal_fingerprint: &st
         .all(|c| c.is_ascii_hexdigit())
     {
         defects.push(format!(
-            "hexidecimal_recovery_rootfs_fingerprint must contain only \
+            "rootfs_hash must contain only \
              hexadecimal characters (0-9, A-F, a-f), got: {}",
             String::from_utf8_lossy(hexidecimal_fingerprint.as_bytes())
         ));

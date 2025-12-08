@@ -2697,9 +2697,7 @@ impl From<pb::BlessAlternativeGuestOsVersion> for pb_api::BlessAlternativeGuestO
     fn from(item: pb::BlessAlternativeGuestOsVersion) -> Self {
         Self {
             chip_ids: Some(item.chip_ids),
-            hexidecimal_recovery_rootfs_fingerprint: Some(
-                item.hexidecimal_recovery_rootfs_fingerprint,
-            ),
+            rootfs_hash: Some(item.rootfs_hash),
             base_guest_launch_measurements: item
                 .base_guest_launch_measurements
                 .map(|item| item.into()),
@@ -2711,9 +2709,7 @@ impl From<pb_api::BlessAlternativeGuestOsVersion> for pb::BlessAlternativeGuestO
     fn from(item: pb_api::BlessAlternativeGuestOsVersion) -> Self {
         Self {
             chip_ids: item.chip_ids.unwrap_or_default(),
-            hexidecimal_recovery_rootfs_fingerprint: item
-                .hexidecimal_recovery_rootfs_fingerprint
-                .unwrap_or_default(),
+            rootfs_hash: item.rootfs_hash.unwrap_or_default(),
             base_guest_launch_measurements: item
                 .base_guest_launch_measurements
                 .map(|item| item.into()),

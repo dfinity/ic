@@ -1074,7 +1074,7 @@ type BlessAlternativeGuestOsVersion = record {
 
   // Hexadecimal fingerprint of the recovery rootfs.
   // Must contain only hexadecimal characters (0-9, A-F, a-f).
-  hexidecimal_recovery_rootfs_fingerprint : opt text;
+  rootfs_hash : opt text;
 
   // Base guest launch measurements for SEV-SNP attestation.
   base_guest_launch_measurements : opt GuestLaunchMeasurements;

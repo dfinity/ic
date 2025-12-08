@@ -2803,7 +2803,7 @@ pub struct BlessAlternativeGuestOsVersion {
     #[prost(bytes = "vec", repeated, tag = "1")]
     pub chip_ids: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     #[prost(string, tag = "2")]
-    pub hexidecimal_recovery_rootfs_fingerprint: ::prost::alloc::string::String,
+    pub rootfs_hash: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "3")]
     pub base_guest_launch_measurements: ::core::option::Option<GuestLaunchMeasurements>,
 }
