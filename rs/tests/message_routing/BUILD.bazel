@@ -117,8 +117,6 @@ system_test_nns(
         "//rs/tests/message_routing/rejoin_test_lib",
         "//rs/types/types",
         "@crate_index//:anyhow",
-        "@crate_index//:ic-agent",
-        "@crate_index//:ic-utils",
     ],
 )
 
