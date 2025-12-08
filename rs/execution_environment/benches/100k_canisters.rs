@@ -12,9 +12,12 @@ use ic_state_machine_tests::StateMachine;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::Cycles;
 use ic_wasm_types::CanisterModule;
-use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    hint::black_box,
+};
 
 const NUM_CREATOR_CANISTERS: usize = 10;
 const NUM_CANISTERS_PER_CREATOR_CANISTER: usize = 10_000;
@@ -135,13 +138,43 @@ fn create_canister_state(canister_id: CanisterId) -> CanisterState {
 
 fn clone_100k_canisters(c: &mut Criterion) {
     let mut canisters = BTreeMap::new();
-    for i in 0..100_000 {
-        let canister_id = canister_test_id(i);
-        canisters.insert(canister_id, create_canister_state(canister_id));
-    }
 
     c.bench_function("clone_100k_canisters", |bench| {
+        if canisters.is_empty() {
+            println!("Creating 100k canisters.");
+            canisters = (0..100_000)
+                .map(|i| {
+                    (
+                        canister_test_id(i),
+                        create_canister_state(canister_test_id(i)),
+                    )
+                })
+                .collect();
+        }
         bench.iter(|| canisters.clone());
+    });
+}
+
+fn clone_100k_memories(c: &mut Criterion) {
+    use ic_replicated_state::{NumWasmPages, page_map::PageMap};
+
+    let mut memories: Vec<Memory> = vec![];
+    c.bench_function("clone_100k_memories", |bench| {
+        if memories.is_empty() {
+            println!("Creating 100k Memories.");
+            // Create 100k Memories, each with 2 pages (8KB) of data
+            memories = (0..100_000)
+                .map(|_| {
+                    let data = vec![0xAAu8; 8192]; // 2 pages (8KB) of data
+                    let page_map = PageMap::from(data.as_slice());
+                    Memory::new(page_map, NumWasmPages::from(2))
+                })
+                .collect();
+        }
+
+        bench.iter(|| {
+            let _cloned = black_box(&memories).clone();
+        });
     });
 }
 
@@ -160,7 +193,7 @@ criterion::criterion_group! {
 criterion::criterion_group! {
     name = bench_clone;
     config = Criterion::default().sample_size(10);
-    targets = clone_100k_canisters
+    targets = clone_100k_canisters, clone_100k_memories
 }
 
 criterion::criterion_main!(bench_round, bench_checkpoint, bench_clone);
