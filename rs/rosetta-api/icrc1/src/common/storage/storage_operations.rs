@@ -109,7 +109,6 @@ pub fn initialize_counter_if_missing(
     Ok(())
 }
 
-// Helper function to resolve the fee collector account from a block
 pub fn get_107_fee_collector_or_legacy(
     rosetta_block: &RosettaBlock,
     connection: &Connection,
@@ -121,8 +120,15 @@ pub fn get_107_fee_collector_or_legacy(
     }
 
     // There is not 107 fee collector, check legacy fee collector in the block
+    get_fee_collector_from_block(rosetta_block, connection)
+}
 
-    // Check if the fee collector is directly specified in the block
+// Helper function to resolve the fee collector account from a block
+pub fn get_fee_collector_from_block(
+    rosetta_block: &RosettaBlock,
+    connection: &Connection,
+) -> anyhow::Result<Option<Account>> {
+    // First check if the fee collector is directly specified in the block
     if let Some(fee_collector) = rosetta_block.get_fee_collector() {
         return Ok(Some(fee_collector));
     }
