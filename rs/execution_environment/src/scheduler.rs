@@ -897,6 +897,11 @@ impl SchedulerImpl {
         let mut all_rejects = Vec::new();
         let mut uninstalled_canisters = Vec::new();
         for canister in state.canisters_iter_mut() {
+            // Skip charging an empty canister.
+            if canister.execution_state.is_none() {
+                continue;
+            }
+
             // Postpone charging for resources when a canister has a paused execution
             // to avoid modifying the balance of a canister during an unfinished operation.
             if canister.has_paused_execution() || canister.has_paused_install_code() {
