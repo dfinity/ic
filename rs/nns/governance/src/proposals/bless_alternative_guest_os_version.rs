@@ -22,8 +22,12 @@ use crate::{
 /// running what it's supposed to.
 ///
 /// For more details, see:
+///
 /// - AMD SEV-SNP specification: https://www.amd.com/en/developer/sev.html
-/// - Launch measurement details: Section 8.17.3 of the SEV-SNP API specification
+///
+/// - In particular, "SEV Secure Nested Paging Firmware ABI Specification" might
+///   be of interest:
+///   https://www.amd.com/content/dam/amd/en/documents/developer/56860.pdf
 const SEV_SNP_MEASUREMENT_LENGTH: usize = 48;
 
 impl BlessAlternativeGuestOsVersion {
