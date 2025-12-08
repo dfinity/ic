@@ -46,6 +46,7 @@ pub struct LogMemoryStore {
 }
 
 impl LogMemoryStore {
+    /// Creates a new store with invalid ring buffer to avoid unnecessary log-memory charges.
     pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
         Self::new_inner(RingBuffer::invalid(PageMap::new(fd_factory)).to_page_map())
     }
@@ -81,15 +82,8 @@ impl LogMemoryStore {
 
     /// Clears the canister log records.
     pub fn clear(&mut self) {
+        // Write an invalid ring buffer to the page map to avoid unnecessary log-memory charges.
         self.page_map = RingBuffer::invalid(self.page_map.clone()).to_page_map();
-    }
-
-    /// Creates a new ring buffer with the current log memory limit.
-    fn new_ring_buffer(&self) -> RingBuffer {
-        RingBuffer::new(
-            self.page_map.clone(),
-            MemorySize::new(self.log_memory_limit as u64),
-        )
     }
 
     /// Loads the ring buffer from the page map.
@@ -181,6 +175,7 @@ impl LogMemoryStore {
     }
 
     /// Appends a delta log to the ring buffer.
+    /// If the ring buffer does not exist, it is created with the current log memory limit.
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
         // Record the size of the appended delta log for metrics.
         self.push_delta_log_size(delta_log.bytes_used());
@@ -189,7 +184,10 @@ impl LogMemoryStore {
             .iter_mut()
             .map(std::mem::take)
             .collect();
-        let mut ring_buffer = self.load_ring_buffer().unwrap_or(self.new_ring_buffer());
+        let mut ring_buffer = self.load_ring_buffer().unwrap_or(RingBuffer::new(
+            self.page_map.clone(),
+            MemorySize::new(self.log_memory_limit as u64),
+        ));
         ring_buffer.append_log(records);
         self.page_map = ring_buffer.to_page_map();
     }
