@@ -1,4 +1,4 @@
-use candid::{Decode, Encode};
+use candid::Encode;
 use canister_test::{Canister, Runtime, Wasm};
 use futures::future::join_all;
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -253,14 +253,12 @@ pub async fn rejoin_test_many_canisters(
         "Creating {} canisters via the seed canister {}.", num_canisters, seed_canister_id
     );
     let bytes = Encode!(&num_canisters).expect("Failed to candid encode argument");
-    let raw_bytes = agent
+    agent
         .update(&seed_canister_id, "create_many_canisters")
         .with_arg(bytes)
         .call_and_wait()
         .await
-        .unwrap_or_else(|err| panic!("Failed to create canisters via the seed canister: {}", err));
-    let res = Decode!(&raw_bytes, Result<(), String>).expect("Failed to parse candid response");
-    res.expect("Failed to create many canisters");
+        .expect("Failed to create canisters via the seed canister");
 
     // Kill the rejoin node after it has a checkpoint so that we can test both `copy_chunks` and `fetch_chunks` in the state sync.
     info!(logger, "Waiting for the rejoin_node to have a checkpoint");

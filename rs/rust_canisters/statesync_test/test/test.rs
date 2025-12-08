@@ -64,7 +64,7 @@ fn test_create_many_canisters() {
 
     let seed_canister_id = deploy_state_sync_test_canister(&env);
 
-    let num_canisters: u64 = 800;
+    let num_canisters: u64 = 1000;
     let result = env
         .execute_ingress(
             seed_canister_id,
@@ -72,9 +72,7 @@ fn test_create_many_canisters() {
             Encode!(&num_canisters).unwrap(),
         )
         .unwrap();
-    let raw_bytes = assert_reply(result);
-    let res = Decode!(&raw_bytes, Result<(), String>).unwrap();
-    res.unwrap_or_else(|err| panic!("Failed to create many canisters: {}", err));
+    let _ = assert_reply(result);
 
     // We created `num_canisters` in addition to the seed canister.
     assert_eq!(env.num_running_canisters(), num_canisters + 1);
