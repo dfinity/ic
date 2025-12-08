@@ -16,6 +16,7 @@ show_menu() {
     echo "  service-status          - Show service status (usage: service-status <service-name>)" 
     echo "  view-logs               - View service logs (usage: view-logs <service-name>)"
     echo "  config-json             - Show /boot/config/config.json"
+    echo "  guestos-console-logs    - Show GuestOS Serial Console Logs"
     echo "  network-config-settings - Show network settings from config"
     echo "  manual-recovery         - Manual node recovery (ONLY FOR EMERGENCY USE)"
     echo "  rbash-console           - Drop into restricted bash console"
@@ -67,6 +68,14 @@ execute_command() {
                 LESSSECURE=1 \
                 PATH="$RESTRICTED_PATH" \
                 /usr/bin/less /boot/config/config.json
+            ;;
+        "guestos-console-logs")
+            echo "=== GuestOS Serial Console Logs ==="
+            env -i \
+                TERM="$TERM" \
+                LESSSECURE=1 \
+                PATH="$RESTRICTED_PATH" \
+                /usr/bin/less -f /var/log/libvirt/qemu/guestos-serial.log
             ;;
         "network-config-settings")
             echo "=== Network Settings from Config ==="
