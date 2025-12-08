@@ -419,23 +419,26 @@ fn test_fee_collector_resolution_and_repair() -> anyhow::Result<()> {
 
     // Test fee collector resolution
     assert_eq!(
-        get_fee_collector_from_block(&block1, &connection)?,
+        get_107_fee_collector_or_legacy(&block1, &connection, None)?,
         Some(fee_collector_account)
     );
     assert_eq!(
-        get_fee_collector_from_block(&block2, &connection)?,
+        get_107_fee_collector_or_legacy(&block2, &connection, None)?,
         Some(fee_collector_account)
     );
-    assert_eq!(get_fee_collector_from_block(&block3, &connection)?, None);
+    assert_eq!(
+        get_107_fee_collector_or_legacy(&block3, &connection, None)?,
+        None
+    );
 
     // Test error cases (without storing invalid blocks in DB to avoid repair conflicts)
     let mut invalid_block = create_test_rosetta_block(999, 1000000003, &principal1, 400);
     invalid_block.block.fee_collector_block_index = Some(999); // Non-existent
-    assert!(get_fee_collector_from_block(&invalid_block, &connection).is_err());
+    assert!(get_107_fee_collector_or_legacy(&invalid_block, &connection, None).is_err());
 
     let mut invalid_block2 = create_test_rosetta_block(998, 1000000004, &principal1, 500);
     invalid_block2.block.fee_collector_block_index = Some(3); // Block with no fee collector
-    assert!(get_fee_collector_from_block(&invalid_block2, &connection).is_err());
+    assert!(get_107_fee_collector_or_legacy(&invalid_block2, &connection, None).is_err());
 
     // Test 2: Repair functionality with broken state simulation
     // Manually create broken balances (missing fee collector credits for block 2)
