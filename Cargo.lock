@@ -12783,6 +12783,7 @@ version = "0.9.0"
 dependencies = [
  "bincode",
  "candid",
+ "comparable",
  "erased-serde",
  "hex",
  "ic-error-types 0.2.0",

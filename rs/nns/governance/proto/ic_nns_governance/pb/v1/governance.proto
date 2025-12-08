@@ -7,6 +7,7 @@ import "ic_ledger/pb/v1/types.proto";
 import "ic_nervous_system/pb/v1/nervous_system.proto";
 import "ic_nns_common/pb/v1/types.proto";
 import "ic_sns_swap/pb/v1/swap.proto";
+import "registry/replica_version/v1/replica_version.proto";
 
 // The entity that owns the nodes that run the network.
 //
@@ -1927,38 +1928,7 @@ message FulfillSubnetRentalRequest {
 message BlessAlternativeGuestOsVersion {
   repeated bytes chip_ids = 1;
   string rootfs_hash = 2;
-  GuestLaunchMeasurements base_guest_launch_measurements = 3;
-}
-
-// This is copied from rs/protobuf/.../replica_version.proto. This hack gets
-// around how we tell Prost to slather #[derive(Comparable)] all over the place.
-// That creates a viral requirement, but the rest of the world does not fulfill
-// that requiremnt. Thus, we paint ourselves into this corner where we are not
-// allowed to use the rest of the world, and must do unholy things like this.
-//
-// A less hacky way around this might be to use an alternative Prost
-// configuration to derive Rust types that have the necessary
-// #[derive(Comparable)] from the same replica_version.proto file, but for the
-// time being, copying seems more or less okish.
-message GuestLaunchMeasurements {
-  // A list of valid SEV-SNP measurements. One release can have multiple valid
-  // measurements, e.g. depending on the kernel command line used to launch the
-  // guest. Must be non-empty.
-  repeated GuestLaunchMeasurement guest_launch_measurements = 1;
-}
-
-// See remarks on GuestLaunchMeasurements (plural).
-message GuestLaunchMeasurement {
-  // SEV-SNP measurement (48 bytes)
-  bytes measurement = 1;
-  // Metadata about how the measurement was obtained
-  GuestLaunchMeasurementMetadata metadata = 2;
-}
-
-// See remarks on GuestLaunchMeasurements (plural).
-message GuestLaunchMeasurementMetadata {
-  // Kernel command line string used to launch the guest
-  string kernel_cmdline = 1;
+  registry.replica_version.v1.GuestLaunchMeasurements base_guest_launch_measurements = 3;
 }
 
 // This represents the whole NNS governance system. It contains all

@@ -1,10 +1,12 @@
 use super::*;
 use crate::{
-    pb::v1::{GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements},
     temporarily_disable_bless_alternative_guest_os_version_proposals,
     temporarily_enable_bless_alternative_guest_os_version_proposals,
 };
 use ic_nervous_system_common_test_utils::assert_contains_all_key_words;
+use ic_protobuf::registry::replica_version::v1::{
+    GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
+};
 
 #[test]
 fn test_validate_chip_ids_empty() {
@@ -265,7 +267,7 @@ fn test_bless_alternative_guest_os_version_validate_multiple_errors() {
         &[
             "chip_ids",
             "empty",
-            "hexidecimal",
+            "hexadecimal",
             "base_guest_launch_measurements",
             "present",
         ],

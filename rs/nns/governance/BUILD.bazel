@@ -310,6 +310,7 @@ generated_files_check(
         "//rs/ledger_suite/icp:protos",
         "//rs/nervous_system/proto:protos",
         "//rs/nns/common:protos",
+        "//rs/protobuf:protos",
         "//rs/sns/root:protos",
         "//rs/sns/swap:protos",
         "//rs/types/base_types:protos",

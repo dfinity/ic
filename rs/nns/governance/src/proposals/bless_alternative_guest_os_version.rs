@@ -1,7 +1,6 @@
 use super::*;
-use crate::{
-    are_bless_alternative_guest_os_version_proposals_enabled, pb::v1::GuestLaunchMeasurements,
-};
+use crate::are_bless_alternative_guest_os_version_proposals_enabled;
+use ic_protobuf::registry::replica_version::v1::{GuestLaunchMeasurement, GuestLaunchMeasurements};
 
 /// Length of SEV-SNP launch measurements in bytes.
 ///
@@ -192,9 +191,7 @@ fn validate_base_guest_launch_measurements(
 /// - measurement must be exactly 48 bytes (SEV-SNP measurement size)
 /// - metadata must be present
 /// - metadata.kernel_cmdline must not be empty
-fn validate_guest_launch_measurement(
-    measurement: &crate::pb::v1::GuestLaunchMeasurement,
-) -> Vec<String> {
+fn validate_guest_launch_measurement(measurement: &GuestLaunchMeasurement) -> Vec<String> {
     let mut defects = Vec::new();
 
     // Measurement must be 48 bytes, per SEV-SNP.

@@ -4,6 +4,11 @@ use crate::pb::v1 as pb;
 use candid::{Int, Nat};
 use ic_crypto_sha2::Sha256;
 use ic_nns_governance_api as pb_api;
+use ic_protobuf::registry::replica_version::v1::{
+    GuestLaunchMeasurement as PbGuestLaunchMeasurement,
+    GuestLaunchMeasurementMetadata as PbGuestLaunchMeasurementMetadata,
+    GuestLaunchMeasurements as PbGuestLaunchMeasurements,
+};
 use std::collections::HashMap;
 
 #[cfg(test)]
@@ -2700,7 +2705,7 @@ impl From<pb::BlessAlternativeGuestOsVersion> for pb_api::BlessAlternativeGuestO
             rootfs_hash: Some(item.rootfs_hash),
             base_guest_launch_measurements: item
                 .base_guest_launch_measurements
-                .map(|item| item.into()),
+                .map(convert_guest_launch_measurements_from_pb_to_pb_api),
         }
     }
 }
@@ -2712,68 +2717,72 @@ impl From<pb_api::BlessAlternativeGuestOsVersion> for pb::BlessAlternativeGuestO
             rootfs_hash: item.rootfs_hash.unwrap_or_default(),
             base_guest_launch_measurements: item
                 .base_guest_launch_measurements
-                .map(|item| item.into()),
+                .map(convert_guest_launch_measurements_from_pb_api_to_pb),
         }
     }
 }
 
-impl From<pb::GuestLaunchMeasurements> for pb_api::GuestLaunchMeasurements {
-    fn from(item: pb::GuestLaunchMeasurements) -> Self {
-        Self {
-            guest_launch_measurements: Some(
-                item.guest_launch_measurements
-                    .into_iter()
-                    .map(|item| item.into())
-                    .collect(),
-            ),
-        }
-    }
-}
-
-impl From<pb_api::GuestLaunchMeasurements> for pb::GuestLaunchMeasurements {
-    fn from(item: pb_api::GuestLaunchMeasurements) -> Self {
-        Self {
-            guest_launch_measurements: item
-                .guest_launch_measurements
-                .unwrap_or_default()
+fn convert_guest_launch_measurements_from_pb_to_pb_api(
+    item: PbGuestLaunchMeasurements,
+) -> pb_api::GuestLaunchMeasurements {
+    pb_api::GuestLaunchMeasurements {
+        guest_launch_measurements: Some(
+            item.guest_launch_measurements
                 .into_iter()
-                .map(|item| item.into())
+                .map(convert_guest_launch_measurement_from_pb_to_pb_api)
                 .collect(),
-        }
+        ),
     }
 }
 
-impl From<pb::GuestLaunchMeasurement> for pb_api::GuestLaunchMeasurement {
-    fn from(item: pb::GuestLaunchMeasurement) -> Self {
-        Self {
-            measurement: Some(item.measurement),
-            metadata: item.metadata.map(|item| item.into()),
-        }
+fn convert_guest_launch_measurements_from_pb_api_to_pb(
+    item: pb_api::GuestLaunchMeasurements,
+) -> PbGuestLaunchMeasurements {
+    PbGuestLaunchMeasurements {
+        guest_launch_measurements: item
+            .guest_launch_measurements
+            .unwrap_or_default()
+            .into_iter()
+            .map(convert_guest_launch_measurement_from_pb_api_to_pb)
+            .collect(),
     }
 }
 
-impl From<pb_api::GuestLaunchMeasurement> for pb::GuestLaunchMeasurement {
-    fn from(item: pb_api::GuestLaunchMeasurement) -> Self {
-        Self {
-            measurement: item.measurement.unwrap_or_default(),
-            metadata: item.metadata.map(|item| item.into()),
-        }
+fn convert_guest_launch_measurement_from_pb_to_pb_api(
+    item: PbGuestLaunchMeasurement,
+) -> pb_api::GuestLaunchMeasurement {
+    pb_api::GuestLaunchMeasurement {
+        measurement: Some(item.measurement),
+        metadata: item
+            .metadata
+            .map(convert_guest_launch_measurement_metadata_from_pb_to_pb_api),
     }
 }
 
-impl From<pb::GuestLaunchMeasurementMetadata> for pb_api::GuestLaunchMeasurementMetadata {
-    fn from(item: pb::GuestLaunchMeasurementMetadata) -> Self {
-        Self {
-            kernel_cmdline: Some(item.kernel_cmdline),
-        }
+fn convert_guest_launch_measurement_from_pb_api_to_pb(
+    item: pb_api::GuestLaunchMeasurement,
+) -> PbGuestLaunchMeasurement {
+    PbGuestLaunchMeasurement {
+        measurement: item.measurement.unwrap_or_default(),
+        metadata: item
+            .metadata
+            .map(convert_guest_launch_measurement_metadata_from_pb_api_to_pb),
     }
 }
 
-impl From<pb_api::GuestLaunchMeasurementMetadata> for pb::GuestLaunchMeasurementMetadata {
-    fn from(item: pb_api::GuestLaunchMeasurementMetadata) -> Self {
-        Self {
-            kernel_cmdline: item.kernel_cmdline.unwrap_or_default(),
-        }
+fn convert_guest_launch_measurement_metadata_from_pb_to_pb_api(
+    item: PbGuestLaunchMeasurementMetadata,
+) -> pb_api::GuestLaunchMeasurementMetadata {
+    pb_api::GuestLaunchMeasurementMetadata {
+        kernel_cmdline: Some(item.kernel_cmdline),
+    }
+}
+
+fn convert_guest_launch_measurement_metadata_from_pb_api_to_pb(
+    item: pb_api::GuestLaunchMeasurementMetadata,
+) -> PbGuestLaunchMeasurementMetadata {
+    PbGuestLaunchMeasurementMetadata {
+        kernel_cmdline: item.kernel_cmdline.unwrap_or_default(),
     }
 }
 
