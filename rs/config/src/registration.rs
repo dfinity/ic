@@ -66,6 +66,7 @@ impl Default for Config {
             nns_pub_key_pem: None,
             node_operator_pem: None,
             node_reward_type: None,
+            enable_beta_registration_feature: None,
         }
     }
 }

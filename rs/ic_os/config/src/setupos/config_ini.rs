@@ -111,6 +111,8 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         .filter(|s| !s.is_empty())
         .cloned();
 
+    let enable_beta_node_registration = read_boolean(&config_map, "enable_beta_node_registration")?;
+
     let enable_trusted_execution_environment =
         read_boolean(&config_map, "enable_trusted_execution_environment")?.unwrap_or(false);
 
@@ -125,6 +127,7 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         verbose,
         node_reward_type,
         enable_trusted_execution_environment,
+        enable_beta_node_registration,
     })
 }
 
