@@ -36,7 +36,7 @@ impl PublicKey {
     pub fn deserialize_cached(
         bytes: &PublicKeyBytes,
     ) -> Result<Self, ThresholdSigPublicKeyBytesConversionError> {
-        G2Affine::deserialize_unchecked(&bytes.0)
+        G2Affine::deserialize_cached(&bytes.0)
             .map_err(|_| ThresholdSigPublicKeyBytesConversionError::Malformed {
                 key_bytes: Some(bytes.0.to_vec()),
                 internal_error: "Invalid public key".to_string(),
