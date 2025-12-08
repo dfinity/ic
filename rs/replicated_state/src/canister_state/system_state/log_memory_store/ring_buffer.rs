@@ -1,18 +1,16 @@
 use crate::canister_state::system_state::log_memory_store::{
-    header::Header,
+    header::{Header, MAGIC},
     log_record::LogRecord,
     memory::{MemoryAddress, MemorySize},
     struct_io::StructIO,
 };
 use crate::page_map::{PAGE_SIZE, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, DataSize, FetchCanisterLogsFilter};
-use ic_types::DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT;
 
 // PageMap file layout.
 // Header layout constants.
 pub const HEADER_OFFSET: MemoryAddress = MemoryAddress::new(0);
 pub const HEADER_SIZE: MemorySize = MemorySize::new(PAGE_SIZE as u64);
-pub const MAGIC: &[u8; 3] = b"CLB"; // Canister Log Buffer
 // Index table layout constants.
 pub const INDEX_TABLE_OFFSET: MemoryAddress = HEADER_OFFSET.add_size(HEADER_SIZE);
 pub const INDEX_TABLE_PAGES: usize = 1;
@@ -58,16 +56,13 @@ impl RingBuffer {
         Self { io }
     }
 
-    /// Returns an existing ring buffer if present, or initializes a new one with default data capacity.
-    pub fn load_or_default(page_map: PageMap) -> Self {
+    /// Returns an existing ring buffer if present.
+    pub fn load(page_map: PageMap) -> Option<Self> {
         let io = StructIO::new(page_map);
         if io.load_header().magic != *MAGIC {
-            // Not initialized yet — set up a new header.
-            let data_capacity = MemorySize::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64);
-            return Self::new(io.to_page_map(), data_capacity);
+            return None;
         }
-
-        Self { io }
+        Some(Self { io })
     }
 
     pub fn to_page_map(&self) -> PageMap {
@@ -76,8 +71,7 @@ impl RingBuffer {
 
     /// Clears the canister log records.
     pub fn clear(&mut self) {
-        let data_capacity = self.io.load_header().data_capacity;
-        self.io.save_header(&Header::new(data_capacity));
+        self.io.save_header(&Header::invalid());
     }
 
     /// Returns the total allocated bytes for the ring buffer
@@ -354,9 +348,9 @@ mod tests {
         rb.append(&r1);
         rb.clear();
 
-        assert_eq!(rb.bytes_used(), 0);
-        assert_eq!(rb.byte_capacity(), data_capacity.get() as usize);
-        assert_eq!(rb.pop_front(), None);
+        // After clear, header is invalid, so loading should fail.
+        let page_map = rb.to_page_map();
+        assert!(RingBuffer::load(page_map).is_none());
     }
 
     #[test]

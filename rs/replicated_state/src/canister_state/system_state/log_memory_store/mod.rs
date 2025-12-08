@@ -11,7 +11,7 @@ use crate::canister_state::system_state::log_memory_store::{
 };
 use crate::page_map::{PAGE_SIZE, PageAllocatorFileDescriptor, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
-use ic_types::{CanisterLog, NumBytes};
+use ic_types::{CanisterLog, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, NumBytes};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::VecDeque;
@@ -52,7 +52,7 @@ impl LogMemoryStore {
 
     fn new_inner(page_map: PageMap) -> Self {
         Self {
-            page_map: RingBuffer::load_or_default(page_map).to_page_map(),
+            page_map,
             delta_log_sizes: VecDeque::new(),
         }
     }
@@ -69,24 +69,37 @@ impl LogMemoryStore {
         NumBytes::from((self.page_map.num_delta_pages() * PAGE_SIZE) as u64)
     }
 
-    fn load_ring_buffer(&self) -> RingBuffer {
-        RingBuffer::load_or_default(self.page_map.clone())
+    fn load_ring_buffer(&self) -> Option<RingBuffer> {
+        RingBuffer::load(self.page_map.clone())
+    }
+
+    fn init(&self) -> RingBuffer {
+        RingBuffer::new(
+            self.page_map.clone(),
+            MemorySize::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64),
+        )
     }
 
     /// Returns the total allocated bytes for the ring buffer
     /// including header, index table and data region.
     pub fn total_allocated_bytes(&self) -> usize {
-        self.load_ring_buffer().total_allocated_bytes()
+        self.load_ring_buffer()
+            .map(|rb| rb.total_allocated_bytes())
+            .unwrap_or(0)
     }
 
     /// Returns the data capacity of the ring buffer.
     pub fn byte_capacity(&self) -> usize {
-        self.load_ring_buffer().byte_capacity()
+        self.load_ring_buffer()
+            .map(|rb| rb.byte_capacity())
+            .unwrap_or(0)
     }
 
     /// Returns the data size of the ring buffer.
     pub fn bytes_used(&self) -> usize {
-        self.load_ring_buffer().bytes_used()
+        self.load_ring_buffer()
+            .map(|rb| rb.bytes_used())
+            .unwrap_or(0)
     }
 
     /// Set the ring buffer capacity — preserves existing records by collecting and re-appending them.
@@ -96,10 +109,15 @@ impl LogMemoryStore {
         // TODO: PageMap cannot be shrunk today; reducing capacity does not free allocated pages
         // (practical ring buffer max currently ~55 MB). Future improvement: allocate a new PageMap
         // with the desired capacity, refeed records, then drop the old map or provide a `PageMap::shrink` API.
-        let old = self.load_ring_buffer();
-        if old.byte_capacity() == new_byte_capacity {
-            return;
-        }
+        let old = match self.load_ring_buffer() {
+            None => self.init(),
+            Some(old) => {
+                if old.byte_capacity() == new_byte_capacity {
+                    return;
+                }
+                old
+            }
+        };
 
         // Recreate ring buffer with new capacity and restore records.
         let mut new = RingBuffer::new(
@@ -112,26 +130,35 @@ impl LogMemoryStore {
 
     /// Returns the next log record `idx`.
     pub fn next_idx(&self) -> u64 {
-        self.load_ring_buffer().next_idx()
+        self.load_ring_buffer().map(|rb| rb.next_idx()).unwrap_or(0)
     }
 
     pub fn is_empty(&self) -> bool {
-        self.load_ring_buffer().is_empty()
+        self.load_ring_buffer()
+            .map(|rb| rb.is_empty())
+            .unwrap_or(true)
     }
 
     /// Returns the canister log records, optionally filtered.
     pub fn records(&self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
-        self.load_ring_buffer().records(filter)
+        self.load_ring_buffer()
+            .map(|rb| rb.records(filter))
+            .unwrap_or_default()
     }
 
     /// Returns all canister log records.
     pub fn all_records(&self) -> Vec<CanisterLogRecord> {
-        self.load_ring_buffer().all_records()
+        self.load_ring_buffer()
+            .map(|rb| rb.all_records())
+            .unwrap_or_default()
     }
 
     /// Clears the canister log records.
     pub fn clear(&mut self) {
-        self.update_ring_buffer(|rb| rb.clear());
+        if let Some(mut rb) = self.load_ring_buffer() {
+            rb.clear();
+            self.page_map = rb.to_page_map();
+        }
     }
 
     /// Appends a delta log to the ring buffer.
@@ -143,12 +170,8 @@ impl LogMemoryStore {
             .iter_mut()
             .map(std::mem::take)
             .collect();
-        self.update_ring_buffer(|rb| rb.append_log(records));
-    }
-
-    fn update_ring_buffer(&mut self, f: impl FnOnce(&mut RingBuffer)) {
-        let mut ring_buffer = self.load_ring_buffer();
-        f(&mut ring_buffer);
+        let mut ring_buffer = self.load_ring_buffer().unwrap_or(self.init());
+        ring_buffer.append_log(records);
         self.page_map = ring_buffer.to_page_map();
     }
 
@@ -171,7 +194,6 @@ mod tests {
     use super::*;
     use crate::canister_state::system_state::log_memory_store::ring_buffer::RESULT_MAX_SIZE;
     use ic_management_canister_types_private::{DataSize, FetchCanisterLogsRange};
-    use ic_types::DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT;
 
     fn make_canister_record(idx: u64, ts: u64, message: &str) -> CanisterLogRecord {
         CanisterLogRecord {
@@ -222,8 +244,9 @@ mod tests {
         let s = LogMemoryStore::new_for_testing();
         assert_eq!(s.next_idx(), 0);
         assert!(s.is_empty());
+        assert_eq!(s.total_allocated_bytes(), 0);
         assert_eq!(s.bytes_used(), 0);
-        assert_eq!(s.byte_capacity(), DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
+        assert_eq!(s.byte_capacity(), 0);
         assert_eq!(s.records(None).len(), 0);
     }
 
@@ -605,5 +628,29 @@ mod tests {
         assert_eq!(records.len(), 5);
         assert_eq!(records[0].idx, 10);
         assert_eq!(records[4].idx, 14);
+    }
+
+    #[test]
+    fn lazy_initialization() {
+        let mut s = LogMemoryStore::new_for_testing();
+        assert_eq!(s.total_allocated_bytes(), 0);
+        assert_eq!(s.heap_delta(), NumBytes::from(0));
+        assert!(s.is_empty());
+
+        let mut delta = CanisterLog::default_delta();
+        delta.add_record(100, b"a".to_vec());
+        s.append_delta_log(&mut delta);
+
+        assert!(s.total_allocated_bytes() > 0);
+        assert!(s.heap_delta() > NumBytes::from(0));
+        assert!(!s.is_empty());
+    }
+
+    #[test]
+    fn clear_on_empty() {
+        let mut s = LogMemoryStore::new_for_testing();
+        s.clear();
+        assert_eq!(s.total_allocated_bytes(), 0);
+        assert_eq!(s.heap_delta(), NumBytes::from(0));
     }
 }
