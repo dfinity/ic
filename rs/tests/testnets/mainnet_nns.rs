@@ -349,7 +349,7 @@ fn setup_recovered_nns(
     .unwrap();
 
     let api_bn = env.topology_snapshot().api_boundary_nodes().next().unwrap();
-    setup_api_bn(&env, &recovered_nns_node, &api_bn);
+    patch_api_bn(&env, &recovered_nns_node, &api_bn);
 
     propose_to_turn_into_api_bn(
         &env,
@@ -383,7 +383,7 @@ fn fetch_recovered_nns_public_key_pem(recovered_nns_node: &IcNodeSnapshot) -> Ve
     pem
 }
 
-fn setup_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcNodeSnapshot) {
+fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcNodeSnapshot) {
     let logger = env.logger();
     let recovered_nns_node_ipv6 = recovered_nns_node.get_ip_addr();
 
