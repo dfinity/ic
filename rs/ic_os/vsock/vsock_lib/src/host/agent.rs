@@ -121,13 +121,13 @@ async fn create_hostos_upgrade_file(
         Ok(_) => Ok(()),
         Err(e) => {
             if let Ok(metadata) = std::fs::metadata(file_path) {
-                eprintln!(
+                println!(
                     "Download failed: {}. Partial file size: {} bytes",
                     e,
                     metadata.len()
                 );
             } else {
-                eprintln!("Download failed: {}", e);
+                println!("Download failed: {}", e);
             }
             Err(e.to_string())
         }
@@ -159,7 +159,7 @@ async fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
     )
     .await?;
 
-    eprintln!("Download completed, starting upgrade installation...");
+    println!("Download completed, starting upgrade installation...");
     run_upgrade()
 }
 
