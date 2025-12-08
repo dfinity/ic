@@ -2,8 +2,8 @@ benches:
   build_estimate_retrieve_btc_fee_1_50k_sats:
     total:
       calls: 1
-      instructions: 40813570
-      heap_increase: 147
+      instructions: 2689868
+      heap_increase: 0
       stable_memory_increase: 0
     scopes:
       build_unsigned_transaction_from_inputs:
@@ -13,12 +13,12 @@ benches:
         stable_memory_increase: 0
       greedy:
         calls: 1
-        instructions: 3687
+        instructions: 3817
         heap_increase: 0
         stable_memory_increase: 0
       utxos_selection:
         calls: 1
-        instructions: 2683550
+        instructions: 2683797
         heap_increase: 0
         stable_memory_increase: 0
   build_unsigned_transaction_1_50k_sats:
