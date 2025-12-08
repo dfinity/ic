@@ -27,6 +27,8 @@ pub struct LogMemoryStore {
     #[validate_eq(Ignore)]
     pub page_map: PageMap,
 
+    log_memory_limit: NumBytes,
+
     /// (!) No need to preserve across checkpoints.
     /// Tracks the size of each delta log appended during a round.
     /// Multiple logs can be appended in one round (e.g. heartbeat, timers, or message executions).
@@ -38,12 +40,12 @@ pub struct LogMemoryStore {
 
 impl LogMemoryStore {
     pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
-        Self::new_inner(PageMap::new(fd_factory))
+        Self::new_inner(RingBuffer::invalid(PageMap::new(fd_factory)).to_page_map())
     }
 
     /// Creates a new store that will use the temp file system for allocating new pages.
     pub fn new_for_testing() -> Self {
-        Self::new_inner(PageMap::new_for_testing())
+        Self::new_inner(RingBuffer::invalid(PageMap::new_for_testing()).to_page_map())
     }
 
     pub fn from_checkpoint(page_map: PageMap) -> Self {
@@ -54,6 +56,7 @@ impl LogMemoryStore {
         Self {
             page_map,
             delta_log_sizes: VecDeque::new(),
+            log_memory_limit: NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64),
         }
     }
 
@@ -65,8 +68,13 @@ impl LogMemoryStore {
         &mut self.page_map
     }
 
-    pub(crate) fn heap_delta(&self) -> NumBytes {
+    pub fn heap_delta(&self) -> NumBytes {
         NumBytes::from((self.page_map.num_delta_pages() * PAGE_SIZE) as u64)
+    }
+
+    /// Clears the canister log records.
+    pub fn clear(&mut self) {
+        self.page_map = RingBuffer::invalid(self.page_map.clone()).to_page_map();
     }
 
     fn load_ring_buffer(&self) -> Option<RingBuffer> {
@@ -76,7 +84,7 @@ impl LogMemoryStore {
     fn init(&self) -> RingBuffer {
         RingBuffer::new(
             self.page_map.clone(),
-            MemorySize::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64),
+            MemorySize::new(self.log_memory_limit.get()),
         )
     }
 
@@ -102,22 +110,31 @@ impl LogMemoryStore {
             .unwrap_or(0)
     }
 
-    /// Set the ring buffer capacity — preserves existing records by collecting and re-appending them.
-    pub fn set_byte_capacity(&mut self, new_byte_capacity: usize) {
+    /// Sets the log memory limit for this canister.
+    ///
+    /// The ring buffer is updated only when it already exists and the new
+    /// limit changes its byte capacity. This avoids creating a ring buffer
+    /// for canisters without a Wasm module or after uninstall, preventing
+    /// unnecessary log-memory charges.
+    pub fn set_log_memory_limit(&mut self, new_log_memory_limit: usize) {
+        self.log_memory_limit = NumBytes::new(new_log_memory_limit as u64);
+
+        // Update existing ring buffer only when its capacity would change.
+        if let Some(old) = self.load_ring_buffer() {
+            if new_log_memory_limit != old.byte_capacity() {
+                self.set_byte_capacity(new_log_memory_limit);
+            }
+        }
+    }
+
+    /// Set a new ring buffer capacity preserving existing records.
+    fn set_byte_capacity(&mut self, new_byte_capacity: usize) {
         let new_byte_capacity = new_byte_capacity.max(DATA_CAPACITY_MIN);
 
         // TODO: PageMap cannot be shrunk today; reducing capacity does not free allocated pages
         // (practical ring buffer max currently ~55 MB). Future improvement: allocate a new PageMap
         // with the desired capacity, refeed records, then drop the old map or provide a `PageMap::shrink` API.
-        let old = match self.load_ring_buffer() {
-            None => self.init(),
-            Some(old) => {
-                if old.byte_capacity() == new_byte_capacity {
-                    return;
-                }
-                old
-            }
-        };
+        let old = self.load_ring_buffer().unwrap_or(self.init());
 
         // Recreate ring buffer with new capacity and restore records.
         let mut new = RingBuffer::new(
@@ -151,14 +168,6 @@ impl LogMemoryStore {
         self.load_ring_buffer()
             .map(|rb| rb.all_records())
             .unwrap_or_default()
-    }
-
-    /// Clears the canister log records.
-    pub fn clear(&mut self) {
-        if let Some(mut rb) = self.load_ring_buffer() {
-            rb.clear();
-            self.page_map = rb.to_page_map();
-        }
     }
 
     /// Appends a delta log to the ring buffer.

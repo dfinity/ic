@@ -56,6 +56,13 @@ impl RingBuffer {
         Self { io }
     }
 
+    /// Creates an invalid ring buffer.
+    pub fn invalid(page_map: PageMap) -> Self {
+        let mut io = StructIO::new(page_map);
+        io.save_header(&Header::invalid());
+        Self { io }
+    }
+
     /// Returns an existing ring buffer if present.
     pub fn load(page_map: PageMap) -> Option<Self> {
         let io = StructIO::new(page_map);
@@ -67,11 +74,6 @@ impl RingBuffer {
 
     pub fn to_page_map(&self) -> PageMap {
         self.io.to_page_map()
-    }
-
-    /// Clears the canister log records.
-    pub fn clear(&mut self) {
-        self.io.save_header(&Header::invalid());
     }
 
     /// Returns the total allocated bytes for the ring buffer
@@ -334,23 +336,6 @@ mod tests {
         assert_eq!(rb.pop_front().unwrap(), r0);
         assert_eq!(rb.pop_front().unwrap(), r1);
         assert!(rb.pop_front().is_none());
-    }
-
-    #[test]
-    fn test_clear() {
-        let page_map = PageMap::new_for_testing();
-        let data_capacity = TEST_DATA_CAPACITY;
-        let mut rb = RingBuffer::new(page_map, data_capacity);
-
-        let r0 = log_record(0, 100, "a");
-        let r1 = log_record(1, 200, "bb");
-        rb.append(&r0);
-        rb.append(&r1);
-        rb.clear();
-
-        // After clear, header is invalid, so loading should fail.
-        let page_map = rb.to_page_map();
-        assert!(RingBuffer::load(page_map).is_none());
     }
 
     #[test]
