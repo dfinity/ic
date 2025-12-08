@@ -61,7 +61,7 @@ impl DerivationContext {
             DERIVATION_CANISTER_DST,
         );
 
-        let canister_key = G2Affine::from(G2Affine::generator() * &offset + master_pk);
+        let canister_key = G2Affine::generator() * &offset + master_pk;
 
         if let Some(context) = &self.context {
             let context_offset =
@@ -70,7 +70,7 @@ impl DerivationContext {
             offset += context_offset;
             (G2Affine::from(canister_key_with_context), offset)
         } else {
-            (canister_key, offset)
+            (G2Affine::from(canister_key), offset)
         }
     }
 }
