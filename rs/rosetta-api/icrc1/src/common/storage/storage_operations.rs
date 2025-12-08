@@ -315,8 +315,15 @@ pub fn update_account_balances(
 
     // As long as there are blocks to be fetched, keep on iterating over the blocks in the database with the given BATCH_SIZE interval
     while !rosetta_blocks.is_empty() {
-        let last_block_index_bytes = rosetta_blocks.last().unwrap().index.to_le_bytes();
+        let mut last_block_index = batch_start_idx;
         for rosetta_block in rosetta_blocks {
+            if rosetta_block.index < last_block_index {
+                bail!(format!(
+                    "Processing blocks not in order, previous processed block: {last_block_index}, current block {}",
+                    rosetta_block.index
+                ));
+            }
+            last_block_index = rosetta_block.index;
             match rosetta_block.get_transaction().operation {
                 crate::common::storage::types::IcrcOperation::Burn {
                     from,
@@ -482,6 +489,7 @@ pub fn update_account_balances(
         {
             insert_tx.prepare_cached("INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = excluded.value;")?.execute(params![METADATA_FEE_COL, candid::encode_one(collector)?])?;
         }
+        let last_block_index_bytes = last_block_index.to_le_bytes();
         insert_tx.prepare_cached("INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = excluded.value;")?.execute(params![METADATA_BLOCK_IDX, last_block_index_bytes])?;
         insert_tx.commit()?;
 
