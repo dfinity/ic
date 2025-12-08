@@ -214,6 +214,71 @@ pub async fn rejoin_test_large_state(
     assert_state_sync_has_happened(&logger, rejoin_node, base_count).await;
 }
 
+pub async fn rejoin_test_many_canisters(
+    env: TestEnv,
+    num_canisters: usize,
+    dkg_interval: u64,
+    rejoin_node: IcNodeSnapshot,
+    agent_node: IcNodeSnapshot,
+) {
+    let logger = env.logger();
+    let endpoint_runtime = runtime_from_url(
+        agent_node.get_public_url(),
+        agent_node.effective_canister_id(),
+    );
+
+    info!(
+        logger,
+        "Installing the seed canister on a node {} ...",
+        agent_node.get_public_url()
+    );
+    let wasm = Wasm::from_file(get_dependency_path(
+        env::var("STATESYNC_TEST_CANISTER_WASM_PATH")
+            .expect("STATESYNC_TEST_CANISTER_WASM_PATH not set"),
+    ));
+    let seed_canister = wasm
+        .install(&endpoint_runtime)
+        .bytes(Vec::new())
+        .await
+        .unwrap_or_else(|_| panic!("Installation of the seed canister failed."));
+
+    info!(
+        logger,
+        "Creating {} canisters via the seed canister {}.",
+        num_canisters,
+        seed_canister.canister_id()
+    );
+    seed_canister
+        .update_(
+            "create_many_canisters",
+            dfn_candid::candid::<Result<(), String>, _>,
+            (num_canisters,),
+        )
+        .await
+        .unwrap_or_else(|err| panic!("Failed to create canisters via the seed canister: {}", err))
+        .unwrap_or_else(|err| panic!("Failed to create canisters via the seed canister: {}", err));
+
+    // Kill the rejoin node after it has a checkpoint so that we can test both `copy_chunks` and `fetch_chunks` in the state sync.
+    info!(logger, "Waiting for the rejoin_node to have a checkpoint");
+    wait_for_manifest(&logger, dkg_interval + 1, rejoin_node.clone()).await;
+
+    info!(
+        logger,
+        "Killing a node: {} ...",
+        rejoin_node.get_public_url()
+    );
+    rejoin_node.vm().kill();
+    rejoin_node
+        .await_status_is_unavailable()
+        .expect("Node still healthy");
+
+    info!(logger, "Start the killed node again...");
+    rejoin_node.vm().start();
+    rejoin_node
+        .await_status_is_healthy()
+        .expect("Started node did not report healthy status");
+}
+
 pub async fn assert_state_sync_has_happened(
     logger: &slog::Logger,
     rejoin_node: IcNodeSnapshot,
