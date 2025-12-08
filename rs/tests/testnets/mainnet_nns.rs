@@ -112,7 +112,8 @@ use std::sync::mpsc::{self, Receiver};
 use std::{io::Write, process::Command, time::Duration};
 use url::Url;
 
-// TODO: move this to an environment variable and set this on the CLI using --test_env=NNS_BACKUP_POD=zh1-pyr07.zh1.dfinity.network
+// Default path to the mainnet NNS state tarball on the backup pod. Can be overridden through the
+// NNS_STATE_ON_BACKUP_POD environment variable.
 const NNS_STATE_ON_BACKUP_POD: &str =
     "dev@zh1-pyr07.zh1.dfinity.network:/home/dev/nns_state.tar.zst";
 
@@ -584,18 +585,20 @@ fn propose_to_turn_into_api_bn(
 
 fn fetch_nns_state_from_backup_pod(env: &TestEnv) {
     let logger: slog::Logger = env.logger();
-    let nns_state_backup_path = env.get_path(PATH_STATE_TARBALL);
+    let remote_nns_state_path = std::env::var("NNS_STATE_ON_BACKUP_POD")
+        .unwrap_or_else(|_| NNS_STATE_ON_BACKUP_POD.to_string());
+    let local_nns_state_path = env.get_path(PATH_STATE_TARBALL);
     info!(
         logger,
-        "Downloading {} to {:?} ...", NNS_STATE_ON_BACKUP_POD, nns_state_backup_path
+        "Downloading {} to {:?} ...", remote_nns_state_path, local_nns_state_path
     );
     // TODO: consider using the ssh2 crate (like we do in prometheus_vm.rs)
     // instead of shelling out to scp.
     let mut cmd = Command::new("scp");
     cmd.arg("-oUserKnownHostsFile=/dev/null")
         .arg("-oStrictHostKeyChecking=no")
-        .arg(&NNS_STATE_ON_BACKUP_POD)
-        .arg(&nns_state_backup_path);
+        .arg(&remote_nns_state_path)
+        .arg(&local_nns_state_path);
     info!(env.logger(), "{cmd:?} ...");
     let scp_out = cmd.output().unwrap_or_else(|e| {
         panic!("Could not scp the {PATH_STATE_TARBALL} from the backup pod because: {e:?}!",)
@@ -607,11 +610,11 @@ fn fetch_nns_state_from_backup_pod(env: &TestEnv) {
     }
     info!(
         logger,
-        "Downloaded {NNS_STATE_ON_BACKUP_POD} to {:?}, unpacking ...", nns_state_backup_path
+        "Downloaded {remote_nns_state_path} to {:?}, unpacking ...", local_nns_state_path
     );
     let mut cmd = Command::new("tar");
     cmd.arg("xf")
-        .arg(&nns_state_backup_path)
+        .arg(&local_nns_state_path)
         .arg("-C")
         .arg(env.base_path())
         .arg(format!(
@@ -626,7 +629,7 @@ fn fetch_nns_state_from_backup_pod(env: &TestEnv) {
         std::io::stderr().write_all(&tar_out.stderr).unwrap();
         panic!("Could not unpack {PATH_STATE_TARBALL}!");
     }
-    info!(logger, "Unpacked {:?}", nns_state_backup_path);
+    info!(logger, "Unpacked {:?}", local_nns_state_path);
 }
 
 fn fetch_ic_config(env: &TestEnv, nns_node: &IcNodeSnapshot) {
