@@ -1076,9 +1076,11 @@ type BlessAlternativeGuestOsVersion = record {
   // Must contain only hexadecimal characters (0-9, A-F, a-f).
   rootfs_hash : opt text;
 
-  // Base guest launch measurements for SEV-SNP attestation.
-  base_guest_launch_measurements : opt GuestLaunchMeasurements;
-};
+  // The version being replaced by this (alternative version) must match this
+  // field (or one of the possibilities therein).
+  //
+  // (Here, we refer to the version being replaced as the "base" version.)
+  base_guest_launch_measurements : opt GuestLaunchMeasurements; };
 
 type GuestLaunchMeasurements = record {
   guest_launch_measurements : opt vec GuestLaunchMeasurement;
