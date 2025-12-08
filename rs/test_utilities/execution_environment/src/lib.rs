@@ -1431,6 +1431,7 @@ impl ExecutionTest {
         if let Some(canister_id) = maybe_canister_id
             && message_executed.yes()
         {
+            // WIP
             let instructions_used =
                 as_num_instructions(initial_instructions - round_limits.instructions);
             self.update_execution_stats(

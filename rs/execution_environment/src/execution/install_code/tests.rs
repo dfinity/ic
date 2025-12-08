@@ -79,6 +79,12 @@ fn dts_resume_works_in_install_code() {
         arg: vec![],
         sender_canister_version: None,
     };
+    let compilation_cost = test
+        .cycles_account_manager()
+        .convert_instructions_to_cycles(
+            ic_test_utilities_execution_environment::wat_compilation_cost(DTS_INSTALL_WAT),
+            WasmExecutionMode::Wasm32,
+        );
     let original_system_state = test.canister_state(canister_id).system_state.clone();
     let original_execution_cost = test.canister_execution_cost(canister_id);
     let ingress_id = test.dts_install_code(payload);
@@ -103,10 +109,32 @@ fn dts_resume_works_in_install_code() {
         test.canister_state(canister_id).next_execution(),
         NextExecution::None
     );
+    println!(
+        "left: test.canister_state(canister_id).system_state.balance(): {}",
+        test.canister_state(canister_id).system_state.balance()
+    );
+    println!(
+        "right: original_system_state.balance(): {}",
+        original_system_state.balance()
+    );
+    println!(
+        "test.canister_execution_cost(canister_id): {}",
+        test.canister_execution_cost(canister_id)
+    );
+    println!("original_execution_cost: {original_execution_cost}");
+    println!("compilation_cost: {compilation_cost}");
+    println!(
+        "diff: {}",
+        (original_system_state.balance()
+            - (test.canister_execution_cost(canister_id) - original_execution_cost
+                + compilation_cost))
+            - test.canister_state(canister_id).system_state.balance()
+    );
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         original_system_state.balance()
-            - (test.canister_execution_cost(canister_id) - original_execution_cost)
+            - (test.canister_execution_cost(canister_id) - original_execution_cost
+                + compilation_cost)
     );
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
