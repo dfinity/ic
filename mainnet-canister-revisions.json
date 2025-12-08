@@ -96,8 +96,8 @@
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_test": {
-    "sha256": "18bd7e5f51aab7c4048aaa9fce25fe12565930173a055db6c5106bc83bf7a880",
-    "tag": "release-2025-11-28"
+    "sha256": "51aa14f7d88a389e3d3434cd135967ac9b24ddd61c17a45e21d46006776016b3",
+    "tag": "release-2025-12-05"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
