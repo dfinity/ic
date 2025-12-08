@@ -162,6 +162,17 @@ impl CanisterState {
         &self.system_state.log_visibility
     }
 
+    /// Returns true if the canister is empty.
+    ///
+    /// When canister is uninstalled it is not removed from the state,
+    /// but exeuction state is removed, canister history is emptied
+    /// and balance is burned to zero.
+    pub fn is_empty(&self) -> bool {
+        self.execution_state.is_none()
+            && self.canister_history.is_empty()
+            && self.system_state.balance() == Cycles::zero()
+    }
+
     /// Returns the difference in time since the canister was last charged for resource allocations.
     pub fn duration_since_last_allocation_charge(&self, current_time: Time) -> Duration {
         debug_assert!(
