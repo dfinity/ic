@@ -108,5 +108,41 @@ sha2 = { workspace = true }
 simple_asn1 = { workspace = true }
 
 [[bench]]
+name = "basic_sig"
+harness = false
+
+[[bench]]
+name = "hash"
+harness = false
+
+[[bench]]
+name = "threshold_sig"
+harness = false
+
+[[bench]]
+name = "idkg"
+harness = false
+
+[[bench]]
+name = "tecdsa"
+harness = false
+
+[[bench]]
 name = "ni_dkg"
+harness = false
+
+[[bench]]
+name = "multi_sig"
+harness = false
+
+[[bench]]
+name = "canister_sig"
+harness = false
+
+[[bench]]
+name = "tschnorr"
+harness = false
+
+[[bench]]
+name = "vetkd"
 harness = false
