@@ -64,10 +64,7 @@ impl LogMemoryStore {
         }
     }
 
-    pub fn from_checkpoint(page_map: PageMap) -> Self {
-        let log_memory_limit = RingBuffer::load(page_map.clone())
-            .map(|rb| rb.byte_capacity())
-            .unwrap_or(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
+    pub fn from_checkpoint(page_map: PageMap, log_memory_limit: usize) -> Self {
         Self {
             page_map,
             delta_log_sizes: VecDeque::new(),
