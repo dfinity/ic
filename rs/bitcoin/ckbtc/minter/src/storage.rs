@@ -273,7 +273,7 @@ mod benches {
         })
     }
 
-    fn bench_estimate_retrieve_btc_fee(withdrawal_amount) -> canbench_rs::BenchResult {
+    fn bench_estimate_retrieve_btc_fee(withdrawal_amount: u64) -> canbench_rs::BenchResult {
         rebuild_mainnet_state();
         state::read_state(|s| {
             // The distribution of UTXOs is a key factor in the complexity of building a transaction,
