@@ -163,12 +163,9 @@ fn validate_base_guest_launch_measurements(
     let mut defects = Vec::new();
 
     // Not None.
-    let measurements = match measurements {
-        Some(m) => m,
-        None => {
-            defects.push("base_guest_launch_measurements must be present".to_string());
-            return defects;
-        }
+    let Some(measurements) = measurements else {
+        defects.push("base_guest_launch_measurements must be present".to_string());
+        return defects;
     };
 
     // Not vec[].
