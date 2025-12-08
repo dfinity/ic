@@ -279,23 +279,19 @@ main() {
 
     log_message "Parsed VERSION='$VERSION' VERSION_HASH='$VERSION_HASH' RECOVERY_HASH='$RECOVERY_HASH'"
 
-    if [ -z "$VERSION" ] || [ -z "$VERSION_HASH" ]; then
-        log_message "ERROR: version and version-hash parameters are required"
-        log_message "Usage: version=<commit-hash> version-hash=<sha256> [recovery-hash=<sha256>]"
+    if [ -z "$VERSION" ] || [ -z "$VERSION_HASH" ] || [ -z "$RECOVERY_HASH" ]; then
+        log_message "ERROR: version, version-hash, and recovery-hash parameters are required"
+        log_message "Usage: version=<commit-hash> version-hash=<sha256> recovery-hash=<sha256>"
         # Sleep 15 seconds then repeat error message to ensure visibility after console initialization wipe
         sleep 15
-        log_message "ERROR: version and version-hash parameters are required"
-        log_message "Usage: version=<commit-hash> version-hash=<sha256> [recovery-hash=<sha256>]"
+        log_message "ERROR: version, version-hash, and recovery-hash parameters are required"
+        log_message "Usage: version=<commit-hash> version-hash=<sha256> recovery-hash=<sha256>"
         exit 1
     fi
 
     log_message "Version: $VERSION"
     log_message "Version hash: $VERSION_HASH"
-    if [ -n "$RECOVERY_HASH" ]; then
-        log_message "Recovery hash: $RECOVERY_HASH"
-    else
-        log_message "Recovery hash not provided (optional for testing)"
-    fi
+    log_message "Recovery hash: $RECOVERY_HASH"
 
     TMPDIR=$(mktemp -d)
     trap 'guestos_upgrade_cleanup; rm -rf "$TMPDIR"' EXIT
@@ -306,12 +302,8 @@ main() {
         exit 1
     fi
 
-    if [ -n "$RECOVERY_HASH" ]; then
-        if ! retry_operation "recovery artifact download and verification" download_and_verify_recovery "$RECOVERY_HASH" "$TMPDIR"; then
-            exit 1
-        fi
-    else
-        log_message "Skipping recovery artifact download and verification (recovery-hash not provided)"
+    if ! retry_operation "recovery artifact download and verification" download_and_verify_recovery "$RECOVERY_HASH" "$TMPDIR"; then
+        exit 1
     fi
 
     extract_upgrade "$TMPDIR"
@@ -326,13 +318,11 @@ main() {
 
     log_message "Launching GuestOS on the new version..."
 
-    if [ -n "$RECOVERY_HASH" ]; then
-        log_message "Writing recovery hash to file"
-        RECOVERY_FILE="/run/config/guestos_recovery_hash"
-        mkdir -p "$(dirname "$RECOVERY_FILE")"
-        echo "$RECOVERY_HASH" >"$RECOVERY_FILE"
-        log_message "Recovery hash written to $RECOVERY_FILE"
-    fi
+    log_message "Writing recovery hash to file"
+    RECOVERY_FILE="/run/config/guestos_recovery_hash"
+    mkdir -p "$(dirname "$RECOVERY_FILE")"
+    echo "$RECOVERY_HASH" >"$RECOVERY_FILE"
+    log_message "Recovery hash written to $RECOVERY_FILE"
 
     log_message "Restarting guestos.service after manual upgrade installation"
     systemctl start guestos.service
