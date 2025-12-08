@@ -65,6 +65,7 @@ ic-config = { path = "../../../config" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
 ic-ledger-suite-orchestrator-test-utils = { path = "../../ledger-suite-orchestrator/test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-types = { path = "../../../types/types" }
 maplit = "1"
 proptest = { workspace = true }
 rand = { workspace = true }

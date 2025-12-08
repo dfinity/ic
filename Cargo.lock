@@ -7212,6 +7212,7 @@ dependencies = [
  "ic-sha3 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-stable-structures",
  "ic-state-machine-tests",
+ "ic-types",
  "ic-utils-ensure",
  "icrc-cbor",
  "icrc-ledger-client-cdk",

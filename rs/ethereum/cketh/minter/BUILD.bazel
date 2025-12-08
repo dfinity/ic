@@ -220,6 +220,7 @@ rust_ic_test_suite(
         "//rs/state_machine_tests",
         "//rs/types/base_types",
         "//rs/types/management_canister_types",
+        "//rs/types/types",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:ethers-core",
