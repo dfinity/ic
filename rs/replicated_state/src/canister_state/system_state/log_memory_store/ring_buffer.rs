@@ -1,5 +1,5 @@
 use crate::canister_state::system_state::log_memory_store::{
-    header::{Header, MAGIC_VALID},
+    header::{Header, MAGIC},
     log_record::LogRecord,
     memory::{MemoryAddress, MemorySize},
     struct_io::StructIO,
@@ -56,17 +56,17 @@ impl RingBuffer {
         Self { io }
     }
 
-    /// Creates an invalid ring buffer.
-    pub fn invalid(page_map: PageMap) -> Self {
-        let mut io = StructIO::new(page_map);
-        io.save_header(&Header::invalid());
-        Self { io }
+    /// Loads a raw ring buffer from given `page_map` without validating its contents.
+    pub fn load_raw(page_map: PageMap) -> Self {
+        Self {
+            io: StructIO::new(page_map),
+        }
     }
 
     /// Returns an existing ring buffer if present.
-    pub fn load(page_map: PageMap) -> Option<Self> {
+    pub fn load_checked(page_map: PageMap) -> Option<Self> {
         let io = StructIO::new(page_map);
-        if io.load_header().magic != *MAGIC_VALID {
+        if io.load_header().magic != *MAGIC {
             return None;
         }
         Some(Self { io })
