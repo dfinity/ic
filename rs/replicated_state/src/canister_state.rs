@@ -21,7 +21,7 @@ use ic_types::batch::TotalQueryStats;
 use ic_types::methods::SystemMethod;
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{
-    AccumulatedPriority, CanisterId, CanisterLog, ComputeAllocation, ExecutionRound,
+    AccumulatedPriority, CanisterId, CanisterLog, ComputeAllocation, Cycles, ExecutionRound,
     MemoryAllocation, NumBytes, PrincipalId, Time,
     messages::{CanisterMessage, Ingress, Request, RequestOrResponse, Response},
     methods::WasmMethod,
@@ -165,11 +165,11 @@ impl CanisterState {
     /// Returns true if the canister is empty.
     ///
     /// When canister is uninstalled it is not removed from the state,
-    /// but exeuction state is removed, canister history is emptied
+    /// but its execution state is empty, canister history is empty
     /// and balance is burned to zero.
     pub fn is_empty(&self) -> bool {
         self.execution_state.is_none()
-            && self.canister_history.is_empty()
+            && self.system_state.canister_history_memory_usage() == NumBytes::new(0)
             && self.system_state.balance() == Cycles::zero()
     }
 
