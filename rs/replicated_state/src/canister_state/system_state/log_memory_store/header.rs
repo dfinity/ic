@@ -3,7 +3,7 @@ use crate::canister_state::system_state::log_memory_store::{
     ring_buffer::{DATA_REGION_OFFSET, INDEX_TABLE_PAGES},
 };
 
-/// Indicates a valid canister log buffer.
+/// Magic prefix that marks a properly initialized canister log buffer.
 pub(crate) const MAGIC: &[u8; 3] = b"CLB";
 
 /// Header structure for the log memory store (version 1).
