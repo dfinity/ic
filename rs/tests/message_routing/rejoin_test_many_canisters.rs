@@ -20,8 +20,7 @@ use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{
-    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResources,
-    NrOfVCPUs,
+    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
 };
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
@@ -57,12 +56,14 @@ fn main() -> Result<()> {
 #[derive(Clone, Debug)]
 pub struct Config {
     nodes_count: usize,
+    num_canisters: usize,
 }
 
 impl Config {
-    pub fn new(nodes_count: usize) -> Config {
+    pub fn new(nodes_count: usize, num_canisters: usize) -> Config {
         Config {
             nodes_count,
+            num_canisters,
         }
     }
 
