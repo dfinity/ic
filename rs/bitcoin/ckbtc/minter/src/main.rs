@@ -205,7 +205,7 @@ async fn upload_events(events: Vec<Event>) {
 #[query]
 fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
     // This is a **query** endpoint, so mutating the state is not an issue
-    // since any change will be discarded.
+    // (even when called in replicated mode) since any change will be discarded.
     match mutate_state(|s| {
         let fee_estimator = IC_CANISTER_RUNTIME.fee_estimator(s);
         let withdrawal_amount = arg.amount.unwrap_or(s.fee_based_retrieve_btc_min_amount);
