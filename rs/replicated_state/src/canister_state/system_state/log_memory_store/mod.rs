@@ -80,10 +80,6 @@ impl LogMemoryStore {
         &mut self.page_map
     }
 
-    pub fn heap_delta(&self) -> NumBytes {
-        NumBytes::from((self.page_map.num_delta_pages() * PAGE_SIZE) as u64)
-    }
-
     /// Clears the canister log records.
     pub fn clear(&mut self) {
         // Write an invalid ring buffer to the page map to avoid unnecessary log-memory charges.
