@@ -442,6 +442,55 @@ fn test_canister_out_of_cycles() {
     );
 }
 
+/*
+running 1 test
+ABC: charge_canisters_for_resource_allocation_and_usage
+ABC: cycles 339_704_000 available 74_079_999_931_960 ok
+ABC: cycles 300_005_000_000 available 74_079_660_227_960 ok
+ABC: cycles 40_005_000_000 available 74_076_868_663_894 ok
+ABC: charge_canisters_for_resource_allocation_and_usage
+ABC: step 1
+ABC: cycles 40_005_000_000 available 74_076_863_661_755 ok
+ABC: charge_canisters_for_resource_allocation_and_usage
+ABC: cycles 4_076_331_358 available 99_997_915_268_609 ok
+ABC: cycles 0 available 99_993_838_937_251 ok
+ABC: cycles 99_997_930_000_000 available 99_993_838_937_251 error
+ABC: Charging canister rwlgt-iiaaa-aaaaa-aaaaa-cai for ComputeAllocation failed with Canister rwlgt-iiaaa-aaaaa-aaaaa-cai is out of cycles
+ABC: Uninstalling canister rwlgt-iiaaa-aaaaa-aaaaa-cai because it ran out of cycles with err: CanisterOutOfCyclesError { canister_id: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), available: Cycles(99993838937251), requested: Cycles(99997930000000), threshold: Cycles(0), reveal_top_up: false }
+ABC: step 2
+ABC: step 3
+ABC: charge_canisters_for_resource_allocation_and_usage
+ABC: cycles 0 available 0 ok
+ABC: cycles 0 available 0 ok
+ABC: cycles 0 available 0 ok
+ABC: step 4
+ABC: step 5
+test canister_has_zero_balance_when_uninstalled_due_to_low_cycles ... ok
+
+===
+running 1 test
+ABC: charge_canisters_for_resource_allocation_and_usage
+ABC: cycles 339_704_000 available 74_079_996_164_740 ok
+ABC: cycles 300_005_000_000 available 74_079_656_460_740 ok
+ABC: cycles 40_005_000_000 available 74_076_864_896_674 ok
+ABC: charge_canisters_for_resource_allocation_and_usage
+ABC: step 1
+ABC: cycles 40_005_000_000 available 74_076_859_894_535 ok
+ABC: charge_canisters_for_resource_allocation_and_usage
+ABC: cycles 4_090_865_085 available 99_997_915_268_609 ok
+ABC: cycles 0 available 99_993_824_403_524 ok
+ABC: cycles 99_997_930_000_000 available 99_993_824_403_524 error
+ABC: Charging canister rwlgt-iiaaa-aaaaa-aaaaa-cai for ComputeAllocation failed with Canister rwlgt-iiaaa-aaaaa-aaaaa-cai is out of cycles
+ABC: Uninstalling canister rwlgt-iiaaa-aaaaa-aaaaa-cai because it ran out of cycles with err: CanisterOutOfCyclesError { canister_id: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), available: Cycles(99993824403524), requested: Cycles(99997930000000), threshold: Cycles(0), reveal_top_up: false }
+ABC: step 2
+ABC: step 3
+ABC: charge_canisters_for_resource_allocation_and_usage
+ABC: cycles 29 available 0 error
+ABC: Charging canister rwlgt-iiaaa-aaaaa-aaaaa-cai for Memory failed with Canister rwlgt-iiaaa-aaaaa-aaaaa-cai is out of cycles
+ABC: Uninstalling canister rwlgt-iiaaa-aaaaa-aaaaa-cai because it ran out of cycles with err: CanisterOutOfCyclesError { canister_id: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), available: Cycles(0), requested: Cycles(29), threshold: Cycles(0), reveal_top_up: false }
+ABC: step 4
+*/
+
 #[test]
 fn canister_has_zero_balance_when_uninstalled_due_to_low_cycles() {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
@@ -468,6 +517,7 @@ fn canister_has_zero_balance_when_uninstalled_due_to_low_cycles() {
         INITIAL_CYCLES_BALANCE,
     );
 
+    println!("ABC: step 1");
     // We don't charge for allocation periodically, we advance the state machine
     // time to trigger allocation charging. The canister should get uninstalled
     // since we simulate that enough time has passed to not be able to pay for
@@ -477,22 +527,30 @@ fn canister_has_zero_balance_when_uninstalled_due_to_low_cycles() {
     env.advance_time(Duration::from_secs(seconds_to_burn_balance + 1));
     env.tick();
 
+    println!("ABC: step 2");
     // Verify the original canister still exists but it's uninstalled and has a
     // zero cycle balance.
     assert_eq!(env.cycle_balance(canister_id), 0);
     assert_eq!(env.num_canisters_uninstalled_out_of_cycles(), 1);
 
+    println!("ABC: step 3");
     // Advance the statem machine time a bit more and confirm the canister is
     // still uninstalled.
-    env.advance_time(
-        2 * CyclesAccountManagerConfig::application_subnet().duration_between_allocation_charges,
-    );
-    env.tick();
+    for _ in 0..1 {
+        env.advance_time(
+            2 * CyclesAccountManagerConfig::application_subnet()
+                .duration_between_allocation_charges,
+        );
+        env.tick();
+    }
 
+    println!("ABC: step 4");
     // Verify the original canister still exists but it's uninstalled and has a
     // zero cycle balance.
     assert_eq!(env.cycle_balance(canister_id), 0);
     assert_eq!(env.num_canisters_uninstalled_out_of_cycles(), 1);
+
+    println!("ABC: step 5");
 }
 
 /// Verifies that incremental manifest computation correctly handles memory

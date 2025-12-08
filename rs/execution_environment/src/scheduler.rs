@@ -892,14 +892,15 @@ impl SchedulerImpl {
         state: &mut ReplicatedState,
         subnet_size: usize,
     ) {
+        println!("ABC: charge_canisters_for_resource_allocation_and_usage");
         let cost_schedule = state.get_own_cost_schedule();
         let state_time = state.time();
         let mut all_rejects = Vec::new();
         let mut uninstalled_canisters = Vec::new();
         for canister in state.canisters_iter_mut() {
-            if canister.is_empty() {
-                continue; // Skip checking empty canisters.
-            }
+            // if canister.is_empty() {
+            //     continue; // Skip checking empty canisters.
+            // }
             // Postpone charging for resources when a canister has a paused execution
             // to avoid modifying the balance of a canister during an unfinished operation.
             if canister.has_paused_execution() || canister.has_paused_install_code() {
@@ -920,7 +921,7 @@ impl SchedulerImpl {
                 let duration_since_last_charge =
                     canister.duration_since_last_allocation_charge(state_time);
                 canister.scheduler_state.time_of_last_allocation_charge = state_time;
-                if self
+                let res = self
                     .cycles_account_manager
                     .charge_canister_for_resource_allocation_and_usage(
                         &self.log,
@@ -928,9 +929,8 @@ impl SchedulerImpl {
                         duration_since_last_charge,
                         subnet_size,
                         cost_schedule,
-                    )
-                    .is_err()
-                {
+                    );
+                if res.is_err() {
                     uninstalled_canisters.push(canister.canister_id());
                     all_rejects.push(uninstall_canister(
                         &self.log,
@@ -949,6 +949,12 @@ impl SchedulerImpl {
                         self.log,
                         "Uninstalling canister {} because it ran out of cycles",
                         canister.canister_id()
+                    );
+                    let err = res.unwrap_err();
+                    println!(
+                        "ABC: Uninstalling canister {} because it ran out of cycles with err: {:?}",
+                        canister.canister_id(),
+                        err
                     );
                     self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
                 }

@@ -1118,6 +1118,15 @@ impl CyclesAccountManager {
             Cycles::zero()
         };
 
+        let status = if cycles > cycles_available {
+            "error"
+        } else {
+            "ok"
+        };
+        println!(
+            "ABC: cycles {} available {} {}",
+            cycles, cycles_available, status
+        );
         if cycles > cycles_available {
             return Err(CanisterOutOfCyclesError {
                 canister_id,
@@ -1300,6 +1309,12 @@ impl CyclesAccountManager {
                 info!(
                     log,
                     "Charging canister {} for {} failed with {}",
+                    canister.canister_id(),
+                    use_case.as_str(),
+                    err
+                );
+                println!(
+                    "ABC: Charging canister {} for {} failed with {}",
                     canister.canister_id(),
                     use_case.as_str(),
                     err

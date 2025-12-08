@@ -404,6 +404,7 @@ impl CanisterState {
         self.execution_memory_usage()
             + self.canister_history_memory_usage()
             + self.wasm_chunk_store_memory_usage()
+            + NumBytes::new(3 * 4096)
             + self.snapshots_memory_usage()
     }
 
