@@ -418,10 +418,12 @@ fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcN
     upload_node_operator_private_key(api_bn, &ssh_session)
         .expect("Could not upload node operator private key to API BN");
 
-    // Restart ic-replica
-    // TODO: won't work because ic-generate-config doesn't run anymore
+    // Regenerate IC config and start ic-replica
     api_bn
-        .block_on_bash_script_from_session(&ssh_session, "sudo systemctl restart ic-replica")
+        .block_on_bash_script_from_session(
+            &ssh_session,
+            "sudo systemctl restart generate-ic-config && sudo systemctl start ic-replica",
+        )
         .expect("Could not restart ic-replica on API BN");
 
     // TODO: needed?
