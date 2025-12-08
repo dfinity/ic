@@ -142,9 +142,9 @@ fn validate_rootfs_hash(hexidecimal_fingerprint: &str) -> Vec<String> {
         .all(|c| c.is_ascii_hexdigit())
     {
         defects.push(format!(
-            "rootfs_hash must contain only \
-             hexadecimal characters (0-9, A-F, a-f), got: {}",
-            String::from_utf8_lossy(hexidecimal_fingerprint.as_bytes())
+            "rootfs_hash must contain only hexadecimal characters \
+             (0-9, A-F, a-f), got: {}",
+            hexidecimal_fingerprint,
         ));
     }
 
