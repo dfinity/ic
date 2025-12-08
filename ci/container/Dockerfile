@@ -10,7 +10,7 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
 
-RUN apt -yqq install --no-install-recommends podman containernetworking-plugins buildah zip fuse-overlayfs xtail
+RUN apt -yqq install --no-install-recommends podman containernetworking-plugins buildah zip xtail
 
 # install afl & gsutils deps for bazel-fuzzers
 RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
@@ -136,9 +136,6 @@ USER ubuntu
 # Set PATH for ubuntu user
 ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
 ENV PYTHONPATH=/ic/ci/src:/ic/ci/src/dependencies:$PYTHONPATH
-
-# Make sure we own .local/share
-RUN mkdir -p /home/ubuntu/.local/share
 
 # Pre-populate the Bazel installation for ubuntu
 RUN cd /tmp/bazel && bazel version
