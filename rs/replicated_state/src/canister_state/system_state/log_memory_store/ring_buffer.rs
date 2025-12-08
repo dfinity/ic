@@ -78,9 +78,11 @@ impl RingBuffer {
     /// including header, index table and data region.
     pub fn total_allocated_bytes(&self) -> usize {
         let header = self.io.load_header();
-        HEADER_SIZE.get() as usize
+        let memory_usage = HEADER_SIZE.get() as usize
             + header.index_table_pages as usize * PAGE_SIZE
-            + header.data_capacity.get() as usize
+            + header.data_capacity.get() as usize;
+        // TODO: temporarely remove from counting the first 3 pages of log memory store.
+        memory_usage.saturating_sub(3 * PAGE_SIZE)
     }
 
     /// Returns the data capacity of the ring buffer.
