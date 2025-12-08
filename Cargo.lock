@@ -21368,7 +21368,9 @@ dependencies = [
  "chrono",
  "dfn_candid",
  "futures",
+ "ic-agent 0.40.1",
  "ic-system-test-driver",
+ "ic-utils 0.40.1",
  "slog",
  "tokio",
 ]

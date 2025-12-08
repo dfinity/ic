@@ -1,3 +1,4 @@
+use candid::{Decode, Encode};
 use canister_test::{Canister, Runtime, Wasm};
 use futures::future::join_all;
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -5,6 +6,7 @@ use ic_system_test_driver::driver::test_env_api::get_dependency_path;
 use ic_system_test_driver::driver::test_env_api::retry_async;
 use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasVm, IcNodeSnapshot};
 use ic_system_test_driver::util::{MetricsFetcher, UniversalCanister, runtime_from_url};
+use ic_utils::interfaces::management_canister::ManagementCanister;
 use slog::info;
 use std::collections::BTreeMap;
 use std::env;
@@ -222,41 +224,43 @@ pub async fn rejoin_test_many_canisters(
     agent_node: IcNodeSnapshot,
 ) {
     let logger = env.logger();
-    let endpoint_runtime = runtime_from_url(
-        agent_node.get_public_url(),
-        agent_node.effective_canister_id(),
-    );
+    let agent = agent_node.build_default_agent_async().await;
+    let ic00 = ManagementCanister::create(&agent);
 
     info!(
         logger,
         "Installing the seed canister on a node {} ...",
         agent_node.get_public_url()
     );
-    let wasm = Wasm::from_file(get_dependency_path(
+    let seed_canister_id = ic00
+        .create_canister()
+        .as_provisional_create_with_amount(None)
+        .call_and_wait()
+        .await
+        .expect("Installation of the seed canister failed")
+        .0;
+    let wasm = std::fs::read(get_dependency_path(
         env::var("STATESYNC_TEST_CANISTER_WASM_PATH")
             .expect("STATESYNC_TEST_CANISTER_WASM_PATH not set"),
-    ));
-    let seed_canister = wasm
-        .install(&endpoint_runtime)
-        .bytes(Vec::new())
+    ))
+    .expect("Could not read STATESYNC_TEST_CANISTER_WASM_PATH");
+    ic00.install(&seed_canister_id, &wasm)
         .await
-        .unwrap_or_else(|_| panic!("Installation of the seed canister failed."));
+        .expect("Failed to install the seed canister");
 
     info!(
         logger,
-        "Creating {} canisters via the seed canister {}.",
-        num_canisters,
-        seed_canister.canister_id()
+        "Creating {} canisters via the seed canister {}.", num_canisters, seed_canister_id
     );
-    seed_canister
-        .update_(
-            "create_many_canisters",
-            dfn_candid::candid::<Result<(), String>, _>,
-            (num_canisters,),
-        )
+    let bytes = Encode!(&num_canisters).expect("Failed to candid encode argument");
+    let raw_bytes = agent
+        .update(&seed_canister_id, "create_many_canisters")
+        .with_arg(bytes)
+        .call_and_wait()
         .await
-        .unwrap_or_else(|err| panic!("Failed to create canisters via the seed canister: {}", err))
         .unwrap_or_else(|err| panic!("Failed to create canisters via the seed canister: {}", err));
+    let res = Decode!(&raw_bytes, Result<(), String>).expect("Failed to parse candid response");
+    res.expect("Failed to create many canisters");
 
     // Kill the rejoin node after it has a checkpoint so that we can test both `copy_chunks` and `fetch_chunks` in the state sync.
     info!(logger, "Waiting for the rejoin_node to have a checkpoint");
