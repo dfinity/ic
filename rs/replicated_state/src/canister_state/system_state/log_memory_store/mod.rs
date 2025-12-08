@@ -9,9 +9,9 @@ use crate::canister_state::system_state::log_memory_store::{
     memory::MemorySize,
     ring_buffer::{DATA_CAPACITY_MIN, RingBuffer},
 };
-use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
+use crate::page_map::{PAGE_SIZE, PageAllocatorFileDescriptor, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
-use ic_types::CanisterLog;
+use ic_types::{CanisterLog, NumBytes};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::VecDeque;
@@ -63,6 +63,10 @@ impl LogMemoryStore {
 
     pub fn page_map_mut(&mut self) -> &mut PageMap {
         &mut self.page_map
+    }
+
+    pub(crate) fn heap_delta(&self) -> NumBytes {
+        NumBytes::from((self.page_map.num_delta_pages() * PAGE_SIZE) as u64)
     }
 
     fn load_ring_buffer(&self) -> RingBuffer {

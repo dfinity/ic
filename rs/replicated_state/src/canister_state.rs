@@ -614,6 +614,7 @@ impl CanisterState {
             .as_ref()
             .map_or(NumBytes::new(0), |es| es.heap_delta())
             + self.system_state.wasm_chunk_store.heap_delta()
+            + self.system_state.log_memory_store.heap_delta()
     }
 
     /// Updates status of `OnLowWasmMemory` hook.
