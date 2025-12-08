@@ -509,6 +509,7 @@ fn patch_config_nns_public_key(
         &session,
         &format!(
             r#"
+                set -e
                 sudo chown --reference={PROD_NNS_PUBLIC_KEY} {TMP_NNS_PUBLIC_KEY}
                 sudo chmod --reference={PROD_NNS_PUBLIC_KEY} {TMP_NNS_PUBLIC_KEY}
                 sudo mount --bind {TMP_NNS_PUBLIC_KEY} {PROD_NNS_PUBLIC_KEY}
@@ -523,7 +524,9 @@ fn upload_node_operator_private_key(node: &IcNodeSnapshot, session: &Session) ->
     node.block_on_bash_script_from_session(
         &session,
         &format!(
-            r#"sudo tee {PROD_NODE_OPERATOR_PRIVATE_KEY} >/dev/null <<EOF
+            r#"
+                set -e
+                sudo tee {PROD_NODE_OPERATOR_PRIVATE_KEY} >/dev/null <<EOF
 {NODE_OPERATOR_PRIVATE_KEY_PEM}
 EOF
             "#
