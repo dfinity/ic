@@ -126,35 +126,33 @@ impl LogMemoryStore {
     /// for canisters without a Wasm module or after uninstall, preventing
     /// unnecessary log-memory charges.
     pub fn set_log_memory_limit(&mut self, new_log_memory_limit: usize) {
+        // Enforce a safe minimum for data capacity.
         let new_log_memory_limit = new_log_memory_limit.max(DATA_CAPACITY_MIN);
         self.log_memory_limit = new_log_memory_limit;
 
-        // Update existing ring buffer only when its capacity would change.
+        // Only resize on an existing ring buffer.
         if let Some(old) = self.load_ring_buffer() {
-            if new_log_memory_limit != old.byte_capacity() {
-                self.set_byte_capacity(new_log_memory_limit);
+            // Only resize when the capacity actually changes.
+            if old.byte_capacity() != new_log_memory_limit {
+                // NOTE — PageMap cannot be shrunk today. Reducing capacity keeps
+                // allocated pages in place; in practice the ring buffer max is
+                // currently ~55 MB. Future improvement — allocate a new PageMap
+                // with the desired capacity, refeed records, then drop the old
+                // map or add a `PageMap::shrink` API to reclaim pages.
+                //
+                // Recreate a ring buffer with the new capacity and restore records.
+                let mut new = RingBuffer::new(
+                    self.page_map.clone(),
+                    MemorySize::new(new_log_memory_limit as u64),
+                );
+                new.append_log(old.all_records());
+                self.page_map = new.to_page_map();
             }
         }
     }
 
     pub fn log_memory_limit(&self) -> usize {
         self.log_memory_limit
-    }
-
-    /// Set a new ring buffer capacity preserving existing records.
-    fn set_byte_capacity(&mut self, new_byte_capacity: usize) {
-        // TODO: PageMap cannot be shrunk today; reducing capacity does not free allocated pages
-        // (practical ring buffer max currently ~55 MB). Future improvement: allocate a new PageMap
-        // with the desired capacity, refeed records, then drop the old map or provide a `PageMap::shrink` API.
-        let old = self.load_ring_buffer().unwrap_or(self.new_ring_buffer());
-
-        // Recreate ring buffer with new capacity and restore records.
-        let mut new = RingBuffer::new(
-            self.page_map.clone(),
-            MemorySize::new(new_byte_capacity as u64),
-        );
-        new.append_log(old.all_records());
-        self.page_map = new.to_page_map();
     }
 
     /// Returns the next log record `idx`.
