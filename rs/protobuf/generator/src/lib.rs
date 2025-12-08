@@ -228,7 +228,7 @@ fn build_registry_proto(def: &Path, out: &Path) {
         "GuestLaunchMeasurementMetadata",
     ] {
         config.type_attribute(
-            &format!(".registry.replica_version.v1.{type_name}"),
+            format!(".registry.replica_version.v1.{type_name}"),
             "#[derive(Eq, candid::CandidType, comparable::Comparable)]",
         );
     }
