@@ -35,7 +35,11 @@ mod stability {
     #[test]
     fn message_to_g1() {
         assert_eq!(
-            hex::encode(multi_crypto::hash_message_to_g1(b"abc").to_affine().serialize()),
+            hex::encode(
+                multi_crypto::hash_message_to_g1(b"abc")
+                    .to_affine()
+                    .serialize()
+            ),
             "a13964470939e806ca5ca96b348ab13af3f06a7d9dc4e8a0cf20d8a81a6d8f5a692c67424228d45d749e7832d27cea79"
         );
     }
@@ -45,7 +49,11 @@ mod stability {
         let (_secret_key, public_key) = multi_crypto::keypair_from_rng(&mut csprng);
         let public_key_bytes = PublicKeyBytes::from(&public_key);
         assert_eq!(
-            hex::encode(multi_crypto::hash_public_key_to_g1(&public_key_bytes.0[..]).to_affine().serialize()),
+            hex::encode(
+                multi_crypto::hash_public_key_to_g1(&public_key_bytes.0[..])
+                    .to_affine()
+                    .serialize()
+            ),
             "b02fd0d54faab7498924d7e230f84b00519ea7f3846cd30f82b149c1f172ad79ee68adb2ea2fc8a2d40ffdf3fd5df02a"
         );
     }
@@ -104,7 +112,9 @@ mod basic_functionality {
         let number_of_messages = 100;
         let points: HashSet<_> = (0..number_of_messages as u32)
             .map(|number| {
-                let bytes = multi_crypto::hash_message_to_g1(&number.to_be_bytes()[..]).to_affine().serialize();
+                let bytes = multi_crypto::hash_message_to_g1(&number.to_be_bytes()[..])
+                    .to_affine()
+                    .serialize();
                 // It suffices to prove that the first 32 bytes are distinct.  More requires a
                 // custom hash implementation.
                 let mut hashable = [0u8; 32];

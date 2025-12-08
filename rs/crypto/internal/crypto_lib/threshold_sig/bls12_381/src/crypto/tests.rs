@@ -167,7 +167,7 @@ pub mod util {
             let mut accum = vec![G2Projective::identity(); len];
 
             for (pc, _) in generations.iter() {
-                for (i, val) in accum.iter_mut().enumerate()  {
+                for (i, val) in accum.iter_mut().enumerate() {
                     *val += &pc.coefficients[i].0;
                 }
             }
