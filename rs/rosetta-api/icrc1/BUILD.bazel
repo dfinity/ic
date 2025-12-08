@@ -293,7 +293,6 @@ oci_image(
     name = "ic_icrc_rosetta_image",
     base = ":ic_icrc_rosetta_image_base",
     entrypoint = ["/home/ic_icrc_rosetta/ic-icrc-rosetta-bin"],
-    tags = ["local"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],

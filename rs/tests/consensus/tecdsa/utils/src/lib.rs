@@ -1,3 +1,4 @@
+use anyhow::bail;
 use candid::{CandidType, Deserialize, Encode, Principal};
 use canister_test::{Canister, Cycles};
 use ic_agent::AgentError;
@@ -31,10 +32,11 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF, SshSession, SubnetSnapshot,
         },
     },
     nns::vote_and_execute_proposal,
-    util::{MessageCanister, SignerCanister, block_on},
+    util::{MessageCanister, MetricsFetcher, SignerCanister, block_on},
 };
 use ic_types::{Height, PrincipalId, ReplicaVersion};
 use ic_types_test_utils::ids::subnet_test_id;
@@ -1057,7 +1059,7 @@ pub async fn create_new_subnet_with_keys(
                 key_config: Some(KeyConfigCreate {
                     pre_signatures_to_create_in_advance: key_id
                         .requires_pre_signatures()
-                        .then_some(4),
+                        .then_some(5),
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                     key_id: Some(key_id),
                 }),
@@ -1107,6 +1109,82 @@ pub async fn create_new_subnet_with_keys(
         gossip_retransmission_request_ms: Default::default(),
     };
     execute_create_subnet_proposal(governance, payload, logger).await;
+}
+
+pub fn await_pre_signature_stash_size(
+    subnet: &SubnetSnapshot,
+    expected_size: usize,
+    key_ids: &[MasterPublicKeyId],
+    log: &Logger,
+) {
+    let metric_vec = key_ids
+        .iter()
+        .map(|key_id| format!("execution_pre_signature_stash_size{{key_id=\"{key_id}\"}}"))
+        .collect::<Vec<_>>();
+    let metrics = MetricsFetcher::new(subnet.nodes(), metric_vec.clone());
+    ic_system_test_driver::retry_with_msg!(
+        format!(
+            "Waiting until pre-signature stashes for key_ids {key_ids:?} are of size {expected_size}",
+        ),
+        log.clone(),
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || match block_on(metrics.fetch::<usize>()) {
+            Ok(val) => {
+                for metric in &metric_vec {
+                    let Some(sizes) = val.get(metric) else {
+                        bail!("Metric {metric} not found in {val:?}");
+                    };
+                    assert_eq!(sizes.len(), subnet.nodes().count());
+                    for size in sizes {
+                        if *size != expected_size {
+                            bail!(
+                                "Pre-signature stash for key_id {} is of size {}, but expected {}",
+                                metric, size, expected_size
+                            );
+                        }
+                    }
+                }
+                Ok(())
+            }
+            Err(err) => {
+                bail!("Could not connect to metrics yet {:?}", err);
+            }
+        }
+    )
+    .expect("The subnet did not reach the required pre-signature stash size in time");
+}
+
+pub async fn set_pre_signature_stash_size(
+    governance: &Canister<'_>,
+    subnet_id: SubnetId,
+    key_ids: &[MasterPublicKeyId],
+    max_parallel_pre_signature_transcripts_in_creation: u32,
+    pre_signatures_to_create_in_advance: u32,
+    idkg_key_rotation_period_ms: Option<Duration>,
+    log: &Logger,
+) {
+    let proposal_payload = UpdateSubnetPayload {
+        subnet_id,
+        chain_key_config: Some(ChainKeyConfig {
+            key_configs: key_ids
+                .iter()
+                .map(|key_id| KeyConfigUpdate {
+                    key_id: Some(key_id.clone()),
+                    pre_signatures_to_create_in_advance: Some(pre_signatures_to_create_in_advance),
+                    max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                })
+                .collect(),
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: idkg_key_rotation_period_ms.map(|t| t.as_millis() as u64),
+            max_parallel_pre_signature_transcripts_in_creation: Some(
+                max_parallel_pre_signature_transcripts_in_creation,
+            ),
+        }),
+        ..empty_subnet_update()
+    };
+    execute_update_subnet_proposal(governance, proposal_payload, "Update Chain key config", log)
+        .await;
 }
 
 pub fn verify_bip340_signature(sec1_pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {

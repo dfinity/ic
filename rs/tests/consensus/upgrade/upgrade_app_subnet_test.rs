@@ -72,7 +72,6 @@ fn upgrade_app_subnet(env: TestEnv) {
         &target_version,
         SubnetType::Application,
         Some(&ecdsa_state),
-        /*assert_graceful_orchestrator_tasks_exits=*/ false,
     );
 }
 

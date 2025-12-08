@@ -13,7 +13,6 @@ use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::{ids::canister_test_id, ids::user_test_id};
-use ic_types::default_log_memory_limit;
 use ic_types::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask};
 use ic_types::time::UNIX_EPOCH;
 use itertools::Itertools;
@@ -56,8 +55,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
         total_query_stats: TotalQueryStats::default(),
         log_visibility: Default::default(),
-        log_memory_limit: default_log_memory_limit(),
-        canister_log: Default::default(),
+        canister_log: CanisterLog::default_aggregate(),
         wasm_memory_limit: None,
         next_snapshot_id: 0,
         snapshots_memory_usage: NumBytes::from(0),

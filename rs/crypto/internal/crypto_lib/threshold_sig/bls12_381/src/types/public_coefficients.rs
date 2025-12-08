@@ -31,19 +31,22 @@ impl PublicCoefficients {
         }
     }
 
+    pub(crate) fn new(coefficients: Vec<PublicKey>) -> Self {
+        Self { coefficients }
+    }
+
     /// Deserializes a `PublicCoefficients` from a *trusted* source.
     ///
-    /// # Security Notice
-    /// This uses the "unchecked" G2 deserialization (no subgroup check),
-    /// so should only be used on `InternalPublicCoefficients` obtained
-    /// from a known, trusted source.
-    pub fn from_trusted_bytes(
+    /// # Note
+    /// This caches the deserialized points with the expectation that
+    /// at least some of the points will be seen again.
+    pub fn deserialize_cached(
         bytes: &InternalPublicCoefficients,
     ) -> Result<PublicCoefficients, CryptoError> {
         let coefficients: Result<Vec<PublicKey>, ThresholdSigPublicKeyBytesConversionError> = bytes
             .coefficients
             .iter()
-            .map(PublicKey::from_trusted_bytes)
+            .map(PublicKey::deserialize_cached)
             .collect();
         let coefficients = coefficients?;
         Ok(PublicCoefficients { coefficients })
@@ -166,25 +169,6 @@ impl<B: std::borrow::Borrow<PublicCoefficients>> std::ops::Add<B> for PublicCoef
 
     fn add(mut self, rhs: B) -> Self {
         self += rhs;
-        self
-    }
-}
-
-#[allow(clippy::suspicious_op_assign_impl)]
-impl std::ops::MulAssign<Scalar> for PublicCoefficients {
-    fn mul_assign(&mut self, rhs: Scalar) {
-        for self_c in self.coefficients.iter_mut() {
-            self_c.0.mul_assign(&rhs);
-        }
-        self.remove_zeros();
-    }
-}
-
-impl std::ops::Mul<Scalar> for PublicCoefficients {
-    type Output = Self;
-
-    fn mul(mut self, rhs: Scalar) -> Self {
-        self *= rhs;
         self
     }
 }

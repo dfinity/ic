@@ -148,7 +148,7 @@ pub(super) fn fake_signature_request_context(
     SignWithThresholdContext {
         request: RequestBuilder::new().build(),
         args: fake_signature_request_args(key_id),
-        derivation_path: Arc::new(vec![]),
+        derivation_path: Arc::new(vec![vec![]]),
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [0; 32],
         matched_pre_signature: None,

@@ -2,7 +2,7 @@ use candid::Encode;
 use ic_nervous_system_agent::AgentFor;
 use ic_nervous_system_agent::nns::node_rewards::get_node_providers_monthly_xdr_rewards;
 use ic_nns_constants::NODE_REWARDS_CANISTER_ID;
-use ic_nns_test_utils::common::build_node_rewards_test_wasm;
+use ic_nns_test_utils::common::build_node_rewards_wasm;
 use ic_node_rewards_canister_api::DateUtc;
 use ic_node_rewards_canister_api::monthly_rewards::GetNodeProvidersMonthlyXdrRewardsRequest;
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
@@ -34,7 +34,7 @@ async fn setup_env() -> PocketIc {
     pocket_ic
         .install_canister(
             NODE_REWARDS_CANISTER_ID.get().0,
-            build_node_rewards_test_wasm().bytes(),
+            build_node_rewards_wasm().bytes(),
             Encode!().unwrap(),
             None,
         )

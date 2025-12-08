@@ -8,7 +8,6 @@ DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:clap",
     "@crate_index//:tempfile",
-    "@crate_index//:tokio",
 ]
 
 DEV_DEPENDENCIES = []
