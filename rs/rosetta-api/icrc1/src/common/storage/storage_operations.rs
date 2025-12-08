@@ -119,7 +119,7 @@ pub fn get_107_fee_collector_or_legacy(
         return Ok(fee_collector_107);
     }
 
-    // There is not 107 fee collector, check legacy fee collector in the block
+    // There is no 107 fee collector, check legacy fee collector in the block
     get_fee_collector_from_block(rosetta_block, connection)
 }
 
