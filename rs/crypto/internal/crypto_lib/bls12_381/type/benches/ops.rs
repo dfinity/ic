@@ -206,7 +206,7 @@ fn bls12_381_scalar_ops(c: &mut Criterion) {
     group.bench_function("serialize", |b| {
         b.iter_batched_ref(
             || random_scalar(rng),
-            |pt| pt.serialize(),
+            |s| s.serialize(),
             BatchSize::SmallInput,
         )
     });
@@ -275,7 +275,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
 
     group.bench_function("serialize", |b| {
         b.iter_batched_ref(
-            || random_g1(rng),
+            || random_g1(rng).to_affine(),
             |pt| pt.serialize(),
             BatchSize::SmallInput,
         )
@@ -283,16 +283,16 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
 
     group.bench_function("deserialize", |b| {
         b.iter_batched_ref(
-            || random_g1(rng).serialize(),
-            |bytes| G1Projective::deserialize(bytes),
+            || random_g1(rng).to_affine().serialize(),
+            |bytes| G1Affine::deserialize(bytes),
             BatchSize::SmallInput,
         )
     });
 
     group.bench_function("deserialize_unchecked", |b| {
         b.iter_batched_ref(
-            || random_g1(rng).serialize(),
-            |bytes| G1Projective::deserialize_unchecked(bytes),
+            || random_g1(rng).to_affine().serialize(),
+            |bytes| G1Affine::deserialize_unchecked(bytes),
             BatchSize::SmallInput,
         )
     });
@@ -475,7 +475,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
 
     group.bench_function("serialize", |b| {
         b.iter_batched_ref(
-            || random_g2(rng),
+            || random_g2(rng).to_affine(),
             |pt| pt.serialize(),
             BatchSize::SmallInput,
         )
@@ -483,23 +483,23 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
 
     group.bench_function("deserialize", |b| {
         b.iter_batched_ref(
-            || random_g2(rng).serialize(),
-            |bytes| G2Projective::deserialize(bytes),
+            || random_g2(rng).to_affine().serialize(),
+            |bytes| G2Affine::deserialize(bytes),
             BatchSize::SmallInput,
         )
     });
 
     group.bench_function("deserialize_unchecked", |b| {
         b.iter_batched_ref(
-            || random_g2(rng).serialize(),
-            |bytes| G2Projective::deserialize_unchecked(bytes),
+            || random_g2(rng).to_affine().serialize(),
+            |bytes| G2Affine::deserialize_unchecked(bytes),
             BatchSize::SmallInput,
         )
     });
 
     group.bench_function("deserialize_cached", |b| {
         b.iter_batched_ref(
-            || (G2Affine::generator() * Scalar::from_u32(rng.r#gen::<u32>() % 100)).serialize(),
+            || (G2Affine::generator() * Scalar::from_u32(rng.r#gen::<u32>() % 100)).to_affine().serialize(),
             |bytes| G2Affine::deserialize_cached(bytes),
             BatchSize::SmallInput,
         )
@@ -507,7 +507,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
 
     group.bench_function("deserialize_cached_miss", |b| {
         b.iter_batched_ref(
-            || random_g2(rng).serialize(),
+            || random_g2(rng).to_affine().serialize(),
             |bytes| G2Affine::deserialize_cached(bytes),
             BatchSize::SmallInput,
         )
