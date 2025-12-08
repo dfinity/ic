@@ -91,15 +91,14 @@ pub fn create_tables(connection: &Connection) -> Result<()> {
         [],
     )?;
 
-    // Fee Collectors 107 table
+    // Rosetta metadata table. Meant to store values like `synced_block_height`.
+    // The `metadata` table defined above stores the ICRC1 token metadata.
     connection.execute(
         r#"
-        CREATE TABLE IF NOT EXISTS fee_collectors_107 (
-            block_idx INTEGER NOT NULL PRIMARY KEY,
-            caller_principal BLOB,
-            fee_collector_principal BLOB,
-            fee_collector_subaccount BLOB
-        )
+        CREATE TABLE IF NOT EXISTS rosetta_metadata (
+            key TEXT PRIMARY KEY,
+            value BLOB NOT NULL
+        );
         "#,
         [],
     )?;

@@ -1,11 +1,11 @@
 use crate::MetadataEntry;
 use crate::common::storage::types::{RosettaBlock, RosettaCounter};
 use anyhow::{Context, bail};
-use candid::{Nat, Principal};
+use candid::Nat;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::tokens::Zero;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::Account;
 use num_bigint::BigUint;
 use rusqlite::Connection;
 use rusqlite::{CachedStatement, Params, named_params, params};
@@ -13,6 +13,8 @@ use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 use tracing::{info, trace};
+
+const METADATA_FEE_COL: &str = "fee_collector_107";
 
 /// Gets the current value of a counter from the database.
 /// Returns None if the counter doesn't exist.
@@ -107,17 +109,17 @@ pub fn initialize_counter_if_missing(
 }
 
 // Helper function to resolve the fee collector account from a block
-pub fn get_fee_collector_from_block(
+pub fn get_107_fee_collector_or_legacy(
     rosetta_block: &RosettaBlock,
     connection: &Connection,
+    fee_collector_107: Option<Option<Account>>,
 ) -> anyhow::Result<Option<Account>> {
     // First check if we have a 107 fee collector
-    if let Some(fee_collector_107) = get_fee_collector_107_for_idx(connection, rosetta_block.index)?
-    {
+    if let Some(fee_collector_107) = fee_collector_107 {
         return Ok(fee_collector_107);
     }
 
-    // FeeCollector 107 does not apply to this block, see if there is a legacy fee collector
+    // There is not 107 fee collector, check legacy fee collector in the block
 
     // Check if the fee collector is directly specified in the block
     if let Some(fee_collector) = rosetta_block.get_fee_collector() {
@@ -176,6 +178,27 @@ pub fn get_metadata(connection: &Connection) -> anyhow::Result<Vec<MetadataEntry
         result.push(entry);
     }
     Ok(result)
+}
+
+pub fn get_rosetta_metadata(connection: &Connection, key: &str) -> anyhow::Result<Option<Vec<u8>>> {
+    let mut stmt_metadata = connection.prepare_cached(&format!(
+        "SELECT value FROM rosetta_metadata WHERE key = '{key}'"
+    ))?;
+    let rows = stmt_metadata.query_map(params![], |row| Ok(row.get(0)?))?;
+    let mut result = vec![];
+    for row in rows {
+        let entry: Vec<u8> = row?;
+        result.push(entry);
+    }
+    if result.len() == 1 {
+        Ok(Some(result[0].clone()))
+    } else if result.is_empty() {
+        // Return None if no metadata entry found
+        Ok(None)
+    } else {
+        // If more than one metadata entry was found return an error
+        bail!(format!("Multiple metadata entries found for key: {key}"))
+    }
 }
 
 pub fn update_account_balances(
@@ -275,6 +298,15 @@ pub fn update_account_balances(
     let mut account_balances_cache: HashMap<Account, BTreeMap<u64, Nat>> = HashMap::new();
     let mut dummy_principals = vec![];
 
+    let mut current_fee_collector_107 = match get_rosetta_metadata(connection, METADATA_FEE_COL)? {
+        Some(value) => {
+            let fc: Option<Account> = candid::decode_one(&value)?;
+            Some(fc)
+        }
+        None => None,
+    };
+    let collector_before = current_fee_collector_107;
+
     // As long as there are blocks to be fetched, keep on iterating over the blocks in the database with the given BATCH_SIZE interval
     while !rosetta_blocks.is_empty() {
         for rosetta_block in rosetta_blocks {
@@ -299,9 +331,11 @@ pub fn update_account_balances(
                         connection,
                         &mut account_balances_cache,
                     )?;
-                    if let Some(collector) =
-                        get_fee_collector_from_block(&rosetta_block, connection)?
-                    {
+                    if let Some(collector) = get_107_fee_collector_or_legacy(
+                        &rosetta_block,
+                        connection,
+                        current_fee_collector_107,
+                    )? {
                         credit(
                             collector,
                             fee,
@@ -326,9 +360,11 @@ pub fn update_account_balances(
                         connection,
                         &mut account_balances_cache,
                     )?;
-                    if let Some(collector) =
-                        get_fee_collector_from_block(&rosetta_block, connection)?
-                    {
+                    if let Some(collector) = get_107_fee_collector_or_legacy(
+                        &rosetta_block,
+                        connection,
+                        current_fee_collector_107,
+                    )? {
                         credit(
                             collector,
                             fee,
@@ -357,9 +393,7 @@ pub fn update_account_balances(
                         &mut account_balances_cache,
                     )?;
 
-                    if let Some(Some(collector)) =
-                        get_fee_collector_107_for_idx(connection, rosetta_block.index)?
-                    {
+                    if let Some(Some(collector)) = current_fee_collector_107 {
                         credit(
                             collector,
                             fee,
@@ -399,9 +433,11 @@ pub fn update_account_balances(
                         &mut account_balances_cache,
                     )?;
 
-                    if let Some(collector) =
-                        get_fee_collector_from_block(&rosetta_block, connection)?
-                    {
+                    if let Some(collector) = get_107_fee_collector_or_legacy(
+                        &rosetta_block,
+                        connection,
+                        current_fee_collector_107,
+                    )? {
                         credit(
                             collector,
                             fee,
@@ -412,13 +448,14 @@ pub fn update_account_balances(
                     }
                 }
                 crate::common::storage::types::IcrcOperation::FeeCollector {
-                    fee_collector: _,
+                    fee_collector,
                     caller: _,
                 } => {
                     // Since we use the account_balances table to determine the synced height
                     // and since there is no credit or debit operation for the fee collector block,
                     // we have to add a dummy principal with the block index, to indicate the synced height
                     dummy_principals.push((rosetta_block.index, [107u8; 30]));
+                    current_fee_collector_107 = Some(fee_collector);
                 }
             }
         }
@@ -446,6 +483,11 @@ pub fn update_account_balances(
                         ":subaccount": [0u8;32],
                         ":amount": "0",
                     })?;
+        }
+        if collector_before != current_fee_collector_107
+            && let Some(collector) = current_fee_collector_107
+        {
+            insert_tx.prepare_cached("INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = excluded.value;")?.execute(params![METADATA_FEE_COL, candid::encode_one(collector)?])?;
         }
         insert_tx.commit()?;
 
@@ -605,16 +647,6 @@ pub fn store_blocks(
                         ":transaction_created_at_time":transaction_created_at_time_i64,
                         ":approval_expires_at":approval_expires_at_i64
                     })?;
-        if operation_type == "107feecol" {
-            insert_tx.prepare_cached(
-        "INSERT OR IGNORE INTO fee_collectors_107 (block_idx, caller_principal, fee_collector_principal, fee_collector_subaccount) VALUES (:block_idx, :caller_principal, :fee_collector_principal, :fee_collector_subaccount)")?
-                    .execute(named_params! {
-                        ":block_idx":rosetta_block.index,
-                        ":caller_principal":from_principal.map(|x| x.as_slice().to_vec()),
-                        ":fee_collector_principal":to_principal.map(|x| x.as_slice().to_vec()),
-                        ":fee_collector_subaccount":to_subaccount,
-                    })?;
-        }
     }
     insert_tx.commit()?;
     Ok(())
@@ -656,18 +688,6 @@ fn get_block_at_next_idx(
     );
     let mut stmt = connection.prepare_cached(&command)?;
     read_single_block(&mut stmt, params![])
-}
-
-// Returns ICRC-107 fee collector that has effect on block at `block_idx`
-pub fn get_fee_collector_107_for_idx(
-    connection: &Connection,
-    block_idx: u64,
-) -> anyhow::Result<Option<Option<Account>>> {
-    let command = format!(
-        "SELECT fee_collector_principal,fee_collector_subaccount FROM fee_collectors_107 WHERE block_idx < {block_idx} ORDER BY block_idx DESC LIMIT 1"
-    );
-    let mut stmt = connection.prepare_cached(&command)?;
-    read_single_fee_collector_107(&mut stmt, params![])
 }
 
 // Returns a RosettaBlock if the block hash exists in the database, else returns None.
@@ -911,52 +931,6 @@ where
     let mut result = vec![];
     for block in blocks {
         result.push(block?);
-    }
-    Ok(result)
-}
-
-fn read_single_fee_collector_107<P>(
-    stmt: &mut CachedStatement,
-    params: P,
-) -> anyhow::Result<Option<Option<Account>>>
-where
-    P: Params,
-{
-    let fcs: Vec<Option<Account>> = read_fee_collectors_107(stmt, params)?;
-    if fcs.len() == 1 {
-        // Return the fee collector if only one was found
-        Ok(Some(fcs[0]))
-    } else if fcs.is_empty() {
-        // Return None if no fee collector was found
-        Ok(None)
-    } else {
-        // If more than one fee collector was found return an error
-        bail!("Multiple fee collectors found with given parameters".to_owned(),)
-    }
-}
-
-// Executes the constructed statement that reads the 107 fee collectors.
-fn read_fee_collectors_107<P>(
-    stmt: &mut CachedStatement,
-    params: P,
-) -> anyhow::Result<Vec<Option<Account>>>
-where
-    P: Params,
-{
-    let fee_collectors = stmt.query_map(params, |row| {
-        let owner_bytes: Option<Vec<u8>> = row.get(0)?;
-        let subaccount: Option<Subaccount> = row.get(1)?;
-        match owner_bytes {
-            Some(owner_bytes) => Ok(Some(Account {
-                owner: Principal::from_slice(&owner_bytes),
-                subaccount,
-            })),
-            None => Ok(None),
-        }
-    })?;
-    let mut result = vec![];
-    for fc in fee_collectors {
-        result.push(fc?);
     }
     Ok(result)
 }
