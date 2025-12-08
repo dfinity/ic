@@ -137,6 +137,11 @@ async fn mint() {
     }
 }
 
+/// Maximum fraction of time that `scrape_logs` is allowed to run before
+/// yielding control via a timer. This allows the canister to stop between
+/// scraping batches if a stop is requested.
+const SCRAPE_LOGS_TIME_BUDGET_FRACTION: f64 = 0.75;
+
 pub async fn scrape_logs() {
     let _guard = match TimerGuard::new(TaskType::ScrapEthLogs) {
         Ok(guard) => guard,
@@ -153,9 +158,97 @@ pub async fn scrape_logs() {
         }
     };
     let max_block_spread = read_state(|s| s.max_block_spread_for_logs_scraping());
-    scrape_until_block::<ReceivedEthLogScraping>(last_block_number, max_block_spread).await;
-    scrape_until_block::<ReceivedErc20LogScraping>(last_block_number, max_block_spread).await;
-    scrape_until_block::<ReceivedEthOrErc20LogScraping>(last_block_number, max_block_spread).await;
+
+    // Calculate time budget for this scraping session.
+    // We allow scraping to run for up to 75% of the scraping interval,
+    // leaving time for other operations and allowing the canister to stop if needed.
+    let time_budget = Duration::from_secs_f64(
+        crate::SCRAPING_ETH_LOGS_INTERVAL.as_secs_f64() * SCRAPE_LOGS_TIME_BUDGET_FRACTION,
+    );
+    let deadline = ic_cdk::api::time() + time_budget.as_nanos() as u64;
+
+    scrape_logs_inner(last_block_number, max_block_spread, deadline).await;
+}
+
+/// Inner scraping function that respects a time deadline.
+/// If the deadline is exceeded, it schedules a continuation via `set_timer(0)`
+/// which allows the canister to stop between batches if a stop is requested.
+async fn scrape_logs_inner(last_block_number: BlockNumber, max_block_spread: u16, deadline: u64) {
+    // Scrape each log type, but check deadline after each one
+    let result = scrape_until_block_or_deadline::<ReceivedEthLogScraping>(
+        last_block_number,
+        max_block_spread,
+        deadline,
+    )
+    .await;
+    if let ScrapeResult::DeadlineExceeded = result {
+        schedule_scrape_continuation(last_block_number, max_block_spread, deadline);
+        return;
+    }
+
+    let result = scrape_until_block_or_deadline::<ReceivedErc20LogScraping>(
+        last_block_number,
+        max_block_spread,
+        deadline,
+    )
+    .await;
+    if let ScrapeResult::DeadlineExceeded = result {
+        schedule_scrape_continuation(last_block_number, max_block_spread, deadline);
+        return;
+    }
+
+    let result = scrape_until_block_or_deadline::<ReceivedEthOrErc20LogScraping>(
+        last_block_number,
+        max_block_spread,
+        deadline,
+    )
+    .await;
+    if let ScrapeResult::DeadlineExceeded = result {
+        schedule_scrape_continuation(last_block_number, max_block_spread, deadline);
+        return;
+    }
+}
+
+/// Schedule a continuation of scraping via a timer.
+/// This function is called when the time deadline is exceeded, at which point
+/// there are no pending HTTP outcalls. If the canister is in "Stopping" state,
+/// this timer will NOT fire, allowing the canister to stop gracefully.
+fn schedule_scrape_continuation(
+    last_block_number: BlockNumber,
+    max_block_spread: u16,
+    deadline: u64,
+) {
+    log!(
+        DEBUG,
+        "[scrape_logs]: time budget exceeded, scheduling continuation via timer"
+    );
+    ic_cdk_timers::set_timer(Duration::from_secs(0), async move {
+        let _guard = match TimerGuard::new(TaskType::ScrapEthLogs) {
+            Ok(guard) => guard,
+            Err(_) => return,
+        };
+        scrape_logs_inner(last_block_number, max_block_spread, deadline).await;
+    });
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScrapeResult {
+    /// All blocks up to the target were scraped successfully.
+    Completed,
+    /// Scraping stopped due to an error.
+    Error,
+    /// Scraping stopped because the time deadline was exceeded.
+    /// At this point there are no pending HTTP outcalls, so the canister
+    /// can be stopped if requested.
+    DeadlineExceeded,
+}
+
+#[derive(Debug)]
+enum ScrapeBlockRangeError {
+    /// The time deadline was exceeded. No pending HTTP outcalls at this point.
+    DeadlineExceeded,
+    /// An RPC error occurred.
+    RpcError(MultiCallError<Vec<LogEntry>>),
 }
 
 pub async fn update_last_observed_block_number() -> Option<BlockNumber> {
@@ -182,7 +275,11 @@ pub async fn update_last_observed_block_number() -> Option<BlockNumber> {
     }
 }
 
-async fn scrape_until_block<S>(last_block_number: BlockNumber, max_block_spread: u16)
+async fn scrape_until_block_or_deadline<S>(
+    last_block_number: BlockNumber,
+    max_block_spread: u16,
+    deadline: u64,
+) -> ScrapeResult
 where
     S: LogScraping,
 {
@@ -194,7 +291,7 @@ where
                 "[scrape_contract_logs]: skipping scraping {} logs: not active",
                 S::ID
             );
-            return;
+            return ScrapeResult::Completed;
         }
     };
     let block_range = BlockRangeInclusive::new(
@@ -211,25 +308,48 @@ where
     );
     let rpc_client = read_state(rpc_client);
     for block_range in block_range.into_chunks(max_block_spread) {
+        // Check if we've exceeded the time deadline before each chunk.
+        // This allows the canister to stop between chunks if a stop is requested.
+        // At this point there are no pending HTTP outcalls since we check BEFORE
+        // making the next call.
+        if ic_cdk::api::time() > deadline {
+            log!(
+                DEBUG,
+                "[scrape_contract_logs]: deadline exceeded for {} logs, will continue in next batch",
+                S::ID
+            );
+            return ScrapeResult::DeadlineExceeded;
+        }
+
         match scrape_block_range::<S>(
             &rpc_client,
             scrape.contract_address,
             scrape.topics.clone(),
             block_range.clone(),
+            deadline,
         )
         .await
         {
             Ok(()) => {}
-            Err(e) => {
+            Err(ScrapeBlockRangeError::DeadlineExceeded) => {
+                log!(
+                    DEBUG,
+                    "[scrape_contract_logs]: deadline exceeded during {} logs scraping, will continue in next batch",
+                    S::ID
+                );
+                return ScrapeResult::DeadlineExceeded;
+            }
+            Err(ScrapeBlockRangeError::RpcError(e)) => {
                 log!(
                     INFO,
                     "[scrape_contract_logs]: Failed to scrape {} logs in range {block_range}: {e:?}",
                     S::ID
                 );
-                return;
+                return ScrapeResult::Error;
             }
         }
     }
+    ScrapeResult::Completed
 }
 
 async fn scrape_block_range<S>(
@@ -237,7 +357,8 @@ async fn scrape_block_range<S>(
     contract_address: Address,
     topics: Vec<Topic>,
     block_range: BlockRangeInclusive,
-) -> Result<(), MultiCallError<Vec<LogEntry>>>
+    deadline: u64,
+) -> Result<(), ScrapeBlockRangeError>
 where
     S: LogScraping,
 {
@@ -245,6 +366,18 @@ where
     subranges.push_back(block_range);
 
     while !subranges.is_empty() {
+        // Check deadline before each HTTP call. At this point there are no
+        // pending HTTP outcalls, so the canister can be stopped if requested.
+        if ic_cdk::api::time() > deadline {
+            log!(
+                DEBUG,
+                "[scrape_block_range]: deadline exceeded for {} logs with {} subranges remaining",
+                S::ID,
+                subranges.len()
+            );
+            return Err(ScrapeBlockRangeError::DeadlineExceeded);
+        }
+
         let range = subranges.pop_front().unwrap();
         let (from_block, to_block) = range.clone().into_inner();
 
@@ -300,7 +433,7 @@ where
                     }
                 } else {
                     log!(INFO, "Failed to get {} logs in range {range}: {e:?}", S::ID);
-                    return Err(e);
+                    return Err(ScrapeBlockRangeError::RpcError(e));
                 }
             }
         }

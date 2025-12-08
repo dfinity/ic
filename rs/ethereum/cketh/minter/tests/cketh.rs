@@ -973,6 +973,103 @@ fn should_be_unstoppable_while_scraping_blocks_has_open_call_context() {
     );
 }
 
+/// This test verifies that the canister CAN be stopped when the deadline is exceeded
+/// during scraping, because:
+/// 1. The stop request is processed first (canister goes to "Stopping" state)
+/// 2. When the HTTP response callback runs, it sees deadline exceeded and schedules a timer
+/// 3. The scheduled timer does NOT fire because the IC doesn't execute timers for stopping canisters
+/// 4. Since no new HTTP calls are made, the call context closes and the canister stops
+#[test]
+fn should_be_stoppable_when_time_budget_exceeded_during_scraping() {
+    const NUM_BLOCK_RANGES: usize = 10;
+
+    let cketh = CkEthSetup::default();
+    let max_eth_logs_block_range = cketh.as_ref().max_logs_block_range();
+    let max_block: u64 = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL
+        + (NUM_BLOCK_RANGES as u64) * (max_eth_logs_block_range as u64);
+
+    // Start scraping - this triggers the scrape_logs timer which makes HTTP calls
+    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+
+    // Get the latest block number. This triggers scraping to start.
+    // After this, HTTP calls for block range 1 are pending.
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .respond_for_all_with(block_response(max_block))
+        .build()
+        .expect_rpc_calls(&cketh);
+
+    let stop_msg_id = cketh.env.stop_canister_non_blocking(cketh.minter_id);
+
+    // Tick to process the stop request. The canister goes to "Stopping" state.
+    // Note: The canister cannot become "Stopped" yet because there are pending HTTP outcalls.
+    cketh.env.tick();
+
+    // Verify the canister is in "Stopping" state
+    let status = cketh.minter_status();
+    assert_eq!(
+        status,
+        CanisterStatusType::Stopping,
+        "Expected minter to be in Stopping state while HTTP outcall is pending"
+    );
+
+    // Now advance time past the deadline (75% of SCRAPING_ETH_LOGS_INTERVAL = 135s).
+    cketh.env.advance_time(Duration::from_secs(140));
+
+    let from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
+    let to_block = from_block
+        .checked_add(BlockNumber::from(max_eth_logs_block_range))
+        .unwrap();
+
+    // Provide the response to block range 1.
+    // The callback will run with the NEW time (which exceeds the deadline).
+    // It will:
+    // 1. See that deadline is exceeded
+    // 2. Schedule a continuation timer
+    // 3. Return WITHOUT making HTTP calls for block range 2
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": from_block,
+            "toBlock": to_block,
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
+            "topics": [cketh.received_eth_event_topic()]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(&cketh);
+
+    // Give a few ticks for the stop to complete.
+    // The timer scheduled by schedule_scrape_continuation should NOT fire
+    // because the canister is in "Stopping" state.
+    for _ in 0..10 {
+        cketh.env.tick();
+    }
+
+    // Verify the stop completed
+    let stop_result = cketh.env.ingress_status(&stop_msg_id);
+    match &stop_result {
+        IngressStatus::Known { state, .. } => {
+            assert!(
+                matches!(state, IngressState::Completed(_)),
+                "Expected stop to be Completed, but got: {:?}",
+                state
+            );
+        }
+        other => panic!(
+            "Expected IngressStatus::Known with Completed state, got: {:?}",
+            other
+        ),
+    }
+
+    // Verify the canister is stopped
+    let final_status = cketh.minter_status();
+    assert_eq!(
+        final_status,
+        CanisterStatusType::Stopped,
+        "Expected minter to be Stopped - the timer-based solution should allow stopping \
+         between batches when the time budget is exceeded"
+    );
+}
+
 #[test]
 fn should_panic_when_last_finalized_block_in_the_past() {
     let cketh = CkEthSetup::default();
