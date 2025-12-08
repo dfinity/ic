@@ -1420,6 +1420,7 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
     });
 
     let input_utxos = mutate_state(|s| select_utxos_to_consolidate(&mut s.available_utxos));
+    let input_utxos_len = input_utxos.len();
     let restore_utxos = |utxos| {
         mutate_state(|s| {
             for utxo in utxos {
@@ -1466,10 +1467,9 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
     let utxos_guard = guard(input_utxos, restore_utxos);
 
     // Burn transaction fee (bitcoin_fee) from fee collector's account.
-    let burn_memo = memo::BurnMemo::Convert {
-        address: None,
-        kyt_fee: None,
-        status: None,
+    let burn_memo = memo::BurnMemo::Consolidate {
+        value: total_amount,
+        inputs: input_utxos_len as u64,
     };
     let block_index = updates::retrieve_btc::burn_ckbtcs_from_subaccount(
         FEE_COLLECTOR_SUBACCOUNT,

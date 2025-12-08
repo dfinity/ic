@@ -80,4 +80,13 @@ pub enum BurnMemo<'a> {
         /// The status of the Bitcoin check.
         status: Option<Status>,
     },
+    #[n(1)]
+    Consolidate {
+        #[n(0)]
+        /// The total value of conslidated UTXOs.
+        value: u64,
+        /// Number of consolidated UTXOs.
+        #[n(1)]
+        inputs: u64,
+    },
 }
