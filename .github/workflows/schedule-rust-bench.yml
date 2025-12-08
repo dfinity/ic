@@ -61,6 +61,7 @@ jobs:
             echo -e "\e[34mRunning rust benchmarks on dedicated machine fr1-spm15!\e[0m"
 
             CRITERION_HOME=$(mktemp -d)
+            trap "rm -rf $CRITERION_HOME" INT TERM EXIT
 
             while IFS= read -r tgt; do
                 bazel run "$tgt" -- --criterion-home "$CRITERION_HOME"
