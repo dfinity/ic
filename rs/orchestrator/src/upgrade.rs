@@ -2,7 +2,6 @@ use crate::{
     catch_up_package_provider::CatchUpPackageProvider,
     error::{OrchestratorError, OrchestratorResult},
     metrics::OrchestratorMetrics,
-    orchestrator::SubnetAssignment,
     process_manager::{Process, ProcessManager},
     registry_helper::RegistryHelper,
 };
@@ -40,7 +39,7 @@ use std::{
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 
 #[must_use = "This may be a `Stop` variant, which should be handled"]
-pub(crate) enum UpgradeCheckResult {
+pub(crate) enum OrchestratorControlFlow {
     /// The node is assigned to the subnet with the given subnet id.
     Assigned(SubnetId),
     /// The node is in the process of leaving subnet with the given id.
@@ -49,45 +48,6 @@ pub(crate) enum UpgradeCheckResult {
     Unassigned,
     /// The node should stop the orchestrator.
     Stop,
-    /// There was an error while checking for an upgrade, but we still successfully determined that
-    /// the node is assigned to the given subnet.
-    ErrorAsAssigned(SubnetId, OrchestratorError),
-    /// There was an error while checking for an upgrade, but we still successfully determined that
-    /// the node is unassigned.
-    ErrorAsUnassigned(OrchestratorError),
-    /// There was an error while checking for an upgrade, and we could not determine the subnet
-    /// assignment of the node.
-    ErrorAsUnknown(OrchestratorError),
-}
-
-impl UpgradeCheckResult {
-    pub(crate) fn as_subnet_assignment(&self) -> SubnetAssignment {
-        match self {
-            UpgradeCheckResult::Assigned(subnet_id)
-            | UpgradeCheckResult::Leaving(subnet_id)
-            | UpgradeCheckResult::ErrorAsAssigned(subnet_id, _) => {
-                SubnetAssignment::Assigned(*subnet_id)
-            }
-            UpgradeCheckResult::Unassigned | UpgradeCheckResult::ErrorAsUnassigned(_) => {
-                SubnetAssignment::Unassigned
-            }
-            UpgradeCheckResult::Stop | UpgradeCheckResult::ErrorAsUnknown(_) => {
-                SubnetAssignment::Unknown
-            }
-        }
-    }
-
-    pub(crate) fn as_result(&self) -> Result<(), &OrchestratorError> {
-        match self {
-            UpgradeCheckResult::Assigned(_)
-            | UpgradeCheckResult::Leaving(_)
-            | UpgradeCheckResult::Unassigned
-            | UpgradeCheckResult::Stop => Ok(()),
-            UpgradeCheckResult::ErrorAsAssigned(_, err)
-            | UpgradeCheckResult::ErrorAsUnassigned(err)
-            | UpgradeCheckResult::ErrorAsUnknown(err) => Err(err),
-        }
-    }
 }
 
 pub struct ReplicaProcess {
@@ -199,124 +159,96 @@ impl Upgrade {
 
     /// Checks for a new release package, and if found, upgrades to this release
     /// package
-    pub(crate) async fn check(&mut self) -> UpgradeCheckResult {
+    pub(crate) async fn check(&mut self) -> OrchestratorResult<OrchestratorControlFlow> {
         let latest_registry_version = self.registry.get_latest_version();
-
         // Determine the subnet_id using the local CUP.
-        let maybe_local_cup_proto = self.cup_provider.get_local_cup_proto();
-        let (subnet_id, maybe_local_cup) = 'block: {
-            let Some(cup_proto) = maybe_local_cup_proto.as_ref() else {
-                // If there is no local CUP, we check the registry for subnet assignment.
-                match self.registry.get_subnet_id(latest_registry_version) {
-                    Ok(subnet_id) => {
-                        info!(self.logger, "Assignment to subnet {} detected", subnet_id);
-                        break 'block (subnet_id, None);
-                    }
-                    Err(OrchestratorError::NodeUnassignedError(_, _)) => {
-                        match self
-                            .check_for_upgrade_as_unassigned(latest_registry_version)
-                            .await
-                        {
-                            Ok(true) => return UpgradeCheckResult::Stop,
-                            Ok(false) => return UpgradeCheckResult::Unassigned,
-                            Err(err) => return UpgradeCheckResult::ErrorAsUnassigned(err),
-                        };
-                    }
-                    Err(err) => {
-                        return UpgradeCheckResult::ErrorAsUnknown(err);
-                    }
-                }
-            };
+        let (subnet_id, local_cup_proto, local_cup) = {
+            let maybe_proto = self.cup_provider.get_local_cup_proto();
+            let maybe_cup = maybe_proto.as_ref().and_then(|proto| {
+                CatchUpPackage::try_from(proto)
+                    .inspect_err(|err| {
+                        error!(self.logger, "Failed to deserialize CatchUpPackage: {}", err);
+                    })
+                    .ok()
+            });
 
-            match CatchUpPackage::try_from(cup_proto) {
-                Ok(cup) => match get_subnet_id(&*self.registry.registry_client, &cup) {
-                    Ok(subnet_id) => break 'block (subnet_id, Some(cup)),
-                    Err(err) => {
-                        return UpgradeCheckResult::ErrorAsUnknown(
+            match (&maybe_cup, &maybe_proto) {
+                (Some(cup), _) => {
+                    let subnet_id =
+                        get_subnet_id(&*self.registry.registry_client, cup).map_err(|err| {
                             OrchestratorError::UpgradeError(format!(
                                 "Couldn't determine the subnet id: {err:?}"
-                            )),
-                        );
+                            ))
+                        })?;
+                    (subnet_id, maybe_proto, maybe_cup)
+                }
+                (None, Some(proto)) => {
+                    // We found a local CUP proto that we can't deserialize. This may only happen
+                    // if this is the first CUP we are reading on a new replica version after an
+                    // upgrade. This means we have to be an assigned node, otherwise we would have
+                    // left the subnet and deleted the CUP before upgrading to this version.
+                    // The only way to leave this branch is via subnet recovery.
+                    self.metrics.critical_error_cup_deserialization_failed.inc();
+
+                    // Try to find the subnet ID by deserializing only the NiDkgId. If it fails
+                    // we will have to recover using failover nodes.
+                    let nidkg_id: NiDkgId = try_from_option_field(proto.signer.clone(), "NiDkgId")
+                        .map_err(|err| {
+                            OrchestratorError::UpgradeError(format!(
+                                "Couldn't deserialize NiDkgId to determine the subnet id: {err:?}"
+                            ))
+                        })?;
+
+                    let subnet_id = match nidkg_id.target_subnet {
+                        NiDkgTargetSubnet::Local => nidkg_id.dealer_subnet,
+                        NiDkgTargetSubnet::Remote(_) => {
+                            // If this CUP was created by a remote subnet, then it is a genesis/recovery
+                            // CUP. This is the only case in the branch where we can trust the subnet ID
+                            // of the latest registry version, as switching to a registry CUP "resets" the
+                            // "oldest registry version in use" which is responsible for subnet membership.
+                            match self.registry.get_subnet_id(latest_registry_version) {
+                                Ok(subnet_id) => subnet_id,
+                                Err(OrchestratorError::NodeUnassignedError(_, _)) => {
+                                    // If the registry says that we are unassigned, this unassignment
+                                    // must have happened after the registry CUP triggering the upgrade.
+                                    // Otherwise we would have left the subnet before upgrading. This means
+                                    // we will trust the registry and go ahead with removing the node's state
+                                    // including the broken local CUP.
+                                    self.remove_state().await?;
+                                    return Ok(OrchestratorControlFlow::Unassigned);
+                                }
+                                Err(other) => return Err(other),
+                            }
+                        }
+                    };
+                    (subnet_id, maybe_proto, None)
+                }
+                (None, None) => match self.registry.get_subnet_id(latest_registry_version) {
+                    Ok(subnet_id) => {
+                        info!(self.logger, "Assignment to subnet {} detected", subnet_id);
+                        (subnet_id, None, None)
+                    }
+                    // If no subnet is assigned to the node id, we're unassigned.
+                    _ => {
+                        return self.check_for_upgrade_as_unassigned().await;
                     }
                 },
-                Err(err) => error!(self.logger, "Failed to deserialize CatchUpPackage: {}", err),
             }
-
-            // We found a local CUP proto that we can't deserialize. This may only happen
-            // if this is the first CUP we are reading on a new replica version after an
-            // upgrade. This means we have to be an assigned node, otherwise we would have
-            // left the subnet and deleted the CUP before upgrading to this version.
-            // The only way to leave this branch is via subnet recovery.
-            self.metrics.critical_error_cup_deserialization_failed.inc();
-
-            // Try to find the subnet ID by deserializing only the NiDkgId. If it fails
-            // we will have to recover using failover nodes.
-            let nidkg_id: NiDkgId = match try_from_option_field(cup_proto.signer.clone(), "NiDkgId")
-            {
-                Ok(nidkg_id) => nidkg_id,
-                Err(err) => {
-                    return UpgradeCheckResult::ErrorAsUnknown(OrchestratorError::UpgradeError(
-                        format!("Couldn't deserialize NiDkgId to determine the subnet id: {err:?}"),
-                    ));
-                }
-            };
-
-            let subnet_id = match nidkg_id.target_subnet {
-                NiDkgTargetSubnet::Local => nidkg_id.dealer_subnet,
-                NiDkgTargetSubnet::Remote(_) => {
-                    // If this CUP was created by a remote subnet, then it is a genesis/recovery
-                    // CUP. This is the only case in the branch where we can trust the subnet ID
-                    // of the latest registry version, as switching to a registry CUP "resets" the
-                    // "oldest registry version in use" which is responsible for subnet membership.
-                    match self.registry.get_subnet_id(latest_registry_version) {
-                        Ok(subnet_id) => subnet_id,
-                        Err(OrchestratorError::NodeUnassignedError(_, _)) => {
-                            // If the registry says that we are unassigned, this unassignment
-                            // must have happened after the registry CUP triggering the upgrade.
-                            // Otherwise we would have left the subnet before upgrading. This means
-                            // we will trust the registry and go ahead with removing the node's state
-                            // including the broken local CUP.
-                            if let Err(err) = self.remove_state().await {
-                                warn!(
-                                    self.logger,
-                                    "Removal of the node state failed with error {}", err
-                                );
-                                self.metrics.critical_error_state_removal_failed.inc();
-
-                                return UpgradeCheckResult::ErrorAsUnassigned(err);
-                            }
-
-                            return UpgradeCheckResult::Unassigned;
-                        }
-                        Err(err) => {
-                            return UpgradeCheckResult::ErrorAsUnknown(err);
-                        }
-                    }
-                }
-            };
-
-            (subnet_id, None)
         };
 
         // When we arrived here, we are an assigned node.
-        let old_cup_height = maybe_local_cup.as_ref().map(HasHeight::height);
+        let old_cup_height = local_cup.as_ref().map(HasHeight::height);
 
         // Get the latest available CUP from the disk, peers or registry and
         // persist it if necessary.
-        let latest_cup = match self
+        let latest_cup = self
             .cup_provider
-            .get_latest_cup(maybe_local_cup_proto, subnet_id)
-            .await
-        {
-            Ok(cup) => cup,
-            Err(err) => {
-                return UpgradeCheckResult::ErrorAsAssigned(subnet_id, err);
-            }
-        };
+            .get_latest_cup(local_cup_proto, subnet_id)
+            .await?;
 
         // If we replaced the previous local CUP, compare potential threshold master public keys with
         // the ones in the new CUP, to make sure they haven't changed. Raise an alert if they did.
-        if let Some(old_cup) = maybe_local_cup
+        if let Some(old_cup) = local_cup
             && old_cup.height() < latest_cup.height()
         {
             compare_master_public_keys(
@@ -340,58 +272,45 @@ impl Upgrade {
                 latest_cup.height(),
             );
 
-            if let Err(err) = self
-                .download_registry_and_restart_if_nns_subnet_recovery(
-                    subnet_id,
-                    latest_registry_version,
-                )
-                .await
-            {
-                return UpgradeCheckResult::ErrorAsAssigned(subnet_id, err);
-            };
+            self.download_registry_and_restart_if_nns_subnet_recovery(
+                subnet_id,
+                latest_registry_version,
+            )
+            .await?;
         }
 
         // Now when we have the most recent CUP, we check if we're still assigned.
         // If not, go into unassigned state.
-        let is_leaving = match should_node_become_unassigned(
+        let flow = match should_node_become_unassigned(
             &*self.registry.registry_client,
-            latest_registry_version,
             self.node_id,
             subnet_id,
             &latest_cup,
         ) {
-            UnassignmentDecision::StayInSubnet => false,
-            UnassignmentDecision::Later => true,
+            UnassignmentDecision::StayInSubnet => OrchestratorControlFlow::Assigned(subnet_id),
+            UnassignmentDecision::Later => OrchestratorControlFlow::Leaving(subnet_id),
             UnassignmentDecision::Now => {
-                if let Err(err) = self.stop_replica() {
-                    return UpgradeCheckResult::ErrorAsUnassigned(err);
-                }
-
-                if let Err(err) = self.remove_state().await {
-                    warn!(
-                        self.logger,
-                        "Removal of the node state failed with error {}", err
-                    );
-                    self.metrics.critical_error_state_removal_failed.inc();
-                    return UpgradeCheckResult::ErrorAsUnassigned(err);
-                }
-
-                return UpgradeCheckResult::Unassigned;
+                self.stop_replica()?;
+                return match self.remove_state().await {
+                    Ok(()) => Ok(OrchestratorControlFlow::Unassigned),
+                    Err(err) => {
+                        warn!(
+                            self.logger,
+                            "Removal of the node state failed with error {}", err
+                        );
+                        self.metrics.critical_error_state_removal_failed.inc();
+                        Err(err)
+                    }
+                };
             }
         };
 
         // If we arrived here, we have the newest CUP and we're still assigned.
         // Now we check if this CUP requires a new replica version.
         let cup_registry_version = latest_cup.content.registry_version();
-        let new_replica_version = match self
+        let new_replica_version = self
             .registry
-            .get_replica_version(subnet_id, cup_registry_version)
-        {
-            Ok(version) => version,
-            Err(err) => {
-                return UpgradeCheckResult::ErrorAsAssigned(subnet_id, err);
-            }
-        };
+            .get_replica_version(subnet_id, cup_registry_version)?;
         if new_replica_version != self.replica_version {
             info!(
                 self.logger,
@@ -403,15 +322,11 @@ impl Upgrade {
             // Only downloads the new image if it doesn't already exists locally, i.e. it
             // was previously downloaded by `prepare_upgrade_if_scheduled()`, see
             // below.
-            match self.execute_upgrade(&new_replica_version).await {
-                Ok(Rebooting) => return UpgradeCheckResult::Stop,
-                Err(err) => {
-                    return UpgradeCheckResult::ErrorAsAssigned(
-                        subnet_id,
-                        OrchestratorError::from(err),
-                    );
-                }
-            };
+            return self
+                .execute_upgrade(&new_replica_version)
+                .await
+                .map_err(OrchestratorError::from)
+                .map(|Rebooting| OrchestratorControlFlow::Stop);
         }
 
         // If we arrive here, we are on the newest replica version.
@@ -420,24 +335,13 @@ impl Upgrade {
         self.stop_replica_if_new_recovery_cup(&latest_cup, old_cup_height);
 
         // This will start a new replica process if none is running.
-        if let Err(err) = self.ensure_replica_is_running(&self.replica_version, subnet_id) {
-            return UpgradeCheckResult::ErrorAsAssigned(subnet_id, err);
-        };
+        self.ensure_replica_is_running(&self.replica_version, subnet_id)?;
 
         // This will trigger an image download if one is already scheduled but we did
         // not arrive at the corresponding CUP yet.
-        if let Err(err) = self
-            .prepare_upgrade_if_scheduled(subnet_id, latest_registry_version)
-            .await
-        {
-            return UpgradeCheckResult::ErrorAsAssigned(subnet_id, err);
-        };
+        self.prepare_upgrade_if_scheduled(subnet_id).await?;
 
-        if is_leaving {
-            UpgradeCheckResult::Leaving(subnet_id)
-        } else {
-            UpgradeCheckResult::Assigned(subnet_id)
-        }
+        Ok(flow)
     }
 
     pub fn node_id(&self) -> NodeId {
@@ -528,11 +432,9 @@ impl Upgrade {
     async fn prepare_upgrade_if_scheduled(
         &mut self,
         subnet_id: SubnetId,
-        registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
-        let expected_replica_version = self
-            .registry
-            .get_replica_version(subnet_id, registry_version)?;
+        let (expected_replica_version, registry_version) =
+            self.registry.get_expected_replica_version(subnet_id)?;
         if expected_replica_version != self.replica_version {
             info!(
                 self.logger,
@@ -546,12 +448,11 @@ impl Upgrade {
         Ok(())
     }
 
-    /// Check for upgrade as unassigned node. Returns true if an upgrade was performed, false
-    /// otherwise.
     async fn check_for_upgrade_as_unassigned(
         &mut self,
-        registry_version: RegistryVersion,
-    ) -> OrchestratorResult<bool> {
+    ) -> OrchestratorResult<OrchestratorControlFlow> {
+        let registry_version = self.registry.get_latest_version();
+
         // If the node is a boundary node, we upgrade to that version, otherwise we upgrade to the unassigned version
         let replica_version = self
             .registry
@@ -564,7 +465,7 @@ impl Upgrade {
             })?;
 
         if self.replica_version == replica_version {
-            return Ok(false);
+            return Ok(OrchestratorControlFlow::Unassigned);
         }
 
         info!(
@@ -577,7 +478,7 @@ impl Upgrade {
         self.execute_upgrade(&replica_version)
             .await
             .map_err(OrchestratorError::from)
-            .map(|Rebooting| true)
+            .map(|Rebooting| OrchestratorControlFlow::Stop)
     }
 
     /// Stop the current replica process.
@@ -656,7 +557,7 @@ impl Upgrade {
 
 #[async_trait]
 impl ImageUpgrader<ReplicaVersion> for Upgrade {
-    type UpgradeType = UpgradeCheckResult;
+    type UpgradeType = OrchestratorControlFlow;
 
     fn get_prepared_version(&self) -> Option<&ReplicaVersion> {
         self.prepared_upgrade_version.as_ref()
@@ -714,8 +615,8 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
         principal.as_slice().iter().fold(0, |acc, x| acc ^ x) as usize
     }
 
-    async fn check_for_upgrade(&mut self) -> UpgradeCheckResult {
-        self.check().await
+    async fn check_for_upgrade(&mut self) -> UpgradeResult<OrchestratorControlFlow> {
+        self.check().await.map_err(UpgradeError::from)
     }
 }
 
@@ -790,13 +691,12 @@ enum UnassignmentDecision {
 // version.
 fn should_node_become_unassigned(
     registry: &dyn RegistryClient,
-    latest_registry_version: RegistryVersion,
     node_id: NodeId,
     subnet_id: SubnetId,
     cup: &CatchUpPackage,
 ) -> UnassignmentDecision {
     let oldest_relevant_version = cup.get_oldest_registry_version_in_use().get();
-    let latest_registry_version = latest_registry_version.get();
+    let latest_registry_version = registry.get_latest_version().get();
     // Make sure that if the latest registry version is for some reason violating
     // the assumption that it's higher/equal than any other version used in the
     // system, we still do not remove the subnet state by a mistake.
@@ -1582,7 +1482,7 @@ mod tests {
             ),
         });
 
-        let latest_registry_version = RegistryVersion::from(10);
+        let latest_registry_version = 10;
         for (oldest_relevant_version, node_in_subnet, expected_decision) in [
             // Latest registry version is behind the oldest relevant version
             (
@@ -1616,6 +1516,9 @@ mod tests {
             (5, NodeInSubnetOnVersion::No, UnassignmentDecision::Now),
         ] {
             let mut registry_client = MockFakeRegistryClient::new();
+            registry_client
+                .expect_get_latest_version()
+                .return_const(RegistryVersion::new(latest_registry_version));
 
             let mut setup = Setup::new_with_nidkg_registry_version(Some(oldest_relevant_version));
             let key_transcript = setup.generate_key_transcript(&key_id);
@@ -1643,13 +1546,8 @@ mod tests {
                 }
             };
 
-            let response = should_node_become_unassigned(
-                &registry_client,
-                latest_registry_version,
-                node_id,
-                subnet_id,
-                &cup,
-            );
+            let response =
+                should_node_become_unassigned(&registry_client, node_id, subnet_id, &cup);
 
             assert!(
                 response == expected_decision,
