@@ -271,12 +271,14 @@ mod event {
     }
 }
 
+pub type CkBtcMinterEvent = Event<EventType>;
+
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
-pub struct Event {
+pub struct Event<T> {
     /// The canister time at which the minter generated this event.
     pub timestamp: Option<u64>,
     /// The event type.
-    pub payload: EventType,
+    pub payload: T,
 }
 
 #[derive(Debug)]
@@ -290,7 +292,7 @@ pub enum ReplayLogError {
 /// Reconstructs the minter state from an event log.
 #[allow(deprecated)]
 pub fn replay<I: CheckInvariants>(
-    mut events: impl Iterator<Item = Event>,
+    mut events: impl Iterator<Item = CkBtcMinterEvent>,
 ) -> Result<CkBtcMinterState, ReplayLogError> {
     let mut state = match events.next() {
         Some(event) => match event.payload {

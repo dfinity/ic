@@ -1,15 +1,17 @@
-use super::{decode_event, encode_event};
+use crate::state::eventlog::CkBtcMinterEvent;
+use crate::storage::StorableEvent;
 use crate::{
     state::eventlog::{Event, EventType},
     test_fixtures::arbitrary,
 };
 use proptest::proptest;
+use std::borrow::Cow;
 
 proptest! {
     #[test]
     fn should_decode_encoded_event(event in arbitrary::event()) {
-        let encoded = encode_event(&event);
-        let decoded = decode_event(&encoded);
+        let encoded = event.to_bytes();
+        let decoded = CkBtcMinterEvent::from_bytes(encoded);
 
         assert_eq!(event, decoded);
     }
@@ -25,7 +27,7 @@ proptest! {
         }
 
         let encoded = encode_legacy_event(&legacy_event);
-        let decoded = decode_event(&encoded);
+        let decoded = CkBtcMinterEvent::from_bytes(Cow::Borrowed(&encoded));
 
         assert_eq!(
             decoded,

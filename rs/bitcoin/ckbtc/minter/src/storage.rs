@@ -2,14 +2,16 @@
 mod tests;
 
 use crate::CanisterRuntime;
-use crate::state::eventlog::{Event, EventType};
+use crate::state::eventlog::{CkBtcMinterEvent, Event, EventType};
 use ic_stable_structures::{
     DefaultMemoryImpl,
     log::{Log as StableLog, NoSuchEntry},
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
 };
 use serde::Deserialize;
+use std::borrow::Cow;
 use std::cell::RefCell;
+use std::marker::PhantomData;
 
 const V0_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(0);
 const V0_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(1);
@@ -48,12 +50,13 @@ thread_local! {
         );
 }
 
-pub struct EventIterator {
+pub struct EventIterator<Event> {
     buf: Vec<u8>,
     pos: u64,
+    marker: PhantomData<Event>,
 }
 
-impl Iterator for EventIterator {
+impl<Event: StorableEvent> Iterator for EventIterator<Event> {
     type Item = Event;
 
     fn next(&mut self) -> Option<Event> {
@@ -63,7 +66,7 @@ impl Iterator for EventIterator {
             match events.read_entry(self.pos, &mut self.buf) {
                 Ok(()) => {
                     self.pos = self.pos.saturating_add(1);
-                    Some(decode_event(&self.buf))
+                    Some(Event::from_bytes(Cow::Borrowed(&self.buf)))
                 }
                 Err(NoSuchEntry) => None,
             }
@@ -76,45 +79,52 @@ impl Iterator for EventIterator {
     }
 }
 
-/// Encodes an event into a byte array.
-pub fn encode_event(event: &Event) -> Vec<u8> {
-    let mut buf = Vec::new();
-    ciborium::ser::into_writer(event, &mut buf).expect("failed to encode a minter event");
-    buf
+pub trait StorableEvent {
+    fn to_bytes<'a>(&'a self) -> Cow<'a, [u8]>;
+    fn from_bytes<'a>(bytes: Cow<'a, [u8]>) -> Self;
 }
 
-/// # Panics
-///
-/// This function panics if the event decoding fails.
-pub fn decode_event(buf: &[u8]) -> Event {
-    // For backwards compatibility, we have to handle two cases:
-    //  1. Legacy events: raw instances of the event type enum
-    //  2. New events: a struct containing a timestamp and an event type
-    // To differentiate the two, we use a dummy intermediate enum whose variants
-    // correspond to the two cases above. The `untagged` attribute tells serde
-    // that instances of each variant are not labeled, and that it should tell
-    // the two apart based on their contents (e.g. presence of timestamp attribute
-    // suggests a new event).
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum SerializedEvent {
-        Legacy(EventType),
-        Event(Event),
+impl StorableEvent for CkBtcMinterEvent {
+    fn to_bytes<'a>(&'a self) -> Cow<'a, [u8]> {
+        let mut buf = Vec::new();
+        ciborium::ser::into_writer(self, &mut buf).expect("failed to encode a minter event");
+        Cow::Owned(buf)
     }
-    match ciborium::de::from_reader(buf).expect("failed to decode a minter event") {
-        SerializedEvent::Legacy(payload) => Event {
-            payload,
-            timestamp: None,
-        },
-        SerializedEvent::Event(event) => event,
+
+    fn from_bytes<'a>(bytes: Cow<'a, [u8]>) -> Self {
+        // For backwards compatibility, we have to handle two cases:
+        //  1. Legacy events: raw instances of the event type enum
+        //  2. New events: a struct containing a timestamp and an event type
+        // To differentiate the two, we use a dummy intermediate enum whose variants
+        // correspond to the two cases above. The `untagged` attribute tells serde
+        // that instances of each variant are not labeled, and that it should tell
+        // the two apart based on their contents (e.g. presence of timestamp attribute
+        // suggests a new event).
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum SerializedEvent {
+            Legacy(EventType),
+            Event(Event<EventType>),
+        }
+        match ciborium::de::from_reader(bytes.as_ref()).expect("failed to decode a minter event") {
+            SerializedEvent::Legacy(payload) => Event {
+                payload,
+                timestamp: None,
+            },
+            SerializedEvent::Event(event) => event,
+        }
     }
 }
 
 /// Returns an iterator over all minter events.
-pub fn events() -> impl Iterator<Item = Event> {
+pub fn events<T>() -> impl Iterator<Item = Event<T>>
+where
+    Event<T>: StorableEvent,
+{
     EventIterator {
         buf: vec![],
         pos: 0,
+        marker: PhantomData,
     }
 }
 
@@ -145,7 +155,7 @@ pub fn migrate_old_events_if_not_empty() -> Option<u64> {
 pub fn migrate_events(old_events: &EventLog, new_events: &EventLog) -> u64 {
     let mut removed = 0;
     for bytes in old_events.iter() {
-        let event = decode_event(&bytes);
+        let event = CkBtcMinterEvent::from_bytes(Cow::Borrowed(&bytes));
         match event.payload {
             EventType::ReceivedUtxos { utxos, .. } if utxos.is_empty() => removed += 1,
             _ => {
@@ -164,11 +174,15 @@ pub fn count_events() -> u64 {
 }
 
 /// Records a new minter event.
-pub fn record_event<R: CanisterRuntime>(payload: EventType, runtime: &R) {
-    let bytes = encode_event(&Event {
+pub fn record_event<R: CanisterRuntime, T>(payload: T, runtime: &R)
+where
+    Event<T>: StorableEvent,
+{
+    let event = Event {
         timestamp: Some(runtime.time()),
         payload,
-    });
+    };
+    let bytes = event.to_bytes().to_vec();
     V1_EVENTS.with(|events| {
         events
             .borrow()
@@ -186,10 +200,11 @@ pub fn record_event_v0<R: CanisterRuntime>(payload: EventType, runtime: &R) {
     // canister, and the memory dump is used in a canbench to measure
     // instruction counts. So the actual value of timestamps shouldn't
     // matter.
-    let bytes = encode_event(&Event {
+    let event = Event {
         timestamp: Some(runtime.time()),
         payload,
-    });
+    };
+    let bytes = event.to_bytes().as_ref().to_vec();
     V0_EVENTS.with(|events| {
         events
             .borrow()

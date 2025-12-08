@@ -8,7 +8,7 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
 use ic_ckbtc_minter::state::CkBtcMinterState;
-use ic_ckbtc_minter::state::eventlog::{Event, EventType, replay};
+use ic_ckbtc_minter::state::eventlog::{CkBtcMinterEvent, EventType, replay};
 use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use ic_ckbtc_minter::{ECDSAPublicKey, Network};
 use std::cmp::Reverse;
@@ -207,7 +207,7 @@ trait GetEventsFile {
         minter_id: &Principal,
         start: u64,
         length: u64,
-    ) -> Vec<Event> {
+    ) -> Vec<CkBtcMinterEvent> {
         use candid::{Decode, Encode};
         use ic_ckbtc_minter::state::eventlog::GetEventsArg;
 
@@ -219,7 +219,7 @@ trait GetEventsFile {
             .call_and_wait()
             .await
             .expect("Failed to call get_events");
-        Decode!(&raw_result, Vec<Event>).unwrap()
+        Decode!(&raw_result, Vec<CkBtcMinterEvent>).unwrap()
     }
 
     async fn retrieve_and_store_events(&self) {
@@ -317,7 +317,7 @@ impl GetEventsFile for Testnet {
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct GetEventsResult {
-    pub events: Vec<Event>,
+    pub events: Vec<CkBtcMinterEvent>,
     pub total_event_count: u64,
 }
 

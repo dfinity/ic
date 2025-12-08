@@ -3,6 +3,7 @@ mod tests;
 
 pub mod address;
 pub mod candid_api;
+pub mod event;
 pub mod fees;
 pub mod lifecycle;
 pub mod updates;

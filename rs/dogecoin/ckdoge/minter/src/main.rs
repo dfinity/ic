@@ -4,12 +4,13 @@ use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
 use ic_ckbtc_minter::{BuildTxError, CanisterRuntime};
 use ic_ckdoge_minter::candid_api::{EstimateWithdrawalFeeError, MinterInfo};
 use ic_ckdoge_minter::{
-    DOGECOIN_CANISTER_RUNTIME, EstimateFeeArg, Event, EventType, GetEventsArg, UpdateBalanceArgs,
+    DOGECOIN_CANISTER_RUNTIME, EstimateFeeArg, EventType, GetEventsArg, UpdateBalanceArgs,
     UpdateBalanceError, Utxo, UtxoStatus,
     candid_api::{
         GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeStatusRequest,
         RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError, WithdrawalFee,
     },
+    event::CkDogeMinterEvent,
     lifecycle::init::MinterArg,
     updates,
 };
@@ -214,7 +215,7 @@ async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusRes
 // 2) Some events, related to KYT are not applicable to Dogecoin.
 // 3) Some fundamental types like BitcoinAddress are also misused to fit in a Dogecoin address.
 #[query(hidden = true)]
-fn get_events(args: GetEventsArg) -> Vec<Event> {
+fn get_events(args: GetEventsArg) -> Vec<CkDogeMinterEvent> {
     const MAX_EVENTS_PER_QUERY: usize = 2000;
 
     ic_ckbtc_minter::storage::events()

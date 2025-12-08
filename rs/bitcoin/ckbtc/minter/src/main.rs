@@ -5,7 +5,7 @@ use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
 use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
-use ic_ckbtc_minter::state::eventlog::Event;
+use ic_ckbtc_minter::state::eventlog::CkBtcMinterEvent;
 use ic_ckbtc_minter::state::{
     BtcRetrievalStatusV2, RetrieveBtcStatus, RetrieveBtcStatusV2, read_state,
 };
@@ -196,7 +196,7 @@ async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusRes
 
 #[cfg(feature = "self_check")]
 #[update]
-async fn upload_events(events: Vec<Event>) {
+async fn upload_events(events: Vec<CkBtcMinterEvent>) {
     for event in events {
         storage::record_event(event.payload, &IC_CANISTER_RUNTIME);
     }
@@ -255,7 +255,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 }
 
 #[query]
-fn get_events(args: GetEventsArg) -> Vec<Event> {
+fn get_events(args: GetEventsArg) -> Vec<CkBtcMinterEvent> {
     const MAX_EVENTS_PER_QUERY: usize = 2000;
 
     storage::events()

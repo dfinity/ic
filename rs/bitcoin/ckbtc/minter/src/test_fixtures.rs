@@ -218,6 +218,7 @@ pub mod mock {
 }
 
 pub mod arbitrary {
+    use crate::state::eventlog::CkBtcMinterEvent;
     use crate::state::utxos::UtxoSet;
     use crate::{
         WithdrawalFee,
@@ -448,7 +449,7 @@ pub mod arbitrary {
         })
     }
 
-    pub fn event() -> impl Strategy<Value = Event> {
+    pub fn event() -> impl Strategy<Value = CkBtcMinterEvent> {
         (any::<Option<u64>>(), event_type())
             .prop_map(|(timestamp, payload)| Event { timestamp, payload })
     }
