@@ -26,6 +26,7 @@ use ic_state_machine_tests::{
 };
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
+use ic_types::ingress::IngressStatus;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use num_traits::cast::ToPrimitive;
@@ -493,6 +494,15 @@ impl CkEthSetup {
             )
             .unwrap();
         self.start_minter();
+    }
+
+    pub fn try_stop_minter_without_stopping_ongoing_https_outcalls(&self) -> IngressStatus {
+        const MAX_TICKS: u64 = 100;
+        let stop_msg_id = self.env.stop_canister_non_blocking(self.minter_id);
+        for _ in 0..MAX_TICKS {
+            self.env.tick();
+        }
+        self.env.ingress_status(&stop_msg_id)
     }
 
     pub fn stop_minter(&self) {
