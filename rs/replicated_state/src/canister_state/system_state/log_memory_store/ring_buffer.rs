@@ -1,5 +1,5 @@
 use crate::canister_state::system_state::log_memory_store::{
-    header::{Header, MAGIC_VALID},
+    header::{Header, MAGIC},
     log_record::LogRecord,
     memory::{MemoryAddress, MemorySize},
     struct_io::StructIO,
@@ -9,21 +9,22 @@ use ic_management_canister_types_private::{CanisterLogRecord, DataSize, FetchCan
 
 // PageMap file layout.
 // Header layout constants.
-pub const HEADER_OFFSET: MemoryAddress = MemoryAddress::new(0);
-pub const HEADER_SIZE: MemorySize = MemorySize::new(PAGE_SIZE as u64);
+pub(crate) const HEADER_OFFSET: MemoryAddress = MemoryAddress::new(0);
+pub(crate) const HEADER_SIZE: MemorySize = MemorySize::new(PAGE_SIZE as u64);
 // Index table layout constants.
-pub const INDEX_TABLE_OFFSET: MemoryAddress = HEADER_OFFSET.add_size(HEADER_SIZE);
-pub const INDEX_TABLE_PAGES: usize = 1;
-pub const INDEX_TABLE_SIZE: MemorySize = MemorySize::new((INDEX_TABLE_PAGES * PAGE_SIZE) as u64);
-pub const INDEX_ENTRY_SIZE: MemorySize = MemorySize::new(28);
-pub const INDEX_ENTRY_COUNT_MAX: u64 = INDEX_TABLE_SIZE.get() / INDEX_ENTRY_SIZE.get();
+pub(crate) const INDEX_TABLE_OFFSET: MemoryAddress = HEADER_OFFSET.add_size(HEADER_SIZE);
+pub(crate) const INDEX_TABLE_PAGES: usize = 1;
+pub(crate) const INDEX_TABLE_SIZE: MemorySize =
+    MemorySize::new((INDEX_TABLE_PAGES * PAGE_SIZE) as u64);
+pub(crate) const INDEX_ENTRY_SIZE: MemorySize = MemorySize::new(28);
+pub(crate) const INDEX_ENTRY_COUNT_MAX: u64 = INDEX_TABLE_SIZE.get() / INDEX_ENTRY_SIZE.get();
 // Data region layout constants.
-pub const DATA_REGION_OFFSET: MemoryAddress = INDEX_TABLE_OFFSET.add_size(INDEX_TABLE_SIZE);
+pub(crate) const DATA_REGION_OFFSET: MemoryAddress = INDEX_TABLE_OFFSET.add_size(INDEX_TABLE_SIZE);
 
 // Ring buffer constraints.
 
 /// Maximum total size of log records returned in a single message.
-pub const RESULT_MAX_SIZE: MemorySize = MemorySize::new(2_000_000);
+pub(crate) const RESULT_MAX_SIZE: MemorySize = MemorySize::new(2_000_000);
 const _: () = assert!(RESULT_MAX_SIZE.get() <= 2_000_000, "Exceeds 2 MB");
 
 // With index table of 1 page (4 KiB) and 28 bytes per entry -> 146 entries max.
@@ -31,12 +32,12 @@ const _: () = assert!(RESULT_MAX_SIZE.get() <= 2_000_000, "Exceeds 2 MB");
 // say 20% of that (400 KB). So 146 segments turns into ~55 MB total data capacity.
 // Small segments help to reduce work on refining log records filtering
 // when fetching logs.
-pub const DATA_CAPACITY_MAX: MemorySize = MemorySize::new(55_000_000); // 55 MB
+pub(crate) const DATA_CAPACITY_MAX: MemorySize = MemorySize::new(55_000_000); // 55 MB
 const DATA_SEGMENT_SIZE_MAX: u64 = DATA_CAPACITY_MAX.get() / INDEX_ENTRY_COUNT_MAX;
 // Ensure data segment size is significantly smaller than max result size, say 20%.
 const _: () = assert!(5 * DATA_SEGMENT_SIZE_MAX <= RESULT_MAX_SIZE.get());
 
-pub const DATA_CAPACITY_MIN: usize = PAGE_SIZE;
+pub(crate) const DATA_CAPACITY_MIN: usize = PAGE_SIZE;
 const _: () = assert!(PAGE_SIZE <= DATA_CAPACITY_MIN); // data capacity must be at least one page.
 
 pub(super) struct RingBuffer {
@@ -56,17 +57,17 @@ impl RingBuffer {
         Self { io }
     }
 
-    /// Creates an invalid ring buffer.
-    pub fn invalid(page_map: PageMap) -> Self {
-        let mut io = StructIO::new(page_map);
-        io.save_header(&Header::invalid());
-        Self { io }
+    /// Loads a raw ring buffer from given `page_map` without validating its contents.
+    pub fn load_raw(page_map: PageMap) -> Self {
+        Self {
+            io: StructIO::new(page_map),
+        }
     }
 
     /// Returns an existing ring buffer if present.
-    pub fn load(page_map: PageMap) -> Option<Self> {
+    pub fn load_checked(page_map: PageMap) -> Option<Self> {
         let io = StructIO::new(page_map);
-        if io.load_header().magic != *MAGIC_VALID {
+        if io.load_header().magic != *MAGIC {
             return None;
         }
         Some(Self { io })

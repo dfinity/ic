@@ -3,11 +3,8 @@ use crate::canister_state::system_state::log_memory_store::{
     ring_buffer::{DATA_REGION_OFFSET, INDEX_TABLE_PAGES},
 };
 
-/// Indicates a valid canister log buffer.
-pub const MAGIC_VALID: &[u8; 3] = b"CLB";
-
-/// Indicates an invalid canister log buffer.
-pub const MAGIC_INVALID: &[u8; 3] = b"---";
+/// Magic prefix that marks a properly initialized canister log buffer.
+pub(crate) const MAGIC: &[u8; 3] = b"CLB";
 
 /// Header structure for the log memory store (version 1).
 /// This is the in-memory representation of the header.
@@ -37,33 +34,13 @@ impl Header {
     pub fn new(data_capacity: MemorySize) -> Self {
         Self {
             version: 1,
-            magic: *MAGIC_VALID,
+            magic: *MAGIC,
 
             index_table_pages: INDEX_TABLE_PAGES as u16,
             index_entries_count: 0,
 
             data_offset: DATA_REGION_OFFSET,
             data_capacity,
-            data_head: MemoryPosition::new(0),
-            data_tail: MemoryPosition::new(0),
-            data_size: MemorySize::new(0),
-
-            next_idx: 0,
-            max_timestamp: 0,
-        }
-    }
-
-    /// Creates an invalid header.
-    pub fn invalid() -> Self {
-        Self {
-            version: 0,
-            magic: *MAGIC_INVALID, // This is important in order not to charge uninstalled canister.
-
-            index_table_pages: 0,
-            index_entries_count: 0,
-
-            data_offset: MemoryAddress::new(0),
-            data_capacity: MemorySize::new(0),
             data_head: MemoryPosition::new(0),
             data_tail: MemoryPosition::new(0),
             data_size: MemorySize::new(0),
