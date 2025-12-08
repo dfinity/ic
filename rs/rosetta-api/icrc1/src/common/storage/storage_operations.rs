@@ -14,8 +14,8 @@ use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 use tracing::{info, trace};
 
-const METADATA_FEE_COL: &str = "fee_collector_107";
-const METADATA_BLOCK_IDX: &str = "highest_processed_block_index";
+pub const METADATA_FEE_COL: &str = "fee_collector_107";
+pub const METADATA_BLOCK_IDX: &str = "highest_processed_block_index";
 
 /// Gets the current value of a counter from the database.
 /// Returns None if the counter doesn't exist.
@@ -959,6 +959,10 @@ pub fn repair_fee_collector_balances(
 
     info!("Starting balance reconciliation...");
     connection.execute("DELETE FROM account_balances", params![])?;
+    connection.execute(
+        &format!("DELETE FROM rosetta_metadata WHERE key = '{METADATA_BLOCK_IDX}' OR key = '{METADATA_FEE_COL}'"),
+        params![],
+    )?;
 
     if block_count > 0 {
         info!("Reprocessing all blocks...");
