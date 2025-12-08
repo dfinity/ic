@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # criterion supports specifying a "home" where it places its benchmark result tree.
-# at the time of writin, our bazel version (.bazelversion) is outdated and sh_binary
+# at the time of writing, our bazel version (.bazelversion) is outdated and sh_binary
 # does not support `env_inherit` so add (or rather intercept) a new CLI argument
 # `--criterion-home` which we convert into `CRITERION_HOME`, which is read by
 # criterion.rs.
