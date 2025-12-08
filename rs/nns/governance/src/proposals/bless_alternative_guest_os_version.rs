@@ -45,7 +45,7 @@ impl BlessAlternativeGuestOsVersion {
     ///    is only required and enforced that this is nonempty.
     ///
     /// 3. base_guest_launch_measurements
-    ///    a. Noneempty.
+    ///    a. Nonempty.
     ///    b. Each element is valid per GuestLaunchMeasurement (singular).
     pub(crate) fn validate(&self) -> Result<(), GovernanceError> {
         if !are_bless_alternative_guest_os_version_proposals_enabled() {
