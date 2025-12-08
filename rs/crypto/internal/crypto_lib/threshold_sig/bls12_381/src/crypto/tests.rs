@@ -201,7 +201,7 @@ fn test_distinct_messages_yield_distinct_hashes() {
     let number_of_messages = 100;
     let points: HashSet<_> = (0..number_of_messages as u32)
         .map(|number| {
-            let g1 = hash_message_to_g1(&number.to_be_bytes()[..]);
+            let g1 = hash_message_to_g1(&number.to_be_bytes()[..]).to_affine();
             let bytes = g1.serialize();
             // It suffices to prove that the first 32 bytes are distinct.  More requires a
             // custom hash implementation.

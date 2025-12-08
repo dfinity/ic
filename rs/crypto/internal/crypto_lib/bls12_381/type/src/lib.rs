@@ -1374,33 +1374,12 @@ macro_rules! define_affine_and_projective_types {
                 Self::new(sum)
             }
 
-            /// Deserialize a point (compressed format only)
-            ///
-            /// This version verifies that the decoded point is within the prime order
-            /// subgroup, and is safe to call on untrusted inputs.
-            pub fn deserialize<B: AsRef<[u8]>>(bytes: &B) -> Result<Self, PairingInvalidPoint> {
-                let pt = $affine::deserialize(bytes)?;
-                Ok(pt.into())
-            }
-
-            /// Serialize a point in compressed format in some specific type
-            pub fn serialize_to<T: From<[u8; Self::BYTES]>>(&self) -> T {
-                T::from(self.serialize())
-            }
-
-            /// Deserialize a point (compressed format only), trusted bytes edition
-            ///
-            /// As only compressed format is accepted, it is not possible to
-            /// create a point which is not on the curve. However it is possible
-            /// using this function to create a point which is not within the
-            /// prime-order subgroup. This can be detected by calling is_torsion_free
-            pub fn deserialize_unchecked<B: AsRef<[u8]>>(bytes: &B) -> Result<Self, PairingInvalidPoint> {
-                let pt = $affine::deserialize_unchecked(bytes)?;
-                Ok(pt.into())
-            }
-
             /// Serialize this point in compressed format
-            pub fn serialize(&self) -> [u8; Self::BYTES] {
+            ///
+            /// This exists for implementing Debug but is intentionally pub(crate)
+            /// since it hides the expensive affine conversion so should be avoided
+            /// in production code.
+            pub(crate) fn serialize(&self) -> [u8; Self::BYTES] {
                 $affine::from(self).serialize()
             }
 
