@@ -9,9 +9,9 @@ use crate::canister_state::system_state::log_memory_store::{
     memory::MemorySize,
     ring_buffer::{DATA_CAPACITY_MIN, RingBuffer},
 };
-use crate::page_map::{PAGE_SIZE, PageAllocatorFileDescriptor, PageMap};
+use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
-use ic_types::{CanisterLog, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, NumBytes};
+use ic_types::{CanisterLog, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::VecDeque;
@@ -81,9 +81,9 @@ impl LogMemoryStore {
     }
 
     /// Clears the canister log records.
-    pub fn clear(&mut self) {
-        // Write an invalid ring buffer to the page map to avoid unnecessary log-memory charges.
-        self.page_map = RingBuffer::invalid(self.page_map.clone()).to_page_map();
+    pub fn clear(&mut self, fd_factory: Arc<dyn PageAllocatorFileDescriptor>) {
+        // Clear page map and invalidate ring buffer header.
+        self.page_map = PageMap::new(fd_factory);
     }
 
     /// Loads the ring buffer from the page map.
