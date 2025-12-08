@@ -1,5 +1,5 @@
 use crate::canister_state::system_state::log_memory_store::{
-    header::Header,
+    header::{Header, MAGIC},
     log_record::LogRecord,
     memory::{MemoryAddress, MemorySize},
     struct_io::StructIO,
@@ -11,7 +11,6 @@ use ic_management_canister_types_private::{CanisterLogRecord, DataSize, FetchCan
 // Header layout constants.
 pub const HEADER_OFFSET: MemoryAddress = MemoryAddress::new(0);
 pub const HEADER_SIZE: MemorySize = MemorySize::new(PAGE_SIZE as u64);
-pub const MAGIC: &[u8; 3] = b"CLB"; // Canister Log Buffer
 // Index table layout constants.
 pub const INDEX_TABLE_OFFSET: MemoryAddress = HEADER_OFFSET.add_size(HEADER_SIZE);
 pub const INDEX_TABLE_PAGES: usize = 1;
@@ -57,25 +56,24 @@ impl RingBuffer {
         Self { io }
     }
 
-    /// Returns an existing ring buffer if present, or initializes a new one.
-    pub fn load_or_new(page_map: PageMap, data_capacity: MemorySize) -> Self {
+    /// Creates an invalid ring buffer.
+    pub fn invalid(page_map: PageMap) -> Self {
+        let mut io = StructIO::new(page_map);
+        io.save_header(&Header::invalid());
+        Self { io }
+    }
+
+    /// Returns an existing ring buffer if present.
+    pub fn load(page_map: PageMap) -> Option<Self> {
         let io = StructIO::new(page_map);
         if io.load_header().magic != *MAGIC {
-            // Not initialized yet — set up a new header.
-            return Self::new(io.to_page_map(), data_capacity);
+            return None;
         }
-
-        Self { io }
+        Some(Self { io })
     }
 
     pub fn to_page_map(&self) -> PageMap {
         self.io.to_page_map()
-    }
-
-    /// Clears the canister log records.
-    pub fn clear(&mut self) {
-        let data_capacity = self.io.load_header().data_capacity;
-        self.io.save_header(&Header::new(data_capacity));
     }
 
     /// Returns the total allocated bytes for the ring buffer
@@ -338,23 +336,6 @@ mod tests {
         assert_eq!(rb.pop_front().unwrap(), r0);
         assert_eq!(rb.pop_front().unwrap(), r1);
         assert!(rb.pop_front().is_none());
-    }
-
-    #[test]
-    fn test_clear() {
-        let page_map = PageMap::new_for_testing();
-        let data_capacity = TEST_DATA_CAPACITY;
-        let mut rb = RingBuffer::new(page_map, data_capacity);
-
-        let r0 = log_record(0, 100, "a");
-        let r1 = log_record(1, 200, "bb");
-        rb.append(&r0);
-        rb.append(&r1);
-        rb.clear();
-
-        assert_eq!(rb.bytes_used(), 0);
-        assert_eq!(rb.byte_capacity(), data_capacity.get() as usize);
-        assert_eq!(rb.pop_front(), None);
     }
 
     #[test]
