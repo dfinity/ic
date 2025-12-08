@@ -48,6 +48,7 @@ pub struct LogMemoryStore {
 impl LogMemoryStore {
     /// Creates a new store with an empty ring buffer to avoid unnecessary log-memory charges.
     pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
+        // This creates a new empty page map with invalid ring buffer header.
         Self::new_inner(RingBuffer::load_raw(PageMap::new(fd_factory)).to_page_map())
     }
 
@@ -82,7 +83,7 @@ impl LogMemoryStore {
 
     /// Clears the canister log records.
     pub fn clear(&mut self, fd_factory: Arc<dyn PageAllocatorFileDescriptor>) {
-        // Clear page map and invalidate ring buffer header.
+        // This creates a new empty page map with invalid ring buffer header.
         self.page_map = PageMap::new(fd_factory);
     }
 
