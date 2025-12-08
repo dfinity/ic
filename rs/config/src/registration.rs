@@ -34,6 +34,10 @@ pub struct Config {
     /// Specifies the type of node rewards that the node operator expects to receive.
     /// Examples include "type3.1" or "type1", corresponding to entries in the node rewards table in the NNS.
     pub node_reward_type: Option<String>,
+
+    /// Whether to use the new registration that doesn't require node operator to be
+    /// present or not. The feature is under development.
+    pub enable_beta_registration_feature: Option<bool>,
 }
 
 // We allow for the operator to only specify some of the fields while the others

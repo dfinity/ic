@@ -138,6 +138,10 @@ pub struct ICOSSettings {
     /// use_ssh_authorized_keys triggers the use of the ssh keys directory
     pub use_ssh_authorized_keys: bool,
     pub icos_dev_settings: ICOSDevSettings,
+
+    /// This flag enables the beta features for onboarding the nodes using the new mechanism
+    /// without the need for the node operator private key.
+    pub enable_beta_node_registration: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
@@ -418,6 +422,7 @@ mod tests {
                 enable_trusted_execution_environment: false,
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: ICOSDevSettings::default(),
+                enable_beta_node_registration: None,
             },
             setupos_settings: SetupOSSettings,
             hostos_settings: HostOSSettings::default(),

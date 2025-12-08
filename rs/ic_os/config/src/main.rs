@@ -79,6 +79,7 @@ pub fn main() -> Result<()> {
                 verbose,
                 node_reward_type,
                 enable_trusted_execution_environment,
+                enable_beta_node_registration,
             } = get_config_ini_settings(&config_ini_path)?;
 
             // get deployment.json variables
@@ -220,6 +221,7 @@ pub fn assemble_setupos_config(
     use_ssh_authorized_keys: bool,
     verbose: bool,
     network_settings: NetworkSettings,
+    enable_beta_node_registration: Option<bool>,
 ) -> SetupOSConfig {
     let icos_settings = ICOSSettings {
         node_reward_type,

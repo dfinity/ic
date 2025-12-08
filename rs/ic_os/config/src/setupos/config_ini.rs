@@ -18,6 +18,7 @@ pub struct ConfigIniSettings {
     pub verbose: bool,
     pub node_reward_type: Option<String>,
     pub enable_trusted_execution_environment: bool,
+    pub enable_beta_node_registration: Option<bool>,
 }
 
 // Prefix should have a max length of 19 ("1234:6789:1234:6789")
