@@ -56,7 +56,7 @@ impl LogMemoryStore {
         Self::new_inner(RingBuffer::invalid(PageMap::new_for_testing()).to_page_map())
     }
 
-    pub fn new_inner(page_map: PageMap) -> Self {
+    fn new_inner(page_map: PageMap) -> Self {
         Self {
             page_map,
             delta_log_sizes: VecDeque::new(),
