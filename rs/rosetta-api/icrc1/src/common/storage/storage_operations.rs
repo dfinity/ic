@@ -185,7 +185,7 @@ pub fn get_rosetta_metadata(connection: &Connection, key: &str) -> anyhow::Resul
     let mut stmt_metadata = connection.prepare_cached(&format!(
         "SELECT value FROM rosetta_metadata WHERE key = '{key}'"
     ))?;
-    let rows = stmt_metadata.query_map(params![], |row| Ok(row.get(0)?))?;
+    let rows = stmt_metadata.query_map(params![], |row| row.get(0))?;
     let mut result = vec![];
     for row in rows {
         let entry: Vec<u8> = row?;
