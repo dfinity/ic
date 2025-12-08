@@ -159,10 +159,11 @@ pub mod events {
         });
         if let Some(idx) = idx {
             HISTORY.with_borrow(|h| {
-                let event = h
-                    .get(&idx)
-                    .expect("Missing event in history (this is a bug!)");
-                Some(event)
+                let event = h.get(&idx);
+                if event.is_none() {
+                    println!("Missing event for source={} and target={} with idx={} in history! This is a bug!", source, target, idx);
+                }
+                event
             })
         } else {
             None
