@@ -86,7 +86,7 @@ pub fn network_options(ledger_id: &Principal) -> NetworkOptionsResponse {
 
 pub fn network_status(storage_client: &StorageClient) -> Result<NetworkStatusResponse, Error> {
     let highest_processed_block = storage_client
-        .get_highest_block_idx_in_account_balance_table()
+        .get_highest_processed_block_idx()
         .map_err(|e| Error::unable_to_find_block(&e))?
         .ok_or_else(|| {
             Error::unable_to_find_block(&"Highest processed block not found".to_owned())
@@ -538,7 +538,7 @@ pub fn initial_sync_is_completed(
         synched.unwrap()
     } else {
         let block_count = storage_client.get_block_count();
-        let highest_index = storage_client.get_highest_block_idx_in_account_balance_table();
+        let highest_index = storage_client.get_highest_processed_block_idx();
         *synched = Some(match (block_count, highest_index) {
             // If the blockchain contains no blocks we mark it as not completed
             (Ok(block_count), Ok(Some(highest_index))) if block_count == highest_index + 1 => true,

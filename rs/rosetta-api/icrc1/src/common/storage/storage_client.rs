@@ -337,9 +337,9 @@ impl StorageClient {
 
     /// Retrieves the highest block index in the account balance table.
     /// Returns None if the account balance table is empty.
-    pub fn get_highest_block_idx_in_account_balance_table(&self) -> Result<Option<u64>> {
+    pub fn get_highest_processed_block_idx(&self) -> Result<Option<u64>> {
         let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_highest_block_idx_in_account_balance_table(&open_connection)
+        storage_operations::get_highest_processed_block_idx(&open_connection)
     }
 
     // Retrieves the account balance at a certain block height

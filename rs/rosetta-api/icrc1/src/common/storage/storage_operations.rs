@@ -15,6 +15,7 @@ use std::str::FromStr;
 use tracing::{info, trace};
 
 const METADATA_FEE_COL: &str = "fee_collector_107";
+const METADATA_BLOCK_IDX: &str = "highest_processed_block_index";
 
 /// Gets the current value of a counter from the database.
 /// Returns None if the counter doesn't exist.
@@ -281,7 +282,7 @@ pub fn update_account_balances(
 
     // The next block to be updated is the highest block index in the account balance table + 1 if the table is not empty and 0 otherwise
     let next_block_to_be_updated =
-        get_highest_block_idx_in_account_balance_table(connection)?.map_or(0, |idx| idx + 1);
+        get_highest_processed_block_idx(connection)?.map_or(0, |idx| idx + 1);
     let highest_block_idx =
         get_block_with_highest_block_idx(connection)?.map_or(0, |block| block.index);
 
@@ -296,7 +297,6 @@ pub fn update_account_balances(
     // For faster inserts, keep a cache of the account balances within a batch range in memory
     // This also makes the inserting of the account balances batchable and therefore faster
     let mut account_balances_cache: HashMap<Account, BTreeMap<u64, Nat>> = HashMap::new();
-    let mut dummy_principals = vec![];
 
     let mut current_fee_collector_107 = match get_rosetta_metadata(connection, METADATA_FEE_COL)? {
         Some(value) => {
@@ -309,6 +309,7 @@ pub fn update_account_balances(
 
     // As long as there are blocks to be fetched, keep on iterating over the blocks in the database with the given BATCH_SIZE interval
     while !rosetta_blocks.is_empty() {
+        let last_block_index_bytes = rosetta_blocks.last().unwrap().index.to_le_bytes();
         for rosetta_block in rosetta_blocks {
             match rosetta_block.get_transaction().operation {
                 crate::common::storage::types::IcrcOperation::Burn {
@@ -451,10 +452,6 @@ pub fn update_account_balances(
                     fee_collector,
                     caller: _,
                 } => {
-                    // Since we use the account_balances table to determine the synced height
-                    // and since there is no credit or debit operation for the fee collector block,
-                    // we have to add a dummy principal with the block index, to indicate the synced height
-                    dummy_principals.push((rosetta_block.index, [107u8; 30]));
                     current_fee_collector_107 = Some(fee_collector);
                 }
             }
@@ -474,21 +471,12 @@ pub fn update_account_balances(
                     })?;
             }
         }
-        for (block_idx, principal) in &dummy_principals {
-            insert_tx
-                    .prepare_cached("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (:block_idx, :principal, :subaccount, :amount)")?
-                    .execute(named_params! {
-                        ":block_idx": block_idx,
-                        ":principal": principal,
-                        ":subaccount": [0u8;32],
-                        ":amount": "0",
-                    })?;
-        }
         if collector_before != current_fee_collector_107
             && let Some(collector) = current_fee_collector_107
         {
             insert_tx.prepare_cached("INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = excluded.value;")?.execute(params![METADATA_FEE_COL, candid::encode_one(collector)?])?;
         }
+        insert_tx.prepare_cached("INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = excluded.value;")?.execute(params![METADATA_BLOCK_IDX, last_block_index_bytes])?;
         insert_tx.commit()?;
 
         if flush_cache_and_shrink_memory {
@@ -498,7 +486,7 @@ pub fn update_account_balances(
         }
 
         // Fetch the next batch of blocks
-        batch_start_idx = get_highest_block_idx_in_account_balance_table(connection)?
+        batch_start_idx = get_highest_processed_block_idx(connection)?
             .context("No blocks in account balance table after inserting")?
             + 1;
         batch_end_idx = batch_start_idx + batch_size;
@@ -764,16 +752,10 @@ pub fn get_blocks_by_transaction_hash(
     read_blocks(&mut stmt, params![hash.as_slice().to_vec()])
 }
 
-pub fn get_highest_block_idx_in_account_balance_table(
-    connection: &Connection,
-) -> anyhow::Result<Option<u64>> {
-    match connection
-        .prepare_cached("SELECT block_idx FROM account_balances WHERE block_idx = (SELECT MAX(block_idx) FROM account_balances)")?
-        .query_map(params![], |row| row.get(0))?
-        .next()
-    {
+pub fn get_highest_processed_block_idx(connection: &Connection) -> anyhow::Result<Option<u64>> {
+    match get_rosetta_metadata(connection, METADATA_BLOCK_IDX)? {
+        Some(value) => Ok(Some(u64::from_le_bytes(value.as_slice().try_into()?))),
         None => Ok(None),
-        Some(res) => Ok(res?),
     }
 }
 
