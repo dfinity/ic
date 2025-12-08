@@ -39,9 +39,10 @@ impl BlessAlternativeGuestOsVersion {
     ///    b. Each element is itself of length 64.
     ///
     /// 2. rootfs_hash - Contains only hexidecimal characters, i.e. 0-9, A-F
-    ///    (lower case is also allowed). Presumably, this would contain a
-    ///    SHA-256 hash, which are 32 bytes in length, so this would be 64
-    ///    characters long, but this is not required, nor is it enforced.
+    ///    (lower case is also allowed). Currently, this is a SHA-256 hash,
+    ///    which are 32 bytes in length, so this would be 64 characters long,
+    ///    but this is not required, nor is it enforced. In terms of length, it
+    ///    is only required and enforced that this is nonempty.
     ///
     /// 3. base_guest_launch_measurements
     ///    a. Noneempty.
