@@ -56,15 +56,22 @@ impl LogMemoryStore {
         Self::new_inner(RingBuffer::invalid(PageMap::new_for_testing()).to_page_map())
     }
 
-    pub fn from_checkpoint(page_map: PageMap) -> Self {
-        Self::new_inner(page_map)
-    }
-
     pub fn new_inner(page_map: PageMap) -> Self {
         Self {
             page_map,
             delta_log_sizes: VecDeque::new(),
             log_memory_limit: DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
+        }
+    }
+
+    pub fn from_checkpoint(page_map: PageMap) -> Self {
+        let log_memory_limit = RingBuffer::load(page_map.clone())
+            .map(|rb| rb.byte_capacity())
+            .unwrap_or(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
+        Self {
+            page_map,
+            delta_log_sizes: VecDeque::new(),
+            log_memory_limit,
         }
     }
 
