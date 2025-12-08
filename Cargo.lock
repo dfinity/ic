@@ -11300,7 +11300,7 @@ dependencies = [
 
 [[package]]
 name = "ic-metrics-assert"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -11308,8 +11308,6 @@ dependencies = [
  "ic-management-canister-types 0.5.0",
  "pocket-ic",
  "regex",
- "serde",
- "serde_bytes",
 ]
 
 [[package]]
