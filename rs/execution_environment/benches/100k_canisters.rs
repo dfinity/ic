@@ -89,7 +89,7 @@ fn checkpoint(c: &mut Criterion) {
     });
 }
 
-fn create_canister_state(canister_id: CanisterId) -> CanisterState {
+fn create_canister_state(canister_id: CanisterId, with_memories: bool) -> CanisterState {
     use ic_replicated_state::{NumWasmPages, page_map::PageMap};
 
     let controller = PrincipalId::new_user_test_id(1);
@@ -108,15 +108,26 @@ fn create_canister_state(canister_id: CanisterId) -> CanisterState {
     ));
     let exports = ExportedFunctions::new(BTreeSet::new());
 
-    // Create wasm memory with some data (1 page of data with a pattern)
-    let wasm_data = vec![0x42u8; 4096]; // 1 page (4KB) of data
-    let wasm_page_map = PageMap::from(wasm_data.as_slice());
-    let wasm_memory = Memory::new(wasm_page_map, NumWasmPages::from(1));
+    // Create memories based on with_memories flag
+    let (wasm_memory, stable_memory) = if with_memories {
+        // Create wasm memory with some data (1 page of data with a pattern)
+        let wasm_data = vec![0x42u8; 4096]; // 1 page (4KB) of data
+        let wasm_page_map = PageMap::from(wasm_data.as_slice());
+        let wasm_memory = Memory::new(wasm_page_map, NumWasmPages::from(1));
 
-    // Create stable memory with some data (2 pages of data with a different pattern)
-    let stable_data = vec![0xAAu8; 8192]; // 2 pages (8KB) of data
-    let stable_page_map = PageMap::from(stable_data.as_slice());
-    let stable_memory = Memory::new(stable_page_map, NumWasmPages::from(2));
+        // Create stable memory with some data (2 pages of data with a different pattern)
+        let stable_data = vec![0xAAu8; 8192]; // 2 pages (8KB) of data
+        let stable_page_map = PageMap::from(stable_data.as_slice());
+        let stable_memory = Memory::new(stable_page_map, NumWasmPages::from(2));
+
+        (wasm_memory, stable_memory)
+    } else {
+        // Create empty memories
+        let wasm_memory = Memory::new_for_testing();
+        let stable_memory = Memory::new_for_testing();
+
+        (wasm_memory, stable_memory)
+    };
 
     let exported_globals = vec![];
     let wasm_metadata = WasmMetadata::default();
@@ -136,17 +147,36 @@ fn create_canister_state(canister_id: CanisterId) -> CanisterState {
     CanisterState::new(system_state, Some(execution_state), scheduler_state)
 }
 
-fn clone_100k_canisters(c: &mut Criterion) {
+fn clone_100k_canisters_with_memories(c: &mut Criterion) {
     let mut canisters = BTreeMap::new();
 
-    c.bench_function("clone_100k_canisters", |bench| {
+    c.bench_function("clone_100k_canisters_with_memories", |bench| {
         if canisters.is_empty() {
             println!("Creating 100k canisters.");
             canisters = (0..100_000)
                 .map(|i| {
                     (
                         canister_test_id(i),
-                        create_canister_state(canister_test_id(i)),
+                        create_canister_state(canister_test_id(i), true),
+                    )
+                })
+                .collect();
+        }
+        bench.iter(|| canisters.clone());
+    });
+}
+
+fn clone_100k_canisters_no_memories(c: &mut Criterion) {
+    let mut canisters = BTreeMap::new();
+
+    c.bench_function("clone_100k_canisters_no_memories", |bench| {
+        if canisters.is_empty() {
+            println!("Creating 100k canisters without memories.");
+            canisters = (0..100_000)
+                .map(|i| {
+                    (
+                        canister_test_id(i),
+                        create_canister_state(canister_test_id(i), false),
                     )
                 })
                 .collect();
@@ -164,7 +194,7 @@ fn clone_100k_memories(c: &mut Criterion) {
             println!("Creating 100k Memories.");
             // Create 100k Memories, each with 2 pages (8KB) of data
             memories = (0..100_000)
-                .map(|_| {
+                .map(|_i| {
                     let data = vec![0xAAu8; 8192]; // 2 pages (8KB) of data
                     let page_map = PageMap::from(data.as_slice());
                     Memory::new(page_map, NumWasmPages::from(2))
@@ -193,7 +223,7 @@ criterion::criterion_group! {
 criterion::criterion_group! {
     name = bench_clone;
     config = Criterion::default().sample_size(10);
-    targets = clone_100k_canisters, clone_100k_memories
+    targets = clone_100k_canisters_with_memories, clone_100k_canisters_no_memories, clone_100k_memories
 }
 
 criterion::criterion_main!(bench_round, bench_checkpoint, bench_clone);
