@@ -4,7 +4,7 @@ use crate::canister_state::system_state::log_memory_store::{
 };
 
 /// Indicates a valid canister log buffer.
-pub const MAGIC: &[u8; 3] = b"CLB";
+pub(crate) const MAGIC: &[u8; 3] = b"CLB";
 
 /// Header structure for the log memory store (version 1).
 /// This is the in-memory representation of the header.
