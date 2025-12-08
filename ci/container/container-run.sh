@@ -33,6 +33,10 @@ EOF
 
 if findmnt /hoststorage >/dev/null; then
     PODMAN_ARGS=(--root /hoststorage/podman-root)
+    if [ ! -d /hoststorage/podman-root ]; then
+        sudo mkdir -p /hoststorage/podman-root
+        sudo chown -R 1000:1000 /hoststorage/podman-root
+    fi
 else
     PODMAN_ARGS=()
 fi
@@ -80,10 +84,10 @@ fi
 USER=$(whoami)
 
 PODMAN_RUN_ARGS=(
-    --device /dev/fuse
     --user="ubuntu:ubuntu"
     --workdir="/home/ubuntu"
     --userns=keep-id
+    --cap-add=sys_admin
     -e HOSTUSER="$USER"
     -e HOSTHOSTNAME="$HOSTNAME"
     -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
@@ -118,39 +122,37 @@ trap 'rm -rf "${SUBUID_FILE}" "${SUBGID_FILE}"' EXIT
 SUBUID_FILE=$(mktemp --suffix=containerrun)
 SUBGID_FILE=$(mktemp --suffix=containerrun)
 
-IDMAP="uids=$(id -u)-1000-1;gids=$(id -g)-1000-1"
-
 PODMAN_RUN_ARGS+=(
-    --mount type=bind,source="${REPO_ROOT}",target="/ic",idmap="${IDMAP}"
-    --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="${CTR_HOME}/.cache",idmap="${IDMAP}"
-    --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache",idmap="${IDMAP}"
-    --mount type=bind,source="${ICT_TESTNETS_DIR}",target="${ICT_TESTNETS_DIR}",idmap="${IDMAP}"
-    --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh",idmap="${IDMAP}"
-    --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws",idmap="${IDMAP}"
+    --mount type=bind,source="${REPO_ROOT}",target="/ic"
+    --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="${CTR_HOME}/.cache"
+    --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache"
+    --mount type=bind,source="${ICT_TESTNETS_DIR}",target="${ICT_TESTNETS_DIR}"
+    --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
+    --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
     --mount type=tmpfs,target="/home/ubuntu/.local/share/containers"
 )
 
 if [ "$(id -u)" = "1000" ]; then
     if [ -e "${HOME}/.gitconfig" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.gitconfig",target="/home/ubuntu/.gitconfig",idmap="${IDMAP}"
+            --mount type=bind,source="${HOME}/.gitconfig",target="/home/ubuntu/.gitconfig"
         )
     fi
 
     if [ -e "${HOME}/.bash_history" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.bash_history",target="/home/ubuntu/.bash_history",idmap="${IDMAP}"
+            --mount type=bind,source="${HOME}/.bash_history",target="/home/ubuntu/.bash_history"
         )
 
     fi
     if [ -e "${HOME}/.local/share/fish" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.local/share/fish",target="/home/ubuntu/.local/share/fish",idmap="${IDMAP}"
+            --mount type=bind,source="${HOME}/.local/share/fish",target="/home/ubuntu/.local/share/fish"
         )
     fi
     if [ -e "${HOME}/.zsh_history" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history",idmap="${IDMAP}"
+            --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history"
         )
     fi
 
@@ -183,11 +185,11 @@ else
 fi
 
 # Create dynamic subuid/subgid files for the user to run nested containers
-echo "$USER:0:$(($(id -u)-1))" > $SUBUID_FILE
-echo "$USER:$(($(id -u)+1)):$((65536-$(id -u)))" >> $SUBUID_FILE
+echo "ubuntu:1:$(($(id -u)-1))" > $SUBUID_FILE
+echo "ubuntu:$(($(id -u)+1)):$((65536-$(id -u) - 1))" >> $SUBUID_FILE
 chmod +r ${SUBUID_FILE}
-echo "$USER:0:$(($(id -g)-1))" > $SUBGID_FILE
-echo "$USER:$(($(id -g)+1)):$((65536-$(id -g)))" >> $SUBGID_FILE
+echo "ubuntu:1:$(($(id -u)-1))" > $SUBGID_FILE
+echo "ubuntu:$(($(id -u)+1)):$((65536-$(id -u) - 1))" >> $SUBGID_FILE
 chmod +r ${SUBGID_FILE}
 PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${SUBUID_FILE}",target="/etc/subuid"

@@ -131,10 +131,6 @@ RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-co
 
 COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
 
-# We nest containers and map in the user's homedir, so we need to configuire a
-# new default storage location, as the top level is already in use.
-RUN sed -i -e 's|^.*rootless_storage_path.*$|rootless_storage_path = "/tmp/nested/storage"|g' /etc/containers/storage.conf
-
 # Fix caps on uidmap binaries, broken on this ubuntu
 RUN setcap cap_setuid=ep /usr/bin/newuidmap && \
     setcap cap_setgid=ep /usr/bin/newgidmap
