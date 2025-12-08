@@ -27,6 +27,13 @@ pub struct LogMemoryStore {
     #[validate_eq(Ignore)]
     page_map: PageMap,
 
+    /// Stores the log memory limit for the canister.
+    ///
+    /// This is important for the cases when the canister
+    /// is created without a Wasm module or after uninstall.
+    /// In these cases the canister should not be charged,
+    /// so the page_map must be empty, but we still need to
+    /// preserve the log_memory_limit.
     log_memory_limit: usize,
 
     /// (!) No need to preserve across checkpoints.
