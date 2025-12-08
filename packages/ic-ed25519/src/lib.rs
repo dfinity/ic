@@ -257,10 +257,7 @@ impl PrivateKey {
     pub fn serialize_pkcs8_pem(&self, format: PrivateKeyFormat) -> String {
         let pkcs8 = self.serialize_pkcs8(format);
 
-        pem::encode(&pem::Pem {
-            tag: "PRIVATE KEY".to_string(),
-            contents: pkcs8,
-        })
+        pem::encode(&pem::Pem::new("PRIVATE KEY", pkcs8))
     }
 
     /// Deserialize an Ed25519 private key from PKCS8 PEM format
@@ -271,11 +268,13 @@ impl PrivateKey {
     pub fn deserialize_pkcs8_pem(pem: &str) -> Result<Self, PrivateKeyDecodingError> {
         let der = pem::parse(pem)
             .map_err(|e| PrivateKeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
-        if der.tag != "PRIVATE KEY" {
-            return Err(PrivateKeyDecodingError::UnexpectedPemLabel(der.tag));
+        if der.tag() != "PRIVATE KEY" {
+            return Err(PrivateKeyDecodingError::UnexpectedPemLabel(
+                der.tag().to_string(),
+            ));
         }
 
-        Self::deserialize_pkcs8(&der.contents)
+        Self::deserialize_pkcs8(der.contents())
     }
 
     /// Derive a private key from this private key using a derivation path
@@ -507,15 +506,10 @@ pub enum PocketIcMasterPublicKeyId {
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct PublicKey {
     pk: VerifyingKey,
-    // TODO(CRP-2412) This struct member can be removed once
-    // https://github.com/dalek-cryptography/curve25519-dalek/issues/624
-    // makes it into a release and replaced with calls to to_edwards
-    // where required
-    edwards: EdwardsPoint,
 }
 
 /// An error that occurs when verifying signatures or batches of signatures
-#[derive(Copy, Clone, Debug, Error)]
+#[derive(Copy, Clone, Debug, Error, Eq, PartialEq)]
 pub enum SignatureError {
     /// The signature had an invalid length, and cannot possibly be valid
     #[error("The signature had an invalid length, and cannot possibly be valid")]
@@ -544,9 +538,7 @@ impl PublicKey {
     /// subgroup, or that the public key is canonical. To check these
     /// properties, use is_torsion_free and is_canonical
     fn new(pk: VerifyingKey) -> Self {
-        let edwards = CompressedEdwardsY(pk.to_bytes()).decompress().unwrap();
-
-        Self { pk, edwards }
+        Self { pk }
     }
 
     /// Return true if and only if the key is contained within the prime
@@ -555,12 +547,12 @@ impl PublicKey {
         // We don't need to call is_weak here since that is subsumed by the
         // test that the point is torsion free - is_weak just checks if the
         // point is within the size-8 cofactor group.
-        self.edwards.is_torsion_free()
+        self.pk.to_edwards().is_torsion_free()
     }
 
     /// Return true if and only if the public key uses a canonical encoding
     pub fn is_canonical(&self) -> bool {
-        self.pk.to_bytes() == self.edwards.compress().0
+        self.pk.to_bytes() == self.pk.to_edwards().compress().0
     }
 
     /// Convert a raw Ed25519 public key (32 bytes) to the DER encoding
@@ -642,12 +634,11 @@ impl PublicKey {
     /// Serialize this public key as a PEM encoded structure
     ///
     /// See RFC 8410 for details on the format
+    ///
+    /// This returns a Vec<u8> instead of a String for accidental/historical reasons
     pub fn serialize_rfc8410_pem(&self) -> Vec<u8> {
-        pem::encode(&pem::Pem {
-            tag: "PUBLIC KEY".to_string(),
-            contents: self.serialize_rfc8410_der(),
-        })
-        .into()
+        let der = self.serialize_rfc8410_der();
+        pem::encode(&pem::Pem::new("PUBLIC KEY", der)).into()
     }
 
     /// Deserialize the DER encoded public key
@@ -679,11 +670,13 @@ impl PublicKey {
     pub fn deserialize_rfc8410_pem(pem: &str) -> Result<Self, PublicKeyDecodingError> {
         let der = pem::parse(pem)
             .map_err(|e| PublicKeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
-        if der.tag != "PUBLIC KEY" {
-            return Err(PublicKeyDecodingError::UnexpectedPemLabel(der.tag));
+        if der.tag() != "PUBLIC KEY" {
+            return Err(PublicKeyDecodingError::UnexpectedPemLabel(
+                der.tag().to_string(),
+            ));
         }
 
-        Self::deserialize_rfc8410_der(&der.contents)
+        Self::deserialize_rfc8410_der(der.contents())
     }
 
     /// Helper function for computing H(R || A || M)
@@ -706,7 +699,7 @@ impl PublicKey {
         let signature = Signature::from_slice(signature)?;
 
         let k = Self::compute_challenge(&signature, self, msg);
-        let minus_a = -self.edwards;
+        let minus_a = -self.pk.to_edwards();
         let recomputed_r =
             EdwardsPoint::vartime_double_scalar_mul_basepoint(&k, &minus_a, signature.s());
 
@@ -770,7 +763,7 @@ impl PublicKey {
         let zhrams = hrams.iter().zip(zs.iter()).map(|(hram, z)| hram * z);
 
         let r = signatures.iter().map(|sig| *sig.r());
-        let pk = keys.iter().map(|pk| pk.edwards);
+        let pk = keys.iter().map(|pk| pk.pk.to_edwards());
 
         let id = EdwardsPoint::vartime_multiscalar_mul(
             once(-b_coefficient).chain(zs.iter().cloned()).chain(zhrams),

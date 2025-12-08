@@ -12,7 +12,7 @@ use nested::{HOST_VM_NAME, registration};
 
 use nested::util::{
     NODE_UPGRADE_BACKOFF, NODE_UPGRADE_TIMEOUT, check_hostos_version, elect_hostos_version,
-    get_host_boot_id, update_nodes_hostos_version,
+    get_host_boot_id, try_logging_guestos_diagnostics, update_nodes_hostos_version,
 };
 
 fn main() -> Result<()> {
@@ -96,7 +96,7 @@ pub fn upgrade_hostos(env: TestEnv) {
 
     info!(logger, "Waiting for the HostOS upgrade to apply...");
 
-    retry_with_msg!(
+    if let Err(e) = retry_with_msg!(
         format!(
             "Waiting until the host's boot ID changes from its pre upgrade value of '{host_boot_id_pre_upgrade}'"
         ),
@@ -115,11 +115,16 @@ pub fn upgrade_hostos(env: TestEnv) {
                 bail!("Host boot ID is still '{host_boot_id_pre_upgrade}'")
             }
         }
-    )
-    .unwrap();
+    ) {
+        try_logging_guestos_diagnostics(&host, &logger);
+        panic!("Failed to see the host boot ID change from '{host_boot_id_pre_upgrade}': {e}");
+    }
 
     info!(logger, "Waiting for Orchestrator dashboard...");
-    host.await_orchestrator_dashboard_accessible().unwrap();
+    if let Err(e) = host.await_orchestrator_dashboard_accessible() {
+        try_logging_guestos_diagnostics(&host, &logger);
+        panic!("Orchestrator dashboard is not accessible: {e}");
+    }
 
     info!(logger, "Checking HostOS version after reboot");
     let new_version = check_hostos_version(&host);

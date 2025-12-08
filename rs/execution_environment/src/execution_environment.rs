@@ -260,6 +260,9 @@ pub struct RoundLimits {
     // TODO would be nice to change that to available, but this requires
     // a lot of changes since available allocation sits in CanisterManager config
     pub compute_allocation_used: u64,
+
+    /// Keeps track of the memory reserved for executing response handlers.
+    pub subnet_memory_reservation: NumBytes,
 }
 
 impl RoundLimits {
@@ -441,6 +444,17 @@ impl ExecutionEnvironment {
                 - memory_taken.wasm_custom_sections().get() as i64,
             scaling_factor,
         )
+    }
+
+    /// Returns the scaled subnet memory reservation.
+    pub fn scaled_subnet_memory_reservation(&self) -> NumBytes {
+        // This function computes the scaled subnet memory reservation per thread.
+        // We apply the scaling factor `self.scheduler_cores`
+        // consistently with the scaling factor of `SubnetAvailableMemory`
+        // in the function `self.scaled_subnet_available_memory`.
+        // and the scaling factor of `ResourceSaturation`
+        // in the function `self.subnet_memory_saturation`.
+        NumBytes::from(self.config.subnet_memory_reservation.get() / self.scheduler_cores as u64)
     }
 
     /// Computes the current amount of guaranteed response message memory available
@@ -941,7 +955,7 @@ impl ExecutionEnvironment {
 
                     let result = self
                         .canister_manager
-                        .delete_canister(*msg.sender(), args.get_canister_id(), &mut state)
+                        .delete_canister(*msg.sender(), args.get_canister_id(), &mut state, round_limits)
                         .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
                         .map_err(|err| err.into());
 
@@ -1472,10 +1486,19 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::ClearChunkStore) => {
+                let resource_saturation =
+                    self.subnet_memory_saturation(&round_limits.subnet_available_memory);
                 let res = ClearChunkStoreArgs::decode(payload).and_then(|args| {
                     let canister_id = args.get_canister_id();
-                    self.clear_chunk_store(*msg.sender(), &mut state, args)
-                        .map(|res| (res, Some(canister_id)))
+                    self.clear_chunk_store(
+                        *msg.sender(),
+                        &mut state,
+                        args,
+                        round_limits,
+                        registry_settings.subnet_size,
+                        &resource_saturation,
+                    )
+                    .map(|res| (res, Some(canister_id)))
                 });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
@@ -1603,7 +1626,7 @@ impl ExecutionEnvironment {
                 Ok(args) => {
                     let canister_id = args.get_canister_id();
                     let (result, instructions_used) = self.take_canister_snapshot(
-                        *msg.sender(),
+                        msg.canister_change_origin(args.get_sender_canister_version()),
                         &mut state,
                         args,
                         registry_settings.subnet_size,
@@ -1659,10 +1682,19 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::DeleteCanisterSnapshot) => {
+                let resource_saturation =
+                    self.subnet_memory_saturation(&round_limits.subnet_available_memory);
                 let res = DeleteCanisterSnapshotArgs::decode(payload).and_then(|args| {
                     let canister_id = args.get_canister_id();
-                    self.delete_canister_snapshot(*msg.sender(), &mut state, args, round_limits)
-                        .map(|res| (res, Some(canister_id)))
+                    self.delete_canister_snapshot(
+                        *msg.sender(),
+                        &mut state,
+                        args,
+                        round_limits,
+                        registry_settings.subnet_size,
+                        &resource_saturation,
+                    )
+                    .map(|res| (res, Some(canister_id)))
                 });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
@@ -2428,10 +2460,21 @@ impl ExecutionEnvironment {
         sender: PrincipalId,
         state: &mut ReplicatedState,
         args: ClearChunkStoreArgs,
+        round_limits: &mut RoundLimits,
+        subnet_size: usize,
+        resource_saturation: &ResourceSaturation,
     ) -> Result<Vec<u8>, UserError> {
+        let cost_schedule = state.get_own_cost_schedule();
         let canister = get_canister_mut(args.get_canister_id(), state)?;
         self.canister_manager
-            .clear_chunk_store(sender, canister)
+            .clear_chunk_store(
+                sender,
+                canister,
+                round_limits,
+                subnet_size,
+                cost_schedule,
+                resource_saturation,
+            )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into())
     }
@@ -2452,7 +2495,7 @@ impl ExecutionEnvironment {
     /// Creates a new canister snapshot and inserts it into `ReplicatedState`.
     fn take_canister_snapshot(
         &self,
-        sender: PrincipalId,
+        origin: CanisterChangeOrigin,
         state: &mut ReplicatedState,
         args: TakeCanisterSnapshotArgs,
         subnet_size: usize,
@@ -2476,11 +2519,13 @@ impl ExecutionEnvironment {
         let resource_saturation =
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
         let replace_snapshot = args.replace_snapshot();
+        let uninstall_code = args.uninstall_code().unwrap_or_default();
         let result = self.canister_manager.take_canister_snapshot(
             subnet_size,
-            sender,
+            origin,
             &mut canister,
             replace_snapshot,
+            uninstall_code,
             state,
             round_limits,
             &resource_saturation,
@@ -2489,7 +2534,16 @@ impl ExecutionEnvironment {
         state.put_canister_state(canister);
 
         match result {
-            Ok((response, instructions_used)) => (Ok(response.encode()), instructions_used),
+            Ok((response, rejects, instructions_used)) => {
+                crate::util::process_responses(
+                    rejects,
+                    state,
+                    Arc::clone(&self.ingress_history_writer),
+                    self.log.clone(),
+                    self.canister_not_found_error(),
+                );
+                (Ok(response.encode()), instructions_used)
+            }
             Err(err) => (Err(err.into()), NumInstructions::new(0)),
         }
     }
@@ -2574,6 +2628,8 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         args: DeleteCanisterSnapshotArgs,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
+        resource_saturation: &ResourceSaturation,
     ) -> Result<Vec<u8>, UserError> {
         let canister_id = args.get_canister_id();
         // Take canister out.
@@ -2595,6 +2651,8 @@ impl ExecutionEnvironment {
                 args.get_snapshot_id(),
                 state,
                 round_limits,
+                subnet_size,
+                resource_saturation,
             )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into());
@@ -2653,6 +2711,7 @@ impl ExecutionEnvironment {
         let new_id = args.rename_to.get_canister_id();
         let to_version = args.rename_to.version;
         let to_total_num_changes = args.rename_to.total_num_changes;
+        let requested_by = args.requested_by();
 
         // Take canister out.
         let mut canister = match state.take_canister_state(&old_id) {
@@ -2675,6 +2734,7 @@ impl ExecutionEnvironment {
                 new_id,
                 to_version,
                 to_total_num_changes,
+                requested_by,
                 state,
                 round_limits,
             )
@@ -2877,17 +2937,6 @@ impl ExecutionEnvironment {
             time,
             cost_schedule,
         };
-        // This function is called on an execution thread with a scaled
-        // available memory. We also need to scale the subnet reservation in
-        // order to be consistent with the scaling of the available memory.
-        // We apply the scaling factor `self.scheduler_cores`
-        // consistently with the scaling factor of `SubnetAvailableMemory`
-        // in the function `self.scaled_subnet_available_memory`.
-        // and the scaling factor of `ResourceSaturation`
-        // in the function `self.subnet_memory_saturation`.
-        let scaling_factor = self.scheduler_cores as u64;
-        let scaled_subnet_memory_reservation =
-            NumBytes::new(self.config.subnet_memory_reservation.get() / scaling_factor);
         execute_response(
             canister,
             response,
@@ -2896,7 +2945,6 @@ impl ExecutionEnvironment {
             round,
             round_limits,
             subnet_size,
-            scaled_subnet_memory_reservation,
             &self.call_tree_metrics,
             self.config.dirty_page_logging,
             self.deallocator_thread.sender(),
@@ -3225,7 +3273,7 @@ impl ExecutionEnvironment {
     ) -> Result<PublicKey, UserError> {
         derive_threshold_public_key(
             subnet_public_key,
-            &ExtendedDerivationPath {
+            ExtendedDerivationPath {
                 caller,
                 derivation_path,
             },
@@ -4223,7 +4271,9 @@ impl ExecutionEnvironment {
 
     // Returns the subnet memory saturation based on the given subnet available memory
     // which is assumed to be scaled with the scaling factor `self.scheduler_cores`.
-    fn subnet_memory_saturation(
+    // Public for use in tests.
+    #[doc(hidden)]
+    pub fn subnet_memory_saturation(
         &self,
         subnet_available_memory: &SubnetAvailableMemory,
     ) -> ResourceSaturation {

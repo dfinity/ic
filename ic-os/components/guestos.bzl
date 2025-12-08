@@ -3,6 +3,9 @@ Enumerate every component file dependency for GuestOS
 """
 
 component_files = {
+    # environment
+    Label("guestos/environment/90-sev-status.sh"): "/etc/systemd/system-environment-generators/90-sev-status.sh",
+
     # early-boot
     Label("early-boot/relabel-machine-id/relabel-machine-id-guestos.sh"): "/opt/ic/bin/relabel-machine-id.sh",
     Label("early-boot/relabel-machine-id/relabel-machine-id.service"): "/etc/systemd/system/relabel-machine-id.service",
@@ -49,8 +52,6 @@ component_files = {
 
     # init
     Label("guestos/init/bootstrap-ic-node/bootstrap-ic-node.service"): "/etc/systemd/system/bootstrap-ic-node.service",
-    Label("guestos/init/mount-config/mount-config.sh"): "/opt/ic/bin/mount-config.sh",
-    Label("guestos/init/mount-config/mount-config.service"): "/etc/systemd/system/mount-config.service",
     Label("guestos/init/mount-config/maybe-disable-store-mounts.service"): "/etc/systemd/system/maybe-disable-store-mounts.service",
     Label("guestos/init/init-config/init-config.sh"): "/opt/ic/bin/init-config.sh",
     Label("guestos/init/init-config/init-config.service"): "/etc/systemd/system/init-config.service",
@@ -60,12 +61,12 @@ component_files = {
     Label("guestos/init/setup-encryption/override.conf"): "/etc/systemd/system/systemd-fsck@dev-mapper-var_crypt.service.d/override.conf",
     Label("guestos/init/setup-lvs/setup-lvs.service"): "/etc/systemd/system/setup-lvs.service",
     Label("guestos/init/setup-lvs/setup-lvs.sh"): "/opt/ic/bin/setup-lvs.sh",
+    Label("guestos/init/cleanup-config-bootstrap/cleanup-config-bootstrap.service"): "/etc/systemd/system/cleanup-config-bootstrap.service",
 
     # misc
     Label("misc/config/config-guestos.sh"): "/opt/ic/bin/config.sh",
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
-    Label("misc/serial-getty@/guestos/override.conf"): "/etc/systemd/system/serial-getty@.service.d/override.conf",
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
     Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
     Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
@@ -97,6 +98,8 @@ component_files = {
     Label("monitoring/guestos/boot-metrics/boot-metrics.sh"): "/opt/ic/bin/boot-metrics.sh",
     Label("monitoring/guestos/boot-metrics/boot-metrics.service"): "/etc/systemd/system/boot-metrics.service",
     Label("monitoring/guestos/boot-metrics/boot-metrics.timer"): "/etc/systemd/system/boot-metrics.timer",
+    Label("monitoring/guestos/boot-logging/log-boot-failure.service"): "/etc/systemd/system/log-boot-failure.service",
+    Label("monitoring/guestos/boot-logging/log-boot-success.service"): "/etc/systemd/system/log-boot-success.service",
     Label("monitoring/guestos/metrics_tool.service"): "/etc/systemd/system/metrics_tool.service",
     Label("monitoring/guestos/metrics_tool.timer"): "/etc/systemd/system/metrics_tool.timer",
     Label("monitoring/node_exporter/node_exporter.crt"): "/etc/node_exporter/node_exporter.crt",

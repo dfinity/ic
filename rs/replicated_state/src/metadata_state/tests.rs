@@ -30,7 +30,7 @@ use ic_test_utilities_types::{
 use ic_types::{
     Cycles, ExecutionRound, Height,
     batch::BlockmakerMetrics,
-    canister_http::{CanisterHttpMethod, CanisterHttpRequestContext, Replication},
+    canister_http::{CanisterHttpMethod, CanisterHttpRequestContext, PricingVersion, Replication},
     consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
     crypto::{
         AlgorithmId,
@@ -603,6 +603,7 @@ fn subnet_call_contexts_deserialization() {
         transform: Some(transform.clone()),
         time: UNIX_EPOCH,
         replication: Replication::FullyReplicated,
+        pricing_version: PricingVersion::Legacy,
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,

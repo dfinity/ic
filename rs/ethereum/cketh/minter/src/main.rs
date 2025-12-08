@@ -74,20 +74,22 @@ fn validate_ckerc20_active() {
 }
 
 fn setup_timers() {
-    ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+    ic_cdk_timers::set_timer(Duration::from_secs(0), async {
         // Initialize the minter's public key to make the address known.
-        ic_cdk::spawn(async {
-            let _ = lazy_call_ecdsa_public_key().await;
-        })
+        let _ = lazy_call_ecdsa_public_key().await;
     });
     // Start scraping logs immediately after the install, then repeat with the interval.
-    ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(scrape_logs()));
-    ic_cdk_timers::set_timer_interval(SCRAPING_ETH_LOGS_INTERVAL, || ic_cdk::spawn(scrape_logs()));
-    ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, || {
-        ic_cdk::spawn(process_retrieve_eth_requests())
+    ic_cdk_timers::set_timer(Duration::from_secs(0), async {
+        scrape_logs().await;
     });
-    ic_cdk_timers::set_timer_interval(PROCESS_REIMBURSEMENT, || {
-        ic_cdk::spawn(process_reimbursement())
+    ic_cdk_timers::set_timer_interval(SCRAPING_ETH_LOGS_INTERVAL, async || {
+        scrape_logs().await;
+    });
+    ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, async || {
+        process_retrieve_eth_requests().await;
+    });
+    ic_cdk_timers::set_timer_interval(PROCESS_REIMBURSEMENT, async || {
+        process_reimbursement().await;
     });
 }
 
@@ -762,7 +764,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     transaction,
                 } => EP::SignedTransaction {
                     withdrawal_id: withdrawal_id.get().into(),
-                    raw_transaction: transaction.raw_transaction_hex(),
+                    raw_transaction: transaction.raw_transaction_hex_string(),
                 },
                 EventType::ReplacedTransaction {
                     withdrawal_id,

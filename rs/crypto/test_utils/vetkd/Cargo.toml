@@ -4,8 +4,10 @@ version = "0.1.0"
 edition.workspace = true
 
 [dependencies]
+ic-base-types = { path = "../../../types/base_types" }
 ic-crypto-internal-bls12-381-type = { path = "../../internal/crypto_lib/bls12_381/type" }
 ic-crypto-internal-bls12-381-vetkd = { path = "../../internal/crypto_lib/bls12_381/vetkd" }
+ic-types = { path = "../../../types/types" }
 rand_chacha = { workspace = true }
 
 [dev-dependencies]

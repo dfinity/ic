@@ -96,6 +96,7 @@ pub fn generate_vm_config(
     media_path: &Path,
     direct_boot: Option<DirectBootConfig>,
     disk_device: &Path,
+    serial_log_path: &Path,
     guest_vm_type: GuestVMType,
 ) -> Result<String> {
     let node_type = match guest_vm_type {
@@ -129,7 +130,7 @@ pub fn generate_vm_config(
         domain_uuid: vm_domain_uuid(guest_vm_type).to_string(),
         disk_device: disk_device.to_path_buf(),
         cpu_domain,
-        console_log_path: serial_log_path(guest_vm_type).display().to_string(),
+        console_log_path: serial_log_path.display().to_string(),
         vm_memory,
         nr_of_vcpus,
         mac_address,
@@ -186,7 +187,7 @@ mod tests {
     use super::*;
     use config_types::{
         DeploymentEnvironment, DeterministicIpv6Config, HostOSConfig, HostOSDevSettings,
-        HostOSSettings, ICOSSettings, Ipv4Config, Ipv6Config, Logging, NetworkSettings,
+        HostOSSettings, ICOSSettings, Ipv4Config, Ipv6Config, NetworkSettings,
     };
     use goldenfile::Mint;
     use std::env;
@@ -213,8 +214,6 @@ mod tests {
                 node_reward_type: Some("type3.1".to_string()),
                 mgmt_mac: "00:11:22:33:44:55".parse().unwrap(),
                 deployment_environment: DeploymentEnvironment::Testnet,
-                logging: Logging {},
-                use_nns_public_key: false,
                 nns_urls: vec![url::Url::parse("https://example.com").unwrap()],
                 use_node_operator_private_key: false,
                 enable_trusted_execution_environment: false,
@@ -301,6 +300,7 @@ mod tests {
             Path::new("/tmp/config.img"),
             direct_boot,
             Path::new("/dev/guest_disk"),
+            Path::new("/var/serial/console.txt"),
             guest_vm_type,
         )
         .unwrap();

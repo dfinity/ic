@@ -17,6 +17,8 @@ DEPENDENCIES = [
     "//rs/universal_canister/lib",
     "@crate_index//:candid",
     "@crate_index//:num-traits",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
 ]
 
 MACRO_DEPENDENCIES = []

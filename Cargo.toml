@@ -38,7 +38,6 @@ members = [
     "rs/bitcoin/replica_types",
     "rs/bitcoin/service",
     "rs/bitcoin/validation",
-    "rs/boundary_node/canary_proxy",
     "rs/boundary_node/certificate_issuance/certificate_issuer",
     "rs/boundary_node/certificate_issuance/certificate_orchestrator",
     "rs/boundary_node/certificate_issuance/certificate_orchestrator_interface",
@@ -51,7 +50,6 @@ members = [
     "rs/boundary_node/salt_sharing",
     "rs/boundary_node/salt_sharing/api",
     "rs/boundary_node/salt_sharing/integration_tests",
-    "rs/boundary_node/systemd_journal_gatewayd_shim",
     "rs/canister_client",
     "rs/canister_client/read_state_response_parser",
     "rs/canister_client/sender",
@@ -146,7 +144,6 @@ members = [
     "rs/embedders/benches/embedders_bench",
     "rs/ethereum/cketh/minter",
     "rs/ethereum/cketh/test_utils",
-    "rs/ethereum/evm-rpc-client",
     "rs/ethereum/ledger-suite-orchestrator",
     "rs/ethereum/ledger-suite-orchestrator/test_utils",
     "rs/execution_environment",
@@ -175,6 +172,7 @@ members = [
     "rs/ic_os/config_types/compatibility_tests",
     "rs/ic_os/deterministic_ips",
     "rs/ic_os/device",
+    "rs/ic_os/dev_test_tools/bare_metal_deployment",
     "rs/ic_os/dev_test_tools/setupos-disable-checks",
     "rs/ic_os/dev_test_tools/setupos-image-config",
     "rs/ic_os/fstrim_tool",
@@ -183,7 +181,6 @@ members = [
     "rs/ic_os/guest_upgrade/server",
     "rs/ic_os/guest_upgrade/shared",
     "rs/ic_os/guest_upgrade/tests",
-    "rs/ic_os/linux_kernel_command_line",
     "rs/ic_os/metrics_tool",
     "rs/ic_os/network",
     "rs/ic_os/nft_exporter",
@@ -241,6 +238,7 @@ members = [
     "rs/monitoring/tracing",
     "rs/monitoring/tracing/jaeger_exporter",
     "rs/monitoring/tracing/logging_layer",
+    "rs/nervous_system/access_list",
     "rs/nervous_system/agent",
     "rs/nervous_system/candid_utils",
     "rs/nervous_system/canisters",
@@ -279,6 +277,7 @@ members = [
     "rs/nervous_system/timestamp",
     "rs/nervous_system/tools/neuron-subaccount",
     "rs/nervous_system/tools/release-runscript",
+    "rs/nervous_system/tools/signed-canister-reply",
     "rs/nervous_system/tools/submit-motion-proposal",
     "rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
     "rs/nns/cmc",
@@ -390,13 +389,12 @@ members = [
     "rs/rust_canisters/dfn_http_metrics",
     "rs/rust_canisters/dfn_json",
     "rs/rust_canisters/dfn_protobuf",
-    "rs/rust_canisters/downstream_calls_test",
     "rs/rust_canisters/ecdsa",
     "rs/rust_canisters/load_simulator",
     "rs/rust_canisters/memory_test",
+    "rs/rust_canisters/messaging_test",
     "rs/rust_canisters/on_wire",
     "rs/rust_canisters/proxy_canister",
-    "rs/rust_canisters/random_traffic_test",
     "rs/rust_canisters/response_payload_test",
     "rs/rust_canisters/stable_memory_integrity",
     "rs/rust_canisters/stable_reader",
@@ -476,8 +474,6 @@ members = [
     "rs/tests/nns/sns/lib",
     "rs/tests/node",
     "rs/tests/query_stats/lib",
-    "rs/tests/research",
-    "rs/tests/research/spec_compliance",
     "rs/tests/sdk",
     "rs/tests/test_canisters/http_counter",
     "rs/tests/test_canisters/kv_store",
@@ -527,7 +523,6 @@ members = [
     "rs/validator/http_request_test_utils",
     "rs/validator/ingress_message",
     "rs/validator/ingress_message/test_canister",
-    "rs/wasm_transform",
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
@@ -613,10 +608,10 @@ bitcoin = { git = "https://github.com/dfinity/rust-dogecoin", rev = "cda2b5ec270
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default-features = false }
 bytes = "1.9.0"
-canbench-rs = "0.2.1"
-candid = { version = "0.10.17" }
+canbench-rs = "0.4.0"
+candid = { version = "0.10.20" }
 candid_parser = { version = "0.1.2" }
-chrono = { version = "0.4.38", default-features = false, features = [
+chrono = { version = "0.4.42", default-features = false, features = [
     "alloc",
     "clock",
     "serde",
@@ -638,7 +633,7 @@ der = { version = "0.7", default-features = false, features = ["derive"] }
 derive-new = "0.7.0"
 devicemapper = "0.34"
 dfx-core = { version = "0.1.4" }
-ed25519-dalek = { version = "2.1.1", features = [
+ed25519-dalek = { version = "2.2.0", features = [
     "std",
     "zeroize",
     "digest",
@@ -648,7 +643,8 @@ ed25519-dalek = { version = "2.1.1", features = [
     "hazmat",
 ] }
 ethnum = { version = "1.3.2", features = ["serde"] }
-evm_rpc_types = { version = "2.0.0" }
+evm_rpc_client = "0.3.0"
+evm_rpc_types = "3.1.0"
 flate2 = "1.0.31"
 fs_extra = "1.2.0"
 futures = "0.3.31"
@@ -676,29 +672,28 @@ hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.12", features = ["full"] }
 ic0 = "1.0.0"
 ic-agent = { version = "0.40.1", features = ["pem", "ring"] }
-ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "620fb49a238b3d8a2caa436b5742ed7ca7012098", features = [
-    "acme_alpn",
-] }
+ic-bn-lib = { version = "0.1.7", features = ["acme-alpn"] }
+ic-bn-lib-common = "0.1"
 ic-btc-interface = "0.2.3"
-ic-canister-sig-creation = "1.3.0"
+ic-canister-runtime = "0.1.0"
+ic-canister-sig-creation = "1.3.1"
 ic-cbor = "3"
-ic-cdk = "0.18.7"
-ic-cdk-timers = "0.12.2"
+ic-cdk = "0.19.0"
+ic-cdk-timers = "1.0.0"
 ic-certificate-verification = "3"
 ic-certification = "3"
-ic-ed25519 = "0.4.0"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "b78562340bd00f05f9c055dcba3ec0f74758c927", default-features = false }
+ic-doge-interface = { git = "https://github.com/dfinity/dogecoin-canister", rev = "74e6dc9a10ba64d2dbad013282c26d74cd49863f" }
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "92ee522a4514584ccf6de487ba40d92063effd9a", default-features = false }
 ic-http-certification = "3.0.3"
-ic-http-gateway = "0.3.0"
+ic-http-gateway = { git = "https://github.com/dfinity/http-gateway", rev = "c17ad1b378df3a85441ce2c6853ec61b6f83f730" }
 ic-identity-hsm = "0.40.1"
-ic-management-canister-types = "0.3.0"
+ic-management-canister-types = "0.5.0"
 ic-response-verification = "3"
-ic-secp256k1 = "0.3.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.40.1" }
 ic-utils = { version = "0.40.1", features = ["raw"] }
-ic-vetkeys = "0.4.0"
+ic-vetkeys = "0.6.0"
 ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
     "groups",
     "pairings",
@@ -734,6 +729,7 @@ lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "4d952c8f
 local-ip-address = "0.5.6"
 loopdev-3 = "0.5"
 macaddr = "1.0"
+memchr = "2.7"
 memmap2 = "0.9.5"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
@@ -758,7 +754,7 @@ p384 = "0.13"
 pairing = "0.23"
 parking_lot = "0.12.3"
 paste = "1.0.15"
-pem = { version = "^1.0.1", default-features = false }
+pem = { version = "^3", default-features = false, features = ["std"] }
 ping = "0.5.0"
 pkcs8 = "0.10.2"
 pprof = { version = "0.14.0", default-features = false, features = [
@@ -768,6 +764,7 @@ pprof = { version = "0.14.0", default-features = false, features = [
 ] }
 predicates = "3.1.2"
 pretty_assertions = "1.4.0"
+procfs = { version = "^0.9" }
 proc-macro2 = "1.0.89"
 prometheus = { version = "0.13.4", features = ["process"] }
 prometheus-parse = { version = "0.2.4" }
@@ -777,6 +774,7 @@ prost = "0.13.3"
 prost-build = "0.13.3"
 protobuf = "2.28.0"
 ring = { version = "^0.17.7", features = ["std"] }
+qrcode = { version = "0.14.1", default-features = false }
 quinn = { version = "0.11.5", default-features = false, features = [
     "ring",
     "log",
@@ -787,12 +785,13 @@ quinn-udp = "0.5.5"
 quote = "1.0.37"
 rand = { version = "0.8.5", features = ["small_rng"] }
 rand_chacha = "0.3.1"
-raw-cpuid = "11.5"
+ratatui = "0.29"
 rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"
 serde_regex = "1.1.0"
-reqwest = { version = "0.12.15", default-features = false, features = [
+rexpect = "0.6"
+reqwest = { version = "0.12.24", default-features = false, features = [
     "blocking",
     "http2",
     "json",
@@ -822,12 +821,13 @@ serde_cbor = "0.11.2"
 serde_json = { version = "^1.0.107" }
 serde_with = "1.14.0"
 serde_yaml = "0.9.33"
-sev = { version = "6.2", default-features = false, features = [
+sev = { version = "7.1", default-features = false, features = [
     "crypto_nossl",
     "snp",
 ] }
 sha2 = "0.10.9"
 sha3 = "0.10.8"
+shell-escape = { version = "^0.1.5" }
 signature = "2.2.0"
 simple_asn1 = "0.6.2"
 slog = { version = "2.7.0", features = [
@@ -845,7 +845,7 @@ static_assertions = "1.1.0"
 strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"
 subtle = "2.6.1"
-syn = { version = "1.0.109", features = ["fold", "full"] }
+syn = { version = "2.0.110", features = ["fold", "full"] }
 sys-mount = "3.0"
 systemd = "0.10"
 tar = "0.4.39"
@@ -895,11 +895,11 @@ uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.23.3"
-wasm-encoder = { version = "0.235.0", features = ["wasmparser"] }
-wasmparser = "0.235.0"
-wasmprinter = "0.235.0"
-wast = "235.0.0"
-wat = "1.235.0"
+wasm-encoder = { version = "0.240.0", features = ["wasmparser"] }
+wasmparser = "0.240.0"
+wasmprinter = "0.240.0"
+wast = "240.0.0"
+wat = "1.240.0"
 which = "6.0.3"
 wirm = { version = "2.1.0", features = ["parallel"] }
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }

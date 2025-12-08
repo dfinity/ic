@@ -128,6 +128,7 @@ async fn resume_killed_instance_impl(
         icp_config: None,
         log_level: None,
         bitcoind_addr: None,
+        dogecoind_addr: None,
         icp_features: None,
         incomplete_state,
         initial_time: None,
@@ -462,33 +463,23 @@ fn payload_too_large() {
     );
     for url in [instances_url, gateway_url] {
         let client = reqwest::blocking::Client::new();
-        retry_send_too_large_body(
-            &client,
-            &url,
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "error: payload_too_large\ndetails: Payload is too large: maximum body size is 4194304 bytes.",
-        );
+        retry_send_too_large_body(&client, &url, StatusCode::PAYLOAD_TOO_LARGE);
     }
 
     // Too large frontend request for canister via HTTP gateway.
     let (client, url) = frontend_canister(&pic, canister_id, false, "/index.html");
-    retry_send_too_large_body(
-        &client,
-        url.as_ref(),
-        StatusCode::SERVICE_UNAVAILABLE,
-        "503 - upstream error",
-    );
+    retry_send_too_large_body(&client, url.as_ref(), StatusCode::SERVICE_UNAVAILABLE);
 }
 
 fn retry_send_too_large_body(
     client: &reqwest::blocking::Client,
     url: &str,
     expected_status: StatusCode,
-    expected_body: &str,
 ) {
     let started = Instant::now();
-    while let Err(err) = send_too_large_body(client, url, expected_status, expected_body) {
+    while let Err(err) = send_too_large_body(client, url, expected_status) {
         println!("{err}");
+
         if started.elapsed() > Duration::from_secs(5 * 60) {
             panic!("Retrying requests with too large body timed out.");
         }
@@ -500,7 +491,6 @@ fn send_too_large_body(
     client: &reqwest::blocking::Client,
     url: &str,
     expected_status: StatusCode,
-    expected_body: &str,
 ) -> Result<(), String> {
     let resp = client
         .post(url)
@@ -510,11 +500,6 @@ fn send_too_large_body(
 
     if resp.status() != expected_status {
         return Err(format!("Unexpected status code: {:?}", resp.status()));
-    }
-
-    let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
-    if !body.contains(expected_body) {
-        return Err(format!("Unexpected response body: {body}"));
     }
 
     Ok(())

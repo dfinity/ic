@@ -768,6 +768,12 @@ impl PayloadBuilder {
         self
     }
 
+    pub fn cost_http_request_v2(mut self, data: &[u8]) -> Self {
+        self = self.push_bytes(data);
+        self.0.push(Ops::CostHttpRequestV2 as u8);
+        self
+    }
+
     pub fn cost_sign_with_ecdsa(mut self, data: &[u8], curve: u32) -> Self {
         self = self.push_bytes(data);
         self = self.push_int(curve);
@@ -817,6 +823,15 @@ impl PayloadBuilder {
     pub fn memory_size_is_at_least(mut self, amount: u64) -> Self {
         self = self.push_int64(amount);
         self.0.push(Ops::MemorySizeIsAtLeast as u8);
+        self
+    }
+
+    /// Grows WASM memory by the specified amount of WASM pages.
+    /// This function should only be used to test WASM memory growth,
+    /// it does not substitute the Rust allocator.
+    pub fn wasm_memory_grow(mut self, pages: u32) -> Self {
+        self = self.push_int(pages);
+        self.0.push(Ops::WasmMemoryGrow as u8);
         self
     }
 

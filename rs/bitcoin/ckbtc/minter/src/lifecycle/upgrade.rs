@@ -80,7 +80,7 @@ pub fn post_upgrade<R: CanisterRuntime>(upgrade_args: Option<UpgradeArgs>, runti
         ic_cdk::trap(format!("[upgrade]: failed to replay the event log: {e:?}"))
     });
 
-    state.validate_config();
+    runtime.validate_config(&state);
 
     replace_state(state);
 

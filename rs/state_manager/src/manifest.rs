@@ -47,18 +47,29 @@ const REHASH_EVERY_NTH_CHUNK: u64 = 10;
 /// which have filenames ending with `FILE_TO_GROUP`.
 ///
 /// We make the decision to group `canister.pbuf` files for two main reasons:
-///     1. They are small in general, usually less than 1 KiB.
+///     1. They are relatively small (typically < 128 KiB) compared to chunk size (1 MiB).
 ///     2. They change between checkpoints, so we always have to fetch them.
 const FILE_TO_GROUP: &str = CANISTER_FILE;
 
-/// The size of files to group should be less or equal to the `FILE_GROUP_SIZE_LIMIT`
-/// to guarantee the efficiency of grouping.
-///
-/// The number is chosen heuristically for two reasons:
-///     1. It will cover most of `canister.pbuf` files if not all of them.
-///     2. `DEFAULT_CHUNK_SIZE` is 128 times of it. It means the number of chunks
-///     will decrease by at least two orders of magnitude, which is significant enough.
-const MAX_FILE_SIZE_TO_GROUP: u32 = 1 << 13; // 8 KiB
+/// The size limit for grouping files in state sync V3 and earlier.
+pub(crate) const MAX_FILE_SIZE_TO_GROUP_V3: u32 = 1 << 13; // 8 KiB
+
+/// The size limit for grouping files in state sync V4 and later.
+/// Increased to accommodate growing `canister.pbuf` files while still
+/// ensuring meaningful grouping: at least 8 files can fit per 1 MiB chunk.
+const MAX_FILE_SIZE_TO_GROUP_V4: u32 = 1 << 17; // 128 KiB
+
+/// Returns the file size limit for grouping based on the state sync version.
+/// This ensures sender and receiver use the same grouping logic.
+fn max_file_size_to_group(version: StateSyncVersion) -> u32 {
+    match version {
+        StateSyncVersion::V0
+        | StateSyncVersion::V1
+        | StateSyncVersion::V2
+        | StateSyncVersion::V3 => MAX_FILE_SIZE_TO_GROUP_V3,
+        StateSyncVersion::V4 => MAX_FILE_SIZE_TO_GROUP_V4,
+    }
+}
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum ManifestValidationError {
@@ -276,8 +287,11 @@ pub(crate) fn observe_file_sizes(
 ///
 /// Builds the grouping of how files should be put together into a single chunk and
 /// returns the mapping from chunk id to the grouped chunk indices.
-/// The grouping is deterministic to ensure that the sender assembles the file
-/// in such a way that the receiver can split it back just by looking at the manifest.
+/// The grouping is deterministic and version-aware to ensure that both sender and
+/// receiver use the same grouping logic based on the manifest version.
+///
+/// Note: The version parameter refers to the version specified in the manifest itself,
+/// not necessarily the version currently used by the replica.
 pub(crate) fn build_file_group_chunks(manifest: &Manifest) -> FileGroupChunks {
     let mut file_group_chunks: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
     let mut chunk_id_p2p = FILE_GROUP_CHUNK_ID_OFFSET;
@@ -285,9 +299,12 @@ pub(crate) fn build_file_group_chunks(manifest: &Manifest) -> FileGroupChunks {
 
     let mut bytes_left = DEFAULT_CHUNK_SIZE as u64;
 
+    // Use version-specific file size limit to ensure sender and receiver agree
+    let max_file_size = max_file_size_to_group(manifest.version);
+
     for (file_index, f) in manifest.file_table.iter().enumerate() {
         if !f.relative_path.ends_with(FILE_TO_GROUP)
-            || f.size_bytes > MAX_FILE_SIZE_TO_GROUP as u64
+            || f.size_bytes > max_file_size as u64
             || f.size_bytes >= DEFAULT_CHUNK_SIZE as u64
         {
             continue;

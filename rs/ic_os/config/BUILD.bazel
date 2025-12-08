@@ -13,8 +13,8 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/ic_os/config_types",
     "//rs/ic_os/deterministic_ips",
-    "//rs/ic_os/linux_kernel_command_line",
     "//rs/ic_os/network",
+    "//rs/ic_os/sev",
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
     "@crate_index//:askama",
@@ -23,7 +23,7 @@ DEPENDENCIES = [
     "@crate_index//:get_if_addrs",
     "@crate_index//:macaddr",
     "@crate_index//:regex",
-    "@crate_index//:rust-ini",
+    "@crate_index//:rust_ini",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
@@ -61,6 +61,9 @@ rust_library(
     name = "config_lib",
     srcs = LIB_SOURCES,
     crate_name = "config",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
@@ -74,6 +77,9 @@ rust_library(
     srcs = LIB_SOURCES,
     crate_features = ["dev"],
     crate_name = "config",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
@@ -87,7 +93,6 @@ rust_test(
     name = "config_lib_test_dev",
     crate = ":config_lib_dev",
     crate_features = ["dev"],
-    data = glob(["golden/*"]),
     env = {"CARGO_MANIFEST_DIR": "rs/ic_os/generate_guestos_vm_config"},
     deps = TEST_DEPENDENCIES,
 )
@@ -104,6 +109,9 @@ rust_binary(
     aliases = ALIASES,
     crate_name = "config",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     deps = [
         ":config_lib",
     ] + DEPENDENCIES,
@@ -116,6 +124,9 @@ rust_binary(
     crate_features = ["dev"],
     crate_name = "config",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     deps = [
         ":config_lib_dev",
     ] + DEPENDENCIES,

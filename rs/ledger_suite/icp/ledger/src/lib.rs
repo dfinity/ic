@@ -29,7 +29,7 @@ use lazy_static::lazy_static;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::RwLock;
 use std::time::Duration;
@@ -147,6 +147,8 @@ thread_local! {
     // block_index -> block
     pub static BLOCKS_MEMORY: RefCell<StableBTreeMap<u64, Vec<u8>, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BLOCKS_MEMORY_ID))));
+
+    static ARCHIVING_FAILURES: Cell<u64> = Cell::default();
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
@@ -321,6 +323,14 @@ impl LedgerData for Ledger {
         &mut self,
     ) -> Option<&mut ic_ledger_core::block::FeeCollector<Self::AccountId>> {
         None
+    }
+
+    fn increment_archiving_failure_metric(&mut self) {
+        ARCHIVING_FAILURES.with(|cell| cell.set(cell.get() + 1));
+    }
+
+    fn get_archiving_failure_metric(&self) -> u64 {
+        ARCHIVING_FAILURES.get()
     }
 }
 

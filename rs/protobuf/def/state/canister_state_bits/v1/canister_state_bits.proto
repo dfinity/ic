@@ -302,6 +302,7 @@ message CanisterRename {
   types.v1.PrincipalId canister_id = 1;
   uint64 total_num_changes = 2;
   RenameTo rename_to = 3;
+  types.v1.PrincipalId requested_by = 4;
 }
 
 message RenameTo {
@@ -473,8 +474,7 @@ message CanisterStateBits {
   reserved "log_visibility";
   // Log visibility for the canister.
   LogVisibilityV2 log_visibility_v2 = 51;
-  // The capacity of the canister log in bytes.
-  uint64 log_memory_limit = 56;
+  reserved 56;
   // Log records of the canister.
   repeated CanisterLogRecord canister_log_records = 43;
   // The index of the next log record to be created.

@@ -419,7 +419,7 @@ impl Payload {
     }
 
     /// Returns the size of this `Payload` in bytes.
-    fn size_bytes(&self) -> NumBytes {
+    pub fn size_bytes(&self) -> NumBytes {
         match self {
             Payload::Data(data) => NumBytes::from(data.len() as u64),
             Payload::Reject(context) => context.size_bytes(),

@@ -26,7 +26,7 @@ use ic_embedders::{
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionRoundSummary, ExecutionRoundType, HypervisorError, HypervisorResult,
-    InstanceStats, RegistryExecutionSettings, Scheduler, SystemApiCallCounters,
+    InstanceStats, MessageMemoryUsage, RegistryExecutionSettings, Scheduler, SystemApiCallCounters,
     WasmExecutionOutput,
 };
 use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
@@ -38,8 +38,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, MessageMemoryUsage,
-    ReplicatedState,
+    CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, ReplicatedState,
     canister_state::execution_state::{self, WasmExecutionMode, WasmMetadata},
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
@@ -198,7 +197,7 @@ impl SchedulerTest {
         self.create_canister_with(
             self.initial_canister_cycles,
             ComputeAllocation::zero(),
-            MemoryAllocation::BestEffort,
+            MemoryAllocation::default(),
             None,
             None,
             None,
@@ -242,7 +241,7 @@ impl SchedulerTest {
             .with_cycles(cycles)
             .with_controller(controller)
             .with_compute_allocation(compute_allocation)
-            .with_memory_allocation(memory_allocation.bytes())
+            .with_memory_allocation(memory_allocation.pre_allocated_bytes())
             .with_wasm(wasm_source.clone())
             .with_freezing_threshold(100)
             .with_time_of_last_allocation_charge(time_of_last_allocation_charge)
@@ -573,6 +572,7 @@ impl SchedulerTest {
                 .scaled_subnet_available_memory(&state),
             subnet_available_callbacks: self.scheduler.exec_env.subnet_available_callbacks(&state),
             compute_allocation_used,
+            subnet_memory_reservation: self.scheduler.exec_env.scaled_subnet_memory_reservation(),
         };
         let measurements = MeasurementScope::root(&self.scheduler.metrics.round_subnet_queue);
         self.scheduler.drain_subnet_queues(
@@ -1200,6 +1200,8 @@ impl TestWasmExecutorCore {
                 num_instructions_left: NumInstructions::from(0),
                 allocated_bytes: NumBytes::from(0),
                 allocated_guaranteed_response_message_bytes: NumBytes::from(0),
+                new_memory_usage: None,
+                new_message_memory_usage: None,
                 instance_stats: InstanceStats::default(),
                 system_api_call_counters: SystemApiCallCounters::default(),
             };
@@ -1246,6 +1248,8 @@ impl TestWasmExecutorCore {
             wasm_result: Ok(None),
             allocated_bytes: NumBytes::from(0),
             allocated_guaranteed_response_message_bytes: NumBytes::from(0),
+            new_memory_usage: None,
+            new_message_memory_usage: None,
             num_instructions_left: instructions_left,
             instance_stats,
             system_api_call_counters: SystemApiCallCounters::default(),

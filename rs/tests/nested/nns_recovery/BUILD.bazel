@@ -27,11 +27,13 @@ rust_library(
     crate_name = "ic_nested_nns_recovery_common",
     deps = [
         # Keep sorted.
+        "//rs/ic_os/os_tools/manual_guestos_recovery",
         "//rs/recovery",
         "//rs/tests/consensus/subnet_recovery:lib",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nested",
+        "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:rand",
         "@crate_index//:sha2",
@@ -100,6 +102,25 @@ system_test_nns(
 
 system_test_nns(
     name = "nr_no_bless_fix_like_np",
+    env = ENV,
+    flaky = True,
+    tags = ["long_test"],
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
+    uses_setupos_img = True,
+    runtime_deps = RUNTIME_DEPS + [
+        "//rs/tests:recovery/binaries",
+    ],
+    deps = [
+        # Keep sorted.
+        ":common",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "nr_seq_np_actions",
     env = ENV,
     flaky = True,
     tags = ["long_test"],

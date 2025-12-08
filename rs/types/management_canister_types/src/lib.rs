@@ -10,8 +10,10 @@ pub use bounded_vec::*;
 use candid::{CandidType, Decode, DecoderConfig, Deserialize, Encode, Reserved};
 pub use data_size::*;
 pub use http::{
-    BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader,
-    HttpMethod, TransformArgs, TransformContext, TransformFunc,
+    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS, BoundedHttpHeaders, CanisterHttpRequestArgs,
+    CanisterHttpResponsePayload, DEFAULT_HTTP_OUTCALLS_PRICING_VERSION, HttpHeader, HttpMethod,
+    PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, TransformArgs, TransformContext,
+    TransformFunc,
 };
 use ic_base_types::{
     CanisterId, EnvironmentVariables, NodeId, NumBytes, PrincipalId, RegistryVersion, SnapshotId,
@@ -416,6 +418,7 @@ impl CanisterSettingsChangeRecord {
 ///        version : nat64;
 ///        total_num_changes : nat64;
 ///    };
+///    requested_by : principal;
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -423,6 +426,25 @@ pub struct CanisterRenameRecord {
     canister_id: PrincipalId,
     total_num_changes: u64,
     rename_to: RenameToRecord,
+    requested_by: PrincipalId,
+}
+
+impl CanisterRenameRecord {
+    pub fn canister_id(&self) -> PrincipalId {
+        self.canister_id
+    }
+
+    pub fn total_num_changes(&self) -> u64 {
+        self.total_num_changes
+    }
+
+    pub fn rename_to(&self) -> &RenameToRecord {
+        &self.rename_to
+    }
+
+    pub fn requested_by(&self) -> PrincipalId {
+        self.requested_by
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -430,6 +452,20 @@ pub struct RenameToRecord {
     canister_id: PrincipalId,
     version: u64,
     total_num_changes: u64,
+}
+
+impl RenameToRecord {
+    pub fn canister_id(&self) -> PrincipalId {
+        self.canister_id
+    }
+
+    pub fn version(&self) -> u64 {
+        self.version
+    }
+
+    pub fn total_num_changes(&self) -> u64 {
+        self.total_num_changes
+    }
 }
 
 /// `CandidType` for `CanisterChangeDetails`
@@ -469,6 +505,7 @@ pub struct RenameToRecord {
 ///       version : nat64;
 ///       total_num_changes : nat64;
 ///     };
+///     requested_by : principal;
 ///   };
 /// }
 /// ```
@@ -549,6 +586,7 @@ impl CanisterChangeDetails {
         to_canister_id: PrincipalId,
         to_version: u64,
         to_total_num_changes: u64,
+        requested_by: PrincipalId,
     ) -> CanisterChangeDetails {
         let rename_to = RenameToRecord {
             canister_id: to_canister_id,
@@ -559,6 +597,7 @@ impl CanisterChangeDetails {
             canister_id,
             total_num_changes,
             rename_to,
+            requested_by,
         };
         CanisterChangeDetails::CanisterRename(record)
     }
@@ -918,6 +957,7 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                             version: canister_rename.rename_to.version,
                             total_num_changes: canister_rename.rename_to.total_num_changes,
                         }),
+                        requested_by: Some(canister_rename.requested_by.into()),
                     },
                 )
             }
@@ -1045,6 +1085,19 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                 let rename_to = canister_rename
                     .rename_to
                     .ok_or(ProxyDecodeError::MissingField("CanisterRename::rename_to"))?;
+                // The only principal who could request canister renaming before
+                // that principal started to be recorded in canister history
+                // is the following principal allowlisted in the NNS proposal 139083:
+                // https://dashboard.internetcomputer.org/proposal/139083
+                let default_requested_by = PrincipalId::from_str(
+                    "axa43-ya3vf-zi3lb-xbffp-vdsi5-alaja-wujmj-qg26n-pugel-72qro-iae",
+                )
+                .unwrap();
+                let requested_by = if let Some(requested_by) = canister_rename.requested_by {
+                    requested_by.try_into()?
+                } else {
+                    default_requested_by
+                };
                 Ok(CanisterChangeDetails::rename_canister(
                     canister_rename
                         .canister_id
@@ -1063,6 +1116,7 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                         .try_into()?,
                     rename_to.version,
                     rename_to.total_num_changes,
+                    requested_by,
                 ))
             }
         }
@@ -3468,10 +3522,10 @@ impl Payload<'_> for NodeMetricsHistoryResponse {}
 /// Exclusive range for fetching canister logs `[start, end)`.
 /// It's used both for `idx` and `timestamp_nanos` based filtering.
 /// If `end` is below `start`, the range is considered empty.
-#[derive(Clone, Debug, Default, CandidType, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, CandidType, Deserialize)]
 pub struct FetchCanisterLogsRange {
-    start: u64, // Inclusive.
-    end: u64,   // Exclusive, values below `start` are ignored.
+    pub start: u64, // Inclusive.
+    pub end: u64,   // Exclusive, values below `start` are ignored.
 }
 
 impl Payload<'_> for FetchCanisterLogsRange {}
@@ -3480,6 +3534,11 @@ impl FetchCanisterLogsRange {
     /// Creates a new range from `start` (inclusive) to `end` (exclusive).
     pub fn new(start: u64, end: u64) -> Self {
         Self { start, end }
+    }
+
+    /// Returns true if the range is valid (i.e., start < end).
+    pub fn is_valid(&self) -> bool {
+        self.start < self.end
     }
 
     /// Returns the length of the range.
@@ -3504,7 +3563,7 @@ impl FetchCanisterLogsRange {
     }
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(Copy, Clone, Debug, CandidType, Deserialize)]
 pub enum FetchCanisterLogsFilter {
     #[serde(rename = "by_idx")]
     ByIdx(FetchCanisterLogsRange),
@@ -3514,6 +3573,15 @@ pub enum FetchCanisterLogsFilter {
 }
 
 impl Payload<'_> for FetchCanisterLogsFilter {}
+
+impl FetchCanisterLogsFilter {
+    pub fn is_valid(&self) -> bool {
+        match self {
+            FetchCanisterLogsFilter::ByIdx(range) => range.is_valid(),
+            FetchCanisterLogsFilter::ByTimestampNanos(range) => range.is_valid(),
+        }
+    }
+}
 
 /// `CandidType` for `FetchCanisterLogsRequest`
 /// ```text
@@ -3648,7 +3716,7 @@ impl UploadChunkArgs {
 ///   hash : blob;
 /// }
 /// ```
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Serialize, Deserialize)]
 pub struct ChunkHash {
     #[serde(with = "serde_bytes")]
     pub hash: Vec<u8>,
@@ -3879,19 +3947,30 @@ impl Payload<'_> for StoredChunksReply {}
 /// record {
 ///   canister_id : principal;
 ///   replace_snapshot : opt blob;
+///   uninstall_code : opt bool;
+///   sender_canister_version : opt na64;
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct TakeCanisterSnapshotArgs {
     pub canister_id: PrincipalId,
     pub replace_snapshot: Option<SnapshotId>,
+    pub uninstall_code: Option<bool>,
+    pub sender_canister_version: Option<u64>,
 }
 
 impl TakeCanisterSnapshotArgs {
-    pub fn new(canister_id: CanisterId, replace_snapshot: Option<SnapshotId>) -> Self {
+    pub fn new(
+        canister_id: CanisterId,
+        replace_snapshot: Option<SnapshotId>,
+        uninstall_code: Option<bool>,
+        sender_canister_version: Option<u64>,
+    ) -> Self {
         Self {
             canister_id: canister_id.get(),
             replace_snapshot,
+            uninstall_code,
+            sender_canister_version,
         }
     }
 
@@ -3901,6 +3980,14 @@ impl TakeCanisterSnapshotArgs {
 
     pub fn replace_snapshot(&self) -> Option<SnapshotId> {
         self.replace_snapshot
+    }
+
+    pub fn uninstall_code(&self) -> Option<bool> {
+        self.uninstall_code
+    }
+
+    pub fn get_sender_canister_version(&self) -> Option<u64> {
+        self.sender_canister_version
     }
 }
 impl Payload<'_> for TakeCanisterSnapshotArgs {}
@@ -4170,7 +4257,7 @@ impl ReadCanisterSnapshotMetadataArgs {
 
 impl Payload<'_> for ReadCanisterSnapshotMetadataArgs {}
 
-#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Deserialize, EnumIter)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Serialize, Deserialize, EnumIter)]
 pub enum SnapshotSource {
     #[serde(rename = "taken_from_canister")]
     TakenFromCanister(Reserved),
@@ -4267,7 +4354,7 @@ impl TryFrom<pb_canister_state_bits::SnapshotSource> for SnapshotSource {
 /// }
 /// ```
 
-#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Clone, PartialEq, Debug, CandidType, Serialize, Deserialize)]
 pub struct ReadCanisterSnapshotMetadataResponse {
     pub source: SnapshotSource,
     pub taken_at_timestamp: u64,
@@ -4654,6 +4741,7 @@ pub enum CanisterSnapshotDataOffset {
 ///     version : nat64;
 ///     total_num_changes : nat64;
 ///   };
+///   requested_by : principal;
 ///   sender_canister_version : nat64;
 /// }
 /// ```
@@ -4662,6 +4750,7 @@ pub enum CanisterSnapshotDataOffset {
 pub struct RenameCanisterArgs {
     pub canister_id: PrincipalId,
     pub rename_to: RenameToArgs,
+    pub requested_by: PrincipalId,
     pub sender_canister_version: u64,
 }
 
@@ -4670,6 +4759,10 @@ impl Payload<'_> for RenameCanisterArgs {}
 impl RenameCanisterArgs {
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    pub fn requested_by(&self) -> PrincipalId {
+        self.requested_by
     }
 
     pub fn get_sender_canister_version(&self) -> Option<u64> {

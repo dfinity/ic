@@ -222,14 +222,14 @@ fn test_can_read_nns_mainnet_registry() {
     with_test_replica_logger(|log| {
         let rt = tokio::runtime::Runtime::new().unwrap();
 
-        let (jh, mut receiver, registry_client, oldest, _tmp) =
+        let (jh, mut receiver, registry_client, consensus_registry_version, _tmp) =
             create_peer_manager_with_local_store(rt.handle(), log, mainnet_nns_subnet());
         let highest_version = registry_client.get_latest_version();
         let interval = 5;
 
         rt.block_on(async move {
-            for v in (highest_version.get() - interval)..(highest_version.get() + interval) {
-                oldest.store(v, Ordering::SeqCst);
+            for v in (highest_version.get() - interval)..=highest_version.get() {
+                consensus_registry_version.store(v, Ordering::SeqCst);
                 receiver.changed().await.unwrap();
                 let peer_num = receiver.borrow().iter().count();
                 // NNS subnet usually has 30-40 nodes. Sanity check by verifying that there are
@@ -254,14 +254,14 @@ fn test_can_read_app_mainnet_registry() {
     with_test_replica_logger(|log| {
         let rt = tokio::runtime::Runtime::new().unwrap();
 
-        let (jh, mut receiver, registry_client, oldest, _tmp) =
+        let (jh, mut receiver, registry_client, consensus_registry_version, _tmp) =
             create_peer_manager_with_local_store(rt.handle(), log, mainnet_app_subnet());
         let highest_version = registry_client.get_latest_version();
         let interval = 5;
 
         rt.block_on(async move {
-            for v in (highest_version.get() - interval)..(highest_version.get() + interval) {
-                oldest.store(v, Ordering::SeqCst);
+            for v in (highest_version.get() - interval)..=highest_version.get() {
+                consensus_registry_version.store(v, Ordering::SeqCst);
                 receiver.changed().await.unwrap();
                 let peer_num = receiver.borrow().iter().count();
                 // App subnets usually have 13 nodes. Sanity check by verifying that there are

@@ -203,6 +203,12 @@ pub fn assert_subnet_is_broken(
     );
 }
 
+/// Helper function to get the certification share height of a node with less boilerplate
+pub fn get_node_certification_share_height(node: &IcNodeSnapshot, logger: &Logger) -> Option<u64> {
+    block_on(get_node_metrics(logger, &node.get_ip_addr()))
+        .map(|m| m.certification_share_height.get())
+}
+
 /// Select a node with highest certification share height in the given subnet snapshot
 pub fn node_with_highest_certification_share_height(
     subnet: &SubnetSnapshot,
@@ -210,10 +216,7 @@ pub fn node_with_highest_certification_share_height(
 ) -> (IcNodeSnapshot, u64) {
     subnet
         .nodes()
-        .filter_map(|n| {
-            block_on(get_node_metrics(logger, &n.get_ip_addr()))
-                .map(|m| (n, m.certification_share_height.get()))
-        })
+        .filter_map(|n| get_node_certification_share_height(&n, logger).map(|h| (n, h)))
         .max_by_key(|&(_, cert_height)| cert_height)
         .expect("No healthy node found")
 }
@@ -444,7 +447,8 @@ pub mod local {
             replay_until_height,
             readonly_pub_key,
             readonly_key_file,
-            download_method: _, // ignored to choose "local" in local recoveries, see below
+            download_pool_node,
+            download_state_method: _, // ignored to choose "local" in local recoveries, see below
             keep_downloaded_state,
             upload_method: _, // ignored to choose "local" in local recoveries, see below
             wait_for_cup_node,
@@ -469,8 +473,9 @@ pub mod local {
             readonly_key_file.as_deref(),
             logger,
         );
+        let download_pool_node_cli = opt_cli_arg!(download_pool_node);
         // We are doing a local recovery, so we override the download method to "local"
-        let download_method_cli = r#"--download-method "local" "#.to_string();
+        let download_state_method_cli = r#"--download-state-method "local" "#.to_string();
         let keep_downloaded_state_cli = opt_cli_arg!(keep_downloaded_state);
         // We are doing a local recovery, so we override the upload method to "local"
         let upload_method_cli = r#"--upload-method "local" "#.to_string();
@@ -490,7 +495,8 @@ pub mod local {
             {replay_until_height_cli} \
             {readonly_pub_key_cli} \
             {readonly_key_file_cli} \
-            {download_method_cli} \
+            {download_pool_node_cli} \
+            {download_state_method_cli} \
             {keep_downloaded_state_cli} \
             {upload_method_cli} \
             {wait_for_cup_node_cli} \

@@ -178,9 +178,9 @@ def test_get_finding_return_issue(jira_ds, jira_lib_mock):
     risk = Mock()
     risk.id = JIRA_SECURITY_RISK_TO_ID[SecurityRisk.CRITICAL]
     team1 = Mock()
-    team1.name = JIRA_OWNER_GROUP_BY_TEAM[Team.GIX_TEAM]["name"]
+    team1.name = JIRA_OWNER_GROUP_BY_TEAM[Team.OISY_TEAM]["name"]
     team2 = Mock()
-    team2.name = JIRA_OWNER_GROUP_BY_TEAM[Team.FINANCIAL_INTEGRATIONS_TEAM]["name"]
+    team2.name = JIRA_OWNER_GROUP_BY_TEAM[Team.DEFI_TEAM]["name"]
     issue_data = {
         JIRA_FINDING_TO_CUSTOM_FIELD.get("repository")[0]: "repo",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("scanner")[0]: "scanner",
@@ -249,7 +249,7 @@ def test_get_finding_return_issue(jira_ds, jira_lib_mock):
     assert res1.projects == ["project A", "project B", "project C"]
     assert res1.risk_assessor == [User(user1.accountId), User(user2.accountId, user2.displayName, user2.emailAddress)]
     assert res1.risk == SecurityRisk.CRITICAL
-    assert res1.owning_teams == [Team.GIX_TEAM, Team.FINANCIAL_INTEGRATIONS_TEAM]
+    assert res1.owning_teams == [Team.OISY_TEAM, Team.DEFI_TEAM]
     assert res1.patch_responsible == [User(user3.accountId, user3.displayName)]
     assert res1.due_date == 1671840000
     assert res1.more_info == "https://dfinity.atlassian.net/browse/SCAVM-4"
@@ -377,7 +377,7 @@ def test_update_open_finding_create_issue(jira_ds, jira_lib_mock):
         ["foo", "bar", "bear"],
         [User("risk assessor 1")],
         SecurityRisk.MEDIUM,
-        [Team.BOUNDARY_NODE_TEAM, Team.FINANCIAL_INTEGRATIONS_TEAM, Team.TRUST_TEAM],
+        [Team.BOUNDARY_NODE_TEAM, Team.DEFI_TEAM, Team.TRUST_TEAM],
         [User("patch responsible 1"), User("patch responsible 2")],
         0,
         42,
@@ -403,7 +403,7 @@ def test_update_open_finding_create_issue(jira_ds, jira_lib_mock):
             JIRA_FINDING_TO_CUSTOM_FIELD.get("risk")[0]: {"id": JIRA_SECURITY_RISK_TO_ID[SecurityRisk.MEDIUM]},
             JIRA_FINDING_TO_CUSTOM_FIELD.get("owning_teams")[0]: [
                 JIRA_OWNER_GROUP_BY_TEAM[Team.BOUNDARY_NODE_TEAM],
-                JIRA_OWNER_GROUP_BY_TEAM[Team.FINANCIAL_INTEGRATIONS_TEAM],
+                JIRA_OWNER_GROUP_BY_TEAM[Team.DEFI_TEAM],
                 JIRA_OWNER_GROUP_BY_TEAM[Team.TRUST_TEAM],
             ],
             JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_responsible")[0]: [

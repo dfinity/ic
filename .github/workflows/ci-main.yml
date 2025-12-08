@@ -1,31 +1,19 @@
 name: CI Main
 
 on:
-  merge_group:
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
-  push:
-    branches:
-      - master
-      - 'dev-gh-*'
-  pull_request:
-    branches-ignore:
-      - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
-  # Used as reusable workflow within release-testing workflow
   workflow_call:
-
-# runs for the same workflow are cancelled on PRs but not on master
-# explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
-concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+    inputs:
+      commit-sha:
+        description: The commit sha to run the CI on
+        required: true
+        type: string
 
 permissions:
   contents: read
   pull-requests: read
 
 env:
-  CI_COMMIT_SHA: ${{ github.sha }}
+  CI_COMMIT_SHA: ${{ inputs.commit-sha }}
   CI_JOB_NAME: ${{ github.job }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_EVENT_NAME: ${{ github.event_name }}
@@ -33,22 +21,32 @@ env:
   CI_RUN_ID: ${{ github.run_id }}
 
 jobs:
-  # This job is not run, but just used to set anchor references for other jobs
-  anchor-setup:
-    if: false
-    name: Anchor Setup
+  bazel-run-fuzzers:
+    name: Bazel Run Fuzzers
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:19aa596f49db34ece26a1a2903e6fabcd8766025b3dc543546fbef341ef910a2
+      image: ghcr.io/dfinity/ic-build@sha256:86c24b5b717519527920d3b720906f91723514d63acddcbaeb27ecf4144aeb37
       options: >-
          -e NODE_NAME --privileged --cgroupns host
+    timeout-minutes: 90
     steps:
       - &checkout
         name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+          ref: ${{ inputs.commit-sha }}
+      - name: Run Libfuzzer targets
+        uses: ./.github/actions/bazel
+        with:
+          invocation-names: libfuzzer
+          run: ./bin/fuzzing/run-all-fuzzers.sh --libfuzzer 100
+      - name: Run AFL targets
+        uses: ./.github/actions/bazel
+        with:
+          invocation-names: afl
+          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
 
   config:
     name: Set Config
@@ -74,10 +72,10 @@ jobs:
               fi
           done
 
-          if [[ "${is_protected_branch:-}" == "true" || '${{ github.event_name }}' == 'workflow_call' ]]; then
-              # if we are on a "protected" branch, targeting an rc branch or
-              # we're called from another workflow (i.e. release-testing) we
+          if [[ "${is_protected_branch:-}" == "true" && '${{ github.event_name }}' != 'workflow_dispatch' ]]; then
+              # if we are on a "protected" branch, targeting an rc branch or master we
               # upload all artifacts and run a release build (with versioning)
+              # but don't set this if it has been kicked off manually, because that is for external contribution PRs
               release_build="true"
               diff_only="false"
               skip_long_tests="false"
@@ -98,6 +96,11 @@ jobs:
               release_build="false"
               diff_only="false"
               skip_long_tests="true"
+          elif [[ '${{ github.event_name }}' == "workflow_dispatch" ]]; then
+              # if a workflow is manually dispatched, we cannot easily find the file changes, therefore build all targets
+              release_build="false"
+              diff_only="false"
+              skip_long_tests="false"
           else
               # default behavior is to not release, only build targets with modified inputs and skip long_tests.
               release_build="false"
@@ -109,13 +112,6 @@ jobs:
               full_macos_build="true"
           else
               full_macos_build="false"
-          fi
-
-
-          if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}' == 'true' ]]; then
-              skip_didc_checks="true"
-          else
-              skip_didc_checks="false"
           fi
 
 
@@ -144,10 +140,6 @@ jobs:
           echo "full_macos_build: $full_macos_build"
           echo "full_macos_build=$full_macos_build" >> "$GITHUB_OUTPUT"
           echo "| \`full_macos_build\` | \`$full_macos_build\` |" >> "$GITHUB_STEP_SUMMARY"
-
-          echo "skip_didc_checks: $skip_didc_checks"
-          echo "skip_didc_checks=$skip_didc_checks" >> "$GITHUB_OUTPUT"
-          echo "| \`skip_didc_checks\` | \`$skip_didc_checks\` |" >> "$GITHUB_STEP_SUMMARY"
 
           echo "skip_buf_checks: $skip_buf_checks"
           echo "skip_buf_checks=$skip_buf_checks" >> "$GITHUB_OUTPUT"
@@ -204,9 +196,6 @@ jobs:
             targets_args=()
             if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
               targets_args+=("--skip_long_tests")
-            fi
-            if [[ '${{ needs.config.outputs.skip_didc_checks }}' == 'true' ]]; then
-              targets_args+=("--exclude_tags=didc")
             fi
             if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
               targets_args+=("--exclude_tags=buf")
@@ -341,6 +330,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build and Test
         run: |
+          mkdir -p /tmp/zig-cache
+
           bazel \
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
@@ -434,24 +425,6 @@ jobs:
           name: arm64 artifacts
           upload-command: bazel run --config=stamped //:artifact-uploader -- ${{ steps.prepare-bundle.outputs.bundledir }}
           credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
-
-  bazel-run-fuzzers:
-    name: Bazel Run Fuzzers
-    runs-on: *dind-large-setup
-    container: *container-setup
-    timeout-minutes: 90
-    steps:
-      - *checkout
-      - name: Run Libfuzzer targets
-        uses: ./.github/actions/bazel
-        with:
-          invocation-names: libfuzzer
-          run: ./bin/fuzzing/run-all-fuzzers.sh --libfuzzer 100
-      - name: Run AFL targets
-        uses: ./.github/actions/bazel
-        with:
-          invocation-names: afl
-          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
 
   python-ci-tests:
     name: Python CI Tests
@@ -643,6 +616,7 @@ jobs:
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
         with:
+          ref: ${{ inputs.commit-sha }}
           filters: |
             cargo:
               - "**/*.rs"
@@ -675,3 +649,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Check PULL_REQUEST_BAZEL_TARGETS
         run: ./ci/scripts/targets.py check
+
+# only run on pull-request event - they are also triggered from schedule-daily.yml
+  pocket-ic-tests-windows:
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/pocket-ic-tests-windows.yml
+    with:
+      commit-sha: ${{ github.sha }}

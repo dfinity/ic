@@ -44,7 +44,6 @@
 
 *.sh        //pre-commit:shfmt-check
 *.py        //pre-commit:ruff-lint
-*.hs        //pre-commit:ormolu-lint
 *.proto     //pre-commit:protobuf-format-check
             //pre-commit:buf-breaking
 
@@ -70,12 +69,14 @@ ic-os/guestos/context/docker-base.* //rs/tests/node:kill_start_long_test
 
 rs/nns/cmc/*.rs //rs/tests/nns:nns_cycles_minting_test
 
-*nns_delegation* //rs/tests/networking:nns_delegation_mainnet_nns_version_test
-                 //rs/tests/networking:nns_delegation_branch_nns_version_test
+*nns_delegation* //rs/tests/networking:nns_delegation_branch_nns_version_test
+# TODO(NET-1784): add this back
+# //rs/tests/networking:nns_delegation_mainnet_nns_version_test
 
 rs/backup/*.rs //rs/tests/consensus/backup/...
 
 rs/orchestrator/*.rs //rs/tests/consensus/orchestrator/...
+                     //rs/tests/consensus/upgrade/...
 
 *guestos-recovery-engine* //rs/tests/consensus:guestos_recovery_engine_smoke_test
                           //rs/tests/nested/nns_recovery/...
@@ -93,3 +94,5 @@ rs/bitcoin/* //rs/tests/ckbtc:btc_adapter_basics_test
              //rs/tests/execution:btc_get_balance_test_colocate
 
 rs/boundary_node/rate_limits/* //rs/tests/boundary_nodes:rate_limit_canister_test
+
+rs/migration_canister/* //rs/tests/execution:canister_migration_test_head_nns

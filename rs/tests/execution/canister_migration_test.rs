@@ -3,7 +3,7 @@ use std::iter::zip;
 use std::time::Duration;
 
 use anyhow::{Result, bail};
-use candid::{CandidType, Decode, Deserialize, Encode, Principal};
+use candid::{CandidType, Decode, Deserialize, Encode, Principal, Reserved};
 use canister_test::Canister;
 use futures::future::join_all;
 use ic_agent::Agent;
@@ -64,24 +64,25 @@ fn test(env: TestEnv) {
 
 #[derive(Clone, Debug, CandidType)]
 struct MigrateCanisterArgs {
-    pub source: Principal,
-    pub target: Principal,
+    pub canister_id: Principal,
+    pub replace_canister_id: Principal,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
 pub enum ValidationError {
-    MigrationsDisabled,
-    RateLimited,
+    MigrationsDisabled(Reserved),
+    RateLimited(Reserved),
+    ValidationInProgress { canister: Principal },
     MigrationInProgress { canister: Principal },
     CanisterNotFound { canister: Principal },
-    SameSubnet,
+    SameSubnet(Reserved),
     CallerNotController { canister: Principal },
     NotController { canister: Principal },
-    SourceNotStopped,
-    SourceNotReady,
-    TargetNotStopped,
-    TargetHasSnapshots,
-    SourceInsufficientCycles,
+    SourceNotStopped(Reserved),
+    SourceNotReady(Reserved),
+    TargetNotStopped(Reserved),
+    TargetHasSnapshots(Reserved),
+    SourceInsufficientCycles(Reserved),
     CallFailed { reason: String },
 }
 
@@ -378,13 +379,13 @@ async fn test_async(env: TestEnv) {
     pause_canister_migrations(&governance_canister).await;
 
     let args = Encode!(&MigrateCanisterArgs {
-        source: source_canister.canister_id(),
-        target: target_canister.canister_id(),
+        canister_id: source_canister.canister_id(),
+        replace_canister_id: target_canister.canister_id(),
     })
     .unwrap();
     let args2 = Encode!(&MigrateCanisterArgs {
-        source: source_canister2.canister_id(),
-        target: target_canister2.canister_id(),
+        canister_id: source_canister2.canister_id(),
+        replace_canister_id: target_canister2.canister_id(),
     })
     .unwrap();
 
@@ -397,10 +398,13 @@ async fn test_async(env: TestEnv) {
         .await
         .expect("Failed to call migrate_canister.");
 
-    let decoded_result = Decode!(&result, Result<(), ValidationError>)
+    let decoded_result = Decode!(&result, Result<(), Option<ValidationError>>)
         .expect("Failed to decode reponse from migrate_canister.");
 
-    assert_eq!(decoded_result, Err(ValidationError::MigrationsDisabled));
+    assert_eq!(
+        decoded_result,
+        Err(Some(ValidationError::MigrationsDisabled(Reserved)))
+    );
 
     info!(logger, "Unpausing migrations");
 
@@ -422,18 +426,18 @@ async fn test_async(env: TestEnv) {
         .await
         .expect("Failed to call migrate_canister.");
 
-    let decoded_result = Decode!(&result, Result<(), ValidationError>)
+    let decoded_result = Decode!(&result, Result<(), Option<ValidationError>>)
         .expect("Failed to decode reponse from migrate_canister.");
 
     assert_eq!(decoded_result, Ok(()));
 
-    // The migration canister has a step where it waits for 5 minutes, so we give it a minute more than that.
-    println!("Wait over 5 minutes for processing.");
+    // The migration canister has a step where it waits for 6 minutes, so we give it a minute more than that.
+    println!("Wait 7 minutes for processing.");
 
     retry_with_msg_async!(
-        "Wait 5m for migration canister to process",
+        "Wait 7m for migration canister to process",
         &logger,
-        Duration::from_secs(360),
+        Duration::from_secs(420),
         Duration::from_secs(10),
         || async {
             let status = nns_agent
@@ -442,13 +446,14 @@ async fn test_async(env: TestEnv) {
                 .call_and_wait()
                 .await
                 .expect("Failed to call migration_status.");
-            let decoded_status = Decode!(&status, Vec<MigrationStatus>)
-                .expect("Failed to decode response from migration_status.");
+            let decoded_status = Decode!(&status, Option<MigrationStatus>)
+                .expect("Failed to decode response from migration_status.")
+                .expect("There should be a migration status available.");
 
-            if matches!(decoded_status[0], MigrationStatus::Succeeded { .. }) {
+            if matches!(decoded_status, MigrationStatus::Succeeded { .. }) {
                 Ok(())
             } else {
-                bail!("Not ready. Status: {:?}", decoded_status[0])
+                bail!("Not ready. Status: {:?}", decoded_status)
             }
         }
     )

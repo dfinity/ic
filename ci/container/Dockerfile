@@ -41,14 +41,6 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
     cd .. && \
     rm -rf e2fsdroid
 
-# Install an older libtinfo for rules_haskell
-RUN mkdir libtinfo && \
-    cd libtinfo && \
-    wget "http://mirrors.kernel.org/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb" && \
-    apt -yqq install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
-    cd .. && \
-    rm -rf libtinfo
-
 ARG mkcert_version=1.4.4
 ARG mkcert_sha=6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52
 RUN curl -fsSL https://github.com/FiloSottile/mkcert/releases/download/v${mkcert_version}/mkcert-v${mkcert_version}-linux-amd64 -o /usr/local/bin/mkcert && \
@@ -131,7 +123,7 @@ RUN mkdir -p /afl && \
 # Pre-populate the Bazel installation for root
 # (note: this is only used for bash completion; the actual bazel version comes from bazelisk)
 COPY .bazelversion /tmp/bazel/
-RUN cd /tmp/bazel && touch WORKSPACE  && bazel version
+RUN cd /tmp/bazel && bazel version
 
 COPY ./ci/container/files/generate-bazel-completion.sh /tmp/
 RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-completion.sh && \

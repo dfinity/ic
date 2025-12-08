@@ -1,10 +1,7 @@
 #[cfg(test)]
 mod tests;
 use crate::reimbursement::reimburse_withdrawals;
-use crate::{
-    CanisterRuntime, IC_CANISTER_RUNTIME, estimate_fee_per_vbyte, finalize_requests,
-    submit_pending_requests,
-};
+use crate::{CanisterRuntime, estimate_fee_per_vbyte, finalize_requests, submit_pending_requests};
 use scopeguard::guard;
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
@@ -104,7 +101,7 @@ impl TaskQueue {
 /// Schedules a task for execution after the given delay.
 pub fn schedule_after<R: CanisterRuntime>(delay: Duration, work: TaskType, runtime: &R) {
     let now_nanos = runtime.time();
-    let execute_at_ns = now_nanos.saturating_add(delay.as_secs().saturating_mul(crate::SEC_NANOS));
+    let execute_at_ns = now_nanos.saturating_add(delay.as_nanos() as u64);
 
     let execution_time = TASKS.with(|t| t.borrow_mut().schedule_at(execute_at_ns, work));
     set_global_timer(execution_time, runtime);
@@ -144,15 +141,14 @@ pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
                 None => return,
             };
 
-            submit_pending_requests(&IC_CANISTER_RUNTIME).await;
-            finalize_requests(&IC_CANISTER_RUNTIME, force_resubmit_stuck_transactions).await;
-            reimburse_withdrawals(&IC_CANISTER_RUNTIME).await;
+            submit_pending_requests(&runtime).await;
+            finalize_requests(&runtime, force_resubmit_stuck_transactions).await;
+            reimburse_withdrawals(&runtime).await;
         }
         TaskType::RefreshFeePercentiles => {
-            const FEE_ESTIMATE_DELAY: Duration = Duration::from_secs(60 * 60);
             let _enqueue_followup_guard = guard((), |_| {
                 schedule_after(
-                    FEE_ESTIMATE_DELAY,
+                    runtime.refresh_fee_percentiles_frequency(),
                     TaskType::RefreshFeePercentiles,
                     &runtime,
                 )
@@ -162,7 +158,7 @@ pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
                 Some(guard) => guard,
                 None => return,
             };
-            let _ = estimate_fee_per_vbyte().await;
+            let _ = estimate_fee_per_vbyte(&runtime).await;
         }
     }
 }

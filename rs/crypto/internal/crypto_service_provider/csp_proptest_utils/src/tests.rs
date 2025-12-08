@@ -34,14 +34,12 @@ macro_rules! should_have_a_strategy_for_each_variant {
 use ic_crypto_internal_csp::vault::api::CspBasicSignatureError;
 should_have_a_strategy_for_each_variant!(
     CspBasicSignatureError,
-    CspBasicSignatureError::TransientInternalError {
-        internal_error: "dummy error to match upon".to_string(),
-    },
-    SecretKeyNotFound { .. },
-    UnsupportedAlgorithm { .. },
+    CspBasicSignatureError::MalformedPublicKey("dummy error to match upon".to_string()),
+    MalformedPublicKey(_),
+    SecretKeyNotFound(_),
     WrongSecretKeyType { .. },
-    MalformedSecretKey { .. },
-    TransientInternalError { .. }
+    TransientInternalError { .. },
+    PublicKeyNotFound
 );
 
 use ic_crypto_internal_csp::types::CspSignature;
@@ -261,6 +259,5 @@ should_have_a_strategy_for_each_variant!(
     SecretKeyNotFound { .. },
     WrongSecretKeyType { .. },
     MalformedSecretKey { .. },
-    SigningFailed { .. },
     TransientInternalError { .. },
 );

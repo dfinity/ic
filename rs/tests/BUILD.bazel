@@ -20,6 +20,7 @@ PACKAGES = [
     "@noble//libcryptsetup-dev/amd64",
     "@noble//dmsetup/amd64",
     "@noble//dosfstools/amd64",
+    "@noble//e2fsprogs/amd64",
     "@noble//gawk/amd64",
     "@noble//gzip/amd64",
     "@noble//libssl3t64/amd64",

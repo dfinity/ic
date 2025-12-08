@@ -18,6 +18,7 @@ DEPENDENCIES = [
     "//rs/crypto/sha2",
     "//rs/crypto/utils/basic_sig",
     "//rs/crypto/utils/ni_dkg",
+    "//rs/nervous_system/access_list",
     "//rs/nervous_system/chunks",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",

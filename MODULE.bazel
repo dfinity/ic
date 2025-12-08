@@ -12,21 +12,26 @@ use_repo(ext, "rules_buf_toolchains")
 register_toolchains("@rules_buf_toolchains//:all")
 
 # General Bazel helpers
-bazel_dep(name = "bazel_skylib", version = "1.7.1")
+bazel_dep(name = "bazel_skylib", version = "1.8.2")
 bazel_dep(name = "aspect_bazel_lib", version = "2.9.0")
+bazel_dep(name = "rules_shell", version = "0.6.1")
 
 bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = True)
 
 # CC dependencies (for C libs like miracl-core, etc)
-bazel_dep(name = "rules_cc", version = "0.0.13")
-bazel_dep(name = "platforms", version = "0.0.11")
-bazel_dep(name = "hermetic_cc_toolchain", version = "3.1.1")
+bazel_dep(name = "rules_cc", version = "0.2.8")
+bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "hermetic_cc_toolchain", version = "4.0.1")
 archive_override(
     module_name = "hermetic_cc_toolchain",
-    integrity = "sha256-kHdFv5FVX3foI0wLlTNx5srFunFdHPEv9kFJbdG86dE=",
+    integrity = "sha256-ziFGNqyR/zQFkoqxcOdCAbAYnhNxXXObBfUjxO9LGoM=",
     patch_strip = 1,
-    patches = ["//bazel:hermetic_cc_toolchain.patch"],
-    urls = ["https://github.com/uber/hermetic_cc_toolchain/releases/download/v3.1.1/hermetic_cc_toolchain-v3.1.1.tar.gz"],
+    patches = [
+        "//bazel:hermetic_cc_toolchain_strip.patch",
+        "//bazel:hermetic_cc_toolchain_cache_dir.patch",
+    ],
+    strip_prefix = "hermetic_cc_toolchain-32c6f9ec9e0b3aebfa92950e7019f1275390bda1",
+    urls = ["https://github.com/uber/hermetic_cc_toolchain/archive/32c6f9ec9e0b3aebfa92950e7019f1275390bda1.tar.gz"],
 )
 
 # configure/make dependencies
@@ -55,6 +60,10 @@ archive_override(
 
 bazel_dep(name = "pigz", version = "2.8")  # (parallel) gzip
 
+# Rust
+
+include("//bazel:rust.MODULE.bazel")
+
 # Python dependencies
 
 bazel_dep(name = "rules_python", version = "0.35.0")
@@ -75,7 +84,7 @@ use_repo(pip, "python_deps")
 # Protobuf dependencies
 bazel_dep(
     name = "protobuf",
-    version = "28.2",
+    version = "29.1",
     # We rename it to keep the legacy name used throughout our bazel files
     repo_name = "com_google_protobuf",
 )
@@ -270,164 +279,6 @@ apt.install(
     manifest = "//bazel:noble.yaml",
 )
 use_repo(apt, "noble")
-
-# Haskell toolchain for spec_compliance tests
-
-bazel_dep(
-    name = "rules_haskell",
-    version = "1.0",
-)
-
-# patched to work around https://github.com/tweag/rules_haskell/issues/2254
-archive_override(
-    module_name = "rules_haskell",
-    integrity = "sha384-bL1ZOn6DZpfsl4+a3PA9T4OAOJnioHXUhoRR9jChk4oy9ykbMAjCBpZ+AxRdRu7V",
-    patch_strip = 1,
-    patches = ["//bazel:rules_haskell.patch"],
-    strip_prefix = "rules_haskell-1.0",
-    urls = ["https://github.com/tweag/rules_haskell/releases/download/v1.0/rules_haskell-1.0.tar.gz"],
-)
-
-haskell_toolchains = use_extension(
-    "@rules_haskell//extensions:haskell_toolchains.bzl",
-    "haskell_toolchains",
-)
-haskell_toolchains.bindists(version = "9.6.6")
-
-rules_haskell_dependencies = use_extension(
-    "@rules_haskell//extensions:rules_haskell_dependencies.bzl",
-    "rules_haskell_dependencies",
-)
-use_repo(
-    rules_haskell_dependencies,
-    "Cabal",
-)
-
-# Stack snapshot. To update, run
-# bazel run @stackage-unpinned//:pin
-stack_snapshot = use_extension(
-    "@rules_haskell//extensions:stack_snapshot.bzl",
-    "stack_snapshot",
-)
-use_repo(
-    stack_snapshot,
-    "stackage",
-    "stackage-unpinned",
-)
-
-stack_snapshot.stack_snapshot_json(label = "//:stackage_snapshot.json")
-stack_snapshot.snapshot(name = "lts-22.30")
-
-[
-    stack_snapshot.package(
-        name = pkg,
-    )
-    for pkg in [
-        "QuickCheck",
-        "aeson",
-        "array",
-        "asn1-encoding",
-        "asn1-types",
-        "async",
-        "atomic-write",
-        "base",
-        "base16",
-        "base32",
-        "base64-bytestring",
-        "binary",
-        "bytes",
-        "bytestring",
-        "case-insensitive",
-        "cborg",
-        "cereal",
-        "conduit",
-        "constraints",
-        "containers",
-        "crypton-connection",
-        "crypton-x509",
-        "crypton-x509-store",
-        "crypton-x509-validation",
-        "cryptonite",
-        "data-default-class",
-        "deepseq",
-        "digest",
-        "directory",
-        "dlist",
-        "ed25519",
-        "either",
-        "entropy",
-        "file-embed",
-        "filepath",
-        "hashable",
-        "hex-text",
-        "hspec",
-        "http-client",
-        "http-client-tls",
-        "http-types",
-        "leb128-cereal",
-        "megaparsec",
-        "memory",
-        "mtl",
-        "murmur3",
-        "network",
-        "network-uri",
-        "optparse-applicative",
-        "parallel",
-        "parser-combinators",
-        "prettyprinter",
-        "primitive",
-        "process",
-        "quickcheck-io",
-        "random",
-        "row-types",
-        "safe",
-        "scientific",
-        "secp256k1-haskell",
-        "serialise",
-        "split",
-        "splitmix",
-        "string-conversions",
-        "tasty",
-        "tasty-ant-xml",
-        "tasty-html",
-        "tasty-hunit",
-        "tasty-quickcheck",
-        "tasty-rerun",
-        "template-haskell",
-        "temporary",
-        "text",
-        "time",
-        "tls",
-        "transformers",
-        "uglymemo",
-        "unordered-containers",
-        "utf8-string",
-        "vector",
-        "wai",
-        "wai-cors",
-        "wai-extra",
-        "warp",
-        "wide-word",
-        "word8",
-        "zlib",
-    ]
-]
-
-stack_snapshot.package(
-    name = "attoparsec",
-    components =
-        [
-            # attoparsec contains an internal library which is not exposed publicly,
-            # but required to build the public library, hence the declaration of
-            # those 2 components, as well as the explicit declaration of the
-            # dependency between them.
-            "lib",
-            "lib:attoparsec-internal",
-        ],
-    components_dependencies = {
-        "lib:attoparsec": ["lib:attoparsec-internal"],
-    },
-)
 
 # Single files & archives that are not bazel modules
 
@@ -702,23 +553,6 @@ http_file(
 )
 
 http_archive(
-    name = "haskell-candid",
-    sha256 = "bd9d67c3f719ac4cfb5ba339b52dd8ee985b11029a53e97b3cd555334f28d1e3",
-    strip_prefix = "haskell-candid-b4ebdea36ad0b7cbf6f69ddbbfffc73434ecb222",
-    urls = ["https://github.com/nomeata/haskell-candid/archive/b4ebdea36ad0b7cbf6f69ddbbfffc73434ecb222.tar.gz"],
-)
-
-http_archive(
-    name = "miracl-core",
-    build_file = "@//third_party:BUILD.miracl-core.bazel",
-    patch_args = ["-p1"],
-    patches = ["//hs/spec_compliance:miracl-core.patch"],
-    sha256 = "b93a14c35f56eca8dddaab95dea94294d51ca680a7d6bb1c1f048e1cd71550cd",
-    strip_prefix = "core-ec77b2817a0e360b1893affe4cfa44d19391efc7",
-    urls = ["https://github.com/miracl/core/archive/ec77b2817a0e360b1893affe4cfa44d19391efc7.tar.gz"],
-)
-
-http_archive(
     name = "bitcoin_core_linux_x86",
     build_file_content = """
 package(default_visibility = ["//visibility:public"])
@@ -844,14 +678,70 @@ http_file(
 )
 
 http_file(
+    name = "dogecoin_example_canister",
+    downloaded_file_path = "basic_dogecoin.wasm",
+    sha256 = "2eacb8de00dc2fc9bd43f7a5a8a4cd79c61c40ed3f761df84105a4a450f9e0c4",
+    url = "https://github.com/dfinity/dogecoin-canister/releases/download/example%2Fbasic-dogecoin%2F2025-11-12/basic_dogecoin.wasm",
+)
+
+http_file(
     name = "pocket-ic-mainnet-gz",
     # Calculate this hash using:
     # git checkout $revision
     # ci/container/container-run.sh
     # bazel build //publish/binaries:pocket-ic.gz
     # sha256sum bazel-bin/publish/binaries/pocket-ic.gz
-    sha256 = "237272216498074e5250a0685813b96632963ff9abbc51a7030d9b625985028d",
-    url = "https://github.com/dfinity/pocketic/releases/download/9.0.1/pocket-ic-x86_64-linux.gz",
+    sha256 = "dd8a95dd5a784e9b7c8c79fc4fa3a5c97d449f9666afe57aefa960aef0d68b8c",
+    url = "https://github.com/dfinity/pocketic/releases/download/10.0.0/pocket-ic-x86_64-linux.gz",
+)
+
+## Rosetta CLI
+
+http_archive(
+    name = "rosetta-cli-x86_64-darwin",
+    build_file = "@//third_party:BUILD.rosetta-cli.bazel",
+    sha256 = "6426d69d8ce6851a00eb47c4b3bb5a5f2f792daca58a58d077ac5ade7c07f42b",
+    url = "https://github.com/coinbase/mesh-cli/releases/download/v0.10.3/rosetta-cli-0.10.3-darwin-amd64.tar.gz",
+)
+
+http_archive(
+    name = "rosetta-cli-aarch64-darwin",
+    build_file = "@//third_party:BUILD.rosetta-cli.bazel",
+    sha256 = "41eaa23bc2a34568549e7c0d99c3471fd0c20959ffb7a1e9fd2acc658f500b20",
+    url = "https://github.com/coinbase/mesh-cli/releases/download/v0.10.3/rosetta-cli-0.10.3-darwin-arm64.tar.gz",
+)
+
+http_archive(
+    name = "rosetta-cli-x86_64-linux",
+    build_file = "@//third_party:BUILD.rosetta-cli.bazel",
+    sha256 = "1ea96b427dfa69a93d2915bc57669014b58d66a9ee7d761509d50b66486d42f8",
+    url = "https://github.com/coinbase/mesh-cli/releases/download/v0.10.3/rosetta-cli-0.10.3-linux-amd64.tar.gz",
+)
+
+# ruff, python linter & formatter
+
+http_archive(
+    name = "ruff-x86_64-linux",
+    build_file = "@//third_party:BUILD.ruff.bazel",
+    sha256 = "7edce7075bf6d43b1ef2a9383b76a43310bbf5d70fa4471330fd5aaf655192b0",
+    strip_prefix = "ruff-x86_64-unknown-linux-gnu",
+    url = "https://github.com/astral-sh/ruff/releases/download/0.6.8/ruff-x86_64-unknown-linux-gnu.tar.gz",
+)
+
+http_archive(
+    name = "ruff-aarch64-darwin",
+    build_file = "@//third_party:BUILD.ruff.bazel",
+    sha256 = "e554d55281391138e44b30ccd38c666388e4aeb05417c9ffb98a6cbb014aef0d",
+    strip_prefix = "ruff-aarch64-apple-darwin",
+    url = "https://github.com/astral-sh/ruff/releases/download/0.6.8/ruff-aarch64-apple-darwin.tar.gz",
+)
+
+http_archive(
+    name = "ruff-x86_64-darwin",
+    build_file = "@//third_party:BUILD.ruff.bazel",
+    sha256 = "44039cea2aed4787cedcda0c35e5b352530d6ca2178f39c8bd4ff63526c43aef",
+    strip_prefix = "ruff-x86_64-apple-darwin",
+    url = "https://github.com/astral-sh/ruff/releases/download/0.6.8/ruff-x86_64-apple-darwin.tar.gz",
 )
 
 http_archive(
@@ -870,20 +760,53 @@ http_archive(
     url = "https://github.com/rclone/rclone/releases/download/v1.69.2/rclone-v1.69.2-linux-amd64.zip",
 )
 
-# even if the macOS version is "x86_64" it runs on ARM chips because of
-# emulation
+http_archive(
+    name = "trivy-x86_64-linux",
+    build_file = "@//third_party:BUILD.trivy.bazel",
+    sha256 = "ebc1dd4d4c0594028d6a501dfc1a73d56add20b29d3dee5ab6e64aac94b1d526",
+    url = "https://github.com/aquasecurity/trivy/releases/download/v0.35.0/trivy_0.35.0_Linux-64bit.tar.gz",
+)
+
+http_archive(
+    name = "trivy-aarch64-darwin",
+    build_file = "@//third_party:BUILD.trivy.bazel",
+    sha256 = "343fb01737e886bde797f30e5e6359fc1a7b7e1e9807f0e62ae3aea3f9508a1a",
+    url = "https://github.com/aquasecurity/trivy/releases/download/v0.35.0/trivy_0.35.0_macOS-ARM64.tar.gz",
+)
+
+http_archive(
+    name = "trivy-x86_64-darwin",
+    build_file = "@//third_party:BUILD.trivy.bazel",
+    sha256 = "165c501451ab91a486678107c34bfb7b0b9e117c8ed5bba746ebda31923d9330",
+    url = "https://github.com/aquasecurity/trivy/releases/download/v0.35.0/trivy_0.35.0_macOS-64bit.tar.gz",
+)
+
 http_archive(
     name = "dfx-x86_64-darwin",
     build_file = "@//third_party:BUILD.dfx.bazel",
-    sha256 = "4b1c24805f655576fb97f61aba019fbbe7c1bdca0598a5c1a9220a4bfe80f460",
-    url = "https://github.com/dfinity/sdk/releases/download/0.20.1/dfx-0.20.1-x86_64-darwin.tar.gz",
+    sha256 = "be1079c5f48e4bb88c2421f65b501040250a13a4ea57c6ccc1d3edf17812f674",
+    url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-x86_64-darwin.tar.gz",
 )
 
 http_archive(
     name = "dfx-x86_64-linux",
     build_file = "@//third_party:BUILD.dfx.bazel",
-    sha256 = "011c8a6ff9af0578ee2c8b0a7af3abc5b3d5950cc64421b4c3a7acd1fc18265e",
-    url = "https://github.com/dfinity/sdk/releases/download/0.20.1/dfx-0.20.1-x86_64-linux.tar.gz",
+    sha256 = "d1473ae15ece44e782f0f2f8ac586ead349fe434189df8b587eb738becce0138",
+    url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-x86_64-linux.tar.gz",
+)
+
+http_archive(
+    name = "dfx-aarch64-darwin",
+    build_file = "@//third_party:BUILD.dfx.bazel",
+    sha256 = "c97b3975f3c72c20f016f7ef4d394fea5bb7e7d849dd77f6ab0ea0361ad6276c",
+    url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-aarch64-darwin.tar.gz",
+)
+
+http_archive(
+    name = "dfx-aarch64-linux",
+    build_file = "@//third_party:BUILD.dfx.bazel",
+    sha256 = "9da909e8a3cbcb938cfe8502afab87ec61e75c5744025cd0a18b621695c38a5e",
+    url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-aarch64-linux.tar.gz",
 )
 
 http_file(
@@ -900,6 +823,98 @@ http_file(
     executable = True,
     sha256 = "5df9a457c5ede103c7d017c23a4c1abce4d17db50442a9407724a9006db2f710",
     url = "https://github.com/dfinity/candid/releases/download/2023-11-16/didc-macos",
+)
+
+# pebble & pebble dns server for Boundary Nodes ACME tests
+
+http_archive(
+    name = "pebble-aarch64-darwin",
+    build_file = "@//third_party:BUILD.pebble.bazel",
+    sha256 = "39e07d63dc776521f2ffe0584e5f4f081c984ac02742c882b430891d89f0c866",
+    strip_prefix = "pebble-darwin-arm64/darwin/arm64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-darwin-arm64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-x86_64-darwin",
+    build_file = "@//third_party:BUILD.pebble.bazel",
+    sha256 = "9b9625651f8ce47706235179503fec149f8f38bce2b2554efe8c0f2a021f877c",
+    strip_prefix = "pebble-darwin-amd64/darwin/amd64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-darwin-amd64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-aarch64-linux",
+    build_file = "@//third_party:BUILD.pebble.bazel",
+    sha256 = "0e70f2537353f61cbf06aa54740bf7f7bb5f963ba00e909f23af5f85bc13fd1a",
+    strip_prefix = "pebble-linux-arm64/linux/arm64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-linux-arm64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-x86_64-linux",
+    build_file = "@//third_party:BUILD.pebble.bazel",
+    sha256 = "34595d915bbc2fc827affb3f58593034824df57e95353b031c8d5185724485ce",
+    strip_prefix = "pebble-linux-amd64/linux/amd64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-linux-amd64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-challtestsrv-aarch64-darwin",
+    build_file = "@//third_party:BUILD.pebble-challtestsrv.bazel",
+    sha256 = "1bc5a6cfa062d9756e98d67825daf67f61dd655bcb6025efca2138fe836c9bbc",
+    strip_prefix = "pebble-challtestsrv-darwin-arm64/darwin/arm64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-darwin-arm64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-challtestsrv-x86_64-darwin",
+    build_file = "@//third_party:BUILD.pebble-challtestsrv.bazel",
+    sha256 = "3d1343b1bbe892145fd2da70be36e67b149e482fbff897e109b8053f4f790f40",
+    strip_prefix = "pebble-challtestsrv-darwin-amd64/darwin/amd64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-darwin-amd64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-challtestsrv-aarch64-linux",
+    build_file = "@//third_party:BUILD.pebble-challtestsrv.bazel",
+    sha256 = "99a276aac8ceac121859b799708218e6dc57d7ca1dc1b8b5b586246b3c4160e6",
+    strip_prefix = "pebble-challtestsrv-linux-arm64/linux/arm64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-linux-arm64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-challtestsrv-x86_64-linux",
+    build_file = "@//third_party:BUILD.pebble-challtestsrv.bazel",
+    sha256 = "a817449d1f05ae58bcb7bf073b4cebe5d31512f859ba4b83951bd825d28d2114",
+    strip_prefix = "pebble-challtestsrv-linux-amd64/linux/amd64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-linux-amd64.tar.gz",
+)
+
+## shfmt, for formatting bash code
+
+http_file(
+    name = "shfmt-x86_64-linux",
+    downloaded_file_path = "shfmt",
+    executable = True,
+    sha256 = "5741a02a641de7e56b8da170e71a97e58050d66a3cf485fb268d6a5a8bb74afb",
+    url = "https://github.com/mvdan/sh/releases/download/v3.6.0/shfmt_v3.6.0_linux_amd64",
+)
+
+http_file(
+    name = "shfmt-aarch64-darwin",
+    downloaded_file_path = "shfmt",
+    executable = True,
+    sha256 = "633f242246ee0a866c5f5df25cbf61b6af0d5e143555aca32950059cf13d91e0",
+    url = "https://github.com/mvdan/sh/releases/download/v3.6.0/shfmt_v3.6.0_darwin_arm64",
+)
+
+http_file(
+    name = "shfmt-x86_64-darwin",
+    downloaded_file_path = "shfmt",
+    executable = True,
+    sha256 = "b8c9c025b498e2816b62f0b717f6032e9ab49e725a45b8205f52f66318f17185",
+    url = "https://github.com/mvdan/sh/releases/download/v3.6.0/shfmt_v3.6.0_darwin_amd64",
 )
 
 # Management canister candid interface
@@ -919,6 +934,89 @@ http_file(
     url = "https://curl.se/ca/cacert-2024-11-26.pem",
 )
 
+mainnet_icos_images = use_repo_rule("//bazel:mainnet-icos-images.bzl", "mainnet_icos_images")
+
+# Mainnet ICOS images
+mainnet_icos_images(
+    name = "mainnet_latest_hostos_images",
+    parts = [
+        "hostos",
+        "latest_release",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_images(
+    name = "mainnet_latest_hostos_images_dev",
+    dev = True,
+    parts = [
+        "hostos",
+        "latest_release",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_images(
+    name = "mainnet_latest_guestos_images",
+    parts = [
+        "guestos",
+        "latest_release",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_images(
+    name = "mainnet_latest_guestos_images_dev",
+    dev = True,
+    parts = [
+        "guestos",
+        "latest_release",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_images(
+    name = "mainnet_nns_images",
+    parts = [
+        "guestos",
+        "subnets",
+        "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_images(
+    name = "mainnet_nns_images_dev",
+    dev = True,
+    parts = [
+        "guestos",
+        "subnets",
+        "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_images(
+    name = "mainnet_app_images",
+    parts = [
+        "guestos",
+        "subnets",
+        "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_images(
+    name = "mainnet_app_images_dev",
+    dev = True,
+    parts = [
+        "guestos",
+        "subnets",
+        "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
 mainnet_icos_versions = use_repo_rule("//bazel:mainnet-icos-versions.bzl", "mainnet_icos_versions")
 
 mainnet_icos_versions(
@@ -935,12 +1033,13 @@ toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolcha
 
 # The use_hermetic_cc setting is added to each toolchain to allow us to opt out
 # in favor of system toolchains, when needed.
-toolchains.extra_settings(settings = ["//bazel:use_hermetic_cc"])
+toolchains.extra_target_settings(settings = ["//bazel:use_hermetic_cc"])
 use_repo(toolchains, "zig_sdk")
 
 register_toolchains(
     # Linux toolchains
     "@zig_sdk//toolchain:linux_amd64_gnu.2.31",
+    "@zig_sdk//toolchain:linux_arm64_gnu.2.31",
 
     # macOS toolchains
     # Do not use hermetic toolchains for macOS until we have had a chance to
@@ -974,3 +1073,83 @@ new_local_repository(
     build_file = "@//third_party:BUILD.libvirt.bazel",
     path = "/usr",
 )
+
+# Mainnet canister references
+
+canisters = use_repo_rule("//bazel:mainnet-canisters.bzl", "canisters")
+
+# We cannot derive the filenames (e.g. "registry-canister.wasm.gz") directly
+# from the canister names because we use inconsistent names.
+#
+# For each new canister defined in the source JSON file (see `path`) a mapping can be added
+# from canister name (as per JSON) to filename.
+#
+# Additionally the `repositories` list GitHub repositories for canisters. If a canister has an
+# entry in `repositories`, then the source JSON file must specify a `tag` and the canister
+# artifact will be fetched from the tag's release page.
+canisters(
+    name = "mainnet_canisters",
+    filenames = {
+        "registry": "registry-canister.wasm.gz",
+        "governance": "governance-canister.wasm.gz",
+        "governance-canister_test": "governance-canister_test.wasm.gz",
+        "ledger": "ledger-canister_notify-method.wasm.gz",
+        "archive": "ledger-archive-node-canister.wasm.gz",
+        "index": "ic-icp-index-canister.wasm.gz",
+        "root": "root-canister.wasm.gz",
+        "lifeline": "lifeline_canister.wasm.gz",
+        "genesis-token": "genesis-token-canister.wasm.gz",
+        "cycles-minting": "cycles-minting-canister.wasm.gz",
+        "sns-wasm": "sns-wasm-canister.wasm.gz",
+        "ck_btc_archive": "ic-icrc1-archive.wasm.gz",
+        "ck_btc_ledger": "ic-icrc1-ledger.wasm.gz",
+        "ck_btc_ledger_v1": "ic-icrc1-ledger.wasm.gz",
+        "ck_btc_ledger_v2": "ic-icrc1-ledger.wasm.gz",
+        "ck_btc_ledger_v2_noledgerversion": "ic-icrc1-ledger.wasm.gz",
+        "ck_btc_ledger_v3": "ic-icrc1-ledger.wasm.gz",
+        "ck_btc_index": "ic-icrc1-index-ng.wasm.gz",
+        "ck_eth_archive": "ic-icrc1-archive-u256.wasm.gz",
+        "ck_eth_ledger": "ic-icrc1-ledger-u256.wasm.gz",
+        "ck_eth_ledger_v1": "ic-icrc1-ledger-u256.wasm.gz",
+        "ck_eth_ledger_v2": "ic-icrc1-ledger-u256.wasm.gz",
+        "ck_eth_ledger_v2_noledgerversion": "ic-icrc1-ledger-u256.wasm.gz",
+        "ck_eth_ledger_v3": "ic-icrc1-ledger-u256.wasm.gz",
+        "ck_eth_index": "ic-icrc1-index-ng-u256.wasm.gz",
+        "sns_root": "sns-root-canister.wasm.gz",
+        "sns_governance": "sns-governance-canister.wasm.gz",
+        "swap": "sns-swap-canister.wasm.gz",
+        "sns_ledger": "ic-icrc1-ledger.wasm.gz",
+        "sns_ledger_v2": "ic-icrc1-ledger.wasm.gz",
+        "sns_archive": "ic-icrc1-archive.wasm.gz",
+        "sns_index": "ic-icrc1-index-ng.wasm.gz",
+        "node-rewards": "node-rewards-canister.wasm.gz",
+        "internet_identity_test": "internet_identity_dev.wasm.gz",
+        "nns_dapp_test": "nns-dapp_test.wasm.gz",
+        "sns_aggregator_test": "sns_aggregator_dev.wasm.gz",
+        "cycles_ledger": "cycles-ledger.wasm.gz",
+        "cycles_ledger_index": "ic-icrc1-index-ng-u256.wasm.gz",
+        "bitcoin_testnet": "ic-btc-canister.wasm.gz",
+        "dogecoin": "ic-doge-canister.wasm.gz",
+        "migration": "migration-canister.wasm.gz",
+    },
+    path = "//:mainnet-canister-revisions.json",
+    repositories = {
+        "cycles_ledger": "dfinity/cycles-ledger",
+        "internet_identity_test": "dfinity/internet-identity",
+        "nns_dapp_test": "dfinity/nns-dapp",
+        "sns_aggregator_test": "dfinity/nns-dapp",
+        "bitcoin_testnet": "dfinity/bitcoin-canister",
+        "dogecoin": "dfinity/dogecoin-canister",
+    },
+)
+
+bazel_dep(name = "rules_motoko", version = "1.0.0")
+archive_override(
+    module_name = "rules_motoko",
+    integrity = "sha256-cheylLgUCNaODuEtYla4/oVrj6F0FMp7nRjui1AvCo4=",
+    strip_prefix = "rules_motoko-9b6d6311db8f1c1fe4c24b70414edf149913ae44",
+    urls = ["https://github.com/dfinity/rules_motoko/archive/9b6d6311db8f1c1fe4c24b70414edf149913ae44.tar.gz"],
+)
+
+motoko = use_extension("@rules_motoko//motoko:extensions.bzl", "motoko")
+motoko.toolchain(version = "0.16.3")

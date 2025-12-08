@@ -4,7 +4,7 @@
 use crate::governance::RandomnessGenerator;
 use crate::{
     governance::{Environment, HeapGrowthPotential, RngError},
-    pb::v1::{ExecuteNnsFunction, GovernanceError, OpenSnsTokenSwap},
+    pb::v1::{GovernanceError, OpenSnsTokenSwap},
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -257,7 +257,7 @@ impl Environment for MockEnvironment {
     fn execute_nns_function(
         &self,
         _proposal_id: u64,
-        _update: &ExecuteNnsFunction,
+        _update: &crate::proposals::execute_nns_function::ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         Ok(())
     }

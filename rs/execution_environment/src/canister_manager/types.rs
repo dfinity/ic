@@ -316,12 +316,6 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
     }
 }
 
-/// Indicates whether `uninstall_canister` should push a canister change (with a given change origin) to canister history.
-pub enum AddCanisterChangeToHistory {
-    Yes(CanisterChangeOrigin),
-    No,
-}
-
 pub(crate) struct UploadChunkResult {
     pub(crate) reply: UploadChunkReply,
     pub(crate) heap_delta_increase: NumBytes,
@@ -357,10 +351,6 @@ pub(crate) enum CanisterManagerError {
     DeleteCanisterSelf(CanisterId),
     DeleteCanisterQueueNotEmpty(CanisterId),
     SenderNotInWhitelist(PrincipalId),
-    NotEnoughMemoryAllocationGiven {
-        memory_allocation_given: MemoryAllocation,
-        memory_usage_needed: NumBytes,
-    },
     CreateCanisterNotEnoughCycles {
         sent: Cycles,
         required: Cycles,
@@ -553,10 +543,6 @@ impl AsErrorHelp for CanisterManagerError {
                 in the meantime stop the canister."
                     .to_string(),
                 doc_link: doc_ref("delete-canister-queue-not-empty"),
-            },
-            CanisterManagerError::NotEnoughMemoryAllocationGiven { .. } => ErrorHelp::UserError {
-                suggestion: "Try increasing the canister's memory allocation.".to_string(),
-                doc_link: doc_ref("not-enough-memory-allocation-given"),
             },
             CanisterManagerError::CreateCanisterNotEnoughCycles { .. } => ErrorHelp::UserError {
                 suggestion: "Try sending more cycles with the request.".to_string(),
@@ -862,15 +848,6 @@ impl From<CanisterManagerError> for UserError {
                     String::from("Sender not authorized to use method."),
                 )
             }
-            NotEnoughMemoryAllocationGiven {
-                memory_allocation_given,
-                memory_usage_needed,
-            } => Self::new(
-                ErrorCode::InsufficientMemoryAllocation,
-                format!(
-                    "Canister was given {memory_allocation_given} memory allocation but at least {memory_usage_needed} of memory is needed.{additional_help}",
-                ),
-            ),
             CreateCanisterNotEnoughCycles { sent, required } => Self::new(
                 ErrorCode::InsufficientCyclesForCreateCanister,
                 format!(

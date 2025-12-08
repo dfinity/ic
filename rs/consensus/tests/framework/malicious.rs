@@ -100,14 +100,10 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusWithMaliciousFlags 
         let changeset = self.consensus.on_state_change(pool);
         let pool_reader = PoolReader::new(pool);
         if self.malicious_flags.is_consensus_malicious() {
-            ic_consensus::consensus::malicious_consensus::maliciously_alter_changeset(
+            self.consensus.maliciously_alter_changeset(
                 &pool_reader,
                 changeset,
                 &self.malicious_flags,
-                &self.consensus.block_maker,
-                &self.consensus.finalizer,
-                &self.consensus.notary,
-                &self.consensus.log,
                 current_time(),
             )
         } else {

@@ -254,6 +254,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
         }
         match step_type {
             StepType::DownloadConsensusPool => {
+                // We could pick a node with highest finalization height automatically,
+                // but we might have a preference between nodes of the same finalization height.
                 print_height_info(
                     &self.logger,
                     &self.recovery.registry_helper,

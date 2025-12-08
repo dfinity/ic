@@ -9,8 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-- Added `environment_variables` to canister settings for `create_canister` and `notify_create_canister`
-
 ## Changed
 
 ## Deprecated

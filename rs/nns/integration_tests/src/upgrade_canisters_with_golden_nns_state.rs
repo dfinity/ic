@@ -1,4 +1,4 @@
-use candid::Encode;
+use candid::{CandidType, Encode, Principal};
 use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
@@ -29,6 +29,7 @@ use ic_nns_test_utils::{
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::Tokens;
+use serde::Deserialize;
 use std::{
     env,
     fmt::{Debug, Formatter},
@@ -60,7 +61,12 @@ impl NnsCanisterUpgrade {
             "registry"       => (REGISTRY_CANISTER_ID, "REGISTRY_CANISTER_WASM_PATH"),
             "root"           => (ROOT_CANISTER_ID, "ROOT_CANISTER_WASM_PATH"),
             "sns-wasm"       => (SNS_WASM_CANISTER_ID, "SNS_WASM_CANISTER_WASM_PATH"),
-            "node-rewards"   => (NODE_REWARDS_CANISTER_ID, "NODE_REWARDS_CANISTER_WASM_PATH"),
+
+            // The Node Rewards canister is updated with test feature that simulates
+            // calls to the management canister in order to retrieve blockmaker statistics for each node.
+            // This is necessary because state_machine tests run only with an NNS subnet, where real
+            // management canister calls are not possible (Just NNS subnet is present).
+            "node-rewards"   => (NODE_REWARDS_CANISTER_ID, "NODE_REWARDS_CANISTER_TEST_WASM_PATH"),
             _ => panic!("Not a known NNS canister type: {nns_canister_name}",),
         };
 
@@ -78,6 +84,12 @@ impl NnsCanisterUpgrade {
             .unwrap()
         } else if nns_canister_name == "ledger" {
             Encode!(&()).unwrap()
+        } else if nns_canister_name == "migration" {
+            #[derive(CandidType, Deserialize, Default)]
+            struct MigrationCanisterInitArgs {
+                allowlist: Option<Vec<Principal>>,
+            }
+            Encode!(&MigrationCanisterInitArgs::default()).unwrap()
         } else {
             vec![]
         };
