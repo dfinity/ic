@@ -91,8 +91,9 @@ pub fn create_tables(connection: &Connection) -> Result<()> {
         [],
     )?;
 
-    // Rosetta metadata table. Meant to store values like `synced_block_height`.
-    // The `metadata` table defined above stores the ICRC1 token metadata.
+    // The rosetta_metadata table is meant to store values like the index
+    // of the highest processed block. This is different than the metadata
+    // table above which stores the ICRC1 token metadata.
     connection.execute(
         r#"
         CREATE TABLE IF NOT EXISTS rosetta_metadata (
