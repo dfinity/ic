@@ -111,7 +111,7 @@ pub fn decode_event(buf: &[u8]) -> Event {
 }
 
 /// Returns an iterator over all minter events.
-pub fn events() -> impl Iterator<Item=Event> {
+pub fn events() -> impl Iterator<Item = Event> {
     EventIterator {
         buf: vec![],
         pos: 0,
@@ -268,7 +268,7 @@ mod benches {
                     median_fee_millisatoshi_per_vbyte,
                     &fee_estimator,
                 )
-                    .unwrap()
+                .unwrap()
             });
         })
     }
@@ -287,14 +287,14 @@ mod benches {
         let fee_estimator = state::read_state(|s| IC_CANISTER_RUNTIME.fee_estimator(s));
 
         canbench_rs::bench_fn(|| {
-            state::read_state(|s| {
+            state::mutate_state(|s| {
                 crate::estimate_retrieve_btc_fee(
-                    &s.available_utxos,
+                    &mut s.available_utxos,
                     withdrawal_amount,
                     s.last_median_fee_per_vbyte.unwrap(),
                     &fee_estimator,
                 )
-                    .unwrap()
+                .unwrap()
             });
         })
     }
@@ -310,7 +310,7 @@ mod benches {
                     m.borrow().get(V1_LOG_INDEX_MEMORY_ID),
                     m.borrow().get(V1_LOG_DATA_MEMORY_ID),
                 )
-                    .expect("failed to initialize stable log")
+                .expect("failed to initialize stable log")
             })
         });
         assert_eq!(count_events(), 768_723);
