@@ -499,7 +499,11 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
 
     group.bench_function("deserialize_cached", |b| {
         b.iter_batched_ref(
-            || (G2Affine::generator() * Scalar::from_u32(rng.r#gen::<u32>() % 100)).to_affine().serialize(),
+            || {
+                (G2Affine::generator() * Scalar::from_u32(rng.r#gen::<u32>() % 100))
+                    .to_affine()
+                    .serialize()
+            },
             |bytes| G2Affine::deserialize_cached(bytes),
             BatchSize::SmallInput,
         )
