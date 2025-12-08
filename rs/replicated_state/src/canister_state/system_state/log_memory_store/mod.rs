@@ -117,6 +117,10 @@ impl LogMemoryStore {
             .unwrap_or(0)
     }
 
+    pub fn log_memory_limit(&self) -> usize {
+        self.log_memory_limit
+    }
+
     /// Sets the log memory limit for this canister.
     ///
     /// The ring buffer is updated only when it already exists and the new
@@ -147,10 +151,6 @@ impl LogMemoryStore {
                 self.page_map = new.to_page_map();
             }
         }
-    }
-
-    pub fn log_memory_limit(&self) -> usize {
-        self.log_memory_limit
     }
 
     /// Returns the next log record `idx`.
