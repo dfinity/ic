@@ -9,8 +9,9 @@ use crate::{
 /// technology that that protects a virtual machine's memory from being read
 /// and/or modified by the host.
 ///
-/// A "launch measurement" is a cryptographic hash (48 bytes) of the software
-/// that was used to launch a VM, which consists of the following pieces:
+/// A "launch measurement" is a cryptographic hash (48 bytes) of how the VM was
+/// launched. A non-exhaustive list of key ingredients of how a VM is launched
+/// (and therefore, affect the measurement) are the following:
 ///
 ///     1. firmware
 ///     2. kernel
