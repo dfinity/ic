@@ -1,0 +1,51 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_library(
+    name = "lib",
+    testonly = True,
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_testnet_mainnet_nns",
+    visibility = [
+        "//rs:system-tests-pkg",
+    ],
+    deps = [
+        # FIXME:
+        # Keep sorted.
+        "//rs/canister_client",
+        "//rs/canister_client/sender",
+        "//rs/crypto/utils/threshold_sig_der",
+        "//rs/limits",
+        "//rs/nervous_system/common",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nns/common",
+        "//rs/nns/governance/api",
+        "//rs/nns/test_utils",
+        "//rs/protobuf",
+        "//rs/registry/canister",
+        "//rs/registry/client",
+        "//rs/registry/helpers",
+        "//rs/registry/local_store",
+        # "//rs/registry/nns_data_provider",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/tests/consensus/subnet_recovery:lib",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nested",
+        "//rs/tests/nested/nns_recovery:common",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:base64",
+        "@crate_index//:flate2",
+        "@crate_index//:ic-agent",
+        "@crate_index//:nix",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde",
+        "@crate_index//:slog",
+        "@crate_index//:ssh2",
+        "@crate_index//:url",
+    ],
+)

@@ -15226,6 +15226,53 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-testnet-mainnet-nns"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "base64 0.13.1",
+ "candid",
+ "dfn_candid",
+ "flate2",
+ "ic-agent 0.40.1",
+ "ic-base-types",
+ "ic-canister-client",
+ "ic-canister-client-sender",
+ "ic-crypto-utils-threshold-sig-der",
+ "ic-limits",
+ "ic-nervous-system-common",
+ "ic-nervous-system-common-test-keys",
+ "ic-nns-common",
+ "ic-nns-governance-api",
+ "ic-nns-test-utils",
+ "ic-protobuf",
+ "ic-registry-client",
+ "ic-registry-client-helpers",
+ "ic-registry-local-store",
+ "ic-registry-nns-data-provider",
+ "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic-xrc-types",
+ "ic_consensus_system_test_subnet_recovery",
+ "ic_consensus_system_test_utils",
+ "ic_nested_nns_recovery_common",
+ "nested",
+ "nix 0.24.3",
+ "nns_dapp",
+ "os_qualification_utils",
+ "registry-canister",
+ "reqwest 0.12.24",
+ "serde",
+ "serde_json",
+ "slog",
+ "ssh2",
+ "url",
+ "xrc-mock",
+]
+
+[[package]]
 name = "ic-tests-ckbtc"
 version = "0.9.0"
 dependencies = [
@@ -24066,6 +24113,7 @@ dependencies = [
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
+ "ic-testnet-mainnet-nns",
  "ic-types",
  "ic-xrc-types",
  "ic_consensus_system_test_subnet_recovery",

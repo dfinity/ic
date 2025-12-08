@@ -7,6 +7,7 @@ name = "testnets"
 version.workspace = true
 
 [dependencies]
+# FIXME:
 anyhow = { workspace = true }
 base64 = { workspace = true }
 candid = { workspace = true }
@@ -31,6 +32,7 @@ ic-registry-nns-data-provider = { path = "../../registry/nns_data_provider" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
+ic-testnet-mainnet-nns = { path = "./mainnet_nns" }
 ic-types = { path = "../../types/types" }
 ic-xrc-types = "1.0.0"
 ic_consensus_system_test_subnet_recovery = { path = "../consensus/subnet_recovery" }
