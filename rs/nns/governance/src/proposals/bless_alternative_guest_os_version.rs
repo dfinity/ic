@@ -1,34 +1,6 @@
 use super::*;
 use crate::are_bless_alternative_guest_os_version_proposals_enabled;
-use ic_protobuf::registry::replica_version::v1::{GuestLaunchMeasurement, GuestLaunchMeasurements};
-
-/// Length of SEV-SNP launch measurements in bytes.
-///
-/// SEV-SNP (Secure Encrypted Virtualization - Secure Nested Paging) is an AMD
-/// technology that that protects a virtual machine's memory from being read
-/// and/or modified by the host.
-///
-/// A "launch measurement" is a cryptographic hash (48 bytes) of how the VM was
-/// launched. A non-exhaustive list of key ingredients of how a VM is launched
-/// (and therefore, affect the measurement) are the following:
-///
-///     1. firmware
-///     2. kernel
-///     3. initrd
-///     4. kernel command line
-///
-/// A launch measurement is part of a signed artifact called an "attestation". A
-/// remote machine can use an attestation to securely verify that the VM is
-/// running what it's supposed to.
-///
-/// For more details, see:
-///
-/// - AMD SEV-SNP specification: https://www.amd.com/en/developer/sev.html
-///
-/// - In particular, "SEV Secure Nested Paging Firmware ABI Specification" might
-///   be of interest:
-///   https://www.amd.com/content/dam/amd/en/documents/developer/56860.pdf
-const SEV_SNP_MEASUREMENT_LENGTH: usize = 48;
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 
 impl BlessAlternativeGuestOsVersion {
     /// Verifies the following:
@@ -167,52 +139,9 @@ fn validate_base_guest_launch_measurements(
         return defects;
     };
 
-    // Not vec[].
-    if measurements.guest_launch_measurements.is_empty() {
-        defects.push("base_guest_launch_measurements must not be empty".to_string());
-        return defects;
-    }
-
-    // Each element is valid.
-    for (i, measurement) in measurements.guest_launch_measurements.iter().enumerate() {
-        defects.extend(
-            validate_guest_launch_measurement(measurement)
-                .into_iter()
-                .map(|defect| format!("guest_launch_measurements[{}]: {}", i, defect)),
-        );
-    }
-
-    defects
-}
-
-/// Validates a single GuestLaunchMeasurement (singular).
-///
-/// Returns a list of defects (empty if valid):
-/// - measurement must be exactly 48 bytes (SEV-SNP measurement size)
-/// - metadata must be present
-/// - metadata.kernel_cmdline must not be empty
-fn validate_guest_launch_measurement(measurement: &GuestLaunchMeasurement) -> Vec<String> {
-    let mut defects = Vec::new();
-
-    // Measurement must be 48 bytes, per SEV-SNP.
-    if measurement.measurement.len() != SEV_SNP_MEASUREMENT_LENGTH {
-        defects.push(format!(
-            "measurement must be exactly {} bytes (SEV-SNP measurement), got {} bytes",
-            SEV_SNP_MEASUREMENT_LENGTH,
-            measurement.measurement.len()
-        ));
-    }
-
-    // kernel_cmdline must be nonempty, even though metadata is optional.
-    let ok = measurement
-        .metadata
-        .as_ref()
-        // kernel_cmdline must be nonempty.
-        .map(|metadata| !metadata.kernel_cmdline.is_empty())
-        // Absent metadata is ok though.
-        .unwrap_or(true);
-    if !ok {
-        defects.push("metadata.kernel_cmdline must not be empty".to_string());
+    // Some must wrap a valid GuestLaunchMeasurements.
+    if let Err(validation_defects) = measurements.validate() {
+        defects.extend(validation_defects);
     }
 
     defects

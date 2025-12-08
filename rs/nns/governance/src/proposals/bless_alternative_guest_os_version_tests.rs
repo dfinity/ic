@@ -86,7 +86,7 @@ fn test_validate_base_guest_launch_measurements_empty() {
     };
     let defects = validate_base_guest_launch_measurements(&Some(measurements));
     assert_eq!(defects.len(), 1, "{defects:#?}");
-    assert_contains_all_key_words(&defects[0], &["base_guest_launch_measurements", "empty"]);
+    assert_contains_all_key_words(&defects[0], &["guest_launch_measurements", "empty"]);
 }
 
 #[test]
@@ -151,78 +151,6 @@ fn test_validate_base_guest_launch_measurements_multiple_defects() {
         &defects[1],
         &["guest_launch_measurements[3]", "kernel_cmdline", "empty"],
     );
-}
-
-#[test]
-fn test_validate_guest_launch_measurement_valid() {
-    let _guard = temporarily_enable_bless_alternative_guest_os_version_proposals();
-
-    let measurement = GuestLaunchMeasurement {
-        measurement: vec![0u8; 48],
-        metadata: Some(GuestLaunchMeasurementMetadata {
-            kernel_cmdline: "console=ttyS0".to_string(),
-        }),
-    };
-    let defects = validate_guest_launch_measurement(&measurement);
-    assert!(defects.is_empty(), "{defects:#?}");
-}
-
-#[test]
-fn test_validate_guest_launch_measurement_wrong_size() {
-    let _guard = temporarily_enable_bless_alternative_guest_os_version_proposals();
-
-    let measurement = GuestLaunchMeasurement {
-        measurement: vec![0u8; 32],
-        metadata: Some(GuestLaunchMeasurementMetadata {
-            kernel_cmdline: "console=ttyS0".to_string(),
-        }),
-    };
-    let defects = validate_guest_launch_measurement(&measurement);
-    assert_eq!(defects.len(), 1, "{defects:#?}");
-    assert_contains_all_key_words(&defects[0], &["48", "32"]);
-}
-
-#[test]
-fn test_validate_guest_launch_measurement_no_metadata() {
-    let _guard = temporarily_enable_bless_alternative_guest_os_version_proposals();
-
-    let measurement = GuestLaunchMeasurement {
-        measurement: vec![0u8; 48],
-        metadata: None,
-    };
-    let defects = validate_guest_launch_measurement(&measurement);
-    assert!(defects.is_empty(), "{defects:#?}");
-}
-
-#[test]
-fn test_validate_guest_launch_measurement_empty_kernel_cmdline() {
-    let _guard = temporarily_enable_bless_alternative_guest_os_version_proposals();
-
-    let measurement = GuestLaunchMeasurement {
-        measurement: vec![0u8; 48],
-        metadata: Some(GuestLaunchMeasurementMetadata {
-            kernel_cmdline: "".to_string(),
-        }),
-    };
-
-    let defects = validate_guest_launch_measurement(&measurement);
-
-    assert_eq!(defects.len(), 1, "{defects:#?}");
-    assert_contains_all_key_words(&defects[0], &["kernel", "empty"]);
-}
-
-#[test]
-fn test_validate_guest_launch_measurement_multiple_defects() {
-    let _guard = temporarily_enable_bless_alternative_guest_os_version_proposals();
-
-    let measurement = GuestLaunchMeasurement {
-        measurement: vec![0u8; 32], // Wrong size.
-        metadata: None,             // No metadata.
-    };
-    let defects = validate_guest_launch_measurement(&measurement);
-    // Should report measurement size error. Metadata missing is allowed though.
-    assert_eq!(defects.len(), 1, "{defects:#?}");
-    assert_contains_all_key_words(&defects[0], &["48"]);
 }
 
 #[test]
