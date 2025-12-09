@@ -486,6 +486,22 @@ impl TipHandler {
         Ok(())
     }
 
+    /// Deletes snapshots from tip if they are not in ids.
+    pub fn filter_tip_snapshots(
+        &mut self,
+        height: Height,
+        ids: &BTreeSet<SnapshotId>,
+    ) -> Result<(), LayoutError> {
+        let tip = self.tip(height)?;
+        let snapshots_on_disk = tip.snapshot_ids()?;
+        for id in snapshots_on_disk {
+            if !ids.contains(&id) {
+                tip.snapshot(&id)?.delete_dir()?;
+            }
+        }
+        Ok(())
+    }
+
     /// Moves the entire canister directory from one canister id to another.
     pub fn move_canister_directory(
         &mut self,

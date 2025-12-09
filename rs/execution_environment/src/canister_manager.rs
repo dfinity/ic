@@ -1240,7 +1240,9 @@ impl CanisterManager {
         let canister_memory_allocated_bytes = canister_to_delete.memory_allocated_bytes();
 
         // Delete canister snapshots that are stored separately in `ReplicatedState`.
-        state.delete_snapshots(canister_to_delete.canister_id());
+        state
+            .canister_snapshots
+            .delete_snapshots(canister_to_delete.canister_id());
 
         round_limits.subnet_available_memory.increment(
             canister_memory_allocated_bytes,
@@ -2551,7 +2553,7 @@ impl CanisterManager {
             resource_saturation,
         )?;
 
-        let old_snapshot = state.delete_snapshot(delete_snapshot_id);
+        let old_snapshot = state.canister_snapshots.remove(delete_snapshot_id);
         // Already confirmed that `old_snapshot` exists.
         debug_assert_eq!(old_snapshot.unwrap().size(), old_snapshot_size);
         canister.system_state.snapshots_memory_usage = canister
@@ -3000,8 +3002,6 @@ impl CanisterManager {
         }
         round_limits.instructions -= as_round_instructions(instructions);
 
-        state.record_snapshot_data_upload(snapshot_id);
-
         // Return the instructions needed to write the chunk to the destination.
         Ok(instructions)
     }
@@ -3015,7 +3015,7 @@ impl CanisterManager {
         snapshot_size: NumBytes,
     ) {
         // Delete old snapshot identified by `snapshot_id`.
-        state.delete_snapshot(snapshot_id);
+        state.canister_snapshots.remove(snapshot_id);
         canister.system_state.snapshots_memory_usage = canister
             .system_state
             .snapshots_memory_usage
