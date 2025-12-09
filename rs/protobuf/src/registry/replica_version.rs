@@ -12,10 +12,10 @@ pub mod v1;
 /// launched. A non-exhaustive list of key ingredients of how a VM is launched
 /// (and therefore, affect the measurement) are the following:
 ///
-///     1. firmware
-///     2. kernel
-///     3. initrd
-///     4. kernel command line
+/// 1. firmware
+/// 2. kernel
+/// 3. initrd
+/// 4. kernel command line
 ///
 /// A launch measurement is part of a signed artifact called an "attestation". A
 /// remote machine can use an attestation to securely verify that the VM is
