@@ -985,8 +985,8 @@ fn should_be_stoppable_when_time_budget_exceeded_during_scraping() {
 
     let cketh = CkEthSetup::default();
     let max_eth_logs_block_range = cketh.as_ref().max_logs_block_range();
-    let max_block: u64 = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL
-        + (NUM_BLOCK_RANGES as u64) * (max_eth_logs_block_range as u64);
+    let max_block: u64 =
+        LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + (NUM_BLOCK_RANGES as u64) * max_eth_logs_block_range;
 
     // Start scraping - this triggers the scrape_logs timer which makes HTTP calls
     cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
