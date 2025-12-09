@@ -1343,8 +1343,8 @@ fn online_split() {
     // The snapshot of `CANISTER_2` should have been deleted.
     expected.delete_snapshot(canister_2_snapshot_id);
 
-    // And the split marker should be reset.
-    expected.metadata.split_from = None;
+    // And the split marker should be set.
+    expected.metadata.subnet_split_from = Some(SUBNET_A);
 
     // Everything else should be unchanged.
     assert_eq!(expected, state_a);
@@ -1380,8 +1380,8 @@ fn online_split() {
     expected.put_subnet_queues(Default::default());
     expected.take_refunds(|_| true);
 
-    // And the split marker should be reset.
-    expected.metadata.split_from = None;
+    // And the split marker should be set.
+    expected.metadata.subnet_split_from = Some(SUBNET_A);
 
     // Everything else should be unchanged.
     assert_eq!(expected, state_b);

@@ -1292,8 +1292,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         }
 
         // If the subnet is starting up after a split, execute splitting phase 2.
-        //
-        // TODO(DSM-51): Repurpose `split_from` as a `subnet_split_height` signal only.
         if let Some(split_from) = state.metadata.split_from {
             info!(
                 self.log,
@@ -1305,6 +1303,14 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
                 .with_label_values(&[&split_from.to_string()])
                 .set(batch.batch_number.get() as i64);
             state.after_split();
+        }
+        // If this is the round after an onlins subnet split, record the split height.
+        if let Some(split_from) = state.metadata.subnet_split_from {
+            self.metrics
+                .subnet_split_height
+                .with_label_values(&[&split_from.to_string()])
+                .set(batch.batch_number.get() as i64);
+            state.metadata.subnet_split_from = None;
         }
         self.observe_phase_duration(PHASE_LOAD_STATE, &since);
 

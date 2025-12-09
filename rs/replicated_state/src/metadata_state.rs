@@ -106,10 +106,16 @@ pub struct SystemMetadata {
     /// this is subnet A' (when equal to `own_subnet_id`) or B (when different).
     pub split_from: Option<SubnetId>,
 
+    /// "Subnet was split" marker. Records the subnet ID from which this subnet was
+    /// split (could be the same as `own_subnet_id`; or different, if this is a
+    /// newly created subnet). Reset in the very next round, once a metric is
+    /// exported.
+    pub subnet_split_from: Option<SubnetId>,
+
     /// Asynchronously handled subnet messages.
     pub subnet_call_context_manager: SubnetCallContextManager,
 
-    /// The version of StateSync protocol that should be used to compute
+    /// The version of StateSync protocol that should be used to compute the
     /// manifest of this state.
     pub state_sync_version: StateSyncVersion,
 
@@ -369,6 +375,7 @@ impl SystemMetadata {
             node_public_keys: Default::default(),
             api_boundary_nodes: Default::default(),
             split_from: None,
+            subnet_split_from: None,
 
             // StateManager populates proper values of these fields before
             // committing each state.
@@ -547,6 +554,8 @@ impl SystemMetadata {
         subnet_id: SubnetId,
         new_subnet_batch_time: Option<Time>,
     ) -> Result<Self, String> {
+        assert_eq!(None, self.split_from);
+        assert_eq!(None, self.subnet_split_from);
         assert_eq!(0, self.heap_delta_estimate.get());
         assert!(self.expected_compiled_wasms.is_empty());
 
@@ -653,6 +662,7 @@ impl SystemMetadata {
             node_public_keys: _,
             api_boundary_nodes: _,
             ref mut split_from,
+            subnet_split_from,
             subnet_call_context_manager: _,
             // Set by `commit_and_certify()` at the end of the round. Not used before.
             state_sync_version: _,
@@ -670,6 +680,7 @@ impl SystemMetadata {
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
 
+        assert_eq!(None, subnet_split_from);
         assert_eq!(0, heap_delta_estimate.get());
         assert!(expected_compiled_wasms.is_empty());
 
@@ -754,6 +765,7 @@ impl SystemMetadata {
             node_public_keys,
             api_boundary_nodes,
             split_from,
+            mut subnet_split_from,
             mut subnet_call_context_manager,
             state_sync_version,
             certification_version,
@@ -767,6 +779,7 @@ impl SystemMetadata {
         } = self;
 
         assert_eq!(None, split_from);
+        assert_eq!(None, subnet_split_from);
         assert_eq!(0, heap_delta_estimate.get());
         assert!(expected_compiled_wasms.is_empty());
 
@@ -777,9 +790,6 @@ impl SystemMetadata {
                 .map(|(_range, subnet_id)| subnet_id)
                 == Some(subnet_id)
         };
-
-        // TODO(DSM-51): Set the split marker to the original subnet ID (that of subnet A).
-        // split_from = Some(own_subnet_id);
 
         if own_subnet_id == subnet_id {
             //
@@ -831,6 +841,9 @@ impl SystemMetadata {
             subnet_metrics = Default::default();
         }
 
+        // Set the split marker to the original subnet ID, on both subnets.
+        subnet_split_from = Some(own_subnet_id);
+
         // Only retain Bitcoin responses for hosted canisters.
         bitcoin_get_successors_follow_up_responses
             .retain(|canister_id, _| is_local_canister(*canister_id));
@@ -853,6 +866,7 @@ impl SystemMetadata {
             node_public_keys,
             api_boundary_nodes,
             split_from,
+            subnet_split_from,
             subnet_call_context_manager,
             state_sync_version,
             certification_version,
@@ -1872,6 +1886,7 @@ pub(crate) mod testing {
             node_public_keys: Default::default(),
             api_boundary_nodes: Default::default(),
             split_from: None,
+            subnet_split_from: None,
             prev_state_hash: Default::default(),
             state_sync_version: CURRENT_STATE_SYNC_VERSION,
             certification_version: CURRENT_CERTIFICATION_VERSION,
