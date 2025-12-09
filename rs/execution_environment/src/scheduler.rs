@@ -1133,6 +1133,9 @@ impl SchedulerImpl {
     }
 
     /// Code that must be executed unconditionally after each round.
+    ///
+    /// NOTE: This is also called by `checkpoint_round_with_no_execution()`, so it
+    /// must be safe to call even when no execution has taken place.
     fn finish_round(&self, state: &mut ReplicatedState, current_round_type: ExecutionRoundType) {
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
