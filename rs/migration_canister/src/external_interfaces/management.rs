@@ -54,6 +54,7 @@ pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResul
 
 /// This is a success if the call is a success
 /// and a fatal failure if the canister does not exist.
+/// Otherwise, this function returns no progress.
 /// If applicable, failures due to the caller not being a controller of the given canister
 /// should be detected separately using `canister_info`.
 pub async fn set_controllers(

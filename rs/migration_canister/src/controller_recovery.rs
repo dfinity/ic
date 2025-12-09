@@ -88,31 +88,37 @@ async fn controller_recovery_internal<IC: InternetComputer>(
                 if canister_info.controllers == vec![ic00.canister_self()] {
                     ControllerRecoveryState::TotalNumChangesBefore(canister_info.total_num_changes)
                 } else {
+                    // We only recover controllers if the migration canister is the exclusive controller.
                     ControllerRecoveryState::Done
                 }
             }
-            ProcessingResult::NoProgress => ControllerRecoveryState::NoProgress,
+            ProcessingResult::NoProgress => state,
+            // `ProcessingResult::FatalFailure` means that the canister does not exist, and thus
+            // we are (trivially) done because there is nothing to recover at this point.
             ProcessingResult::FatalFailure(()) => ControllerRecoveryState::Done,
         },
         ControllerRecoveryState::TotalNumChangesBefore(total_num_changes) => {
             match ic00.get_canister_info(canister_id).await {
                 ProcessingResult::Success(canister_info) => {
                     if canister_info.total_num_changes > total_num_changes {
+                        // Because the migration canister is the exclusive controller and
+                        // the number of changes in canister history increased since last time,
+                        // a past update call to restore controllers must have succeeded.
                         ControllerRecoveryState::Done
                     } else {
                         let res = ic00.set_controllers(canister_id, controllers.clone()).await;
                         match res {
                             ProcessingResult::Success(_) => ControllerRecoveryState::Done,
-                            ProcessingResult::NoProgress => {
-                                ControllerRecoveryState::TotalNumChangesBefore(total_num_changes)
-                            }
+                            ProcessingResult::NoProgress => state,
+                            // `ProcessingResult::FatalFailure` means that the canister does not exist, and thus
+                            // we are (trivially) done because there is nothing to recover at this point.
                             ProcessingResult::FatalFailure(()) => ControllerRecoveryState::Done,
                         }
                     }
                 }
-                ProcessingResult::NoProgress => {
-                    ControllerRecoveryState::TotalNumChangesBefore(total_num_changes)
-                }
+                ProcessingResult::NoProgress => state,
+                // `ProcessingResult::FatalFailure` means that the canister does not exist, and thus
+                // we are (trivially) done because there is nothing to recover at this point.
                 ProcessingResult::FatalFailure(()) => ControllerRecoveryState::Done,
             }
         }

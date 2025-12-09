@@ -334,6 +334,9 @@ pub async fn process_source_deleted(
         .cloned()
         .collect::<Vec<Principal>>();
     let ProcessingResult::Success(()) =
+        // The migration canister is the exclusive controller of `request.source`
+        // and thus the following call cannot fail because of the caller
+        // not being a controller.
         set_controllers(request.source, controllers, request.target_subnet).await
     else {
         return ProcessingResult::NoProgress;
