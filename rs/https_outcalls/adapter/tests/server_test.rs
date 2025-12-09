@@ -8,10 +8,9 @@ mod test {
     use hyper_util::rt::{TokioExecutor, TokioIo};
     use ic_https_outcalls_adapter::{Config, IncomingSource};
     use ic_https_outcalls_service::{
-        https_outcall_result, https_outcalls_service_client::HttpsOutcallsServiceClient,
-        CanisterHttpMetrics,
-        CanisterHttpError, CanisterHttpErrorKind, HttpMethod, HttpsOutcallRequest,
-        HttpsOutcallResponse, HttpsOutcallResult,
+        CanisterHttpAdapterMetrics, CanisterHttpError, CanisterHttpErrorKind, HttpMethod,
+        HttpsOutcallRequest, HttpsOutcallResponse, HttpsOutcallResult, https_outcall_result,
+        https_outcalls_service_client::HttpsOutcallsServiceClient,
     };
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -26,15 +25,15 @@ mod test {
     use tower::service_fn;
     use uuid::Uuid;
     use warp::{
-        filters::BoxedFilter,
-        http::{header::HeaderValue, Response, StatusCode},
         Filter,
+        filters::BoxedFilter,
+        http::{Response, StatusCode, header::HeaderValue},
     };
 
     #[cfg(feature = "http")]
     use socks5_impl::protocol::{
-        handshake, Address, AsyncStreamOperation, AuthMethod, Reply,
-        Request as Socks5Request, Response as Socks5Response,
+        Address, AsyncStreamOperation, AuthMethod, Reply, Request as Socks5Request,
+        Response as Socks5Response, handshake,
     };
     #[cfg(feature = "http")]
     use std::io;
@@ -50,21 +49,24 @@ mod test {
 
     fn unwrap_response(
         response: tonic::Response<HttpsOutcallResult>,
-    ) -> (HttpsOutcallResponse, CanisterHttpMetrics) {
+    ) -> (HttpsOutcallResponse, CanisterHttpAdapterMetrics) {
         let inner = response.into_inner();
         let metrics = inner.metrics.expect("Metrics must be present");
         let result = inner.result.expect("Result must be present");
         match result {
             https_outcall_result::Result::Response(r) => (r, metrics),
             https_outcall_result::Result::Error(e) => {
-                panic!("Expected Http Response, got Error: {:?} - {}", e.kind, e.message)
+                panic!(
+                    "Expected Http Response, got Error: {:?} - {}",
+                    e.kind, e.message
+                )
             }
         }
     }
 
     fn unwrap_error(
         response: tonic::Response<HttpsOutcallResult>,
-    ) -> (CanisterHttpError, CanisterHttpMetrics) {
+    ) -> (CanisterHttpError, CanisterHttpAdapterMetrics) {
         let inner = response.into_inner();
         let metrics = inner.metrics.expect("Metrics must be present");
         let result = inner.result.expect("Result must be present");
@@ -299,7 +301,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         tokio::spawn(fut);
         format!("{}:{}", ip, addr.port())
     }
-    //TODO(urgent): check all changes.
 
     #[cfg(feature = "http")]
     #[tokio::test]
@@ -409,7 +410,10 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             .map(|h| (h.name.len() + h.value.len()) as u64)
             .sum();
         // Check that downloaded bytes includes headers + body.
-        assert_eq!(metrics.downloaded_bytes, http_response.content.len() as u64 + headers_size);
+        assert_eq!(
+            metrics.downloaded_bytes,
+            http_response.content.len() as u64 + headers_size
+        );
     }
 
     #[cfg(not(feature = "http"))]
@@ -433,9 +437,10 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             max_response_size_bytes: 512,
             ..Default::default()
         });
-        let response: tonic::Response<HttpsOutcallResult> = client.https_outcall(request).await.unwrap();
+        let response: tonic::Response<HttpsOutcallResult> =
+            client.https_outcall(request).await.unwrap();
         let (error, _) = unwrap_error(response);
-        
+
         assert_eq!(error.kind, CanisterHttpErrorKind::InvalidInput as i32);
         assert!(error.message.contains("Url need to specify https scheme"));
     }
@@ -673,11 +678,9 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let (error, metrics) = unwrap_error(response);
 
         assert_eq!(error.kind, CanisterHttpErrorKind::Internal as i32);
-        assert!(error
-            .message
-            .contains("Failed to parse headers"));
+        assert!(error.message.contains("Failed to parse headers"));
 
-        // Important: check that even though parsing headers failed and the adapter returned an error, 
+        // Important: check that even though parsing headers failed and the adapter returned an error,
         // we still report how much data was downloaded (non negative).
         assert!(metrics.downloaded_bytes > 0);
     }

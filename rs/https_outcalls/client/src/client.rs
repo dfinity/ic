@@ -3,7 +3,8 @@ use candid::Encode;
 use futures::future::TryFutureExt;
 use ic_error_types::{RejectCode, UserError};
 use ic_https_outcalls_service::{
-    HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse, HttpsOutcallResult, https_outcall_result, CanisterHttpErrorKind,
+    CanisterHttpErrorKind, HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse,
+    HttpsOutcallResult, https_outcall_result,
     https_outcalls_service_client::HttpsOutcallsServiceClient,
 };
 use ic_interfaces::execution_environment::{TransformExecutionInput, TransformExecutionService};
@@ -148,7 +149,8 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             if request_pricing_version == ic_types::canister_http::PricingVersion::PayAsYouGo {
                 warn!(
                     log,
-                    "Canister HTTP request with PayAsYouGo pricing is not supported yet: request_id {}, sender {}, process_id: {}",
+                    "Canister HTTP request with PayAsYouGo pricing is not supported yet: \
+                    request_id {}, sender {}, process_id: {}",
                     request_id,
                     request_sender,
                     std::process::id(),
@@ -164,7 +166,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     }),
                 });
                 return;
-            } 
+            }
 
             let adapter_req_timer = Instant::now();
             let max_response_size_bytes = request_max_response_bytes
@@ -203,12 +205,15 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         result,
                     } = adapter_response.into_inner();
 
+                    //TODO(urgent): this string is too long.
                     info!(
                         log,
-                        "Received canister http response from adapter: request_size: {}, response_time {}, downloaded_bytes {}, reply_callback_id {}, sender {}, process_id: {}",
+                        "Received canister http response from adapter: request_size: {}, \
+                         response_time {}, downloaded_bytes {}, reply_callback_id {}, \
+                         sender {}, process_id: {}",
                         request_size,
                         adapter_req_timer.elapsed().as_millis(),
-                        adapter_metrics.map_or(0, |metrics| metrics.downloaded_bytes),
+                        adapter_metrics.map_or(0, |m| m.downloaded_bytes),
                         reply_callback_id,
                         request_sender,
                         std::process::id(),
@@ -222,7 +227,6 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                                 },
                                 https_outcall_result::Result::Error(canister_http_error) => {
                                     let code = match CanisterHttpErrorKind::try_from(canister_http_error.kind).unwrap_or(CanisterHttpErrorKind::Unspecified) {
-                                        //TODO(urgent): check those. 
                                         CanisterHttpErrorKind::InvalidInput => RejectCode::SysFatal,
                                         CanisterHttpErrorKind::Connection => RejectCode::SysTransient,
                                         CanisterHttpErrorKind::LimitExceeded => RejectCode::SysFatal,
@@ -601,9 +605,7 @@ mod tests {
         (BoxCloneService::new(infallible_service), handle)
     }
 
-    fn create_result_from_response(
-        response: HttpsOutcallResponse,
-    ) -> HttpsOutcallResult {
+    fn create_result_from_response(response: HttpsOutcallResponse) -> HttpsOutcallResult {
         HttpsOutcallResult {
             metrics: None,
             result: Some(https_outcall_result::Result::Response(response)),
@@ -634,7 +636,7 @@ mod tests {
             content: adapter_body.clone(),
         };
         //TODO(urgent): also test the metrics
-        //TODO(urgent): also test the new custom errors. 
+        //TODO(urgent): also test the new custom errors.
         let mock_grpc_channel = setup_adapter_mock(Ok(create_result_from_response(response))).await;
 
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
@@ -786,7 +788,8 @@ mod tests {
                             UNIX_EPOCH,
                             RejectCode::SysFatal,
                             format!(
-                                "Transformed http response exceeds limit: {MAX_CANISTER_HTTP_RESPONSE_BYTES}"
+                                "Transformed http response exceeds limit: \
+                                {MAX_CANISTER_HTTP_RESPONSE_BYTES}"
                             )
                         )
                     );
@@ -870,8 +873,7 @@ mod tests {
             headers: adapter_headers.clone(),
             content: adapter_body.clone(),
         };
-        let mock_grpc_channel = setup_adapter_mock(Ok(create_result_from_response(response)))
-        .await;
+        let mock_grpc_channel = setup_adapter_mock(Ok(create_result_from_response(response))).await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
         let (svc, mut handle) = setup_system_query_mock();
 

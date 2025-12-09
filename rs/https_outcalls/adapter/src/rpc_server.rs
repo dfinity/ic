@@ -20,7 +20,8 @@ use hyper_socks2::SocksConnector;
 use hyper_util::client::legacy::{Client, connect::HttpConnector};
 use hyper_util::rt::TokioExecutor;
 use ic_https_outcalls_service::{
-    HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse, HttpsOutcallResult, CanisterHttpError, CanisterHttpErrorKind, https_outcall_result, CanisterHttpMetrics,
+    CanisterHttpAdapterMetrics, CanisterHttpError, CanisterHttpErrorKind, HttpHeader, HttpMethod,
+    HttpsOutcallRequest, HttpsOutcallResponse, HttpsOutcallResult, https_outcall_result,
     https_outcalls_service_server::HttpsOutcallsService,
 };
 use ic_logger::{ReplicaLogger, debug, info};
@@ -65,7 +66,6 @@ pub struct CanisterHttp {
 }
 
 impl CanisterHttp {
-    //TODO(urgent): correctness test fail. 
     pub fn new(config: Config, logger: ReplicaLogger, metrics: &MetricsRegistry) -> Self {
         // Socks client setup
         let mut http_connector = HttpConnector::new();
@@ -282,11 +282,9 @@ impl HttpsOutcallsService for CanisterHttp {
             }
 
             let method = HttpMethod::try_from(req.method)
-                .map_err(|_| {
-                    CanisterHttpError {
-                        kind: CanisterHttpErrorKind::InvalidInput as i32,
-                        message: "Failed to get HTTP method".to_string(),
-                    }
+                .map_err(|_| CanisterHttpError {
+                    kind: CanisterHttpErrorKind::InvalidInput as i32,
+                    message: "Failed to get HTTP method".to_string(),
                 })
                 .and_then(|method| match method {
                     HttpMethod::Get => Ok(Method::GET),
@@ -310,10 +308,10 @@ impl HttpsOutcallsService for CanisterHttp {
                     .request_errors
                     .with_label_values(&[LABEL_REQUEST_HEADERS])
                     .inc();
-                 CanisterHttpError {
+                CanisterHttpError {
                     kind: CanisterHttpErrorKind::InvalidInput as i32,
                     message: format!("Invalid headers: {e}"),
-                 }
+                }
             })?;
 
             // Add user-agent header if not present.
@@ -384,7 +382,7 @@ impl HttpsOutcallsService for CanisterHttp {
                     Ok(HttpHeader { name, value })
                 })
                 .collect::<Result<Vec<_>, ToStrError>>();
-            
+
             // Update metric immediately after receiving headers
             total_downloaded_bytes += headers_size_bytes as u64;
 
@@ -400,7 +398,8 @@ impl HttpsOutcallsService for CanisterHttp {
                 }
             })?;
 
-            let remaining_limit = req.max_response_size_bytes
+            let remaining_limit = req
+                .max_response_size_bytes
                 .checked_sub(headers_size_bytes as u64)
                 .ok_or_else(|| {
                     self.metrics
@@ -417,38 +416,39 @@ impl HttpsOutcallsService for CanisterHttp {
                 })?;
 
             // We don't need a timeout here because there is a global timeout on the entire request.
-            let body_bytes = http_body_util::Limited::new(
-                http_resp.into_body(),
-                remaining_limit as usize,
-            )
-            .collect()
-            .await
-            .map(|col| col.to_bytes())
-            .map_err(|err| {
-                debug!(self.logger, "Failed to fetch body: {}", err);
-                self.metrics
-                    .request_errors
-                    .with_label_values(&[LABEL_BODY_RECEIVE_SIZE])
-                    .inc();
-                
-                if err.downcast_ref::<http_body_util::LengthLimitError>().is_some() {
-                    // If limit exceeded, assume we consumed the full allowance
-                    total_downloaded_bytes += remaining_limit;
-                    CanisterHttpError {
-                        kind: CanisterHttpErrorKind::LimitExceeded as i32,
-                        message: format!(
-                            "Http body exceeds size limit of {} bytes.",
-                            req.max_response_size_bytes
-                        ),
-                    }
-                } else {
-                    //TODO(urgent): figure out why this else branch exists. 
-                    CanisterHttpError {
-                        kind: CanisterHttpErrorKind::Connection as i32,
-                        message: format!("Failed to fetch body: {}", err),
-                    }
-                }
-            })?;
+            let body_bytes =
+                http_body_util::Limited::new(http_resp.into_body(), remaining_limit as usize)
+                    .collect()
+                    .await
+                    .map(|col| col.to_bytes())
+                    .map_err(|err| {
+                        debug!(self.logger, "Failed to fetch body: {}", err);
+                        self.metrics
+                            .request_errors
+                            .with_label_values(&[LABEL_BODY_RECEIVE_SIZE])
+                            .inc();
+
+                        if err
+                            .downcast_ref::<http_body_util::LengthLimitError>()
+                            .is_some()
+                        {
+                            // If limit exceeded, assume we consumed the full allowance
+                            total_downloaded_bytes += remaining_limit;
+                            CanisterHttpError {
+                                kind: CanisterHttpErrorKind::LimitExceeded as i32,
+                                message: format!(
+                                    "Http body exceeds size limit of {} bytes.",
+                                    req.max_response_size_bytes
+                                ),
+                            }
+                        } else {
+                            // Something else went wrong
+                            CanisterHttpError {
+                                kind: CanisterHttpErrorKind::Connection as i32,
+                                message: format!("Failed to fetch body: {}", err),
+                            }
+                        }
+                    })?;
 
             total_downloaded_bytes += body_bytes.len() as u64;
 
@@ -456,24 +456,24 @@ impl HttpsOutcallsService for CanisterHttp {
                 .network_traffic
                 .with_label_values(&[LABEL_DOWNLOAD])
                 .inc_by(total_downloaded_bytes);
-            
+
             Ok(HttpsOutcallResponse {
                 status,
                 headers,
                 content: body_bytes.to_vec(),
             })
-        }.await;
-
+        }
+        .await;
 
         let result_envelope = match execution_result {
             Ok(response) => HttpsOutcallResult {
-                metrics: Some(CanisterHttpMetrics {
+                metrics: Some(CanisterHttpAdapterMetrics {
                     downloaded_bytes: total_downloaded_bytes,
                 }),
                 result: Some(https_outcall_result::Result::Response(response)),
             },
             Err(error) => HttpsOutcallResult {
-                metrics: Some(CanisterHttpMetrics {
+                metrics: Some(CanisterHttpAdapterMetrics {
                     // Ensure we report whatever we managed to download up to the failure
                     downloaded_bytes: total_downloaded_bytes,
                 }),

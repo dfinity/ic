@@ -43,13 +43,12 @@ message CanisterHttpError {
   string message = 2;
 }
 
-//TODO(urgent): rethink this name this maybe. 
-message CanisterHttpMetrics {
+message CanisterHttpAdapterMetrics {
   uint64 downloaded_bytes = 1;
 }
 
 message HttpsOutcallResult {
-  CanisterHttpMetrics metrics = 1;
+  CanisterHttpAdapterMetrics metrics = 1;
   oneof result {
     HttpsOutcallResponse response = 2;
     CanisterHttpError error = 3;
