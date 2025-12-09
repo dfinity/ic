@@ -11,7 +11,7 @@ use crate::canister_state::system_state::log_memory_store::{
 };
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
-use ic_types::{CanisterLog, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT};
+use ic_types::{CanisterLog, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, NumBytes};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::VecDeque;
@@ -34,7 +34,7 @@ pub struct LogMemoryStore {
     /// In these cases the canister should not be charged,
     /// so the page_map must be empty, but we still need to
     /// preserve the log_memory_limit.
-    log_memory_limit: usize,
+    log_memory_limit: NumBytes,
 
     /// (!) No need to preserve across checkpoints.
     /// Tracks the size of each delta log appended during a round.
@@ -61,11 +61,11 @@ impl LogMemoryStore {
         Self {
             page_map,
             delta_log_sizes: VecDeque::new(),
-            log_memory_limit: DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
+            log_memory_limit: NumBytes::from(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64),
         }
     }
 
-    pub fn from_checkpoint(page_map: PageMap, log_memory_limit: usize) -> Self {
+    pub fn from_checkpoint(page_map: PageMap, log_memory_limit: NumBytes) -> Self {
         Self {
             page_map,
             delta_log_sizes: VecDeque::new(),
@@ -114,7 +114,7 @@ impl LogMemoryStore {
             .unwrap_or(0)
     }
 
-    pub fn log_memory_limit(&self) -> usize {
+    pub fn log_memory_limit(&self) -> NumBytes {
         self.log_memory_limit
     }
 
@@ -124,15 +124,15 @@ impl LogMemoryStore {
     /// limit changes its byte capacity. This avoids creating a ring buffer
     /// for canisters without a Wasm module or after uninstall, preventing
     /// unnecessary log-memory charges.
-    pub fn set_log_memory_limit(&mut self, new_log_memory_limit: usize) {
+    pub fn set_log_memory_limit(&mut self, new_log_memory_limit: NumBytes) {
         // Enforce a safe minimum for data capacity.
-        let new_log_memory_limit = new_log_memory_limit.max(DATA_CAPACITY_MIN);
-        self.log_memory_limit = new_log_memory_limit;
+        let new_log_memory_limit = new_log_memory_limit.get().max(DATA_CAPACITY_MIN as u64);
+        self.log_memory_limit = NumBytes::from(new_log_memory_limit);
 
         // Only resize on an existing ring buffer.
         if let Some(old) = self.load_ring_buffer() {
             // Only resize when the capacity actually changes.
-            if old.byte_capacity() != new_log_memory_limit {
+            if old.byte_capacity() != new_log_memory_limit as usize {
                 // NOTE — PageMap cannot be shrunk today. Reducing capacity keeps
                 // allocated pages in place; in practice the ring buffer max is
                 // currently ~55 MB. Future improvement — allocate a new PageMap
@@ -140,10 +140,8 @@ impl LogMemoryStore {
                 // map or add a `PageMap::shrink` API to reclaim pages.
                 //
                 // Recreate a ring buffer with the new capacity and restore records.
-                let mut new = RingBuffer::new(
-                    self.page_map.clone(),
-                    MemorySize::new(new_log_memory_limit as u64),
-                );
+                let mut new =
+                    RingBuffer::new(self.page_map.clone(), MemorySize::new(new_log_memory_limit));
                 new.append_log(old.all_records());
                 self.page_map = new.to_page_map();
             }
@@ -187,7 +185,7 @@ impl LogMemoryStore {
             .collect();
         let mut ring_buffer = self.load_ring_buffer().unwrap_or(RingBuffer::new(
             self.page_map.clone(),
-            MemorySize::new(self.log_memory_limit as u64),
+            MemorySize::new(self.log_memory_limit.get()),
         ));
         ring_buffer.append_log(records);
         self.page_map = ring_buffer.to_page_map();
@@ -354,7 +352,7 @@ mod tests {
     #[test]
     fn eviction_when_capacity_reached() {
         // Force repeated large appends so aggregate log approaches capacity — beginning records should be dropped.
-        let aggregate_capacity = 50_000; // keep small for the test.
+        let aggregate_capacity = NumBytes::from(50_000); // keep small for the test.
         let start_idx = 0;
         let mut s = LogMemoryStore::new_for_testing();
         s.set_log_memory_limit(aggregate_capacity);
@@ -382,10 +380,10 @@ mod tests {
     #[test]
     fn max_response_size_respected_without_filtering() {
         // Ensure results are trimmed to RESULT_MAX_SIZE — both for full range and for range-filtered queries.
-        let aggregate_capacity = 10_000_000;
+        let aggregate_capacity = NumBytes::from(10_000_000);
         let start_idx = 1_000;
         assert!(
-            aggregate_capacity > RESULT_MAX_SIZE.get() as usize,
+            aggregate_capacity.get() > RESULT_MAX_SIZE.get(),
             "large enough capacity"
         );
 
@@ -404,10 +402,10 @@ mod tests {
     #[test]
     fn max_response_size_respected_with_filtering_by_idx() {
         // Ensure results are trimmed to RESULT_MAX_SIZE — both for full range and for range-filtered queries.
-        let aggregate_capacity = 10_000_000;
+        let aggregate_capacity = NumBytes::from(10_000_000);
         let start_idx = 1_000;
         assert!(
-            aggregate_capacity > RESULT_MAX_SIZE.get() as usize,
+            aggregate_capacity.get() > RESULT_MAX_SIZE.get(),
             "large enough capacity"
         );
 
@@ -443,10 +441,10 @@ mod tests {
     #[test]
     fn max_response_size_respected_with_filtering_by_timestamp() {
         // Ensure results are trimmed to RESULT_MAX_SIZE — both for full range and for range-filtered queries.
-        let aggregate_capacity = 10_000_000;
+        let aggregate_capacity = NumBytes::from(10_000_000);
         let start_idx = 1_000;
         assert!(
-            aggregate_capacity > RESULT_MAX_SIZE.get() as usize,
+            aggregate_capacity.get() > RESULT_MAX_SIZE.get(),
             "large enough capacity"
         );
 
