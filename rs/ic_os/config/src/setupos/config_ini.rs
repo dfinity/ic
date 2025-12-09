@@ -18,7 +18,7 @@ pub struct ConfigIniSettings {
     pub verbose: bool,
     pub node_reward_type: Option<String>,
     pub enable_trusted_execution_environment: bool,
-    pub enable_beta_node_registration: Option<bool>,
+    pub enable_beta_registration_feature: Option<bool>,
 }
 
 // Prefix should have a max length of 19 ("1234:6789:1234:6789")
@@ -111,7 +111,8 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         .filter(|s| !s.is_empty())
         .cloned();
 
-    let enable_beta_node_registration = read_boolean(&config_map, "enable_beta_node_registration")?;
+    let enable_beta_registration_feature =
+        read_boolean(&config_map, "enable_beta_registration_feature")?;
 
     let enable_trusted_execution_environment =
         read_boolean(&config_map, "enable_trusted_execution_environment")?.unwrap_or(false);
@@ -127,7 +128,7 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         verbose,
         node_reward_type,
         enable_trusted_execution_environment,
-        enable_beta_node_registration,
+        enable_beta_registration_feature,
     })
 }
 

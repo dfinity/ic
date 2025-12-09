@@ -96,4 +96,6 @@ pub fn registration(env: TestEnv) {
         }
     ).unwrap();
     info!(logger, "All {n} nodes successfully came up and registered.");
+
+    std::thread::sleep(std::time::Duration::from_secs(60 * 60));
 }

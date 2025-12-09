@@ -175,7 +175,7 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
         .map(|mb| serde_json::to_string(mb).unwrap_or_default())
         .unwrap_or_default();
 
-    let enable_beta_registration_feature = guestos_config.icos_settings.enable_beta_node_registration.clone().unwrap_or_default();
+    let enable_beta_registration_feature = guestos_config.icos_settings.enable_beta_registration_feature.clone().unwrap_or_default();
 
     Ok(IcConfigTemplate {
         ipv6_address,

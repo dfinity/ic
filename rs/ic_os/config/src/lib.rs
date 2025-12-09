@@ -72,7 +72,7 @@ mod tests {
             enable_trusted_execution_environment: true,
             use_ssh_authorized_keys: false,
             icos_dev_settings,
-            enable_beta_node_registration: None,
+            enable_beta_registration_feature: None,
         };
         let setupos_settings = SetupOSSettings;
         #[allow(deprecated)]
