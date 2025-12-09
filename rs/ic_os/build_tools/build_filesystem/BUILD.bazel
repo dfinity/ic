@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 
 package(default_visibility = [
     "//rs:ic-os-pkg",
@@ -38,50 +39,46 @@ rust_binary(
 rust_test(
     name = "build_filesystem_test",
     crate = ":build_filesystem",
-    data = select({
-        "@platforms//os:linux": ["@e2fsprogs//:mke2fs"],
-        "//conditions:default": [],
-    }),
-    env = select({
-        "@platforms//os:linux": {"MKE2FS_BIN": "$(rootpath @e2fsprogs//:mke2fs)"},
-        "//conditions:default": {},
-    }),
-    # Integration tests require root privileges to mount filesystems (Linux only)
-    # Marked as manual - use build_filesystem_root_test to run with sudo
+    data = ["@e2fsprogs//:mke2fs"],
+    env = {
+        "MKE2FS_BIN": "$(rootpath @e2fsprogs//:mke2fs)",
+    },
+    # The devenv has limited loop devices, more threads would cause contention and make the tests slower
+    args = ["--test-threads=12"],
+    # Requires root privileges to mount filesystems.
+    # Marked as manual - run build_filesystem_root_test to run with sudo
     tags = [
-        "local",
         "manual",
+        "local",
     ],
     deps = [
         "@crate_index//:proptest",
     ],
-)
-
-sh_test(
-    name = "build_filesystem_root_test",
-    srcs = ["tests/run_rust_test_with_sudo.sh"],
-    data = [
-        ":build_filesystem_test",
-        "@e2fsprogs//:mke2fs",
-    ],
-    env = {
-        "RUST_TEST_BIN": "$(rootpath :build_filesystem_test)",
-        "MKE2FS_BIN": "$(rootpath @e2fsprogs//:mke2fs)",
-    },
-    # This test needs root privileges to mount filesystems
-    tags = ["local"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
 )
 
+write_file(
+    name = "sudo_wrapper",
+    out = "sudo_wrapper.sh",
+    content = [
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+        "cd /ic",
+        "export HOME=/home/ubuntu",
+#         "exec $(execpath :build_filesystem_test)",
+        'exec bazel run --run_under="sudo -E" //rs/ic_os/build_tools/build_filesystem:build_filesystem_test',
+    ],
+    is_executable = True,
+)
+
 sh_test(
-    name = "integration_test",
-    srcs = ["tests/integration_test.sh"],
-    data = [":build_filesystem"],
-    env = {
-        "BUILD_FILESYSTEM_BIN": "$(rootpath :build_filesystem)",
-    },
+    name = "build_filesystem_root_test",
+    srcs = [":sudo_wrapper"],
+    data = [
+        ":build_filesystem_test",
+    ],
     # This test needs root privileges to mount filesystems
     tags = ["local"],
     target_compatible_with = [

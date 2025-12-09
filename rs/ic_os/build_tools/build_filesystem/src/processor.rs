@@ -1,7 +1,7 @@
 use crate::fs_builder::{FileEntry, FilesystemBuilder};
 use crate::path_converter::{ImagePath, PathConverter};
 use crate::selinux::{FileContexts, FileType};
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use regex::RegexSet;
 use std::fs::File;
 use std::io::Read;
@@ -89,6 +89,7 @@ fn add_root(
 ) -> Result<()> {
     let mut header = Header::new_gnu();
     header.set_mode(0o755);
+    header.set_size(0);
     header.set_entry_type(tar::EntryType::Directory);
     header.set_cksum();
     add_entry(
@@ -164,8 +165,8 @@ fn add_entry(
         None
     };
 
-    let file_entry = FileEntry::new(target_path.clone(), header, data)
-        .with_selinux_context(selinux_context);
+    let file_entry =
+        FileEntry::new(target_path.clone(), header, data).with_selinux_context(selinux_context);
 
     output_builder.append_entry(file_entry)
 }

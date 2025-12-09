@@ -1,4 +1,5 @@
-use crate::io::retry_if_busy;
+use crate::device_mapping::LoopDeviceWrapper;
+use crate::io::retry_if_io_error;
 use anyhow::{Context, Result};
 use gpt::GptDisk;
 use std::fs::File;
@@ -7,7 +8,6 @@ use std::path::{Path, PathBuf};
 use sys_mount::{FilesystemType, Mount, MountFlags, Unmount, UnmountFlags};
 use tempfile::TempDir;
 use uuid::Uuid;
-
 // There are two traits here:
 // 1. PartitionProvider (high level): provides access to partitions by UUID
 //    Real implementation: GptPartitionProvider
@@ -159,12 +159,15 @@ struct LoopDeviceMount {
     // drop order as well. According to the spec, fields are dropped in the
     // order of declaration.
     mount: Mount,
+    loop_device: LoopDeviceWrapper,
     _tempdir: TempDir,
 }
 
 impl Drop for LoopDeviceMount {
     fn drop(&mut self) {
-        if let Err(e) = retry_if_busy(|| self.mount.unmount(UnmountFlags::empty())) {
+        if let Err(e) = retry_if_io_error(nix::Error::EBUSY, || {
+            self.mount.unmount(UnmountFlags::empty())
+        }) {
             // If umount fails, we need to avoid cleaning the tmpdir, as this
             // will purge the contents of the mounted fs, instead.
             eprintln!("Error dropping mount: {e:?}");
@@ -195,18 +198,29 @@ impl Mounter for LoopDeviceMounter {
     ) -> Result<Box<dyn MountedPartition>> {
         let tempdir = TempDir::new()?;
         let mount_point = tempdir.path();
+        let loop_device = LoopDeviceWrapper::attach_to_next_free(&device, offset_bytes)?;
+
         let mount = LoopDeviceMount {
-            mount: retry_if_busy(|| {
+            // Sometimes the mount can fail with EIO when udev is not ready yet
+            mount: retry_if_io_error(nix::Error::EIO, || {
                 Mount::builder()
                     .fstype(FilesystemType::Manual(options.file_system.as_str()))
-                    .loopback_offset(offset_bytes)
                     .flags(MountFlags::empty())
-                    .explicit_loopback()
-                    .mount(&device, mount_point)
+                    .mount(
+                        loop_device.path().ok_or_else(|| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                "Loop device has no path",
+                            )
+                        })?,
+                        mount_point,
+                    )
             })
             .context("Failed to create mount")?,
+            loop_device,
             _tempdir: tempdir,
         };
+
         Ok(Box::new(mount))
     }
 }

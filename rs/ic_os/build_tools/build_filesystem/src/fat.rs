@@ -1,10 +1,18 @@
 use crate::fs_builder::{FileEntry, FilesystemBuilder};
 use crate::partition_size::PartitionSize;
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{Context, Result, bail, ensure};
+use std::fs::{File, FileTimes};
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
-use tempfile::NamedTempFile;
+use std::time::{Duration, SystemTime};
+use tempfile::{NamedTempFile, TempDir};
+
+/// Returns the minimum time for FAT filesystems
+pub fn fat_min_time() -> SystemTime {
+    // 1980-01-01 00:00:00 UTC
+    SystemTime::UNIX_EPOCH + Duration::from_secs(315532800)
+}
 
 /// FAT filesystem type
 #[derive(Debug, Clone, Copy)]
@@ -59,14 +67,13 @@ impl FatBuilder {
                 cmd.arg("-F").arg("32");
             }
 
-            cmd.arg("-C");
-
             // Add volume label if provided
             if let Some(ref label) = self.label {
                 cmd.arg("-n").arg(label);
             }
 
-            cmd.arg(&self.output_path)
+            cmd.arg("-C")
+                .arg(&self.output_path)
                 .arg(self.partition_size.as_kb()?.to_string())
                 .env("SOURCE_DATE_EPOCH", "0");
 
@@ -94,30 +101,32 @@ impl FilesystemBuilder for FatBuilder {
 
         match entry_type {
             tar::EntryType::Directory => {
-                // Create directory using mmd
-                let output = Command::new("/usr/bin/mmd")
+                let dir = TempDir::new().context("Failed to create temporary directory")?;
+                File::open(dir.path())?.set_times(
+                    FileTimes::new()
+                        .set_modified(fat_min_time())
+                        .set_accessed(fat_min_time()),
+                )?;
+                // Copy directory using mcopy
+                let output = Command::new("mcopy")
+                    .arg("-m")
                     .arg("-i")
                     .arg(&self.output_path)
+                    .arg(dir.path())
                     .arg(&fat_path)
-                    .env("SOURCE_DATE_EPOCH", "0")
                     .output()
                     .with_context(|| {
                         format!(
-                            "Failed to execute mmd for {:?}",
+                            "Failed to execute mcopy for {:?}",
                             entry_path.as_relative_path()
                         )
                     })?;
 
-                // mmd returns error if directory already exists, which is fine
-                if !output.status.success() {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    if !stderr.contains("File exists") && !stderr.contains("already exists") {
-                        bail!(
-                            "mmd failed for {:?}: {output:?}",
-                            entry_path.as_relative_path()
-                        );
-                    }
-                }
+                ensure!(
+                    output.status.success(),
+                    "mcopy failed for {:?}: {output:?}",
+                    entry_path.as_relative_path()
+                );
             }
             tar::EntryType::Regular => {
                 // Create a temporary file with the contents
@@ -131,13 +140,19 @@ impl FilesystemBuilder for FatBuilder {
                 })?;
                 temp_file.flush()?;
 
+                temp_file.as_file_mut().set_times(
+                    FileTimes::new()
+                        .set_modified(fat_min_time())
+                        .set_accessed(fat_min_time()),
+                )?;
+
                 // Copy file using mcopy
                 let output = Command::new("mcopy")
+                    .arg("-m")
                     .arg("-i")
                     .arg(&self.output_path)
                     .arg(temp_file.path())
                     .arg(&fat_path)
-                    .env("SOURCE_DATE_EPOCH", "0")
                     .output()
                     .with_context(|| {
                         format!(
@@ -169,4 +184,3 @@ impl FilesystemBuilder for FatBuilder {
         false
     }
 }
-

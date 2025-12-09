@@ -1,59 +1,30 @@
 #![cfg(test)]
 
+use crate::fat::fat_min_time;
+use crate::{Args, OutputType, build_filesystem};
+use ic_device::mount::{FileSystem, LoopDeviceMounter, MountOptions, Mounter};
+use proptest::prelude::*;
 use std::fs;
+use std::io::Read;
+use std::ops::Add;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 use tempfile::TempDir;
 
-use crate::{Args, OutputType, build_filesystem};
-
-#[cfg(target_os = "linux")]
-use ic_device::mount::{FileSystem, LoopDeviceMounter, MountOptions, Mounter};
-
-#[cfg(target_os = "linux")]
-use std::io::Read;
-
-#[cfg(target_os = "linux")]
-use proptest::test_runner::TestCaseError;
-
-#[cfg(target_os = "linux")]
-use proptest::prelude::*;
-
-/// Get the mke2fs binary path from environment variable if available
 fn get_mke2fs_path() -> Option<PathBuf> {
     std::env::var("MKE2FS_BIN").ok().map(PathBuf::from)
 }
 
-/// All image types that can be tested (tar is extracted, others are mounted)
-#[cfg(target_os = "linux")]
-const ALL_TYPES: &[OutputType] = &[
-    OutputType::Tar,
-    OutputType::Ext4,
-    OutputType::Vfat,
-    OutputType::Fat32,
-];
-
-/// Image types that can be mounted as filesystems
-#[cfg(target_os = "linux")]
-const MOUNTABLE_TYPES: &[OutputType] = &[OutputType::Ext4, OutputType::Vfat, OutputType::Fat32];
-
-/// Image types that support extended attributes and permissions (ext4 only)
-#[cfg(target_os = "linux")]
-const EXT4_ONLY: &[OutputType] = &[OutputType::Ext4];
-
-/// FAT filesystem types
-#[cfg(target_os = "linux")]
-const FAT_TYPES: &[OutputType] = &[OutputType::Vfat, OutputType::Fat32];
-
 /// Test fixture for creating filesystem images and mounting them
-#[allow(dead_code)]
 struct ImageFixture {
-    _temp_dir: TempDir,
+    /// The path where the image/tar is generated
     output_path: PathBuf,
     output_type: OutputType,
+    /// Temporary directory for intermediate files
+    temp_dir: TempDir,
 }
 
 /// Builder for creating ImageFixture with custom arguments
-#[allow(dead_code)]
 struct ImageFixtureBuilder {
     output_type: OutputType,
     partition_size: Option<String>,
@@ -65,7 +36,6 @@ struct ImageFixtureBuilder {
     tar_builder: Option<tar::Builder<Vec<u8>>>,
 }
 
-#[allow(dead_code)]
 impl ImageFixtureBuilder {
     fn new(output_type: OutputType) -> Self {
         Self {
@@ -82,6 +52,13 @@ impl ImageFixtureBuilder {
 
     fn partition_size(mut self, size: &str) -> Self {
         self.partition_size = Some(size.to_string());
+        self
+    }
+
+    fn partition_size_if_not_tar(mut self, size: &str) -> Self {
+        if self.output_type != OutputType::Tar {
+            self.partition_size = Some(size.to_string());
+        }
         self
     }
 
@@ -115,8 +92,8 @@ impl ImageFixtureBuilder {
         self
     }
 
-    fn build(self) -> Result<ImageFixture, TestCaseError> {
-        let temp_dir = TempDir::new()?;
+    fn build(self) -> ImageFixture {
+        let temp_dir = TempDir::new().unwrap();
         let output_path = match self.output_type {
             OutputType::Tar => temp_dir.path().join("output.tar"),
             OutputType::Ext4 | OutputType::Vfat | OutputType::Fat32 => {
@@ -125,9 +102,9 @@ impl ImageFixtureBuilder {
         };
 
         let input_tar = if let Some(builder) = self.tar_builder {
-            let tar_data = builder.into_inner()?;
+            let tar_data = builder.into_inner().unwrap();
             let tar_path = temp_dir.path().join("input.tar");
-            fs::write(&tar_path, tar_data)?;
+            fs::write(&tar_path, tar_data).unwrap();
             Some(tar_path)
         } else {
             None
@@ -142,7 +119,7 @@ impl ImageFixtureBuilder {
                 .as_ref()
                 .map(|s| s.parse())
                 .transpose()
-                .map_err(|s| TestCaseError::fail(s))?,
+                .unwrap(),
             label: self.label,
             subdir: self.subdir,
             file_contexts: self.file_contexts,
@@ -150,17 +127,16 @@ impl ImageFixtureBuilder {
             extra_files: self.extra_files,
             mke2fs_path: get_mke2fs_path(),
         })
-        .map_err(|e| TestCaseError::fail(format!("Failed to build filesystem: {e:?}")))?;
+        .unwrap();
 
-        Ok(ImageFixture {
-            _temp_dir: temp_dir,
+        ImageFixture {
+            temp_dir,
             output_path,
             output_type: self.output_type,
-        })
+        }
     }
 }
 
-#[allow(dead_code)]
 impl ImageFixture {
     fn builder(output_type: OutputType) -> ImageFixtureBuilder {
         ImageFixtureBuilder::new(output_type)
@@ -171,108 +147,106 @@ impl ImageFixture {
     }
 
     /// Convert OutputType to FileSystem for mounting
-    #[cfg(target_os = "linux")]
-    fn filesystem_type(&self) -> Result<FileSystem, TestCaseError> {
+    fn filesystem_type(&self) -> FileSystem {
         match self.output_type {
-            OutputType::Ext4 => Ok(FileSystem::Ext4),
-            OutputType::Vfat | OutputType::Fat32 => Ok(FileSystem::Vfat),
-            OutputType::Tar => Err(TestCaseError::fail("No filesystem type for tar")),
+            OutputType::Ext4 => FileSystem::Ext4,
+            OutputType::Vfat | OutputType::Fat32 => FileSystem::Vfat,
+            OutputType::Tar => panic!("No filesystem type for tar"),
         }
     }
 
     /// Mount the image (Linux only)
     /// For tar files, this extracts the tar to a temporary directory
     /// For filesystem images, this mounts them using a loop device
-    #[cfg(target_os = "linux")]
-    fn mount(&self) -> Result<MountedImage, TestCaseError> {
+    fn mount(&self) -> MountedImage {
         match self.output_type {
             OutputType::Tar => MountedImage::extract_tar(self.path()),
-            _ => MountedImage::mount_loop(self.path(), self.filesystem_type()?),
+            _ => MountedImage::mount_loop(self.path(), self.filesystem_type()),
         }
     }
 
     /// Extract tar.zst and return path to extracted tar
-    #[cfg(target_os = "linux")]
-    fn extract_zst(&self) -> Result<PathBuf, TestCaseError> {
+    fn extract_zst(&self) -> PathBuf {
         use std::process::Command;
 
-        let extracted = self._temp_dir.path().join("extracted.tar");
+        let extracted = self.temp_dir.path().join("extracted.tar");
 
         let output = Command::new("zstd")
             .arg("-d")
             .arg(self.path())
             .arg("-o")
             .arg(&extracted)
-            .output()?;
+            .output()
+            .unwrap();
 
-        prop_assert!(output.status.success(), "zstd decompression failed");
+        assert!(output.status.success(), "zstd decompression failed");
 
-        Ok(extracted)
+        extracted
     }
 }
 
 /// Helper to mount an image and verify contents
 /// For tar files, this extracts to a temp directory
 /// For filesystem images, this mounts using a loop device
-#[cfg(target_os = "linux")]
 struct MountedImage {
+    // The mount point points to either the mount or the temp dir
     mount_point: PathBuf,
     _mount: Option<Box<dyn ic_device::mount::MountedPartition>>,
     _temp_dir: Option<TempDir>,
 }
 
-#[cfg(target_os = "linux")]
 impl MountedImage {
     /// Mount a filesystem image using a loop device
-    fn mount_loop(image_path: &Path, fs_type: FileSystem) -> Result<Self, TestCaseError> {
-        prop_assert!(
+    fn mount_loop(image_path: &Path, fs_type: FileSystem) -> Self {
+        assert!(
             image_path.exists(),
-            "Image file does not exist: {} (cwd: {:?})",
-            image_path.display(),
-            std::env::current_dir()
-        );
-
-        eprintln!(
-            "Mounting image: {} (size: {} bytes)",
-            image_path.display(),
-            fs::metadata(image_path)?.len()
+            "Image file does not exist: {}",
+            image_path.display()
         );
 
         let mount = LoopDeviceMounter
             .mount_range(
                 image_path.to_path_buf(),
                 0,
-                0,
+                fs::metadata(image_path).unwrap().len(),
                 MountOptions {
                     file_system: fs_type,
                 },
             )
-            .map_err(|e| TestCaseError::fail(format!("Failed to mount image: {e:?}")))?;
+            .unwrap();
 
         let mount_point = mount.mount_point().to_path_buf();
 
-        Ok(Self {
+        Self {
             mount_point,
             _mount: Some(mount),
             _temp_dir: None,
-        })
+        }
     }
 
     /// Extract a tar file to a temporary directory
-    fn extract_tar(tar_path: &Path) -> Result<Self, TestCaseError> {
-        let temp_dir = TempDir::new()?;
+    fn extract_tar(tar_path: &Path) -> Self {
+        use std::process::Command;
+
+        let temp_dir = TempDir::new().unwrap();
         let extract_dir = temp_dir.path().join("extracted");
-        fs::create_dir(&extract_dir)?;
+        fs::create_dir(&extract_dir).unwrap();
 
-        let tar_file = fs::File::open(tar_path)?;
-        let mut archive = tar::Archive::new(tar_file);
-        archive.unpack(&extract_dir)?;
+        let output = Command::new("tar")
+            .arg("-xf")
+            .arg(tar_path)
+            .arg("-C")
+            .arg(&extract_dir)
+            .output()
+            .unwrap();
 
-        Ok(Self {
+        assert!(output.status.success(), "tar extraction failed");
+
+        Self {
             mount_point: extract_dir,
             _mount: None,
             _temp_dir: Some(temp_dir),
-        })
+        }
     }
 
     fn mount_point(&self) -> &Path {
@@ -280,74 +254,53 @@ impl MountedImage {
     }
 
     /// Assert file exists with expected content
-    fn assert_file_content(&self, path: &str, expected: &str) -> Result<(), TestCaseError> {
+    fn assert_file_content(&self, path: &str, expected: &str) {
         let file_path = self.mount_point().join(path);
-        let content = fs::read_to_string(&file_path)?;
-        prop_assert_eq!(content, expected, "File {} has wrong content", path);
-        Ok(())
+        let content = fs::read_to_string(&file_path).unwrap();
+        assert_eq!(content, expected, "File {} has wrong content", path);
     }
 
     /// Assert file exists
-    fn assert_file_exists(&self, path: &str) -> Result<(), TestCaseError> {
+    fn assert_file_exists(&self, path: &str) {
         let file_path = self.mount_point().join(path);
-        prop_assert!(file_path.exists(), "File {} does not exist", path);
-        Ok(())
+        assert!(file_path.exists(), "File {} does not exist", path);
     }
 
     /// Assert file does not exist
-    fn assert_file_not_exists(&self, path: &str) -> Result<(), TestCaseError> {
+    fn assert_file_not_exists(&self, path: &str) {
         let file_path = self.mount_point().join(path);
-        prop_assert!(!file_path.exists(), "File {} should not exist", path);
-        Ok(())
+        assert!(!file_path.exists(), "File {} should not exist", path);
     }
 
     /// Assert directory exists
-    fn assert_dir_exists(&self, path: &str) -> Result<(), TestCaseError> {
+    fn assert_dir_exists(&self, path: &str) {
         let dir_path = self.mount_point().join(path);
-        prop_assert!(dir_path.is_dir(), "Directory {} does not exist", path);
-        Ok(())
+        assert!(dir_path.is_dir(), "Directory {} does not exist", path);
     }
 
     /// Assert file has specific permissions
-    #[cfg(target_os = "linux")]
-    fn assert_permissions(&self, path: &str, expected_mode: u32) -> Result<(), TestCaseError> {
+    fn assert_permissions(&self, path: &str, expected_mode: u32) {
         use std::os::unix::fs::PermissionsExt;
         let file_path = self.mount_point().join(path);
-        let metadata = fs::metadata(&file_path)?;
+        let metadata = fs::metadata(&file_path).unwrap();
         let mode = metadata.permissions().mode() & 0o777;
-        prop_assert_eq!(
-            mode,
-            expected_mode,
+        assert_eq!(
+            mode, expected_mode,
             "File {} has wrong permissions: {:o} (expected {:o})",
-            path,
-            mode,
-            expected_mode
+            path, mode, expected_mode
         );
-        Ok(())
     }
 
     /// Assert file has specific ownership
-    #[cfg(target_os = "linux")]
-    fn assert_ownership(
-        &self,
-        path: &str,
-        expected_uid: u32,
-        expected_gid: u32,
-    ) -> Result<(), TestCaseError> {
+    fn assert_ownership(&self, path: &str, expected_uid: u32, expected_gid: u32) {
         use std::os::unix::fs::MetadataExt;
         let file_path = self.mount_point().join(path);
-        let metadata = fs::metadata(&file_path)?;
-        prop_assert_eq!(metadata.uid(), expected_uid, "File {} has wrong uid", path);
-        prop_assert_eq!(metadata.gid(), expected_gid, "File {} has wrong gid", path);
-        Ok(())
+        let metadata = fs::metadata(&file_path).unwrap();
+        assert_eq!(metadata.uid(), expected_uid, "File {} has wrong uid", path);
+        assert_eq!(metadata.gid(), expected_gid, "File {} has wrong gid", path);
     }
 }
 
-// ============================================================================
-// Proptest Strategies
-// ============================================================================
-
-#[cfg(target_os = "linux")]
 fn all_types() -> impl Strategy<Value = OutputType> {
     prop_oneof![
         Just(OutputType::Tar),
@@ -357,40 +310,32 @@ fn all_types() -> impl Strategy<Value = OutputType> {
     ]
 }
 
-#[cfg(target_os = "linux")]
-fn ext4_only() -> impl Strategy<Value = OutputType> {
-    Just(OutputType::Ext4)
+fn append_file(tar: &mut tar::Builder<Vec<u8>>, path: &str, content: &[u8], mode: u32) {
+    let mut header = tar::Header::new_gnu();
+    header.set_size(content.len() as u64);
+    header.set_mode(mode);
+    header.set_cksum();
+    tar.append_data(&mut header, path, content).unwrap();
 }
 
-#[cfg(target_os = "linux")]
-fn fat_types() -> impl Strategy<Value = OutputType> {
-    prop_oneof![Just(OutputType::Vfat), Just(OutputType::Fat32),]
+fn append_dir(tar: &mut tar::Builder<Vec<u8>>, path: &str, mode: u32) {
+    let mut header = tar::Header::new_gnu();
+    header.set_entry_type(tar::EntryType::Directory);
+    header.set_size(0);
+    header.set_mode(mode);
+    header.set_cksum();
+    tar.append_data(&mut header, path, &[] as &[u8]).unwrap();
 }
 
-#[cfg(target_os = "linux")]
 proptest! {
     #[test]
     fn test_basic_files_and_dirs(output_type in all_types()) {
         let mut tar = tar::Builder::new(Vec::new());
 
-        let mut header = tar::Header::new_gnu();
-        header.set_size(12);
-        header.set_mode(0o644);
-        header.set_cksum();
-        tar.append_data(&mut header, "file1.txt", "test content".as_bytes())?;
-
-        let mut header = tar::Header::new_gnu();
-        header.set_size(14);
-        header.set_mode(0o644);
-        header.set_cksum();
-        tar.append_data(&mut header, "subdir/file2.txt", "nested content".as_bytes())?;
-
-        let mut header = tar::Header::new_gnu();
-        header.set_entry_type(tar::EntryType::Directory);
-        header.set_size(0);
-        header.set_mode(0o755);
-        header.set_cksum();
-        tar.append_data(&mut header, "emptydir", &[] as &[u8])?;
+        append_file(&mut tar, "file1.txt", "test content".as_bytes(), 0o644);
+        append_dir(&mut tar, "subdir", 0o755);
+        append_file(&mut tar, "subdir/file2.txt", "nested content".as_bytes(), 0o644);
+        append_dir(&mut tar, "emptydir", 0o755);
 
         let mut builder = ImageFixture::builder(output_type).tar_content(tar);
 
@@ -398,30 +343,25 @@ proptest! {
             builder = builder.partition_size("50M");
         }
 
-        let image = builder.build()?;
-        let mounted = image.mount()?;
+        let image = builder.build();
+        let mounted = image.mount();
 
-        mounted.assert_file_content("file1.txt", "test content")?;
-        mounted.assert_file_content("subdir/file2.txt", "nested content")?;
-        mounted.assert_dir_exists("emptydir")?;
-        mounted.assert_dir_exists("subdir")?;
+        mounted.assert_file_content("file1.txt", "test content");
+        mounted.assert_file_content("subdir/file2.txt", "nested content");
+        mounted.assert_dir_exists("emptydir");
+        mounted.assert_dir_exists("subdir");
     }
 
     #[test]
-    fn test_label(output_type in fat_types()) {
+    fn test_label(output_type in prop_oneof![Just(OutputType::Vfat), Just(OutputType::Fat32)]) {
         let mut tar = tar::Builder::new(Vec::new());
-
-        let mut header = tar::Header::new_gnu();
-        header.set_size(12);
-        header.set_mode(0o644);
-        header.set_cksum();
-        tar.append_data(&mut header, "file1.txt", "test content".as_bytes())?;
+        append_file(&mut tar, "file1.txt", "test content".as_bytes(), 0o644);
 
         let image = ImageFixture::builder(output_type)
             .partition_size("50M")
             .label("TESTLABEL")
             .tar_content(tar)
-            .build()?;
+            .build();
 
         let output_label = std::process::Command::new("blkid")
             .arg("-s")
@@ -429,31 +369,23 @@ proptest! {
             .arg("-o")
             .arg("value")
             .arg(image.path())
-            .output()?;
+            .output()
+            .expect("failed to start blkid");
         let label = String::from_utf8_lossy(&output_label.stdout)
             .trim()
             .to_string();
-        prop_assert_eq!(label, "TESTLABEL", "Label should match");
+        assert_eq!(label, "TESTLABEL", "Label should match");
 
-        let mounted = image.mount()?;
-        mounted.assert_file_content("file1.txt", "test content")?;
+        let mounted = image.mount();
+        mounted.assert_file_content("file1.txt", "test content");
     }
 
     #[test]
     fn test_subdir_extraction(output_type in all_types()) {
         let mut tar = tar::Builder::new(Vec::new());
 
-        let mut header = tar::Header::new_gnu();
-        header.set_size(12);
-        header.set_mode(0o644);
-        header.set_cksum();
-        tar.append_data(&mut header, "file1.txt", "test content".as_bytes())?;
-
-        let mut header = tar::Header::new_gnu();
-        header.set_size(14);
-        header.set_mode(0o644);
-        header.set_cksum();
-        tar.append_data(&mut header, "subdir/file2.txt", "nested content".as_bytes())?;
+        append_file(&mut tar, "file1.txt", "test content".as_bytes(), 0o644);
+        append_file(&mut tar, "subdir/file2.txt", "nested content".as_bytes(), 0o644);
 
         let mut builder = ImageFixture::builder(output_type)
             .subdir("/subdir")
@@ -463,27 +395,22 @@ proptest! {
             builder = builder.partition_size("50M");
         }
 
-        let image = builder.build()?;
+        let image = builder.build();
 
-        let mounted = image.mount()?;
-        mounted.assert_file_content("file2.txt", "nested content")?;
-        mounted.assert_file_not_exists("file1.txt")?;
-        mounted.assert_file_not_exists("subdir/file2.txt")?;
+        let mounted = image.mount();
+        mounted.assert_file_content("file2.txt", "nested content");
+        mounted.assert_file_not_exists("file1.txt");
+        mounted.assert_file_not_exists("subdir/file2.txt");
     }
 
     #[test]
     fn test_extra_files(output_type in all_types()) {
-        let temp_dir = TempDir::new()?;
+        let temp_dir = TempDir::new().unwrap();
         let extra_file = temp_dir.path().join("extra.txt");
-        fs::write(&extra_file, "extra content")?;
+        fs::write(&extra_file, "extra content").unwrap();
 
         let mut tar = tar::Builder::new(Vec::new());
-
-        let mut header = tar::Header::new_gnu();
-        header.set_size(12);
-        header.set_mode(0o644);
-        header.set_cksum();
-        tar.append_data(&mut header, "file1.txt", "test content".as_bytes())?;
+        append_file(&mut tar, "file1.txt", "test content".as_bytes(), 0o644);
 
         let mut builder = ImageFixture::builder(output_type)
             .extra_file(&format!("{}:/extra.txt:0644", extra_file.display()))
@@ -493,11 +420,11 @@ proptest! {
             builder = builder.partition_size("50M");
         }
 
-        let image = builder.build()?;
+        let image = builder.build();
 
-        let mounted = image.mount()?;
-        mounted.assert_file_content("file1.txt", "test content")?;
-        mounted.assert_file_content("extra.txt", "extra content")?;
+        let mounted = image.mount();
+        mounted.assert_file_content("file1.txt", "test content");
+        mounted.assert_file_content("extra.txt", "extra content");
     }
 
     #[test]
@@ -509,166 +436,113 @@ proptest! {
         header.set_size(large_data.len() as u64);
         header.set_mode(0o644);
         header.set_cksum();
-        tar.append_data(&mut header, "large.bin", large_data.as_slice())?;
+        tar.append_data(&mut header, "large.bin", large_data.as_slice()).unwrap();
 
-        let mut builder = ImageFixture::builder(output_type).tar_content(tar);
+        let image = ImageFixture::builder(output_type).partition_size_if_not_tar("50M")
+            .tar_content(tar).build();
 
-        if output_type != OutputType::Tar {
-            builder = builder.partition_size("50M");
-        }
+        let mounted = image.mount();
+        mounted.assert_file_exists("large.bin");
 
-        let image = builder.build()?;
-
-        let mounted = image.mount()?;
-        mounted.assert_file_exists("large.bin")?;
-
-        let file_size = fs::metadata(mounted.mount_point().join("large.bin"))?.len();
-        prop_assert_eq!(file_size, large_data.len() as u64, "File size should match");
+        let file_size = fs::metadata(mounted.mount_point().join("large.bin")).unwrap().len();
+        assert_eq!(file_size, large_data.len() as u64, "File size should match");
     }
 
     #[test]
-    fn test_mtime_set_to_zero(output_type in all_types()) {
-        use std::os::unix::fs::MetadataExt;
-
+    fn test_mtime_set(output_type in all_types()) {
         let mut tar = tar::Builder::new(Vec::new());
 
-        let mut header = tar::Header::new_gnu();
-        header.set_size(12);
-        header.set_mode(0o644);
-        header.set_cksum();
-        tar.append_data(&mut header, "file1.txt", "test content".as_bytes())?;
+        append_file(&mut tar, "file1.txt", "test content".as_bytes(), 0o644);
+        append_dir(&mut tar, "subdir", 0o755);
+        append_file(&mut tar, "subdir/file2.txt", "nested content".as_bytes(), 0o644);
 
-        let mut header = tar::Header::new_gnu();
-        header.set_entry_type(tar::EntryType::Directory);
-        header.set_size(0);
-        header.set_mode(0o755);
-        header.set_cksum();
-        tar.append_data(&mut header, "subdir", &[] as &[u8])?;
+        let image = ImageFixture::builder(output_type)
+            .partition_size_if_not_tar("50M")
+            .tar_content(tar)
+            .build();
+        let mounted = image.mount();
 
-        let mut header = tar::Header::new_gnu();
-        header.set_size(14);
-        header.set_mode(0o644);
-        header.set_cksum();
-        tar.append_data(&mut header, "subdir/file2.txt", "nested content".as_bytes())?;
+        let expected_mtime = match output_type {
+            OutputType::Fat32 | OutputType::Vfat => fat_min_time(),
+            _ => SystemTime::UNIX_EPOCH,
+        };
 
-        let mut builder = ImageFixture::builder(output_type).tar_content(tar);
-
-        if output_type != OutputType::Tar {
-            builder = builder.partition_size("50M");
+        for path in &["file1.txt", "subdir/file2.txt", "subdir"] {
+            let metadata = fs::metadata(mounted.mount_point().join(path)).unwrap();
+            assert_eq!(
+                metadata.modified().unwrap(),
+                expected_mtime,
+                "{path} mtime should match",
+            );
         }
-
-        let image = builder.build()?;
-        let mounted = image.mount()?;
-
-        let file_metadata = fs::metadata(mounted.mount_point().join("file1.txt"))?;
-        prop_assert_eq!(file_metadata.mtime(), 0, "file1.txt mtime should be 0");
-
-        let nested_metadata = fs::metadata(mounted.mount_point().join("subdir/file2.txt"))?;
-        prop_assert_eq!(nested_metadata.mtime(), 0, "subdir/file2.txt mtime should be 0");
-
-        let dir_metadata = fs::metadata(mounted.mount_point().join("subdir"))?;
-        prop_assert_eq!(dir_metadata.mtime(), 0, "subdir mtime should be 0");
     }
 
     #[test]
-    fn test_symlinks(output_type in ext4_only()) {
+    fn test_symlinks(output_type in prop_oneof!(Just(OutputType::Ext4), Just(OutputType::Tar))) {
         let mut tar = tar::Builder::new(Vec::new());
 
         let mut header = tar::Header::new_gnu();
         header.set_size(11);
         header.set_mode(0o644);
         header.set_cksum();
-        tar.append_data(&mut header, "target.txt", "test target".as_bytes())?;
+        tar.append_data(&mut header, "target.txt", "test target".as_bytes()).unwrap();
 
         let mut header = tar::Header::new_gnu();
         header.set_entry_type(tar::EntryType::Symlink);
         header.set_size(0);
         header.set_mode(0o777);
         header.set_cksum();
-        tar.append_link(&mut header, "link.txt", "target.txt")?;
+        tar.append_link(&mut header, "link.txt", "target.txt").unwrap();
 
-        let image = ImageFixture::builder(output_type)
-            .partition_size("50M")
-            .tar_content(tar)
-            .build()?;
+        let image = ImageFixture::builder(output_type).partition_size_if_not_tar("50M")
+            .tar_content(tar).build();
 
-        let mounted = image.mount()?;
+        let mounted = image.mount();
         let link_path = mounted.mount_point().join("link.txt");
-        prop_assert!(link_path.exists(), "Symlink should exist");
+        assert!(link_path.exists(), "Symlink should exist");
 
-        let metadata = fs::symlink_metadata(&link_path)?;
-        prop_assert!(metadata.file_type().is_symlink(), "link.txt should be a symlink");
+        let metadata = fs::symlink_metadata(&link_path).unwrap();
+        assert!(metadata.file_type().is_symlink(), "link.txt should be a symlink");
 
-        let target = fs::read_link(&link_path)?;
-        prop_assert_eq!(target, PathBuf::from("target.txt"), "Symlink target should be target.txt");
+        let target = fs::read_link(&link_path).unwrap();
+        assert_eq!(target, PathBuf::from("target.txt"), "Symlink target should be target.txt");
     }
 
     #[test]
-    fn test_permissions_preserved(output_type in ext4_only()) {
+    fn test_permissions_preserved(output_type in prop_oneof!(Just(OutputType::Ext4), Just(OutputType::Tar))) {
         let mut tar = tar::Builder::new(Vec::new());
 
-        let mut header = tar::Header::new_gnu();
-        header.set_size(22);
-        header.set_mode(0o755);
-        header.set_cksum();
-        tar.append_data(&mut header, "script.sh", "script".as_bytes())?;
+        append_file(&mut tar, "script.sh", "script".as_bytes(), 0o755);
+        append_file(&mut tar, "readonly.txt", "readonly".as_bytes(), 0o444);
+        append_file(&mut tar, "writable.txt", "writable".as_bytes(), 0o644);
 
-        let mut header = tar::Header::new_gnu();
-        header.set_size(8);
-        header.set_mode(0o444);
-        header.set_cksum();
-        tar.append_data(&mut header, "readonly.txt", "readonly".as_bytes())?;
+        let image = ImageFixture::builder(output_type).partition_size_if_not_tar("50M")
+            .tar_content(tar).build();
 
-        let mut header = tar::Header::new_gnu();
-        header.set_size(8);
-        header.set_mode(0o644);
-        header.set_cksum();
-        tar.append_data(&mut header, "writable.txt", "writable".as_bytes())?;
+        let mounted = image.mount();
 
-        let image = ImageFixture::builder(output_type)
-            .partition_size("50M")
-            .tar_content(tar)
-            .build()?;
-
-        let mounted = image.mount()?;
-
-        mounted.assert_permissions("script.sh", 0o755)?;
-        mounted.assert_permissions("readonly.txt", 0o444)?;
-        mounted.assert_permissions("writable.txt", 0o644)?;
+        mounted.assert_permissions("script.sh", 0o755);
+        mounted.assert_permissions("readonly.txt", 0o444);
+        mounted.assert_permissions("writable.txt", 0o644);
     }
 
     #[test]
-    fn test_ownership_preserved(output_type in ext4_only()) {
+    fn test_ownership_preserved(output_type in prop_oneof!(Just(OutputType::Ext4), Just(OutputType::Tar))) {
         let mut tar = tar::Builder::new(Vec::new());
 
-        let mut header = tar::Header::new_gnu();
-        header.set_size(12);
-        header.set_mode(0o644);
-        header.set_cksum();
-        tar.append_data(&mut header, "file1.txt", "test content".as_bytes())?;
-
-        let mut header = tar::Header::new_gnu();
-        header.set_entry_type(tar::EntryType::Directory);
-        header.set_size(0);
-        header.set_mode(0o755);
-        header.set_cksum();
-        tar.append_data(&mut header, "subdir", &[] as &[u8])?;
-
-        let mut header = tar::Header::new_gnu();
-        header.set_size(14);
-        header.set_mode(0o644);
-        header.set_cksum();
-        tar.append_data(&mut header, "subdir/file2.txt", "nested content".as_bytes())?;
+        append_file(&mut tar, "file1.txt", "test content".as_bytes(), 0o644);
+        append_dir(&mut tar, "subdir", 0o755);
+        append_file(&mut tar, "subdir/file2.txt", "nested content".as_bytes(), 0o644);
 
         let image = ImageFixture::builder(output_type)
-            .partition_size("50M")
+            .partition_size_if_not_tar("50M")
             .tar_content(tar)
-            .build()?;
-        let mounted = image.mount()?;
+            .build();
+        let mounted = image.mount();
 
-        mounted.assert_ownership("file1.txt", 0, 0)?;
-        mounted.assert_ownership("subdir/file2.txt", 0, 0)?;
-        mounted.assert_ownership("subdir", 0, 0)?;
+        mounted.assert_ownership("file1.txt", 0, 0);
+        mounted.assert_ownership("subdir/file2.txt", 0, 0);
+        mounted.assert_ownership("subdir", 0, 0);
     }
 }
 
@@ -699,13 +573,13 @@ proptest! {
 //         .filter_map(|e| e.ok())
 //         .filter_map(|e| e.path().ok().map(|p| p.to_string_lossy().to_string()))
 //         .collect();
-//     prop_assert_eq!(entries, vec!["file1.txt", "subdir/file2.txt"], "Tar contents should match");
+//     assert_eq!(entries, vec!["file1.txt", "subdir/file2.txt"], "Tar contents should match");
 //
 //     Ok(())
 // }
 
 // #[test]
-// #[cfg(target_os = "linux")]
+//
 // fn test_empty_filesystem() -> Result<()> {
 //     let image = ImageFixture::builder(OutputType::Ext4)
 //         .partition_size("10M")
@@ -721,13 +595,13 @@ proptest! {
 //         .filter_map(|e| e.ok())
 //         .filter(|e| e.file_type().is_file())
 //         .count();
-//     prop_assert_eq!(file_count, 0, "Expected empty filesystem");
+//     assert_eq!(file_count, 0, "Expected empty filesystem");
 //
 //     Ok(())
 // }
 //
 // #[test]
-// #[cfg(target_os = "linux")]
+//
 // fn test_compressed_tar_output() -> Result<()> {
 //     let temp_dir = TempDir::new()?;
 //     let output = temp_dir.path().join("output.tar.zst");
@@ -758,7 +632,7 @@ proptest! {
 //     })?;
 //
 //     drop(tar_temp_dir);
-//     prop_assert!(output.exists(), "Output file should exist");
+//     assert!(output.exists(), "Output file should exist");
 //
 //     // Verify it's a zstd compressed file by checking magic bytes
 //     let mut file = fs::File::open(&output)?;
@@ -767,7 +641,7 @@ proptest! {
 //     drop(file);
 //
 //     // Zstandard magic number is 0x28, 0xB5, 0x2F, 0xFD
-//     prop_assert_eq!(
+//     assert_eq!(
 //         magic,
 //         [0x28, 0xB5, 0x2F, 0xFD],
 //         "Output should be Zstandard compressed"
@@ -783,7 +657,7 @@ proptest! {
 //         .output()
 //         .context("Failed to execute zstd")?;
 //
-//     prop_assert!(zstd_output.status.success(), "zstd decompression failed");
+//     assert!(zstd_output.status.success(), "zstd decompression failed");
 //
 //     // Verify tar contents
 //     let tar_file = fs::File::open(&extracted)?;
@@ -794,7 +668,7 @@ proptest! {
 //         .filter_map(|e| e.path().ok().map(|p| p.to_string_lossy().to_string()))
 //         .collect();
 //
-//     prop_assert!(
+//     assert!(
 //         entries.iter().any(|e| e.contains("file1.txt")),
 //         "Extracted tar should contain file1.txt"
 //     );
@@ -803,7 +677,7 @@ proptest! {
 // }
 //
 // #[test]
-// #[cfg(target_os = "linux")]
+//
 // fn test_invalid_partition_size() -> Result<()> {
 //     let temp_dir = TempDir::new()?;
 //
@@ -835,7 +709,7 @@ proptest! {
 //         mke2fs_path: get_mke2fs_path(),
 //     });
 //
-//     prop_assert!(result.is_err(), "Should fail without partition size");
+//     assert!(result.is_err(), "Should fail without partition size");
 //
 //     Ok(())
 // }

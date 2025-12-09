@@ -47,4 +47,3 @@ impl<W: Write + Send> FilesystemBuilder for TarBuilder<W> {
         false
     }
 }
-
