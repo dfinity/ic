@@ -32,7 +32,7 @@ jobs:
     runs-on: &dind-small-setup
       labels: dind-small
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:86c24b5b717519527920d3b720906f91723514d63acddcbaeb27ecf4144aeb37
+      image: ghcr.io/dfinity/ic-build@sha256:8ef03974a8f5d902d42daf35378cd8c0352ee1251a6aff1b3b8923670c4b3469
       options: >-
          -e NODE_NAME
     steps:
