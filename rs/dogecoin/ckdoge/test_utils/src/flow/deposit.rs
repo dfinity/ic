@@ -2,7 +2,8 @@ use crate::{Setup, into_rust_dogecoin_network};
 use candid::Principal;
 use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
 use ic_ckdoge_minter::{
-    EventType, MintMemo, UpdateBalanceArgs, UpdateBalanceError, Utxo, UtxoStatus, memo_encode,
+    MintMemo, UpdateBalanceArgs, UpdateBalanceError, Utxo, UtxoStatus,
+    event::CkDogeMinterEventType, memo_encode,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -170,11 +171,11 @@ where
             .iter()
             .flat_map(|(utxo, (mint_index, _minted_amount))| {
                 vec![
-                    EventType::CheckedUtxoV2 {
+                    CkDogeMinterEventType::CheckedUtxoV2 {
                         utxo: utxo.clone(),
                         account: self.account,
                     },
-                    EventType::ReceivedUtxos {
+                    CkDogeMinterEventType::ReceivedUtxos {
                         mint_txid: Some(*mint_index),
                         to_account: self.account,
                         utxos: vec![utxo.clone()],

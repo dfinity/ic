@@ -16,6 +16,7 @@ use ic_ckdoge_minter::{
         GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeWithApprovalError,
         WithdrawalFee,
     },
+    event::CkDogeMinterEventType,
     memo_encode,
 };
 use icrc_ledger_types::{
@@ -136,7 +137,7 @@ where
         minter
             .assert_that_events()
             .ignoring_timestamp()
-            .contains_only_once_in_order(&[EventType::AcceptedRetrieveBtcRequest(
+            .contains_only_once_in_order(&[CkDogeMinterEventType::AcceptedRetrieveBtcRequest(
                 RetrieveBtcRequest {
                     amount: self.withdrawal_amount,
                     address: BitcoinAddress::P2pkh(address.as_bytes().to_vec().try_into().unwrap()),
@@ -221,10 +222,10 @@ where
             let sent_tx_event = minter
                 .assert_that_events()
                 .extract_exactly_one(
-                    |event| matches!(event, EventType::SentBtcTransaction {txid: sent_txid, ..} if sent_txid == &txid),
+                    |event| matches!(event, CkDogeMinterEventType::SentBtcTransaction {txid: sent_txid, ..} if sent_txid == &txid),
                 );
             match sent_tx_event {
-                EventType::SentBtcTransaction {
+                CkDogeMinterEventType::SentBtcTransaction {
                     request_block_indices,
                     txid: _,
                     utxos,
@@ -361,17 +362,18 @@ where
             .none_satisfy(|event| {
                 matches!(
                     event,
-                    EventType::SentBtcTransaction { .. } | EventType::ReplacedBtcTransaction { .. }
+                    CkDogeMinterEventType::SentBtcTransaction { .. }
+                        | CkDogeMinterEventType::ReplacedBtcTransaction { .. }
                 )
             })
             .contains_only_once_in_order(&[
-                EventType::ScheduleWithdrawalReimbursement {
+                CkDogeMinterEventType::ScheduleWithdrawalReimbursement {
                     account: self.account,
                     amount: reimbursement_amount,
                     reason,
                     burn_block_index: withdrawal_id,
                 },
-                EventType::ReimbursedWithdrawal {
+                CkDogeMinterEventType::ReimbursedWithdrawal {
                     burn_block_index: withdrawal_id,
                     mint_block_index: reimbursement_block_index,
                 },
@@ -450,7 +452,7 @@ where
             Txid::from(txid_bytes)
         );
         minter.assert_that_events().contains_only_once_in_order(&[
-            EventType::ConfirmedBtcTransaction {
+            CkDogeMinterEventType::ConfirmedBtcTransaction {
                 txid: txid_bytes.into(),
             },
         ]);
@@ -479,7 +481,7 @@ where
             .assert_that_events()
             .extract_exactly_one(
                 |event| matches!(event,
-                    EventType::ReplacedBtcTransaction {old_txid: event_old_txid, new_txid: event_new_txid, ..}
+                    CkDogeMinterEventType::ReplacedBtcTransaction {old_txid: event_old_txid, new_txid: event_new_txid, ..}
                     if event_old_txid == &old_txid && event_new_txid == &new_txid),
             );
         let new_tx = mempool_after

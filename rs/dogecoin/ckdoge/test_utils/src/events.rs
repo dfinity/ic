@@ -1,6 +1,5 @@
 use crate::only_one;
-use ic_ckdoge_minter::EventType;
-use ic_ckdoge_minter::RetrieveBtcRequest;
+use ic_ckdoge_minter::{RetrieveBtcRequest, event::CkDogeMinterEventType};
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -8,7 +7,7 @@ pub struct MinterEventAssert<E> {
     pub(crate) events: Vec<E>,
 }
 
-impl MinterEventAssert<EventType> {
+impl MinterEventAssert<CkDogeMinterEventType> {
     pub fn ignoring_timestamp(self) -> MinterEventAssert<IgnoreTimestamp> {
         MinterEventAssert {
             events: self.events.into_iter().map(IgnoreTimestamp::from).collect(),
@@ -17,9 +16,9 @@ impl MinterEventAssert<EventType> {
 }
 
 impl<E> MinterEventAssert<E> {
-    pub fn contains_only_once_in_order(self, expected_events: &[EventType]) -> Self
+    pub fn contains_only_once_in_order(self, expected_events: &[CkDogeMinterEventType]) -> Self
     where
-        EventType: Into<E>,
+        CkDogeMinterEventType: Into<E>,
         E: PartialEq + fmt::Debug,
     {
         let mut found_event_indexes = BTreeMap::new();
@@ -77,10 +76,10 @@ impl<E> MinterEventAssert<E> {
 
 /// Ignore fields related to timestamps.
 #[derive(Debug)]
-pub struct IgnoreTimestamp(EventType);
+pub struct IgnoreTimestamp(CkDogeMinterEventType);
 
-impl From<EventType> for IgnoreTimestamp {
-    fn from(value: EventType) -> Self {
+impl From<CkDogeMinterEventType> for IgnoreTimestamp {
+    fn from(value: CkDogeMinterEventType) -> Self {
         Self(value)
     }
 }
@@ -92,7 +91,7 @@ impl PartialEq for IgnoreTimestamp {
         }
         match (&self.0, &rhs.0) {
             (
-                EventType::SentBtcTransaction {
+                CkDogeMinterEventType::SentBtcTransaction {
                     request_block_indices,
                     txid,
                     utxos,
@@ -101,7 +100,7 @@ impl PartialEq for IgnoreTimestamp {
                     fee_per_vbyte,
                     withdrawal_fee,
                 },
-                EventType::SentBtcTransaction {
+                CkDogeMinterEventType::SentBtcTransaction {
                     request_block_indices: rhs_request_block_indices,
                     txid: rhs_txid,
                     utxos: rhs_utxos,
@@ -120,7 +119,7 @@ impl PartialEq for IgnoreTimestamp {
             }
 
             (
-                EventType::ReplacedBtcTransaction {
+                CkDogeMinterEventType::ReplacedBtcTransaction {
                     old_txid,
                     new_txid,
                     change_output,
@@ -130,7 +129,7 @@ impl PartialEq for IgnoreTimestamp {
                     reason,
                     new_utxos,
                 },
-                EventType::ReplacedBtcTransaction {
+                CkDogeMinterEventType::ReplacedBtcTransaction {
                     old_txid: rhs_old_txid,
                     new_txid: rhs_new_txid,
                     change_output: rhs_change_output,
@@ -150,7 +149,7 @@ impl PartialEq for IgnoreTimestamp {
                     && new_utxos == rhs_new_utxos
             }
             (
-                EventType::AcceptedRetrieveBtcRequest(RetrieveBtcRequest {
+                CkDogeMinterEventType::AcceptedRetrieveBtcRequest(RetrieveBtcRequest {
                     amount,
                     address,
                     block_index,
@@ -158,7 +157,7 @@ impl PartialEq for IgnoreTimestamp {
                     kyt_provider,
                     reimbursement_account,
                 }),
-                EventType::AcceptedRetrieveBtcRequest(RetrieveBtcRequest {
+                CkDogeMinterEventType::AcceptedRetrieveBtcRequest(RetrieveBtcRequest {
                     amount: rhs_amount,
                     address: rhs_address,
                     block_index: rhs_block_index,

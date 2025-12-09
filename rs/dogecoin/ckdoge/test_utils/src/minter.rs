@@ -10,7 +10,7 @@ use ic_ckdoge_minter::{
         RetrieveDogeStatus, RetrieveDogeStatusRequest, RetrieveDogeWithApprovalArgs,
         RetrieveDogeWithApprovalError, WithdrawalFee,
     },
-    event::CkDogeMinterEvent,
+    event::{CkDogeMinterEvent, CkDogeMinterEventType},
     lifecycle::init::{MinterArg, UpgradeArgs},
 };
 use ic_management_canister_types::{CanisterId, CanisterStatusResult};
@@ -259,7 +259,7 @@ impl MinterCanister {
             .entries
     }
 
-    pub fn assert_that_events(&self) -> MinterEventAssert<EventType> {
+    pub fn assert_that_events(&self) -> MinterEventAssert<CkDogeMinterEventType> {
         MinterEventAssert {
             events: self
                 .get_all_events()
