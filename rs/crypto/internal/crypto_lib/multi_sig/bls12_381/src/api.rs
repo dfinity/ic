@@ -99,7 +99,6 @@ fn key_from_bytes_with_cache(public_key_bytes: &PublicKeyBytes) -> Result<Public
             key_bytes: Some(public_key_bytes.0.to_vec()),
             internal_error: "Point decoding failed".to_string(),
         })
-        .map(|pt| pt.into())
 }
 
 /// Verifies an individual signature over the given `message` using the given
