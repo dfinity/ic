@@ -481,7 +481,7 @@ async fn submit_unsigned_request<R: CanisterRuntime>(
     });
 
     // This guard ensures that we return pending requests and UTXOs back to
-    // the state if the signing or sending a transaction fails or panics.
+    // the state if the signing or sending of a transaction fails or panics.
     let requests_guard = guard((req.requests, req.utxos), |(reqs, utxos)| {
         undo_sign_request(reqs, utxos);
     });
