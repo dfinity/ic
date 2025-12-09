@@ -341,7 +341,7 @@ system_test_nns(
 
 system_test_nns(
     name = "mainnet_nns",
-    # env_inherit = ["SSH_AUTH_SOCK"],
+    env_inherit = ["SSH_AUTH_SOCK"],
     env = MAINNET_ENV | {
         # TODO (CON-1624): Remove those dependencies once changes reached mainnet NNS
         "IC_RECOVERY_PATH": "$(rootpath //rs/recovery:ic-recovery)",

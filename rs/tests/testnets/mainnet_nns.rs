@@ -21,7 +21,6 @@
 // to unpack and 59G of disk space.
 //
 // ```
-// TODO: SSH_AUTH_SOCK in Bazel or here?
 // $ ict testnet create mainnet_nns --lifetime-mins 180 --verbose --set-required-host-features=dc=zh1 -- --test_tmpdir=./mainnet_nns
 // ```
 //
