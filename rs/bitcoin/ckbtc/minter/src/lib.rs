@@ -171,7 +171,7 @@ struct SignTxRequest {
 
 /// Undoes changes we make to the ckBTC state when we construct a pending transaction.
 /// We call this function if we fail to sign or send a Bitcoin transaction.
-fn undo_sign_request(requests: state::SubmittedWithdrawalRequests, utxos: Vec<Utxo>) {
+fn undo_withdrawal_request(requests: state::SubmittedWithdrawalRequests, utxos: Vec<Utxo>) {
     state::mutate_state(|s| {
         for utxo in utxos {
             assert!(s.available_utxos.insert(utxo));
@@ -458,11 +458,11 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
         }
     });
     if let Some((req, total_fee)) = maybe_sign_request {
-        let _ = submit_unsigned_request(req, fee_millisatoshi_per_vbyte, total_fee, runtime).await;
+        let _ = sign_and_submit_request(req, fee_millisatoshi_per_vbyte, total_fee, runtime).await;
     }
 }
 
-async fn submit_unsigned_request<R: CanisterRuntime>(
+async fn sign_and_submit_request<R: CanisterRuntime>(
     req: SignTxRequest,
     fee_millisatoshi_per_vbyte: u64,
     total_fee: WithdrawalFee,
@@ -483,7 +483,7 @@ async fn submit_unsigned_request<R: CanisterRuntime>(
     // This guard ensures that we return pending requests and UTXOs back to
     // the state if the signing or sending of a transaction fails or panics.
     let requests_guard = guard((req.requests, req.utxos), |(reqs, utxos)| {
-        undo_sign_request(reqs, utxos);
+        undo_withdrawal_request(reqs, utxos);
     });
 
     let txid = req.unsigned_tx.txid();
@@ -1397,7 +1397,7 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
     // TODO DEFI-2551: make this configurable
     const MIN_CONSOLIDATION_INTERVAL: Duration = Duration::from_secs(24 * 3600);
     let min_consolidation_utxo_required = read_state(|s| s.utxo_consolidation_threshold) as usize;
-    assert!(min_consolidation_utxo_required > MAX_NUM_INPUTS_IN_TRANSACTION);
+
     // Return early if number of available UTXOs is below consolidation threshold.
     if read_state(|s| s.available_utxos.len() < min_consolidation_utxo_required) {
         return Err(ConsolidateUtxosError::TooFewAvailableUtxos);
@@ -1503,7 +1503,7 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
         utxos,
     });
 
-    submit_unsigned_request(request, fee_millisatoshi_per_vbyte, total_fee, runtime)
+    sign_and_submit_request(request, fee_millisatoshi_per_vbyte, total_fee, runtime)
         .await
         .map_err(ConsolidateUtxosError::SubmitRequest)?;
 

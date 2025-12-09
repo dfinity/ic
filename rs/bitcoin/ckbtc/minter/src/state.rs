@@ -155,7 +155,7 @@ impl SubmittedWithdrawalRequests {
         }
     }
 
-    pub fn count_retrieve_btc_request(&self) -> usize {
+    pub fn count_retrieve_btc_requests(&self) -> usize {
         match self {
             Self::ToConfirm { requests } => requests.len(),
             Self::ToCancel { requests, .. } => requests.len(),
@@ -924,7 +924,7 @@ impl CkBtcMinterState {
             + self
                 .submitted_transactions
                 .iter()
-                .map(|tx| tx.requests.count_retrieve_btc_request())
+                .map(|tx| tx.requests.count_retrieve_btc_requests())
                 .sum::<usize>()
     }
 

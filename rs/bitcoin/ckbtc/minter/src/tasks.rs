@@ -10,9 +10,6 @@ use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
-/// Interval of calling the consolidation task.
-pub const CONSOLIDATION_TASK_INTERVAL: Duration = Duration::from_secs(3600);
-
 thread_local! {
     static TASKS: RefCell<TaskQueue> = RefCell::default();
     static LAST_GLOBAL_TIMER: Cell<u64> = Cell::default();
@@ -168,6 +165,8 @@ pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
             let _ = estimate_fee_per_vbyte(&runtime).await;
         }
         TaskType::ConsolidateUtxos => {
+            const CONSOLIDATION_TASK_INTERVAL: Duration = Duration::from_secs(3600);
+
             let _enqueue_followup_guard = guard((), |_| {
                 schedule_after(
                     CONSOLIDATION_TASK_INTERVAL,
