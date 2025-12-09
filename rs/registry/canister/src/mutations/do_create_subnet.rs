@@ -421,9 +421,10 @@ impl TryFrom<KeyConfig> for KeyConfigInternal {
                 "KeyConfig.pre_signatures_to_create_in_advance must be specified for key {key_id}."
             ));
         };
+        // Ensure absence of `pre_signatures_to_create_in_advance` for keys that do not require it.
         if !key_id.requires_pre_signatures() && pre_signatures_to_create_in_advance.is_some() {
             return Err(format!(
-                "KeyConfig.pre_signatures_to_create_in_advance must not be specified for key {key_id} because it does not require pre-signatures."
+                "KeyConfig.pre_signatures_to_create_in_advance must not be specified for key {key_id}."
             ));
         };
 
@@ -433,7 +434,7 @@ impl TryFrom<KeyConfig> for KeyConfigInternal {
 
         Ok(Self {
             key_id,
-            pre_signatures_to_create_in_advance: pre_signatures_to_create_in_advance.unwrap_or(0),
+            pre_signatures_to_create_in_advance,
             max_queue_size,
         })
     }
@@ -561,7 +562,7 @@ mod test {
         add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
         prepare_registry_with_nodes,
     };
-    use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId};
+    use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, VetKdCurve, VetKdKeyId};
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
     use ic_types::ReplicaVersion;
@@ -787,4 +788,36 @@ mod test {
         };
         futures::executor::block_on(registry.do_create_subnet(payload));
     }
+
+        #[test]
+        #[should_panic(
+            expected = "KeyConfig.pre_signatures_to_create_in_advance must not be specified for key vetkd:Bls12_381_G2:some_key_name"
+        )]
+        fn should_panic_when_key_not_requiring_pre_signatures_has_pre_signatures_to_create() {
+            // VetKd keys don't require pre-signatures, so specifying
+            // pre_signatures_to_create_in_advance should return an error
+            let mut registry = invariant_compliant_registry(0);
+            let payload = CreateSubnetPayload {
+                replica_version_id: ReplicaVersion::default().into(),
+                chain_key_config: Some(InitialChainKeyConfig {
+                    key_configs: vec![KeyConfigRequest {
+                        key_config: Some(KeyConfig {
+                            key_id: Some(MasterPublicKeyId::VetKd(VetKdKeyId {
+                                curve: VetKdCurve::Bls12_381_G2,
+                                name: "some_key_name".to_string(),
+                            })),
+                            pre_signatures_to_create_in_advance: Some(99),
+                            max_queue_size: Some(155),
+                        }),
+                        subnet_id: Some(*TEST_USER1_PRINCIPAL),
+                    }],
+                    signature_request_timeout_ns: None,
+                    idkg_key_rotation_period_ms: None,
+                    max_parallel_pre_signature_transcripts_in_creation: None,
+                }),
+                ..Default::default()
+            };
+
+            futures::executor::block_on(registry.do_create_subnet(payload));
+        }
 }

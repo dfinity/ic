@@ -23,8 +23,8 @@ use ic_nns_test_utils::{
     registry::{INITIAL_MUTATION_ID, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::subnet::v1::{
-    ChainKeyConfig as ChainKeyConfigPb, SubnetListRecord as SubnetListRecordPb,
-    SubnetRecord as SubnetRecordPb,
+    ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
+    SubnetListRecord as SubnetListRecordPb, SubnetRecord as SubnetRecordPb,
 };
 use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
 use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
@@ -261,18 +261,20 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
         )
         .unwrap();
 
-        subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
-            key_configs: vec![KeyConfigInternal {
-                key_id: key_id.clone(),
-                pre_signatures_to_create_in_advance: key_id
-                    .requires_pre_signatures()
-                    .then_some(100),
-                max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+        subnet_record.chain_key_config = Some(ChainKeyConfigPb {
+            key_configs: vec![KeyConfigPb {
+                key_id: Some(MasterPublicKeyIdPb::from(&key_id)),
+                pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
+                    Some(100)
+                } else {
+                    None
+                },
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
             max_parallel_pre_signature_transcripts_in_creation: None,
-        }));
+        });
 
         let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
             mutations: vec![upsert(

@@ -18,14 +18,16 @@ use ic_nns_test_utils::itest_helpers::{
 use ic_nns_test_utils::registry::{get_value_or_panic, new_node_keys_and_node_id};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::subnet::v1::{
-    CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, SubnetListRecord, SubnetRecord,
+    CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
+    SubnetListRecord, SubnetRecord,
 };
+use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig};
+use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_types::ReplicaVersion;
 use pocket_ic::nonblocking::PocketIc;
@@ -60,7 +62,7 @@ pub fn get_subnet_holding_chain_keys(
         node_ids,
         ..Default::default()
     });
-    subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
+    subnet_record.chain_key_config = Some(ChainKeyConfigPb {
         key_configs: key_ids
             .into_iter()
             .map(|key_id| KeyConfig {
@@ -72,7 +74,7 @@ pub fn get_subnet_holding_chain_keys(
         signature_request_timeout_ns: None,
         idkg_key_rotation_period_ms: None,
         max_parallel_pre_signature_transcripts_in_creation: None,
-    }));
+    });
 
     subnet_record
 }
