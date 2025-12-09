@@ -757,7 +757,7 @@ where
     let status = get_status(pic, sender, &args).await;
     assert!(matches!(
         status.unwrap(),
-        MigrationStatus::Failed {reason, ..} if reason.contains(&format!("Failed to set controller of canister {}", canister))
+        MigrationStatus::Failed {reason, ..} if reason.contains(&format!("Failed to set the migration canister as the exclusive controller of canister {}", canister))
     ));
 }
 
