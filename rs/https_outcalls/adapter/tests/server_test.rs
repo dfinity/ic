@@ -8,7 +8,10 @@ mod test {
     use hyper_util::rt::{TokioExecutor, TokioIo};
     use ic_https_outcalls_adapter::{Config, IncomingSource};
     use ic_https_outcalls_service::{
-        HttpMethod, HttpsOutcallRequest, https_outcalls_service_client::HttpsOutcallsServiceClient,
+        https_outcall_result, https_outcalls_service_client::HttpsOutcallsServiceClient,
+        CanisterHttpMetrics,
+        CanisterHttpError, CanisterHttpErrorKind, HttpMethod, HttpsOutcallRequest,
+        HttpsOutcallResponse, HttpsOutcallResult,
     };
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -23,15 +26,15 @@ mod test {
     use tower::service_fn;
     use uuid::Uuid;
     use warp::{
-        Filter,
         filters::BoxedFilter,
-        http::{Response, StatusCode, header::HeaderValue},
+        http::{header::HeaderValue, Response, StatusCode},
+        Filter,
     };
 
     #[cfg(feature = "http")]
     use socks5_impl::protocol::{
-        Address, AsyncStreamOperation, AuthMethod, Reply, Request as Socks5Request,
-        Response as Socks5Response, handshake,
+        handshake, Address, AsyncStreamOperation, AuthMethod, Reply,
+        Request as Socks5Request, Response as Socks5Response,
     };
     #[cfg(feature = "http")]
     use std::io;
@@ -44,6 +47,34 @@ mod test {
         io::AsyncWriteExt,
         net::{TcpListener, TcpStream},
     };
+
+    fn unwrap_response(
+        response: tonic::Response<HttpsOutcallResult>,
+    ) -> (HttpsOutcallResponse, CanisterHttpMetrics) {
+        let inner = response.into_inner();
+        let metrics = inner.metrics.expect("Metrics must be present");
+        let result = inner.result.expect("Result must be present");
+        match result {
+            https_outcall_result::Result::Response(r) => (r, metrics),
+            https_outcall_result::Result::Error(e) => {
+                panic!("Expected Http Response, got Error: {:?} - {}", e.kind, e.message)
+            }
+        }
+    }
+
+    fn unwrap_error(
+        response: tonic::Response<HttpsOutcallResult>,
+    ) -> (CanisterHttpError, CanisterHttpMetrics) {
+        let inner = response.into_inner();
+        let metrics = inner.metrics.expect("Metrics must be present");
+        let result = inner.result.expect("Result must be present");
+        match result {
+            https_outcall_result::Result::Error(e) => (e, metrics),
+            https_outcall_result::Result::Response(r) => {
+                panic!("Expected Error, got Success Response: status {}", r.status)
+            }
+        }
+    }
 
     // Selfsigned localhost cert
     const CERT: &str = "
@@ -268,6 +299,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         tokio::spawn(fut);
         format!("{}:{}", ip, addr.port())
     }
+    //TODO(urgent): check all changes.
 
     #[cfg(feature = "http")]
     #[tokio::test]
@@ -301,8 +333,9 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             ..Default::default()
         });
         // Everything should fail.
-        let response = client.https_outcall(request).await;
-        assert!(response.is_err());
+        let response = client.https_outcall(request).await.unwrap();
+        let (error, _) = unwrap_error(response);
+        assert_eq!(error.kind, CanisterHttpErrorKind::Connection as i32);
 
         // Make a request with socks proxy/
         let request = tonic::Request::new(HttpsOutcallRequest {
@@ -318,9 +351,34 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             ],
         });
         // The requests succeeds.
-        let response = client.https_outcall(request).await;
-        let http_response = response.unwrap().into_inner();
+        let response = client.https_outcall(request).await.unwrap();
+        let (http_response, _) = unwrap_response(response);
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
+    }
+
+    #[tokio::test]
+    async fn test_metrics_on_connection_failure() {
+        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
+        let server_config = Config {
+            incoming_source: IncomingSource::Path(path.into()),
+            ..Default::default()
+        };
+        let mut client = spawn_grpc_server(server_config);
+
+        let request = tonic::Request::new(HttpsOutcallRequest {
+            url: "https://127.0.0.1:54321".to_string(), // Random closed port
+            headers: Vec::new(),
+            method: HttpMethod::Get as i32,
+            body: "hello".to_string().as_bytes().to_vec(),
+            max_response_size_bytes: 512,
+            ..Default::default()
+        });
+
+        let response = client.https_outcall(request).await.unwrap();
+        let (error, metrics) = unwrap_error(response);
+
+        assert_eq!(error.kind, CanisterHttpErrorKind::Connection as i32);
+        assert_eq!(metrics.downloaded_bytes, 0);
     }
 
     #[tokio::test]
@@ -341,9 +399,17 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             max_response_size_bytes: 512,
             ..Default::default()
         });
-        let response = client.https_outcall(request).await;
-        let http_response = response.unwrap().into_inner();
+        let response = client.https_outcall(request).await.unwrap();
+        let (http_response, metrics) = unwrap_response(response);
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
+
+        let headers_size: u64 = http_response
+            .headers
+            .iter()
+            .map(|h| (h.name.len() + h.value.len()) as u64)
+            .sum();
+        // Check that downloaded bytes includes headers + body.
+        assert_eq!(metrics.downloaded_bytes, http_response.content.len() as u64 + headers_size);
     }
 
     #[cfg(not(feature = "http"))]
@@ -367,17 +433,11 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             max_response_size_bytes: 512,
             ..Default::default()
         });
-        let response = client.https_outcall(request).await;
-        assert_eq!(
-            response.as_ref().unwrap_err().code(),
-            tonic::Code::InvalidArgument
-        );
-        assert!(
-            response
-                .unwrap_err()
-                .message()
-                .contains(&"Url need to specify https scheme".to_string())
-        );
+        let response: tonic::Response<HttpsOutcallResult> = client.https_outcall(request).await.unwrap();
+        let (error, _) = unwrap_error(response);
+        
+        assert_eq!(error.kind, CanisterHttpErrorKind::InvalidInput as i32);
+        assert!(error.message.contains("Url need to specify https scheme"));
     }
 
     #[cfg(feature = "http")]
@@ -401,8 +461,8 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             max_response_size_bytes: 512,
             ..Default::default()
         });
-        let response = client.https_outcall(request).await;
-        let http_response = response.unwrap().into_inner();
+        let response = client.https_outcall(request).await.unwrap();
+        let (http_response, _) = unwrap_response(response);
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
     }
 
@@ -426,8 +486,8 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             ..Default::default()
         });
 
-        let response = client.https_outcall(request).await;
-        let http_response = response.unwrap().into_inner();
+        let response = client.https_outcall(request).await.unwrap();
+        let (http_response, _) = unwrap_response(response);
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
         assert_eq!(String::from_utf8_lossy(&http_response.content), "420");
     }
@@ -452,8 +512,8 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             ..Default::default()
         });
 
-        let response = client.https_outcall(request).await;
-        let http_response = response.unwrap().into_inner();
+        let response = client.https_outcall(request).await.unwrap();
+        let (http_response, _) = unwrap_response(response);
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
     }
 
@@ -479,17 +539,14 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             ..Default::default()
         });
 
-        let response = client.https_outcall(request).await;
-        assert_eq!(
-            response.as_ref().unwrap_err().code(),
-            tonic::Code::OutOfRange
-        );
-        assert!(
-            response
-                .unwrap_err()
-                .message()
-                .contains(&"Http body exceeds size limit of".to_string())
-        );
+        let response = client.https_outcall(request).await.unwrap();
+        let (error, metrics) = unwrap_error(response);
+
+        assert_eq!(error.kind, CanisterHttpErrorKind::LimitExceeded as i32);
+        assert!(error.message.contains("Http body exceeds size limit of"));
+
+        // Check that we report we've downloaded the response, even though the final result is an error.
+        assert!(metrics.downloaded_bytes >= response_limit);
     }
 
     #[tokio::test]
@@ -513,8 +570,8 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             ..Default::default()
         });
 
-        let response = client.https_outcall(request).await;
-        let http_response = response.unwrap().into_inner();
+        let response = client.https_outcall(request).await.unwrap();
+        let (http_response, _) = unwrap_response(response);
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
     }
 
@@ -577,15 +634,12 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             max_response_size_bytes: 64,
             ..Default::default()
         });
-        let response = client.https_outcall(request).await;
-        assert_eq!(
-            response.as_ref().unwrap_err().code(),
-            tonic::Code::Unavailable
-        );
+        let response = client.https_outcall(request).await.unwrap();
+        let (error, _) = unwrap_error(response);
 
-        let response_error = response.unwrap_err();
-        let actual_error_message = response_error.message();
+        assert_eq!(error.kind, CanisterHttpErrorKind::Connection as i32);
 
+        let actual_error_message = error.message;
         let expected_error_message = "Error(Connect, ConnectError(\"tcp connect error\", Custom { kind: TimedOut, error: Elapsed(()) }))";
 
         assert!(
@@ -615,8 +669,17 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             ..Default::default()
         });
 
-        let response = client.https_outcall(request).await;
-        let _ = response.unwrap_err();
+        let response = client.https_outcall(request).await.unwrap();
+        let (error, metrics) = unwrap_error(response);
+
+        assert_eq!(error.kind, CanisterHttpErrorKind::Internal as i32);
+        assert!(error
+            .message
+            .contains("Failed to parse headers"));
+
+        // Important: check that even though parsing headers failed and the adapter returned an error, 
+        // we still report how much data was downloaded (non negative).
+        assert!(metrics.downloaded_bytes > 0);
     }
 
     #[tokio::test]
@@ -639,8 +702,9 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             max_response_size_bytes: 512,
             ..Default::default()
         });
-        let response = client.https_outcall(request).await;
-        let _ = response.unwrap_err();
+        let response = client.https_outcall(request).await.unwrap();
+        let (error, _) = unwrap_error(response);
+        assert_eq!(error.kind, CanisterHttpErrorKind::InvalidInput as i32);
     }
 
     #[rstest]
@@ -743,9 +807,9 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                     ..Default::default()
                 });
 
-                let response = client.https_outcall(request).await;
+                let response = client.https_outcall(request).await.unwrap();
 
-                let http_response = response.unwrap().into_inner();
+                let (http_response, _) = unwrap_response(response);
                 assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
             });
     }

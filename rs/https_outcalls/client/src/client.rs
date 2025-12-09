@@ -3,7 +3,7 @@ use candid::Encode;
 use futures::future::TryFutureExt;
 use ic_error_types::{RejectCode, UserError};
 use ic_https_outcalls_service::{
-    HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse,
+    HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse, HttpsOutcallResult, https_outcall_result, CanisterHttpErrorKind,
     https_outcalls_service_client::HttpsOutcallsServiceClient,
 };
 use ic_interfaces::execution_environment::{TransformExecutionInput, TransformExecutionService};
@@ -164,7 +164,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     }),
                 });
                 return;
-            }
+            } 
 
             let adapter_req_timer = Instant::now();
             let max_response_size_bytes = request_max_response_bytes
@@ -197,26 +197,55 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         grpc_status.message().to_string(),
                     )
                 })
-                .and_then(|adapter_response| async move {
-                    //TODO: We should also log the downloaded bytes when the adapter returns an error.
-                    let HttpsOutcallResponse {
-                        status,
-                        headers,
-                        content: body,
+                .and_then(|adapter_response: tonic::Response<HttpsOutcallResult>| async move {
+                    let HttpsOutcallResult {
+                        metrics: adapter_metrics,
+                        result,
                     } = adapter_response.into_inner();
-
-                    let headers_size: usize = headers.iter().map(|h| h.name.len() + h.value.len()).sum();
 
                     info!(
                         log,
                         "Received canister http response from adapter: request_size: {}, response_time {}, downloaded_bytes {}, reply_callback_id {}, sender {}, process_id: {}",
                         request_size,
                         adapter_req_timer.elapsed().as_millis(),
-                        body.len() + headers_size,
+                        adapter_metrics.map_or(0, |metrics| metrics.downloaded_bytes),
                         reply_callback_id,
                         request_sender,
                         std::process::id(),
                     );
+
+                    let response = match result {
+                        Some(result) => {
+                            match result {
+                                https_outcall_result::Result::Response(https_outcall_response) => {
+                                    Ok(https_outcall_response)
+                                },
+                                https_outcall_result::Result::Error(canister_http_error) => {
+                                    let code = match CanisterHttpErrorKind::try_from(canister_http_error.kind).unwrap_or(CanisterHttpErrorKind::Unspecified) {
+                                        //TODO(urgent): check those. 
+                                        CanisterHttpErrorKind::InvalidInput => RejectCode::SysFatal,
+                                        CanisterHttpErrorKind::Connection => RejectCode::SysTransient,
+                                        CanisterHttpErrorKind::LimitExceeded => RejectCode::SysFatal,
+                                        CanisterHttpErrorKind::Internal => RejectCode::SysTransient,
+                                        CanisterHttpErrorKind::Unspecified => RejectCode::SysFatal,
+                                    };
+                                    Err((code, canister_http_error.message))
+                                }
+                            }
+                        }
+                        None => {
+                            Err((
+                                RejectCode::SysFatal,
+                                "Adapter returned empty result".to_string()
+                            ))
+                        }
+                    }?;
+
+                    let HttpsOutcallResponse {
+                        status,
+                        headers,
+                        content: body,
+                    } = response;
 
                     let canister_http_payload = CanisterHttpResponsePayload {
                         status: status as u128,
@@ -398,7 +427,7 @@ pub fn grpc_status_code_to_reject(code: Code) -> RejectCode {
 mod tests {
     use super::*;
     use ic_https_outcalls_service::{
-        HttpsOutcallRequest, HttpsOutcallResponse,
+        HttpsOutcallRequest, HttpsOutcallResponse, HttpsOutcallResult,
         https_outcalls_service_server::{HttpsOutcallsService, HttpsOutcallsServiceServer},
     };
     use ic_interfaces::execution_environment::{QueryExecutionError, QueryExecutionResponse};
@@ -420,11 +449,11 @@ mod tests {
 
     #[derive(Clone)]
     pub struct SingleResponseAdapter {
-        response: Result<HttpsOutcallResponse, (Code, String)>,
+        response: Result<HttpsOutcallResult, (Code, String)>,
     }
 
     impl SingleResponseAdapter {
-        fn new(response: Result<HttpsOutcallResponse, (Code, String)>) -> Self {
+        fn new(response: Result<HttpsOutcallResult, (Code, String)>) -> Self {
             Self { response }
         }
     }
@@ -434,7 +463,7 @@ mod tests {
         async fn https_outcall(
             &self,
             _request: Request<HttpsOutcallRequest>,
-        ) -> Result<Response<HttpsOutcallResponse>, Status> {
+        ) -> Result<Response<HttpsOutcallResult>, Status> {
             match self.response.clone() {
                 Ok(resp) => Ok(Response::new(resp)),
                 Err((code, msg)) => Err(Status::new(code, msg)),
@@ -443,7 +472,7 @@ mod tests {
     }
 
     async fn setup_adapter_mock(
-        adapter_response: Result<HttpsOutcallResponse, (Code, String)>,
+        adapter_response: Result<HttpsOutcallResult, (Code, String)>,
     ) -> Channel {
         let (client, server) = tokio::io::duplex(1024);
         let mock_adapter = SingleResponseAdapter::new(adapter_response);
@@ -572,6 +601,15 @@ mod tests {
         (BoxCloneService::new(infallible_service), handle)
     }
 
+    fn create_result_from_response(
+        response: HttpsOutcallResponse,
+    ) -> HttpsOutcallResult {
+        HttpsOutcallResult {
+            metrics: None,
+            result: Some(https_outcall_result::Result::Response(response)),
+        }
+    }
+
     /// Test canister http client send/receive without transform.
     #[tokio::test]
     async fn test_client_happy_path() {
@@ -590,12 +628,14 @@ mod tests {
         }];
 
         // Adapter mock setup
-        let mock_grpc_channel = setup_adapter_mock(Ok(HttpsOutcallResponse {
+        let response = HttpsOutcallResponse {
             status: 200,
             headers: adapter_headers.clone(),
             content: adapter_body.clone(),
-        }))
-        .await;
+        };
+        //TODO(urgent): also test the metrics
+        //TODO(urgent): also test the new custom errors. 
+        let mock_grpc_channel = setup_adapter_mock(Ok(create_result_from_response(response))).await;
 
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
         let (svc, mut handle) = setup_system_query_mock();
@@ -694,12 +734,12 @@ mod tests {
     #[tokio::test]
     async fn test_client_transformed_limit() {
         // Adapter mock setup
-        let mock_grpc_channel = setup_adapter_mock(Ok(HttpsOutcallResponse {
+        let response = HttpsOutcallResponse {
             status: 200,
             headers: Vec::new(),
             content: Vec::new(),
-        }))
-        .await;
+        };
+        let mock_grpc_channel = setup_adapter_mock(Ok(create_result_from_response(response))).await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
         let (svc, mut handle) = setup_system_query_mock();
 
@@ -825,11 +865,12 @@ mod tests {
         }];
 
         // Adapter mock setup.
-        let mock_grpc_channel = setup_adapter_mock(Ok(HttpsOutcallResponse {
+        let response = HttpsOutcallResponse {
             status: 200,
             headers: adapter_headers.clone(),
             content: adapter_body.clone(),
-        }))
+        };
+        let mock_grpc_channel = setup_adapter_mock(Ok(create_result_from_response(response)))
         .await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
         let (svc, mut handle) = setup_system_query_mock();
@@ -917,12 +958,12 @@ mod tests {
         }];
 
         // Adapter mock setup. Not relevant for client response in this test case.
-        let mock_grpc_channel = setup_adapter_mock(Ok(HttpsOutcallResponse {
+        let response = HttpsOutcallResponse {
             status: 200,
             headers: adapter_headers.clone(),
             content: adapter_body.clone(),
-        }))
-        .await;
+        };
+        let mock_grpc_channel = setup_adapter_mock(Ok(create_result_from_response(response))).await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
         let (svc, mut handle) = setup_system_query_mock();
 
