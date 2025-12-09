@@ -163,14 +163,7 @@ pub struct RecoveryState {
 }
 
 impl RecoveryState {
-    pub fn restore_source() -> Self {
-        Self {
-            restore_source_controllers: ControllerRecoveryState::NoProgress,
-            restore_target_controllers: ControllerRecoveryState::Done,
-        }
-    }
-
-    pub fn restore_both() -> Self {
+    pub fn new() -> Self {
         Self {
             restore_source_controllers: ControllerRecoveryState::NoProgress,
             restore_target_controllers: ControllerRecoveryState::NoProgress,

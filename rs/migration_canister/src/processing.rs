@@ -88,7 +88,7 @@ pub async fn process_accepted(
         })
         .map_failure(|reason| RequestState::Failed {
             request: request.clone(),
-            recovery_state: RecoveryState::restore_source(),
+            recovery_state: RecoveryState::new(),
             reason,
         });
     if !res.is_success() {
@@ -103,7 +103,7 @@ pub async fn process_accepted(
         })
         .map_failure(|reason| RequestState::Failed {
             request,
-            recovery_state: RecoveryState::restore_both(),
+            recovery_state: RecoveryState::new(),
             reason,
         })
 }
@@ -123,14 +123,14 @@ pub async fn process_controllers_changed(
     if source_status.status != CanisterStatusType::Stopped {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
-            recovery_state: RecoveryState::restore_both(),
+            recovery_state: RecoveryState::new(),
             reason: "Source is not stopped.".to_string(),
         });
     }
     if !source_status.ready_for_migration {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
-            recovery_state: RecoveryState::restore_both(),
+            recovery_state: RecoveryState::new(),
             reason: "Source is not ready for migration.".to_string(),
         });
     }
@@ -138,7 +138,7 @@ pub async fn process_controllers_changed(
     if canister_version > u64::MAX / 2 {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
-            recovery_state: RecoveryState::restore_both(),
+            recovery_state: RecoveryState::new(),
             reason: "Source version is too large.".to_string(),
         });
     }
@@ -149,7 +149,7 @@ pub async fn process_controllers_changed(
     if target_status.status != CanisterStatusType::Stopped {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
-            recovery_state: RecoveryState::restore_both(),
+            recovery_state: RecoveryState::new(),
             reason: "Target is not stopped.".to_string(),
         });
     }
@@ -159,7 +159,7 @@ pub async fn process_controllers_changed(
         ProcessingResult::FatalFailure(_) => {
             return ProcessingResult::FatalFailure(RequestState::Failed {
                 request,
-                recovery_state: RecoveryState::restore_both(),
+                recovery_state: RecoveryState::new(),
                 reason: "Target has snapshots.".to_string(),
             });
         }
@@ -168,7 +168,7 @@ pub async fn process_controllers_changed(
     if source_status.cycles < CYCLES_COST_PER_MIGRATION {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
-            recovery_state: RecoveryState::restore_both(),
+            recovery_state: RecoveryState::new(),
             reason: format!(
                 "Source does not have sufficient cycles: {} < {}.",
                 source_status.cycles, CYCLES_COST_PER_MIGRATION
@@ -187,7 +187,7 @@ pub async fn process_controllers_changed(
         })
         .map_failure(|()| RequestState::Failed {
             request,
-            recovery_state: RecoveryState::restore_both(),
+            recovery_state: RecoveryState::new(),
             reason: "Source has been deleted".to_string(),
         })
 }
