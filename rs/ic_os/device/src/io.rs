@@ -1,5 +1,8 @@
 use std::io;
+#[cfg(not(test))]
 use std::time::Duration;
+
+const RETRY_MAX_ATTEMPTS: i32 = 100;
 
 /// Retries a function, returning its result if it succeeds, or retrying if it fails with
 /// the specified error.
@@ -7,7 +10,6 @@ pub fn retry_if_io_error<T>(
     error: nix::Error,
     mut f: impl FnMut() -> io::Result<T>,
 ) -> io::Result<T> {
-    const MAX_ATTEMPTS: i32 = 100;
     let mut attempts = 0;
     loop {
         match f() {
@@ -15,9 +17,10 @@ pub fn retry_if_io_error<T>(
             Err(e) => {
                 if e.raw_os_error() == Some(error as i32) {
                     attempts += 1;
-                    if attempts >= MAX_ATTEMPTS {
+                    if attempts >= RETRY_MAX_ATTEMPTS {
                         return Err(e);
                     }
+                    #[cfg(not(test))]
                     std::thread::sleep(Duration::from_millis((100 * attempts) as u64));
                 } else {
                     return Err(e);
@@ -57,23 +60,19 @@ mod tests {
     #[test]
     fn test_retry_if_io_error_enoent() {
         let mut attempts = 0;
-        let result = retry_if_io_error(nix::Error::ENOENT, || {
+        let result: Result<(), _> = retry_if_io_error(nix::Error::ENOENT, || {
             attempts += 1;
-            if attempts < 3 {
-                Err(io::Error::from_raw_os_error(nix::Error::ENOENT as i32))
-            } else {
-                Ok("success")
-            }
+            Err(io::Error::from_raw_os_error(nix::Error::ENOENT as i32))
         });
 
-        assert_eq!(result.unwrap(), "success");
-        assert_eq!(attempts, 3);
+        assert!(result.is_err());
+        assert_eq!(attempts, RETRY_MAX_ATTEMPTS);
     }
 
     #[test]
     fn test_retry_if_io_error_wrong_error_no_retry() {
         let mut attempts = 0;
-        let result = retry_if_io_error(nix::Error::EBUSY, || {
+        let result: Result<(), _> = retry_if_io_error(nix::Error::EBUSY, || {
             attempts += 1;
             Err(io::Error::from_raw_os_error(nix::Error::ENOENT as i32))
         });

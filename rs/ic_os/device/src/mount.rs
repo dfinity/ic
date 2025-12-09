@@ -207,9 +207,9 @@ impl Mounter for LoopDeviceMounter {
                 .fstype(FilesystemType::Manual(options.file_system.as_str()))
                 .flags(MountFlags::empty())
                 .mount(
-                    loop_device.path().ok_or_else(|| {
-                        std::io::Error::new(std::io::ErrorKind::Other, "Loop device has no path")
-                    })?,
+                    loop_device
+                        .path()
+                        .ok_or_else(|| std::io::Error::other("Loop device has no path"))?,
                     mount_point,
                 )
         })

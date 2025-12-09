@@ -12,7 +12,6 @@ use std::ops::Deref;
 use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
 use tempfile::{NamedTempFile, TempPath};
 
 // Republish these types so clients can pass them as parameters.
@@ -202,6 +201,9 @@ pub struct LoopDeviceWrapper(pub LoopDevice);
 
 impl LoopDeviceWrapper {
     /// Opens a loop device and attaches it to the specified file.
+    ///
+    /// * `path` - Path to the backing file
+    /// * `offset` - Offset in bytes from the start of the backing file the data will start at.
     pub fn attach_to_next_free(path: &Path, offset: u64) -> Result<Self> {
         let loop_control = loopdev::LoopControl::open()?;
         // next_free() will return the same loop device until a file is attached to it, so
