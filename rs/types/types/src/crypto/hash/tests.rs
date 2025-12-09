@@ -62,7 +62,7 @@ mod crypto_hash_tests {
 ///
 /// Each type is tested with a single, deterministic input to verify the
 /// Hash trait implementation for each type produces stable output and
-/// the overall hash computation remains consistent
+/// the overall hash computation remains consistent.
 ///
 /// If any of these tests fail, it indicates a breaking change in the hash
 /// computation that could affect consensus or other cryptographic protocols.
@@ -497,7 +497,7 @@ mod crypto_hash_stability {
             hashed_block,
             hashed_beacon,
             state_hash,
-            None, // oldest_registry_version_in_use_by_replicated_state
+            None, 
         );
         let hash = crypto_hash(&data);
         assert_eq!(
@@ -519,7 +519,7 @@ mod crypto_hash_stability {
             hashed_block,
             hashed_beacon,
             state_hash,
-            None, // oldest_registry_version_in_use_by_replicated_state
+            None,
         );
         let data = CatchUpShareContent::from(&cup_content);
         let hash = crypto_hash(&data);
@@ -539,8 +539,8 @@ mod crypto_hash_stability {
             signature: vec![0x42; 48],
             signer: Some(pb::NiDkgId {
                 start_block_height: 42,
-                dealer_subnet: vec![0x42; 29], // PrincipalId bytes
-                dkg_tag: 1,                    // HighThreshold
+                dealer_subnet: vec![0x42; 29], 
+                dkg_tag: 1,                    
                 remote_target_id: None,
                 key_id: None,
             }),
@@ -566,7 +566,7 @@ mod crypto_hash_stability {
             hashed_block,
             hashed_beacon,
             state_hash,
-            None, // oldest_registry_version_in_use_by_replicated_state
+            None,
         );
         let data: CatchUpPackage = Signed {
             content,
