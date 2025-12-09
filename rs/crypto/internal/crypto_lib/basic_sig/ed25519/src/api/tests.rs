@@ -106,7 +106,7 @@ mod ed25519_cr_yp_to {
             let m = hex_to_byte_vec(splitter.next().unwrap());
             let sm = splitter.next().unwrap();
 
-            let s = sign(&m, &sk).unwrap();
+            let s = sign(&m, &sk);
 
             // ed25519.checkvalid(s,m,pk)
             assert!(
@@ -147,7 +147,7 @@ mod sign {
             let sig = SignatureBytes(sig);
 
             assert_eq!(
-                sign(&msg, &sk).unwrap(),
+                sign(&msg, &sk),
                 sig,
                 "Unexpected signature for test vector {test_vec:?}"
             );
@@ -252,7 +252,7 @@ mod verify {
         let sk = SecretKeyBytes(SecretArray::new_and_dont_zeroize_argument(&sk));
         let pk = PublicKeyBytes(pk);
 
-        let result = verify(&sign(b"x", &sk).unwrap(), b"y", &pk);
+        let result = verify(&sign(b"x", &sk), b"y", &pk);
 
         assert!(result.unwrap_err().is_signature_verification_error());
     }
@@ -266,7 +266,7 @@ mod verify {
         let wrong_pk = PublicKeyBytes(wrong_pk);
         assert_ne!(pk, wrong_pk);
 
-        let result = verify(&sign(&msg, &sk).unwrap(), &msg, &wrong_pk);
+        let result = verify(&sign(&msg, &sk), &msg, &wrong_pk);
 
         assert!(result.unwrap_err().is_signature_verification_error());
     }

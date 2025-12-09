@@ -270,7 +270,7 @@ pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
 /// The number of seconds between automated Node Provider reward events
 /// Currently 1/12 of a year: 2629800 = 86400 * 365.25 / 12
-const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
+pub const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
 
 const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
 
@@ -5125,13 +5125,14 @@ impl Governance {
             ));
         }
 
-        let self_describing_action = if is_self_describing_proposal_actions_enabled() {
-            // TODO(NNS1-4271): handle the error case when the self-describing action is fully
-            // implemented.
-            action.to_self_describing(self.env.clone()).await.ok()
-        } else {
-            None
-        };
+        let self_describing_action =
+            if is_self_describing_proposal_actions_enabled() && cfg!(target_arch = "wasm32") {
+                // TODO(NNS1-4271): handle the error case when the self-describing action is fully
+                // implemented.
+                action.to_self_describing(self.env.clone()).await.ok()
+            } else {
+                None
+            };
 
         // Before actually modifying anything, we first make sure that
         // the neuron is allowed to make this proposal and create the

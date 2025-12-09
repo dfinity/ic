@@ -31,6 +31,7 @@ humantime = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-bn-lib = { workspace = true }
+ic-bn-lib-common = { workspace = true }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-config = { path = "../../config" }
 ic-crypto = { path = "../../crypto" }
@@ -95,4 +96,5 @@ x509-parser = { workspace = true }
 
 [dev-dependencies]
 indoc = "1.0"
+tempfile = { workspace = true }
 tokio-tungstenite = "0.26"
