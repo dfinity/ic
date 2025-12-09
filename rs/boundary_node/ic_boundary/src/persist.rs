@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, atomic::Ordering},
+};
 
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
@@ -141,9 +144,11 @@ impl Persist for Persister {
 
         for mut subnet in subnets {
             // Sort nodes by an average latency before publishing
-            subnet
-                .nodes
-                .sort_by(|a, b| a.avg_latency_secs.total_cmp(&b.avg_latency_secs));
+            subnet.nodes.sort_by(|a, b| {
+                a.avg_latency_us
+                    .load(Ordering::SeqCst)
+                    .cmp(&b.avg_latency_us.load(Ordering::SeqCst))
+            });
 
             let subnet = Arc::new(subnet);
             subnet_map.insert(subnet.id, subnet.clone());
@@ -233,7 +238,7 @@ pub(crate) mod test {
     use std::{
         collections::HashMap,
         net::{IpAddr, Ipv4Addr},
-        sync::Arc,
+        sync::{Arc, atomic::AtomicU64},
     };
 
     use anyhow::Error;
@@ -292,7 +297,7 @@ pub(crate) mod test {
             tls_certificate: valid_tls_certificate_and_validation_time()
                 .0
                 .certificate_der,
-            avg_latency_secs: f64::MAX,
+            avg_latency_us: AtomicU64::new(u64::MAX),
         })
     }
 

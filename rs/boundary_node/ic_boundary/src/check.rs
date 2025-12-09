@@ -1,7 +1,7 @@
 use std::{
-    fmt,
+    fmt::Display,
     str::FromStr,
-    sync::Arc,
+    sync::{Arc, atomic::Ordering},
     time::{Duration, Instant},
 };
 
@@ -13,6 +13,7 @@ use ic_bn_lib_common::traits::{Run, http::Client};
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
 use simple_moving_average::{SMA, SumTreeSMA};
+use strum::Display;
 #[allow(clippy::disallowed_types)]
 use tokio::sync::Mutex;
 use tokio::{
@@ -31,7 +32,8 @@ use crate::{
 };
 
 /// An error that can occur during check
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Display)]
+#[strum(serialize_all = "snake_case")]
 pub enum CheckError {
     /// Generic error
     Generic(String),
@@ -48,39 +50,26 @@ pub enum CheckError {
 }
 
 impl CheckError {
-    pub fn short(&self) -> &str {
+    pub fn details(&self) -> String {
         match self {
-            Self::Generic(_) => "generic",
-            Self::Network(_) => "network",
-            Self::Http(_) => "http",
-            Self::ReadBody(_) => "read_body",
-            Self::Cbor(_) => "cbor",
-            Self::Health => "health",
-        }
-    }
-}
-
-impl fmt::Display for CheckError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Generic(e) => write!(f, "Error: {e}"),
-            Self::Network(e) => write!(f, "Network error: {e}"),
-            Self::Http(code) => write!(f, "Got non-2xx response code: {code}"),
-            Self::ReadBody(e) => write!(f, "Unable to read body: {e}"),
-            Self::Cbor(e) => write!(f, "Unable to decode CBOR: {e}"),
-            Self::Health => write!(f, "Node reported itself as unhealthy"),
+            Self::Generic(e) => format!("Generic error: {e}"),
+            Self::Network(e) => format!("Network error: {e}"),
+            Self::Http(code) => format!("Got non-2xx response code: {code}"),
+            Self::ReadBody(e) => format!("Unable to read body: {e}"),
+            Self::Cbor(e) => format!("Unable to decode CBOR: {e}"),
+            Self::Health => "Node reported itself as unhealthy".into(),
         }
     }
 }
 
 const WINDOW_SIZE: usize = 10;
-type LatencyMovAvg = SumTreeSMA<f64, f64, WINDOW_SIZE>;
+type LatencyMovAvg = SumTreeSMA<u64, u64, WINDOW_SIZE>;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 struct NodeState {
     healthy: bool,
     height: u64,
-    avg_latency_secs: f64,
+    avg_latency_us: u64,
 }
 
 /// Send node's state message to the SubnetActor after this number of health checks have passed.
@@ -99,6 +88,12 @@ struct NodeActor {
     state: Option<NodeState>,
     avg_mov_latency: LatencyMovAvg,
     checks_counter: usize,
+}
+
+impl Display for NodeActor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "NodeActor({})", self.node)
+    }
 }
 
 impl NodeActor {
@@ -130,12 +125,13 @@ impl NodeActor {
 
         let (healthy, height, latency_change) = match &res {
             Ok(res) => {
-                let latency = start.elapsed().as_secs_f64();
+                let latency = start.elapsed().as_micros() as u64;
                 let current_avg = self.avg_mov_latency.get_average();
                 self.avg_mov_latency.add_sample(latency);
-                let latency_change = (latency - current_avg).abs() / current_avg;
+                let latency_change = (latency.abs_diff(current_avg) as f64) / (current_avg as f64);
                 (true, res.height, latency_change)
             }
+
             // Note: we don't add latency to the moving average in case of an error.
             Err(_) => (false, 0, 0.0),
         };
@@ -144,7 +140,7 @@ impl NodeActor {
         let mut new_state = self.state.unwrap_or_else(|| NodeState {
             healthy,
             height,
-            avg_latency_secs: self.avg_mov_latency.get_average(),
+            avg_latency_us: self.avg_mov_latency.get_average(),
         });
         new_state.healthy = healthy;
 
@@ -154,7 +150,7 @@ impl NodeActor {
         {
             // reset the counter
             self.checks_counter = 0;
-            new_state.avg_latency_secs = self.avg_mov_latency.get_average();
+            new_state.avg_latency_us = self.avg_mov_latency.get_average();
             new_state.height = height;
         }
 
@@ -165,19 +161,20 @@ impl NodeActor {
         if Some(new_state) != self.state {
             self.state = Some(new_state);
             // It can never fail in our case
+            debug!("{self}: new state: {new_state:?}");
             let _ = self.channel.send((self.idx, new_state)).await;
         }
     }
 
     async fn run(&mut self, check_interval: Duration) {
-        debug!("Healthcheck actor for node {} started", self.node);
+        debug!("{self}: started");
 
         let mut interval = tokio::time::interval(check_interval);
         loop {
             select! {
                 // Check if we need to shut down
                 _ = self.token.cancelled() => {
-                    debug!("Healthcheck actor for node {} stopped", self.node);
+                    debug!("{self}: stopped");
                     return;
                 }
 
@@ -298,7 +295,7 @@ impl SubnetActor {
         let nodes = self
             .states
             .iter()
-            // All states are Some() - it's checked above
+            // All states are Some() - it's checked above in self.init_done()
             .map(|x| x.as_ref().unwrap())
             .enumerate()
             // Map from idx to a node
@@ -306,9 +303,9 @@ impl SubnetActor {
             // Discard unhealthy & lagging behind
             .filter(|(_, state)| state.healthy && state.height >= min_height)
             .map(|(node, state)| {
-                let mut node = (*node).clone();
-                node.avg_latency_secs = state.avg_latency_secs;
-                Arc::new(node)
+                node.avg_latency_us
+                    .store(state.avg_latency_us, Ordering::SeqCst);
+                node
             })
             .collect::<Vec<_>>();
 
@@ -650,7 +647,7 @@ impl<T: Check> Check for WithMetricsCheck<T> {
 
         let result = match &out {
             Ok(_) => "ok".to_string(),
-            Err(e) => format!("error_{}", e.short()),
+            Err(e) => format!("error_{e}"),
         };
 
         let (block_height, replica_version) = out.as_ref().map_or((-1, "unknown"), |out| {
@@ -690,7 +687,7 @@ impl<T: Check> Check for WithMetricsCheck<T> {
                 subnet_id,
                 node_id,
                 node_addr,
-                error = e.to_string(),
+                error = e.details(),
             );
         }
 
@@ -703,7 +700,7 @@ pub(crate) mod test {
     use std::{
         collections::HashMap,
         net::{IpAddr, Ipv4Addr},
-        sync::Arc,
+        sync::{Arc, atomic::AtomicU64},
     };
 
     use arc_swap::ArcSwapOption;
@@ -756,7 +753,7 @@ pub(crate) mod test {
                     tls_certificate: valid_tls_certificate_and_validation_time()
                         .0
                         .certificate_der,
-                    avg_latency_secs: f64::MAX,
+                    avg_latency_us: AtomicU64::new(u64::MAX),
                 };
                 let node = Arc::new(node);
 

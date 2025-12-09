@@ -3,7 +3,7 @@ use std::{
     fmt,
     net::{IpAddr, SocketAddr},
     str::FromStr,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, atomic::AtomicU64},
     time::{Duration, Instant},
 };
 
@@ -40,7 +40,7 @@ use crate::{
     persist::principal_to_u256,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Node {
     pub id: Principal,
     pub subnet_id: Principal,
@@ -48,7 +48,7 @@ pub struct Node {
     pub addr: IpAddr,
     pub port: u16,
     pub tls_certificate: Vec<u8>,
-    pub avg_latency_secs: f64,
+    pub avg_latency_us: AtomicU64,
 }
 
 // Lightweight Eq, just compare principals
@@ -408,7 +408,7 @@ impl Snapshotter {
 
                         let node = Node {
                             // init to max, this value is updated with running health checks
-                            avg_latency_secs: f64::MAX,
+                            avg_latency_us: AtomicU64::new(u64::MAX),
                             id: node_id.as_ref().0,
                             subnet_id: subnet_id.as_ref().0,
                             subnet_type,
@@ -614,7 +614,7 @@ pub fn generate_stub_subnet(nodes: Vec<SocketAddr>) -> Subnet {
         .map(|(i, x)| {
             Arc::new(Node {
                 // init to max, this value is updated with running health checks
-                avg_latency_secs: f64::MAX,
+                avg_latency_us: AtomicU64::new(u64::MAX),
                 id: node_test_id(i as u64).get().0,
                 subnet_type: SubnetType::Application,
                 subnet_id,
