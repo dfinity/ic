@@ -105,6 +105,14 @@ rust_binary(
 rust_test(
     name = "ic_boundary_test",
     crate = ":ic-boundary",
+    data = [
+        "//:pebble",
+        "//:pebble-challtestsrv",
+    ],
+    env = {
+        "PEBBLE": "$(rootpath //:pebble)",
+        "CHALLTESTSRV": "$(rootpath //:pebble-challtestsrv)",
+    },
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:async-trait",
@@ -180,6 +188,7 @@ rust_test(
         "@crate_index//:simple_moving_average",
         "@crate_index//:slog",
         "@crate_index//:strum",
+        "@crate_index//:tempfile",
         "@crate_index//:thiserror",
         "@crate_index//:tikv-jemalloc-ctl",
         "@crate_index//:tikv-jemallocator",

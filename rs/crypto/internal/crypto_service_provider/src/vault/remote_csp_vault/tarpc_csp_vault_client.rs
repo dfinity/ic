@@ -261,17 +261,10 @@ fn error_to_string_with_sources(error: &dyn std::error::Error) -> String {
 // API is async.
 impl BasicSignatureCspVault for RemoteCspVault {
     #[instrument(skip_all)]
-    fn sign(
-        &self,
-        algorithm_id: AlgorithmId,
-        message: Vec<u8>,
-        key_id: KeyId,
-    ) -> Result<CspSignature, CspBasicSignatureError> {
+    fn sign(&self, message: Vec<u8>) -> Result<CspSignature, CspBasicSignatureError> {
         self.tokio_block_on(self.tarpc_csp_client.sign(
             context_with_timeout(self.rpc_timeout),
-            algorithm_id,
             ByteBuf::from(message),
-            key_id,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(CspBasicSignatureError::TransientInternalError {

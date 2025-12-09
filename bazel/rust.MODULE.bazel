@@ -258,7 +258,7 @@ crate.spec(
 )
 crate.spec(
     package = "cc",
-    version = "=1.2.22",
+    version = "=1.2.48",
 )
 crate.spec(
     package = "cddl",
@@ -619,7 +619,7 @@ crate.spec(
         "acme-alpn",
     ],
     package = "ic-bn-lib",
-    version = "0.1",
+    version = "0.1.7",
 )
 crate.spec(
     package = "ic-bn-lib-common",
@@ -1192,6 +1192,11 @@ crate.spec(
 )
 crate.spec(
     default_features = False,
+    package = "qrcode",
+    version = "0.14.1",
+)
+crate.spec(
+    default_features = False,
     features = [
         "ring",
         "log",
@@ -1456,6 +1461,10 @@ crate.spec(
 crate.spec(
     package = "sha3",
     version = "^0.10.8",
+)
+crate.spec(
+    package = "shell-escape",
+    version = "^0.1.5",
 )
 crate.spec(
     features = [
@@ -1850,11 +1859,11 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^38.0.3",
+    version = "^39.0.1",
 )
 crate.spec(
     package = "wasmtime-environ",
-    version = "^38.0.3",
+    version = "^39.0.1",
 )
 crate.spec(
     package = "wast",

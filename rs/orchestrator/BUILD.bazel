@@ -62,6 +62,7 @@ rust_library(
         "@crate_index//:nix",
         "@crate_index//:prometheus",
         "@crate_index//:prost",
+        "@crate_index//:qrcode",
         "@crate_index//:rand",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",

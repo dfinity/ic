@@ -277,6 +277,7 @@ members = [
     "rs/nervous_system/timestamp",
     "rs/nervous_system/tools/neuron-subaccount",
     "rs/nervous_system/tools/release-runscript",
+    "rs/nervous_system/tools/signed-canister-reply",
     "rs/nervous_system/tools/submit-motion-proposal",
     "rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
     "rs/nns/cmc",
@@ -671,7 +672,7 @@ hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.12", features = ["full"] }
 ic0 = "1.0.0"
 ic-agent = { version = "0.40.1", features = ["pem", "ring"] }
-ic-bn-lib = { version = "0.1", features = ["acme-alpn"] }
+ic-bn-lib = { version = "0.1.7", features = ["acme-alpn"] }
 ic-bn-lib-common = "0.1"
 ic-btc-interface = "0.2.3"
 ic-canister-runtime = "0.1.0"
@@ -775,6 +776,7 @@ prost = "0.13.3"
 prost-build = "0.13.3"
 protobuf = "2.28.0"
 ring = { version = "^0.17.7", features = ["std"] }
+qrcode = { version = "0.14.1", default-features = false }
 quinn = { version = "0.11.5", default-features = false, features = [
     "ring",
     "log",
@@ -827,6 +829,7 @@ sev = { version = "7.1", default-features = false, features = [
 ] }
 sha2 = "0.10.9"
 sha3 = "0.10.8"
+shell-escape = { version = "^0.1.5" }
 signature = "2.2.0"
 simple_asn1 = "0.6.2"
 slog = { version = "2.7.0", features = [
