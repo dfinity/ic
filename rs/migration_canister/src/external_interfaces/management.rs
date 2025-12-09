@@ -46,7 +46,7 @@ pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResul
         Err(e) => {
             println!("Call `update_settings` for {} failed: {:?}", canister_id, e);
             ProcessingResult::FatalFailure(format!(
-                "Failed to set controller of canister {canister_id}: {e}",
+                "Failed to set the migration canister as the exclusive controller of canister {canister_id}: {e}",
             ))
         }
     }
