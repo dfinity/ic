@@ -20,6 +20,8 @@ component_files = {
     Label("early-boot/initramfs-tools/guestos/modules"): "/etc/initramfs-tools/modules",
     Label("early-boot/initramfs-tools/guestos/scripts/init-bottom/set-machine-id"): "/etc/initramfs-tools/scripts/init-bottom/set-machine-id",
     Label("early-boot/initramfs-tools/guestos/scripts/init-premount/verity-root"): "/etc/initramfs-tools/scripts/init-premount/verity-root",
+    Label("pollute-var.service"): "/etc/systemd/system/pollute-var.service",
+    Label("pollute-var.sh"): "/opt/ic/bin/pollute-var.sh",
 
     # ic
     Label("guestos/ic-btc-adapter/generate-btc-adapter-config.sh"): "/opt/ic/bin/generate-btc-adapter-config.sh",

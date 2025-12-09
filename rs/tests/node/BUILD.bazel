@@ -121,7 +121,7 @@ rust_binary(
 system_test(
     name = "kill_start_long_test",
     env = {
-        "NUM_KILL_START_ITERATIONS": "5",
+        "NUM_KILL_START_ITERATIONS": "20",
     },
     tags = ["long_test"],
     test_driver_target = ":kill_start_test_bin",

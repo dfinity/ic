@@ -1,0 +1,14 @@
+[Unit]
+Description=Pollute Var
+RequiresMountsFor=/var
+After=ic-replica.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/ic/bin/pollute-var.sh
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
