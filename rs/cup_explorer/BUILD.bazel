@@ -5,8 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_client",
-    "//rs/config",
-    "//rs/crypto",
+    "//rs/crypto/for_verification_only",
     "//rs/crypto/node_key_generation",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/interfaces",
@@ -22,9 +21,6 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:prost",
     "@crate_index//:serde",
-    "@crate_index//:slog",
-    "@crate_index//:slog-async",
-    "@crate_index//:slog-term",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:url",

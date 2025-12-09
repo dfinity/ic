@@ -1,3 +1,6 @@
+use ic_cdk::stable::{
+    WASM_PAGE_SIZE_IN_BYTES as PAGE_SIZE, stable_grow, stable_size, stable_write,
+};
 /// This canister is used in the testcase 5_2. The canister stores a vector of
 /// variable length, and the number of times the canister update method has
 /// been called.
@@ -11,14 +14,6 @@ const VECTOR_LENGTH: usize = 128 * 1024 * 1024;
 
 lazy_static! {
     static ref V_DATA: Mutex<Vec<u8>> = Mutex::new(vec![0; VECTOR_LENGTH]);
-    static ref V_DATA_1: Mutex<Vec<u8>> = Mutex::new(vec![1; VECTOR_LENGTH]);
-    static ref V_DATA_2: Mutex<Vec<u8>> = Mutex::new(vec![2; VECTOR_LENGTH]);
-    static ref V_DATA_3: Mutex<Vec<u8>> = Mutex::new(vec![3; VECTOR_LENGTH]);
-    static ref V_DATA_4: Mutex<Vec<u8>> = Mutex::new(vec![4; VECTOR_LENGTH]);
-    static ref V_DATA_5: Mutex<Vec<u8>> = Mutex::new(vec![5; VECTOR_LENGTH]);
-    static ref V_DATA_6: Mutex<Vec<u8>> = Mutex::new(vec![6; VECTOR_LENGTH]);
-    static ref V_DATA_7: Mutex<Vec<u8>> = Mutex::new(vec![7; VECTOR_LENGTH]);
-    static ref V_DATA_8: Mutex<Vec<u8>> = Mutex::new(vec![8; VECTOR_LENGTH]);
     static ref NUM_CHANGED: Mutex<u64> = Mutex::new(0_u64);
 }
 
@@ -38,28 +33,37 @@ async fn change_state(seed: u32) -> Result<u64, String> {
     Ok(*num_changed)
 }
 
-/// Expands state by access the indexed V_DATA and overwrites it with random data.
+fn grow_stable_memory_to(target_bytes: u64) -> Result<(), String> {
+    let current_num_pages = stable_size();
+    if (current_num_pages * PAGE_SIZE) >= target_bytes {
+        return Ok(());
+    }
+    stable_grow(target_bytes.div_ceil(PAGE_SIZE) - current_num_pages)
+        .map_or_else(|e| Err(e.to_string()), |_| Ok(()))
+}
+
+/// Writes random data to stable memory at the given offset and length.
 ///
-/// Returns the number of times it has been called.
+/// Note: This function not only writes to stable memory but also changes the
+/// canister heap, as `V_DATA` is used as a buffer and gets filled with random bytes.
+/// This is good for state sync tests as both stable memory and heap can be covered.
 #[update]
-async fn expand_state(index: u32, seed: u32) -> Result<u64, String> {
-    let mut num_changed = NUM_CHANGED
-        .lock()
-        .expect("Could not lock NUM_CHANGED mutex");
-    let mut rng = SmallRng::seed_from_u64(seed as u64);
-    let mut state = match index % 8 {
-        1 => V_DATA_1.lock().expect("Could not lock V_DATA_1 mutex"),
-        2 => V_DATA_2.lock().expect("Could not lock V_DATA_2 mutex"),
-        3 => V_DATA_3.lock().expect("Could not lock V_DATA_3 mutex"),
-        4 => V_DATA_4.lock().expect("Could not lock V_DATA_4 mutex"),
-        5 => V_DATA_5.lock().expect("Could not lock V_DATA_5 mutex"),
-        6 => V_DATA_6.lock().expect("Could not lock V_DATA_6 mutex"),
-        7 => V_DATA_7.lock().expect("Could not lock V_DATA_7 mutex"),
-        _ => V_DATA_8.lock().expect("Could not lock V_DATA_8 mutex"),
-    };
-    rng.fill(&mut state[..]);
-    *num_changed += 1;
-    Ok(*num_changed)
+async fn write_random_data(offset: u64, length: u64, seed: u64) -> Result<(), String> {
+    grow_stable_memory_to(offset + length)?;
+
+    let mut rng = SmallRng::seed_from_u64(seed);
+    let mut buffer = V_DATA.lock().unwrap();
+    let mut current_offset = offset;
+    let mut remaining = length as usize;
+
+    while remaining > 0 {
+        let write_size = remaining.min(buffer.len());
+        rng.fill(&mut buffer[..write_size]);
+        stable_write(current_offset, &buffer[..write_size]);
+        current_offset += write_size as u64;
+        remaining -= write_size;
+    }
+    Ok(())
 }
 
 /// Method to query element index of the vector, return first element if index

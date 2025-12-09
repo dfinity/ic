@@ -225,7 +225,6 @@ pub fn assemble_setupos_config(
         node_reward_type,
         mgmt_mac,
         deployment_environment,
-        use_nns_public_key: false,
         nns_urls: nns_urls.to_vec(),
         use_node_operator_private_key,
         enable_trusted_execution_environment,

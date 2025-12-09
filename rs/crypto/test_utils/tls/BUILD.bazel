@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -51,10 +51,4 @@ rust_test(
     crate = ":tls",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
-)
-
-rust_test_suite(
-    name = "tls_integration",
-    srcs = glob(["tests/**/*.rs"]),
-    deps = [":tls"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

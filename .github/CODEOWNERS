@@ -192,6 +192,7 @@ go_deps.bzl               @dfinity/idx
 /rs/query_stats/                                        @dfinity/team-dsm @dfinity/consensus
 /rs/recovery/                                           @dfinity/consensus
 /rs/registry/                                           @dfinity/governance-team
+/rs/registry/canister/src/invariants/crypto.rs          @dfinity/consensus
 /rs/registry/helpers/src/crypto.rs                      @dfinity/consensus
 /rs/registry/helpers/src/crypto/                        @dfinity/consensus
 /rs/registry/helpers/src/firewall.rs                    @dfinity/consensus

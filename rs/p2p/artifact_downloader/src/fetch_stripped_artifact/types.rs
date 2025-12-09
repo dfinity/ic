@@ -1,10 +1,10 @@
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
-use ic_types::NodeIndex;
 use ic_types::consensus::idkg::IDkgArtifactId;
 use ic_types::crypto::CryptoHash;
 use ic_types::crypto::canister_threshold_sig::idkg::SignedIDkgDealing;
 use ic_types::messages::SignedIngress;
+use ic_types::{CountBytes, NodeIndex};
 use ic_types::{artifact::IngressMessageId, crypto::CryptoHashOf, messages::SignedRequestBytes};
 
 pub(super) mod rpc;
@@ -67,18 +67,7 @@ pub(crate) enum StrippedMessage {
     IDkgDealing(IDkgArtifactId, NodeIndex, SignedIDkgDealing),
 }
 
-impl From<&StrippedMessage> for StrippedMessageId {
-    fn from(message: &StrippedMessage) -> Self {
-        match message {
-            StrippedMessage::Ingress(id, _) => StrippedMessageId::Ingress(id.clone()),
-            StrippedMessage::IDkgDealing(id, node_index, _) => {
-                StrippedMessageId::IDkgDealing(id.clone(), *node_index)
-            }
-        }
-    }
-}
-
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum StrippedMessageType {
     Ingress,
     IDkgDealing,
@@ -98,6 +87,24 @@ impl From<&StrippedMessageId> for StrippedMessageType {
         match id {
             StrippedMessageId::Ingress(_) => StrippedMessageType::Ingress,
             StrippedMessageId::IDkgDealing(_, _) => StrippedMessageType::IDkgDealing,
+        }
+    }
+}
+
+impl From<&StrippedMessage> for StrippedMessageType {
+    fn from(id: &StrippedMessage) -> Self {
+        match id {
+            StrippedMessage::Ingress(_, _) => StrippedMessageType::Ingress,
+            StrippedMessage::IDkgDealing(_, _, _) => StrippedMessageType::IDkgDealing,
+        }
+    }
+}
+
+impl CountBytes for StrippedMessage {
+    fn count_bytes(&self) -> usize {
+        match self {
+            StrippedMessage::Ingress(_, ingress) => ingress.count_bytes(),
+            StrippedMessage::IDkgDealing(_, _, dealing) => dealing.count_bytes(),
         }
     }
 }

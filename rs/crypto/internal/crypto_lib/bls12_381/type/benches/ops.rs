@@ -91,6 +91,15 @@ fn g1_muln_instance<R: Rng + CryptoRng>(
     (points, scalars)
 }
 
+fn g1_muln_affine_instance<R: Rng + CryptoRng>(
+    terms: usize,
+    rng: &mut R,
+) -> (Vec<G1Affine>, Vec<Scalar>) {
+    let (points, scalars) = g1_muln_instance(terms, rng);
+    let points = G1Projective::batch_normalize(&points);
+    (points, scalars)
+}
+
 fn g1_sparse_muln_instance<R: Rng + CryptoRng>(
     terms: usize,
     num_bits: u8,
@@ -116,6 +125,15 @@ fn g2_muln_instance<R: Rng + CryptoRng>(
         points.push(random_g2(rng));
         scalars.push(random_scalar(rng));
     }
+    (points, scalars)
+}
+
+fn g2_muln_affine_instance<R: Rng + CryptoRng>(
+    terms: usize,
+    rng: &mut R,
+) -> (Vec<G2Affine>, Vec<Scalar>) {
+    let (points, scalars) = g2_muln_instance(terms, rng);
+    let points = G2Projective::batch_normalize(&points);
     (points, scalars)
 }
 
@@ -315,6 +333,14 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
         )
     });
 
+    group.bench_function("multiply_vartime", |b| {
+        b.iter_batched_ref(
+            || (random_g1(rng).to_affine(), random_scalar(rng)),
+            |(pt, scalar)| pt.mul_vartime(scalar),
+            BatchSize::SmallInput,
+        )
+    });
+
     group.bench_function("batch_mul(32)", |b| {
         b.iter_batched_ref(
             || (random_g1(rng).to_affine(), n_random_scalar(32, rng)),
@@ -344,6 +370,23 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
                 )
             },
             |(pt, scalar)| pt.clone() * scalar.clone(),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("multiply vartime with precompute", |b| {
+        b.iter_batched_ref(
+            || {
+                (
+                    {
+                        let mut pt = random_g1(rng).to_affine();
+                        pt.precompute();
+                        pt
+                    },
+                    random_scalar(rng),
+                )
+            },
+            |(pt, scalar)| pt.mul_vartime(scalar),
             BatchSize::SmallInput,
         )
     });
@@ -399,6 +442,13 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
             b.iter_batched_ref(
                 || g1_muln_instance(n, rng),
                 |(points, scalars)| G1Projective::muln_vartime(&points[..], &scalars[..]),
+                BatchSize::SmallInput,
+            )
+        });
+        group.bench_function(format!("multiexp_muln_affine_{n}"), |b| {
+            b.iter_batched_ref(
+                || g1_muln_affine_instance(n, rng),
+                |(points, scalars)| G1Projective::muln_affine_vartime(&points[..], &scalars[..]),
                 BatchSize::SmallInput,
             )
         });
@@ -499,6 +549,14 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
         )
     });
 
+    group.bench_function("multiply vartime", |b| {
+        b.iter_batched_ref(
+            || (random_g2(rng).to_affine(), random_scalar(rng)),
+            |(pt, scalar)| pt.mul_vartime(scalar),
+            BatchSize::SmallInput,
+        )
+    });
+
     group.bench_function("batch_mul(32)", |b| {
         b.iter_batched_ref(
             || (random_g2(rng).to_affine(), n_random_scalar(32, rng)),
@@ -528,6 +586,23 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
                 )
             },
             |(pt, scalar)| pt.clone() * scalar.clone(),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("multiply vartime with precompute", |b| {
+        b.iter_batched_ref(
+            || {
+                (
+                    {
+                        let mut pt = random_g2(rng).to_affine();
+                        pt.precompute();
+                        pt
+                    },
+                    random_scalar(rng),
+                )
+            },
+            |(pt, scalar)| pt.mul_vartime(scalar),
             BatchSize::SmallInput,
         )
     });
@@ -592,6 +667,13 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
             b.iter_batched_ref(
                 || g2_muln_instance(n, rng),
                 |(points, scalars)| G2Projective::muln_vartime(&points[..], &scalars[..]),
+                BatchSize::SmallInput,
+            )
+        });
+        group.bench_function(format!("multiexp_muln_affine_{n}"), |b| {
+            b.iter_batched_ref(
+                || g2_muln_affine_instance(n, rng),
+                |(points, scalars)| G2Projective::muln_affine_vartime(&points[..], &scalars[..]),
                 BatchSize::SmallInput,
             )
         });

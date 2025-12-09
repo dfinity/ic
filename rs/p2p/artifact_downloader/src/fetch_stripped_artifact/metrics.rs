@@ -8,25 +8,25 @@ const STRIPPED_MESSAGE_TYPE_LABEL: &str = "type";
 
 #[derive(Clone)]
 pub(super) struct FetchStrippedConsensusArtifactMetrics {
-    pub(super) ingress_messages_in_a_block_count: HistogramVec,
+    pub(super) stripped_messages_in_a_block_count: HistogramVec,
     pub(super) download_missing_stripped_messages_duration: Histogram,
-    pub(super) missing_ingress_messages_bytes: Histogram,
+    pub(super) missing_stripped_messages_bytes: HistogramVec,
     pub(super) total_block_assembly_duration: Histogram,
     pub(super) active_stripped_message_downloads: IntGaugeVec,
     pub(super) total_stripped_message_download_errors: IntCounterVec,
 }
 
 #[derive(Copy, Clone)]
-pub(super) enum IngressMessageSource {
+pub(super) enum StrippedMessageSource {
     Peer,
-    IngressPool,
+    Pool,
 }
 
-impl IngressMessageSource {
+impl StrippedMessageSource {
     fn as_str(&self) -> &str {
         match self {
-            IngressMessageSource::Peer => "peer",
-            IngressMessageSource::IngressPool => "ingress_pool",
+            StrippedMessageSource::Peer => "peer",
+            StrippedMessageSource::Pool => "pool",
         }
     }
 }
@@ -34,23 +34,24 @@ impl IngressMessageSource {
 impl FetchStrippedConsensusArtifactMetrics {
     pub(super) fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
-            ingress_messages_in_a_block_count: metrics_registry.histogram_vec(
-                    "ic_stripped_consensus_artifact_downloader_ingress_messages_in_a_block_count",
-                    "Number of ingress messages in a block partitioned by the source of the \
-                    ingress message (a peer or replica's own ingress pool)",
+            stripped_messages_in_a_block_count: metrics_registry.histogram_vec(
+                    "ic_stripped_consensus_artifact_downloader_stripped_messages_in_a_block_count",
+                    "Number of stripped messages in a block partitioned by the source of the \
+                    message (a peer or replica's own pool), and the message type",
                     decimal_buckets_with_zero(0, 3),
-                    &[SOURCE_LABEL],
+                    &[SOURCE_LABEL, STRIPPED_MESSAGE_TYPE_LABEL],
             ),
             download_missing_stripped_messages_duration: metrics_registry.histogram(
                     "ic_stripped_consensus_artifact_downloader_missing_stripped_messages_fetch_duration",
                     "Download time for all the missing stripped messages in the block, in seconds",
                     decimal_buckets_with_zero(-2, 1),
             ),
-            missing_ingress_messages_bytes: metrics_registry.histogram(
-                    "ic_stripped_consensus_artifact_downloader_missing_ingress_messages_bytes",
-                    "Size of missing ingress messages, in bytes",
+            missing_stripped_messages_bytes: metrics_registry.histogram_vec(
+                    "ic_stripped_consensus_artifact_downloader_missing_stripped_messages_bytes",
+                    "Size of missing stripped messages, in bytes",
                     // 0B, 1B, ..., 5MB
                     decimal_buckets_with_zero(0, 6),
+                    &[STRIPPED_MESSAGE_TYPE_LABEL],
             ),
             total_block_assembly_duration: metrics_registry.histogram(
                     "ic_stripped_consensus_artifact_total_block_assembly_duration",
@@ -71,9 +72,24 @@ impl FetchStrippedConsensusArtifactMetrics {
         }
     }
 
-    pub(super) fn report_ingress_messages_count(&self, source: IngressMessageSource, count: u64) {
-        self.ingress_messages_in_a_block_count
-            .with_label_values(&[source.as_str()])
+    pub(super) fn report_missing_stripped_messages_bytes(
+        &self,
+        message_type: StrippedMessageType,
+        bytes: usize,
+    ) {
+        self.missing_stripped_messages_bytes
+            .with_label_values(&[message_type.as_str()])
+            .observe(bytes as f64)
+    }
+
+    pub(super) fn report_stripped_messages_count(
+        &self,
+        source: StrippedMessageSource,
+        message_type: StrippedMessageType,
+        count: usize,
+    ) {
+        self.stripped_messages_in_a_block_count
+            .with_label_values(&[source.as_str(), message_type.as_str()])
             .observe(count as f64)
     }
 
