@@ -90,7 +90,7 @@ pub(crate) struct ProposeToUpdateSubnetCmd {
     /// is new for the specified subnet, it must also not already exist on the IC.
     ///
     /// key_id: master public key ID formatted as "Scheme:AlgorithmID:KeyName".
-    /// pre_signatures_to_create_in_advance: Non-negative integer value.
+    /// pre_signatures_to_create_in_advance: Non-negative integer value. Omitted for keys without pre-signatures (e.g., vetKD).
     /// max_queue_size: integer value greater than or equal 1.
     ///
     /// Example (note that all values, including integers, are represented as strings):
@@ -105,6 +105,10 @@ pub(crate) struct ProposeToUpdateSubnetCmd {
     ///     {
     ///         "key_id": "schnorr:Bip340Secp256k1:some_key_name_2",
     ///         "pre_signatures_to_create_in_advance": "98",
+    ///         "max_queue_size": "154"
+    ///     },
+    ///     {
+    ///         "key_id": "vetkd:Bls12_381_G2:some_key_name_3",
     ///         "max_queue_size": "154"
     ///     }
     /// ]'
@@ -190,25 +194,30 @@ fn parse_chain_key_configs_option(
 
     raw.iter()
         .map(|btree| {
-            let key_id = Some(btree
+            let key_id = btree
                 .get("key_id")
                 .map(|key| {
                     key.parse::<MasterPublicKeyId>()
                         .unwrap_or_else(|_| panic!("Could not parse key_id: '{key}'"))
                 })
-                .expect("Each element of the JSON object must specify a 'key_id'."));
+                .expect("Each element of the JSON object must specify a 'key_id'.");
 
-            let pre_signatures_to_create_in_advance = Some(btree
+            let pre_signatures_to_create_in_advance = btree
                 .get("pre_signatures_to_create_in_advance")
-                .map(|x| x.parse::<u32>().expect("pre_signatures_to_create_in_advance must be a u32."))
-                .expect("Each element of the JSON object must specify a 'pre_signatures_to_create_in_advance'."));
+                .map(|x| x.parse::<u32>().expect("pre_signatures_to_create_in_advance must be a u32."));
+            if key_id.requires_pre_signatures() && pre_signatures_to_create_in_advance.is_none() {
+                panic!("JSON object must specify a 'pre_signatures_to_create_in_advance' for key {key_id}.");
+            }
+            if !key_id.requires_pre_signatures() && pre_signatures_to_create_in_advance.is_some() {
+                panic!("JSON object must not specify a 'pre_signatures_to_create_in_advance' for key {key_id}.");
+            }
 
             let max_queue_size = Some(btree
                 .get("max_queue_size")
                 .map(|x| x.parse::<u32>().expect("max_queue_size must be a u32"))
                 .expect("Each element of the JSON object must specify a 'max_queue_size'."));
 
-            do_update_subnet::KeyConfig { key_id, pre_signatures_to_create_in_advance, max_queue_size }
+            do_update_subnet::KeyConfig { key_id: Some(key_id), pre_signatures_to_create_in_advance, max_queue_size }
         })
         .collect()
 }
@@ -483,7 +492,6 @@ mod tests {
             },
             {
                 "key_id": "vetkd:Bls12_381_G2:some_key_name_5",
-                "pre_signatures_to_create_in_advance": "0",
                 "max_queue_size": "154"
             }]"#
         .to_string();
@@ -557,7 +565,7 @@ mod tests {
                                 curve: VetKdCurve::Bls12_381_G2,
                                 name: "some_key_name_5".to_string(),
                             })),
-                            pre_signatures_to_create_in_advance: Some(0),
+                            pre_signatures_to_create_in_advance: None,
                             max_queue_size: Some(154),
                         },
                     ],
@@ -600,7 +608,6 @@ mod tests {
             },
             {
                 "key_id": "vetkd:Bls12_381_G2:some_key_name_3",
-                "pre_signatures_to_create_in_advance": "0",
                 "max_queue_size": "154"
             }]"#
         .to_string();
@@ -645,7 +652,7 @@ mod tests {
                                 curve: VetKdCurve::Bls12_381_G2,
                                 name: "some_key_name_3".to_string(),
                             })),
-                            pre_signatures_to_create_in_advance: Some(0),
+                            pre_signatures_to_create_in_advance: None,
                             max_queue_size: Some(154),
                         },
                     ],
@@ -692,7 +699,6 @@ mod tests {
             },
             {
                 "key_id": "vetkd:Bls12_381_G2:some_key_name_3",
-                "pre_signatures_to_create_in_advance": "0",
                 "max_queue_size": "444"
             }]"#
         .to_string();
@@ -740,7 +746,7 @@ mod tests {
                                 curve: VetKdCurve::Bls12_381_G2,
                                 name: "some_key_name_3".to_string(),
                             })),
-                            pre_signatures_to_create_in_advance: Some(0),
+                            pre_signatures_to_create_in_advance: None,
                             max_queue_size: Some(444),
                         },
                     ],
@@ -751,5 +757,60 @@ mod tests {
                 ..make_empty_update_payload(subnet_id)
             },
         );
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "must specify a 'pre_signatures_to_create_in_advance' for key ecdsa:Secp256k1:some_key_name"
+    )]
+    fn should_panic_when_key_requiring_pre_signatures_is_missing_pre_signatures_to_create() {
+        let subnet_id = SubnetId::from(PrincipalId::new_user_test_id(1));
+        let subnet_record = SubnetRecord {
+            chain_key_config: None,
+            ..Default::default()
+        };
+
+        let chain_key_configs_to_generate = r#"[{
+                "key_id": "ecdsa:Secp256k1:some_key_name",
+                "max_queue_size": "155"
+            }]"#
+        .to_string();
+
+        let cmd = ProposeToUpdateSubnetCmd {
+            chain_key_configs_to_generate: Some(chain_key_configs_to_generate),
+            signature_request_timeout_ns: Some(111),
+            ..empty_propose_to_update_subnet_cmd(subnet_id)
+        };
+
+        // This should panic when parsing the key config
+        let _ = cmd.new_payload_for_subnet(subnet_id, subnet_record);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "must not specify a 'pre_signatures_to_create_in_advance' for key vetkd:Bls12_381_G2:some_key_name"
+    )]
+    fn should_panic_when_key_not_requiring_pre_signatures_has_pre_signatures_to_create() {
+        let subnet_id = SubnetId::from(PrincipalId::new_user_test_id(1));
+        let subnet_record = SubnetRecord {
+            chain_key_config: None,
+            ..Default::default()
+        };
+
+        let chain_key_configs_to_generate = r#"[{
+                "key_id": "vetkd:Bls12_381_G2:some_key_name",
+                "pre_signatures_to_create_in_advance": "99",
+                "max_queue_size": "155"
+            }]"#
+        .to_string();
+
+        let cmd = ProposeToUpdateSubnetCmd {
+            chain_key_configs_to_generate: Some(chain_key_configs_to_generate),
+            signature_request_timeout_ns: Some(111),
+            ..empty_propose_to_update_subnet_cmd(subnet_id)
+        };
+
+        // This should panic when parsing the key config
+        let _ = cmd.new_payload_for_subnet(subnet_id, subnet_record);
     }
 }
