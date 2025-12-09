@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 use tempfile::TempDir;
 
-fn get_mke2fs_path() -> Option<PathBuf> {
-    std::env::var("MKE2FS_BIN").ok().map(PathBuf::from)
+fn get_mke2fs_path() -> PathBuf {
+    PathBuf::from(std::env::var("MKE2FS_BIN").unwrap())
 }
 
 /// Test fixture for creating filesystem images and mounting them
@@ -125,7 +125,7 @@ impl ImageFixtureBuilder {
             file_contexts: self.file_contexts,
             strip_paths: self.strip_paths,
             extra_files: self.extra_files,
-            mke2fs_path: get_mke2fs_path(),
+            mke2fs_path: Some(get_mke2fs_path()),
         })
         .unwrap();
 

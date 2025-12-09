@@ -1,6 +1,6 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
-load("@bazel_skylib//rules:write_file.bzl", "write_file")
 
 package(default_visibility = [
     "//rs:ic-os-pkg",
@@ -38,47 +38,69 @@ rust_binary(
 
 rust_test(
     name = "build_filesystem_test",
+    # The devenv has limited loop devices, more threads would cause contention and make the tests slower
+    args = ["--test-threads=12"],
     crate = ":build_filesystem",
     data = ["@e2fsprogs//:mke2fs"],
     env = {
         "MKE2FS_BIN": "$(rootpath @e2fsprogs//:mke2fs)",
     },
-    # The devenv has limited loop devices, more threads would cause contention and make the tests slower
-    args = ["--test-threads=12"],
     # Requires root privileges to mount filesystems.
     # Marked as manual - run build_filesystem_root_test to run with sudo
     tags = [
-        "manual",
         "local",
-    ],
-    deps = [
-        "@crate_index//:proptest",
+        "manual",
     ],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
+    deps = [
+        "@crate_index//:proptest",
+    ],
 )
 
-write_file(
-    name = "sudo_wrapper",
-    out = "sudo_wrapper.sh",
-    content = [
-        "#!/usr/bin/env bash",
-        "set -euo pipefail",
-        "cd /ic",
-        "export HOME=/home/ubuntu",
+#write_file(
+#    name = "sudo_wrapper",
+#    out = "sudo_wrapper.sh",
+#    content = [
+#        "#!/usr/bin/env bash",
+#        "set -euo pipefail",
+#        "cd /ic",
+#        "export HOME=/home/ubuntu",
 #         "exec $(execpath :build_filesystem_test)",
-        'exec bazel run --run_under="sudo -E" //rs/ic_os/build_tools/build_filesystem:build_filesystem_test',
-    ],
-    is_executable = True,
-)
+#        'exec bazel run --run_under="sudo -E" //rs/ic_os/build_tools/build_filesystem:build_filesystem_test',
+#    ],
+#    is_executable = True,
+#)
 
-sh_test(
-    name = "build_filesystem_root_test",
-    srcs = [":sudo_wrapper"],
-    data = [
+#write_file(
+#    name = "run_build_filesystem_test",
+#    out = "run_build_filesystem_test.sh",
+#    content = [
+#        "#!/usr/bin/env bash",
+#        "set -euo pipefail",
+#        "exec $TEST_BIN",
+#    ],
+#    is_executable = True,
+#)
+
+genrule(
+    name = "run_filesystem_root_test",
+    #    env = {
+    #        "TEST_BIN": "$(execpath :run_build_filesystem_test)",
+    #        "MKE2FS_BIN": "$(execpath @e2fsprogs//:mke2fs)",
+    #    },
+    testonly = True,
+    srcs = [
         ":build_filesystem_test",
+        "@e2fsprogs//:mke2fs",
     ],
+    outs = ["build_filesystem_root_test.sh"],
+    cmd = "echo $(rootpath :build_filesystem_test) > $@",
+    #    data = [
+    #        ":build_filesystem_test",
+    #        ":run_build_filesystem_test",
+    #    ],
     # This test needs root privileges to mount filesystems
     tags = ["local"],
     target_compatible_with = [
