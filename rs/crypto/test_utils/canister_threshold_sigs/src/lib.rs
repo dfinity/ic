@@ -431,14 +431,8 @@ pub mod node {
     }
 
     impl<T: Signable> BasicSigner<T> for Node {
-        fn sign_basic(
-            &self,
-            message: &T,
-            signer: NodeId,
-            registry_version: RegistryVersion,
-        ) -> CryptoResult<BasicSigOf<T>> {
-            self.crypto_component
-                .sign_basic(message, signer, registry_version)
+        fn sign_basic(&self, message: &T) -> CryptoResult<BasicSigOf<T>> {
+            self.crypto_component.sign_basic(message)
         }
     }
 
@@ -896,7 +890,7 @@ pub mod node {
                 let mut signatures_map = BTreeMap::new();
                 for signer in self.filter_by_receivers(&params) {
                     let signature = signer
-                        .sign_basic(&signed_dealing, signer.id(), params.registry_version())
+                        .sign_basic(&signed_dealing)
                         .expect("failed to generate basic-signature");
                     signatures_map.insert(signer.id(), signature);
                 }
@@ -2368,13 +2362,13 @@ impl SignedIDkgDealingBuilder {
 
     pub fn build_with_signature<T: BasicSigner<IDkgDealing>>(
         mut self,
-        params: &IDkgTranscriptParams,
+        _params: &IDkgTranscriptParams,
         basic_signer: &T,
         signer_id: NodeId,
     ) -> SignedIDkgDealing {
         self.signature = BasicSignature {
             signature: basic_signer
-                .sign_basic(&self.content, signer_id, params.registry_version())
+                .sign_basic(&self.content)
                 .expect("Failed to sign a dealing"),
             signer: signer_id,
         };

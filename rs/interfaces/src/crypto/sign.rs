@@ -66,8 +66,6 @@ pub trait BasicSigner<T: Signable>: Send + Sync {
     fn sign_basic(
         &self,
         message: &T,
-        signer: NodeId,
-        registry_version: RegistryVersion,
     ) -> CryptoResult<BasicSigOf<T>>;
 }
 

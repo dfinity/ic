@@ -124,7 +124,7 @@ mod verify_basic_sig {
             .build();
         let msg = SignableMock::new(b"message".to_vec());
 
-        let signature_result = crypto_component.sign_basic(&msg, NODE_1, REG_V2);
+        let signature_result = crypto_component.sign_basic(&msg);
         assert_matches!(signature_result, Ok(_));
 
         let signature = signature_result.unwrap();
@@ -222,7 +222,7 @@ mod verify_sig_batch {
             .build();
 
         let msg = SignableMock::new(b"Hello World!".to_vec());
-        let sig_node1_on_msg = crypto.sign_basic(&msg, NODE_1, REG_V2).unwrap();
+        let sig_node1_on_msg = crypto.sign_basic(&msg).unwrap();
 
         let mut signatures = BTreeMap::new();
         signatures.insert(NODE_1, &sig_node1_on_msg);
@@ -266,8 +266,8 @@ mod verify_sig_batch {
         let msg = SignableMock::new(b"message".to_vec());
 
         let mut signatures = BTreeMap::new();
-        let sig_1 = crypto_1.sign_basic(&msg, NODE_1, REG_V2).unwrap();
-        let sig_2 = crypto_2.sign_basic(&msg, NODE_2, REG_V2).unwrap();
+        let sig_1 = crypto_1.sign_basic(&msg).unwrap();
+        let sig_2 = crypto_2.sign_basic(&msg).unwrap();
         signatures.insert(NODE_1, &sig_1);
         signatures.insert(NODE_2, &sig_2);
 
@@ -307,10 +307,10 @@ mod verify_sig_batch {
         registry_client.reload();
 
         let msg = SignableMock::new(b"Hello World!".to_vec());
-        let sig_node1_on_msg = crypto_1.sign_basic(&msg, NODE_1, REG_V2).unwrap();
+        let sig_node1_on_msg = crypto_1.sign_basic(&msg).unwrap();
 
         let other_msg = SignableMock::new(b"World Hello! ".to_vec());
-        let sig_node2_on_other_msg = crypto_2.sign_basic(&other_msg, NODE_2, REG_V2).unwrap();
+        let sig_node2_on_other_msg = crypto_2.sign_basic(&other_msg).unwrap();
 
         let mut signatures = BTreeMap::new();
         assert!(
@@ -364,8 +364,8 @@ mod verify_sig_batch {
         registry_client.reload();
 
         let msg = SignableMock::new(b"Hello World!".to_vec());
-        let sig_node1 = crypto_1.sign_basic(&msg, NODE_1, REG_V2).unwrap();
-        let sig_node2 = crypto_2.sign_basic(&msg, NODE_2, REG_V2).unwrap();
+        let sig_node1 = crypto_1.sign_basic(&msg).unwrap();
+        let sig_node2 = crypto_2.sign_basic(&msg).unwrap();
         let sig_node2_corrupted = {
             let mut sig = sig_node2.get().0;
             sig[0] ^= 0x80; // flip first bit
