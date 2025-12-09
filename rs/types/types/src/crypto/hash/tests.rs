@@ -73,12 +73,12 @@ mod crypto_hash_stability {
         CanisterHttpRequestId, CanisterHttpResponse, CanisterHttpResponseContent,
         CanisterHttpResponseMetadata,
     };
-    use crate::consensus::{RandomBeaconShare, RandomTape, RandomTapeShare};
     use crate::consensus::{
-        Block, BlockProposal, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
+        Block, BlockPayload, BlockProposal, CatchUpContent, CatchUpContentProtobufBytes,
         CatchUpPackage, CatchUpPackageShare, CatchUpShareContent, ConsensusMessage, DataPayload,
-        EquivocationProof, Finalization, FinalizationContent, FinalizationShare, HashedBlock, HashedRandomBeacon, Notarization,
-        NotarizationContent, NotarizationShare, Payload, RandomBeacon, RandomBeaconContent, RandomTapeContent, Rank,
+        EquivocationProof, Finalization, FinalizationContent, FinalizationShare, HashedBlock,
+        HashedRandomBeacon, Notarization, NotarizationContent, NotarizationShare, Payload,
+        RandomBeacon, RandomBeaconContent, RandomTapeContent, Rank,
         certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
         },
@@ -89,6 +89,7 @@ mod crypto_hash_stability {
             SchnorrSigShare, SignedIDkgComplaint, SignedIDkgOpening, VetKdKeyShare,
         },
     };
+    use crate::consensus::{RandomBeaconShare, RandomTape, RandomTapeShare};
     use crate::crypto::AlgorithmId;
     use crate::crypto::CryptoHashableTestDummy;
     use crate::crypto::canister_threshold_sig::{
@@ -313,14 +314,13 @@ mod crypto_hash_stability {
     #[test]
     fn random_beacon_share_stability() {
         let content = RandomBeaconContent::new(Height::from(42), test_crypto_hash_of(0x42));
-        let data: RandomBeaconShare =
-            Signed {
-                content,
-                signature: ThresholdSignatureShare {
-                    signature: ThresholdSigShareOf::new(ThresholdSigShare(vec![0x42; 48])),
-                    signer: NodeId::from(PrincipalId::new_node_test_id(42)),
-                },
-            };
+        let data: RandomBeaconShare = Signed {
+            content,
+            signature: ThresholdSignatureShare {
+                signature: ThresholdSigShareOf::new(ThresholdSigShare(vec![0x42; 48])),
+                signer: NodeId::from(PrincipalId::new_node_test_id(42)),
+            },
+        };
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
