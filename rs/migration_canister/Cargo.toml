@@ -29,10 +29,12 @@ ic-base-types = { path = "../types/base_types" }
 ic-http-types = { path = "../../packages/ic-http-types" }
 ic-management-canister-types = { workspace = true }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
+ic-nervous-system-common-test-utils = { path = "../nervous_system/common/test_utils" }
 ic-nns-test-utils = { path = "../nns/test_utils" }
 ic-transport-types = { workspace = true }
 ic-universal-canister = { path = "../universal_canister/lib" }
 pocket-ic = { path = "../../packages/pocket-ic" }
+prometheus-parse = { workspace = true }
 registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
 serde_bytes = { workspace = true }

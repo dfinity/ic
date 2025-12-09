@@ -123,7 +123,7 @@ fn migration_status(args: MigrateCanisterArgs) -> Option<MigrationStatus> {
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
-        "migration_canister_num_requests",
+        "migration_canister_requests_in_flight",
         num_requests() as f64,
         "Number of currently ongoing migration requests.",
     )?;
@@ -141,9 +141,9 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
 
     w.encode_gauge(
-        "migration_canister_migrations_disabled",
-        migrations_disabled() as u32 as f64,
-        "Whether canister migrations are currently disabled.",
+        "migration_canister_migrations_enabled",
+        !migrations_disabled() as u32 as f64,
+        "Whether canister migrations are currently enabled.",
     )?;
 
     Ok(())

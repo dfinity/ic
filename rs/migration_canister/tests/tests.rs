@@ -5,6 +5,7 @@ use ic_management_canister_types::{CanisterLogRecord, CanisterSettings};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, Payload as _,
 };
+use ic_nervous_system_common_test_utils::get_gauge;
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::Call;
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
@@ -14,6 +15,7 @@ use pocket_ic::{
     common::rest::{IcpFeatures, IcpFeaturesConfig},
     nonblocking::PocketIc,
 };
+use prometheus_parse::Scrape;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
@@ -264,7 +266,7 @@ async fn get_status(
     Decode!(&res, Option<MigrationStatus>).unwrap()
 }
 
-async fn fetch_metrics(pic: &PocketIc) -> String {
+async fn fetch_metrics(pic: &PocketIc) -> Scrape {
     let http_request = ic_http_types::HttpRequest {
         method: "GET".to_string(),
         url: "/metrics".to_string(),
@@ -284,7 +286,15 @@ async fn fetch_metrics(pic: &PocketIc) -> String {
 
     let response = Decode!(&res, ic_http_types::HttpResponse).unwrap();
 
-    String::from_utf8(response.body.into_vec()).unwrap()
+    let iterator = String::from_utf8(response.body.into_vec())
+        .unwrap()
+        .lines()
+        .map(|s| Ok(s.to_owned()))
+        .collect::<Vec<_>>()
+        .into_iter();
+
+    //String::from_utf8(response.body.into_vec()).unwrap()
+    prometheus_parse::Scrape::parse(iterator).unwrap()
 }
 
 /// Advances time by a second and executes enough ticks that the state machine
@@ -579,10 +589,12 @@ async fn replay_call_after_migration() {
     let source = sources[0];
     let target = targets[0];
 
-    assert!(
-        fetch_metrics(&pic)
-            .await
-            .contains("migration_canister_num_successes_in_past_24_h 0")
+    assert_eq!(
+        get_gauge(
+            &fetch_metrics(&pic).await,
+            "migration_canister_num_successes_in_past_24_h"
+        ),
+        0.0
     );
 
     // We deploy the universal canister WASM
@@ -631,10 +643,12 @@ async fn replay_call_after_migration() {
         pic.tick().await;
     }
 
-    assert!(
-        fetch_metrics(&pic)
-            .await
-            .contains("migration_canister_num_successes_in_past_24_h 1")
+    assert_eq!(
+        get_gauge(
+            &fetch_metrics(&pic).await,
+            "migration_canister_num_successes_in_past_24_h"
+        ),
+        1.0
     );
 
     // We restart the "source" canister right away.
@@ -645,10 +659,12 @@ async fn replay_call_after_migration() {
     assert_eq!(resp.status(), reqwest::StatusCode::BAD_REQUEST);
     let message = String::from_utf8(resp.bytes().await.unwrap().to_vec()).unwrap();
     assert!(message.contains("Invalid request expiry"));
-    assert!(
-        fetch_metrics(&pic)
-            .await
-            .contains("migration_canister_num_successes_in_past_24_h 1")
+    assert_eq!(
+        get_gauge(
+            &fetch_metrics(&pic).await,
+            "migration_canister_num_successes_in_past_24_h"
+        ),
+        1.0
     );
 }
 
@@ -658,8 +674,15 @@ async fn metrics() {
 
     let metrics = fetch_metrics(&pic).await;
 
-    assert!(metrics.contains("migration_canister_num_successes_in_past_24_h 0"));
-    assert!(metrics.contains("migration_canister_migrations_disabled 0"));
+    assert_eq!(
+        get_gauge(&metrics, "migration_canister_num_successes_in_past_24_h"),
+        0.0
+    );
+
+    assert_eq!(
+        get_gauge(&metrics, "migration_canister_migrations_enabled"),
+        1.0
+    );
 }
 
 async fn concurrent_migration(
