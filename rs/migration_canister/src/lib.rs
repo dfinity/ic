@@ -162,6 +162,12 @@ pub struct RecoveryState {
     pub restore_target_controllers: ControllerRecoveryState,
 }
 
+impl Default for RecoveryState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RecoveryState {
     pub fn new() -> Self {
         Self {
