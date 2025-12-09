@@ -262,9 +262,12 @@ pub fn update_account_balances(
     let mut batch_end_idx = batch_start_idx + batch_size;
     let mut rosetta_blocks = get_blocks_by_index_range(connection, batch_start_idx, batch_end_idx)?;
 
+    // For faster inserts, keep a cache of the account balances within a batch range in memory
+    // This also makes the inserting of the account balances batchable and therefore faster
+    let mut account_balances_cache: HashMap<Account, BTreeMap<u64, Nat>> = HashMap::new();
+
     // As long as there are blocks to be fetched, keep on iterating over the blocks in the database with the given BATCH_SIZE interval
     while !rosetta_blocks.is_empty() {
-        let mut account_balances_cache: HashMap<Account, BTreeMap<u64, Nat>> = HashMap::new();
         for rosetta_block in rosetta_blocks {
             match rosetta_block.get_transaction().operation {
                 crate::common::storage::types::IcrcOperation::Burn {
