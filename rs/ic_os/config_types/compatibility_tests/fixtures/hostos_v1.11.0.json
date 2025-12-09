@@ -24,8 +24,7 @@
     "use_node_operator_private_key": true,
     "enable_trusted_execution_environment": false,
     "use_ssh_authorized_keys": false,
-    "icos_dev_settings": {},
-    "enable_beta_registration_feature": null
+    "icos_dev_settings": {}
   },
   "hostos_settings": {
     "hostos_dev_settings": {
@@ -33,9 +32,6 @@
       "vm_cpu": "kvm",
       "vm_nr_of_vcpus": 64
     },
-    "vm_memory": 16,
-    "vm_cpu": "kvm",
-    "vm_nr_of_vcpus": 64,
     "verbose": false
   },
   "guestos_settings": {

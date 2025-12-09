@@ -24,8 +24,7 @@
     "use_node_operator_private_key": true,
     "enable_trusted_execution_environment": false,
     "use_ssh_authorized_keys": false,
-    "icos_dev_settings": {},
-    "enable_beta_registration_feature": null
+    "icos_dev_settings": {}
   },
   "guestos_settings": {
     "inject_ic_crypto": false,

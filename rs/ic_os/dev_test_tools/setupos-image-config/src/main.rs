@@ -12,7 +12,7 @@ use config::setupos::config_ini::ConfigIniSettings;
 use tempfile::NamedTempFile;
 use url::Url;
 
-use config::setupos::deployment_json::CompatDeploymentSettings;
+use config::setupos::deployment_json::DeploymentSettings;
 use config_types::DeploymentEnvironment;
 use partition_tools::{Partition, ext::ExtPartition, fat::FatPartition};
 use setupos_image_config::write_config;
@@ -111,7 +111,7 @@ fn write_public_keys(path: &Path, ks: Vec<String>) -> Result<(), Error> {
 fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Error> {
     let mut deployment_json = {
         let f = File::open(path).context("failed to open deployment config file")?;
-        let deployment_json: CompatDeploymentSettings = serde_json::from_reader(f)?;
+        let deployment_json: DeploymentSettings = serde_json::from_reader(f)?;
 
         deployment_json
     };
@@ -125,27 +125,15 @@ fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Error> {
     }
 
     if let Some(memory) = cfg.memory_gb {
-        deployment_json
-            .dev_vm_resources
-            .get_or_insert_default()
-            .memory = memory;
-        deployment_json.vm_resources.get_or_insert_default().memory = memory;
+        deployment_json.dev_vm_resources.memory = memory;
     }
 
     if let Some(cpu) = &cfg.cpu {
-        deployment_json.dev_vm_resources.get_or_insert_default().cpu = cpu.to_owned();
-        deployment_json.vm_resources.get_or_insert_default().cpu = cpu.to_owned();
+        deployment_json.dev_vm_resources.cpu = cpu.to_owned();
     }
 
     if let Some(nr_of_vcpus) = &cfg.nr_of_vcpus {
-        deployment_json
-            .dev_vm_resources
-            .get_or_insert_default()
-            .nr_of_vcpus = nr_of_vcpus.to_owned();
-        deployment_json
-            .vm_resources
-            .get_or_insert_default()
-            .nr_of_vcpus = nr_of_vcpus.to_owned();
+        deployment_json.dev_vm_resources.nr_of_vcpus = nr_of_vcpus.to_owned();
     }
 
     if let Some(deployment_environment) = &cfg.deployment_environment {
