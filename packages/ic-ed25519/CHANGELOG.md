@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Changed
 
 - This crate now depends on version 2.2 of `ed25519-dalek`, in order to make use of a newly added interface which simplifies this crate's support for hierarchical derivation.
+- Update dependency on `pem` crate from crate major version 1 to major version 3.
+- Implement `Eq` and `PartialEq` traits for `SignatureError`.
 
 ## [0.4.0] - 2025-10-10
 
