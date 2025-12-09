@@ -1904,7 +1904,7 @@ fn test_utxo_consolidation() {
         .expect("Failed to upgrade the minter canister");
 
     // Step 3: wait for the consolidation transaction to be submitted.
-    // Expect the corresponding burn index to transfer_index + 1.
+    // Expect the corresponding burn index to be transfer_index + 1.
     let burn_index = transfer_index + 1;
     let txid = ckbtc.await_btc_transaction(burn_index, MAX_NUM_INPUTS_IN_TRANSACTION * 6);
     let mempool = ckbtc.mempool();
