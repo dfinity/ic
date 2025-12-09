@@ -85,13 +85,10 @@ const SUBNET_B_RANGES: &[CanisterIdRange] = &[
 /// Note that any queue files are missing as they would be empty.
 fn subnet_a_files() -> &'static [&'static str] {
     &[
-        "canister_states/00000000000000010101/000000000000002a_0000_log_memory_store.overlay",
         "canister_states/00000000000000010101/canister.pbuf",
         "canister_states/00000000000000010101/software.wasm",
-        "canister_states/00000000000000020101/000000000000002a_0000_log_memory_store.overlay",
         "canister_states/00000000000000020101/canister.pbuf",
         "canister_states/00000000000000020101/software.wasm",
-        "canister_states/00000000000000030101/000000000000002a_0000_log_memory_store.overlay",
         "canister_states/00000000000000030101/canister.pbuf",
         "canister_states/00000000000000030101/software.wasm",
         INGRESS_HISTORY_FILE,
@@ -106,10 +103,8 @@ fn subnet_a_files() -> &'static [&'static str] {
 /// Full list of files expected to be listed in the manifest of subnet A'.
 fn subnet_a_prime_files() -> &'static [&'static str] {
     &[
-        "canister_states/00000000000000010101/000000000000002a_0000_log_memory_store.overlay",
         "canister_states/00000000000000010101/canister.pbuf",
         "canister_states/00000000000000010101/software.wasm",
-        "canister_states/00000000000000030101/000000000000002a_0000_log_memory_store.overlay",
         "canister_states/00000000000000030101/canister.pbuf",
         "canister_states/00000000000000030101/software.wasm",
         INGRESS_HISTORY_FILE,
@@ -125,7 +120,6 @@ fn subnet_a_prime_files() -> &'static [&'static str] {
 /// Full list of files expected to be listed in the manifest of subnet B.
 fn subnet_b_files() -> &'static [&'static str] {
     &[
-        "canister_states/00000000000000020101/000000000000002a_0000_log_memory_store.overlay",
         "canister_states/00000000000000020101/canister.pbuf",
         "canister_states/00000000000000020101/software.wasm",
         INGRESS_HISTORY_FILE,

@@ -1102,7 +1102,7 @@ impl CanisterManager {
         let freeze_threshold = canister.system_state.freeze_threshold;
         let reserved_cycles_limit = canister.system_state.reserved_balance_limit();
         let log_visibility = canister.system_state.log_visibility.clone();
-        let log_memory_limit = canister.system_state.log_memory_store.byte_capacity();
+        let log_memory_limit = canister.system_state.log_memory_store.log_memory_limit();
         let wasm_memory_limit = canister.system_state.wasm_memory_limit;
         let wasm_memory_threshold = canister.system_state.wasm_memory_threshold;
 
@@ -1131,7 +1131,7 @@ impl CanisterManager {
             freeze_threshold.get(),
             reserved_cycles_limit.map(|x| x.get()),
             log_visibility,
-            log_memory_limit as u64,
+            log_memory_limit.get(),
             self.cycles_account_manager
                 .idle_cycles_burned_rate(
                     memory_allocation,
@@ -3174,7 +3174,10 @@ pub fn uninstall_canister(
 
     // Clear log.
     canister.system_state.canister_log.clear();
-    canister.system_state.log_memory_store.clear(fd_factory);
+    canister
+        .system_state
+        .log_memory_store
+        .clear(fd_factory.clone());
 
     // Clear the Wasm chunk store.
     canister.system_state.wasm_chunk_store = WasmChunkStore::new(fd_factory);
