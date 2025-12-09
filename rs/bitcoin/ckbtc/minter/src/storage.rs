@@ -133,9 +133,9 @@ impl StorableEvent for CkBtcMinterEvent {
 }
 
 /// Returns an iterator over all minter events.
-pub fn events<T>() -> impl Iterator<Item = Event<T>>
+pub fn events<Event>() -> impl Iterator<Item = Event>
 where
-    Event<T>: StorableEvent,
+    Event: StorableEvent,
 {
     EventIterator {
         buf: vec![],
