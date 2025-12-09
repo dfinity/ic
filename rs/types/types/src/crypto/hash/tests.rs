@@ -60,10 +60,9 @@ mod crypto_hash_tests {
 /// for types implementing CryptoHashDomain. The expected hashes are computed
 /// once and must remain constant across code changes.
 ///
-/// Each type is tested with a single, deterministic input to verify:
-/// 1. The domain separator strings are correctly incorporated into the hash
-/// 2. The Hash trait implementation for each type produces stable output
-/// 3. The overall hash computation remains consistent
+/// Each type is tested with a single, deterministic input to verify the
+/// Hash trait implementation for each type produces stable output and
+/// the overall hash computation remains consistent
 ///
 /// If any of these tests fail, it indicates a breaking change in the hash
 /// computation that could affect consensus or other cryptographic protocols.
@@ -74,11 +73,12 @@ mod crypto_hash_stability {
         CanisterHttpRequestId, CanisterHttpResponse, CanisterHttpResponseContent,
         CanisterHttpResponseMetadata,
     };
+    use crate::consensus::{RandomBeaconShare, RandomTape, RandomTapeShare};
     use crate::consensus::{
-        Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
+        Block, BlockProposal, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
         CatchUpPackage, CatchUpPackageShare, CatchUpShareContent, ConsensusMessage, DataPayload,
-        EquivocationProof, FinalizationContent, HashedBlock, HashedRandomBeacon,
-        NotarizationContent, Payload, RandomBeacon, RandomBeaconContent, RandomTapeContent, Rank,
+        EquivocationProof, Finalization, FinalizationContent, FinalizationShare, HashedBlock, HashedRandomBeacon, Notarization,
+        NotarizationContent, NotarizationShare, Payload, RandomBeacon, RandomBeaconContent, RandomTapeContent, Rank,
         certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
         },
@@ -190,12 +190,11 @@ mod crypto_hash_stability {
         );
     }
 
-    /// Test stability of Signed<NotarizationContent, MultiSignature<NotarizationContent>> hash output
-    /// This is the "Notarization" type used in consensus
+    /// Test stability of Notarization hash output
     #[test]
     fn notarization_stability() {
         let content = NotarizationContent::new(Height::from(42), test_crypto_hash_of(0x42));
-        let data: Signed<NotarizationContent, MultiSignature<NotarizationContent>> = Signed {
+        let data: Notarization = Signed {
             content,
             signature: MultiSignature {
                 signature: CombinedMultiSigOf::new(CombinedMultiSig(vec![0x42; 48])),
@@ -210,12 +209,11 @@ mod crypto_hash_stability {
         );
     }
 
-    /// Test stability of Signed<NotarizationContent, MultiSignatureShare<NotarizationContent>> hash output
-    /// This is the "NotarizationShare" type used in consensus
+    /// Test stability of NotarizationShare hash output
     #[test]
     fn notarization_share_stability() {
         let content = NotarizationContent::new(Height::from(42), test_crypto_hash_of(0x42));
-        let data: Signed<NotarizationContent, MultiSignatureShare<NotarizationContent>> = Signed {
+        let data: NotarizationShare = Signed {
             content,
             signature: MultiSignatureShare {
                 signature: IndividualMultiSigOf::new(IndividualMultiSig(vec![0x42; 48])),
@@ -242,12 +240,11 @@ mod crypto_hash_stability {
         );
     }
 
-    /// Test stability of Signed<FinalizationContent, MultiSignature<FinalizationContent>> hash output
-    /// This is the "Finalization" type used in consensus
+    /// Test stability of Finalization hash output
     #[test]
     fn finalization_stability() {
         let content = FinalizationContent::new(Height::from(42), test_crypto_hash_of(0x42));
-        let data: Signed<FinalizationContent, MultiSignature<FinalizationContent>> = Signed {
+        let data: Finalization = Signed {
             content,
             signature: MultiSignature {
                 signature: CombinedMultiSigOf::new(CombinedMultiSig(vec![0x42; 48])),
@@ -262,12 +259,11 @@ mod crypto_hash_stability {
         );
     }
 
-    /// Test stability of Signed<FinalizationContent, MultiSignatureShare<FinalizationContent>> hash output
-    /// This is the "FinalizationShare" type used in consensus
+    /// Test stability of FinalizationShare hash output
     #[test]
     fn finalization_share_stability() {
         let content = FinalizationContent::new(Height::from(42), test_crypto_hash_of(0x42));
-        let data: Signed<FinalizationContent, MultiSignatureShare<FinalizationContent>> = Signed {
+        let data: FinalizationShare = Signed {
             content,
             signature: MultiSignatureShare {
                 signature: IndividualMultiSigOf::new(IndividualMultiSig(vec![0x42; 48])),
@@ -294,12 +290,11 @@ mod crypto_hash_stability {
         );
     }
 
-    /// Test stability of Signed<RandomBeaconContent, ThresholdSignature<RandomBeaconContent>> hash output
-    /// This is the "RandomBeacon" type used in consensus
+    /// Test stability of RandomBeacon hash output
     #[test]
     fn random_beacon_stability() {
         let content = RandomBeaconContent::new(Height::from(42), test_crypto_hash_of(0x42));
-        let data: Signed<RandomBeaconContent, ThresholdSignature<RandomBeaconContent>> = Signed {
+        let data: RandomBeacon = Signed {
             content,
             signature: ThresholdSignature {
                 signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![0x42; 48])),
@@ -314,12 +309,11 @@ mod crypto_hash_stability {
         );
     }
 
-    /// Test stability of Signed<RandomBeaconContent, ThresholdSignatureShare<RandomBeaconContent>> hash output
-    /// This is the "RandomBeaconShare" type used in consensus
+    /// Test stability of RandomBeaconShare hash output
     #[test]
     fn random_beacon_share_stability() {
         let content = RandomBeaconContent::new(Height::from(42), test_crypto_hash_of(0x42));
-        let data: Signed<RandomBeaconContent, ThresholdSignatureShare<RandomBeaconContent>> =
+        let data: RandomBeaconShare =
             Signed {
                 content,
                 signature: ThresholdSignatureShare {
@@ -335,12 +329,11 @@ mod crypto_hash_stability {
         );
     }
 
-    /// Test stability of Signed<RandomTapeContent, ThresholdSignature<RandomTapeContent>> hash output
-    /// This is the "RandomTape" type used in consensus
+    /// Test stability of RandomTape hash output
     #[test]
     fn random_tape_stability() {
         let content = RandomTapeContent::new(Height::from(42));
-        let data: Signed<RandomTapeContent, ThresholdSignature<RandomTapeContent>> = Signed {
+        let data: RandomTape = Signed {
             content,
             signature: ThresholdSignature {
                 signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![0x42; 48])),
@@ -355,12 +348,11 @@ mod crypto_hash_stability {
         );
     }
 
-    /// Test stability of Signed<RandomTapeContent, ThresholdSignatureShare<RandomTapeContent>> hash output
-    /// This is the "RandomTapeShare" type used in consensus
+    /// Test stability of RandomTapeShare hash output
     #[test]
     fn random_tape_share_stability() {
         let content = RandomTapeContent::new(Height::from(42));
-        let data: Signed<RandomTapeContent, ThresholdSignatureShare<RandomTapeContent>> = Signed {
+        let data: RandomTapeShare = Signed {
             content,
             signature: ThresholdSignatureShare {
                 signature: ThresholdSigShareOf::new(ThresholdSigShare(vec![0x42; 48])),
@@ -391,7 +383,6 @@ mod crypto_hash_stability {
     }
 
     /// Test stability of consensus_dkg::Message hash output
-    /// Message is BasicSigned<DealingContent>
     #[test]
     fn dkg_message_stability() {
         let dealing = NiDkgDealing {
@@ -540,7 +531,6 @@ mod crypto_hash_stability {
     }
 
     /// Test stability of CatchUpContentProtobufBytes hash output
-    /// This is created from a pb::CatchUpPackage's content field
     #[test]
     fn catch_up_content_protobuf_bytes_stability() {
         // Create a pb::CatchUpPackage with deterministic content
@@ -564,8 +554,7 @@ mod crypto_hash_stability {
         );
     }
 
-    /// Test stability of Signed<CatchUpContent, ThresholdSignature<CatchUpContent>> hash output
-    /// This is the "CatchUpPackage" type used in consensus
+    /// Test stability of CatchUpPackage hash output
     #[test]
     fn catch_up_package_stability() {
         let block = test_block();
@@ -594,8 +583,7 @@ mod crypto_hash_stability {
         );
     }
 
-    /// Test stability of Signed<CatchUpShareContent, ThresholdSignatureShare<CatchUpContent>> hash output
-    /// This is the "CatchUpPackageShare" type used in consensus
+    /// Test stability of CatchUpPackageShare hash output
     #[test]
     fn catch_up_package_share_stability() {
         let block = test_block();
@@ -626,7 +614,6 @@ mod crypto_hash_stability {
     }
 
     /// Test stability of ConsensusMessage hash output
-    /// Using RandomBeacon variant as representative
     #[test]
     fn consensus_message_stability() {
         let beacon = test_random_beacon();
@@ -640,7 +627,6 @@ mod crypto_hash_stability {
     }
 
     /// Test stability of CertificationMessage hash output
-    /// Using Certification variant as representative
     #[test]
     fn certification_message_stability() {
         let state_hash: CryptoHashOfPartialState = CryptoHashOf::new(CryptoHash(vec![0x42; 32]));
@@ -742,7 +728,6 @@ mod crypto_hash_stability {
     }
 
     /// Test stability of IDkgMessage hash output
-    /// Using Dealing variant as representative
     #[test]
     fn idkg_message_stability() {
         let dealing = IDkgDealing {
@@ -991,13 +976,12 @@ mod crypto_hash_stability {
         )
     }
 
-    /// Test stability of Signed<HashedBlock, BasicSignature<BlockMetadata>> hash output
-    /// This is the "BlockProposal" type used in consensus
+    /// Test stability of BlockProposal hash output
     #[test]
     fn block_proposal_stability() {
         let block = test_block();
         let hashed_block: HashedBlock = Hashed::new(crypto_hash, block);
-        let data: Signed<HashedBlock, BasicSignature<BlockMetadata>> = Signed {
+        let data: BlockProposal = Signed {
             content: hashed_block,
             signature: BasicSignature {
                 signature: BasicSigOf::new(BasicSig(vec![0x42; 64])),
