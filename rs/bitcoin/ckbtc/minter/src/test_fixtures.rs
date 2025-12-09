@@ -38,7 +38,7 @@ pub fn init_args() -> InitArgs {
         kyt_principal: None,
         kyt_fee: None,
         get_utxos_cache_expiration_seconds: None,
-        min_utxo_consolidation_threshold: None,
+        utxo_consolidation_threshold: None,
     }
 }
 
@@ -505,7 +505,7 @@ pub mod arbitrary {
                         btc_checker_principal: args.btc_checker_principal,
                         kyt_principal: args.kyt_principal,
                         get_utxos_cache_expiration_seconds: args.get_utxos_cache_expiration_seconds,
-                        min_utxo_consolidation_threshold: args.min_utxo_consolidation_threshold,
+                        utxo_consolidation_threshold: args.utxo_consolidation_threshold,
                     },
                 )
         }
@@ -521,7 +521,7 @@ pub mod arbitrary {
                 btc_checker_principal: option::of(canister_id()),
                 kyt_principal: option::of(canister_id()),
                 get_utxos_cache_expiration_seconds: option::of(any::<u64>()),
-                min_utxo_consolidation_threshold: option::of(any::<u64>()),
+                utxo_consolidation_threshold: option::of(any::<u64>()),
             })
         }
 

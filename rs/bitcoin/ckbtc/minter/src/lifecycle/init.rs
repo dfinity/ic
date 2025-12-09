@@ -71,7 +71,7 @@ pub struct InitArgs {
 
     /// The minimum number of available UTXOs required to trigger a conslidation.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub min_utxo_consolidation_threshold: Option<u64>,
+    pub utxo_consolidation_threshold: Option<u64>,
 }
 
 pub fn init<R: CanisterRuntime>(args: InitArgs, runtime: &R) {

@@ -462,7 +462,7 @@ pub struct CkBtcMinterState {
     pub last_consolidate_utxos_request_created_time_ns: Option<u64>,
 
     /// Minimum number of available UTXOs to trigger a consolidation.
-    pub min_utxo_consolidation_threshold: u64,
+    pub utxo_consolidation_threshold: u64,
 
     /// BTC transactions waiting for finalization.
     pub submitted_transactions: Vec<SubmittedBtcTransaction>,
@@ -609,7 +609,7 @@ impl CkBtcMinterState {
             kyt_principal: _,
             kyt_fee,
             get_utxos_cache_expiration_seconds,
-            min_utxo_consolidation_threshold,
+            utxo_consolidation_threshold,
         }: InitArgs,
     ) {
         self.btc_network = btc_network;
@@ -632,15 +632,15 @@ impl CkBtcMinterState {
             self.get_utxos_cache
                 .set_expiration(Duration::from_secs(expiration));
         }
-        if let Some(threshold) = min_utxo_consolidation_threshold {
+        if let Some(threshold) = utxo_consolidation_threshold {
             if threshold > crate::MAX_NUM_INPUTS_IN_TRANSACTION as u64 {
-                self.min_utxo_consolidation_threshold = threshold;
+                self.utxo_consolidation_threshold = threshold;
             } else {
                 log!(
                     Priority::Info,
-                    "Didn't set min_utxo_consolidation_threshold to {} (current value: {})",
+                    "Didn't set utxo_consolidation_threshold to {} (current value: {})",
                     threshold,
-                    self.min_utxo_consolidation_threshold
+                    self.utxo_consolidation_threshold
                 );
             }
         }
@@ -659,7 +659,7 @@ impl CkBtcMinterState {
             kyt_principal: _,
             kyt_fee,
             get_utxos_cache_expiration_seconds,
-            min_utxo_consolidation_threshold,
+            utxo_consolidation_threshold,
         }: UpgradeArgs,
     ) {
         if let Some(retrieve_btc_min_amount) = retrieve_btc_min_amount {
@@ -696,15 +696,15 @@ impl CkBtcMinterState {
             self.get_utxos_cache
                 .set_expiration(Duration::from_secs(expiration));
         }
-        if let Some(threshold) = min_utxo_consolidation_threshold {
+        if let Some(threshold) = utxo_consolidation_threshold {
             if threshold > crate::MAX_NUM_INPUTS_IN_TRANSACTION as u64 {
-                self.min_utxo_consolidation_threshold = threshold;
+                self.utxo_consolidation_threshold = threshold;
             } else {
                 log!(
                     Priority::Info,
-                    "Didn't set min_utxo_consolidation_threshold to {} (current value: {})",
+                    "Didn't set utxo_consolidation_threshold to {} (current value: {})",
                     threshold,
-                    self.min_utxo_consolidation_threshold
+                    self.utxo_consolidation_threshold
                 );
             }
         }
@@ -1874,7 +1874,7 @@ impl From<InitArgs> for CkBtcMinterState {
             requests_in_flight: Default::default(),
             last_transaction_submission_time_ns: None,
             last_consolidate_utxos_request_created_time_ns: None,
-            min_utxo_consolidation_threshold: DEFAULT_UTXO_CONSOLIDATION_THRESHOLD,
+            utxo_consolidation_threshold: DEFAULT_UTXO_CONSOLIDATION_THRESHOLD,
             submitted_transactions: Default::default(),
             replacement_txid: Default::default(),
             retrieve_btc_account_to_block_indices: Default::default(),

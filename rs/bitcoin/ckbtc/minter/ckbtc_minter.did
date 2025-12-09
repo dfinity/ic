@@ -234,7 +234,7 @@ type InitArgs = record {
     get_utxos_cache_expiration_seconds: opt nat64;
 
     /// The minimum number of available UTXOs to trigger a consolidation.
-    min_utxo_consolidation_threshold: opt nat64;
+    utxo_consolidation_threshold: opt nat64;
 };
 
 // The upgrade parameters of the minter canister.
@@ -269,7 +269,7 @@ type UpgradeArgs = record {
     get_utxos_cache_expiration_seconds: opt nat64;
 
     /// The minimum number of available UTXOs to trigger a consolidation.
-    min_utxo_consolidation_threshold: opt nat64;
+    utxo_consolidation_threshold: opt nat64;
 };
 
 type RetrieveBtcStatus = variant {

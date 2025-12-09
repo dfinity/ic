@@ -69,7 +69,7 @@ fn default_init_args() -> CkbtcMinterInitArgs {
         kyt_principal: None,
         kyt_fee: None,
         get_utxos_cache_expiration_seconds: None,
-        min_utxo_consolidation_threshold: None,
+        utxo_consolidation_threshold: None,
     }
 }
 
@@ -1890,7 +1890,7 @@ fn test_utxo_consolidation() {
     // Step 2: upgrade to trigger consolidation task by setting a lower threshold.
     // upgrade
     let upgrade_args = UpgradeArgs {
-        min_utxo_consolidation_threshold: Some(1 + MAX_NUM_INPUTS_IN_TRANSACTION as u64),
+        utxo_consolidation_threshold: Some(1 + MAX_NUM_INPUTS_IN_TRANSACTION as u64),
         ..Default::default()
     };
     let minter_arg = MinterArg::Upgrade(Some(upgrade_args));

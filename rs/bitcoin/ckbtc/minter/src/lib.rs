@@ -1396,8 +1396,7 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
 ) -> Result<u64, ConsolidateUtxoError> {
     // TODO DEFI-2551: make this configurable
     const MIN_CONSOLIDATION_INTERVAL: Duration = Duration::from_secs(24 * 3600);
-    let min_consolidation_utxo_required =
-        read_state(|s| s.min_utxo_consolidation_threshold) as usize;
+    let min_consolidation_utxo_required = read_state(|s| s.utxo_consolidation_threshold) as usize;
     assert!(min_consolidation_utxo_required > MAX_NUM_INPUTS_IN_TRANSACTION);
     // Return early if number of available UTXOs is below consolidation threshold.
     if read_state(|s| s.available_utxos.len() < min_consolidation_utxo_required) {
