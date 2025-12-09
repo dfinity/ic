@@ -84,7 +84,7 @@ pub struct RetrieveBtcRequest {
     Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize, candid::CandidType,
 )]
 pub struct ConsolidateUtxosRequest {
-    /// The amount to consolidate
+    /// The amount to consolidate.
     pub amount: u64,
     /// The BURN transaction index on the ledger.
     /// Serves as a unique request identifier.
