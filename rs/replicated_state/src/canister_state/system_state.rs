@@ -556,6 +556,7 @@ impl SystemState {
         wasm_chunk_store_data: PageMap,
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
         log_visibility: LogVisibilityV2,
+        log_memory_limit: NumBytes,
         canister_log: CanisterLog,
         log_memory_store_data: PageMap,
         wasm_memory_limit: Option<NumBytes>,
@@ -564,7 +565,6 @@ impl SystemState {
         environment_variables: BTreeMap<String, String>,
         metrics: &dyn CheckpointLoadingMetrics,
     ) -> Self {
-        let log_memory_limit = 4096; // TODO: properly populate. 
         let system_state = Self {
             controllers,
             canister_id,
@@ -591,7 +591,7 @@ impl SystemState {
             canister_log,
             log_memory_store: LogMemoryStore::from_checkpoint(
                 log_memory_store_data,
-                log_memory_limit,
+                log_memory_limit.get() as usize,
             ),
             wasm_memory_limit,
             next_snapshot_id,
