@@ -107,6 +107,30 @@ system_test_nns(
         "//rs/rust_canisters/canister_test",
         "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
+    name = "pre_signature_stash_management_test",
+    env = MESSAGE_CANISTER_ENV,
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/nns/constants",
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
         "@crate_index//:tokio",

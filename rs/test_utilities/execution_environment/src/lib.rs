@@ -79,6 +79,7 @@ use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
 use ic_wasm_types::BinaryEncodedWasm;
 use maplit::{btreemap, btreeset};
+use num_traits::ops::saturating::SaturatingAdd;
 use prometheus::IntCounter;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
@@ -267,6 +268,7 @@ pub struct ExecutionTest {
     caller_canister_id: Option<CanisterId>,
     chain_key_data: ChainKeyData,
     replica_version: ReplicaVersion,
+    canister_snapshot_baseline_instructions: NumInstructions,
 
     // The actual implementation.
     exec_env: Arc<ExecutionEnvironment>,
@@ -386,6 +388,24 @@ impl ExecutionTest {
 
     pub fn execution_cost(&self) -> Cycles {
         Cycles::new(self.execution_cost.values().map(|x| x.get()).sum())
+    }
+
+    pub fn canister_snapshot_cost(&self, canister_id: CanisterId) -> Cycles {
+        let canister = self.canister_state(canister_id);
+        let new_snapshot_size = canister.snapshot_size_bytes();
+        let instructions = self
+            .canister_snapshot_baseline_instructions
+            .saturating_add(&new_snapshot_size.get().into());
+        self.cycles_account_manager.execution_cost(
+            instructions,
+            self.subnet_size(),
+            self.cost_schedule(),
+            // For the `take_canister_snapshot` operation, it does not matter if this is a Wasm64 or Wasm32 module
+            // since the number of instructions charged depends on constant set fee and snapshot size
+            // and Wasm64 does not bring any additional overhead for this operation.
+            // The only overhead is during execution time.
+            WasmExecutionMode::Wasm32,
+        )
     }
 
     pub fn canister_execution_cost(&self, canister_id: CanisterId) -> Cycles {
@@ -2684,6 +2704,10 @@ impl ExecutionTestBuilder {
             log: self.log,
             checkpoint_files: vec![],
             replica_version: self.replica_version,
+            canister_snapshot_baseline_instructions: self
+                .subnet_config
+                .scheduler_config
+                .canister_snapshot_baseline_instructions,
         }
     }
 }

@@ -34,7 +34,6 @@ use ic_bn_lib::{
 use ic_bn_lib_common::{
     traits::{http::Client, shed::TypeExtractor},
     types::{
-        acme::AcmeUrl,
         http::{ALPN_ACME, ClientOptions, Metrics as HttpServerMetrics, ServerOptions},
         shed::{ShardedOptions, ShedResponse},
         tls::TlsOptions,
@@ -451,6 +450,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
             &cli,
             &metrics_registry,
             http_metrics.clone(),
+            &mut tasks,
         )
         .context("unable to setup HTTPS")?;
 
@@ -489,23 +489,23 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     tasks.add_interval("metrics_runner", metrics_runner, 5 * SECOND);
 
     // HTTP Logs Anonymization
-    let salt_fetcher = cli
-        .obs
+    cli.obs
         .obs_log_anonymization_canister_id
         .and_then(|canister_id| {
             agent.as_ref().map(|agent| {
-                Arc::new(AnonymizationSaltFetcher::new(
+                let fetcher = Arc::new(AnonymizationSaltFetcher::new(
                     agent.clone(),
                     canister_id,
                     cli.obs.obs_log_anonymization_poll_interval,
                     anonymization_salt,
                     &metrics_registry,
-                ))
+                ));
+
+                tasks.add("anonymization_salt_fetcher", fetcher.clone());
+
+                fetcher
             })
         });
-    if let Some(v) = &salt_fetcher {
-        tasks.add("anonymization_salt_fetcher", v.clone());
-    }
 
     // Start the tasks
     tasks.start();
@@ -731,7 +731,10 @@ fn setup_tls_resolver_stub(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>
     Ok(Arc::new(resolver))
 }
 
-fn setup_tls_resolver_acme(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Error> {
+fn setup_tls_resolver_acme(
+    cli: &cli::Tls,
+    tasks: &mut TaskManager,
+) -> Result<Arc<dyn ResolvesServerCert>, Error> {
     let path = cli
         .tls_acme_credentials_path
         .clone()
@@ -742,25 +745,37 @@ fn setup_tls_resolver_acme(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>
         .clone()
         .ok_or(anyhow!("hostname not specified"))?;
 
-    let acme_url = if cli.tls_acme_staging {
-        AcmeUrl::LetsEncryptStaging
+    let tls_config = if cli.tls_acme_disable_tls_cert_verification {
+        let cfg = ic_bn_lib::rustls_acme::futures_rustls::rustls::ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(NoopServerCertVerifier::default()))
+            .with_no_client_auth();
+
+        Some(cfg)
     } else {
-        AcmeUrl::LetsEncryptProduction
+        None
     };
 
     let opts = AcmeAlpn::Opts::new(
-        acme_url,
+        cli.tls_acme_url.clone(),
         vec![hostname],
         "mailto:boundary-nodes@dfinity.org".into(),
         path,
+        tls_config,
     );
 
-    Ok(Arc::new(AcmeAlpn::AcmeAlpn::new(opts)))
+    let acme = Arc::new(AcmeAlpn::AcmeAlpn::new(opts));
+    tasks.add("acme_alpn", acme.clone());
+
+    Ok(acme)
 }
 
 /// Try to load the static resolver first, then ACME one.
 /// This is needed for integration tests where we cannot easily separate test/prod environments
-fn setup_tls_resolver(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Error> {
+fn setup_tls_resolver(
+    cli: &cli::Tls,
+    tasks: &mut TaskManager,
+) -> Result<Arc<dyn ResolvesServerCert>, Error> {
     warn!("TLS: Trying resolver: static files");
     match setup_tls_resolver_stub(cli) {
         Ok(v) => {
@@ -772,10 +787,10 @@ fn setup_tls_resolver(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Err
     }
 
     warn!(
-        "TLS: Trying resolver: ACME ALPN-01 (staging: {})",
-        cli.tls_acme_staging
+        "TLS: Trying resolver: ACME ALPN-01 (URL: {})",
+        cli.tls_acme_url
     );
-    match setup_tls_resolver_acme(cli) {
+    match setup_tls_resolver_acme(cli, tasks) {
         Ok(v) => {
             warn!("TLS: ACME resolver loaded");
             return Ok(v);
@@ -793,10 +808,11 @@ fn setup_https(
     cli: &Cli,
     registry: &Registry,
     metrics: HttpServerMetrics,
+    tasks: &mut TaskManager,
 ) -> Result<bnhttp::Server, Error> {
     use ic_bn_lib::tls;
 
-    let resolver = setup_tls_resolver(&cli.tls).context("unable to setup TLS resolver")?;
+    let resolver = setup_tls_resolver(&cli.tls, tasks).context("unable to setup TLS resolver")?;
 
     let tls_opts = TlsOptions {
         additional_alpn: vec![ALPN_ACME.to_vec()],
@@ -1084,4 +1100,73 @@ pub fn error_source<E: StdError + 'static>(error: &impl StdError) -> Option<&E> 
     }
 
     None
+}
+
+#[cfg(test)]
+mod test {
+    use std::time::Instant;
+
+    use clap::Parser;
+    use http::StatusCode;
+    use ic_bn_lib::tests::pebble::Env;
+
+    use crate::cli::Cli;
+
+    use super::*;
+
+    /// Tests `ic-boundary` startup using ACME certificates obtained from Pebble
+    #[tokio::test]
+    async fn test_startup() {
+        let pebble_env = Env::new().await;
+        let acme_cache_path = tempfile::TempDir::new().unwrap();
+        let acme_url = format!("https://{}/dir", pebble_env.addr_acme());
+
+        let args = &[
+            "",
+            "--listen-https-port",
+            "5001", // Pebble challenges on port 5001 by default
+            "--tls-hostname",
+            "foo.bar", // Pebble's DNS resolves any hostname to 127.0.0.1 by default
+            "--tls-acme-url",
+            &acme_url,
+            "--tls-acme-credentials-path",
+            acme_cache_path.path().to_str().unwrap(),
+            "--tls-acme-disable-tls-cert-verification",
+            "--registry-stub-replica",
+            "127.0.0.1:1443", // Doesn't really matter
+        ];
+
+        let cli = Cli::parse_from(args);
+
+        tokio::spawn(async move {
+            if let Err(e) = main(cli).await {
+                panic!("Unable to start ic-boundary: {e}");
+            }
+        });
+
+        let client = reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()
+            .unwrap();
+
+        // Poke ic-boundary until it issues the certificate
+        let start = Instant::now();
+        loop {
+            let req = client.get("https://127.0.0.1:5001/health").build().unwrap();
+            let res = client.execute(req).await;
+            if let Ok(v) = res
+                && v.status() == StatusCode::NO_CONTENT
+            {
+                return;
+            }
+
+            if start.elapsed() > Duration::from_secs(120) {
+                break;
+            }
+
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+
+        panic!("Unable to query ic-boundary: timed out");
+    }
 }
