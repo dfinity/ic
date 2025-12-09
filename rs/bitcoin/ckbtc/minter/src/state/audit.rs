@@ -47,7 +47,7 @@ pub fn accept_consolidate_utxos_request<R: CanisterRuntime>(
     // Note that here it shouldn't add the request to state.pending_btc_request
     // like what was done in accept_retrieve_btc_request. This is because
     // a ConsolidateUtxoRequest is accepted only *after* the transaction is
-    // built (and will then be signed and submitted), which means it is
+    // built (and will then be signed and submitted), which means it
     // should not be in pending status.
 }
 
