@@ -37,9 +37,17 @@ MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
+LIB_SRCS = glob(
+    ["src/**/*.rs"],
+    exclude = [
+        "**/*tests.rs",
+        "**/*tests*/**",
+    ],
+)
+
 rust_library(
     name = "regedit",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_name = "ic_regedit",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -63,7 +71,8 @@ rust_binary(
 rust_test(
     name = "regedit_test",
     aliases = ALIASES,
-    crate = ":regedit",
+    srcs = glob(["src/**/*.rs"]),
+    crate_root = "src/lib.rs",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

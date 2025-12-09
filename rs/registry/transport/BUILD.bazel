@@ -37,12 +37,20 @@ MACRO_DEV_DEPENDENCIES = [
     # Keep sorted.
 ]
 
-rust_library(
-    name = "transport",
-    srcs = glob([
+LIB_SRCS = glob(
+    [
         "src/**",
         "gen/**",
-    ]),
+    ],
+    exclude = [
+        "**/*tests.rs",
+        "**/*tests*/**",
+    ],
+)
+
+rust_library(
+    name = "transport",
+    srcs = LIB_SRCS,
     crate_name = "ic_registry_transport",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
@@ -51,7 +59,11 @@ rust_library(
 
 rust_test(
     name = "lib_tests",
-    crate = ":transport",
+    srcs = glob([
+        "src/**",
+        "gen/**",
+    ]),
+    crate_root = "src/lib.rs",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )

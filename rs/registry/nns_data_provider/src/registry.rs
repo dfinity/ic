@@ -403,12 +403,5 @@ async fn deserialize_and_dechunk_get_value_result(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    #[should_panic]
-    fn empty_urls_panics() {
-        RegistryCanister::new(vec![]);
-    }
-}
+#[path = "registry_tests.rs"]
+mod tests;

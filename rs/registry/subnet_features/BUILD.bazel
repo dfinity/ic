@@ -2,9 +2,17 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
+LIB_SRCS = glob(
+    ["src/**/*.rs"],
+    exclude = [
+        "**/*tests.rs",
+        "**/*tests*/**",
+    ],
+)
+
 rust_library(
     name = "subnet_features",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = LIB_SRCS,
     crate_name = "ic_registry_subnet_features",
     version = "0.9.0",
     deps = [
@@ -18,5 +26,13 @@ rust_library(
 
 rust_test(
     name = "subnet_features_test",
-    crate = ":subnet_features",
+    srcs = glob(["src/**/*.rs"]),
+    crate_root = "src/lib.rs",
+    deps = [
+        # Keep sorted.
+        "//rs/protobuf",
+        "//rs/types/management_canister_types",
+        "@crate_index//:candid",
+        "@crate_index//:serde",
+    ],
 )

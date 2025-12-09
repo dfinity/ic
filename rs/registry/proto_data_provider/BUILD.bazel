@@ -21,9 +21,17 @@ MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
+LIB_SRCS = glob(
+    ["src/**/*.rs"],
+    exclude = [
+        "**/*tests.rs",
+        "**/*tests*/**",
+    ],
+)
+
 rust_library(
     name = "proto_data_provider",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_name = "ic_registry_proto_data_provider",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -33,8 +41,9 @@ rust_library(
 
 rust_test(
     name = "proto_data_provider_test",
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
-    crate = ":proto_data_provider",
+    crate_root = "src/lib.rs",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

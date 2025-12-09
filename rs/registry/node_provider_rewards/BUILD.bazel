@@ -13,9 +13,17 @@ DEV_DEPENDENCIES = [
     "@crate_index//:pretty_assertions",
 ]
 
+LIB_SRCS = glob(
+    ["src/**/*.rs"],
+    exclude = [
+        "**/*tests.rs",
+        "**/*tests*/**",
+    ],
+)
+
 rust_library(
     name = "node_provider_rewards",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = LIB_SRCS,
     crate_name = "ic_registry_node_provider_rewards",
     version = "0.9.0",
     deps = DEPENDENCIES,
@@ -23,6 +31,7 @@ rust_library(
 
 rust_test(
     name = "node_provider_rewards_test",
-    crate = ":node_provider_rewards",
+    srcs = glob(["src/**/*.rs"]),
+    crate_root = "src/lib.rs",
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
