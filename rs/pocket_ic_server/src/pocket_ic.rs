@@ -3386,20 +3386,24 @@ fn process_mock_canister_https_response(
                 content: reply.body.clone(),
             };
 
-            let headers_size: usize = response.headers.iter().map(|h| h.name.len() + h.value.len()).sum();
+            let headers_size: usize = response
+                .headers
+                .iter()
+                .map(|h| h.name.len() + h.value.len())
+                .sum();
             let total_size = (response.content.len() + headers_size) as u64;
 
             let result = ic_https_outcalls_service::HttpsOutcallResult {
                 metrics: Some(ic_https_outcalls_service::CanisterHttpAdapterMetrics {
                     downloaded_bytes: total_size,
                 }),
-                result: Some(ic_https_outcalls_service::https_outcall_result::Result::Response(response)),
+                result: Some(
+                    ic_https_outcalls_service::https_outcall_result::Result::Response(response),
+                ),
             };
 
-            let grpc_channel = pic
-                .runtime
-                .block_on(setup_adapter_mock(Ok(result)));
-            
+            let grpc_channel = pic.runtime.block_on(setup_adapter_mock(Ok(result)));
+
             let mut client = CanisterHttpAdapterClientImpl::new(
                 pic.runtime.handle().clone(),
                 grpc_channel,
