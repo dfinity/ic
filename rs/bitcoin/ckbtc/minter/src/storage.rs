@@ -2,7 +2,7 @@
 mod tests;
 
 use crate::CanisterRuntime;
-use crate::state::eventlog::{CkBtcMinterEvent, Event, EventType};
+use crate::state::eventlog::{CkBtcMinterEvent, Event, EventLogger, EventType};
 use ic_stable_structures::{
     DefaultMemoryImpl,
     log::{Log as StableLog, NoSuchEntry},
@@ -190,15 +190,12 @@ pub fn count_events() -> u64 {
 }
 
 /// Records a new minter event.
-pub fn record_event<R: CanisterRuntime, T>(payload: T, runtime: &R)
-where
-    Event<T>: StorableEvent,
-{
-    let event = Event {
+pub fn record_event<R: CanisterRuntime>(payload: EventType, runtime: &R) {
+    let event = CkBtcMinterEvent {
         timestamp: Some(runtime.time()),
         payload,
     };
-    append_event(&event);
+    runtime.event_logger().record_event(event.into());
 }
 
 pub fn append_event<E: StorableEvent>(event: &E) {

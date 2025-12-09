@@ -285,7 +285,11 @@ pub struct Event<T> {
 /// Handle how events that register state modifications are recorded and
 /// how they are replayed to re-create an equivalent state.
 pub trait EventLogger {
-    type Event;
+    /// The type of event that is to be registered or replayed.
+    ///
+    /// Note that it must be instantiated from a [`CkBtcMinterEvent`]
+    /// since the ckBTC minter's logic decides when to record a given event.
+    type Event: From<CkBtcMinterEvent>;
 
     /// Append a new event to the log.
     fn record_event(&self, event: Self::Event);
@@ -308,6 +312,7 @@ pub enum ReplayLogError {
     InconsistentLog(String),
 }
 
+#[derive(Clone, Debug)]
 pub struct CkBtcEventLogger;
 
 impl EventLogger for CkBtcEventLogger {
