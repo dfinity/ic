@@ -18,7 +18,7 @@ const DEFAULT_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/guestos-serial.log"
 const UPGRADE_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/upgrade-guestos-serial.log";
 
 #[cfg(not(feature = "dev"))]
-const DEFAULT_VM_MEMORY_GB: u32 = 490;
+const DEFAULT_VM_MEMORY_GB: u32 = 480;
 #[cfg(not(feature = "dev"))]
 const DEFAULT_VM_VCPUS: u32 = 64;
 const UPGRADE_VM_MEMORY_GB: u32 = 4;

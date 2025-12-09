@@ -32,7 +32,7 @@ fn should_increase_minimum_withdrawal_amount_by_half() {
 
 #[proptest]
 fn test_fee_range(
-    #[strategy(arbitrary::utxo_set(5_000u64..1_000_000_000, 20..40))] utxos: UtxoSet,
+    #[strategy(arbitrary::utxo_set(5_000u64..1_000_000_000, 20..40))] mut utxos: UtxoSet,
     #[strategy(0_u64..15_000)] amount: u64,
     #[strategy(2000..10000u64)] fee_rate_in_millikoinus_per_byte: u64,
 ) {
@@ -45,7 +45,7 @@ fn test_fee_range(
         fee_estimator.fee_based_minimum_withdrawal_amount(fee_rate_in_millikoinus_per_byte),
     );
     let estimate = estimate_retrieve_doge_fee(
-        &utxos,
+        &mut utxos,
         amount,
         fee_rate_in_millikoinus_per_byte,
         &fee_estimator,
