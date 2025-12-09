@@ -2021,6 +2021,28 @@ fn canister_status_of_deleted_canister() {
 }
 
 #[test]
+fn deleting_already_deleted_canister() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+
+    let _ = test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+
+    test.delete_canister(canister_id).unwrap();
+
+    let err = test.delete_canister(canister_id).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterNotFound);
+    assert!(
+        err.description()
+            .contains(&format!("Canister {canister_id} not found"))
+    );
+
+    // The migration canister relies on this particular reject code.
+    assert_eq!(err.reject_code(), RejectCode::DestinationInvalid);
+}
+
+#[test]
 fn delete_canister_via_inter_canister_call() {
     let mut test = ExecutionTestBuilder::new()
         .with_initial_canister_cycles(1_u128 << 62)
@@ -4931,6 +4953,19 @@ where
     } else {
         assert!(!chunk_store_is_empty(&test));
     }
+}
+
+#[test]
+fn take_canister_snapshot_and_uninstall_code_clears_canister_state() {
+    let uninstall_code = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        let args = TakeCanisterSnapshotArgs::new(canister_id, None, Some(true), None);
+        test.subnet_message("take_canister_snapshot", args.encode())
+            .unwrap();
+        test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+            .unwrap();
+    };
+
+    operation_clears_canister_state(uninstall_code, true);
 }
 
 #[test]

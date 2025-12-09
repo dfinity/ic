@@ -27,6 +27,7 @@ sha2 = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 ic-ckdoge-minter-test-utils = { path = "../test_utils" }
+ic-management-canister-types = { workspace = true }
 pocket-ic = { path = "../../../../packages/pocket-ic" }
 proptest = { workspace = true }
 serde_json = { workspace = true }

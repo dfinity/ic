@@ -18,7 +18,7 @@ const DEFAULT_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/guestos-serial.log"
 const UPGRADE_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/upgrade-guestos-serial.log";
 
 #[cfg(not(feature = "dev"))]
-const DEFAULT_VM_MEMORY_GB: u32 = 490;
+const DEFAULT_VM_MEMORY_GB: u32 = 480;
 #[cfg(not(feature = "dev"))]
 const DEFAULT_VM_VCPUS: u32 = 64;
 const UPGRADE_VM_MEMORY_GB: u32 = 4;
@@ -214,7 +214,6 @@ mod tests {
                 node_reward_type: Some("type3.1".to_string()),
                 mgmt_mac: "00:11:22:33:44:55".parse().unwrap(),
                 deployment_environment: DeploymentEnvironment::Testnet,
-                use_nns_public_key: false,
                 nns_urls: vec![url::Url::parse("https://example.com").unwrap()],
                 use_node_operator_private_key: false,
                 enable_trusted_execution_environment: false,

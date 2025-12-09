@@ -232,13 +232,13 @@ impl EncryptedKey {
         let l = LagrangeCoefficients::at_zero(&NodeIndices::from_map(nodes));
 
         let c1 = l
-            .interpolate_g1(&nodes.iter().map(|i| &i.1.c1).collect::<Vec<_>>())
+            .interpolate_g1(&nodes.iter().map(|i| i.1.c1.clone()).collect::<Vec<_>>())
             .expect("Number of nodes and shares guaranteed equal");
         let c2 = l
-            .interpolate_g2(&nodes.iter().map(|i| &i.1.c2).collect::<Vec<_>>())
+            .interpolate_g2(&nodes.iter().map(|i| i.1.c2.clone()).collect::<Vec<_>>())
             .expect("Number of nodes and shares guaranteed equal");
         let c3 = l
-            .interpolate_g1(&nodes.iter().map(|i| &i.1.c3).collect::<Vec<_>>())
+            .interpolate_g1(&nodes.iter().map(|i| i.1.c3.clone()).collect::<Vec<_>>())
             .expect("Number of nodes and shares guaranteed equal");
 
         Ok(Self { c1, c2, c3 })
@@ -435,7 +435,7 @@ impl EncryptedKeyShare {
     ) -> bool {
         let (dpk, offset) = context.derive_key(master_pk);
 
-        let derived_node_key = G2Affine::from(G2Affine::generator() * &offset + node_pk);
+        let derived_node_key = G2Affine::from(G2Affine::generator().mul_vartime(&offset) + node_pk);
 
         let msg = G1Affine::augmented_hash(&dpk, input);
 

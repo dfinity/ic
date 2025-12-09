@@ -3,12 +3,17 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//rs:ic-os-pkg"])
 
 rust_library(
-    name = "guestos_recovery_tui",
+    name = "manual_guestos_recovery",
     srcs = glob(["src/**/*.rs"]),
-    crate_name = "guestos_recovery_tui",
+    crate_name = "manual_guestos_recovery",
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
     deps = [
         "@crate_index//:anyhow",
         "@crate_index//:ratatui",
+        "@crate_index//:shell-escape",
         "@crate_index//:tui-textarea",
     ],
 )
