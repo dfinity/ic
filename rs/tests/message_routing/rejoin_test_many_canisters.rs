@@ -6,13 +6,12 @@ Runbook::
 . setup the testnet of 3f + 1 nodes with f = 4 (like on mainnet)
 . pick a random node and install the state sync test canister through it
 . create 100,000 canisters via the state sync test canister
-. pick another random node rejoin_node and wait for it creating a checkpoint
-. kill the rejoined node and wait for the subnet producing a new CUP
+. pick another random node rejoin_node and kill that node
+. wait for the subnet producing a CUP
 . start the rejoin_node
-. wait until the rejoin_node is healthy
 
 Success::
-.. if the status of the rejoined node turns healthy
+.. if the rejoin_node catches up w.r.t. its certified height until the next CUP
 
 end::catalog[] */
 
@@ -34,8 +33,8 @@ use ic_types::Height;
 use rejoin_test_lib::rejoin_test_many_canisters;
 use std::time::Duration;
 
-const PER_TASK_TIMEOUT: Duration = Duration::from_secs(3600 * 2);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(3600 * 2);
+const PER_TASK_TIMEOUT: Duration = Duration::from_secs(3600);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(3600);
 const NUM_CANISTERS: usize = 100_000;
 
 const NUM_NODES: usize = 13; // mainnet value
@@ -78,24 +77,21 @@ impl Config {
     }
 }
 
-// Generic setup
 fn setup(env: TestEnv, config: Config) {
-    assert!(
-        config.nodes_count >= 4,
-        "at least 4 nodes are required for state sync"
-    );
     PrometheusVm::default()
         .start(&env)
         .expect("failed to start prometheus VM");
 
+    // VM resources are as for the "large" testnet.
+    let vm_resources = VmResources {
+        vcpus: Some(NrOfVCPUs::new(64)),
+        memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
+        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2000)),
+    };
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
-                .with_default_vm_resources(VmResources {
-                    vcpus: Some(NrOfVCPUs::new(64)),
-                    memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2000)),
-                })
+                .with_default_vm_resources(vm_resources)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .add_nodes(config.nodes_count),
         )

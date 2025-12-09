@@ -1,7 +1,6 @@
 use futures::{StreamExt, stream};
 use ic_cdk::management_canister::{
-    CanisterInstallMode, InstallCodeArgs, ProvisionalCreateCanisterWithCyclesArgs, install_code,
-    provisional_create_canister_with_cycles,
+    ProvisionalCreateCanisterWithCyclesArgs, provisional_create_canister_with_cycles,
 };
 use ic_cdk::stable::{
     WASM_PAGE_SIZE_IN_BYTES as PAGE_SIZE, stable_grow, stable_size, stable_write,
@@ -85,43 +84,26 @@ async fn read_state(index: usize) -> Result<u8, String> {
 
 #[update]
 async fn create_many_canisters(n: u64) {
-    if !n.is_multiple_of(500) {
-        panic!("The number of canisters must be a multiple of 500");
-    }
+    let mut futs = vec![];
 
-    let wat = "(module)";
-    let wasm_bytes = wat::parse_str(wat).expect("Failed to parse WAT");
-
-    for _ in 0..(n / 500) {
-        let mut futs = vec![];
-        for _ in 0..500 {
-            let fut = async {
-                let create_args = ProvisionalCreateCanisterWithCyclesArgs {
-                    amount: None,
-                    settings: None,
-                    specified_id: None,
-                };
-                let canister_id = provisional_create_canister_with_cycles(&create_args)
-                    .await
-                    .expect("Failed to create canister")
-                    .canister_id;
-                let install_args = InstallCodeArgs {
-                    mode: CanisterInstallMode::Install,
-                    canister_id,
-                    wasm_module: wasm_bytes.clone(),
-                    arg: vec![],
-                };
-                install_code(&install_args)
-                    .await
-                    .expect("Failed to install canister");
+    for _ in 0..n {
+        let fut = async {
+            let create_args = ProvisionalCreateCanisterWithCyclesArgs {
+                amount: None,
+                settings: None,
+                specified_id: None,
             };
-            futs.push(fut);
-        }
-        stream::iter(futs)
-            .buffer_unordered(500) // limit concurrency to 500
-            .collect::<Vec<_>>()
-            .await;
+            provisional_create_canister_with_cycles(&create_args)
+                .await
+                .expect("Failed to create canister");
+        };
+        futs.push(fut);
     }
+
+    stream::iter(futs)
+        .buffer_unordered(500) // limit concurrency to 500 (inter-canister queue capacity)
+        .collect::<Vec<_>>()
+        .await;
 }
 
 fn main() {}

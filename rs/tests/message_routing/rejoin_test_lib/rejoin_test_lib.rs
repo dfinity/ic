@@ -237,32 +237,30 @@ pub async fn rejoin_test_many_canisters(
         .as_provisional_create_with_amount(None)
         .call_and_wait()
         .await
-        .expect("Installation of the seed canister failed")
+        .expect("Failed to create the seed canister")
         .0;
-    let wasm = std::fs::read(get_dependency_path(
+    let seed_canister_wasm_path = get_dependency_path(
         env::var("STATESYNC_TEST_CANISTER_WASM_PATH")
             .expect("STATESYNC_TEST_CANISTER_WASM_PATH not set"),
-    ))
-    .expect("Could not read STATESYNC_TEST_CANISTER_WASM_PATH");
-    ic00.install(&seed_canister_id, &wasm)
+    );
+    let seed_canister_wasm = std::fs::read(seed_canister_wasm_path)
+        .expect("Could not read STATESYNC_TEST_CANISTER_WASM_PATH");
+    ic00.install(&seed_canister_id, &seed_canister_wasm)
         .await
         .expect("Failed to install the seed canister");
 
     info!(
         logger,
-        "Creating {} canisters via the seed canister {}.", num_canisters, seed_canister_id
+        "Creating {} canisters via the seed canister {} ...", num_canisters, seed_canister_id
     );
-    let bytes = Encode!(&num_canisters).expect("Failed to candid encode argument");
+    let bytes =
+        Encode!(&num_canisters).expect("Failed to candid encode argument for the seed canister");
     agent
         .update(&seed_canister_id, "create_many_canisters")
         .with_arg(bytes)
         .call_and_wait()
         .await
         .expect("Failed to create canisters via the seed canister");
-
-    // Kill the rejoin node after it has a checkpoint so that we can test both `copy_chunks` and `fetch_chunks` in the state sync.
-    info!(logger, "Waiting for the rejoin_node to have a checkpoint");
-    wait_for_manifest(&logger, dkg_interval + 1, rejoin_node.clone()).await;
 
     info!(
         logger,
@@ -274,11 +272,40 @@ pub async fn rejoin_test_many_canisters(
         .await_status_is_unavailable()
         .expect("Node still healthy");
 
-    info!(logger, "Start the killed node again...");
+    // Wait for the subnet to produce a CUP and then restart the rejoin_node.
+    // This way, the restarted node starts from that CUP
+    // and we can assert it to catch up until the next CUP.
+    info!(logger, "Waiting for a CUP ...");
+    let res =
+        fetch_metrics::<u64>(&logger, agent_node.clone(), vec![LATEST_CERTIFIED_HEIGHT]).await;
+    let latest_certified_height = res[LATEST_CERTIFIED_HEIGHT][0];
+    wait_for_cup(&logger, latest_certified_height, agent_node.clone()).await;
+
+    info!(logger, "Start the killed node again ...");
     rejoin_node.vm().start();
-    rejoin_node
-        .await_status_is_healthy()
-        .expect("Started node did not report healthy status");
+
+    info!(logger, "Waiting for the next CUP ...");
+    let last_cup_height = wait_for_cup(
+        &logger,
+        latest_certified_height + dkg_interval + 1,
+        agent_node.clone(),
+    )
+    .await;
+
+    let rejoin_node_status = rejoin_node
+        .status_async()
+        .await
+        .expect("Failed to get status of rejoin_node");
+    let rejoin_node_certified_height = rejoin_node_status
+        .certified_height
+        .expect("Failed to get the certified height of rejoin_node")
+        .get();
+    assert!(
+        rejoin_node_certified_height >= last_cup_height,
+        "The rejoin_node certified height {} is less than the last CUP height {}.",
+        rejoin_node_certified_height,
+        last_cup_height
+    );
 }
 
 pub async fn assert_state_sync_has_happened(
