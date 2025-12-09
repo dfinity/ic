@@ -1367,7 +1367,7 @@ pub fn estimate_retrieve_btc_fee<F: FeeEstimator>(
 }
 
 #[derive(Debug)]
-pub enum ConsolidateUtxoError {
+pub enum ConsolidateUtxosError {
     TooSoon,
     TooFewAvailableUtxos,
     EstimateFeeNotAvailable,
@@ -1393,14 +1393,14 @@ pub enum ConsolidateUtxoError {
 /// share the same logic as a retrieve_btc request.
 pub async fn consolidate_utxos<R: CanisterRuntime>(
     runtime: &R,
-) -> Result<u64, ConsolidateUtxoError> {
+) -> Result<u64, ConsolidateUtxosError> {
     // TODO DEFI-2551: make this configurable
     const MIN_CONSOLIDATION_INTERVAL: Duration = Duration::from_secs(24 * 3600);
     let min_consolidation_utxo_required = read_state(|s| s.utxo_consolidation_threshold) as usize;
     assert!(min_consolidation_utxo_required > MAX_NUM_INPUTS_IN_TRANSACTION);
     // Return early if number of available UTXOs is below consolidation threshold.
     if read_state(|s| s.available_utxos.len() < min_consolidation_utxo_required) {
-        return Err(ConsolidateUtxoError::TooFewAvailableUtxos);
+        return Err(ConsolidateUtxosError::TooFewAvailableUtxos);
     }
 
     // Return early if MIN_CONSOLIDATION_INTERVAL is not met since last submission.
@@ -1410,7 +1410,7 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
         .checked_duration_since(Timestamp::new(last_submission.unwrap_or_default()))
         < Some(MIN_CONSOLIDATION_INTERVAL)
     {
-        return Err(ConsolidateUtxoError::TooSoon);
+        return Err(ConsolidateUtxosError::TooSoon);
     }
     mutate_state(|s| s.last_consolidate_utxos_request_created_time_ns = Some(now));
     // In case of any error, restore the last request created time.
@@ -1433,7 +1433,7 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
     // TODO DEFI-2552: use 25% percentile
     let fee_millisatoshi_per_vbyte = estimate_fee_per_vbyte(runtime)
         .await
-        .ok_or(ConsolidateUtxoError::EstimateFeeNotAvailable)?;
+        .ok_or(ConsolidateUtxosError::EstimateFeeNotAvailable)?;
 
     // There will be two outputs: 1 normal output and 1 change output, each about
     // half of the total value of the input UTXOs. It could be made into just one
@@ -1458,7 +1458,7 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
                 err
             );
             restore_utxos(input_utxos);
-            return Err(ConsolidateUtxoError::BuildTx(err));
+            return Err(ConsolidateUtxosError::BuildTx(err));
         }
     };
 
@@ -1482,7 +1482,7 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
             "[consolidate_utxos]: failed to burn ckbtc from fee account {:?}",
             err
         );
-        ConsolidateUtxoError::BurnCkbtc(err, total_fee.bitcoin_fee)
+        ConsolidateUtxosError::BurnCkbtc(err, total_fee.bitcoin_fee)
     })?;
 
     let request = state::ConsolidateUtxosRequest {
@@ -1505,7 +1505,7 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
 
     submit_unsigned_request(request, fee_millisatoshi_per_vbyte, total_fee, runtime)
         .await
-        .map_err(ConsolidateUtxoError::SubmitRequest)?;
+        .map_err(ConsolidateUtxosError::SubmitRequest)?;
 
     let _ = ScopeGuard::into_inner(request_created_guard);
     Ok(block_index)
