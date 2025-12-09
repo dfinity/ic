@@ -1864,7 +1864,7 @@ fn test_utxo_consolidation() {
     let ckbtc = CkBtcSetup::new();
     let user = Principal::from(ckbtc.caller);
 
-    // Step 1: create many Utxos to trigger consolidation
+    // Step 1: create many UTXOs to trigger consolidation.
     let mut utxo_values: [u64; COUNT] = [0; COUNT];
     let mut rng = reproducible_rng();
     for x in utxo_values.iter_mut() {
