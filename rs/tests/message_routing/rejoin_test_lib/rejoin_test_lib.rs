@@ -6,6 +6,7 @@ use ic_system_test_driver::driver::test_env_api::get_dependency_path;
 use ic_system_test_driver::driver::test_env_api::retry_async;
 use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasVm, IcNodeSnapshot};
 use ic_system_test_driver::util::{MetricsFetcher, UniversalCanister, runtime_from_url};
+use ic_types::messages::ReplicaHealthStatus;
 use ic_utils::interfaces::management_canister::ManagementCanister;
 use slog::info;
 use std::collections::BTreeMap;
@@ -298,7 +299,7 @@ pub async fn rejoin_test_many_canisters(
         .expect("Failed to get status of rejoin_node");
     let rejoin_node_certified_height = rejoin_node_status
         .certified_height
-        .expect("Failed to get the certified height of rejoin_node")
+        .expect("Failed to get certified height of rejoin_node")
         .get();
     assert!(
         rejoin_node_certified_height >= last_cup_height,
@@ -306,6 +307,10 @@ pub async fn rejoin_test_many_canisters(
         rejoin_node_certified_height,
         last_cup_height
     );
+    let rejoin_node_health_status = rejoin_node_status
+        .replica_health_status
+        .expect("Failed to get replica health status of rejoin_node");
+    assert_eq!(rejoin_node_health_status, ReplicaHealthStatus::Healthy);
 }
 
 pub async fn assert_state_sync_has_happened(

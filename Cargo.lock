@@ -21370,6 +21370,7 @@ dependencies = [
  "futures",
  "ic-agent 0.40.1",
  "ic-system-test-driver",
+ "ic-types",
  "ic-utils 0.40.1",
  "slog",
  "tokio",
