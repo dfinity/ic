@@ -89,12 +89,19 @@ execute_command() {
             if [ "$confirm" == "y" ]; then
                 # Launch the NNS recovery TUI tool via hostos_tool
 
-                # Fix for serial console where size might be reported as 0 0
-                if size=$(stty size 2>/dev/null); then
-                     read -r rows cols <<< "$size"
-                     if [ "${rows:-0}" -eq 0 ] || [ "${cols:-0}" -eq 0 ]; then
-                         stty rows 36 cols 120
-                     fi
+                # Fix for serial/remote consoles where window size may be missing or tiny
+                if ! size=$(stty size 2>/dev/null); then
+                    echo "Error: could not determine terminal size. The manual-recovery TUI requires a TTY."
+                    echo "Please see /"Manual Recovery Fallback/" in the Manual Node Recovery Guide further direction."
+                    exit 1
+                fi
+
+                read -r rows cols <<< "$size"
+                # Treat anything smaller than the TUI minimum as unusable
+                min_rows=15
+                min_cols=60
+                if [ "${rows:-0}" -lt "$min_rows" ] || [ "${cols:-0}" -lt "$min_cols" ]; then
+                    stty rows 36 cols 120
                 fi
 
                 /opt/ic/bin/hostos_tool manual-recovery
