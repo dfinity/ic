@@ -205,7 +205,6 @@ async fn scrape_logs_inner(last_block_number: BlockNumber, max_block_spread: u16
     .await;
     if let ScrapeResult::DeadlineExceeded = result {
         schedule_scrape_continuation(last_block_number, max_block_spread, deadline);
-        return;
     }
 }
 
