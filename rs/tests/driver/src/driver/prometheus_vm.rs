@@ -8,9 +8,10 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use ic_crypto_sha2::Sha256;
 use maplit::hashmap;
 use reqwest::Url;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use slog::{Logger, debug, info, warn};
 
@@ -89,6 +90,17 @@ const GRAFANA_DASHBOARDS: &str = "grafana_dashboards";
 pub struct PrometheusVm {
     universal_vm: UniversalVm,
     scrape_interval: Duration,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PrometheusConfigHash {
+    hash: String,
+}
+
+impl TestEnvAttribute for PrometheusConfigHash {
+    fn attribute_name() -> String {
+        "prometheus_config_hash".to_string()
+    }
 }
 
 impl Default for PrometheusVm {
@@ -391,10 +403,7 @@ impl HasPrometheus for TestEnv {
             prometheus_config_dir.clone(),
             group_name,
         )?;
-        // Setup an SSH session to the prometheus VM which we'll use to scp the JSON files.
-        let deployed_prometheus_vm = self.get_deployed_universal_vm(&vm_name)?;
-        let session = deployed_prometheus_vm.block_on_ssh_session()?;
-        // scp the scraping target JSON files to prometheus VM.
+
         let mut target_json_files = vec![
             REPLICA_PROMETHEUS_TARGET,
             ORCHESTRATOR_PROMETHEUS_TARGET,
@@ -411,11 +420,35 @@ impl HasPrometheus for TestEnv {
             target_json_files.push(DOGECOIN_MAINNET_CANISTER_PROMETHEUS_TARGET);
             target_json_files.push(DOGECOIN_TESTNET_CANISTER_PROMETHEUS_TARGET);
         }
+
+        // Hash the contents of the scraping target JSON files and exit early if nothing changed compared to the last time we synced.
+        let mut hasher = Sha256::new();
+        for file_name in &target_json_files {
+            let file_path = prometheus_config_dir.join(file_name);
+            let mut file = File::open(file_path)?;
+            std::io::copy(&mut file, &mut hasher)?;
+        }
+        let new_hash = hex::encode(hasher.finish());
+
+        if let Ok(stored_hash) = PrometheusConfigHash::try_read_attribute(self)
+            && stored_hash.hash == new_hash
+        {
+            info!(
+                self.logger(),
+                "No changes in Prometheus scraping targets detected, skipping sync."
+            );
+            return Ok(());
+        }
+
+        // scp the scraping target JSON files to prometheus VM.
+        let deployed_prometheus_vm = self.get_deployed_universal_vm(&vm_name)?;
+        let session = deployed_prometheus_vm.block_on_ssh_session()?;
         for file in &target_json_files {
             let from = prometheus_config_dir.join(file);
             let to = Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(file);
             scp_send_to(self.logger(), &session, &from, &to, 0o644);
         }
+        PrometheusConfigHash { hash: new_hash }.write_attribute(self);
         Ok(())
     }
 

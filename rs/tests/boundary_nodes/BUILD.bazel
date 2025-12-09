@@ -137,6 +137,7 @@ system_test_nns(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    prometheus_vm_required_host_features = ["performance"],
     tags = ["manual"],
     runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -157,6 +158,7 @@ system_test(
         "boot_image_minimal_size_gibibytes": 500,
     },
     env_inherit = ["BOUNDARY_NODE_IPV6"],
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],
@@ -178,6 +180,7 @@ system_test(
         "boot_image_minimal_size_gibibytes": 500,
     },
     env_inherit = ["BOUNDARY_NODE_IPV6"],
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],

@@ -135,12 +135,6 @@ pub struct CliArgs {
     )]
     pub required_host_features: Option<Vec<HostFeature>>,
 
-    #[clap(
-        long = "enable-metrics",
-        help = "If set, a PrometheusVm will be spawned running both p8s configured to scrape the testnet & Grafana."
-    )]
-    pub enable_metrics: bool,
-
     #[clap(long = "no-logs", help = "If set, the vector vm will not be spawned.")]
     pub no_logs: bool,
 
@@ -737,8 +731,12 @@ impl SystemTestGroup {
         };
 
         let metrics_task_id = TaskId::Test(String::from(METRICS_TASK_NAME));
-        let metrics_task = if group_ctx.metrics_enabled {
+        let metrics_enabled: bool = std::env::var("ENABLE_METRICS")
+            .map(|v| v == "1" || v.to_lowercase() == "true")
+            .unwrap_or(false);
+        let metrics_task = if metrics_enabled {
             let logger = group_ctx.logger().clone();
+            info!(logger, "Setting up PrometheusVm ...");
             let group_ctx = group_ctx.clone();
 
             let metrics_task = subproc(
@@ -754,7 +752,22 @@ impl SystemTestGroup {
                         std::thread::sleep(KEEPALIVE_INTERVAL);
                     }
 
+                    let host_features: Vec<HostFeature> =
+                        std::env::var("PROMETHEUS_VM_REQUIRED_HOST_FEATURES")
+                            .map_err(|e| e.to_string())
+                            .and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string()))
+                            .unwrap_or_default();
+
+                    let prometheus_scrape_interval =
+                        std::env::var("PROMETHEUS_SCRAPE_INTERVAL_SECS")
+                            .ok()
+                            .and_then(|s| s.parse::<u64>().ok())
+                            .map(Duration::from_secs)
+                            .unwrap_or(Duration::from_secs(10));
+
                     PrometheusVm::default()
+                        .with_required_host_features(host_features)
+                        .with_scrape_interval(prometheus_scrape_interval)
                         .start(&env)
                         .expect("failed to start prometheus VM");
                     loop {
@@ -1013,7 +1026,6 @@ impl SystemTestGroup {
             args.debug_keepalive,
             args.no_farm_keepalive || args.no_group_ttl,
             args.group_base_name,
-            args.enable_metrics,
             !args.no_logs,
             args.exclude_logs,
             args.quiet,

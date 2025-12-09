@@ -195,6 +195,9 @@ def system_test(
         tags = [],
         test_timeout = "long",
         flaky = False,
+        enable_metrics = False,
+        prometheus_vm_required_host_features = [],
+        prometheus_vm_scrape_interval_secs = 10,
         colocated_test_driver_vm_resources = default_vm_resources,
         colocated_test_driver_vm_required_host_features = [],
         colocated_test_driver_vm_enable_ipv4 = False,
@@ -233,6 +236,9 @@ def system_test(
       tags: additional tags for the system_test.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
       flaky: rerun in case of failure (up to 3 times).
+      enable_metrics: if True, a PrometheusVm will be spawned running both p8s (configured to scrape the testnet) & Grafana.
+      prometheus_vm_required_host_features: a list of strings specifying the required host features of the PrometheusVm.
+      prometheus_vm_scrape_interval_secs: the scrape interval in seconds for the PrometheusVm. Defaults to 10 seconds.
       colocated_test_driver_vm_resources: a structure describing
       the required resources of the colocated test-driver VM. For example:
         {
@@ -435,6 +441,14 @@ def system_test(
         name: "$(rootpath {})".format(dep)
         for name, dep in _env_deps.items()
     }
+
+    if enable_metrics:
+        env |= {"ENABLE_METRICS": "1"}
+
+    env |= {
+        "PROMETHEUS_VM_REQUIRED_HOST_FEATURES": json.encode(prometheus_vm_required_host_features),
+        "PROMETHEUS_VM_SCRAPE_INTERVAL_SECS": json.encode(prometheus_vm_scrape_interval_secs),
+    }
     for dep in _env_deps.values():
         if dep not in deps:
             deps.append(dep)
@@ -455,7 +469,7 @@ def system_test(
         exclude_logs = exclude_logs,
     )
 
-    env = env | {
+    env |= {
         "COLOCATED_TEST": test_name,
         "COLOCATED_TEST_DRIVER_VM_REQUIRED_HOST_FEATURES": json.encode(colocated_test_driver_vm_required_host_features),
         "COLOCATED_TEST_DRIVER_VM_RESOURCES": json.encode(colocated_test_driver_vm_resources),

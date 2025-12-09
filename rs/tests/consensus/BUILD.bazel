@@ -44,6 +44,7 @@ rust_library(
 
 system_test(
     name = "catch_up_loop_prevention_test",
+    prometheus_vm_scrape_interval_secs = 5,
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
         "long_test",

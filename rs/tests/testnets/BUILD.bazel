@@ -11,6 +11,7 @@ IC_GATEWAY_UVM_IMAGE = [
 
 system_test(
     name = "single_large_node",
+    enable_metrics = True,
     tags = [
         "dynamic_testnet",
         "manual",
