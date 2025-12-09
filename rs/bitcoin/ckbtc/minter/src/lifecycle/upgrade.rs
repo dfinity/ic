@@ -1,9 +1,9 @@
 use crate::CanisterRuntime;
 use crate::logs::Priority;
-use crate::state::eventlog::{EventType, replay};
+use crate::state::eventlog::{EventLogger, EventType};
 use crate::state::invariants::CheckInvariantsImpl;
 use crate::state::{Mode, replace_state};
-use crate::storage::{count_events, events, migrate_old_events_if_not_empty, record_event};
+use crate::storage::{count_events, migrate_old_events_if_not_empty, record_event};
 use candid::{CandidType, Deserialize};
 use canlog::log;
 use ic_base_types::CanisterId;
@@ -76,9 +76,13 @@ pub fn post_upgrade<R: CanisterRuntime>(upgrade_args: Option<UpgradeArgs>, runti
         count_events()
     );
 
-    let state = replay::<CheckInvariantsImpl>(events()).unwrap_or_else(|e| {
-        ic_cdk::trap(format!("[upgrade]: failed to replay the event log: {e:?}"))
-    });
+    let eventlog = runtime.event_logger();
+
+    let state = eventlog
+        .replay::<CheckInvariantsImpl>(eventlog.events_iter())
+        .unwrap_or_else(|e| {
+            ic_cdk::trap(format!("[upgrade]: failed to replay the event log: {e:?}"))
+        });
 
     runtime.validate_config(&state);
 

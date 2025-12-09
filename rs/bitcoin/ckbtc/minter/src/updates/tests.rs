@@ -2,6 +2,7 @@ mod update_balance {
     use crate::management::{CallError, CallSource, get_utxos, sign_with_ecdsa};
     use crate::metrics::{Histogram, NumUtxoPages};
     use crate::metrics::{LatencyHistogram, MetricsResult};
+    use crate::state::eventlog::CkBtcMinterEvent;
     use crate::state::{SuspendedReason, audit, eventlog::EventType, mutate_state, read_state};
     use crate::test_fixtures::{
         BTC_CHECKER_CANISTER_ID, DAY, MINTER_CANISTER_ID, NOW, ecdsa_public_key, get_uxos_response,
@@ -13,7 +14,7 @@ mod update_balance {
     use crate::updates::update_balance::{
         SuspendedUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
     };
-    use crate::{CanisterRuntime, GetUtxosResponse, Timestamp, storage};
+    use crate::{CanisterRuntime, GetUtxosResponse, Timestamp};
     use ic_btc_checker::{CheckTransactionResponse, CheckTransactionStatus};
     use ic_btc_interface::Utxo;
     use ic_management_canister_types_private::BoundedVec;
@@ -91,7 +92,7 @@ mod update_balance {
             )
         });
         mutate_state(|s| s.check_fee = ignored_utxo.value - 1);
-        let events_before: Vec<_> = storage::events().map(|event| event.payload).collect();
+        let events_before: Vec<_> = events().map(|event| event.payload).collect();
 
         mock_derive_user_address(&mut runtime, account);
         mock_get_utxos_for_account(&mut runtime, account, vec![ignored_utxo.clone()]);
@@ -144,7 +145,7 @@ mod update_balance {
             )
         });
         mutate_state(|s| s.check_fee = ignored_utxo.value - 1);
-        let events_before: Vec<_> = storage::events().map(|event| event.payload).collect();
+        let events_before: Vec<_> = events().map(|event| event.payload).collect();
 
         mock_derive_user_address(&mut runtime, account);
         mock_get_utxos_for_account(&mut runtime, account, vec![ignored_utxo.clone()]);
@@ -216,7 +217,7 @@ mod update_balance {
         });
         let check_fee = read_state(|s| s.check_fee);
         let minted_amount = quarantined_utxo.value - check_fee;
-        let events_before: Vec<_> = storage::events().map(|event| event.payload).collect();
+        let events_before: Vec<_> = events().map(|event| event.payload).collect();
 
         mock_derive_user_address(&mut runtime, account);
         mock_get_utxos_for_account(&mut runtime, account, vec![quarantined_utxo.clone()]);
@@ -282,7 +283,7 @@ mod update_balance {
         });
         let check_fee = read_state(|s| s.check_fee);
         let minted_amount = utxo.value - check_fee;
-        let events_before: Vec<_> = storage::events().map(|event| event.payload).collect();
+        let events_before: Vec<_> = events().map(|event| event.payload).collect();
 
         mock_derive_user_address(&mut runtime, account);
         mock_get_utxos_for_account(
@@ -742,7 +743,7 @@ mod update_balance {
             }),
         };
 
-        let events_before: Vec<_> = storage::events().map(|event| event.payload).collect();
+        let events_before: Vec<_> = events().map(|event| event.payload).collect();
         let update_balance_args = UpdateBalanceArgs {
             owner: Some(account.owner),
             subaccount: account.subaccount,
@@ -930,7 +931,7 @@ mod update_balance {
             .iter()
             .chain(expected_new_events.iter())
             .collect::<Vec<_>>();
-        let actual_events: Vec<_> = storage::events().map(|event| event.payload).collect();
+        let actual_events: Vec<_> = events().map(|event| event.payload).collect();
         let actual_events_ref = actual_events.iter().collect::<Vec<_>>();
 
         assert_eq!(expected_events.as_slice(), actual_events_ref.as_slice());
@@ -956,5 +957,10 @@ mod update_balance {
                     }
                 })
         })
+    }
+
+    fn events() -> impl Iterator<Item = CkBtcMinterEvent> {
+        use crate::state::eventlog::{CkBtcEventLogger, EventLogger};
+        CkBtcEventLogger.events_iter()
     }
 }

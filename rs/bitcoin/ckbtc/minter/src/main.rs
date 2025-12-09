@@ -60,13 +60,19 @@ fn ok_or_die(result: Result<(), String>) {
 /// Checks that ckBTC minter state internally consistent.
 #[cfg(feature = "self_check")]
 fn check_invariants() -> Result<(), String> {
-    use ic_ckbtc_minter::state::{eventlog::replay, invariants::CheckInvariantsImpl};
+    use ic_ckbtc_minter::state::{
+        eventlog::{CkBtcEventLogger, EventLogger},
+        invariants::CheckInvariantsImpl,
+    };
+
+    let events_logger = CkBtcEventLogger;
 
     read_state(|s| {
         s.check_invariants()?;
 
-        let events: Vec<_> = storage::events().collect();
-        let recovered_state = replay::<CheckInvariantsImpl>(events.clone().into_iter())
+        let events: Vec<_> = events_logger.events_iter().collect();
+        let recovered_state = events_logger
+            .replay::<CheckInvariantsImpl>(events.clone().into_iter())
             .unwrap_or_else(|e| panic!("failed to replay log {events:?}: {e:?}"));
 
         recovered_state.check_invariants()?;

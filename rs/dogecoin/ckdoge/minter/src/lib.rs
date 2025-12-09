@@ -13,6 +13,7 @@ pub mod test_fixtures;
 
 use crate::address::DogecoinAddress;
 use crate::dogecoin_canister::MillikoinuPerByte;
+use crate::event::CkDogeEventLogger;
 use crate::fees::DogecoinFeeEstimator;
 use crate::lifecycle::init::Network;
 use async_trait::async_trait;
@@ -47,9 +48,14 @@ pub struct DogeCanisterRuntime {}
 #[async_trait]
 impl CanisterRuntime for DogeCanisterRuntime {
     type Estimator = DogecoinFeeEstimator;
+    type EventLog = CkDogeEventLogger;
 
     fn fee_estimator(&self, state: &CkBtcMinterState) -> DogecoinFeeEstimator {
         DogecoinFeeEstimator::from_state(state)
+    }
+
+    fn event_logger(&self) -> Self::EventLog {
+        CkDogeEventLogger
     }
 
     fn refresh_fee_percentiles_frequency(&self) -> Duration {

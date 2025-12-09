@@ -56,6 +56,22 @@ pub struct EventIterator<Event> {
     marker: PhantomData<Event>,
 }
 
+impl<Event> EventIterator<Event> {
+    pub fn new() -> Self {
+        EventIterator {
+            buf: vec![],
+            pos: 0,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<Event> Default for EventIterator<Event> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<Event: StorableEvent> Iterator for EventIterator<Event> {
     type Item = Event;
 
@@ -182,6 +198,10 @@ where
         timestamp: Some(runtime.time()),
         payload,
     };
+    append_event(&event);
+}
+
+pub fn append_event<E: StorableEvent>(event: &E) {
     let bytes = event.to_bytes().to_vec();
     V1_EVENTS.with(|events| {
         events
@@ -216,7 +236,7 @@ pub fn record_event_v0<R: CanisterRuntime>(payload: EventType, runtime: &R) {
 #[cfg(feature = "canbench-rs")]
 mod benches {
     use super::*;
-    use crate::state::eventlog::replay;
+    use crate::state::eventlog::{CkBtcEventLogger, EventLogger};
     use crate::state::replace_state;
     use crate::state::{CkBtcMinterState, invariants::CheckInvariants};
     use crate::{IC_CANISTER_RUNTIME, state};
@@ -299,9 +319,11 @@ mod benches {
         });
         assert_eq!(count_events(), 768_723);
 
-        let state = replay::<DoNotCheckInvariants>(events()).unwrap_or_else(|e| {
-            ic_cdk::trap(format!("[upgrade]: failed to replay the event log: {e:?}"))
-        });
+        let state = CkBtcEventLogger
+            .replay::<DoNotCheckInvariants>(CkBtcEventLogger.events_iter())
+            .unwrap_or_else(|e| {
+                ic_cdk::trap(format!("[upgrade]: failed to replay the event log: {e:?}"))
+            });
         state.validate_config();
         replace_state(state);
     }

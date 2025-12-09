@@ -156,16 +156,19 @@ fn ok_or_die(result: Result<(), String>) {
 /// Checks that ckDOGE minter state internally consistent.
 #[cfg(feature = "self_check")]
 fn check_invariants() -> Result<(), String> {
-    use ic_ckbtc_minter::{
-        state::{eventlog::replay, invariants::CheckInvariantsImpl, read_state},
-        storage,
+    use ic_ckbtc_minter::state::{
+        eventlog::EventLogger, invariants::CheckInvariantsImpl, read_state,
     };
+    use ic_ckdoge_minter::event::CkDogeEventLogger;
+
+    let events_logger = CkDogeEventLogger;
 
     read_state(|s| {
         s.check_invariants()?;
 
-        let events: Vec<_> = storage::events().collect();
-        let recovered_state = replay::<CheckInvariantsImpl>(events.clone().into_iter())
+        let events: Vec<_> = events_logger.events_iter().collect();
+        let recovered_state = events_logger
+            .replay::<CheckInvariantsImpl>(events.clone().into_iter())
             .unwrap_or_else(|e| panic!("failed to replay log {events:?}: {e:?}"));
 
         recovered_state.check_invariants()?;

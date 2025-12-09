@@ -8,7 +8,9 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
 use ic_ckbtc_minter::state::CkBtcMinterState;
-use ic_ckbtc_minter::state::eventlog::{CkBtcMinterEvent, EventType, replay};
+use ic_ckbtc_minter::state::eventlog::{
+    CkBtcEventLogger, CkBtcMinterEvent, EventLogger, EventType,
+};
 use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use ic_ckbtc_minter::{ECDSAPublicKey, Network};
 use std::cmp::Reverse;
@@ -29,7 +31,7 @@ pub mod mock {
     use ic_ckbtc_minter::updates::update_balance::UpdateBalanceError;
     use ic_ckbtc_minter::{
         CanisterRuntime, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
-        Network, tx,
+        Network, state::eventlog::CkBtcEventLogger, tx,
     };
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
@@ -43,6 +45,7 @@ pub mod mock {
         #[async_trait]
         impl CanisterRuntime for CanisterRuntime {
             type Estimator = BitcoinFeeEstimator;
+            type EventLog = CkBtcEventLogger;
             fn caller(&self) -> Principal;
             fn id(&self) -> Principal;
             fn time(&self) -> u64;
@@ -53,6 +56,7 @@ pub mod mock {
             fn derive_minter_address(&self, state: &CkBtcMinterState) -> BitcoinAddress;
             fn derive_minter_address_str(&self, state: &CkBtcMinterState) -> String;
             fn refresh_fee_percentiles_frequency(&self) -> Duration;
+            fn event_logger(&self) -> CkBtcEventLogger;
             fn fee_estimator(&self, state: &CkBtcMinterState) -> BitcoinFeeEstimator;
             async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<u64>, CallError>;
             async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
@@ -82,7 +86,8 @@ pub fn mock_ecdsa_public_key() -> ECDSAPublicKey {
 
 static MAINNET_EVENTS: LazyLock<GetEventsResult> = LazyLock::new(|| Mainnet.deserialize());
 static MAINNET_STATE: LazyLock<CkBtcMinterState> = LazyLock::new(|| {
-    replay::<SkipCheckInvariantsImpl>(MAINNET_EVENTS.events.iter().cloned())
+    CkBtcEventLogger
+        .replay::<SkipCheckInvariantsImpl>(MAINNET_EVENTS.events.iter().cloned())
         .expect("Failed to replay events")
 });
 static TESTNET_EVENTS: LazyLock<GetEventsResult> = LazyLock::new(|| Testnet.deserialize());
@@ -135,7 +140,8 @@ async fn should_have_not_many_transactions_with_many_used_utxos() {
 async fn should_replay_events_for_testnet() {
     Testnet.retrieve_and_store_events_if_env().await;
 
-    let state = replay::<SkipCheckInvariantsImpl>(TESTNET_EVENTS.events.iter().cloned())
+    let state = CkBtcEventLogger
+        .replay::<SkipCheckInvariantsImpl>(TESTNET_EVENTS.events.iter().cloned())
         .expect("Failed to replay events");
     state
         .check_invariants()
@@ -154,7 +160,8 @@ async fn should_replay_events_for_testnet() {
 fn should_replay_events_and_check_invariants() {
     fn test(events: &GetEventsResult) {
         println!("Replaying {} events", events.total_event_count);
-        let _state = replay::<CheckInvariantsImpl>(events.events.iter().cloned())
+        let _state = CkBtcEventLogger
+            .replay::<CheckInvariantsImpl>(events.events.iter().cloned())
             .expect("Failed to replay events");
     }
     test(&MAINNET_EVENTS);
