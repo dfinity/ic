@@ -69,7 +69,7 @@ pub struct InitArgs {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub get_utxos_cache_expiration_seconds: Option<u64>,
 
-    /// The minimum number of available UTXOs required to trigger a conslidation.
+    /// The minimum number of available UTXOs required to trigger a consolidation.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub utxo_consolidation_threshold: Option<u64>,
 }
