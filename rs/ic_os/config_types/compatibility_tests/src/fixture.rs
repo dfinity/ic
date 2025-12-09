@@ -72,6 +72,7 @@ fn generate_hostos_config() -> HostOSConfig {
         use_node_operator_private_key: true,
         use_ssh_authorized_keys: false,
         icos_dev_settings: ICOSDevSettings::default(),
+        enable_beta_registration_feature: None,
     };
 
     #[allow(deprecated)]

@@ -70,6 +70,9 @@ struct ConfigIni {
 
     #[arg(long)]
     verbose: bool,
+
+    #[arg(long)]
+    enable_beta_registration_feature: Option<bool>,
 }
 
 #[derive(Args)]
@@ -185,6 +188,7 @@ fn main() -> Result<(), Error> {
             domain_name,
             enable_trusted_execution_environment,
             verbose,
+            enable_beta_registration_feature,
         } = cli.config_ini;
 
         ConfigIniSettings {
@@ -198,6 +202,7 @@ fn main() -> Result<(), Error> {
             verbose,
             node_reward_type,
             enable_trusted_execution_environment,
+            enable_beta_registration_feature,
         }
     };
     write_config(config_ini.path(), &settings).context("failed to write config file")?;
