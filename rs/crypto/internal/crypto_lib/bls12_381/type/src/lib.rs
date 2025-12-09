@@ -2443,11 +2443,23 @@ impl G2Prepared {
     pub fn neg_generator() -> &'static Self {
         &G2PREPARED_NEG_G
     }
+
+    /// Return statistics related to the G2Prepared cache
+    pub fn cache_statistics() -> crate::cache::G2PreparedCacheStatistics {
+        crate::cache::G2PreparedCache::global().cache_statistics()
+    }
 }
 
 impl From<&G2Affine> for G2Prepared {
     fn from(v: &G2Affine) -> Self {
-        Self::new((*v.inner()).into())
+        let bytes = v.serialize();
+        if let Some(prep) = crate::cache::G2PreparedCache::global().get(&bytes) {
+            prep
+        } else {
+            let prep = Self::new((*v.inner()).into());
+            crate::cache::G2PreparedCache::global().insert(bytes, prep.clone());
+            prep
+        }
     }
 }
 
