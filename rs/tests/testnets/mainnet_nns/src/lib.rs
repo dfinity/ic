@@ -703,30 +703,16 @@ fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcN
 
 fn delete_local_store(node: &IcNodeSnapshot, session: &Session) -> Result<String> {
     const PROD_LOCAL_STORE: &str = "/var/lib/ic/data/ic_registry_local_store";
-    const TMP_EMPTY_DIR: &str = "/tmp/empty_dir";
 
-    // TODO: replace with rm -rf below if it works
     node.block_on_bash_script_from_session(
         session,
         &format!(
             r#"
                 set -e
-                mkdir -p {TMP_EMPTY_DIR}
-                sudo chown --reference={PROD_LOCAL_STORE} {TMP_EMPTY_DIR}
-                sudo chmod --reference={PROD_LOCAL_STORE} {TMP_EMPTY_DIR}
-                sudo mount --bind {TMP_EMPTY_DIR} {PROD_LOCAL_STORE}
+                sudo rm -rf {PROD_LOCAL_STORE}/*
             "#
         ),
     )
-    // node.block_on_bash_script_from_session(
-    //     session,
-    //     &format!(
-    //         r#"
-    //             set -e
-    //             sudo rm -rf {PROD_LOCAL_STORE}/*
-    //         "#
-    //     ),
-    // )
 }
 
 fn patch_config_nns_urls(
