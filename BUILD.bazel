@@ -11,7 +11,6 @@ exports_files([
     "buf.yaml",
     "clippy.toml",
     "rustfmt.toml",
-
     "WORKSPACE.bazel",
     "mainnet-canister-revisions.json",
     "mainnet-icos-images.bzl",
