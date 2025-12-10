@@ -240,7 +240,9 @@ pub enum RetrieveBtcStatusV2 {
 }
 
 /// Controls which operations the minter can perform.
-#[derive(Clone, Eq, PartialEq, Debug, Serialize, candid::CandidType, serde::Deserialize)]
+#[derive(
+    Clone, Eq, PartialEq, Debug, Serialize, candid::CandidType, serde::Deserialize, Default,
+)]
 pub enum Mode {
     /// Minter's state is read-only.
     ReadOnly,
@@ -249,6 +251,7 @@ pub enum Mode {
     /// Only the specified principals can deposit BTC.
     DepositsRestrictedTo(Vec<Principal>),
     /// No restrictions on the minter interactions.
+    #[default]
     GeneralAvailability,
 }
 
@@ -285,12 +288,6 @@ impl Mode {
                 Ok(())
             }
         }
-    }
-}
-
-impl Default for Mode {
-    fn default() -> Self {
-        Self::GeneralAvailability
     }
 }
 
