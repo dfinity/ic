@@ -23,9 +23,7 @@ pub fn accept_retrieve_btc_request<R: CanisterRuntime>(
         EventType::AcceptedRetrieveBtcRequest(request.clone()),
         runtime,
     );
-    state
-        .pending_retrieve_btc_requests
-        .push(request.clone());
+    state.pending_retrieve_btc_requests.push(request.clone());
     if let Some(account) = request.reimbursement_account {
         state
             .retrieve_btc_account_to_block_indices
