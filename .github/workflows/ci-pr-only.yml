@@ -53,7 +53,7 @@ jobs:
               --test_tag_filters="didc"
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
-  lint-and-format:
+  autofix:
     name: Lint and Format
     runs-on: *dind-small-setup
     container: *container-setup
