@@ -1304,7 +1304,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
                 .set(batch.batch_number.get() as i64);
             state.after_split();
         }
-        // If this is the round after an onlins subnet split, record the split height.
+        // If this is the round after an online subnet split, record the split height.
         if let Some(split_from) = state.metadata.subnet_split_from {
             self.metrics
                 .subnet_split_height
