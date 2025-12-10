@@ -1138,6 +1138,7 @@ dependencies = [
  "rand 0.8.5",
  "rexpect",
  "ssh2",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
