@@ -1138,6 +1138,7 @@ dependencies = [
  "rand 0.8.5",
  "rexpect",
  "ssh2",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -18030,6 +18031,7 @@ name = "messaging-test-utils"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "ic-limits",
  "ic-types",
  "messaging-test",
  "proptest",
