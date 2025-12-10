@@ -2,7 +2,7 @@
 
 ## Guidelines
 
-Thank you for your interest in contributing to the Internet Computer Protocol. If you'd like to contribute a feature or bug fix, please **reach out to us first** so that we can discuss feasibility and implementation strategies. You can reach out to us on the [forum](https://forum.dfinity.org/).
+Thank you for your interest in contributing to the implementation of the Internet Computer Protocol. If you'd like to contribute a feature or bug fix, please **reach out to us first** so that we can discuss feasibility and implementation strategies. You can reach out to us on the [forum](https://forum.dfinity.org/).
 
 Please make sure to read the [LICENSE](LICENSE), as well as our general [Contribution Licence Agreement](https://github.com/dfinity/cla/blob/main/CLA.md). If this is your first time contributing to a Dfinity repository you will be prompted on your PR to sign the CLA agreement first.
 
