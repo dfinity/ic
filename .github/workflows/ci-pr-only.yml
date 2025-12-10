@@ -124,7 +124,11 @@ jobs:
     container: *container-setup
     timeout-minutes: 90
     steps:
-      - *checkout
+      - &checkout
+        name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit-sha }}
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
@@ -222,11 +226,7 @@ jobs:
       SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
       REPO_NAME: ${{ github.repository }}
     steps:
-      - &checkout
-        name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.commit-sha }}
+      - *checkout
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
