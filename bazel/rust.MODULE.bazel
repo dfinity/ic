@@ -992,7 +992,7 @@ crate.spec(
 crate.spec(
     features = ["prime"],
     package = "num-bigint-dig",
-    version = "^0.8",
+    version = "^0.9",
 )
 crate.spec(
     package = "num-rational",
