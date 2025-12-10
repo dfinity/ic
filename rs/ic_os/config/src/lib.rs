@@ -67,7 +67,6 @@ mod tests {
             node_reward_type: Some("type3.1".to_string()),
             mgmt_mac: "ec:2a:72:31:a2:0c".parse().unwrap(),
             deployment_environment: DeploymentEnvironment::Mainnet,
-            use_nns_public_key: false,
             nns_urls: vec!["http://localhost".parse().unwrap()],
             use_node_operator_private_key: true,
             enable_trusted_execution_environment: true,
@@ -75,11 +74,7 @@ mod tests {
             icos_dev_settings,
         };
         let setupos_settings = SetupOSSettings;
-        #[allow(deprecated)]
         let hostos_settings = HostOSSettings {
-            vm_memory: 16,
-            vm_cpu: "kvm".to_string(),
-            vm_nr_of_vcpus: 64,
             verbose: false,
             hostos_dev_settings: HostOSDevSettings {
                 vm_memory: 16,
