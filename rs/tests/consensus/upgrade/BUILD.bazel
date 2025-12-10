@@ -19,9 +19,12 @@ rust_library(
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
+        "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:ic-utils",
+        "@crate_index//:regex",
         "@crate_index//:slog",
+        "@crate_index//:tokio",
     ],
 )
 

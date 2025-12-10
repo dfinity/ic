@@ -88,6 +88,7 @@ use ic_nns_governance::{
         reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
         settle_neurons_fund_participation_request, swap_background_information,
     },
+    proposals::execute_nns_function::ValidExecuteNnsFunction,
 };
 use ic_nns_governance::{
     canister_state::{governance_mut, set_governance_for_tests},
@@ -875,6 +876,7 @@ async fn test_manage_network_economics_change_one_deep_subfield() {
                 reject_cost_e8s: 0,
                 ..Default::default()
             })),
+            self_describing_action: None,
         },
     )
     .await
@@ -981,6 +983,7 @@ async fn test_manage_network_economics_reject_invalid() {
                     reject_cost_e8s: 0,
                     ..Default::default()
                 })),
+                self_describing_action: None,
             },
         )
         .await;
@@ -1178,6 +1181,7 @@ async fn test_manage_network_economics_revalidate_at_execution_time(
                     }),
                     ..Default::default()
                 })),
+                self_describing_action: None,
             },
         )
         .await
@@ -1200,6 +1204,7 @@ async fn test_manage_network_economics_revalidate_at_execution_time(
                     }),
                     ..Default::default()
                 })),
+                self_describing_action: None,
             },
         )
         .await
@@ -1349,7 +1354,7 @@ async fn test_mint_monthly_node_provider_rewards() {
         xdr_conversion_rate,
         minimum_xdr_permyriad_per_icp,
         maximum_node_provider_rewards_e8s,
-        registry_version,
+        registry_version: _,
         node_providers,
         algorithm_version: _,
     } = most_recent_monthly_node_provider_rewards;
@@ -1364,8 +1369,6 @@ async fn test_mint_monthly_node_provider_rewards() {
         maximum_node_provider_rewards_e8s,
         Some(default_economics.maximum_node_provider_rewards_e8s)
     );
-    // It happens to be 5, we just want to ensure it is set.
-    assert_eq!(registry_version, Some(5));
     assert_eq!(node_providers.len(), 1);
 }
 
@@ -2637,14 +2640,14 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
 
     assert_eq!(*gov.latest_reward_event(), expected_initial_event);
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS / 2);
-    run_pending_timers();
+    run_pending_timers().await;
     gov.run_periodic_tasks().now_or_never();
 
     // Too early: nothing should have changed
     assert_eq!(*gov.latest_reward_event(), expected_initial_event);
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
     // We are now 1.5 reward periods (1.5 days) past genesis.1
-    run_pending_timers();
+    run_pending_timers().await;
     gov.run_periodic_tasks().now_or_never();
     // A reward event should have happened, albeit an empty one, i.e.,
     // given that no voting took place, no rewards were distributed.
@@ -2687,7 +2690,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     // total_available_e8s_equivalent is equal to 199 maturity.
     fake_driver.advance_time_by(2 * REWARD_DISTRIBUTION_PERIOD_SECONDS);
     // We are now at +3.5 reward periods.
-    run_pending_timers();
+    run_pending_timers().await;
     gov.run_periodic_tasks().now_or_never();
     {
         let fully_elapsed_reward_rounds = 3;
@@ -2713,7 +2716,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     fake_driver.advance_time_by(3 * REWARD_DISTRIBUTION_PERIOD_SECONDS - 5);
     // We are now at +6.5 - epsilon reward periods. Notice that at 6.5 reward
     // periods, the proposal become rewardable.
-    run_pending_timers();
+    run_pending_timers().await;
     gov.run_periodic_tasks().now_or_never();
     // This should have triggered an empty reward event
     assert_eq!(gov.latest_reward_event().day_after_genesis, 6);
@@ -2723,12 +2726,12 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
 
     // This should generate a RewardEvent, because we now have a rewardable
     // proposal (i.e. the proposal has reward_status ReadyToSettle).
-    run_pending_timers();
+    run_pending_timers().await;
     gov.run_periodic_tasks().now_or_never();
     assert_eq!(gov.latest_reward_event().day_after_genesis, 6);
     // let's advance far enough to trigger a reward event
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS + 1);
-    run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(3), 3);
+    run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(3), 3).await;
 
     // Inspect latest_reward_event.
     let fully_elapsed_reward_rounds = 7;
@@ -2786,7 +2789,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
 
     // Now let's advance again -- a new empty reward event should happen
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    run_pending_timers();
+    run_pending_timers().await;
 
     assert_eq!(
         *gov.latest_reward_event(),
@@ -2840,7 +2843,7 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
     let gov = governance_mut();
     schedule_tasks();
 
-    run_pending_timers();
+    run_pending_timers().await;
     // Initial reward event
     assert_eq!(
         *gov.latest_reward_event(),
@@ -2891,7 +2894,7 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
     // total_available_e8s_equivalent is equal to reward function * total supply / 365.25,
     // which is 10% * 1234567890/365.25 = 338006
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS + 1);
-    run_pending_timers();
+    run_pending_timers().await;
 
     assert_eq!(
         *gov.latest_reward_event(),
@@ -2908,7 +2911,7 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
 
     {
         gov.run_periodic_tasks().now_or_never();
-        run_pending_timers();
+        run_pending_timers().await;
         let info = gov.get_proposal_data(ProposalId { id: 1 }).unwrap();
         assert_eq!(info.status(), ProposalStatus::Rejected);
         assert_eq!(
@@ -3132,8 +3135,8 @@ async fn test_disallow_large_manage_neuron_proposals() {
     );
 }
 
-#[test]
-fn test_reward_distribution_skips_deleted_neurons() {
+#[tokio::test]
+async fn test_reward_distribution_skips_deleted_neurons() {
     let mut fixture = fixture_two_neurons_second_is_bigger();
     fixture.proposals.insert(
         1_u64,
@@ -3148,6 +3151,7 @@ fn test_reward_distribution_skips_deleted_neurons() {
                 action: Some(api::proposal::Action::Motion(api::Motion {
                     motion_text: "a motion".to_string(),
                 })),
+                self_describing_action: None,
             }),
             proposal_timestamp_seconds: 2530,
             ballots: [
@@ -3202,7 +3206,7 @@ fn test_reward_distribution_skips_deleted_neurons() {
     }), Err(e) if e.error_type == NotFound as i32);
 
     // The proposal at genesis time is not ready to be settled
-    run_pending_timers();
+    run_pending_timers().await;
     assert_eq!(
         *gov.latest_reward_event(),
         RewardEvent {
@@ -3217,7 +3221,7 @@ fn test_reward_distribution_skips_deleted_neurons() {
     );
 
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS + 1);
-    run_pending_timers();
+    run_pending_timers().await;
 
     assert_eq!(
         *gov.latest_reward_event(),
@@ -3311,7 +3315,7 @@ async fn test_genesis_in_the_future_in_supported() {
         .unwrap();
 
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    run_pending_timers();
+    run_pending_timers().await;
     // We're still pre-genesis at that point
     assert!(fake_driver.now() < genesis_timestamp_seconds);
     // No new reward event should have been created...
@@ -3363,7 +3367,7 @@ async fn test_genesis_in_the_future_in_supported() {
         .unwrap();
 
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    run_pending_timers();
+    run_pending_timers().await;
     // Now we're 0.5 reward period after genesis. Still no new reward event
     // expected.
     assert_eq!(
@@ -3395,7 +3399,7 @@ async fn test_genesis_in_the_future_in_supported() {
 
     // Let's go just at the time we should create the first reward event
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS / 2 + 1);
-    run_pending_timers();
+    run_pending_timers().await;
     assert_eq!(
         fake_driver.now(),
         genesis_timestamp_seconds + REWARD_DISTRIBUTION_PERIOD_SECONDS + 1
@@ -3419,7 +3423,7 @@ async fn test_genesis_in_the_future_in_supported() {
 
     // Let's go just at the time we should create the first reward event
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
-    run_pending_timers();
+    run_pending_timers().await;
     // This time, the other long proposal submitted before genesis should be
     // considered
     assert_eq!(
@@ -3539,9 +3543,13 @@ fn compute_maturities(
     gov.run_periodic_tasks().now_or_never();
 
     fake_driver.advance_time_by(1);
-    run_pending_timers();
 
-    run_pending_timers_every_interval_for_count(core::time::Duration::from_secs(10), 3);
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+    rt.block_on(run_pending_timers());
+    rt.block_on(run_pending_timers_every_interval_for_count(
+        core::time::Duration::from_secs(10),
+        3,
+    ));
 
     // Inspect latest_reward_event.
     let actual_reward_event = gov.latest_reward_event();
@@ -6301,8 +6309,8 @@ fn assert_neuron_spawn_partial(
     assert_eq!(child_neuron.maturity_e8s_equivalent, 0);
 }
 
-#[test]
-fn test_staked_maturity() {
+#[tokio::test]
+async fn test_staked_maturity() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
     let nonce = 1234u64;
@@ -6359,6 +6367,7 @@ fn test_staked_maturity() {
                     action: Some(proposal::Action::Motion(Motion {
                         motion_text: "".to_string(),
                     })),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -6374,7 +6383,7 @@ fn test_staked_maturity() {
 
     // Advance time by 5 days and run periodic tasks so that the neuron is granted (staked) maturity.
     driver.advance_time_by(5 * 24 * 3600);
-    run_pending_timers();
+    run_pending_timers().await;
     gov.run_periodic_tasks().now_or_never();
 
     let neuron = gov
@@ -6438,7 +6447,7 @@ fn test_staked_maturity() {
     driver.advance_time_by(
         VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
     );
-    run_pending_timers();
+    run_pending_timers().await;
     gov.unstake_maturity_of_dissolved_neurons();
 
     // All the maturity should now be regular maturity
@@ -6759,6 +6768,7 @@ async fn test_not_for_profit_neurons() {
                 }))),
                 summary: "".to_string(),
                 url: "".to_string(),
+                self_describing_action: None,
             },
         )
         .await;
@@ -6788,6 +6798,7 @@ async fn test_not_for_profit_neurons() {
                 }))),
                 summary: "".to_string(),
                 url: "".to_string(),
+                self_describing_action: None,
             },
         )
         .await;
@@ -7012,6 +7023,7 @@ fn test_manage_and_reward_node_providers() {
                             to_account: None,
                         })),
                     })),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7061,6 +7073,7 @@ fn test_manage_and_reward_node_providers() {
                             })),
                         },
                     )),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7109,6 +7122,7 @@ fn test_manage_and_reward_node_providers() {
                             })),
                         },
                     )),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7141,6 +7155,7 @@ fn test_manage_and_reward_node_providers() {
                             to_account: None,
                         })),
                     })),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7191,6 +7206,7 @@ fn test_manage_and_reward_node_providers() {
                             ),
                         })),
                     })),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7236,6 +7252,7 @@ fn test_manage_and_reward_node_providers() {
                             dissolve_delay_seconds: 10,
                         })),
                     })),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7282,6 +7299,7 @@ fn test_manage_and_reward_node_providers() {
                             })),
                         },
                     )),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7361,6 +7379,7 @@ fn test_manage_and_reward_multiple_node_providers() {
                             to_account: None,
                         })),
                     })),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7413,6 +7432,7 @@ fn test_manage_and_reward_multiple_node_providers() {
                                 })),
                             },
                         )),
+                        self_describing_action: None,
                     }))),
                 },
             )
@@ -7463,6 +7483,7 @@ fn test_manage_and_reward_multiple_node_providers() {
                                 })),
                             },
                         )),
+                        self_describing_action: None,
                     }))),
                 },
             )
@@ -7525,6 +7546,7 @@ fn test_manage_and_reward_multiple_node_providers() {
                 ],
                 use_registry_derived_rewards: Some(false),
             })),
+            self_describing_action: None,
         }))),
     };
 
@@ -7590,6 +7612,7 @@ fn test_manage_and_reward_multiple_node_providers() {
                             })),
                         },
                     )),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7627,6 +7650,7 @@ fn test_manage_and_reward_multiple_node_providers() {
                             })),
                         },
                     )),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7751,6 +7775,7 @@ fn test_network_economics_proposal() {
                         }),
                         ..Default::default()
                     })),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7975,7 +8000,7 @@ async fn test_max_number_of_proposals_with_ballots() {
         .unwrap();
     }
     assert_eq!(
-        gov.get_pending_proposals(&PrincipalId::new_anonymous())
+        gov.get_pending_proposals(&PrincipalId::new_anonymous(), None)
             .len(),
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
     );
@@ -8022,7 +8047,7 @@ async fn test_max_number_of_proposals_with_ballots() {
 
     fake_driver.advance_time_by(10);
     gov.run_periodic_tasks().now_or_never().unwrap();
-    run_pending_timers();
+    run_pending_timers().await;
 
     // Now all proposals should have been rejected.
     for i in 1_u64..MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS as u64 + 2 {
@@ -8053,7 +8078,7 @@ async fn test_max_number_of_proposals_with_ballots() {
     // Let's make a reward event happen
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
     gov.run_periodic_tasks().now_or_never().unwrap();
-    run_pending_timers();
+    run_pending_timers().await;
 
     // Now it should be allowed to submit a new one
     gov.make_proposal(
@@ -11049,7 +11074,7 @@ impl Environment for MockEnvironment<'_> {
     fn execute_nns_function(
         &self,
         _proposal_id: u64,
-        _update: &ExecuteNnsFunction,
+        _update: &ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         panic!("Unexpected call to Environment::execute_nns_function");
     }
@@ -12824,7 +12849,7 @@ async fn distribute_rewards_test() {
 
     // Step 2: Run code under test.
     governance.run_periodic_tasks().await;
-    run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(2), 200);
+    run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(2), 200).await;
 
     // Step 3: Inspect results.
 
@@ -12916,6 +12941,7 @@ async fn test_proposal_url_not_on_list_fails() {
                 motion_text: "a".to_string(),
             })),
             url: "https://foo.com".to_string(),
+            self_describing_action: None,
         },
     )
     .await
@@ -12933,6 +12959,7 @@ async fn test_proposal_url_not_on_list_fails() {
                 motion_text: "a".to_string(),
             })),
             url: "https://forum.dfinity.org/anything".to_string(),
+            self_describing_action: None,
         },
     )
     .await

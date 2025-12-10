@@ -343,6 +343,7 @@ fn arb_block<Tokens: TokensType>() -> impl Strategy<Value = Block<Tokens>> {
                 timestamp: ts,
                 fee_collector: fee_col,
                 fee_collector_block_index: fee_col_block,
+                btype: None,
             },
         )
 }
@@ -585,16 +586,25 @@ pub fn test_icrc3_supported_block_types<T>(
     T: CandidType,
 {
     let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+    check_icrc3_supported_block_types(&env, canister_id, false);
+}
 
+pub fn check_icrc3_supported_block_types(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    supports_107: bool,
+) {
     let mut block_types = vec![];
-    for supported_block_type in supported_block_types(&env, canister_id) {
+    for supported_block_type in supported_block_types(env, canister_id) {
         block_types.push(supported_block_type.block_type);
     }
     block_types.sort();
-    assert_eq!(
-        block_types,
-        vec!["1burn", "1mint", "1xfer", "2approve", "2xfer"]
-    );
+    let mut expected_block_types = vec!["1burn", "1mint", "1xfer", "2approve", "2xfer"];
+    if supports_107 {
+        expected_block_types.push("107feecol");
+        expected_block_types.sort();
+    }
+    assert_eq!(block_types, expected_block_types);
 }
 
 pub fn test_total_supply<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)

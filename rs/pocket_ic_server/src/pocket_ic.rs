@@ -65,10 +65,12 @@ use ic_interfaces_state_manager::StateReader;
 use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_logger::{ReplicaLogger, no_op_logger};
 use ic_management_canister_types_private::{
-    BoundedVec, CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs, EcdsaCurve,
-    EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId, Method as Ic00Method,
-    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
-    VetKdKeyId,
+    BoundedVec, CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs,
+    CanisterSnapshotDataKind, CanisterSnapshotDataOffset, EcdsaCurve, EcdsaKeyId, LogVisibilityV2,
+    MasterPublicKeyId, Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
+    ReadCanisterSnapshotMetadataResponse, SchnorrAlgorithm, SchnorrKeyId,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, VetKdCurve, VetKdKeyId,
 };
 use ic_metrics::MetricsRegistry;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
@@ -110,7 +112,8 @@ use ic_types::batch::BlockmakerMetrics;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{CertificateDelegationFormat, CertificateDelegationMetadata};
 use ic_types::{
-    CanisterId, Cycles, Height, NodeId, NumInstructions, PrincipalId, RegistryVersion, SubnetId,
+    CanisterId, Cycles, Height, NodeId, NumInstructions, PrincipalId, RegistryVersion, SnapshotId,
+    SubnetId,
     artifact::UnvalidatedArtifactMutation,
     canister_http::{
         CanisterHttpReject, CanisterHttpRequest as AdapterCanisterHttpRequest,
@@ -146,10 +149,10 @@ use std::hash::Hash;
 use std::str::FromStr;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
-    fs::{File, remove_file},
+    fs::{File, OpenOptions, remove_file},
     io::{BufReader, Read, Write},
     net::SocketAddr,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -165,6 +168,17 @@ use tower::{service_fn, util::ServiceExt};
 
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
+
+const MAINNET_NNS_SUBNET_ID: &str =
+    "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe";
+const MAINNET_II_SUBNET_ID: &str =
+    "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe";
+const MAINNET_BITCOIN_SUBNET_ID: &str =
+    "w4rem-dv5e3-widiz-wbpea-kbttk-mnzfm-tzrc7-svcj3-kbxyb-zamch-hqe";
+const MAINNET_FIDUCIARY_SUBNET_ID: &str =
+    "pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae";
+const MAINNET_SNS_SUBNET_ID: &str =
+    "x33ed-h457x-bsgyx-oqxqf-6pzwv-wkhzr-rm2j3-npodi-purzm-n66cg-gae";
 
 const REGISTRY_CANISTER_WASM: &[u8] = include_bytes!(env!("REGISTRY_CANISTER_WASM_PATH"));
 const CYCLES_MINTING_CANISTER_WASM: &[u8] =
@@ -218,6 +232,9 @@ const MAX_START_SERVER_DURATION: Duration = Duration::from_secs(60);
 #[allow(clippy::declare_interior_mutable_const)]
 const CONTENT_TYPE_CBOR: HeaderValue = HeaderValue::from_static("application/cbor");
 
+// Maximum data chunk size when downloading/uploading canister snapshots.
+const MAX_CHUNK_SIZE: u64 = 2_000_000;
+
 fn default_timestamp(icp_features: &Option<IcpFeatures>) -> SystemTime {
     // To set the ICP/XDR conversion rate, the PocketIC time (in seconds) must be strictly larger than the default timestamp in CMC state.
     let cycles_minting_feature = icp_features
@@ -233,10 +250,6 @@ fn default_timestamp(icp_features: &Option<IcpFeatures>) -> SystemTime {
 
 /// The response type for `/api` IC endpoint operations.
 pub(crate) type ApiResponse = BoxFuture<'static, (StatusCode, BTreeMap<String, Vec<u8>>, Vec<u8>)>;
-
-/// We assume that the maximum number of subnets on the mainnet is 1024.
-/// Used for generating canister ID ranges that do not appear on mainnet.
-pub const MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET: u64 = 1024;
 
 fn wasm_result_to_canister_result(
     res: ic_state_machine_tests::WasmResult,
@@ -2268,7 +2281,7 @@ impl PocketIcSubnets {
             // Install the Dogecoin mainnet canister configured for the regtest network.
             let args = DogecoinInitConfig {
                 network: Some(DogecoinNetwork::Regtest),
-                fees: Some(DogecoinFees::testnet()),
+                fees: Some(DogecoinFees::mainnet()),
                 ..Default::default()
             };
             btc_subnet
@@ -2487,6 +2500,7 @@ impl GetChunk for PocketIcSubnets {
 pub struct PocketIc {
     range_gen: RangeGen,
     runtime: Arc<Runtime>,
+    mainnet_routing_table: RoutingTable,
     state_label: StateLabel,
     subnets: PocketIcSubnets,
     default_effective_canister_id: Principal,
@@ -2566,6 +2580,7 @@ impl PocketIc {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn try_new(
         runtime: Arc<Runtime>,
+        mainnet_routing_table: RoutingTable,
         seed: u64,
         subnet_configs: ExtendedSubnetConfigSet,
         state_dir: Option<PathBuf>,
@@ -2760,7 +2775,9 @@ impl PocketIc {
                     // We validate the given canister ranges.
                     let mut sorted_ranges = ranges.clone();
                     sorted_ranges.sort();
-                    if let Some(mut subnet_kind_ranges) = subnet_kind_canister_range(subnet_kind) {
+                    if let Some(mut subnet_kind_ranges) =
+                        subnet_kind_canister_ranges(&mainnet_routing_table, subnet_kind)
+                    {
                         subnet_kind_ranges.sort();
                         if !is_subset_of(subnet_kind_ranges.iter(), sorted_ranges.iter()) {
                             return Err(format!(
@@ -2770,8 +2787,10 @@ impl PocketIc {
                     }
                     for other_subnet_kind in SubnetKind::iter() {
                         if subnet_kind != other_subnet_kind
-                            && let Some(mut other_subnet_kind_ranges) =
-                                subnet_kind_canister_range(other_subnet_kind)
+                            && let Some(mut other_subnet_kind_ranges) = subnet_kind_canister_ranges(
+                                &mainnet_routing_table,
+                                other_subnet_kind,
+                            )
                         {
                             other_subnet_kind_ranges.sort();
                             if !are_disjoint(other_subnet_kind_ranges.iter(), sorted_ranges.iter())
@@ -2788,7 +2807,7 @@ impl PocketIc {
                     let RangeConfig {
                         canister_id_ranges: ranges,
                         canister_allocation_range: alloc_range,
-                    } = get_range_config(subnet_kind, &mut range_gen)?;
+                    } = get_range_config(&mainnet_routing_table, subnet_kind, &mut range_gen)?;
 
                     (ranges, alloc_range, None)
                 };
@@ -2868,6 +2887,7 @@ impl PocketIc {
         Ok(Self {
             range_gen,
             runtime,
+            mainnet_routing_table,
             state_label,
             subnets,
             default_effective_canister_id,
@@ -2941,51 +2961,91 @@ fn from_range(range: &CanisterIdRange) -> rest::CanisterIdRange {
     rest::CanisterIdRange { start, end }
 }
 
-fn subnet_kind_canister_range(subnet_kind: SubnetKind) -> Option<Vec<CanisterIdRange>> {
+fn subnet_kind_canister_ranges(
+    mainnet_routing_table: &RoutingTable,
+    subnet_kind: SubnetKind,
+) -> Option<Vec<CanisterIdRange>> {
     use rest::SubnetKind::*;
     match subnet_kind {
         Application | VerifiedApplication | System => None,
-        NNS => Some(vec![
-            gen_range("rwlgt-iiaaa-aaaaa-aaaaa-cai", "renrk-eyaaa-aaaaa-aaada-cai"),
-            gen_range("qoctq-giaaa-aaaaa-aaaea-cai", "n5n4y-3aaaa-aaaaa-p777q-cai"),
-        ]),
-        II => Some(vec![
-            gen_range("rdmx6-jaaaa-aaaaa-aaadq-cai", "rdmx6-jaaaa-aaaaa-aaadq-cai"),
-            gen_range("uc7f6-kaaaa-aaaaq-qaaaa-cai", "ijz7v-ziaaa-aaaaq-7777q-cai"),
-        ]),
-        Bitcoin => Some(vec![gen_range(
-            "g3wsl-eqaaa-aaaan-aaaaa-cai",
-            "2qqia-xyaaa-aaaan-p777q-cai",
-        )]),
-        Fiduciary => Some(vec![gen_range(
-            "mf7xa-laaaa-aaaar-qaaaa-cai",
-            "qoznl-yiaaa-aaaar-7777q-cai",
-        )]),
-        SNS => Some(vec![gen_range(
-            "ybpmr-kqaaa-aaaaq-aaaaa-cai",
-            "ekjw2-zyaaa-aaaaq-p777q-cai",
-        )]),
+        NNS => {
+            let nns_subnet_id = PrincipalId::from_str(MAINNET_NNS_SUBNET_ID).unwrap().into();
+            Some(
+                mainnet_routing_table
+                    .ranges(nns_subnet_id)
+                    .iter()
+                    .cloned()
+                    .collect(),
+            )
+        }
+        II => {
+            let ii_subnet_id = PrincipalId::from_str(MAINNET_II_SUBNET_ID).unwrap().into();
+            Some(
+                mainnet_routing_table
+                    .ranges(ii_subnet_id)
+                    .iter()
+                    .cloned()
+                    .collect(),
+            )
+        }
+        Bitcoin => {
+            let bitcoin_subnet_id = PrincipalId::from_str(MAINNET_BITCOIN_SUBNET_ID)
+                .unwrap()
+                .into();
+            Some(
+                mainnet_routing_table
+                    .ranges(bitcoin_subnet_id)
+                    .iter()
+                    .cloned()
+                    .collect(),
+            )
+        }
+        Fiduciary => {
+            let fiduciary_subnet_id = PrincipalId::from_str(MAINNET_FIDUCIARY_SUBNET_ID)
+                .unwrap()
+                .into();
+            Some(
+                mainnet_routing_table
+                    .ranges(fiduciary_subnet_id)
+                    .iter()
+                    .cloned()
+                    .collect(),
+            )
+        }
+        SNS => {
+            let sns_subnet_id = PrincipalId::from_str(MAINNET_SNS_SUBNET_ID).unwrap().into();
+            Some(
+                mainnet_routing_table
+                    .ranges(sns_subnet_id)
+                    .iter()
+                    .cloned()
+                    .collect(),
+            )
+        }
     }
 }
 
-fn subnet_kind_from_canister_id(canister_id: CanisterId) -> SubnetKind {
-    use rest::SubnetKind::*;
-    for subnet_kind in [NNS, II, Bitcoin, Fiduciary, SNS] {
-        if let Some(ranges) = subnet_kind_canister_range(subnet_kind)
+fn subnet_kind_from_canister_id(
+    mainnet_routing_table: &RoutingTable,
+    canister_id: CanisterId,
+) -> SubnetKind {
+    for subnet_kind in SubnetKind::iter() {
+        if let Some(ranges) = subnet_kind_canister_ranges(mainnet_routing_table, subnet_kind)
             && ranges.iter().any(|r| r.contains(&canister_id))
         {
             return subnet_kind;
         }
     }
-    Application
+    SubnetKind::Application
 }
 
 fn get_range_config(
+    mainnet_routing_table: &RoutingTable,
     subnet_kind: rest::SubnetKind,
     range_gen: &mut RangeGen,
 ) -> Result<RangeConfig, String> {
     let (canister_id_ranges, canister_allocation_range) =
-        match subnet_kind_canister_range(subnet_kind) {
+        match subnet_kind_canister_ranges(mainnet_routing_table, subnet_kind) {
             Some(ranges) => {
                 range_gen.add_assigned(ranges.clone())?;
                 (ranges, Some(range_gen.next_range()))
@@ -3035,13 +3095,6 @@ impl RangeGen {
                 break range;
             }
         }
-    }
-}
-
-fn gen_range(start: &str, end: &str) -> CanisterIdRange {
-    CanisterIdRange {
-        start: CanisterId::from_str(start).unwrap(),
-        end: CanisterId::from_str(end).unwrap(),
     }
 }
 
@@ -3598,6 +3651,395 @@ impl Operation for AdvanceTimeAndTick {
 
     fn id(&self) -> OpId {
         OpId(format!("advance_time_and_tick({:?})", self.0))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CanisterSnapshotDownload {
+    pub sender: PrincipalId,
+    pub canister_id: CanisterId,
+    pub snapshot_id: SnapshotId,
+    pub snapshot_dir: PathBuf,
+}
+
+fn ensure_empty_dir(path: &Path) -> Result<(), String> {
+    // Create the directory if needed (including parents).
+    // Succeeds silently if the directory already exists.
+    std::fs::create_dir_all(path)
+        .map_err(|e| format!("Could not create snapshot directory: {}", e))?;
+
+    // Now ensure it's actually a directory.
+    if !path.is_dir() {
+        return Err("Snapshot directory path exists but is not a directory".to_string());
+    }
+
+    // Check if it is empty.
+    if std::fs::read_dir(path)
+        .map_err(|e| format!("Could not read snapshot directory: {}", e))?
+        .next()
+        .is_some()
+    {
+        return Err("Snapshot directory is not empty".to_string());
+    }
+
+    Ok(())
+}
+
+enum BlobKind {
+    WasmModule,
+    WasmMemory,
+    StableMemory,
+}
+
+impl BlobKind {
+    fn description(&self) -> &str {
+        match self {
+            BlobKind::WasmModule => "WASM module",
+            BlobKind::WasmMemory => "WASM memory",
+            BlobKind::StableMemory => "stable memory",
+        }
+    }
+}
+
+fn download_blob_to_file(
+    subnet: Arc<StateMachine>,
+    canister_id: CanisterId,
+    snapshot_id: SnapshotId,
+    blob_kind: BlobKind,
+    length: u64,
+    file: PathBuf,
+) -> Result<(), String> {
+    let mut offset = 0;
+    let mut file = OpenOptions::new()
+        .create(true) // create the file if it doesn't exist
+        .append(true) // allow appending
+        .open(file)
+        .map_err(|e| format!("Could not create {} file: {}", blob_kind.description(), e))?;
+    while offset < length {
+        let chunk_size = std::cmp::min(length - offset, MAX_CHUNK_SIZE);
+        let kind = match blob_kind {
+            BlobKind::WasmModule => CanisterSnapshotDataKind::WasmModule {
+                offset,
+                size: chunk_size,
+            },
+            BlobKind::WasmMemory => CanisterSnapshotDataKind::WasmMemory {
+                offset,
+                size: chunk_size,
+            },
+            BlobKind::StableMemory => CanisterSnapshotDataKind::StableMemory {
+                offset,
+                size: chunk_size,
+            },
+        };
+        let data_args = ReadCanisterSnapshotDataArgs {
+            canister_id: canister_id.into(),
+            snapshot_id,
+            kind,
+        };
+        let data = subnet
+            .read_canister_snapshot_data(&data_args)
+            .map_err(|e| e.description().to_string())?
+            .chunk;
+        file.write_all(&data)
+            .map_err(|e| format!("Could not write {} file: {}", blob_kind.description(), e))?;
+        offset += chunk_size;
+    }
+    Ok(())
+}
+
+impl Operation for CanisterSnapshotDownload {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let effective_principal = EffectivePrincipal::CanisterId(self.canister_id);
+        let subnet = route(pic, effective_principal, false);
+        match subnet {
+            Ok(subnet) => {
+                if let Err(e) = ensure_empty_dir(&self.snapshot_dir) {
+                    return OpOut::Error(PocketIcError::InvalidCanisterSnapshotDirectory(e));
+                }
+
+                // Download snapshot metadata.
+                let metadata_args = ReadCanisterSnapshotMetadataArgs {
+                    canister_id: self.canister_id.into(),
+                    snapshot_id: self.snapshot_id,
+                };
+                let metadata = match subnet.read_canister_snapshot_metadata(&metadata_args) {
+                    Ok(metadata) => metadata,
+                    Err(e) => {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(
+                            e.description().to_string(),
+                        ));
+                    }
+                };
+                let metadata_bytes = serde_json::to_string_pretty(&metadata).unwrap();
+                let metadata_path = self.snapshot_dir.join("metadata.json");
+                if let Err(e) = std::fs::write(metadata_path, metadata_bytes) {
+                    return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
+                        "Could not write metadata file: {}",
+                        e
+                    )));
+                }
+
+                // Download WASM binary.
+                let wasm_module_path = self.snapshot_dir.join("wasm_module.bin");
+                if let Err(e) = download_blob_to_file(
+                    subnet.clone(),
+                    self.canister_id,
+                    self.snapshot_id,
+                    BlobKind::WasmModule,
+                    metadata.wasm_module_size,
+                    wasm_module_path,
+                ) {
+                    return OpOut::Error(PocketIcError::CanisterSnapshotError(e));
+                }
+
+                // Download WASM memory.
+                let wasm_memory_path = self.snapshot_dir.join("wasm_memory.bin");
+                if let Err(e) = download_blob_to_file(
+                    subnet.clone(),
+                    self.canister_id,
+                    self.snapshot_id,
+                    BlobKind::WasmMemory,
+                    metadata.wasm_memory_size,
+                    wasm_memory_path,
+                ) {
+                    return OpOut::Error(PocketIcError::CanisterSnapshotError(e));
+                }
+
+                // Download stable memory.
+                if metadata.stable_memory_size != 0 {
+                    let stable_memory_path = self.snapshot_dir.join("stable_memory.bin");
+                    if let Err(e) = download_blob_to_file(
+                        subnet.clone(),
+                        self.canister_id,
+                        self.snapshot_id,
+                        BlobKind::StableMemory,
+                        metadata.stable_memory_size,
+                        stable_memory_path,
+                    ) {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(e));
+                    }
+                }
+
+                // Download WASM chunk store.
+                let chunk_store = match subnet.get_snapshot_chunk_store(&metadata_args) {
+                    Ok(chunk_store) => chunk_store,
+                    Err(e) => {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(
+                            e.description().to_string(),
+                        ));
+                    }
+                };
+                if !chunk_store.is_empty() {
+                    let chunk_store_path = self.snapshot_dir.join("wasm_chunk_store");
+                    if let Err(e) = std::fs::create_dir_all(&chunk_store_path) {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
+                            "Could not create WASM chunk store directory: {}",
+                            e
+                        )));
+                    }
+                    for (hash, chunk) in chunk_store {
+                        let hash_str = hex::encode(hash);
+                        let chunk_file = chunk_store_path.join(format!("{hash_str}.bin"));
+                        if let Err(e) = std::fs::write(chunk_file, chunk) {
+                            return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
+                                "Could not write WASM chunk: {}",
+                                e
+                            )));
+                        }
+                    }
+                }
+
+                OpOut::NoOutput
+            }
+            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
+        }
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!(
+            "canister_snapshot_download(sender={},canister_id={},snapshot_id={},snapshot_dir='{}')",
+            self.sender,
+            self.canister_id,
+            self.snapshot_id,
+            base64::encode_config(self.snapshot_dir.display().to_string(), base64::URL_SAFE)
+        ))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CanisterSnapshotUpload {
+    pub sender: PrincipalId,
+    pub canister_id: CanisterId,
+    pub replace_snapshot: Option<SnapshotId>,
+    pub snapshot_dir: PathBuf,
+}
+
+fn upload_blob_from_file(
+    subnet: Arc<StateMachine>,
+    canister_id: CanisterId,
+    snapshot_id: SnapshotId,
+    blob_kind: BlobKind,
+    length: u64,
+    file: PathBuf,
+) -> Result<(), String> {
+    let mut offset = 0;
+    let mut file = File::open(file)
+        .map_err(|e| format!("Could not open {} file: {}", blob_kind.description(), e))?;
+    while offset < length {
+        let chunk_size = std::cmp::min(length - offset, MAX_CHUNK_SIZE);
+        let mut chunk = vec![0u8; chunk_size as usize];
+        file.read_exact(&mut chunk)
+            .map_err(|e| format!("Could not read {} file: {}", blob_kind.description(), e))?;
+        let kind = match blob_kind {
+            BlobKind::WasmModule => CanisterSnapshotDataOffset::WasmModule { offset },
+            BlobKind::WasmMemory => CanisterSnapshotDataOffset::WasmMemory { offset },
+            BlobKind::StableMemory => CanisterSnapshotDataOffset::StableMemory { offset },
+        };
+        let data_args = UploadCanisterSnapshotDataArgs {
+            canister_id: canister_id.into(),
+            snapshot_id,
+            kind,
+            chunk,
+        };
+        subnet
+            .upload_canister_snapshot_data(&data_args)
+            .map_err(|e| e.description().to_string())?;
+        offset += chunk_size;
+    }
+    Ok(())
+}
+
+impl Operation for CanisterSnapshotUpload {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let effective_principal = EffectivePrincipal::CanisterId(self.canister_id);
+        let subnet = route(pic, effective_principal, false);
+        match subnet {
+            Ok(subnet) => {
+                // Upload snapshot metadata.
+                let metadata_path = self.snapshot_dir.join("metadata.json");
+                let metadata_bytes = match std::fs::read(metadata_path) {
+                    Ok(bytes) => bytes,
+                    Err(e) => {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
+                            "Could not read metadata file: {}",
+                            e
+                        )));
+                    }
+                };
+                let metadata: ReadCanisterSnapshotMetadataResponse =
+                    match serde_json::from_slice(&metadata_bytes) {
+                        Ok(metadata) => metadata,
+                        Err(e) => {
+                            return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
+                                "Could not parse metadata file: {}",
+                                e
+                            )));
+                        }
+                    };
+                let metadata_args = UploadCanisterSnapshotMetadataArgs {
+                    canister_id: self.canister_id.into(),
+                    replace_snapshot: self.replace_snapshot,
+                    wasm_module_size: metadata.wasm_module_size,
+                    globals: metadata.globals,
+                    wasm_memory_size: metadata.wasm_memory_size,
+                    stable_memory_size: metadata.stable_memory_size,
+                    certified_data: metadata.certified_data,
+                    global_timer: metadata.global_timer,
+                    on_low_wasm_memory_hook_status: metadata.on_low_wasm_memory_hook_status,
+                };
+                let snapshot_id = match subnet.upload_canister_snapshot_metadata(&metadata_args) {
+                    Ok(upload_response) => upload_response.snapshot_id,
+                    Err(e) => {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(
+                            e.description().to_string(),
+                        ));
+                    }
+                };
+
+                // Upload WASM binary.
+                let wasm_module_path = self.snapshot_dir.join("wasm_module.bin");
+                if let Err(e) = upload_blob_from_file(
+                    subnet.clone(),
+                    self.canister_id,
+                    snapshot_id,
+                    BlobKind::WasmModule,
+                    metadata.wasm_module_size,
+                    wasm_module_path,
+                ) {
+                    return OpOut::Error(PocketIcError::CanisterSnapshotError(e));
+                }
+
+                // Upload WASM memory.
+                let wasm_memory_path = self.snapshot_dir.join("wasm_memory.bin");
+                if let Err(e) = upload_blob_from_file(
+                    subnet.clone(),
+                    self.canister_id,
+                    snapshot_id,
+                    BlobKind::WasmMemory,
+                    metadata.wasm_memory_size,
+                    wasm_memory_path,
+                ) {
+                    return OpOut::Error(PocketIcError::CanisterSnapshotError(e));
+                }
+
+                // Upload stable memory.
+                if metadata.stable_memory_size != 0 {
+                    let stable_memory_path = self.snapshot_dir.join("stable_memory.bin");
+                    if let Err(e) = upload_blob_from_file(
+                        subnet.clone(),
+                        self.canister_id,
+                        snapshot_id,
+                        BlobKind::StableMemory,
+                        metadata.stable_memory_size,
+                        stable_memory_path,
+                    ) {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(e));
+                    }
+                }
+
+                // Upload WASM chunk store.
+                for hash in metadata.wasm_chunk_store {
+                    let hash_str = hex::encode(hash.hash);
+                    let chunk_store_path = self.snapshot_dir.join("wasm_chunk_store");
+                    let chunk_file = chunk_store_path.join(format!("{hash_str}.bin"));
+                    let chunk = match std::fs::read(chunk_file) {
+                        Ok(chunk) => chunk,
+                        Err(e) => {
+                            return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
+                                "Could not read WASM chunk: {}",
+                                e
+                            )));
+                        }
+                    };
+                    let data_args = UploadCanisterSnapshotDataArgs {
+                        canister_id: self.canister_id.into(),
+                        snapshot_id,
+                        kind: CanisterSnapshotDataOffset::WasmChunk,
+                        chunk,
+                    };
+                    match subnet.upload_canister_snapshot_data(&data_args) {
+                        Ok(_) => (),
+                        Err(e) => {
+                            return OpOut::Error(PocketIcError::CanisterSnapshotError(
+                                e.description().to_string(),
+                            ));
+                        }
+                    };
+                }
+
+                OpOut::CanisterSnapshotId(snapshot_id.to_vec())
+            }
+            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
+        }
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!(
+            "canister_snapshot_upload(sender={},canister_id={},snapshot_dir='{}')",
+            self.sender,
+            self.canister_id,
+            base64::encode_config(self.snapshot_dir.display().to_string(), base64::URL_SAFE)
+        ))
     }
 }
 
@@ -4695,42 +5137,30 @@ fn route(
                         .unwrap())
                 } else if is_provisional_create_canister {
                     // We create a new subnet with the IC mainnet configuration containing the effective canister ID.
-                    // NNS and II subnets cannot be created at this point though because NNS is the root subnet
-                    // and both NNS and II subnets on the IC mainnet do not have a single canister range
-                    // (the PocketIC instance must be created with those subnets if applicable).
-                    let subnet_kind = subnet_kind_from_canister_id(canister_id);
-                    if matches!(subnet_kind, SubnetKind::NNS)
-                        || matches!(subnet_kind, SubnetKind::II)
-                    {
+                    // NNS subnet cannot be created at this point though because NNS is the root subnet
+                    // and the root subnet cannot be changed after its PocketIC instance has already been created.
+                    let subnet_id = match pic.mainnet_routing_table.lookup_entry(canister_id) {
+                        Some((_, subnet_id)) => subnet_id,
+                        None => {
+                            return Err(format!(
+                                "The effective canister ID {canister_id} does not belong to an existing subnet and it is not a mainnet canister ID."
+                            ));
+                        }
+                    };
+                    let subnet_kind =
+                        subnet_kind_from_canister_id(&pic.mainnet_routing_table, canister_id);
+                    if matches!(subnet_kind, SubnetKind::NNS) {
                         return Err(format!(
-                            "The effective canister ID {canister_id} belongs to the NNS or II subnet on the IC mainnet for which PocketIC provides a `SubnetKind`: please set up your PocketIC instance with a subnet of that `SubnetKind`."
+                            "The effective canister ID {canister_id} belongs to the NNS subnet on the IC mainnet for which PocketIC provides a `SubnetKind`: please set up your PocketIC instance with a subnet of that `SubnetKind`."
                         ));
                     }
                     let instruction_config = SubnetInstructionConfig::Production;
-                    // The binary representation of canister IDs on the IC mainnet consists of exactly 10 bytes.
-                    let canister_id_slice: &[u8] = canister_id.as_ref();
-                    if canister_id_slice.len() != 10 {
-                        return Err(format!(
-                            "The binary representation {} of effective canister ID {canister_id} should consist of 10 bytes.",
-                            hex::encode(canister_id_slice)
-                        ));
-                    }
-                    // The first 8 bytes of the binary representation of a canister ID on the IC mainnet represent:
-                    // - the sequence number of the canister's subnet on the IC mainnet (all but the last 20 bits);
-                    // - the sequence number of the canister within its subnet (the last 20 bits).
-                    let canister_id_u64: u64 =
-                        u64::from_be_bytes(canister_id_slice[..8].try_into().unwrap());
-                    if (canister_id_u64 >> 20) >= MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET {
-                        return Err(format!(
-                            "The effective canister ID {canister_id} does not belong to an existing subnet and it is not a mainnet canister ID."
-                        ));
-                    }
-                    // Hence, we derive the canister range of the canister ID on the IC mainnet by masking in/out the last 20 bits.
-                    // This works for all IC mainnet subnets that have not been split.
-                    let range = CanisterIdRange {
-                        start: CanisterId::from_u64(canister_id_u64 & 0xFFFFFFFFFFF00000),
-                        end: CanisterId::from_u64(canister_id_u64 | 0xFFFFF),
-                    };
+                    let ranges = pic
+                        .mainnet_routing_table
+                        .ranges(subnet_id)
+                        .iter()
+                        .cloned()
+                        .collect();
                     // The canister allocation range must be disjoint from the canister ranges on the IC mainnet
                     // and all existing canister ranges within the PocketIC instance and thus we use
                     // `RangeGen::next_range()` to produce such a canister range.
@@ -4739,7 +5169,7 @@ fn route(
                     let update_registry_and_system_canisters = true;
                     pic.subnets.create_subnet(
                         SubnetConfigInfo {
-                            ranges: vec![range],
+                            ranges,
                             alloc_range: Some(canister_allocation_range),
                             subnet_id: None,
                             subnet_state_dir: None,
@@ -4844,6 +5274,7 @@ mod tests {
             // State label changes.
             let mut pic0 = PocketIc::try_new(
                 runtime.clone(),
+                RoutingTable::new(),
                 0,
                 ExtendedSubnetConfigSet {
                     application: vec![SubnetSpec::default()],
@@ -4863,6 +5294,7 @@ mod tests {
             .unwrap();
             let mut pic1 = PocketIc::try_new(
                 runtime.clone(),
+                RoutingTable::new(),
                 1,
                 ExtendedSubnetConfigSet {
                     application: vec![SubnetSpec::default()],

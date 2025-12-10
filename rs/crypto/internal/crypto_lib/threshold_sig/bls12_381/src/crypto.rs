@@ -30,7 +30,7 @@ pub mod tests;
 
 /// Computes the public equivalent of a secret key.
 pub fn public_key_from_secret_key(secret_key: &SecretKey) -> PublicKey {
-    PublicKey(G2Affine::generator() * secret_key)
+    PublicKey((G2Affine::generator() * secret_key).to_affine())
 }
 
 /// Generates keys for a (t,n)-threshold signature scheme.
@@ -161,7 +161,11 @@ pub(crate) fn individual_public_key(
     public_coefficients: &PublicCoefficients,
     index: NodeIndex,
 ) -> PublicKey {
-    PublicKey(public_coefficients.evaluate_at(&Scalar::from_node_index(index)))
+    PublicKey(
+        public_coefficients
+            .evaluate_at(&Scalar::from_node_index(index))
+            .to_affine(),
+    )
 }
 
 /// Computes the public key used to verify combined signatures.
@@ -183,7 +187,7 @@ pub fn combined_public_key(public_coefficients: &PublicCoefficients) -> PublicKe
 /// it is better to hash the data separately and provide the digest to
 ///   sign_hash(digest: [u8: 32], secret_key: &SecretKey) // unimplemented.
 pub(crate) fn sign_message(message: &[u8], secret_key: &SecretKey) -> Signature {
-    hash_message_to_g1(message) * secret_key
+    (hash_message_to_g1(message) * secret_key).to_affine()
 }
 
 /// Combines signature shares (i.e. evaluates the signature at `x=0`).
@@ -219,7 +223,9 @@ pub(crate) fn combine_signatures(
         .zip(0_u32..)
         .filter_map(|(signature, index)| signature.map(|signature| (index, signature)))
         .collect();
-    Ok(PublicCoefficients::interpolate_g1(&signatures).expect("Duplicate indices"))
+    Ok(PublicCoefficients::interpolate_g1(&signatures)
+        .expect("Duplicate indices")
+        .to_affine())
 }
 
 /// Verifies an individual signature against the provided public key.
@@ -268,7 +274,5 @@ pub(crate) fn verify_combined_sig(
 /// key.
 fn verify(message: &[u8], signature: &Signature, public_key: &PublicKey) -> bool {
     let point = hash_message_to_g1(message).to_affine();
-    let pk = public_key.0.to_affine();
-
-    verify_bls_signature(&signature.into(), &pk, &point)
+    verify_bls_signature(signature, &public_key.0, &point)
 }

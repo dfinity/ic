@@ -1,8 +1,9 @@
 #![allow(clippy::all)]
+use candid::{Int, Nat};
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::protobuf::AccountIdentifier;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// The entity that owns the nodes that run the network.
 ///
@@ -544,6 +545,9 @@ pub struct Proposal {
     /// This section describes the action that the proposal proposes to
     /// take.
     pub action: Option<proposal::Action>,
+    /// A self-describing action that can be understood without the schema of a specific
+    /// proposal type.
+    pub self_describing_action: Option<SelfDescribingProposalAction>,
 }
 /// Nested message and enum types in `Proposal`.
 pub mod proposal {
@@ -2958,6 +2962,8 @@ pub struct ListProposalInfoRequest {
     /// is useful to improve download times and to ensure that the response to the
     /// request doesn't exceed the message size limit.
     pub omit_large_fields: Option<bool>,
+    /// Whether to include self-describing proposal actions in the response.
+    pub return_self_describing_action: Option<bool>,
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, Debug, PartialEq)]
 pub struct ListProposalInfoResponse {
@@ -4504,4 +4510,26 @@ pub struct NeuronVotes {
 pub struct NeuronVote {
     pub proposal_id: Option<ProposalId>,
     pub vote: Option<Vote>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub enum SelfDescribingValue {
+    Blob(Vec<u8>),
+    Text(String),
+    Nat(Nat),
+    Int(Int),
+    Array(Vec<SelfDescribingValue>),
+    Map(HashMap<String, SelfDescribingValue>),
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct SelfDescribingProposalAction {
+    pub type_name: Option<String>,
+    pub type_description: Option<String>,
+    pub value: Option<SelfDescribingValue>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct GetPendingProposalsRequest {
+    pub return_self_describing_action: Option<bool>,
 }

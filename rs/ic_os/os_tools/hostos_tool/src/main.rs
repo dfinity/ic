@@ -4,6 +4,7 @@ use config::{DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
+use manual_guestos_recovery::GuestOSRecoveryApp;
 use network::generate_network_config;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use std::path::Path;
@@ -41,6 +42,8 @@ pub enum Commands {
         /// Fails if directory doesn't exist.
         output_path: String,
     },
+    /// Launch the Recovery TUI tool for manual node recovery
+    ManualRecovery,
 }
 
 #[derive(Parser)]
@@ -131,6 +134,11 @@ pub fn main() -> Result<()> {
                 node_type,
             );
             println!("{generated_mac}");
+            Ok(())
+        }
+        Some(Commands::ManualRecovery) => {
+            let mut app = GuestOSRecoveryApp::new();
+            app.run()?;
             Ok(())
         }
         None => Err(anyhow!(

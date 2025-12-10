@@ -31,6 +31,13 @@ pub const USER_PRINCIPAL: Principal = Principal::from_slice(&[0_u8, 42]);
 pub const DOGECOIN_ADDRESS_1: &str = "DJfU2p6woQ9GiBdiXsWZWJnJ9uDdZfSSNC";
 pub const DOGE: u64 = 100_000_000;
 pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 50 * DOGE;
+/// Realistic median transaction fee in millikoinus/byte.
+///
+/// [Average transaction fee](https://bitinfocharts.com/dogecoin/)
+/// was around `0.00084 DOGE/byte` on 26.11.2025 which translates to
+/// * `84_000 koinus/byte`
+/// * `84_000_000 millikoinus/byte`
+pub const MEDIAN_TRANSACTION_FEE: u64 = 50_000_000;
 // 0.01 DOGE, ca 0.002 USD (2025.09.06)
 pub const LEDGER_TRANSFER_FEE: u64 = DOGE / 100;
 const MAX_TIME_IN_QUEUE: Duration = Duration::from_secs(10);
@@ -206,6 +213,24 @@ impl Setup {
             .unwrap()
             .require_network(into_rust_dogecoin_network(self.network()))
             .unwrap()
+    }
+
+    /// Use the given median fee in millikoinu/byte.
+    pub fn with_median_fee_percentile(self, median_fee: u64) -> Self {
+        let fee_percentiles = [median_fee; 101];
+        self.dogecoin().set_fee_percentiles(fee_percentiles);
+        self.env.advance_time(Duration::from_secs(60 * 6 + 1));
+        self.env.tick();
+        self.env.tick();
+        self.env.tick();
+
+        self.minter()
+            .assert_that_metrics()
+            .assert_contains_metric_matching(format!(
+                "ckbtc_minter_median_fee_per_vbyte {median_fee}"
+            ));
+
+        self
     }
 }
 

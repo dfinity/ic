@@ -694,6 +694,7 @@ fn test_g2_deserialize_rejects_infinity_bit_with_nonzero_x() {
 
     assert!(G2Affine::deserialize(&g2_bytes).is_err());
     assert!(G2Affine::deserialize_unchecked(&g2_bytes).is_err());
+    assert!(G2Affine::deserialize_cached(&g2_bytes).is_err());
 }
 
 #[test]
@@ -723,11 +724,13 @@ fn test_g2_deserialize_rejects_out_of_range_x_value() {
         hex::decode("9a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").unwrap();
 
     assert!(G2Affine::deserialize_unchecked(&invalid_x0).is_err());
+    assert!(G2Affine::deserialize_cached(&invalid_x0).is_err());
 
     let invalid_x1 =
         hex::decode("8000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab").unwrap();
 
     assert!(G2Affine::deserialize_unchecked(&invalid_x1).is_err());
+    assert!(G2Affine::deserialize_cached(&invalid_x1).is_err());
 }
 
 #[test]
@@ -1711,14 +1714,14 @@ test_point_operation!(serialization_round_trip, [g1, g2], {
     let rng = &mut reproducible_rng();
 
     for _ in 1..30 {
-        let orig = Projective::hash(b"serialization-round-trip-test", &rng.r#gen::<[u8; 32]>());
+        let orig = Affine::hash(b"serialization-round-trip-test", &rng.r#gen::<[u8; 32]>());
         let bits = orig.serialize();
 
-        let d = Projective::deserialize(&bits).expect("Invalid serialization");
+        let d = Affine::deserialize(&bits).expect("Invalid serialization");
         assert_eq!(orig, d);
         assert_eq!(d.serialize(), bits);
 
-        let du = Projective::deserialize_unchecked(&bits).expect("Invalid serialization");
+        let du = Affine::deserialize_unchecked(&bits).expect("Invalid serialization");
         assert_eq!(orig, du);
         assert_eq!(du.serialize(), bits);
     }
@@ -1837,14 +1840,22 @@ test_point_operation!(mul_with_precompute, [g1, g2], {
     g_with_precompute.precompute();
 
     let assert_same_result = |s: Scalar| {
-        let no_precomp = &g * &s;
-        let with_precomp = &g_with_precompute * &s;
-        assert_eq!(no_precomp, with_precomp);
+        let p1 = &g * &s;
+        let p2 = &g_with_precompute * &s;
+        let p3 = g.mul_vartime(&s);
+        let p4 = g_with_precompute.mul_vartime(&s);
+
+        assert_eq!(p1, p2);
+        assert_eq!(p2, p3);
+        assert_eq!(p3, p4);
     };
 
     assert_same_result(Scalar::zero());
     assert_same_result(Scalar::one());
     assert_same_result(Scalar::one().neg());
+    for _ in 0..1000 {
+        assert_same_result(Scalar::biased(rng));
+    }
     for _ in 0..1000 {
         assert_same_result(Scalar::random(rng));
     }
@@ -1988,6 +1999,36 @@ test_point_operation!(muln, [g1, g2], {
             .fold(Projective::identity(), |accum, (p, s)| accum + p * s);
 
         let computed = Projective::muln_vartime(&points[..], &scalars[..]);
+
+        assert_eq!(computed, reference_val);
+    }
+});
+
+test_point_operation!(muln_affine, [g1, g2], {
+    let rng = &mut reproducible_rng();
+
+    assert_eq!(
+        Projective::muln_affine_vartime(&[], &[]),
+        Projective::identity()
+    );
+
+    for t in 1..100 {
+        let mut points = Vec::with_capacity(t);
+        let mut scalars = Vec::with_capacity(t);
+
+        for _ in 0..t {
+            points.push(Projective::biased(rng));
+            scalars.push(Scalar::biased(rng));
+        }
+
+        let points = Projective::batch_normalize(&points);
+
+        let reference_val = points
+            .iter()
+            .zip(scalars.iter())
+            .fold(Projective::identity(), |accum, (p, s)| accum + p * s);
+
+        let computed = Projective::muln_affine_vartime(&points[..], &scalars[..]);
 
         assert_eq!(computed, reference_val);
     }

@@ -12,7 +12,7 @@ use rusqlite::{CachedStatement, Params, named_params, params};
 use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
-use tracing::info;
+use tracing::{info, trace};
 
 /// Gets the current value of a counter from the database.
 /// Returns None if the counter doesn't exist.
@@ -51,7 +51,7 @@ pub fn increment_counter(
 ) -> anyhow::Result<()> {
     connection
         .prepare_cached(
-            "INSERT INTO counters (name, value) VALUES (?1, ?2) 
+            "INSERT INTO counters (name, value) VALUES (?1, ?2)
              ON CONFLICT(name) DO UPDATE SET value = value + ?2",
         )?
         .execute(params![counter.name(), increment])?;
@@ -170,7 +170,11 @@ pub fn get_metadata(connection: &Connection) -> anyhow::Result<Vec<MetadataEntry
     Ok(result)
 }
 
-pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()> {
+pub fn update_account_balances(
+    connection: &mut Connection,
+    flush_cache_and_shrink_memory: bool,
+    batch_size: u64,
+) -> anyhow::Result<()> {
     // Utility method that tries to fetch the balance from the cache first and, if
     // no balance has been found, fetches it from the database
     fn get_account_balance_with_cache(
@@ -254,10 +258,8 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
     if highest_block_idx < next_block_to_be_updated {
         return Ok(());
     }
-    // Take an interval of 100000 blocks and update the account balances for these blocks
-    const BATCH_SIZE: u64 = 100000;
     let mut batch_start_idx = next_block_to_be_updated;
-    let mut batch_end_idx = batch_start_idx + BATCH_SIZE;
+    let mut batch_end_idx = batch_start_idx + batch_size;
     let mut rosetta_blocks = get_blocks_by_index_range(connection, batch_start_idx, batch_end_idx)?;
 
     // For faster inserts, keep a cache of the account balances within a batch range in memory
@@ -407,11 +409,17 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
         }
         insert_tx.commit()?;
 
+        if flush_cache_and_shrink_memory {
+            trace!("flushing cache and shrinking memory");
+            connection.cache_flush()?;
+            connection.pragma_update(None, "shrink_memory", 1)?;
+        }
+
         // Fetch the next batch of blocks
         batch_start_idx = get_highest_block_idx_in_account_balance_table(connection)?
             .context("No blocks in account balance table after inserting")?
             + 1;
-        batch_end_idx = batch_start_idx + BATCH_SIZE;
+        batch_end_idx = batch_start_idx + batch_size;
         rosetta_blocks = get_blocks_by_index_range(connection, batch_start_idx, batch_end_idx)?;
     }
     Ok(())
@@ -838,7 +846,10 @@ where
 /// If the repair is performed successfully, it adds the counter entry to prevent future runs.
 ///
 /// This is safe to run multiple times - it will produce the same correct result each time.
-pub fn repair_fee_collector_balances(connection: &mut Connection) -> anyhow::Result<()> {
+pub fn repair_fee_collector_balances(
+    connection: &mut Connection,
+    balance_sync_batch_size: u64,
+) -> anyhow::Result<()> {
     // Check if the repair has already been performed
     if is_counter_flag_set(connection, &RosettaCounter::CollectorBalancesFixed)? {
         // Repair has already been performed, skip it
@@ -857,7 +868,7 @@ pub fn repair_fee_collector_balances(connection: &mut Connection) -> anyhow::Res
 
     if block_count > 0 {
         info!("Reprocessing all blocks...");
-        update_account_balances(connection)?;
+        update_account_balances(connection, false, balance_sync_batch_size)?;
         info!("Successfully reprocessed all blocks");
     } else {
         info!("No blocks to process (empty database)");

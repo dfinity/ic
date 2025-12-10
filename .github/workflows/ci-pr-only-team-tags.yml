@@ -52,7 +52,7 @@ jobs:
           for TEAM in ${{ env.requested_teams }}; do
             if ! gh label list --repo "$REPO" --limit 100 | grep -w "$TEAM"; then
               echo "Creating label: $TEAM"
-              gh label create "$TEAM" --color "d4af37"
+              gh label create "$TEAM" --repo "$REPO" --color "d4af37"
             else
               echo "Label $TEAM already exists."
             fi
