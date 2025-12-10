@@ -259,7 +259,7 @@ mod benches {
                 crate::build_unsigned_transaction(
                     &mut s.available_utxos,
                     vec![(dummy_recipient_address, withdrawal_amount)],
-                    dummy_minter_address,
+                    &dummy_minter_address,
                     median_fee_millisatoshi_per_vbyte,
                     &fee_estimator,
                 )
