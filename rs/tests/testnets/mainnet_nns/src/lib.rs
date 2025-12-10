@@ -39,7 +39,6 @@ use ic_system_test_driver::driver::ic_gateway_vm::{
     HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm,
 };
 use ic_system_test_driver::driver::nested::NestedNodes;
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::driver::universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms};
@@ -158,14 +157,6 @@ pub fn setup(env: TestEnv) {
         setup_recovered_nns(env_clone, rx_finished_ic_setup, rx_aux_node)
     });
 
-    // Start a p8s and aux VMs concurrently:
-    let env_clone = env.clone();
-    let prometheus_thread = std::thread::spawn(move || {
-        PrometheusVm::default()
-            .start(&env_clone)
-            .expect("Failed to start prometheus VM")
-    });
-
     // Setup and start the aux UVM concurrently:
     let env_clone = env.clone();
     let uvm_thread = std::thread::spawn(move || {
@@ -216,8 +207,6 @@ pub fn setup(env: TestEnv) {
 
     write_sh_lib(&env, neuron_id, &http_gateway_url);
 
-    prometheus_thread.join().unwrap();
-    env.sync_with_prometheus();
 }
 
 fn setup_recovered_nns(

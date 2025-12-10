@@ -37,9 +37,28 @@
 // Happy testing!
 
 use anyhow::Result;
-use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_testnet_mainnet_nns::setup;
+use ic_system_test_driver::driver::{
+    group::SystemTestGroup,
+    prometheus_vm::{HasPrometheus, PrometheusVm},
+    test_env::TestEnv,
+};
+use ic_testnet_mainnet_nns::setup as setup_mainnet_nns;
 use std::time::Duration;
+
+fn setup(env: TestEnv) {
+    // Start a p8s VM concurrently:
+    let env_clone = env.clone();
+    let prometheus_thread = std::thread::spawn(move || {
+        PrometheusVm::default()
+            .start(&env_clone)
+            .expect("Failed to start prometheus VM")
+    });
+
+    setup_mainnet_nns(env.clone());
+
+    prometheus_thread.join().unwrap();
+    env.sync_with_prometheus();
+}
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
