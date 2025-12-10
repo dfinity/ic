@@ -38,12 +38,12 @@ impl CheckInvariants for CheckInvariantsImpl {
         }
 
         for (l, r) in state
-            .pending_btc_requests
+            .pending_retrieve_btc_requests
             .iter()
-            .zip(state.pending_btc_requests.iter().skip(1))
+            .zip(state.pending_retrieve_btc_requests.iter().skip(1))
         {
             ensure!(
-                l.received_at() <= r.received_at(),
+                l.received_at <= r.received_at,
                 "pending retrieve_btc requests are not sorted by receive time"
             );
         }

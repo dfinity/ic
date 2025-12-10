@@ -350,7 +350,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
         match build_unsigned_transaction(
             &mut s.available_utxos,
             outputs,
-            main_address,
+            &main_address,
             fee_millisatoshi_per_vbyte,
             &fee_estimator,
         ) {
@@ -498,7 +498,7 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
     .inspect_err(|err| {
         log!(
             Priority::Info,
-            "[submit_pending_requests]: failed to sign a Bitcoin transaction: {}",
+            "[sign_and_submit_request]: failed to sign a Bitcoin transaction: {}",
             err
         );
     })?;
@@ -511,7 +511,7 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
 
     log!(
         Priority::Info,
-        "[submit_pending_requests]: sending a signed transaction {}",
+        "[sign_and_submit_request]: sending a signed transaction {}",
         hex::encode(tx::encode_into(&signed_tx, Vec::new()))
     );
     runtime
@@ -520,13 +520,13 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
         .inspect_err(|err| {
             log!(
                 Priority::Info,
-                "[submit_pending_requests]: failed to send a Bitcoin transaction: {}",
+                "[sign_and_submit_request]: failed to send a Bitcoin transaction: {}",
                 err
             );
         })?;
     log!(
         Priority::Debug,
-        "[submit_pending_requests]: successfully sent transaction {}",
+        "[sign_and_submit_request]: successfully sent transaction {}",
         &txid,
     );
 
@@ -546,6 +546,7 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
                 submitted_at: runtime.time(),
                 fee_per_vbyte: Some(fee_millisatoshi_per_vbyte),
                 withdrawal_fee: Some(total_fee),
+                signed_tx: Some(signed_tx),
             },
             runtime,
         );
@@ -810,7 +811,7 @@ pub async fn resubmit_transactions<
         let build_result = match build_unsigned_transaction_from_inputs(
             &input_utxos,
             outputs,
-            main_address.clone(),
+            &main_address,
             tx_fee_per_vbyte,
             fee_estimator,
         ) {
@@ -846,7 +847,7 @@ pub async fn resubmit_transactions<
                 build_unsigned_transaction_from_inputs(
                     &input_utxos,
                     outputs,
-                    main_address.clone(),
+                    &main_address,
                     fee_per_vbyte, // Use normal fee
                     fee_estimator,
                 )
@@ -920,6 +921,7 @@ pub async fn resubmit_transactions<
                     change_output: Some(change_output),
                     fee_per_vbyte: Some(tx_fee_per_vbyte),
                     withdrawal_fee: Some(total_fee),
+                    signed_tx: Some(signed_tx),
                 };
                 replace_transaction(old_txid, new_tx, replaced_reason);
             }
@@ -1149,7 +1151,7 @@ pub enum BuildTxError {
 pub fn build_unsigned_transaction<F: FeeEstimator>(
     available_utxos: &mut UtxoSet,
     outputs: Vec<(BitcoinAddress, Satoshi)>,
-    main_address: BitcoinAddress,
+    main_address: &BitcoinAddress,
     fee_per_vbyte: u64,
     fee_estimator: &F,
 ) -> Result<
@@ -1170,7 +1172,7 @@ pub fn build_unsigned_transaction<F: FeeEstimator>(
     match build_unsigned_transaction_from_inputs(
         &inputs,
         outputs,
-        main_address,
+        &main_address,
         fee_per_vbyte,
         fee_estimator,
     ) {
@@ -1188,7 +1190,7 @@ pub fn build_unsigned_transaction<F: FeeEstimator>(
 pub fn build_unsigned_transaction_from_inputs<F: FeeEstimator>(
     input_utxos: &[Utxo],
     outputs: Vec<(BitcoinAddress, Satoshi)>,
-    main_address: BitcoinAddress,
+    main_address: &BitcoinAddress,
     fee_per_vbyte: u64,
     fee_estimator: &F,
 ) -> Result<(tx::UnsignedTransaction, state::ChangeOutput, WithdrawalFee), BuildTxError> {
@@ -1272,7 +1274,7 @@ pub fn build_unsigned_transaction_from_inputs<F: FeeEstimator>(
 
     // The last output has to match the main_address.
     debug_assert!(matches!(unsigned_tx.outputs.iter().last(),
-        Some(tx::TxOut { value: _, address }) if address == &main_address));
+        Some(tx::TxOut { value: _, address }) if address == main_address));
 
     for (output, fee_share) in unsigned_tx
         .outputs
@@ -1412,6 +1414,42 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
     {
         return Err(ConsolidateUtxosError::TooSoon);
     }
+
+    // If there is still an on-going transaction, submit it again.
+    if let Some((network, txid, signed_tx)) = read_state(|s| {
+        s.current_consolidate_utxos_request
+            .as_ref()
+            .and_then(|req| {
+                s.get_submitted_transaction(req.block_index).and_then(|tx| {
+                    tx.signed_tx
+                        .clone()
+                        .map(|signed_tx| (s.btc_network, tx.txid, signed_tx))
+                })
+            })
+    }) {
+        log!(
+            Priority::Info,
+            "[consolidate_utxos]: re-sending a signed transaction {}",
+            txid,
+        );
+        runtime
+            .send_transaction(&signed_tx, network)
+            .await
+            .inspect_err(|err| {
+                log!(
+                    Priority::Info,
+                    "[consolidate_utxos]: failed to send a Bitcoin transaction: {}",
+                    err
+                );
+            })
+            .map_err(ConsolidateUtxosError::SubmitRequest)?;
+        log!(
+            Priority::Debug,
+            "[consolidate_utxos]: successfully sent transaction {}",
+            &txid,
+        );
+    }
+
     mutate_state(|s| s.last_consolidate_utxos_request_created_time_ns = Some(now));
     // In case of any error, restore the last request created time.
     let request_created_guard = guard(last_submission, |last_submission| {
@@ -1446,7 +1484,7 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
     let (unsigned_tx, change_output, total_fee) = match build_unsigned_transaction_from_inputs(
         &input_utxos,
         vec![(main_address.clone(), output_amount)],
-        main_address,
+        &main_address,
         fee_millisatoshi_per_vbyte,
         &fee_estimator,
     ) {
@@ -1487,10 +1525,11 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
 
     let request = state::ConsolidateUtxosRequest {
         block_index,
+        address: main_address,
         amount: total_amount,
         received_at: now,
     };
-    state::audit::accept_consolidate_utxos_request(request.clone(), runtime);
+    mutate_state(|s| state::audit::create_consolidate_utxos_request(s, request.clone(), runtime));
 
     let utxos = ScopeGuard::into_inner(utxos_guard);
     let request = read_state(|s| SignTxRequest {

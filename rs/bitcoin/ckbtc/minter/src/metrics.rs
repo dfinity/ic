@@ -199,7 +199,7 @@ pub fn encode_metrics(
         )?
         .value(
             &[("status", "pending")],
-            state::read_state(|s| s.pending_btc_requests.len()) as f64,
+            state::read_state(|s| s.pending_retrieve_btc_requests.len()) as f64,
         )?
         .value(
             &[("status", "signing")],

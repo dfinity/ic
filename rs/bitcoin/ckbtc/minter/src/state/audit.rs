@@ -23,7 +23,9 @@ pub fn accept_retrieve_btc_request<R: CanisterRuntime>(
         EventType::AcceptedRetrieveBtcRequest(request.clone()),
         runtime,
     );
-    state.pending_btc_requests.push(request.clone().into());
+    state
+        .pending_retrieve_btc_requests
+        .push(request.clone().into());
     if let Some(account) = request.reimbursement_account {
         state
             .retrieve_btc_account_to_block_indices
@@ -36,19 +38,13 @@ pub fn accept_retrieve_btc_request<R: CanisterRuntime>(
     }
 }
 
-pub fn accept_consolidate_utxos_request<R: CanisterRuntime>(
+pub fn create_consolidate_utxos_request<R: CanisterRuntime>(
+    state: &mut CkBtcMinterState,
     request: ConsolidateUtxosRequest,
     runtime: &R,
 ) {
-    record_event(
-        EventType::AcceptedConsolidateUtxosRequest(request.clone()),
-        runtime,
-    );
-    // Note that here it shouldn't add the request to state.pending_btc_request
-    // like what was done in accept_retrieve_btc_request. This is because
-    // a ConsolidateUtxoRequest is accepted only *after* the transaction is
-    // built (and will then be signed and submitted), which means it
-    // should not be in pending status.
+    state.push_consolidate_utxos_request(request.clone());
+    record_event(EventType::CreatedConsolidateUtxosRequest(request), runtime);
 }
 
 pub fn add_utxos<R: CanisterRuntime>(

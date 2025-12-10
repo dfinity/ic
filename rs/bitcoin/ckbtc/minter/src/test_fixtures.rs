@@ -159,7 +159,7 @@ pub fn build_bitcoin_unsigned_transaction(
     crate::build_unsigned_transaction(
         available_utxos,
         outputs,
-        main_address,
+        &main_address,
         fee_per_vbyte,
         &bitcoin_fee_estimator,
     )

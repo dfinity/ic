@@ -53,7 +53,7 @@ pub fn estimate_withdrawal_fee<F: FeeEstimator>(
     build_unsigned_transaction_from_inputs(
         &selected_utxos,
         vec![(recipient_address, withdrawal_amount)],
-        minter_address,
+        &minter_address,
         median_fee_millisatoshi_per_vbyte,
         fee_estimator,
     )

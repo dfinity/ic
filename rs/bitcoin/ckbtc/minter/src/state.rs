@@ -86,6 +86,8 @@ pub struct RetrieveBtcRequest {
 pub struct ConsolidateUtxosRequest {
     /// The amount to consolidate.
     pub amount: u64,
+    /// The destination BTC address. It should always be the minter's address.
+    pub address: BitcoinAddress,
     /// The BURN transaction index on the ledger.
     /// Serves as a unique request identifier.
     pub block_index: u64,
@@ -181,6 +183,8 @@ pub struct SubmittedBtcTransaction {
     pub fee_per_vbyte: Option<u64>,
     /// Include both the fee paid for the transaction and the minter fee.
     pub withdrawal_fee: Option<WithdrawalFee>,
+    /// Signed transaction if included.
+    pub signed_tx: Option<crate::tx::SignedTransaction>,
 }
 
 /// BtcTransactionRequest is either a RetrieveBtcRequest or ConsolidateUtxosRequest.
@@ -209,10 +213,10 @@ impl BtcTransactionRequest {
             Self::ConsolidateUtxos(request) => request.block_index,
         }
     }
-    pub fn address(&self) -> Option<&BitcoinAddress> {
+    pub fn address(&self) -> &BitcoinAddress {
         match self {
-            Self::RetrieveBtc(request) => Some(&request.address),
-            Self::ConsolidateUtxos(_) => None,
+            Self::RetrieveBtc(request) => &request.address,
+            Self::ConsolidateUtxos(request) => &request.address,
         }
     }
     pub fn kyt_provider(&self) -> Option<Principal> {
@@ -445,8 +449,8 @@ pub struct CkBtcMinterState {
     /// Minimum amount of bitcoin that can be retrieved based on recent fees
     pub fee_based_retrieve_btc_min_amount: u64,
 
-    /// Btc requests that are waiting to be served, sorted by received_at.
-    pub pending_btc_requests: Vec<BtcTransactionRequest>,
+    /// Retrieve_btc requests that are waiting to be served, sorted by received_at.
+    pub pending_retrieve_btc_requests: Vec<RetrieveBtcRequest>,
 
     /// Maps Account to its retrieve_btc requests burn block indices.
     pub retrieve_btc_account_to_block_indices: BTreeMap<Account, Vec<u64>>,
@@ -458,8 +462,11 @@ pub struct CkBtcMinterState {
     /// Last transaction submission timestamp.
     pub last_transaction_submission_time_ns: Option<u64>,
 
-    /// The created time of the last consolidate UTXO request.
+    /// The created time of the last ConsolidateUtxosRequest.
     pub last_consolidate_utxos_request_created_time_ns: Option<u64>,
+
+    /// Current consolidateUtxos request that has not yet finalized.
+    pub current_consolidate_utxos_request: Option<ConsolidateUtxosRequest>,
 
     /// Minimum number of available UTXOs to trigger a consolidation.
     pub utxo_consolidation_threshold: u64,
@@ -824,9 +831,9 @@ impl CkBtcMinterState {
     /// identifier.
     pub fn retrieve_btc_status(&self, block_index: u64) -> RetrieveBtcStatus {
         if self
-            .pending_btc_requests
+            .pending_retrieve_btc_requests
             .iter()
-            .any(|req| req.block_index() == block_index)
+            .any(|req| req.block_index == block_index)
         {
             return RetrieveBtcStatus::Pending;
         }
@@ -873,19 +880,19 @@ impl CkBtcMinterState {
     /// Returns true if the pending requests queue has enough requests to form a
     /// batch or there are old enough requests to form a batch.
     pub fn can_form_a_batch(&self, min_pending: usize, now: u64) -> bool {
-        if self.pending_btc_requests.len() >= min_pending {
+        if self.pending_retrieve_btc_requests.len() >= min_pending {
             return true;
         }
 
-        if let Some(req) = self.pending_btc_requests.first()
-            && self.max_time_in_queue_nanos < now.saturating_sub(req.received_at())
+        if let Some(req) = self.pending_retrieve_btc_requests.first()
+            && self.max_time_in_queue_nanos < now.saturating_sub(req.received_at)
         {
             return true;
         }
 
-        if let Some(req) = self.pending_btc_requests.last()
+        if let Some(req) = self.pending_retrieve_btc_requests.last()
             && let Some(last_submission_time) = self.last_transaction_submission_time_ns
-            && self.max_time_in_queue_nanos < req.received_at().saturating_sub(last_submission_time)
+            && self.max_time_in_queue_nanos < req.received_at.saturating_sub(last_submission_time)
         {
             return true;
         }
@@ -898,18 +905,13 @@ impl CkBtcMinterState {
         let available_utxos_value = self.available_utxos.iter().map(|u| u.value).sum::<u64>();
         let mut batch = BTreeSet::new();
         let mut tx_amount = 0;
-        for request in std::mem::take(&mut self.pending_btc_requests) {
-            match request {
-                BtcTransactionRequest::RetrieveBtc(req) => {
-                    if available_utxos_value < req.amount + tx_amount || batch.len() >= max_size {
-                        // Put this request back to the queue until we have enough liquid UTXOs.
-                        self.pending_btc_requests.push(req.into());
-                    } else {
-                        tx_amount += req.amount;
-                        batch.insert(req);
-                    }
-                }
-                BtcTransactionRequest::ConsolidateUtxos(_) => (),
+        for req in std::mem::take(&mut self.pending_retrieve_btc_requests) {
+            if available_utxos_value < req.amount + tx_amount || batch.len() >= max_size {
+                // Put this request back to the queue until we have enough liquid UTXOs.
+                self.pending_retrieve_btc_requests.push(req.into());
+            } else {
+                tx_amount += req.amount;
+                batch.insert(req);
             }
         }
 
@@ -919,7 +921,7 @@ impl CkBtcMinterState {
     /// Returns the total number of all retrieve_btc requests that we haven't
     /// finalized yet.
     pub fn count_incomplete_retrieve_btc_requests(&self) -> usize {
-        self.pending_btc_requests.len()
+        self.pending_retrieve_btc_requests.len()
             + self.requests_in_flight.len()
             + self
                 .submitted_transactions
@@ -928,12 +930,22 @@ impl CkBtcMinterState {
                 .sum::<usize>()
     }
 
+    /// Returns a submitted transacction if there is one with the given
+    /// identifier.
+    pub fn get_submitted_transaction(&self, block_index: u64) -> Option<&SubmittedBtcTransaction> {
+        self.submitted_transactions.iter().find(|tx| {
+            tx.requests
+                .iter_block_index()
+                .any(|index| index == block_index)
+        })
+    }
+
     /// Returns true if there is a pending retrieve_btc request with the given
     /// identifier.
-    fn has_pending_request(&self, block_index: u64) -> bool {
-        self.pending_btc_requests
+    fn has_pending_retrieve_btc_request(&self, block_index: u64) -> bool {
+        self.pending_retrieve_btc_requests
             .iter()
-            .any(|req| req.block_index() == block_index)
+            .any(|req| req.block_index == block_index)
     }
 
     fn forget_utxo(&mut self, utxo: &Utxo) {
@@ -1015,6 +1027,11 @@ impl CkBtcMinterState {
                 })
             }
             SubmittedWithdrawalRequests::ToConsolidate { request } => {
+                assert_eq!(
+                    self.current_consolidate_utxos_request.as_ref(),
+                    Some(&request)
+                );
+                self.current_consolidate_utxos_request = None;
                 self.push_finalized_request(FinalizedBtcRequest {
                     request: request.into(),
                     state: FinalizedStatus::Confirmed { txid: *txid },
@@ -1123,7 +1140,7 @@ impl CkBtcMinterState {
             "replacing the same transaction twice is not allowed"
         );
         for block_index in tx.requests.iter_block_index() {
-            assert!(!self.has_pending_request(block_index));
+            assert!(!self.has_pending_retrieve_btc_request(block_index));
         }
 
         let new_txid = tx.txid;
@@ -1153,15 +1170,44 @@ impl CkBtcMinterState {
     }
 
     /// Removes a pending retrieve_btc request with the specified block index.
-    fn remove_pending_request(&mut self, block_index: u64) -> Option<BtcTransactionRequest> {
+    fn remove_pending_retrieve_btc_request(
+        &mut self,
+        block_index: u64,
+    ) -> Option<RetrieveBtcRequest> {
         match self
-            .pending_btc_requests
+            .pending_retrieve_btc_requests
             .iter()
-            .position(|req| req.block_index() == block_index)
+            .position(|req| req.block_index == block_index)
         {
-            Some(pos) => Some(self.pending_btc_requests.remove(pos)),
+            Some(pos) => Some(self.pending_retrieve_btc_requests.remove(pos)),
             None => None,
         }
+    }
+
+    /// Removes an in-flight conslidate utxos request with the specified block index.
+    fn get_consolidate_utxos_request(
+        &mut self,
+        block_index: u64,
+    ) -> Option<&ConsolidateUtxosRequest> {
+        self.current_consolidate_utxos_request
+            .as_ref()
+            .and_then(|req| {
+                if req.block_index == block_index {
+                    Some(req)
+                } else {
+                    None
+                }
+            })
+    }
+
+    /// Push a new ConsolidateUtxosRequest.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if there is already an existing ConsolidateUtxosRequest.
+    fn push_consolidate_utxos_request(&mut self, request: ConsolidateUtxosRequest) {
+        assert!(self.current_consolidate_utxos_request.is_none());
+        self.current_consolidate_utxos_request = Some(request);
     }
 
     /// Marks the specified retrieve_btc request as in-flight.
@@ -1171,7 +1217,7 @@ impl CkBtcMinterState {
     /// This function panics if there is a pending retrieve_btc request with the
     /// same identifier.
     pub fn push_in_flight_request(&mut self, block_index: u64, status: InFlightStatus) {
-        assert!(!self.has_pending_request(block_index));
+        assert!(!self.has_pending_retrieve_btc_request(block_index));
 
         self.requests_in_flight.insert(block_index, status);
     }
@@ -1187,13 +1233,20 @@ impl CkBtcMinterState {
         requests: SubmittedWithdrawalRequests,
     ) {
         for block_index in requests.iter_block_index() {
-            assert!(!self.has_pending_request(block_index));
+            assert!(!self.has_pending_retrieve_btc_request(block_index));
             self.requests_in_flight.remove(&block_index);
         }
-        for req in requests.into_tx_request_iter() {
-            self.pending_btc_requests.push(req);
+        match requests {
+            SubmittedWithdrawalRequests::ToConfirm { requests }
+            | SubmittedWithdrawalRequests::ToCancel { requests, .. } => {
+                for req in requests {
+                    self.pending_retrieve_btc_requests.push(req);
+                }
+            }
+            SubmittedWithdrawalRequests::ToConsolidate { .. } => (),
         }
-        self.pending_btc_requests.sort_by_key(|r| r.received_at());
+        self.pending_retrieve_btc_requests
+            .sort_by_key(|r| r.received_at);
     }
 
     /// Push back a retrieve_btc request to the ordered queue.
@@ -1202,15 +1255,15 @@ impl CkBtcMinterState {
     ///
     /// This function panics if the new request breaks the request ordering in
     /// the queue.
-    pub fn push_back_pending_request(&mut self, request: BtcTransactionRequest) {
-        if let Some(last_req) = self.pending_btc_requests.last() {
-            assert!(last_req.received_at() <= request.received_at());
+    pub fn push_back_pending_retrieve_btc_request(&mut self, request: RetrieveBtcRequest) {
+        if let Some(last_req) = self.pending_retrieve_btc_requests.last() {
+            assert!(last_req.received_at <= request.received_at);
         }
-        self.tokens_burned += request.amount();
-        if let Some(kyt_provider) = request.kyt_provider() {
+        self.tokens_burned += request.amount;
+        if let Some(kyt_provider) = request.kyt_provider {
             *self.owed_kyt_amount.entry(kyt_provider).or_insert(0) += self.check_fee;
         }
-        self.pending_btc_requests.push(request);
+        self.pending_retrieve_btc_requests.push(request);
     }
 
     /// Records a BTC transaction as submitted and updates statuses of all
@@ -1222,7 +1275,7 @@ impl CkBtcMinterState {
     /// same identifier as one of the request used for the transaction.
     pub fn push_submitted_transaction(&mut self, tx: SubmittedBtcTransaction) {
         for block_index in tx.requests.iter_block_index() {
-            assert!(!self.has_pending_request(block_index));
+            assert!(!self.has_pending_retrieve_btc_request(block_index));
             self.requests_in_flight.remove(&block_index);
         }
         self.submitted_transactions.push(tx);
@@ -1235,7 +1288,7 @@ impl CkBtcMinterState {
     /// This function panics if there is a pending retrieve_btc request with the
     /// same identifier.
     fn push_finalized_request(&mut self, req: FinalizedBtcRequest) {
-        assert!(!self.has_pending_request(req.request.block_index()));
+        assert!(!self.has_pending_retrieve_btc_request(req.request.block_index()));
 
         if self.finalized_requests.len() >= MAX_FINALIZED_REQUESTS {
             self.finalized_requests.pop_front();
@@ -1466,8 +1519,8 @@ impl CkBtcMinterState {
         ledger_burn_index: LedgerBurnIndex,
         reimburse_deposit_task: ReimburseWithdrawalTask,
     ) {
-        self.pending_btc_requests
-            .retain(|req| req.block_index() != ledger_burn_index);
+        self.pending_retrieve_btc_requests
+            .retain(|req| req.block_index != ledger_burn_index);
 
         if let Some(tx_status) = self.requests_in_flight.get(&ledger_burn_index) {
             panic!(
@@ -1591,12 +1644,13 @@ impl CkBtcMinterState {
             "stuck_transactions do not match"
         );
 
-        let my_requests = as_sorted_vec(self.pending_btc_requests.iter().cloned(), |r| {
-            r.block_index()
+        let my_requests = as_sorted_vec(self.pending_retrieve_btc_requests.iter().cloned(), |r| {
+            r.block_index
         });
-        let other_requests = as_sorted_vec(other.pending_btc_requests.iter().cloned(), |r| {
-            r.block_index()
-        });
+        let other_requests =
+            as_sorted_vec(other.pending_retrieve_btc_requests.iter().cloned(), |r| {
+                r.block_index
+            });
         ensure_eq!(
             my_requests,
             other_requests,
@@ -1870,10 +1924,11 @@ impl From<InitArgs> for CkBtcMinterState {
             retrieve_btc_accounts: Default::default(),
             retrieve_btc_min_amount: args.retrieve_btc_min_amount,
             fee_based_retrieve_btc_min_amount: args.retrieve_btc_min_amount,
-            pending_btc_requests: Default::default(),
+            pending_retrieve_btc_requests: Default::default(),
             requests_in_flight: Default::default(),
             last_transaction_submission_time_ns: None,
             last_consolidate_utxos_request_created_time_ns: None,
+            current_consolidate_utxos_request: None,
             utxo_consolidation_threshold: DEFAULT_UTXO_CONSOLIDATION_THRESHOLD,
             submitted_transactions: Default::default(),
             replacement_txid: Default::default(),

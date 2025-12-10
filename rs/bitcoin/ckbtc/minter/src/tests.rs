@@ -261,7 +261,7 @@ fn should_have_same_input_and_output_count() {
     let (tx, change_output, _, _) = build_unsigned_transaction(
         &mut available_utxos,
         vec![(out1_addr.clone(), 100_000), (out2_addr.clone(), 99_999)],
-        minter_addr.clone(),
+        &minter_addr,
         fee_per_vbyte,
         &fee_estimator,
     )
@@ -311,7 +311,7 @@ fn test_min_change_amount() {
             (out1_addr.clone(), utxo_1.value),
             (out2_addr.clone(), utxo_2.value - 1),
         ],
-        minter_addr.clone(),
+        &minter_addr,
         fee_per_vbyte,
         &fee_estimator,
     )
@@ -431,7 +431,7 @@ fn test_no_dust_in_change_output() {
         let (tx, change_output, _withdrawal_fee, _utxos) = build_unsigned_transaction(
             &mut available_utxos,
             vec![(out1_addr.clone(), utxo.value - change)],
-            minter_addr.clone(),
+            &minter_addr,
             fee_per_vbyte,
             &fee_estimator,
         )
@@ -619,7 +619,7 @@ proptest! {
         let (unsigned_tx, _, _, _) = build_unsigned_transaction(
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
-            minter_address,
+            &minter_address,
             fee_per_vbyte,
             &fee_estimator
         )
@@ -679,7 +679,7 @@ proptest! {
         let (unsigned_tx, change_output, _, _) = build_unsigned_transaction(
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
-            minter_address.clone(),
+            &minter_address,
             fee_per_vbyte,
             &fee_estimator
         )
@@ -777,7 +777,7 @@ proptest! {
         }
         for req in requests {
             let block_index = req.block_index;
-            state.push_back_pending_request(req.into());
+            state.push_back_pending_retrieve_btc_request(req.into());
             prop_assert_eq!(state.retrieve_btc_status(block_index), RetrieveBtcStatus::Pending);
         }
 
@@ -1036,7 +1036,7 @@ fn can_form_a_batch_conditions() {
         kyt_provider: None,
         reimbursement_account: None,
     };
-    state.pending_btc_requests.push(req.into());
+    state.pending_retrieve_btc_requests.push(req.into());
     // One request, >= min_pending, pass.
     assert!(state.can_form_a_batch(1, 10));
 
@@ -1062,7 +1062,7 @@ fn can_form_a_batch_conditions() {
         kyt_provider: None,
         reimbursement_account: None,
     };
-    state.pending_btc_requests.push(req.into());
+    state.pending_retrieve_btc_requests.push(req.into());
     // Two request, long enough since last_transaction_submission_time, pass.
     assert!(state.can_form_a_batch(10, 10600));
 }
@@ -1225,7 +1225,7 @@ fn test_build_consolidation_transaction() {
     let result = build_unsigned_transaction_from_inputs(
         &input_utxos,
         vec![(main_address.clone(), total_amount / 2)],
-        main_address.clone(),
+        &main_address,
         fee_millisatoshi_per_vbyte,
         &fee_estimator,
     );

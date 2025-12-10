@@ -341,15 +341,13 @@ pub fn build_metadata(s: &CkBtcMinterState) -> String {
 
 pub fn build_pending_request_tx(s: &CkBtcMinterState) -> String {
     with_utf8_buffer(|buf| {
-        for req in s.pending_btc_requests.iter() {
+        for req in s.pending_retrieve_btc_requests.iter() {
             writeln!(
                 buf,
                 "<tr><td>{}</td><td><code>{}</code></td><td>{}</td></tr>",
-                req.block_index(),
-                req.address()
-                    .map(|x| x.display(s.btc_network))
-                    .unwrap_or("(minter)".to_string()),
-                req.amount()
+                req.block_index,
+                req.address.display(s.btc_network),
+                req.amount
             )
             .unwrap();
         }
@@ -394,7 +392,7 @@ pub fn build_submitted_transactions(s: &CkBtcMinterState) -> String {
                     .unwrap();
 
                     write!(buf, "<td rowspan='{rowspan}'>").unwrap();
-                    for req in tx.requests.iter_retrieve_btc_request() {
+                    for req in tx.requests.clone().into_tx_request_iter() {
                         write!(
                             buf,
                             "<table>
@@ -403,10 +401,10 @@ pub fn build_submitted_transactions(s: &CkBtcMinterState) -> String {
                             <tr><th>Address</th><td><code>{}</code></td></tr>
                             <tr><th>Received at</th><td>{}</td></tr>
                             </table>",
-                            req.block_index,
-                            DisplayAmount(req.amount),
-                            req.address.display(s.btc_network),
-                            req.received_at,
+                            req.block_index(),
+                            DisplayAmount(req.amount()),
+                            req.address().display(s.btc_network),
+                            req.received_at(),
                         )
                         .unwrap();
                     }
@@ -436,10 +434,7 @@ pub fn build_finalized_requests(s: &CkBtcMinterState) -> String {
                         <td><code>{}</code></td>
                         <td>{}</td>",
                 req.request.block_index(),
-                req.request
-                    .address()
-                    .map(|address| address.display(s.btc_network))
-                    .unwrap_or("(minter)".to_string()),
+                req.request.address().display(s.btc_network),
                 DisplayAmount(req.request.amount()),
             )
             .unwrap();
