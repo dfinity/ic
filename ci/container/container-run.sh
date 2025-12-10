@@ -33,6 +33,10 @@ EOF
 
 if findmnt /hoststorage >/dev/null; then
     PODMAN_ARGS=(--root /hoststorage/podman-root)
+    if [ ! -d /hoststorage/podman-root ]; then
+        sudo mkdir -p /hoststorage/podman-root
+        sudo chown -R 1000:1000 /hoststorage/podman-root
+    fi
 else
     PODMAN_ARGS=()
 fi
@@ -65,18 +69,10 @@ done
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 IMAGE_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
 IMAGE="$IMAGE:$IMAGE_TAG"
-if ! sudo podman "${PODMAN_ARGS[@]}" image exists $IMAGE; then
-    if ! sudo podman "${PODMAN_ARGS[@]}" pull $IMAGE; then
+if ! podman "${PODMAN_ARGS[@]}" image exists $IMAGE; then
+    if ! podman "${PODMAN_ARGS[@]}" pull $IMAGE; then
         # fallback to building the image
-        docker() {
-            # Preserve "${PODMAN_ARGS[@]}" in the exported function by passing
-            # them through a single variable, and unpacking them here.
-            PODMAN_ARGS=(${PODMAN_ARGS})
-            sudo podman "${PODMAN_ARGS[@]}" "$@" --network=host
-        }
-        export -f docker
-        PODMAN_ARGS="${PODMAN_ARGS[@]}" "$REPO_ROOT"/ci/container/build-image.sh
-        unset -f docker
+        "$REPO_ROOT"/ci/container/build-image.sh
     fi
 fi
 
@@ -85,13 +81,13 @@ if findmnt /hoststorage >/dev/null; then
     sudo podman "${PODMAN_ARGS[@]}" image prune -a -f --filter "reference!=$IMAGE"
 fi
 
-WORKDIR="/ic"
 USER=$(whoami)
 
 PODMAN_RUN_ARGS=(
-    -w "$WORKDIR"
-
-    -u "ubuntu:ubuntu"
+    --user="ubuntu:ubuntu"
+    --workdir="/home/ubuntu"
+    --userns=keep-id
+    --cap-add=sys_admin
     -e HOSTUSER="$USER"
     -e HOSTHOSTNAME="$HOSTNAME"
     -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
@@ -126,39 +122,37 @@ trap 'rm -rf "${SUBUID_FILE}" "${SUBGID_FILE}"' EXIT
 SUBUID_FILE=$(mktemp --suffix=containerrun)
 SUBGID_FILE=$(mktemp --suffix=containerrun)
 
-IDMAP="uids=$(id -u)-1000-1;gids=$(id -g)-1000-1"
-
 PODMAN_RUN_ARGS+=(
-    --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}",idmap="${IDMAP}"
-    --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="${CTR_HOME}/.cache",idmap="${IDMAP}"
-    --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache",idmap="${IDMAP}"
-    --mount type=bind,source="${ICT_TESTNETS_DIR}",target="${ICT_TESTNETS_DIR}",idmap="${IDMAP}"
-    --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh",idmap="${IDMAP}"
-    --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws",idmap="${IDMAP}"
+    --mount type=bind,source="${REPO_ROOT}",target="/ic"
+    --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="${CTR_HOME}/.cache"
+    --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache"
+    --mount type=bind,source="${ICT_TESTNETS_DIR}",target="${ICT_TESTNETS_DIR}"
+    --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
+    --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
     --mount type=tmpfs,target="/home/ubuntu/.local/share/containers"
 )
 
 if [ "$(id -u)" = "1000" ]; then
     if [ -e "${HOME}/.gitconfig" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.gitconfig",target="/home/ubuntu/.gitconfig",idmap="${IDMAP}"
+            --mount type=bind,source="${HOME}/.gitconfig",target="/home/ubuntu/.gitconfig"
         )
     fi
 
     if [ -e "${HOME}/.bash_history" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.bash_history",target="/home/ubuntu/.bash_history",idmap="${IDMAP}"
+            --mount type=bind,source="${HOME}/.bash_history",target="/home/ubuntu/.bash_history"
         )
 
     fi
     if [ -e "${HOME}/.local/share/fish" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.local/share/fish",target="/home/ubuntu/.local/share/fish",idmap="${IDMAP}"
+            --mount type=bind,source="${HOME}/.local/share/fish",target="/home/ubuntu/.local/share/fish"
         )
     fi
     if [ -e "${HOME}/.zsh_history" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history",idmap="${IDMAP}"
+            --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history"
         )
     fi
 
@@ -191,9 +185,11 @@ else
 fi
 
 # Create dynamic subuid/subgid files for the user to run nested containers
-echo "ubuntu:100000:65536" >$SUBUID_FILE
+echo "ubuntu:1:$(($(id -u)-1))" > $SUBUID_FILE
+echo "ubuntu:$(($(id -u)+1)):$((65536-$(id -u) - 1))" >> $SUBUID_FILE
 chmod +r ${SUBUID_FILE}
-echo "ubuntu:100000:65536" >$SUBGID_FILE
+echo "ubuntu:1:$(($(id -u)-1))" > $SUBGID_FILE
+echo "ubuntu:$(($(id -u)+1)):$((65536-$(id -u) - 1))" >> $SUBGID_FILE
 chmod +r ${SUBGID_FILE}
 PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${SUBUID_FILE}",target="/etc/subuid"
@@ -221,13 +217,13 @@ if tty >/dev/null 2>&1; then
 else
     tty_arg=
 fi
-other_args="--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host"
-# Privileged rootful podman is required due to requirements of IC-OS guest build;
-# additionally, we need to use hosts's cgroups and network.
+# We need to use hosts's cgroups and network
+other_args="--pids-limit=-1 -i $tty_arg --log-driver=none --rm --network=host --cgroupns=host"
+
 if [ $# -eq 0 ]; then
     set -x
-    exec sudo podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" "$IMAGE" "${USHELL:-/usr/bin/bash}"
+    exec podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} "$IMAGE" "${USHELL:-/usr/bin/bash}"
 else
     set -x
-    exec sudo podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" "$IMAGE" "$@"
+    exec podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} "$IMAGE" "$@"
 fi

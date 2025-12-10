@@ -63,6 +63,7 @@ def build_container(
 
     cmd = "podman "
     cmd += "build "
+    cmd += "--uts=host "
     cmd += f"-t {image_tag} "
     cmd += f"{build_arg_strings_joined} "
     cmd += "--no-cache "
