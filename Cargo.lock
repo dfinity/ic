@@ -18068,6 +18068,7 @@ name = "messaging-test-utils"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "ic-limits",
  "ic-types",
  "messaging-test",
  "proptest",
