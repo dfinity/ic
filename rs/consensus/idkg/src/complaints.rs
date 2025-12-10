@@ -1010,10 +1010,8 @@ impl<'a> Action<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        complaints::tests::crypto_failing_basic_signing::CryptoWrapperFailingBasicSigning,
-        test_utils::*,
-    };
+    use crate::complaints::tests::crypto_failing_basic_signing::CryptoWrapperFailingBasicSigning;
+    use crate::test_utils::*;
     use assert_matches::assert_matches;
     use ic_consensus_utils::crypto::SignVerify;
     use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
