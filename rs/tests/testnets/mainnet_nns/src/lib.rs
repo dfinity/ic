@@ -11,9 +11,6 @@ use ic_consensus_system_test_utils::ssh_access::execute_bash_command;
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nervous_system_common::E8;
-use ic_nested_nns_recovery_common::{
-    grant_backup_access_to_all_nns_nodes, replace_nns_with_unassigned_nodes,
-};
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_governance_api::add_or_remove_node_provider::Change;
 use ic_nns_governance_api::manage_neuron::{NeuronIdOrSubaccount, RegisterVote};

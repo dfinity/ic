@@ -34,7 +34,6 @@ rust_library(
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nested",
-        "//rs/tests/nested/nns_recovery:common",
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:anyhow",

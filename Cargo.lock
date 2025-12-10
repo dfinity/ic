@@ -15257,7 +15257,6 @@ dependencies = [
  "ic-xrc-types",
  "ic_consensus_system_test_subnet_recovery",
  "ic_consensus_system_test_utils",
- "ic_nested_nns_recovery_common",
  "nested",
  "nix 0.24.3",
  "nns_dapp",
