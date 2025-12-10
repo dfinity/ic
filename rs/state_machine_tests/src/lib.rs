@@ -2905,7 +2905,6 @@ impl StateMachine {
         let batch = Batch {
             batch_number,
             batch_summary,
-            requires_full_state_hash,
             blockmaker_metrics,
             content: BatchContent::Data {
                 batch_messages: BatchMessages {
@@ -2923,6 +2922,7 @@ impl StateMachine {
                     nidkg_ids: self.ni_dkg_ids.clone(),
                 },
                 consensus_responses: payload.consensus_responses,
+                requires_full_state_hash,
             },
             randomness: Randomness::from(seed),
             registry_version: self.registry_client.get_latest_version(),
