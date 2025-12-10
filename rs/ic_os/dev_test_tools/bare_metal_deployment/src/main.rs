@@ -195,8 +195,9 @@ fn main() -> Result<()> {
 }
 
 /// Executes an SSH operation with automatic error recovery via IPMI:
-/// - If SSH connection or authentication fails: Connects via IPMI, injects SSH key, uses IPMI's host IP, and retries
-/// Returns the final host IP address used (may differ from initial IP if recovery was needed)
+/// If SSH connection or authentication fails: Connects via IPMI, injects SSH key, uses IPMI's
+/// host IP, and retries.
+/// Returns the final host IP address used (may differ from initial IP if recovery was needed).
 fn execute_with_ssh_recovery<F>(
     mut operation: F,
     login_info: &LoginInfo,
