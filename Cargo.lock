@@ -7694,6 +7694,7 @@ dependencies = [
  "bs58 0.5.1",
  "candid",
  "candid_parser",
+ "ciborium",
  "hex",
  "ic-cdk",
  "ic-ckbtc-minter",
