@@ -12,4 +12,5 @@ clap = { workspace = true }
 http = { workspace = true }
 rand = { workspace = true }
 rexpect = { workspace = true }
+thiserror = { workspace = true }
 ssh2 = { workspace = true }
