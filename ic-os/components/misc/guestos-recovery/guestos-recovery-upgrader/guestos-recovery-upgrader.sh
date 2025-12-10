@@ -339,6 +339,6 @@ main() {
 
     # Log success banner in guestos-recovery-upgrader.sh so that it is visible when run manually
     print_success_banner
-    }
+}
 
 main "$@"
