@@ -46,7 +46,7 @@ impl G2PublicKeyCache {
     /// The current size leads to an estimated maximum memory usage of 321 KiB
     pub const SIZE_OF_GLOBAL_CACHE: usize = 1000;
 
-    /// Create a new signature cache with the specified maximum size
+    /// Create a new cache of G2 points with the specified maximum size
     fn new(max_size: usize) -> Self {
         let cache = Mutex::<SizedCache<[u8; G2Affine::BYTES], G2Affine>>::new(
             SizedCache::with_size(max_size),
@@ -54,7 +54,7 @@ impl G2PublicKeyCache {
         Self { cache }
     }
 
-    /// Return a reference to the global signature cache
+    /// Return a reference to the global cache of G2 points
     pub(crate) fn global() -> &'static Self {
         &GLOBAL_G2PK_CACHE
     }
@@ -115,7 +115,7 @@ impl G2PreparedCache {
     /// just under 19 KiB.
     pub const SIZE_OF_GLOBAL_CACHE: usize = 50;
 
-    /// Create a new signature cache with the specified maximum size
+    /// Create a new cache of G2Prepared with the specified maximum size
     fn new(max_size: usize) -> Self {
         let cache = Mutex::<SizedCache<[u8; G2Affine::BYTES], G2Prepared>>::new(
             SizedCache::with_size(max_size),
@@ -123,7 +123,7 @@ impl G2PreparedCache {
         Self { cache }
     }
 
-    /// Return a reference to the global signature cache
+    /// Return a reference to the global G2Prepared cache
     pub(crate) fn global() -> &'static Self {
         &GLOBAL_G2PREP_CACHE
     }
