@@ -10,8 +10,9 @@ Please make sure to read the [LICENSE](LICENSE), as well as our general [Contrib
 
 For security reasons, we do not run CI on PRs submitted by external contributors automatically. We review PRs first, then kick them off manually. Please use the following instructions:
 
+1. Fork this repository. If you have already forked the repository before, make sure your fork is up to date.
 1. To avoid long feedback loops run tests locally first. You can follow the instructions in the [HACKING.md](HACKING.md) document.
 1. For security reasons, you cannot make any changes to the [following files](.github/repo_policies/EXTERNAL_CONTRIB_BLACKLIST). If you do, your PR will be closed automatically.
-1. Once your PR is ready for review, submit the PR and click `Ready for Review` and someone will review your PR and kick off CI.
+1. Once your code is ready, submit your PR via a fork to and mark it as `Ready for Review`. CI will not kick off automatically for security reasons - your PR will first be reviewed and then someone will kick off CI manually.
 1. You will be notified that CI has been kicked off with a link to the CI run in a comment. Once CI is complete, it will report the status back to your PR.
 1. Running CI manually will need to be repeated for any new commits you push.
