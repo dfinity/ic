@@ -74,6 +74,15 @@ pub struct SubnetRecord {
     /// means to behave according to the `subnet_type` field.
     #[prost(enumeration = "CanisterCyclesCostSchedule", tag = "30")]
     pub canister_cycles_cost_schedule: i32,
+    /// List of replica version IDs that are recalled/blocked for this subnet.
+    /// Nodes in this subnet will not upgrade to any version in this list.
+    /// If the replica_version_id of a subnet points to a broken GuestOS and the subnet is stalled,
+    /// even if we manage to rollback the GuestOS locally, the GuestOS would automatically try
+    /// to upgrade to the broken GuestOS again. We can use this field to prevent that.
+    /// While nodes read the recalled_replica_version_ids from the registry vesion from the CUP,
+    /// they check the latest registry version for recalled_replica_version_ids.
+    #[prost(string, repeated, tag = "31")]
+    pub recalled_replica_version_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaInitialization {

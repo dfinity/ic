@@ -846,6 +846,16 @@ struct ProposeToTakeSubnetOfflineForRepairsCmd {
     /// so most likely, this won't be an issue.
     #[clap(long, value_parser, num_args(1..))]
     pub ssh_node_state_write_access: Vec<NodeSshAccessFlagValue>,
+
+    /// List of replica version IDs to recall. These versions will be marked as
+    /// recalled for this subnet, preventing them from being used.
+    #[clap(long, num_args(1..))]
+    pub recalled_replica_version_ids: Option<Vec<String>>,
+
+    /// If set, recall the current replica version of the subnet. This prevents
+    /// the subnet from being upgraded to this version again.
+    #[clap(long)]
+    pub recall_current_replica_version: bool,
 }
 
 impl ProposalTitle for ProposeToTakeSubnetOfflineForRepairsCmd {
@@ -858,7 +868,22 @@ impl ProposalTitle for ProposeToTakeSubnetOfflineForRepairsCmd {
 
 #[async_trait]
 impl ProposalPayload<SetSubnetOperationalLevelPayload> for ProposeToTakeSubnetOfflineForRepairsCmd {
-    async fn payload(&self, _agent: &Agent) -> SetSubnetOperationalLevelPayload {
+    async fn payload(&self, agent: &Agent) -> SetSubnetOperationalLevelPayload {
+        if self.recalled_replica_version_ids.is_some() && self.recall_current_replica_version {
+            panic!(
+                "Cannot specify both --recalled-replica-version-ids and --recall-current-replica-version"
+            );
+        }
+
+        let recalled_replica_version_ids = if self.recall_current_replica_version {
+            let registry_canister = RegistryCanister::new_with_agent(agent.clone());
+            let subnet_id = SubnetId::from(self.subnet);
+            let subnet_record = get_subnet_record(&registry_canister, subnet_id).await;
+            Some(vec![subnet_record.replica_version_id])
+        } else {
+            self.recalled_replica_version_ids.clone()
+        };
+
         let ssh_node_state_write_access = self
             .ssh_node_state_write_access
             .clone()
@@ -871,6 +896,7 @@ impl ProposalPayload<SetSubnetOperationalLevelPayload> for ProposeToTakeSubnetOf
             operational_level: Some(operational_level::DOWN_FOR_REPAIRS),
             ssh_readonly_access: Some(self.ssh_readonly_access.clone()),
             ssh_node_state_write_access: Some(ssh_node_state_write_access),
+            recalled_replica_version_ids,
         }
     }
 }
@@ -975,6 +1001,7 @@ impl ProposalPayload<SetSubnetOperationalLevelPayload>
             operational_level: Some(operational_level::NORMAL),
             ssh_readonly_access: Some(vec![]),
             ssh_node_state_write_access: Some(ssh_node_state_write_access),
+            recalled_replica_version_ids: Some(vec![]),
         }
     }
 }

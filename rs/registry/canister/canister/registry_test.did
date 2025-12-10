@@ -489,6 +489,11 @@ type SetSubnetOperationalLevelPayload = record {
   // Similar to ssh_read_only_access, except that this targets one node at a
   // time, not all the nodes in the subnet.
   ssh_node_state_write_access : opt vec NodeSshAccess;
+
+  // Replica version IDs to recall for this subnet. If specified, these versions
+  // will be added to the subnet's recalled_replica_version_ids list, preventing
+  // the subnet from upgrading to these versions.
+  recalled_replica_version_ids : opt vec text;
 };
 
 type NodeSshAccess = record {

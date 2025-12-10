@@ -1117,6 +1117,7 @@ impl EcdsaSubnetConfig {
                     max_parallel_pre_signature_transcripts_in_creation: None,
                 }),
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+                recalled_replica_version_ids: vec![],
             },
         }
     }

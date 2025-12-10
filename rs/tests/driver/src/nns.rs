@@ -51,6 +51,7 @@ use registry_canister::mutations::{
     do_create_subnet::{CanisterCyclesCostSchedule, CreateSubnetPayload},
     do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
+    do_recall_subnet_replica_version::RecallSubnetReplicaVersionPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
     do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,

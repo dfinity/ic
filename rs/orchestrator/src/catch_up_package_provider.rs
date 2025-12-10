@@ -501,7 +501,7 @@ fn get_cup_proto_height(cup: &pb::CatchUpPackage) -> Option<Height> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::{
         catch_up_package_provider::CatchUpPackageProvider, registry_helper::RegistryHelper,
@@ -690,7 +690,7 @@ mod tests {
         ))
     }
 
-    fn mock_tls_config() -> MockTlsConfig {
+    pub(crate) fn mock_tls_config() -> MockTlsConfig {
         #[derive(Debug)]
         struct NoVerify;
         impl ServerCertVerifier for NoVerify {
