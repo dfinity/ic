@@ -107,7 +107,7 @@ pub(crate) enum TipRequest {
             >,
         >,
     },
-    /// Filter canisters in tip. Remove ones not present in the set.
+    /// Filter canisters and snapshots in tip. Remove ones not present in the sets.
     ///
     /// State: `tip_folder_state.has_filtered_canisters = true`
     FilterTipCanisters {
@@ -216,7 +216,7 @@ pub(crate) fn spawn_tip_thread(
                                 .unwrap_or_else(|err| {
                                     fatal!(
                                         log,
-                                        "Failed to filter tip canisters for height @{}: {}",
+                                        "Failed to filter tip snapshots for height @{}: {}",
                                         height,
                                         err
                                     )

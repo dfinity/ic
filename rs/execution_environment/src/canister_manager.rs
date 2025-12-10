@@ -2553,22 +2553,8 @@ impl CanisterManager {
             resource_saturation,
         )?;
 
-        let old_snapshot = state.canister_snapshots.remove(delete_snapshot_id);
-        // Already confirmed that `old_snapshot` exists.
-        debug_assert_eq!(old_snapshot.unwrap().size(), old_snapshot_size);
-        canister.system_state.snapshots_memory_usage = canister
-            .system_state
-            .snapshots_memory_usage
-            .get()
-            .saturating_sub(old_snapshot_size.get())
-            .into();
-        // Confirm that `snapshots_memory_usage` is updated correctly.
-        debug_assert_eq!(
-            canister.system_state.snapshots_memory_usage,
-            state
-                .canister_snapshots
-                .compute_memory_usage_by_canister(canister.canister_id()),
-        );
+        self.remove_snapshot(canister, delete_snapshot_id, state, old_snapshot_size);
+
         self.cycles_and_memory_usage_updates(
             subnet_size,
             state.get_own_cost_schedule(),

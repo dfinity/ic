@@ -465,7 +465,7 @@ impl TipHandler {
         }
     }
 
-    /// Deletes canisters from tip if they are not in ids.
+    /// Deletes canisters from tip if they are not in `ids`.
     pub fn filter_tip_canisters(
         &mut self,
         height: Height,
@@ -486,7 +486,7 @@ impl TipHandler {
         Ok(())
     }
 
-    /// Deletes snapshots from tip if they are not in ids.
+    /// Deletes snapshots from tip if they are not in `ids`.
     pub fn filter_tip_snapshots(
         &mut self,
         height: Height,
