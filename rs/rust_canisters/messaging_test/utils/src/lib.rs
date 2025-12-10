@@ -1,3 +1,4 @@
+use ic_limits::MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET;
 use ic_types::{
     CanisterId,
     messages::{EXPECTED_MESSAGE_ID_LENGTH, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64},
@@ -7,6 +8,10 @@ use proptest::prelude::*;
 use std::ops::RangeInclusive;
 
 const MAX_PAYLOAD_SIZE: usize = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
+/// `SignedIngress::count_bytes()` includes the message ID length, account for
+/// that here.
+const MAX_INGRESS_PAYLOAD_SIZE: usize =
+    MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize - EXPECTED_MESSAGE_ID_LENGTH;
 
 /*
  * The proptest crate has dependencies that don't play nice with Wasm, therefore
@@ -64,6 +69,7 @@ pub fn arb_call(receiver: CanisterId, config: CallConfig) -> impl Strategy<Value
         (
             arb_simple_call(CallConfig {
                 receivers: vec![receiver],
+                call_bytes_range: 0..=MAX_INGRESS_PAYLOAD_SIZE,
                 ..config.clone()
             }),
             proptest::collection::vec(arb_simple_call(config.clone()), config.call_tree_size),

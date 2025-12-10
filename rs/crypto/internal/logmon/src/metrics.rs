@@ -1,5 +1,6 @@
 //! Metrics exported by crypto
 
+mod bls12_381_g2_prep_cache;
 mod bls12_381_point_cache;
 mod bls12_381_sig_cache;
 
@@ -283,10 +284,26 @@ impl CryptoMetrics {
         }
     }
 
-    /// Observes the cache statistics for the verification of threshold BLS12-381 signatures.
+    /// Observes the cache statistics for parsing of BLS12-381 points
     pub fn observe_bls12_381_point_cache_stats(&self, size: usize, hits: u64, misses: u64) {
         if let Some(metrics) = &self.metrics {
             let m = &metrics.crypto_bls12_381_point_cache_metrics;
+            m.cache_size.set(size as i64);
+
+            let prev_hits = m.cache_hits.get();
+            debug_assert!(prev_hits <= hits);
+            m.cache_hits.inc_by(hits - prev_hits);
+
+            let prev_misses = m.cache_misses.get();
+            debug_assert!(prev_misses <= misses);
+            m.cache_misses.inc_by(misses - prev_misses);
+        }
+    }
+
+    /// Observes the cache statistics for parsing of BLS12-381 G2Prepared
+    pub fn observe_bls12_381_g2_prep_cache_stats(&self, size: usize, hits: u64, misses: u64) {
+        if let Some(metrics) = &self.metrics {
+            let m = &metrics.crypto_bls12_381_g2_prep_cache_metrics;
             m.cache_size.set(size as i64);
 
             let prev_hits = m.cache_hits.get();
@@ -609,6 +626,9 @@ struct Metrics {
     /// Metrics for the cache of successfully decoded BLS12-381 points
     pub crypto_bls12_381_point_cache_metrics: bls12_381_point_cache::Metrics,
 
+    /// Metrics for the cache of successfully created BLS12-381 G2Prepared
+    pub crypto_bls12_381_g2_prep_cache_metrics: bls12_381_g2_prep_cache::Metrics,
+
     /// Gauge for the minimum epoch in active NI-DKG transcripts.
     observe_minimum_epoch_in_active_nidkg_transcripts: Gauge,
 
@@ -773,6 +793,18 @@ impl Metrics {
                 cache_misses: r.int_counter(
                     "crypto_bls12_381_point_cache_misses",
                 "Number of cache misses for successfully decoded BLS12-381 points"),
+            },
+            crypto_bls12_381_g2_prep_cache_metrics: bls12_381_g2_prep_cache::Metrics {
+                cache_size: r.int_gauge(
+                    "crypto_bls12_381_g2_prep_cache_size",
+                    "Size of cache of BLS12-381 G2Prepared",
+                ),
+                cache_hits: r.int_counter(
+                    "crypto_bls12_381_g2_prep_cache_hits",
+                "Number of cache hits of BLS12-381 G2Prepared cache"),
+                cache_misses: r.int_counter(
+                    "crypto_bls12_381_g2_prep_cache_misses",
+                "Number of cache misses of BLS12-381 G2Prepared cache"),
             },
             observe_minimum_epoch_in_active_nidkg_transcripts: r.gauge(
                 "crypto_minimum_epoch_in_active_nidkg_transcripts",

@@ -1,4 +1,4 @@
-use crate::G2Affine;
+use crate::{G2Affine, G2Prepared};
 use cached::{Cached, SizedCache};
 use parking_lot::Mutex;
 use std::sync::LazyLock;
@@ -46,7 +46,7 @@ impl G2PublicKeyCache {
     /// The current size leads to an estimated maximum memory usage of 321 KiB
     pub const SIZE_OF_GLOBAL_CACHE: usize = 1000;
 
-    /// Create a new signature cache with the specified maximum size
+    /// Create a new cache of G2 points with the specified maximum size
     fn new(max_size: usize) -> Self {
         let cache = Mutex::<SizedCache<[u8; G2Affine::BYTES], G2Affine>>::new(
             SizedCache::with_size(max_size),
@@ -54,7 +54,7 @@ impl G2PublicKeyCache {
         Self { cache }
     }
 
-    /// Return a reference to the global signature cache
+    /// Return a reference to the global cache of G2 points
     pub(crate) fn global() -> &'static Self {
         &GLOBAL_G2PK_CACHE
     }
@@ -84,5 +84,73 @@ impl G2PublicKeyCache {
         let misses = cache.cache_misses().unwrap_or(0);
 
         G2PublicKeyCacheStatistics::new(cache_size, hits, misses)
+    }
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct G2PreparedCacheStatistics {
+    pub size: usize,
+    pub hits: u64,
+    pub misses: u64,
+}
+
+impl G2PreparedCacheStatistics {
+    fn new(size: usize, hits: u64, misses: u64) -> Self {
+        Self { size, hits, misses }
+    }
+}
+
+/// A cache for G2 Public Keys
+pub(crate) struct G2PreparedCache {
+    cache: Mutex<SizedCache<[u8; G2Affine::BYTES], G2Prepared>>,
+}
+
+static GLOBAL_G2PREP_CACHE: LazyLock<G2PreparedCache> =
+    LazyLock::new(|| G2PreparedCache::new(G2PreparedCache::SIZE_OF_GLOBAL_CACHE));
+
+impl G2PreparedCache {
+    /// Specify the size of the global cache used for public keys
+    ///
+    /// This cache is kept small because G2Prepared is quite large,
+    /// just under 19 KiB.
+    pub const SIZE_OF_GLOBAL_CACHE: usize = 50;
+
+    /// Create a new cache of G2Prepared with the specified maximum size
+    fn new(max_size: usize) -> Self {
+        let cache = Mutex::<SizedCache<[u8; G2Affine::BYTES], G2Prepared>>::new(
+            SizedCache::with_size(max_size),
+        );
+        Self { cache }
+    }
+
+    /// Return a reference to the global G2Prepared cache
+    pub(crate) fn global() -> &'static Self {
+        &GLOBAL_G2PREP_CACHE
+    }
+
+    /// Check the cache for an already prepared G2 element
+    pub(crate) fn get(&self, bytes: &[u8; G2Affine::BYTES]) -> Option<G2Prepared> {
+        let mut cache = self.cache.lock();
+        cache.cache_get(bytes).cloned()
+    }
+
+    /// Insert a new G2Prepared into the cache
+    pub(crate) fn insert(&self, bytes: [u8; G2Affine::BYTES], prep: G2Prepared) {
+        let mut cache = self.cache.lock();
+        cache.cache_set(bytes, prep);
+    }
+
+    /// Return statistics about the cache
+    ///
+    /// Returns the size of the cache, the number of cache hits, and
+    /// the number of cache misses
+    pub(crate) fn cache_statistics(&self) -> G2PreparedCacheStatistics {
+        let cache = self.cache.lock();
+
+        let cache_size = cache.cache_size();
+        let hits = cache.cache_hits().unwrap_or(0);
+        let misses = cache.cache_misses().unwrap_or(0);
+
+        G2PreparedCacheStatistics::new(cache_size, hits, misses)
     }
 }
