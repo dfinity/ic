@@ -63,7 +63,7 @@ async fn verify_and_fix_gaps(
     storage_client: Arc<StorageClient>,
     archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
 ) -> anyhow::Result<()> {
-    let sync_ranges = derive_synchronization_gaps(storage_client.clone())?;
+    let sync_ranges = derive_synchronization_gaps(storage_client.clone()).await?;
     let tip = get_tip_block_hash_and_index(agent.clone()).await?;
     let (_tip_block_hash, tip_block_index) = match tip {
         Some(tip) => tip,
@@ -87,15 +87,15 @@ async fn verify_and_fix_gaps(
 /// This function will check whether there is a gap in the database.
 /// Furthermore, if there exists a gap between the genesis block and the lowest stored block, this function will add this synchronization gap to the gaps returned by the storage client.
 /// It is guaranteed that all gaps between [0,Highest_Stored_Block] will be returned.
-fn derive_synchronization_gaps(
+async fn derive_synchronization_gaps(
     storage_client: Arc<StorageClient>,
 ) -> anyhow::Result<Vec<SyncRange>> {
-    if !storage_client.does_blockchain_have_gaps()? {
+    if !storage_client.does_blockchain_have_gaps().await? {
         return Ok(vec![]);
     }
 
     // If there is a gap, compute all the gaps.
-    let gap = storage_client.get_blockchain_gaps()?;
+    let gap = storage_client.get_blockchain_gaps().await?;
 
     // The database should have at most one gap. Otherwise the database file was edited and it can no longer be guaranteed that it contains valid blocks.
     if gap.len() > 1 {
@@ -105,7 +105,7 @@ fn derive_synchronization_gaps(
         );
     } else if gap.is_empty() {
         // The block counter is off
-        storage_client.reset_blocks_counter()?;
+        storage_client.reset_blocks_counter().await?;
     }
 
     let mut sync_ranges = gap
@@ -123,7 +123,7 @@ fn derive_synchronization_gaps(
     // Gaps are only determined within stored block ranges. Blocks with indices that are below the lowest stored block and above the highest stored blocks are not considered.
     // Check if the lowest block that was stored is the genesis block.
 
-    let Some(lowest_block) = storage_client.get_block_with_lowest_block_idx()? else {
+    let Some(lowest_block) = storage_client.get_block_with_lowest_block_idx().await? else {
         // If the database is empty then there cannot exist any gaps.
         return Ok(vec![]);
     };
@@ -197,12 +197,13 @@ pub async fn start_synching_blocks(
 
         // Update the account balances. When queried for its status, the ledger will return the
         // highest block index for which the account balances have been processed.
-        match storage_client.update_account_balances() {
+        match storage_client.update_account_balances().await {
             Ok(_) => {
                 // We will only end up here if there are no gaps, the blockchain is synced to the
                 // tip, and the account balances have been updated.
                 let highest_block_index = storage_client
                     .get_block_with_highest_block_idx()
+                    .await
                     .unwrap_or(None)
                     .map(|rosetta_block| rosetta_block.index)
                     .unwrap_or(0u64);
@@ -281,18 +282,21 @@ pub async fn sync_from_the_tip(
 
     // The starting point of the synchronization process is either 0 if the database is empty or the highest stored block index plus one.
     // The trailing parent hash is either `None` if the database is empty or the block hash of the block with the highest block index in storage.
-    let sync_range = storage_client.get_block_with_highest_block_idx()?.map_or(
-        SyncRange::new(0, tip_block_index, ByteBuf::from(tip_block_hash), None),
-        |block| {
-            SyncRange::new(
-                // If storage is up to date then the start index is the same as the tip of the ledger.
-                block.index + 1,
-                tip_block_index,
-                ByteBuf::from(tip_block_hash),
-                Some(block.clone().get_block_hash()),
-            )
-        },
-    );
+    let sync_range = storage_client
+        .get_block_with_highest_block_idx()
+        .await?
+        .map_or(
+            SyncRange::new(0, tip_block_index, ByteBuf::from(tip_block_hash), None),
+            |block| {
+                SyncRange::new(
+                    // If storage is up to date then the start index is the same as the tip of the ledger.
+                    block.index + 1,
+                    tip_block_index,
+                    ByteBuf::from(tip_block_hash),
+                    Some(block.clone().get_block_hash()),
+                )
+            },
+        );
 
     // Do not make a sync call if the storage is up to date with the replica's ledger.
     if !sync_range.index_range.is_empty() {
@@ -437,7 +441,7 @@ async fn sync_blocks_interval(
         let number_of_blocks_fetched = fetched_blocks.len() as u64;
 
         // Store the fetched blocks in the database.
-        let result = storage_client.store_blocks(fetched_blocks.clone());
+        let result = storage_client.store_blocks(fetched_blocks.clone()).await;
         if let Err(e) = result {
             error!("Error while calling storage_client.store_blocks: {}", e);
             return Err(e);
@@ -589,18 +593,28 @@ async fn fetch_blocks_interval(
                     start: archive_query.start.clone(),
                     length: archive_query.length,
                 })?;
-                // Check if the provided archive canister id is in the list of trusted canister ids
-                let mut trusted_archive_canisters = archive_canister_ids.lock().await;
-                if !trusted_archive_canisters.iter().any(|archive_info| {
-                    archive_info.canister_id == archive_query.callback.canister_id
-                }) {
-                    *trusted_archive_canisters =
-                        fetch_archive_canister_infos(agent.clone()).await?;
 
-                    // Check again after updating the list of archive canister ids whether the provided archive canister id is in the list
-                    if !trusted_archive_canisters.iter().any(|archive_info| {
-                        archive_info.canister_id == archive_query.callback.canister_id
-                    }) {
+                // Check if the provided archive canister id is in the list of trusted canister ids
+                // (without holding lock across await points)
+                let is_trusted = {
+                    let trusted_archive_canisters = archive_canister_ids.lock().await;
+                    trusted_archive_canisters
+                        .iter()
+                        .any(|archive_info| archive_info.canister_id == archive_query.callback.canister_id)
+                };
+
+                if !is_trusted {
+                    // Fetch updated archive info without holding the lock
+                    let new_archive_infos = fetch_archive_canister_infos(agent.clone()).await?;
+
+                    // Update the list and check again
+                    let mut trusted_archive_canisters = archive_canister_ids.lock().await;
+                    *trusted_archive_canisters = new_archive_infos;
+
+                    if !trusted_archive_canisters
+                        .iter()
+                        .any(|archive_info| archive_info.canister_id == archive_query.callback.canister_id)
+                    {
                         bail!(
                             "Archive canister id {} is not in the list of trusted canister ids",
                             archive_query.callback.canister_id
@@ -608,6 +622,7 @@ async fn fetch_blocks_interval(
                     }
                 }
 
+                // Query the archive without holding any lock
                 let archive_response = agent
                     .agent
                     .query(

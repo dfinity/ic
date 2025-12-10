@@ -28,7 +28,7 @@ use config::{Args, ParsedConfig, Store, TokenDef};
 use rosetta_core::metrics::RosettaMetrics;
 use rosetta_core::watchdog::WatchdogThread;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::{path::PathBuf, process, time::Duration};
 use tokio::{net::TcpListener, sync::Mutex as AsyncMutex};
 use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
@@ -119,7 +119,7 @@ async fn load_metadata(
     is_offline: bool,
 ) -> anyhow::Result<Metadata> {
     if is_offline {
-        let db_metadata_entries = storage.read_metadata()?;
+        let db_metadata_entries = storage.read_metadata().await?;
         let are_metadata_set = token_def.are_metadata_args_set();
         // If metadata is empty and the args are not set, bail out.
         if db_metadata_entries.is_empty() && !are_metadata_set {
@@ -189,7 +189,7 @@ async fn load_metadata(
         .map(|(key, value)| MetadataEntry::from_metadata_value(key, value))
         .collect::<Result<Vec<MetadataEntry>>>()?;
 
-    storage.write_metadata(ic_metadata_entries.clone())?;
+    storage.write_metadata(ic_metadata_entries.clone()).await?;
 
     Metadata::from_metadata_entries(&ic_metadata_entries)
 }
@@ -239,7 +239,7 @@ async fn main() -> Result<()> {
         });
 
         let mut storage = match &config.store {
-            Store::InMemory => StorageClient::new_in_memory()?,
+            Store::InMemory => StorageClient::new_in_memory().await?,
             Store::File { dir_path } => {
                 let mut path = dir_path.clone();
                 path.push(format!("{}.db", PrincipalId::from(token_def.ledger_id)));
@@ -249,6 +249,7 @@ async fn main() -> Result<()> {
                     config.flush_cache_shrink_mem,
                     config.balance_sync_batch_size,
                 )
+                .await
                 .unwrap_or_else(|err| panic!("error creating persistent storage '{path:?}': {err}"))
             }
         };
@@ -296,7 +297,7 @@ async fn main() -> Result<()> {
         let shared_state = Arc::new(AppState {
             icrc1_agent: icrc1_agent.clone(),
             ledger_id: token_def.ledger_id,
-            synched: Arc::new(Mutex::new(None)),
+            synched: Arc::new(AsyncMutex::new(None)),
             storage: Arc::new(storage),
             archive_canister_ids: Arc::new(AsyncMutex::new(vec![])),
             metadata,
