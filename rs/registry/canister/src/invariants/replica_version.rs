@@ -81,9 +81,20 @@ pub(crate) fn check_replica_version_invariants(
 
         // Check that any measured versions actually have measurements
         if r.guest_launch_measurements
+            .as_ref()
             .is_some_and(|measurements| measurements.guest_launch_measurements.is_empty())
         {
             panic!("guest_launch_measurements must not be an empty vector");
+        }
+
+        // Check that any measured versions are using encoded_measurement
+        if r.guest_launch_measurements.is_some_and(|measurements| {
+            measurements
+                .guest_launch_measurements
+                .iter()
+                .any(|v| v.encoded_measurement.is_none())
+        }) {
+            panic!("encoded_measurement must be set for any guest_launch_measurements");
         }
     }
 
@@ -267,8 +278,6 @@ mod tests {
             release_package_urls: urls,
             guest_launch_measurements: Some(GuestLaunchMeasurements {
                 guest_launch_measurements: vec![GuestLaunchMeasurement {
-                    #[allow(deprecated)]
-                    measurement: vec![0x01, 0x02, 0x03],
                     metadata: Some(GuestLaunchMeasurementMetadata {
                         kernel_cmdline: "foo=bar".to_string(),
                     }),
@@ -317,6 +326,30 @@ mod tests {
             release_package_urls: vec![MOCK_URL.into()],
             guest_launch_measurements: Some(GuestLaunchMeasurements {
                 guest_launch_measurements: vec![],
+            }),
+        }
+        .encode_to_vec();
+
+        let mutation = vec![upsert(key.as_bytes(), value)];
+        registry.check_global_state_invariants(&mutation);
+    }
+
+    #[test]
+    #[should_panic(expected = "encoded_measurement must be set for any guest_launch_measurements")]
+    fn panic_when_encoded_measurement_not_set() {
+        let registry = invariant_compliant_registry(0);
+
+        let key = make_replica_version_key(ReplicaVersion::default());
+        let value = ReplicaVersionRecord {
+            release_package_sha256_hex: MOCK_HASH.into(),
+            release_package_urls: vec![MOCK_URL.into()],
+            guest_launch_measurements: Some(GuestLaunchMeasurements {
+                guest_launch_measurements: vec![GuestLaunchMeasurement {
+                    metadata: Some(GuestLaunchMeasurementMetadata {
+                        kernel_cmdline: "foo=bar".to_string(),
+                    }),
+                    encoded_measurement: None,
+                }],
             }),
         }
         .encode_to_vec();

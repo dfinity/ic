@@ -2752,8 +2752,6 @@ fn convert_guest_launch_measurement_from_pb_to_pb_api(
     item: PbGuestLaunchMeasurement,
 ) -> pb_api::GuestLaunchMeasurement {
     pb_api::GuestLaunchMeasurement {
-        #[allow(deprecated)]
-        measurement: Some(item.measurement),
         encoded_measurement: item.encoded_measurement,
         metadata: item
             .metadata
@@ -2765,8 +2763,6 @@ fn convert_guest_launch_measurement_from_pb_api_to_pb(
     item: pb_api::GuestLaunchMeasurement,
 ) -> PbGuestLaunchMeasurement {
     PbGuestLaunchMeasurement {
-        #[allow(deprecated)]
-        measurement: item.measurement.unwrap_or_default(),
         encoded_measurement: item.encoded_measurement,
         metadata: item
             .metadata

@@ -2697,8 +2697,6 @@ pub struct GuestLaunchMeasurements {
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug, Default,
 )]
 pub struct GuestLaunchMeasurement {
-    #[deprecated]
-    pub measurement: Option<Vec<u8>>,
     pub encoded_measurement: Option<String>,
     pub metadata: Option<GuestLaunchMeasurementMetadata>,
 }
