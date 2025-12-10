@@ -272,7 +272,7 @@ mod event {
         /// Indicates that the minter consolidates UTXOs with transaction
         /// fee corresponding to burning ckbtc from the fee subaccount
         /// at the given ledger index.
-        #[serde(rename = "accepted_consolidate_utxos_request")]
+        #[serde(rename = "created_consolidate_utxos_request")]
         CreatedConsolidateUtxosRequest(ConsolidateUtxosRequest),
     }
 }

@@ -424,8 +424,9 @@ type EventType = variant {
         kyt_provider : opt principal;
         reimbursement_account : opt Account;
     };
-    accepted_consolidate_utxos_request : record {
+    created_consolidate_utxos_request : record {
         amount : nat64;
+        address : BitcoinAddress;
         block_index : nat64;
         received_at : nat64;
     };
