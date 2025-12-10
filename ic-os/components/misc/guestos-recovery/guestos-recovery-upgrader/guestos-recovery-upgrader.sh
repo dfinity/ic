@@ -56,7 +56,9 @@ print_success_banner() {
     local bold="\033[1m"
     local reset="\033[0m"
     echo
-    echo -e "${green}${bold}=== SUCCESS: Recovery completed successfully! ===${reset}"
+    echo -e "${green}${bold}========================================================"${reset}
+    echo -e "${green}${bold}SUCCESS: Recovery completed successfully!${reset}"
+    echo -e "${green}${bold}========================================================"${reset}
     echo
 }
 
