@@ -13229,6 +13229,7 @@ dependencies = [
 name = "ic-registry-replicator"
 version = "0.9.0"
 dependencies = [
+ "async-trait",
  "candid",
  "clap 4.5.27",
  "ic-certification-test-utils",
@@ -19166,6 +19167,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-protobuf",
  "ic-registry-canister-api",
+ "ic-registry-client",
  "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",

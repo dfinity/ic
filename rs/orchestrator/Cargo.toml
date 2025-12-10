@@ -80,6 +80,7 @@ ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproduci
 ic-crypto-test-utils-tls = { path = "../crypto/test_utils/tls" }
 ic-crypto-tls-interfaces-mocks = { path = "../crypto/tls_interfaces/mocks" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
+ic-registry-client = { path = "../registry/client" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }

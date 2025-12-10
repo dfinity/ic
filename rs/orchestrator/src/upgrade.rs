@@ -20,7 +20,7 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::proxy::try_from_option_field;
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
-use ic_registry_replicator::RegistryReplicator;
+use ic_registry_replicator::RegistryReplicatorTrait;
 use ic_types::{
     Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
     consensus::{CatchUpPackage, HasHeight},
@@ -91,7 +91,7 @@ pub(crate) struct Upgrade {
     replica_config_file: PathBuf,
     pub ic_binary_dir: PathBuf,
     pub image_path: PathBuf,
-    registry_replicator: Arc<RegistryReplicator>,
+    registry_replicator: Arc<dyn RegistryReplicatorTrait>,
     pub logger: ReplicaLogger,
     node_id: NodeId,
     disk_encryption_key_exchange_agent: Option<DiskEncryptionKeyExchangeServerAgent>,
@@ -111,7 +111,7 @@ impl Upgrade {
         replica_config_file: PathBuf,
         node_id: NodeId,
         ic_binary_dir: PathBuf,
-        registry_replicator: Arc<RegistryReplicator>,
+        registry_replicator: Arc<dyn RegistryReplicatorTrait>,
         release_content_dir: PathBuf,
         logger: ReplicaLogger,
         orchestrator_data_directory: PathBuf,
@@ -1591,12 +1591,15 @@ mod tests {
         h: Height,
         registry_version: RegistryVersion,
     ) -> CatchUpPackage {
+        let mut dkg_summary = DkgSummary::fake();
+        dkg_summary.registry_version = registry_version;
+
         let block = Block::new(
             CryptoHashOf::from(CryptoHash(Vec::new())),
             Payload::new(
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(SummaryPayload {
-                    dkg: DkgSummary::fake(),
+                    dkg: dkg_summary,
                     idkg: Some(idkg::IDkgPayload::empty(
                         h,
                         subnet_test_id(1),
@@ -1630,31 +1633,319 @@ mod tests {
         }
     }
 
+    /// Helper function to add a subnet record to a registry data provider.
+    fn add_subnet_record_to_provider(
+        data_provider: &ic_registry_proto_data_provider::ProtoRegistryDataProvider,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+        membership: Vec<NodeId>,
+        replica_version_id: &str,
+        recalled_replica_version_ids: Vec<String>,
+    ) {
+        use ic_protobuf::registry::subnet::v1::SubnetRecord;
+        use ic_registry_keys::make_subnet_record_key;
+
+        let subnet_record = SubnetRecord {
+            membership: membership.iter().map(|id| id.get().to_vec()).collect(),
+            replica_version_id: replica_version_id.to_string(),
+            recalled_replica_version_ids,
+            ..Default::default()
+        };
+
+        data_provider
+            .add(&make_subnet_record_key(subnet_id), version, Some(subnet_record))
+            .unwrap();
+    }
+
+    /// Helper function to add a replica version record to a registry data provider.
+    fn add_replica_version_to_provider(
+        data_provider: &ic_registry_proto_data_provider::ProtoRegistryDataProvider,
+        replica_version: &ReplicaVersion,
+        version: RegistryVersion,
+    ) {
+        use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
+        use ic_registry_keys::make_replica_version_key;
+
+        data_provider
+            .add(
+                &make_replica_version_key(replica_version.to_string()),
+                version,
+                Some(ReplicaVersionRecord::default()),
+            )
+            .unwrap();
+    }
+
+    /// Helper struct for setting up upgrade tests with mock registry replication.
+    ///
+    /// This struct provides a convenient way to set up all the components needed for testing
+    /// the Upgrade module with a mock registry replicator. It handles:
+    /// - Creating a temporary directory for test files
+    /// - Setting up a remote registry data provider (simulating the NNS registry)
+    /// - Creating a local store and populating it with data from the remote provider
+    /// - Creating a mock registry replicator that syncs from remote to local
+    /// - Setting up all necessary components (CUP provider, metrics, process manager, etc.)
+    ///
+    /// # Example
+    /// ```ignore
+    /// let setup = UpgradeTestSetup::new_with_remote_provider(
+    ///     node_id,
+    ///     subnet_id,
+    ///     cup_registry_version,
+    ///     remote_data_provider,
+    ///     logger,
+    /// ).await;
+    ///
+    /// setup.add_subnet_record(subnet_id, version, vec![node_id], "version_1.0.0", vec![]);
+    /// setup.add_replica_version(&version, version);
+    /// let upgrade = setup.create_upgrade(node_id, current_version, logger).await;
+    /// ```
+    struct UpgradeTestSetup {
+        #[allow(dead_code)]
+        tmp_dir: tempfile::TempDir,
+        remote_data_provider: Arc<ic_registry_proto_data_provider::ProtoRegistryDataProvider>,
+        #[allow(dead_code)]
+        local_store: Arc<ic_registry_local_store::LocalStoreImpl>,
+        #[allow(dead_code)]
+        registry_client: Arc<ic_registry_client::client::RegistryClientImpl>,
+        registry_replicator: Arc<ic_registry_replicator::mock::MockRegistryReplicator>,
+        registry: Arc<RegistryHelper>,
+        cup_provider: Arc<CatchUpPackageProvider>,
+        metrics: Arc<OrchestratorMetrics>,
+        replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
+        ic_binary_dir: std::path::PathBuf,
+        orchestrator_data_dir: std::path::PathBuf,
+    }
+
+    impl UpgradeTestSetup {
+        /// Creates a new test setup with a mock registry replicator and a pre-populated remote provider.
+        ///
+        /// # Arguments
+        /// * `node_id` - The node ID for this test
+        /// * `_subnet_id` - The subnet ID for this test (unused but kept for API consistency)
+        /// * `cup_registry_version` - The registry version to use in the CUP
+        /// * `remote_data_provider` - Pre-populated remote registry data provider
+        /// * `logger` - The logger to use
+        ///
+        /// The setup creates:
+        /// - A local store populated up to `cup_registry_version` from the remote provider
+        /// - A mock registry replicator that syncs from remote to local
+        /// - All necessary components for creating an Upgrade instance
+        async fn new_with_remote_provider(
+            node_id: NodeId,
+            _subnet_id: SubnetId,
+            cup_registry_version: RegistryVersion,
+            remote_data_provider: Arc<ic_registry_proto_data_provider::ProtoRegistryDataProvider>,
+            logger: ReplicaLogger,
+        ) -> Self {
+            use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
+            use ic_interfaces_registry::RegistryDataProvider;
+            use ic_registry_client::client::RegistryClientImpl;
+            use ic_registry_local_store::{KeyMutation, LocalStoreImpl, LocalStoreWriter};
+            use ic_registry_replicator::mock::MockRegistryReplicator;
+            use tempfile::tempdir;
+
+            let tmp_dir = tempdir().unwrap();
+
+            // Set up local store and registry client
+            let local_store_path = tmp_dir.path().join("ic_registry_local_store");
+            std::fs::create_dir_all(&local_store_path).unwrap();
+            let local_store = Arc::new(LocalStoreImpl::new(local_store_path.clone()));
+
+            // Populate the local store with data up to CUP version (simulating what's already local)
+            let changelog = remote_data_provider
+                .get_updates_since(RegistryVersion::from(0))
+                .unwrap();
+            let mut version_mutations: std::collections::BTreeMap<RegistryVersion, Vec<KeyMutation>> =
+                std::collections::BTreeMap::new();
+
+            for record in changelog {
+                if record.version <= cup_registry_version {
+                    version_mutations
+                        .entry(record.version)
+                        .or_insert_with(Vec::new)
+                        .push(KeyMutation {
+                            key: record.key,
+                            value: record.value,
+                        });
+                }
+            }
+
+            // Local store requires continuous versions, so fill in any gaps with dummy mutations
+            for version in 1..=cup_registry_version.get() {
+                let version = RegistryVersion::from(version);
+                let mutations = version_mutations.remove(&version).unwrap_or_else(|| {
+                    vec![KeyMutation {
+                        key: format!("dummy_key_{}", version.get()),
+                        value: Some(vec![0]),
+                    }]
+                });
+                local_store.store(version, mutations).unwrap();
+            }
+
+            // Create registry client from the local store
+            let registry_client = Arc::new(RegistryClientImpl::new(local_store.clone(), None));
+            registry_client.fetch_and_start_polling().unwrap();
+
+            // Create mock registry replicator that will sync from remote to local
+            let registry_replicator = Arc::new(MockRegistryReplicator::new(
+                remote_data_provider.clone(),
+                local_store.clone(),
+                registry_client.clone(),
+            ));
+
+            let registry = Arc::new(RegistryHelper::new(
+                node_id,
+                registry_client.clone() as Arc<_>,
+                logger.clone(),
+            ));
+
+            // Set up CUP provider
+            let cup_dir = tmp_dir.path().join("cups");
+            std::fs::create_dir_all(&cup_dir).unwrap();
+
+            let cup = make_cup_with_registry_version(Height::from(10), cup_registry_version);
+            let cup_proto = ic_protobuf::types::v1::CatchUpPackage::from(&cup);
+            let cup_file = cup_dir.join("cup.types.v1.CatchUpPackage.pb");
+            std::fs::write(&cup_file, cup_proto.encode_to_vec()).unwrap();
+
+            let cup_provider = Arc::new(CatchUpPackageProvider::new(
+                registry.clone(),
+                cup_dir.clone(),
+                Arc::new(CryptoReturningOk::default()),
+                Arc::new(crate::catch_up_package_provider::tests::mock_tls_config()),
+                logger.clone(),
+                node_id,
+            ));
+
+            let metrics = Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new()));
+            let replica_process = Arc::new(Mutex::new(ProcessManager::new(logger.clone())));
+
+            let orchestrator_data_dir = tmp_dir.path().join("orchestrator");
+            std::fs::create_dir_all(&orchestrator_data_dir).unwrap();
+
+            // Create a dummy replica binary so ensure_replica_is_running doesn't fail
+            let ic_binary_dir = tmp_dir.path().join("ic_binary");
+            std::fs::create_dir_all(&ic_binary_dir).unwrap();
+            let replica_binary = ic_binary_dir.join("replica");
+            std::fs::write(&replica_binary, "#!/bin/sh\nsleep 1000\n").unwrap();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&replica_binary, std::fs::Permissions::from_mode(0o755))
+                    .unwrap();
+            }
+
+            Self {
+                tmp_dir,
+                remote_data_provider,
+                local_store,
+                registry_client,
+                registry_replicator,
+                registry,
+                cup_provider,
+                metrics,
+                replica_process,
+                ic_binary_dir,
+                orchestrator_data_dir,
+            }
+        }
+
+        /// Adds a subnet record to the remote registry at the specified version.
+        fn add_subnet_record(
+            &self,
+            subnet_id: SubnetId,
+            version: RegistryVersion,
+            membership: Vec<NodeId>,
+            replica_version_id: &str,
+            recalled_replica_version_ids: Vec<String>,
+        ) {
+            use ic_protobuf::registry::subnet::v1::SubnetRecord;
+            use ic_registry_keys::make_subnet_record_key;
+
+            let subnet_record = SubnetRecord {
+                membership: membership.iter().map(|id| id.get().to_vec()).collect(),
+                replica_version_id: replica_version_id.to_string(),
+                recalled_replica_version_ids,
+                ..Default::default()
+            };
+
+            self.remote_data_provider
+                .add(&make_subnet_record_key(subnet_id), version, Some(subnet_record))
+                .unwrap();
+        }
+
+        /// Adds a replica version record to the remote registry at the specified version.
+        fn add_replica_version(&self, replica_version: &ReplicaVersion, version: RegistryVersion) {
+            use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
+            use ic_registry_keys::make_replica_version_key;
+
+            self.remote_data_provider
+                .add(
+                    &make_replica_version_key(replica_version.to_string()),
+                    version,
+                    Some(ReplicaVersionRecord::default()),
+                )
+                .unwrap();
+        }
+
+        /// Adds dummy data for intermediate versions to ensure continuous versions.
+        fn fill_intermediate_versions(&self, from: RegistryVersion, to: RegistryVersion) {
+            for version in (from.get() + 1)..to.get() {
+                self.remote_data_provider
+                    .add(
+                        &format!("dummy_key_{}", version),
+                        RegistryVersion::from(version),
+                        Some(vec![0]),
+                    )
+                    .unwrap();
+            }
+        }
+
+        /// Creates an Upgrade instance with the given parameters.
+        async fn create_upgrade(
+            &self,
+            node_id: NodeId,
+            current_version: ReplicaVersion,
+            logger: ReplicaLogger,
+        ) -> Upgrade {
+            Upgrade::new(
+                self.registry.clone(),
+                self.metrics.clone(),
+                self.replica_process.clone(),
+                self.cup_provider.clone(),
+                current_version,
+                self.tmp_dir.path().join("replica_config.json"),
+                node_id,
+                self.ic_binary_dir.clone(),
+                self.registry_replicator.clone(),
+                self.tmp_dir.path().join("release"),
+                logger,
+                self.orchestrator_data_dir.clone(),
+                None,
+            )
+            .await
+        }
+    }
+
+    /// Test that verifies the orchestrator correctly handles recalled replica versions.
+    ///
+    /// This test simulates a scenario where:
+    /// 1. A subnet is running version_1.0.0 (current version)
+    /// 2. The CUP (at registry version 10) indicates an upgrade to version_2.0.0
+    /// 3. The remote registry (at version 20) marks version_2.0.0 as recalled
+    /// 4. The orchestrator replicates the remote registry and detects the recalled version
+    /// 5. The orchestrator should NOT upgrade to the recalled version
+    /// 6. The orchestrator should continue running the current version (version_1.0.0)
+    ///
+    /// The test uses a MockRegistryReplicator to simulate registry replication from a
+    /// "remote" NNS registry to a local store, allowing us to test the full replication
+    /// and recalled version detection flow.
     #[tokio::test]
     async fn test_recalled_replica_version_prevents_upgrade() {
-        use candid::Encode;
-        use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
-        use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
-        use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister;
-        use ic_nns_constants::REGISTRY_CANISTER_ID;
-        use ic_nns_test_utils::common::{NnsInitPayloadsBuilder, build_test_registry_wasm};
-        use ic_protobuf::registry::node::v1::NodeRecord;
-        use ic_registry_nns_data_provider::registry::RegistryCanister;
-        use ic_registry_transport::{
-            serialize_atomic_mutate_request, deserialize_atomic_mutate_response,
-            pb::v1::{RegistryMutation, registry_mutation::Type},
-        };
-        use pocket_ic::PocketIcBuilder;
-        use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
-        use ic_protobuf::types::v1 as pb;
-        use ic_registry_client_fake::FakeRegistryClient;
-        use ic_registry_keys::{make_node_record_key, make_replica_version_key, make_subnet_record_key};
         use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-        use ic_registry_replicator::RegistryReplicator;
-        use ic_test_utilities_types::ids::node_test_id;
-        use ic_types::RegistryVersion;
-        use prost::Message;
-        use std::time::Duration;
+        use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+        use ic_types::{RegistryVersion, ReplicaVersion};
+        use std::sync::Arc;
 
         with_test_replica_logger(|log| async move {
             let current_version = ReplicaVersion::try_from("version_1.0.0").unwrap();
@@ -1665,231 +1956,59 @@ mod tests {
             let cup_registry_version = RegistryVersion::from(10);
             let latest_registry_version = RegistryVersion::from(20);
 
-            // Create a temporary ProtoRegistryDataProvider to build the registry data
-            let temp_data_provider = Arc::new(ProtoRegistryDataProvider::new());
+            // Create the remote data provider and populate it with data BEFORE creating the setup
+            let remote_data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
-            let node_record = NodeRecord {
-                xnet: Some(ic_protobuf::registry::node::v1::ConnectionEndpoint {
-                    ip_addr: "127.0.0.1".to_string(),
-                    port: 1234,
-                }),
-                http: Some(ic_protobuf::registry::node::v1::ConnectionEndpoint {
-                    ip_addr: "127.0.0.1".to_string(),
-                    port: 8080,
-                }),
-                ..Default::default()
-            };
-
-            temp_data_provider
-                .add(&make_node_record_key(node_id), cup_registry_version, Some(node_record.clone()))
-                .unwrap();
-
-            temp_data_provider
-                .add(&make_node_record_key(node_id), latest_registry_version, Some(node_record))
-                .unwrap();
-
-            // Add a minimal node record at version 1 (without HTTP endpoint to avoid connection attempts)
-            temp_data_provider
-                .add(
-                    &make_node_record_key(node_id),
-                    RegistryVersion::from(1),
-                    Some(NodeRecord {
-                        ..Default::default()
-                    }),
-                )
-                .unwrap();
-
-            let subnet_record_at_cup_version = SubnetRecord {
-                membership: vec![node_id.get().to_vec()],
-                replica_version_id: recalled_version.to_string(),
-                recalled_replica_version_ids: vec![],
-                ..Default::default()
-            };
-
-            temp_data_provider
-                .add(
-                    &make_subnet_record_key(subnet_id),
-                    cup_registry_version,
-                    Some(subnet_record_at_cup_version),
-                )
-                .unwrap();
-
-            temp_data_provider
-                .add(
-                    &make_replica_version_key(recalled_version.to_string()),
-                    cup_registry_version,
-                    Some(ReplicaVersionRecord::default()),
-                )
-                .unwrap();
-
-            let subnet_record_at_latest_version = SubnetRecord {
-                membership: vec![node_id.get().to_vec()],
-                replica_version_id: recalled_version.to_string(),
-                recalled_replica_version_ids: vec![recalled_version.to_string()],
-                ..Default::default()
-            };
-
-            temp_data_provider
-                .add(
-                    &make_subnet_record_key(subnet_id),
-                    latest_registry_version,
-                    Some(subnet_record_at_latest_version),
-                )
-                .unwrap();
-
-            temp_data_provider
-                .add(
-                    &make_replica_version_key(recalled_version.to_string()),
-                    latest_registry_version,
-                    Some(ReplicaVersionRecord::default()),
-                )
-                .unwrap();
-
-            // Add root subnet ID and NNS public key to the temp data provider
-            use ic_registry_keys::{make_crypto_threshold_signing_pubkey_key, ROOT_SUBNET_ID_KEY};
-            use ic_protobuf::registry::crypto::v1::PublicKey as PbPublicKey;
-            use ic_certification_test_utils::{CertificateBuilder, CertificateData};
-            use ic_crypto_tree_hash::Digest;
-            use ic_types::CanisterId;
-
-            // Add root subnet ID at version 1
-            temp_data_provider
-                .add(
-                    ROOT_SUBNET_ID_KEY,
-                    RegistryVersion::from(1),
-                    Some(ic_types::subnet_id_into_protobuf(subnet_id)),
-                )
-                .unwrap();
-
-            // Add NNS public key at version 2
-            let (_, nns_public_key, _) = CertificateBuilder::new(CertificateData::CanisterData {
-                canister_id: CanisterId::from_u64(0),
-                certified_data: Digest([1; 32]),
-            })
-            .build();
-            temp_data_provider
-                .add(
-                    &make_crypto_threshold_signing_pubkey_key(subnet_id),
-                    RegistryVersion::from(2),
-                    Some(PbPublicKey::from(nns_public_key)),
-                )
-                .unwrap();
-
-            let tmp_dir = tempdir().unwrap();
-            let local_store_path = tmp_dir.path().join("ic_registry_local_store");
-            std::fs::create_dir_all(&local_store_path).unwrap();
-
-            use ic_registry_local_store::{KeyMutation, LocalStoreImpl, LocalStoreWriter};
-
-            let local_store = Arc::new(LocalStoreImpl::new(local_store_path.clone()));
-
-            // Populate the local store with all registry data from temp_data_provider
-            let changelog = temp_data_provider.get_updates_since(RegistryVersion::from(0)).unwrap();
-            let mut version_mutations: std::collections::BTreeMap<RegistryVersion, Vec<KeyMutation>> = std::collections::BTreeMap::new();
-
-            for record in changelog {
-                // Populate local store with all data up to latest_registry_version
-                if record.version <= latest_registry_version {
-                    version_mutations.entry(record.version).or_insert_with(Vec::new).push(KeyMutation {
-                        key: record.key,
-                        value: record.value,
-                    });
-                }
-            }
-
-            // Populate local store with continuous versions from 1 to latest_registry_version
-            for version in 1..=latest_registry_version.get() {
-                let version = RegistryVersion::from(version);
-                let mutations = version_mutations.remove(&version).unwrap_or_else(|| {
-                    use prost::Message;
-                    let node_record = NodeRecord {
-                        xnet: Some(ic_protobuf::registry::node::v1::ConnectionEndpoint {
-                            ip_addr: "127.0.0.1".to_string(),
-                            port: 1234,
-                        }),
-                        http: Some(ic_protobuf::registry::node::v1::ConnectionEndpoint {
-                            ip_addr: "127.0.0.1".to_string(),
-                            port: 8080,
-                        }),
-                        ..Default::default()
-                    };
-                    vec![KeyMutation {
-                        key: make_node_record_key(node_id),
-                        value: Some(node_record.encode_to_vec()),
-                    }]
-                });
-                local_store.store(version, mutations).unwrap();
-            }
-
-            // Create FakeRegistryClient from the local store (which now has all the data)
-            let registry_client = Arc::new(FakeRegistryClient::new(local_store.clone() as Arc<_>));
-            registry_client.update_to_latest_version();
-
-            let registry = Arc::new(RegistryHelper::new(
-                node_id,
-                registry_client.clone() as Arc<_>,
-                log.clone(),
-            ));
-
-            let cup_dir = tmp_dir.path().join("cups");
-            std::fs::create_dir_all(&cup_dir).unwrap();
-
-            let cup = make_cup_with_registry_version(Height::from(10), cup_registry_version);
-            let cup_proto = pb::CatchUpPackage::from(&cup);
-            let cup_file = cup_dir.join("cup.types.v1.CatchUpPackage.pb");
-            std::fs::write(&cup_file, cup_proto.encode_to_vec()).unwrap();
-
-            let cup_provider = Arc::new(CatchUpPackageProvider::new(
-                registry.clone(),
-                cup_dir.clone(),
-                Arc::new(CryptoReturningOk::default()),
-                Arc::new(crate::catch_up_package_provider::tests::mock_tls_config()),
-                log.clone(),
-                node_id,
-            ));
-
-            let registry_replicator = Arc::new(
-                RegistryReplicator::new(
-                    log.clone(),
-                    local_store_path,
-                    Duration::from_secs(10),
-                    vec![],
-                    None,
-                )
-                .await,
+            // Add initial subnet record at version 1 (required for the node to be assigned)
+            add_subnet_record_to_provider(
+                &remote_data_provider,
+                subnet_id,
+                RegistryVersion::from(1),
+                vec![node_id],
+                &current_version.to_string(),
+                vec![],
             );
+            add_replica_version_to_provider(&remote_data_provider, &current_version, RegistryVersion::from(1));
 
-            let metrics = Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new()));
-            let replica_process = Arc::new(Mutex::new(ProcessManager::new(log.clone())));
-            let orchestrator_data_dir = tmp_dir.path().join("orchestrator");
-            std::fs::create_dir_all(&orchestrator_data_dir).unwrap();
+            // At CUP version (10): subnet record points to recalled version with empty recalled list
+            add_subnet_record_to_provider(
+                &remote_data_provider,
+                subnet_id,
+                cup_registry_version,
+                vec![node_id],
+                &recalled_version.to_string(),
+                vec![],
+            );
+            add_replica_version_to_provider(&remote_data_provider, &recalled_version, cup_registry_version);
 
-            let mut upgrade = Upgrade::new(
-                registry.clone(),
-                metrics,
-                replica_process,
-                cup_provider,
-                current_version,
-                tmp_dir.path().join("replica_config.json"),
+            // Now create the setup with the pre-populated remote data provider
+            let setup = UpgradeTestSetup::new_with_remote_provider(
                 node_id,
-                tmp_dir.path().join("ic_binary"),
-                registry_replicator,
-                tmp_dir.path().join("release"),
+                subnet_id,
+                cup_registry_version,
+                remote_data_provider.clone(),
                 log.clone(),
-                orchestrator_data_dir,
-                None,
             )
             .await;
 
-            let result = upgrade.check().await;
+            // At latest version (20): subnet record points back to current version and adds recalled version to recalled list
+            // This simulates the scenario where an upgrade was attempted to version_2.0.0, but then it was recalled
+            // and the subnet was rolled back to version_1.0.0
+            setup.add_subnet_record(
+                subnet_id,
+                latest_registry_version,
+                vec![node_id],
+                &current_version.to_string(),
+                vec![recalled_version.to_string()],
+            );
+            setup.add_replica_version(&recalled_version, latest_registry_version);
 
-            match &result {
-                Ok(OrchestratorControlFlow::Assigned(id)) => println!("Result: Ok(Assigned({}))", id),
-                Ok(OrchestratorControlFlow::Unassigned) => println!("Result: Ok(Unassigned)"),
-                Ok(OrchestratorControlFlow::Leaving(id)) => println!("Result: Ok(Leaving({}))", id),
-                Ok(OrchestratorControlFlow::Stop) => println!("Result: Ok(Stop)"),
-                Err(e) => println!("Result: Err({:?})", e),
-            }
+            // Add dummy data for intermediate versions to ensure continuous versions
+            setup.fill_intermediate_versions(cup_registry_version, latest_registry_version);
+
+            let mut upgrade = setup.create_upgrade(node_id, current_version, log.clone()).await;
+
+            let result = upgrade.check().await;
 
             assert!(
                 matches!(result, Ok(OrchestratorControlFlow::Assigned(_))),

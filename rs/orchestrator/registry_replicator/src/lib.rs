@@ -63,6 +63,24 @@ use url::Url;
 pub mod args;
 mod internal_state;
 pub mod metrics;
+pub mod mock;
+
+/// Trait for registry replication functionality.
+/// This allows for mocking the registry replicator in tests.
+#[async_trait::async_trait]
+pub trait RegistryReplicatorTrait: Send + Sync {
+    /// Polls the registry once, fetching and applying updates.
+    async fn poll(&self) -> Result<(), String>;
+
+    /// Returns the registry client used by this replicator.
+    fn get_registry_client(&self) -> Arc<dyn RegistryClient>;
+
+    /// Returns the local store used by this replicator.
+    fn get_local_store(&self) -> Arc<dyn LocalStore>;
+
+    /// Stops polling and sets the local registry data to what is contained in the provided local store.
+    async fn stop_polling_and_set_local_registry_data(&self, new_local_store: &dyn LocalStore);
+}
 
 trait PollableRegistryClient: RegistryClient {
     /// Polls the registry once, updating its cache by polling the latest local store changes.
@@ -483,6 +501,25 @@ impl RegistryReplicator {
 impl Drop for RegistryReplicator {
     fn drop(&mut self) {
         self.stop_polling();
+    }
+}
+
+#[async_trait::async_trait]
+impl RegistryReplicatorTrait for RegistryReplicator {
+    async fn poll(&self) -> Result<(), String> {
+        self.poll().await
+    }
+
+    fn get_registry_client(&self) -> Arc<dyn RegistryClient> {
+        self.get_registry_client()
+    }
+
+    fn get_local_store(&self) -> Arc<dyn LocalStore> {
+        self.get_local_store()
+    }
+
+    async fn stop_polling_and_set_local_registry_data(&self, new_local_store: &dyn LocalStore) {
+        self.stop_polling_and_set_local_registry_data(new_local_store).await
     }
 }
 
