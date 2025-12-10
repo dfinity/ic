@@ -213,7 +213,7 @@ rust_library(
 
 # We are not relying on test feature for this test because we want to test only the performance-based-rewards related code in isolation.
 # Enabling test feature causes the Governance to fail the upgrade leading to its panic when running golden-state test.
-# The upgrades fails because it doesn't completes after 50B instructions.
+# The upgrades fails because it doesn't complete after 50B instructions.
 # This feature will be removed once the performance-based-rewards feature is active on mainnet.
 rust_library(
     name = "governance--pbr_feature",
