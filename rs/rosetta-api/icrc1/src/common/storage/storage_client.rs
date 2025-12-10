@@ -1,6 +1,6 @@
 use super::storage_operations;
 use crate::common::storage::types::{MetadataEntry, RosettaBlock};
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use candid::Nat;
 use ic_base_types::CanisterId;
 use icrc_ledger_types::icrc1::account::Account;
@@ -219,7 +219,9 @@ impl StorageClient {
     pub async fn get_block_at_idx(&self, block_idx: u64) -> anyhow::Result<Option<RosettaBlock>> {
         Ok(self
             .storage_connection
-            .call(move |conn| to_rusqlite_result(storage_operations::get_block_at_idx(conn, block_idx)))
+            .call(move |conn| {
+                to_rusqlite_result(storage_operations::get_block_at_idx(conn, block_idx))
+            })
             .await?)
     }
 
@@ -235,7 +237,9 @@ impl StorageClient {
     pub async fn get_block_with_highest_block_idx(&self) -> anyhow::Result<Option<RosettaBlock>> {
         Ok(self
             .storage_connection
-            .call(move |conn| to_rusqlite_result(storage_operations::get_block_with_highest_block_idx(conn)))
+            .call(move |conn| {
+                to_rusqlite_result(storage_operations::get_block_with_highest_block_idx(conn))
+            })
             .await?)
     }
 
@@ -243,7 +247,9 @@ impl StorageClient {
     pub async fn get_block_with_lowest_block_idx(&self) -> anyhow::Result<Option<RosettaBlock>> {
         Ok(self
             .storage_connection
-            .call(move |conn| to_rusqlite_result(storage_operations::get_block_with_lowest_block_idx(conn)))
+            .call(move |conn| {
+                to_rusqlite_result(storage_operations::get_block_with_lowest_block_idx(conn))
+            })
             .await?)
     }
 
@@ -258,7 +264,11 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call(move |conn| {
-                to_rusqlite_result(storage_operations::get_blocks_by_index_range(conn, start_index, end_index))
+                to_rusqlite_result(storage_operations::get_blocks_by_index_range(
+                    conn,
+                    start_index,
+                    end_index,
+                ))
             })
             .await?)
     }
@@ -276,7 +286,11 @@ impl StorageClient {
     pub async fn get_highest_block_idx(&self) -> Result<Option<u64>> {
         Ok(self
             .storage_connection
-            .call(move |conn| to_rusqlite_result(storage_operations::get_highest_block_idx_in_blocks_table(conn)))
+            .call(move |conn| {
+                to_rusqlite_result(storage_operations::get_highest_block_idx_in_blocks_table(
+                    conn,
+                ))
+            })
             .await?)
     }
 
@@ -322,7 +336,11 @@ impl StorageClient {
     ) -> anyhow::Result<Vec<RosettaBlock>> {
         Ok(self
             .storage_connection
-            .call(move |conn| to_rusqlite_result(storage_operations::get_blocks_by_transaction_hash(conn, hash)))
+            .call(move |conn| {
+                to_rusqlite_result(storage_operations::get_blocks_by_transaction_hash(
+                    conn, hash,
+                ))
+            })
             .await?)
     }
 
@@ -347,7 +365,9 @@ impl StorageClient {
     pub async fn write_metadata(&self, metadata: Vec<MetadataEntry>) -> anyhow::Result<()> {
         Ok(self
             .storage_connection
-            .call(move |conn| to_rusqlite_result(storage_operations::store_metadata(conn, metadata)))
+            .call(move |conn| {
+                to_rusqlite_result(storage_operations::store_metadata(conn, metadata))
+            })
             .await?)
     }
 
@@ -393,7 +413,9 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call(move |conn| {
-                to_rusqlite_result(storage_operations::get_highest_block_idx_in_account_balance_table(conn))
+                to_rusqlite_result(
+                    storage_operations::get_highest_block_idx_in_account_balance_table(conn),
+                )
             })
             .await?)
     }
@@ -409,7 +431,9 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call(move |conn| {
-                to_rusqlite_result(storage_operations::get_account_balance_at_block_idx(conn, &account, block_idx))
+                to_rusqlite_result(storage_operations::get_account_balance_at_block_idx(
+                    conn, &account, block_idx,
+                ))
             })
             .await?)
     }
@@ -421,7 +445,9 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call(move |conn| {
-                to_rusqlite_result(storage_operations::get_account_balance_at_highest_block_idx(conn, &account))
+                to_rusqlite_result(
+                    storage_operations::get_account_balance_at_highest_block_idx(conn, &account),
+                )
             })
             .await?)
     }
@@ -436,9 +462,11 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call(move |conn| {
-                to_rusqlite_result(storage_operations::get_aggregated_balance_for_principal_at_block_idx(
-                    conn, &principal, block_idx,
-                ))
+                to_rusqlite_result(
+                    storage_operations::get_aggregated_balance_for_principal_at_block_idx(
+                        conn, &principal, block_idx,
+                    ),
+                )
             })
             .await?)
     }
@@ -464,7 +492,10 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call(move |conn| {
-                to_rusqlite_result(storage_operations::repair_fee_collector_balances(conn, balance_sync_batch_size))
+                to_rusqlite_result(storage_operations::repair_fee_collector_balances(
+                    conn,
+                    balance_sync_batch_size,
+                ))
             })
             .await?)
     }
@@ -474,9 +505,9 @@ impl StorageClient {
 mod tests {
     use super::*;
     use crate::Metadata;
+    use ic_icrc1::Block;
     use ic_icrc1::blocks::encoded_block_to_generic_block;
     use ic_icrc1::blocks::generic_block_to_encoded_block;
-    use ic_icrc1::Block;
     use ic_icrc1_test_utils::{
         arb_amount, blocks_strategy, metadata_strategy, valid_blockchain_with_gaps_strategy,
     };
