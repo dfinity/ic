@@ -60,9 +60,6 @@ pub struct Cli {
     #[command(flatten, next_help_heading = "Load")]
     pub load: Load,
 
-    #[command(flatten, next_help_heading = "Nftables")]
-    pub nftables: NfTables,
-
     #[command(flatten, next_help_heading = "Shedding System")]
     pub shed_system: ShedSystemCli,
 
@@ -82,7 +79,8 @@ pub struct Registry {
     #[clap(env, long, value_delimiter = ',', default_value = "https://ic0.app")]
     pub registry_nns_urls: Vec<Url>,
 
-    /// The path to the NNS public key file
+    /// The path to the NNS public key file.
+    /// If not specified - hardcoded one will be used.
     #[clap(env, long)]
     pub registry_nns_pub_key_pem: Option<PathBuf>,
 
@@ -100,11 +98,11 @@ pub struct Registry {
 
     /// Instead of using the registry - use the specified replica nodes.
     /// This disables the registry client, registry replicator and health checking.
-    /// To be used only for performance testing.
+    /// To be used mostly for testing.
     #[clap(env, long)]
     pub registry_stub_replica: Vec<SocketAddr>,
 
-    /// Minimum snapshot version age to be useful for initial publishing
+    /// Minimum snapshot version age to be useful for the initial publishing
     #[clap(env, long, default_value = "10s", value_parser = parse_duration)]
     pub registry_min_version_age: Duration,
 }
@@ -132,7 +130,8 @@ pub struct Listen {
     pub listen_http_unix_socket: Option<PathBuf>,
 
     /// Port on 127.0.0.1 to listen on for loopback usage.
-    /// Only needed if a rate-limiting canister or anonymization salt canister is used.
+    /// Only needed if a rate-limiting canister or anonymization salt canister is used,
+    /// to avoid self-blocking.
     /// Change if the default one is occupied for whatever reason.
     #[clap(env, long, default_value = "31337")]
     pub listen_http_port_loopback: u16,
@@ -144,7 +143,9 @@ pub struct Network {
     #[clap(env, long)]
     pub network_disable_http2_client: bool,
 
-    /// Number of HTTP clients to create to spread the load over
+    /// Number of HTTP clients to create to spread the load over.
+    /// In case of HTTP/2 only one connection per target host is established,
+    /// which makes it unusable when all streams are exhausted.
     #[clap(env, long, default_value = "1", value_parser = clap::value_parser!(u16).range(1..))]
     pub network_http_client_count: u16,
 }
@@ -169,24 +170,13 @@ pub struct Health {
     #[clap(env, long, default_value = "50")]
     pub health_max_height_lag: u64,
 
-    /// Fraction of nodes that should be healthy in the subnet to consider the subnet healthy
+    /// Fraction of nodes that should be healthy in the subnet to consider that subnet healthy
     #[clap(env, long, default_value = "0.6666")]
     pub health_nodes_per_subnet_alive_threshold: f64,
 
     /// Fraction of subnets that should be healthy to consider our node healthy
     #[clap(env, long, default_value = "0.51")]
     pub health_subnets_alive_threshold: f64,
-}
-
-#[derive(Args)]
-pub struct NfTables {
-    /// The path to the nftables replica ruleset file to update
-    #[clap(env, long)]
-    pub nftables_system_replicas_path: Option<PathBuf>,
-
-    /// The name of the nftables variable to export
-    #[clap(env, long, default_value = "ipv6_system_replica_ips")]
-    pub nftables_system_replicas_var: String,
 }
 
 #[derive(Args)]

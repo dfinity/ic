@@ -67,7 +67,6 @@ use crate::{
     cli::{self, Cli},
     dns::DnsResolver,
     errors::ErrorCause,
-    firewall::{FirewallGenerator, SystemdReloader},
     http::{
         PATH_CALL_V2, PATH_CALL_V3, PATH_CALL_V4, PATH_HEALTH, PATH_QUERY_V2, PATH_QUERY_V3,
         PATH_READ_STATE_V2, PATH_READ_STATE_V3, PATH_STATUS, PATH_SUBNET_READ_STATE_V2,
@@ -92,15 +91,14 @@ use crate::{
     routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
     salt_fetcher::AnonymizationSaltFetcher,
     snapshot::{
-        RegistryReplicatorRunner, RegistrySnapshot, SnapshotPersister, Snapshotter,
-        generate_stub_snapshot, generate_stub_subnet,
+        RegistryReplicatorRunner, RegistrySnapshot, Snapshotter, generate_stub_snapshot,
+        generate_stub_subnet,
     },
     tls_verify::TlsVerifier,
 };
 
 pub const SERVICE_NAME: &str = "ic_boundary";
 pub const AUTHOR_NAME: &str = "Boundary Node Team <boundary-nodes@dfinity.org>";
-const SYSTEMCTL_BIN: &str = "/usr/bin/systemctl";
 
 pub const SECOND: Duration = Duration::from_secs(1);
 
@@ -665,28 +663,12 @@ fn setup_registry(
 ) -> Result<(), Error> {
     // Snapshots
     let snapshotter = WithMetricsSnapshot(
-        {
-            let mut snapshotter = Snapshotter::new(
-                registry_snapshot.clone(),
-                channel_snapshot_send,
-                replicator.get_registry_client(),
-                cli.registry.registry_min_version_age,
-            );
-
-            if let Some(v) = &cli.nftables.nftables_system_replicas_path {
-                let fw_reloader = SystemdReloader::new(SYSTEMCTL_BIN.into(), "nftables", "reload");
-
-                let fw_generator = FirewallGenerator::new(
-                    v.clone(),
-                    cli.nftables.nftables_system_replicas_var.clone(),
-                );
-
-                let persister = SnapshotPersister::new(fw_generator, fw_reloader);
-                snapshotter.set_persister(persister);
-            }
-
-            snapshotter
-        },
+        Snapshotter::new(
+            registry_snapshot.clone(),
+            channel_snapshot_send,
+            replicator.get_registry_client(),
+            cli.registry.registry_min_version_age,
+        ),
         MetricParamsSnapshot::new(metrics_registry),
     );
     tasks.add_interval("snapshotter", Arc::new(snapshotter), 5 * SECOND);

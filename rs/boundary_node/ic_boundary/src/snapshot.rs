@@ -34,7 +34,6 @@ use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
 use crate::{
     errors::ErrorCause,
-    firewall::{FirewallGenerator, SystemdReloader},
     http::RequestType,
     metrics::{MetricParamsSnapshot, WithMetricsSnapshot},
     persist::principal_to_u256,
@@ -223,26 +222,6 @@ impl fmt::Display for Subnet {
     }
 }
 
-// TODO remove after decentralization and clean up all loose ends
-pub struct SnapshotPersister {
-    generator: FirewallGenerator,
-    reloader: SystemdReloader,
-}
-
-impl SnapshotPersister {
-    pub fn new(generator: FirewallGenerator, reloader: SystemdReloader) -> Self {
-        Self {
-            generator,
-            reloader,
-        }
-    }
-
-    pub fn persist(&self, s: RegistrySnapshot) -> Result<(), Error> {
-        self.generator.generate(s)?;
-        self.reloader.reload()
-    }
-}
-
 pub trait Snapshot: Send + Sync {
     fn snapshot(&self) -> Result<SnapshotResult, Error>;
 }
@@ -287,15 +266,9 @@ pub struct Snapshotter {
     #[new(value = "Mutex::new(Instant::now())")]
     last_version_change: Mutex<Instant>,
     min_version_age: Duration,
-    #[new(default)]
-    persister: Option<SnapshotPersister>,
 }
 
 impl Snapshotter {
-    pub fn set_persister(&mut self, persister: SnapshotPersister) {
-        self.persister = Some(persister);
-    }
-
     fn get_api_boundary_nodes(
         &self,
         version: RegistryVersion,
@@ -544,11 +517,6 @@ impl Snapshot for Snapshotter {
             .store(Some(snapshot_arc.clone()));
         *registry_version_published = Some(version);
         self.channel_notify.send_replace(Some(snapshot_arc));
-
-        // Persist the firewall rules if configured
-        if let Some(v) = &self.persister {
-            v.persist(snapshot)?;
-        }
 
         Ok(SnapshotResult::Published(result))
     }
