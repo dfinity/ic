@@ -859,7 +859,6 @@ dependencies = [
  "ic-registry-client-helpers",
  "ic-types",
  "ic_sev",
- "itertools 0.12.1",
  "pem 3.0.6",
  "prost 0.13.4",
  "prost-build 0.13.4",
