@@ -239,7 +239,7 @@ fn render_input_screen(f: &mut Frame, state: &InputState, size: Rect) {
         ])
         .split(size);
 
-    let title = Paragraph::new("NNS recovery")
+    let title = Paragraph::new("Manual Recovery TUI")
         .block(
             Block::default()
                 .borders(Borders::NONE)
