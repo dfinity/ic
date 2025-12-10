@@ -213,8 +213,8 @@ def main():
     component_files = args.component_files
 
     def cleanup():
-        invoke.run(f"podman rm -f {image_tag}")
         invoke.run(f"podman rm -f {image_tag}_container")
+        invoke.run(f"podman rm -f {image_tag}")
 
     atexit.register(lambda: cleanup())
     signal.signal(signal.SIGTERM, lambda: cleanup())
