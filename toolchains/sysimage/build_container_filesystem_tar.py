@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import os
 import shutil
+import signal
 import tempfile
 import uuid
 from dataclasses import dataclass
@@ -103,7 +105,6 @@ def export_container_filesystem(image_tag: str, destination_tar_filename: str):
         f"fakeroot -i {fakeroot_statefile} tar cf {destination_tar_filename} --numeric-owner --sort=name --exclude='run/*' -C {tar_dir} $(ls -A {tar_dir})"
     )
     invoke.run("sync")
-    invoke.run(f"podman container rm -f {container_name}")
 
 
 def resolve_file_args(context_dir: str, file_build_args: List[str]) -> List[str]:
@@ -207,6 +208,13 @@ def main():
     # manually, for now.
     os.environ["PATH"] = ":".join([x for x in [os.environ.get("PATH"), "/usr/bin"] if x is not None])
 
+    def cleanup():
+        invoke.run("podman system prune --all --volumes --force")
+
+    atexit.register(lambda: cleanup())
+    signal.signal(signal.SIGTERM, lambda: cleanup())
+    signal.signal(signal.SIGINT, lambda: cleanup())
+
     image_tag = str(uuid.uuid4()).split("-")[0]
     context_files = args.context_files
     component_files = args.component_files
@@ -240,8 +248,6 @@ def main():
     build_container(build_args, context_dir, args.dockerfile, image_tag, base_image_override)
 
     export_container_filesystem(image_tag, destination_tar_filename)
-
-    invoke.run(f"podman image rm -f {image_tag}")
 
 
 if __name__ == "__main__":

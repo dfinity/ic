@@ -4,8 +4,10 @@
 #
 from __future__ import annotations
 
+import atexit
 import os
 import shutil
+import signal
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -82,6 +84,13 @@ def main():
     # manually, for now.
     os.environ["PATH"] = ":".join([x for x in [os.environ.get("PATH"), "/usr/bin"] if x is not None])
 
+    def cleanup():
+        invoke.run("podman system prune --all --volumes --force")
+
+    atexit.register(lambda: cleanup())
+    signal.signal(signal.SIGTERM, lambda: cleanup())
+    signal.signal(signal.SIGINT, lambda: cleanup())
+
     build_args = list(args.fancy.build_args or [])
     context_dir = tempfile.mkdtemp()
 
@@ -91,7 +100,6 @@ def main():
 
     build_image(args.fancy.image_tag, args.fancy.dockerfile, context_dir, build_args)
     save_image(args.fancy.image_tag, args.fancy.output)
-    invoke.run(f"podman image rm -f {args.fancy.image_tag}")
 
 
 if __name__ == "__main__":
