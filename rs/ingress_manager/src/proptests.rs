@@ -20,7 +20,7 @@ use ic_interfaces::{
     p2p::consensus::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
     time_source::TimeSource,
 };
-use ic_limits::MAX_INGRESS_TTL;
+use ic_limits::{MAX_INGRESS_BYTES_PER_BLOCK, MAX_INGRESS_TTL};
 use ic_test_utilities_state::{CanisterStateBuilder, ReplicatedStateBuilder};
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::{
@@ -28,8 +28,8 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
-    CountBytes, Height, NumBytes, RegistryVersion, artifact::IngressMessageId,
-    batch::ValidationContext, messages::SignedIngress, time::UNIX_EPOCH,
+    Height, NumBytes, RegistryVersion, artifact::IngressMessageId, batch::ValidationContext,
+    messages::SignedIngress, time::UNIX_EPOCH,
 };
 use proptest::prelude::*;
 use std::collections::HashSet;
@@ -87,21 +87,24 @@ proptest! {
                 }
 
                 // Generate a payload out of the propped up ingress
+                const MAX_PAYLOAD_WIRE_SIZE: NumBytes = NumBytes::new(MAX_BLOCK_SIZE);
                 let payload = ingress_manager.get_ingress_payload(
                     &HashSet::new(),
                     &validation_context,
-                    NumBytes::new(MAX_BLOCK_SIZE),
+                    MAX_PAYLOAD_WIRE_SIZE,
                 );
 
                 // Also in this test the payload must contain some ingress messages
-                assert!(!payload.is_empty());
+                assert!(!payload.payload.is_empty());
 
                 // Check the size explicitly
-                assert!((payload.count_bytes() as u64) < MAX_BLOCK_SIZE);
+                assert!(payload.payload.total_ids_size_estimate().get() < MAX_BLOCK_SIZE);
+                assert!(payload.payload.total_messages_size_estimate().get() < MAX_INGRESS_BYTES_PER_BLOCK);
+                assert!(payload.wire_size_estimate.get() < MAX_BLOCK_SIZE);
 
                 // Any payload generated should pass verification.
                 // If not, we have an issue with the payload builder
-                assert!(ingress_manager.validate_ingress_payload(&payload, &HashSet::new(), &validation_context).is_ok());
+                assert!(ingress_manager.validate_ingress_payload(&payload.payload, &HashSet::new(), &validation_context).is_ok());
             },
         )
     }
