@@ -12,7 +12,8 @@ use ic_interfaces_registry::RegistryClient;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
-    Height, crypto::CryptoHash, malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
+    Height, batch::BatchContent, crypto::CryptoHash, malicious_flags::MaliciousFlags,
+    replica_config::ReplicaConfig,
 };
 use rand::Rng;
 use rand_chacha::{ChaChaRng, rand_core::SeedableRng};
@@ -329,10 +330,8 @@ fn run_n_rounds_and_check_pubkeys(
 
         let mut found_keys = 0;
         for key_id in test_master_public_key_ids() {
-            if batch
-                .chain_key_data
-                .master_public_keys
-                .contains_key(&key_id)
+            if let BatchContent::Data { chain_key_data, .. } = &batch.content
+                && chain_key_data.master_public_keys.contains_key(&key_id)
             {
                 found_keys += 1
             }

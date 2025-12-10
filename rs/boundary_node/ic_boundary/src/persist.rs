@@ -240,7 +240,7 @@ pub(crate) mod test {
     use arc_swap::ArcSwapOption;
     use candid::Principal;
     use ethnum::u256;
-    use ic_bn_lib::principal;
+    use ic_bn_lib_common::principal;
     use ic_registry_subnet_type::SubnetType;
 
     use crate::{

@@ -135,19 +135,15 @@ pub fn verify_pop(
     let minus_challenge = pop.challenge.neg();
     let pop_base = random_oracle_to_g1(DOMAIN_POP_ENCRYPTION_KEY, instance);
 
-    let blinder_public_key = G1Projective::mul2_vartime(
-        &G1Projective::from(&instance.public_key),
+    let blinder_public_key = G1Projective::mul2_affine_vartime(
+        &instance.public_key,
         &minus_challenge,
-        &G1Projective::from(&instance.g1_gen),
+        &instance.g1_gen,
         &pop.response,
     );
 
-    let blinder_pop_key = G1Projective::mul2_vartime(
-        &G1Projective::from(&pop.pop_key),
-        &minus_challenge,
-        &G1Projective::from(&pop_base),
-        &pop.response,
-    );
+    let blinder_pop_key =
+        G1Projective::mul2_affine_vartime(&pop.pop_key, &minus_challenge, &pop_base, &pop.response);
 
     let challenge = generate_pop_challenge(
         &instance.public_key,

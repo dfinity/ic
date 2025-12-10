@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+base64 = { workspace = true }
 candid = { workspace = true }
 ic-agent = { workspace = true }
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
@@ -29,10 +30,12 @@ k256 = { workspace = true }
 p256 = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
+rsa = { workspace = true }
 simple_asn1 = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
+serde_json = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 

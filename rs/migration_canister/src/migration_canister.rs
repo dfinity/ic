@@ -13,7 +13,7 @@ use crate::{
     RequestState, ValidationError,
     canister_state::{
         ValidationGuard, caller_allowed,
-        events::find_event,
+        events::find_last_event,
         migrations_disabled,
         requests::{find_request, insert_request},
         set_allowlist,
@@ -77,7 +77,7 @@ async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), Option<Valida
             println!("Failed to validate request {}: {}", args, e);
             return Err(Some(e));
         }
-        Ok(request) => {
+        Ok((request, _guards)) => {
             // Need to check the rate limit again
             if rate_limited() {
                 return Err(Some(ValidationError::RateLimited(Reserved)));
@@ -100,45 +100,22 @@ pub enum MigrationStatus {
 }
 
 #[query]
-/// The same (canister_id, replace_canister_id) pair might be present in the `HISTORY`, and valid to process again, so
-/// we return a vector.
-fn migration_status(args: MigrateCanisterArgs) -> Vec<MigrationStatus> {
-    let mut active: Vec<MigrationStatus> = find_request(args.canister_id, args.replace_canister_id)
-        .into_iter()
-        .map(|r| MigrationStatus::InProgress {
-            status: r.name().to_string(),
-        })
-        .collect();
-    let events: Vec<MigrationStatus> = find_event(args.canister_id, args.replace_canister_id)
-        .into_iter()
-        .map(|event| match event.event {
+fn migration_status(args: MigrateCanisterArgs) -> Option<MigrationStatus> {
+    if let Some(request_status) = find_request(args.canister_id, args.replace_canister_id) {
+        let migration_status = MigrationStatus::InProgress {
+            status: request_status.name().to_string(),
+        };
+        Some(migration_status)
+    } else if let Some(event) = find_last_event(args.canister_id, args.replace_canister_id) {
+        let migration_status = match event.event {
             crate::EventType::Succeeded { .. } => MigrationStatus::Succeeded { time: event.time },
             crate::EventType::Failed { reason, .. } => MigrationStatus::Failed {
                 reason,
                 time: event.time,
             },
-        })
-        .collect();
-    active.extend(events);
-    active
-}
-
-#[derive(Clone, CandidType, Deserialize)]
-pub(crate) struct ListEventsArgs {
-    page_index: u64,
-    page_size: u64,
-}
-
-#[query]
-fn list_events(args: ListEventsArgs) -> Vec<MigrationStatus> {
-    crate::canister_state::events::list_events(args.page_index, args.page_size)
-        .into_iter()
-        .map(|e| match e.event {
-            crate::EventType::Succeeded { .. } => MigrationStatus::Succeeded { time: e.time },
-            crate::EventType::Failed { reason, .. } => MigrationStatus::Failed {
-                reason,
-                time: e.time,
-            },
-        })
-        .collect()
+        };
+        Some(migration_status)
+    } else {
+        None
+    }
 }

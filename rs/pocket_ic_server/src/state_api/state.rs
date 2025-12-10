@@ -27,13 +27,23 @@ use http::{
         IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
     },
 };
-use ic_agent::agent::route_provider::RoundRobinRouteProvider;
-use ic_gateway::ic_bn_lib::http::{
-    Client, ConnInfo,
-    headers::{X_IC_CANISTER_ID, X_REQUEST_ID, X_REQUESTED_WITH},
-    proxy::proxy,
+use ic_bn_lib_common::{
+    traits::http::Client,
+    types::http::{ClientOptions, ConnInfo},
 };
-use ic_gateway::{Cli, setup_router};
+use ic_gateway::{
+    Cli,
+    ic_bn_lib::{
+        http::{
+            dns::Resolver,
+            headers::{X_IC_CANISTER_ID, X_REQUEST_ID, X_REQUESTED_WITH},
+            proxy::proxy,
+        },
+        ic_agent::agent::route_provider::RoundRobinRouteProvider,
+        utils::health_manager::HealthManager,
+    },
+    setup_router,
+};
 use ic_types::{CanisterId, NodeId, PrincipalId, SubnetId, canister_http::CanisterHttpRequestId};
 use itertools::Itertools;
 use pocket_ic::RejectResponse;
@@ -57,9 +67,12 @@ use tokio::{
     task::{JoinHandle, JoinSet, spawn, spawn_blocking},
     time::{self, sleep},
 };
+use tokio_util::sync::CancellationToken;
 use tower::ServiceExt;
 use tower_http::cors::{Any, CorsLayer};
+use tracing::level_filters::LevelFilter;
 use tracing::{debug, error, trace};
+use tracing_subscriber::reload;
 
 // The maximum wait time for a computation to finish synchronously.
 pub(crate) const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
@@ -796,26 +809,42 @@ impl ApiState {
                 args.push("--ic-unsafe-root-key-fetch".to_string());
                 let cli = Cli::parse_from(args);
 
-                let http_client_opts: ic_gateway::ic_bn_lib::http::client::Options<
-                    ic_gateway::ic_bn_lib::http::dns::Resolver,
-                > = (&cli.http_client).into();
+                let resolver = Resolver::default();
+
+                let http_client_opts: ClientOptions = (&cli.http_client).into();
                 let http_client = Arc::new(
-                    ic_gateway::ic_bn_lib::http::ReqwestClient::new(http_client_opts.clone())
-                        .unwrap(),
+                    ic_gateway::ic_bn_lib::http::ReqwestClient::new(
+                        http_client_opts.clone(),
+                        Some(resolver.clone()),
+                    )
+                    .unwrap(),
                 );
+                let http_client_hyper = Arc::new(ic_gateway::ic_bn_lib::http::HyperClient::new(
+                    http_client_opts,
+                    resolver,
+                ));
 
                 let route_provider =
                     RoundRobinRouteProvider::new(vec![replica_url.clone()]).unwrap();
 
                 let mut tasks = ic_gateway::ic_bn_lib::tasks::TaskManager::new();
 
+                let (_, reload_handle) = reload::Layer::new(LevelFilter::WARN);
+                let health_manager = Arc::new(HealthManager::default());
                 let ic_gateway_router = setup_router(
                     &cli,
                     vec![],
+                    reload_handle,
                     &mut tasks,
+                    health_manager,
                     http_client,
+                    http_client_hyper,
                     Arc::new(route_provider),
                     &ic_gateway::ic_bn_lib::prometheus::Registry::new(),
+                    CancellationToken::new(),
+                    None,
+                    None,
+                    None,
                 )
                 .await
                 .unwrap();

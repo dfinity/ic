@@ -1,6 +1,10 @@
-use crate::fees::DogecoinFeeEstimator;
+use crate::fees::{DogecoinFeeEstimator, estimate_retrieve_doge_fee};
 use crate::lifecycle::init::Network;
+use crate::test_fixtures::{arbitrary, dogecoin_fee_estimator};
 use ic_ckbtc_minter::fees::FeeEstimator;
+use ic_ckbtc_minter::state::utxos::UtxoSet;
+use proptest::prop_assert;
+use test_strategy::proptest;
 
 pub const DOGE: u64 = 100_000_000;
 
@@ -23,5 +27,38 @@ fn should_increase_minimum_withdrawal_amount_by_half() {
     assert_eq!(
         estimator.fee_based_minimum_withdrawal_amount(10_000_000 * 1_000),
         initial_min_amount + increment,
+    );
+}
+
+#[proptest]
+fn test_fee_range(
+    #[strategy(arbitrary::utxo_set(5_000u64..1_000_000_000, 20..40))] mut utxos: UtxoSet,
+    #[strategy(0_u64..15_000)] amount: u64,
+    #[strategy(2000..10000u64)] fee_rate_in_millikoinus_per_byte: u64,
+) {
+    const SMALLEST_TX_SIZE_BYTES: u64 = 225; // one input, two outputs
+    const MIN_MINTER_FEE: u64 = DogecoinFeeEstimator::DUST_LIMIT;
+
+    let fee_estimator = dogecoin_fee_estimator();
+    let amount = std::cmp::max(
+        amount,
+        fee_estimator.fee_based_minimum_withdrawal_amount(fee_rate_in_millikoinus_per_byte),
+    );
+    let estimate = estimate_retrieve_doge_fee(
+        &mut utxos,
+        amount,
+        fee_rate_in_millikoinus_per_byte,
+        &fee_estimator,
+    )
+    .unwrap();
+    let lower_bound =
+        MIN_MINTER_FEE + SMALLEST_TX_SIZE_BYTES * fee_rate_in_millikoinus_per_byte / 1000;
+    let estimate_fee_amount = estimate.minter_fee + estimate.dogecoin_fee;
+
+    prop_assert!(
+        estimate_fee_amount >= lower_bound,
+        "The fee estimate {} is below the lower bound {}",
+        estimate_fee_amount,
+        lower_bound
     );
 }

@@ -1007,18 +1007,13 @@ mod tests {
                 node_reward_type: None,
                 mgmt_mac: Default::default(),
                 deployment_environment: DeploymentEnvironment::Mainnet,
-                use_nns_public_key: false,
                 nns_urls: vec![],
                 use_node_operator_private_key: false,
                 enable_trusted_execution_environment: false,
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: Default::default(),
             },
-            #[allow(deprecated)]
             hostos_settings: HostOSSettings {
-                vm_memory: 16,
-                vm_cpu: "qemu".to_string(),
-                vm_nr_of_vcpus: 56,
                 verbose: false,
                 hostos_dev_settings: HostOSDevSettings {
                     vm_memory: 16,

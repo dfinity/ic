@@ -326,7 +326,36 @@ fn canister_history_tracks_upgrade() {
 }
 
 #[test]
-fn canister_history_tracks_uninstall() {
+fn canister_history_tracks_uninstall_code_directly() {
+    let op = |env: &StateMachine, canister_id: CanisterId, sender: PrincipalId| {
+        let canister_id_record: CanisterIdRecord = canister_id.into();
+        env.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::UninstallCode,
+            canister_id_record.encode(),
+        )
+        .unwrap();
+    };
+
+    canister_history_tracks_uninstall_code(op);
+}
+
+#[test]
+fn canister_history_tracks_uninstall_code_via_take_canister_snapshot() {
+    let op = |env: &StateMachine, canister_id: CanisterId, sender: PrincipalId| {
+        let args: TakeCanisterSnapshotArgs =
+            TakeCanisterSnapshotArgs::new(canister_id, None, Some(true), None);
+        env.take_canister_snapshot_as(args, sender).unwrap();
+    };
+
+    canister_history_tracks_uninstall_code(op);
+}
+
+fn canister_history_tracks_uninstall_code<F>(f: F)
+where
+    F: FnOnce(&StateMachine, CanisterId, PrincipalId),
+{
     let mut now = std::time::SystemTime::now();
     let (env, test_canister, test_canister_sha256) = test_setup(SubnetType::Application, now);
 
@@ -388,14 +417,7 @@ fn canister_history_tracks_uninstall() {
     // uninstall code via ingress from user_id1
     now += Duration::from_secs(5);
     env.set_time(now);
-    let canister_id_record: CanisterIdRecord = canister_id.into();
-    env.execute_ingress_as(
-        user_id1,
-        ic00::IC_00,
-        Method::UninstallCode,
-        canister_id_record.encode(),
-    )
-    .unwrap();
+    f(&env, canister_id, user_id1);
     // check canister history
     reference_change_entries.push(CanisterChange::new(
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
@@ -1125,7 +1147,8 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
     // Create canister snapshot.
     now += Duration::from_secs(5);
     env.set_time(now);
-    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let args: TakeCanisterSnapshotArgs =
+        TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
     let ucan_payload = universal_canister_payload(
         &PrincipalId::default(),
         "take_canister_snapshot",
@@ -1653,7 +1676,7 @@ fn subnet_available_memory() {
     check_subnet_available_memory(&test, true);
 
     // memory usage increases after taking a snapshot
-    let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
     let res = test.subnet_message(
         Method::TakeCanisterSnapshot,
         take_canister_snapshot_args.encode(),
