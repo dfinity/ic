@@ -899,6 +899,7 @@ fn get_canister_status_memory_metrics() {
 
     let canister_history_size = csr.canister_history_size();
     let wasm_chunk_store_size = csr.wasm_chunk_store_size();
+    let log_memory_store_size = csr.log_memory_store_size();
     let snapshots_size = csr.snapshots_size();
 
     let system_memory_size = canister_history_size + wasm_chunk_store_size + snapshots_size;
