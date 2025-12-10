@@ -4,7 +4,7 @@ use hex;
 #[test]
 fn test_validate_guest_launch_measurement_valid() {
     let measurement = GuestLaunchMeasurement {
-        encoded_measurement: Some(hex::encode(vec![0u8; 48])),
+        encoded_measurement: hex::encode(vec![0u8; 48]),
         metadata: Some(GuestLaunchMeasurementMetadata {
             kernel_cmdline: "console=ttyS0".to_string(),
         }),
@@ -16,7 +16,7 @@ fn test_validate_guest_launch_measurement_valid() {
 #[test]
 fn test_validate_guest_launch_measurement_wrong_size() {
     let measurement = GuestLaunchMeasurement {
-        encoded_measurement: Some(hex::encode(vec![0u8; 32])),
+        encoded_measurement: hex::encode(vec![0u8; 32]),
         metadata: Some(GuestLaunchMeasurementMetadata {
             kernel_cmdline: "console=ttyS0".to_string(),
         }),
@@ -33,7 +33,7 @@ fn test_validate_guest_launch_measurement_wrong_size() {
 #[test]
 fn test_validate_guest_launch_measurement_no_metadata() {
     let measurement = GuestLaunchMeasurement {
-        encoded_measurement: Some(hex::encode(vec![0u8; 48])),
+        encoded_measurement: hex::encode(vec![0u8; 48]),
         metadata: None,
     };
     let result = measurement.validate();
@@ -43,7 +43,7 @@ fn test_validate_guest_launch_measurement_no_metadata() {
 #[test]
 fn test_validate_guest_launch_measurement_empty_kernel_cmdline() {
     let measurement = GuestLaunchMeasurement {
-        encoded_measurement: Some(hex::encode(vec![0u8; 48])),
+        encoded_measurement: hex::encode(vec![0u8; 48]),
         metadata: Some(GuestLaunchMeasurementMetadata {
             kernel_cmdline: "".to_string(),
         }),
@@ -62,8 +62,8 @@ fn test_validate_guest_launch_measurement_empty_kernel_cmdline() {
 #[test]
 fn test_validate_guest_launch_measurement_multiple_defects() {
     let measurement = GuestLaunchMeasurement {
-        encoded_measurement: Some(hex::encode(vec![0u8; 32])), // Wrong size.
-        metadata: None,                                        // No metadata.
+        encoded_measurement: hex::encode(vec![0u8; 32]), // Wrong size.
+        metadata: None,                                  // No metadata.
     };
     let defects = measurement.validate().unwrap_err();
     // Should report measurement size error. Metadata missing is allowed though.
@@ -93,7 +93,7 @@ fn test_validate_guest_launch_measurements_empty() {
 fn test_validate_guest_launch_measurements_valid() {
     let guest_launch_measurements = GuestLaunchMeasurements {
         guest_launch_measurements: vec![GuestLaunchMeasurement {
-            encoded_measurement: Some(hex::encode(vec![0u8; 48])),
+            encoded_measurement: hex::encode(vec![0u8; 48]),
             metadata: Some(GuestLaunchMeasurementMetadata {
                 kernel_cmdline: "console=ttyS0".to_string(),
             }),
@@ -109,27 +109,27 @@ fn test_validate_guest_launch_measurements_multiple_defects() {
         guest_launch_measurements: vec![
             // Valid measurement
             GuestLaunchMeasurement {
-                encoded_measurement: Some(hex::encode(vec![0u8; 48])),
+                encoded_measurement: hex::encode(vec![0u8; 48]),
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: "console=ttyS0".to_string(),
                 }),
             },
             // Wrong measurement size
             GuestLaunchMeasurement {
-                encoded_measurement: Some(hex::encode(vec![0u8; 32])),
+                encoded_measurement: hex::encode(vec![0u8; 32]),
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: "console=ttyS0".to_string(),
                 }),
             },
             // Missing metadata. This is ok.
             GuestLaunchMeasurement {
-                encoded_measurement: Some(hex::encode(vec![0u8; 48])),
+                encoded_measurement: hex::encode(vec![0u8; 48]),
                 metadata: None,
             },
             // Empty kernel_cmdline. This is NOT ok, even though metadata is
             // optional.
             GuestLaunchMeasurement {
-                encoded_measurement: Some(hex::encode(vec![0u8; 48])),
+                encoded_measurement: hex::encode(vec![0u8; 48]),
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: "".to_string(),
                 }),

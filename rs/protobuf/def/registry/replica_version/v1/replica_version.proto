@@ -33,7 +33,7 @@ message GuestLaunchMeasurement {
   // Metadata about how the measurement was obtained
   GuestLaunchMeasurementMetadata metadata = 2;
   // encoded SEV-SNP measurement (hex)
-  optional string encoded_measurement = 3;
+  string encoded_measurement = 3;
 
   reserved 1;
   reserved "measurement";

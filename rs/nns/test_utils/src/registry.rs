@@ -624,7 +624,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
             metadata: Some(GuestLaunchMeasurementMetadata {
                 kernel_cmdline: "foo=bar".to_string(),
             }),
-            encoded_measurement: Some(hex::encode(vec![1, 2, 3])),
+            encoded_measurement: hex::encode(vec![1, 2, 3]),
         }],
     });
     let replica_version = ReplicaVersionRecord {

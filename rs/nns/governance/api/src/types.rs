@@ -2697,7 +2697,7 @@ pub struct GuestLaunchMeasurements {
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug, Default,
 )]
 pub struct GuestLaunchMeasurement {
-    pub encoded_measurement: Option<String>,
+    pub encoded_measurement: String,
     pub metadata: Option<GuestLaunchMeasurementMetadata>,
 }
 

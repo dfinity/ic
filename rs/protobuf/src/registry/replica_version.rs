@@ -77,20 +77,18 @@ impl v1::GuestLaunchMeasurement {
         let mut defects = Vec::new();
 
         // Measurement must be 48 bytes, per SEV-SNP.
-        if let Some(encoded_measurement) = &self.encoded_measurement {
-            match hex::decode(encoded_measurement) {
-                Ok(decoded_measurement) => {
-                    if decoded_measurement.len() != SEV_SNP_MEASUREMENT_LENGTH {
-                        defects.push(format!(
+        match hex::decode(self.encoded_measurement.clone()) {
+            Ok(decoded_measurement) => {
+                if decoded_measurement.len() != SEV_SNP_MEASUREMENT_LENGTH {
+                    defects.push(format!(
                         "encoded_measurement must be exactly {} bytes (SEV-SNP measurement), got {} bytes",
                         SEV_SNP_MEASUREMENT_LENGTH,
                         decoded_measurement.len()
                     ));
-                    }
                 }
-                Err(e) => {
-                    defects.push(format!("encoded_measurement must be valid hex: '{}'", e));
-                }
+            }
+            Err(e) => {
+                defects.push(format!("encoded_measurement must be valid hex: '{}'", e));
             }
         }
 
