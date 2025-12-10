@@ -7,7 +7,7 @@
 set -exo pipefail
 
 cleanup() {
-    podman system prune --all --volumes --force
+    podman rm -f "${CONTAINER}"
     rm -rf "${TMPDIR}"
 }
 trap cleanup EXIT

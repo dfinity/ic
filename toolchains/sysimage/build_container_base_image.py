@@ -76,6 +76,10 @@ def main():
         required=True,
     )
     args = parser.parse_args()
+    build_args = args.fancy.build_args
+    dockerfile = args.fancy.dockerfile
+    image_tag = args.fancy.image_tag
+    output = args.fancy.output
 
     log.info(f"Using args: {args}")
 
@@ -85,21 +89,22 @@ def main():
     os.environ["PATH"] = ":".join([x for x in [os.environ.get("PATH"), "/usr/bin"] if x is not None])
 
     def cleanup():
-        invoke.run("podman system prune --all --volumes --force")
+        invoke.run(f"podman rm -f {image_tag}")
+        invoke.run(f"podman rm -f {image_tag}_container")
 
     atexit.register(lambda: cleanup())
     signal.signal(signal.SIGTERM, lambda: cleanup())
     signal.signal(signal.SIGINT, lambda: cleanup())
 
-    build_args = list(args.fancy.build_args or [])
+    build_args = list(build_args or [])
     context_dir = tempfile.mkdtemp()
 
     # Add all context files directly into dir
     for context_file in args.context_files:
         shutil.copy(context_file, context_dir)
 
-    build_image(args.fancy.image_tag, args.fancy.dockerfile, context_dir, build_args)
-    save_image(args.fancy.image_tag, args.fancy.output)
+    build_image(image_tag, dockerfile, context_dir, build_args)
+    save_image(image_tag, output)
 
 
 if __name__ == "__main__":

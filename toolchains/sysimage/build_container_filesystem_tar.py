@@ -208,16 +208,17 @@ def main():
     # manually, for now.
     os.environ["PATH"] = ":".join([x for x in [os.environ.get("PATH"), "/usr/bin"] if x is not None])
 
+    image_tag = str(uuid.uuid4()).split("-")[0]
+    context_files = args.context_files
+    component_files = args.component_files
+
     def cleanup():
-        invoke.run("podman system prune --all --volumes --force")
+        invoke.run(f"podman rm -f {image_tag}")
+        invoke.run(f"podman rm -f {image_tag}_container")
 
     atexit.register(lambda: cleanup())
     signal.signal(signal.SIGTERM, lambda: cleanup())
     signal.signal(signal.SIGINT, lambda: cleanup())
-
-    image_tag = str(uuid.uuid4()).split("-")[0]
-    context_files = args.context_files
-    component_files = args.component_files
 
     context_dir = tempfile.mkdtemp()
 
