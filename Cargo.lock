@@ -9002,6 +9002,7 @@ dependencies = [
 name = "ic-crypto-test-utils-canister-threshold-sigs"
 version = "0.9.0"
 dependencies = [
+ "ic-crypto-interfaces-sig-verification",
  "ic-crypto-internal-threshold-sig-canister-threshold-sig",
  "ic-crypto-temp-crypto",
  "ic-interfaces",
