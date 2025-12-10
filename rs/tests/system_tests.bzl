@@ -2,6 +2,8 @@
 Rules for system-tests.
 """
 
+
+
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@mainnet_icos_versions//:defs.bzl", "MAINNET_APP", "MAINNET_LATEST", "MAINNET_LATEST_HOSTOS", "MAINNET_NNS")
 load("@rules_oci//oci:defs.bzl", "oci_load")
@@ -9,6 +11,9 @@ load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
 load("//bazel:mainnet-icos-images.bzl", "icos_dev_image_download_url", "icos_image_download_url")
 load("//rs/tests:common.bzl", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+
+
+
 
 def _run_system_test(ctx):
     run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
