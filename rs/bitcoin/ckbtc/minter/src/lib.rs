@@ -1172,7 +1172,7 @@ pub fn build_unsigned_transaction<F: FeeEstimator>(
     match build_unsigned_transaction_from_inputs(
         &inputs,
         outputs,
-        &main_address,
+        main_address,
         fee_per_vbyte,
         fee_estimator,
     ) {

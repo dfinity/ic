@@ -908,7 +908,7 @@ impl CkBtcMinterState {
         for req in std::mem::take(&mut self.pending_retrieve_btc_requests) {
             if available_utxos_value < req.amount + tx_amount || batch.len() >= max_size {
                 // Put this request back to the queue until we have enough liquid UTXOs.
-                self.pending_retrieve_btc_requests.push(req.into());
+                self.pending_retrieve_btc_requests.push(req);
             } else {
                 tx_amount += req.amount;
                 batch.insert(req);

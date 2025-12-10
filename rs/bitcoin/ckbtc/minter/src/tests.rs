@@ -777,7 +777,7 @@ proptest! {
         }
         for req in requests {
             let block_index = req.block_index;
-            state.push_back_pending_retrieve_btc_request(req.into());
+            state.push_back_pending_retrieve_btc_request(req);
             prop_assert_eq!(state.retrieve_btc_status(block_index), RetrieveBtcStatus::Pending);
         }
 
@@ -828,6 +828,7 @@ proptest! {
             change_output: Some(change_output),
             fee_per_vbyte: Some(fee_per_vbyte),
             withdrawal_fee: Some(withdrawal_fee),
+            signed_tx: None,
         });
 
         state.check_invariants().expect("violated invariants");
@@ -853,6 +854,7 @@ proptest! {
                 change_output: Some(change_output),
                 fee_per_vbyte: Some(fee_per_vbyte),
                 withdrawal_fee: Some(withdrawal_fee),
+                signed_tx: None,
             });
 
             for txid in &txids {
@@ -1036,7 +1038,7 @@ fn can_form_a_batch_conditions() {
         kyt_provider: None,
         reimbursement_account: None,
     };
-    state.pending_retrieve_btc_requests.push(req.into());
+    state.pending_retrieve_btc_requests.push(req);
     // One request, >= min_pending, pass.
     assert!(state.can_form_a_batch(1, 10));
 
@@ -1062,7 +1064,7 @@ fn can_form_a_batch_conditions() {
         kyt_provider: None,
         reimbursement_account: None,
     };
-    state.pending_retrieve_btc_requests.push(req.into());
+    state.pending_retrieve_btc_requests.push(req);
     // Two request, long enough since last_transaction_submission_time, pass.
     assert!(state.can_form_a_batch(10, 10600));
 }
