@@ -15,7 +15,6 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig",
-        "//rs/crypto/interfaces/sig_verification",
         "//rs/crypto/temp_crypto",
         "//rs/interfaces",
         "//rs/monitoring/logger",

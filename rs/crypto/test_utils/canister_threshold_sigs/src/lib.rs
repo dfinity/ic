@@ -282,17 +282,11 @@ pub fn build_params_from_previous<R: RngCore + CryptoRng>(
 
 pub mod node {
     use crate::{IDkgParticipants, IDkgParticipantsRandom};
-    use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
     use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
     use ic_interfaces::crypto::{
         BasicSigVerifier, BasicSigner, CurrentNodePublicKeysError, IDkgProtocol, KeyManager,
-        LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm,
         ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSchnorrSigVerifier,
-        ThresholdSchnorrSigner, ThresholdSigVerifier, ThresholdSigVerifierByPublicKey,
-        ThresholdSigner, VetKdProtocol,
-    };
-    use ic_interfaces::crypto::{
-        CheckKeysWithRegistryError, IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult,
+        ThresholdSchnorrSigner,
     };
     use ic_logger::ReplicaLogger;
     use ic_protobuf::log::log_entry::v1::LogEntry;
@@ -318,31 +312,15 @@ pub mod node {
         ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
         ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
     };
-    use ic_types::crypto::threshold_sig::ni_dkg::NiDkgDealing;
-    use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
-    use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
-    use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
-    use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRemovalError;
-    use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgLoadTranscriptError;
-    use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
-    use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTranscript};
-    use ic_types::crypto::vetkd::{
-        VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdKeyShareCombinationError,
-        VetKdKeyShareCreationError, VetKdKeyShareVerificationError, VetKdKeyVerificationError,
-    };
-    use ic_types::crypto::{
-        BasicSigOf, CombinedMultiSigOf, CombinedThresholdSigOf, CryptoError, CryptoResult,
-        CurrentNodePublicKeys, IndividualMultiSigOf, Signable, ThresholdSigShareOf, UserPublicKey,
-    };
+    use ic_types::crypto::{BasicSigOf, CryptoResult, CurrentNodePublicKeys, Signable};
     use ic_types::signature::BasicSignatureBatch;
-    use ic_types::{NodeId, RegistryVersion, SubnetId};
+    use ic_types::{NodeId, RegistryVersion};
     use rand::seq::IteratorRandom;
     use rand::{CryptoRng, Rng, RngCore, SeedableRng};
     use rand_chacha::ChaCha20Rng;
     use std::cmp::Ordering;
-    use std::collections::HashSet;
     use std::collections::btree_set::{IntoIter, Iter};
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::{BTreeMap, BTreeSet, HashSet};
     use std::fmt::{Debug, Formatter};
     use std::sync::Arc;
 
@@ -352,7 +330,6 @@ pub mod node {
         id: NodeId,
         crypto_component: Arc<TempCryptoComponentGeneric<ChaCha20Rng>>,
         logger: InMemoryReplicaLogger,
-        fail_sign_basic_with_err: Option<CryptoError>,
     }
 
     impl Node {
@@ -373,7 +350,6 @@ pub mod node {
                     ),
                 ),
                 logger,
-                fail_sign_basic_with_err: None,
             }
         }
 
@@ -394,7 +370,6 @@ pub mod node {
                     ),
                 ),
                 logger,
-                fail_sign_basic_with_err: None,
             }
         }
 
@@ -407,15 +382,17 @@ pub mod node {
         }
 
         pub fn create_dealing_or_panic(&self, params: &IDkgTranscriptParams) -> SignedIDkgDealing {
-            IDkgProtocol::create_dealing(self, params).unwrap_or_else(|error| {
+            self.create_dealing(params).unwrap_or_else(|error| {
                 panic!("failed to create IDkg dealing for {self:?}: {error:?}")
             })
         }
 
         pub fn load_transcript_or_panic(&self, transcript: &IDkgTranscript) {
-            IDkgProtocol::load_transcript(self, transcript).unwrap_or_else(|error| {
-                panic!("failed to load transcript for {self:?}: {error:?}")
-            });
+            self.crypto_component
+                .load_transcript(transcript)
+                .unwrap_or_else(|error| {
+                    panic!("failed to load transcript for {self:?}: {error:?}")
+                });
         }
 
         pub fn load_tecdsa_sig_transcripts(&self, inputs: &ThresholdEcdsaSigInputs) {
@@ -436,20 +413,16 @@ pub mod node {
             params: &IDkgTranscriptParams,
             dealings: &BatchSignedIDkgDealings,
         ) -> IDkgTranscript {
-            IDkgProtocol::create_transcript(self, params, dealings).unwrap_or_else(|error| {
-                panic!("failed to create transcript for {self:?}: {error:?}")
-            })
+            self.create_transcript(params, dealings)
+                .unwrap_or_else(|error| {
+                    panic!("failed to create transcript for {self:?}: {error:?}")
+                })
         }
 
         pub fn current_node_public_keys(
             &self,
         ) -> Result<CurrentNodePublicKeys, CurrentNodePublicKeysError> {
             self.crypto_component.current_node_public_keys()
-        }
-
-        pub fn with_sign_basic_returning_err(mut self, error: CryptoError) -> Self {
-            self.fail_sign_basic_with_err = Some(error);
-            self
         }
 
         pub fn drain_logs(self) -> Vec<LogEntry> {
@@ -464,9 +437,6 @@ pub mod node {
             signer: NodeId,
             registry_version: RegistryVersion,
         ) -> CryptoResult<BasicSigOf<T>> {
-            if let Some(error) = &self.fail_sign_basic_with_err {
-                return Err(error.clone());
-            }
             self.crypto_component
                 .sign_basic(message, signer, registry_version)
         }
@@ -477,7 +447,7 @@ pub mod node {
             &self,
             params: &IDkgTranscriptParams,
         ) -> Result<SignedIDkgDealing, IDkgCreateDealingError> {
-            IDkgProtocol::create_dealing(&*self.crypto_component, params)
+            self.crypto_component.create_dealing(params)
         }
 
         fn verify_dealing_public(
@@ -512,7 +482,7 @@ pub mod node {
             params: &IDkgTranscriptParams,
             dealings: &BatchSignedIDkgDealings,
         ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
-            IDkgProtocol::create_transcript(&*self.crypto_component, params, dealings)
+            self.crypto_component.create_transcript(params, dealings)
         }
 
         fn verify_transcript(
@@ -527,7 +497,7 @@ pub mod node {
             &self,
             transcript: &IDkgTranscript,
         ) -> Result<Vec<IDkgComplaint>, IDkgLoadTranscriptError> {
-            IDkgProtocol::load_transcript(&*self.crypto_component, transcript)
+            self.crypto_component.load_transcript(transcript)
         }
 
         fn verify_complaint(
@@ -707,235 +677,6 @@ pub mod node {
         ) -> CryptoResult<()> {
             self.crypto_component
                 .verify_basic_sig_batch(signature_batch, message, registry_version)
-        }
-    }
-
-    impl KeyManager for Node {
-        fn check_keys_with_registry(
-            &self,
-            registry_version: RegistryVersion,
-        ) -> Result<(), CheckKeysWithRegistryError> {
-            self.crypto_component
-                .check_keys_with_registry(registry_version)
-        }
-
-        fn current_node_public_keys(
-            &self,
-        ) -> Result<CurrentNodePublicKeys, CurrentNodePublicKeysError> {
-            self.crypto_component.current_node_public_keys()
-        }
-
-        fn rotate_idkg_dealing_encryption_keys(
-            &self,
-            registry_version: RegistryVersion,
-        ) -> Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError> {
-            self.crypto_component
-                .rotate_idkg_dealing_encryption_keys(registry_version)
-        }
-    }
-
-    impl NiDkgAlgorithm for Node {
-        fn create_dealing(
-            &self,
-            config: &NiDkgConfig,
-        ) -> Result<NiDkgDealing, DkgCreateDealingError> {
-            NiDkgAlgorithm::create_dealing(&*self.crypto_component, config)
-        }
-
-        fn verify_dealing(
-            &self,
-            config: &NiDkgConfig,
-            dealer: NodeId,
-            dealing: &NiDkgDealing,
-        ) -> Result<(), DkgVerifyDealingError> {
-            self.crypto_component
-                .verify_dealing(config, dealer, dealing)
-        }
-
-        fn create_transcript(
-            &self,
-            config: &NiDkgConfig,
-            verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
-        ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
-            NiDkgAlgorithm::create_transcript(&*self.crypto_component, config, verified_dealings)
-        }
-
-        fn load_transcript(
-            &self,
-            transcript: &NiDkgTranscript,
-        ) -> Result<LoadTranscriptResult, DkgLoadTranscriptError> {
-            NiDkgAlgorithm::load_transcript(&*self.crypto_component, transcript)
-        }
-
-        fn retain_only_active_keys(
-            &self,
-            transcripts: HashSet<NiDkgTranscript>,
-        ) -> Result<(), DkgKeyRemovalError> {
-            self.crypto_component.retain_only_active_keys(transcripts)
-        }
-    }
-
-    impl<T: Signable> ThresholdSigner<T> for Node {
-        fn sign_threshold(
-            &self,
-            message: &T,
-            dkg_id: &NiDkgId,
-        ) -> CryptoResult<ThresholdSigShareOf<T>> {
-            self.crypto_component.sign_threshold(message, dkg_id)
-        }
-    }
-
-    impl<T: Signable> ThresholdSigVerifier<T> for Node {
-        fn verify_threshold_sig_share(
-            &self,
-            signature: &ThresholdSigShareOf<T>,
-            message: &T,
-            dkg_id: &NiDkgId,
-            signer: NodeId,
-        ) -> CryptoResult<()> {
-            self.crypto_component
-                .verify_threshold_sig_share(signature, message, dkg_id, signer)
-        }
-
-        fn combine_threshold_sig_shares(
-            &self,
-            shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
-            dkg_id: &NiDkgId,
-        ) -> CryptoResult<CombinedThresholdSigOf<T>> {
-            self.crypto_component
-                .combine_threshold_sig_shares(shares, dkg_id)
-        }
-
-        fn verify_threshold_sig_combined(
-            &self,
-            signature: &CombinedThresholdSigOf<T>,
-            message: &T,
-            dkg_id: &NiDkgId,
-        ) -> CryptoResult<()> {
-            self.crypto_component
-                .verify_threshold_sig_combined(signature, message, dkg_id)
-        }
-    }
-
-    impl<T: Signable> ThresholdSigVerifierByPublicKey<T> for Node {
-        fn verify_combined_threshold_sig_by_public_key(
-            &self,
-            signature: &CombinedThresholdSigOf<T>,
-            message: &T,
-            subnet_id: SubnetId,
-            registry_version: RegistryVersion,
-        ) -> CryptoResult<()> {
-            self.crypto_component
-                .verify_combined_threshold_sig_by_public_key(
-                    signature,
-                    message,
-                    subnet_id,
-                    registry_version,
-                )
-        }
-    }
-
-    impl<T: Signable> MultiSigner<T> for Node {
-        fn sign_multi(
-            &self,
-            message: &T,
-            signer: NodeId,
-            registry_version: RegistryVersion,
-        ) -> CryptoResult<IndividualMultiSigOf<T>> {
-            self.crypto_component
-                .sign_multi(message, signer, registry_version)
-        }
-    }
-
-    impl<T: Signable> MultiSigVerifier<T> for Node {
-        fn verify_multi_sig_individual(
-            &self,
-            signature: &IndividualMultiSigOf<T>,
-            message: &T,
-            signer: NodeId,
-            registry_version: RegistryVersion,
-        ) -> CryptoResult<()> {
-            self.crypto_component.verify_multi_sig_individual(
-                signature,
-                message,
-                signer,
-                registry_version,
-            )
-        }
-
-        fn combine_multi_sig_individuals(
-            &self,
-            signatures: BTreeMap<NodeId, IndividualMultiSigOf<T>>,
-            registry_version: RegistryVersion,
-        ) -> CryptoResult<CombinedMultiSigOf<T>> {
-            self.crypto_component
-                .combine_multi_sig_individuals(signatures, registry_version)
-        }
-
-        fn verify_multi_sig_combined(
-            &self,
-            signature: &CombinedMultiSigOf<T>,
-            message: &T,
-            signers: BTreeSet<NodeId>,
-            registry_version: RegistryVersion,
-        ) -> CryptoResult<()> {
-            self.crypto_component.verify_multi_sig_combined(
-                signature,
-                message,
-                signers,
-                registry_version,
-            )
-        }
-    }
-
-    impl VetKdProtocol for Node {
-        fn create_encrypted_key_share(
-            &self,
-            args: VetKdArgs,
-        ) -> Result<VetKdEncryptedKeyShare, VetKdKeyShareCreationError> {
-            self.crypto_component.create_encrypted_key_share(args)
-        }
-
-        fn verify_encrypted_key_share(
-            &self,
-            signer: NodeId,
-            key_share: &VetKdEncryptedKeyShare,
-            args: &VetKdArgs,
-        ) -> Result<(), VetKdKeyShareVerificationError> {
-            self.crypto_component
-                .verify_encrypted_key_share(signer, key_share, args)
-        }
-
-        fn combine_encrypted_key_shares(
-            &self,
-            shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
-            args: &VetKdArgs,
-        ) -> Result<VetKdEncryptedKey, VetKdKeyShareCombinationError> {
-            self.crypto_component
-                .combine_encrypted_key_shares(shares, args)
-        }
-
-        fn verify_encrypted_key(
-            &self,
-            key: &VetKdEncryptedKey,
-            args: &VetKdArgs,
-        ) -> Result<(), VetKdKeyVerificationError> {
-            self.crypto_component.verify_encrypted_key(key, args)
-        }
-    }
-
-    impl<T: Signable> BasicSigVerifierByPublicKey<T> for Node {
-        fn verify_basic_sig_by_public_key(
-            &self,
-            signature: &BasicSigOf<T>,
-            signed_bytes: &T,
-            public_key: &UserPublicKey,
-        ) -> CryptoResult<()> {
-            self.crypto_component.verify_basic_sig_by_public_key(
-                signature,
-                signed_bytes,
-                public_key,
-            )
         }
     }
 

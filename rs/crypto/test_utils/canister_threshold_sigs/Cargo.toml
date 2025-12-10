@@ -8,7 +8,6 @@ documentation.workspace = true
 
 [dependencies]
 ic-crypto-internal-threshold-sig-canister-threshold-sig = { path = "../../internal/crypto_lib/threshold_sig/canister_threshold_sig" }
-ic-crypto-interfaces-sig-verification = { path = "../../interfaces/sig_verification" }
 ic-crypto-temp-crypto = { path = "../../temp_crypto" }
 ic-interfaces = { path = "../../../interfaces" }
 ic-logger = { path = "../../../monitoring/logger" }

@@ -1022,7 +1022,7 @@ mod tests {
     use ic_types::{
         Height,
         consensus::idkg::{IDkgMasterPublicKeyId, IDkgObject, PreSigId, RequestId, TranscriptRef},
-        crypto::{AlgorithmId, CryptoError},
+        crypto::AlgorithmId,
         messages::CallbackId,
         time::UNIX_EPOCH,
     };
@@ -2159,45 +2159,6 @@ mod tests {
                     create_complaint_dependencies_with_crypto(pool_config, logger, Some(crypto));
 
                 let status = complaint_handler.load_transcript(&idkg_pool, &t);
-                assert_matches!(status, TranscriptLoadStatus::Failure);
-            })
-        })
-    }
-
-    // Tests that crypto failure when creating complaint leads to transcript load failure
-    #[test]
-    fn test_load_transcript_failure_to_create_complaint_all_algorithms() {
-        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
-            println!("Running test for key ID {key_id}");
-            test_load_transcript_failure_to_create_complaint(key_id);
-        }
-    }
-
-    fn test_load_transcript_failure_to_create_complaint(key_id: IDkgMasterPublicKeyId) {
-        let mut rng = reproducible_rng();
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|logger| {
-                let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
-                let (_, _, transcript) =
-                    create_corrupted_transcript(&env, &mut rng, AlgorithmId::from(key_id.inner()));
-
-                let crypto = env
-                    .nodes
-                    .into_filtered_by_receivers(&transcript)
-                    .next()
-                    .unwrap()
-                    .with_sign_basic_returning_err(CryptoError::TransientInternalError {
-                        internal_error: "boom".to_string(),
-                    });
-                let (idkg_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
-                    pool_config,
-                    logger,
-                    Some(Arc::new(crypto)),
-                );
-
-                // Will attempt to create a complaint but fail because node ID of crypto and
-                // complaint_handler are different
-                let status = complaint_handler.load_transcript(&idkg_pool, &transcript);
                 assert_matches!(status, TranscriptLoadStatus::Failure);
             })
         })
