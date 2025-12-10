@@ -1,6 +1,5 @@
 use std::{
     fmt::Display,
-    str::FromStr,
     sync::{Arc, atomic::Ordering},
     time::{Duration, Instant},
 };
@@ -8,21 +7,22 @@ use std::{
 use anyhow::Error;
 use async_trait::async_trait;
 use bytes::Buf;
+use derive_new::new;
 use http::Method;
 use ic_bn_lib_common::traits::{Run, http::Client};
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
 use simple_moving_average::{SMA, SumTreeSMA};
-use strum::Display;
+use strum::IntoStaticStr;
 #[allow(clippy::disallowed_types)]
 use tokio::sync::Mutex;
 use tokio::{
     select,
     sync::{mpsc, watch},
+    time::MissedTickBehavior,
 };
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tracing::{debug, warn};
-use url::Url;
 
 use crate::{
     metrics::{MetricParamsCheck, WithMetricsCheck},
@@ -32,34 +32,27 @@ use crate::{
 };
 
 /// An error that can occur during check
-#[derive(Clone, PartialEq, Debug, Display)]
+#[derive(Clone, PartialEq, Debug, IntoStaticStr, thiserror::Error)]
 #[strum(serialize_all = "snake_case")]
 pub enum CheckError {
     /// Generic error
+    #[error("Generic error: {0}")]
     Generic(String),
     /// Unable to make HTTP request
+    #[error("Network error: {0}")]
     Network(String),
     /// Got non-200 status code
+    #[error("Got non-2xx response code: {0}")]
     Http(u16),
     /// Cannot read response body
+    #[error("Unable to read body: {0}")]
     ReadBody(String),
     /// Cannot parse CBOR payload
+    #[error("Unable to decode CBOR: {0}")]
     Cbor(String),
     /// Node reported itself as un-healthy
+    #[error("Node reported itself as unhealthy")]
     Health,
-}
-
-impl CheckError {
-    pub fn details(&self) -> String {
-        match self {
-            Self::Generic(e) => format!("Generic error: {e}"),
-            Self::Network(e) => format!("Network error: {e}"),
-            Self::Http(code) => format!("Got non-2xx response code: {code}"),
-            Self::ReadBody(e) => format!("Unable to read body: {e}"),
-            Self::Cbor(e) => format!("Unable to decode CBOR: {e}"),
-            Self::Health => "Node reported itself as unhealthy".into(),
-        }
-    }
 }
 
 const WINDOW_SIZE: usize = 10;
@@ -159,9 +152,10 @@ impl NodeActor {
         // - conditionally updated height has changed
         // - conditionally updated avg latency has changed
         if Some(new_state) != self.state {
+            debug!("{self}: new state: {new_state:?}");
+
             self.state = Some(new_state);
             // It can never fail in our case
-            debug!("{self}: new state: {new_state:?}");
             let _ = self.channel.send((self.idx, new_state)).await;
         }
     }
@@ -170,6 +164,8 @@ impl NodeActor {
         debug!("{self}: started");
 
         let mut interval = tokio::time::interval(check_interval);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
         loop {
             select! {
                 // Check if we need to shut down
@@ -200,6 +196,12 @@ struct SubnetActor {
     healthy_nodes: Option<Vec<Arc<Node>>>,
     state_changed: bool,
     init_done: bool,
+}
+
+impl Display for SubnetActor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SubnetActor({})", self.subnet)
+    }
 }
 
 impl SubnetActor {
@@ -288,11 +290,11 @@ impl SubnetActor {
             return;
         }
 
-        // Calc the minimum height
+        // Calculate the minimum height across this subnet
         let min_height = self.calc_min_height();
 
         // Generate a list of healthy nodes
-        let nodes = self
+        let healthy_nodes = self
             .states
             .iter()
             // All states are Some() - it's checked above in self.init_done()
@@ -302,6 +304,7 @@ impl SubnetActor {
             .map(|(idx, state)| (self.subnet.nodes[idx].clone(), state))
             // Discard unhealthy & lagging behind
             .filter(|(_, state)| state.healthy && state.height >= min_height)
+            // Update the latency on the node
             .map(|(node, state)| {
                 node.avg_latency_us
                     .store(state.avg_latency_us, Ordering::SeqCst);
@@ -310,15 +313,21 @@ impl SubnetActor {
             .collect::<Vec<_>>();
 
         // See if the healthy nodes set changed
-        if self.healthy_nodes.is_none() || &nodes != self.healthy_nodes.as_ref().unwrap() {
-            self.healthy_nodes = Some(nodes.clone());
+        if self.healthy_nodes.is_none() || &healthy_nodes != self.healthy_nodes.as_ref().unwrap() {
+            warn!(
+                "{self}: healthy nodes now {}/{}",
+                healthy_nodes.len(),
+                self.subnet.nodes.len()
+            );
+
+            self.healthy_nodes = Some(healthy_nodes.clone());
 
             // Publish the new subnet
             let subnet = Subnet {
                 id: self.subnet.id,
                 subnet_type: self.subnet.subnet_type,
                 ranges: self.subnet.ranges.clone(),
-                nodes,
+                nodes: healthy_nodes,
                 replica_version: self.subnet.replica_version.clone(),
             };
 
@@ -328,9 +337,11 @@ impl SubnetActor {
     }
 
     async fn run(&mut self, update_interval: Duration) {
-        debug!("Healthcheck actor for subnet {} started", self.subnet);
+        debug!("{self}: started");
 
         let mut interval = tokio::time::interval(update_interval);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
         loop {
             select! {
                 // Check if we need to shut down
@@ -341,7 +352,7 @@ impl SubnetActor {
                     self.tracker.close();
                     self.tracker.wait().await;
                     self.channel_recv.close();
-                    debug!("Healthcheck actor for subnet {} stopped", self.subnet);
+                    debug!("{self}: stopped");
                     return;
                 }
 
@@ -386,6 +397,12 @@ struct GlobalActor {
     channel_recv: mpsc::Receiver<(usize, Subnet)>,
     persister: Arc<dyn Persist>,
     init_done: bool,
+}
+
+impl Display for GlobalActor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "GlobalActor")
+    }
 }
 
 impl GlobalActor {
@@ -450,7 +467,7 @@ impl GlobalActor {
             .subnets
             .clone()
             .into_iter()
-            // Subnets are Some() at this stage - this is checked above
+            // Subnets are Some() at this stage - this is checked above in self.init_done()
             .map(|x| x.unwrap())
             .collect::<Vec<_>>();
 
@@ -458,7 +475,7 @@ impl GlobalActor {
     }
 
     async fn run(&mut self) {
-        debug!("Healthcheck global actor started");
+        debug!("{self}: started");
 
         loop {
             select! {
@@ -470,7 +487,7 @@ impl GlobalActor {
                     self.tracker.close();
                     self.tracker.wait().await;
                     self.channel_recv.close();
-                    debug!("Healthcheck global actor stopped");
+                    debug!("{self}: stopped");
                     return;
                 }
 
@@ -489,7 +506,7 @@ impl GlobalActor {
     }
 }
 
-// Runner receives new registry snapshots and restarts GlobalActor
+/// Runner receives new registry snapshots and restarts GlobalActor
 #[derive(derive_new::new)]
 #[allow(clippy::disallowed_types)]
 pub struct Runner {
@@ -503,7 +520,7 @@ pub struct Runner {
 }
 
 impl Runner {
-    // Start global actor
+    /// Start global actor
     fn start(&self, tracker: &TaskTracker, token: &CancellationToken, subnets: Vec<Subnet>) {
         // Create & spawn new global actor
         let mut actor = GlobalActor::new(
@@ -573,28 +590,16 @@ pub trait Check: Send + Sync {
 }
 
 /// Checks the node's health
+#[derive(new)]
 pub struct Checker {
     http_client: Arc<dyn Client>,
     timeout: Duration,
 }
 
-impl Checker {
-    pub fn new(http_client: Arc<dyn Client>, timeout: Duration) -> Self {
-        Self {
-            http_client,
-            timeout,
-        }
-    }
-}
-
 #[async_trait]
 impl Check for Checker {
     async fn check(&self, node: &Node) -> Result<CheckResult, CheckError> {
-        // Create request
-        let u = Url::from_str(&format!("https://{}:{}/api/v2/status", node.id, node.port))
-            .map_err(|err| CheckError::Generic(err.to_string()))?;
-
-        let mut request = reqwest::Request::new(Method::GET, u);
+        let mut request = reqwest::Request::new(Method::GET, node.health_check_url.clone());
         *request.timeout_mut() = Some(self.timeout);
 
         // Execute request
@@ -647,7 +652,10 @@ impl<T: Check> Check for WithMetricsCheck<T> {
 
         let result = match &out {
             Ok(_) => "ok".to_string(),
-            Err(e) => format!("error_{e}"),
+            Err(e) => {
+                let error_str: &'static str = e.into();
+                format!("error_{error_str}")
+            }
         };
 
         let (block_height, replica_version) = out.as_ref().map_or((-1, "unknown"), |out| {
@@ -687,7 +695,7 @@ impl<T: Check> Check for WithMetricsCheck<T> {
                 subnet_id,
                 node_id,
                 node_addr,
-                error = e.details(),
+                error = e.to_string(),
             );
         }
 
@@ -700,7 +708,7 @@ pub(crate) mod test {
     use std::{
         collections::HashMap,
         net::{IpAddr, Ipv4Addr},
-        sync::{Arc, atomic::AtomicU64},
+        sync::Arc,
     };
 
     use arc_swap::ArcSwapOption;
@@ -744,17 +752,17 @@ pub(crate) mod test {
 
             let mut nodes = Vec::new();
             for j in 0..nodes_per_subnet {
-                let node = Node {
-                    id: node_test_id(NODE_ID_OFFSET + offset + i * 100 + j).get().0,
+                let node = Node::new(
+                    node_test_id(NODE_ID_OFFSET + offset + i * 100 + j).get().0,
                     subnet_id,
-                    subnet_type: SubnetType::Application,
-                    addr: IpAddr::V4(Ipv4Addr::new(192, 168, i as u8, j as u8)),
-                    port: 8080,
-                    tls_certificate: valid_tls_certificate_and_validation_time()
+                    SubnetType::Application,
+                    IpAddr::V4(Ipv4Addr::new(192, 168, i as u8, j as u8)),
+                    8080,
+                    valid_tls_certificate_and_validation_time()
                         .0
                         .certificate_der,
-                    avg_latency_us: AtomicU64::new(u64::MAX),
-                };
+                )
+                .unwrap();
                 let node = Arc::new(node);
 
                 nodes.push(node.clone());
@@ -794,6 +802,14 @@ pub(crate) mod test {
             height,
             replica_version: "foobar".into(),
         }
+    }
+
+    #[test]
+    fn test_checkerror() {
+        let error_str: &'static str = CheckError::Cbor("foo".into()).into();
+        assert_eq!(error_str, "cbor");
+        let error_str: &'static str = CheckError::ReadBody("foo".into()).into();
+        assert_eq!(error_str, "read_body");
     }
 
     // Ensure that nodes that have failed healthcheck or lag behind are excluded

@@ -238,7 +238,7 @@ pub(crate) mod test {
     use std::{
         collections::HashMap,
         net::{IpAddr, Ipv4Addr},
-        sync::{Arc, atomic::AtomicU64},
+        sync::Arc,
     };
 
     use anyhow::Error;
@@ -288,17 +288,19 @@ pub(crate) mod test {
     }
 
     pub fn node(i: u64, subnet_id: Principal) -> Arc<Node> {
-        Arc::new(Node {
-            id: node_test_id(1001 + i).get().0,
-            subnet_id,
-            subnet_type: SubnetType::Application,
-            addr: IpAddr::V4(Ipv4Addr::new(192, 168, 0, i as u8)),
-            port: 8080,
-            tls_certificate: valid_tls_certificate_and_validation_time()
-                .0
-                .certificate_der,
-            avg_latency_us: AtomicU64::new(u64::MAX),
-        })
+        Arc::new(
+            Node::new(
+                node_test_id(1001 + i).get().0,
+                subnet_id,
+                SubnetType::Application,
+                IpAddr::V4(Ipv4Addr::new(192, 168, 0, i as u8)),
+                8080,
+                valid_tls_certificate_and_validation_time()
+                    .0
+                    .certificate_der,
+            )
+            .unwrap(),
+        )
     }
 
     pub fn generate_test_subnets(offset: u64) -> Vec<Subnet> {

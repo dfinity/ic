@@ -49,6 +49,7 @@ pub struct Node {
     pub port: u16,
     pub tls_certificate: Vec<u8>,
     pub avg_latency_us: AtomicU64,
+    pub health_check_url: Url,
 }
 
 // Lightweight Eq, just compare principals
@@ -67,6 +68,29 @@ impl fmt::Display for Node {
 }
 
 impl Node {
+    pub fn new(
+        id: Principal,
+        subnet_id: Principal,
+        subnet_type: SubnetType,
+        addr: IpAddr,
+        port: u16,
+        tls_certificate: Vec<u8>,
+    ) -> Result<Self, Error> {
+        let health_check_url = Url::from_str(&format!("https://{addr}:{port}/api/v2/status"))
+            .context("unable to create health check URL")?;
+
+        Ok(Self {
+            id,
+            subnet_id,
+            subnet_type,
+            addr,
+            port,
+            tls_certificate,
+            health_check_url,
+            avg_latency_us: AtomicU64::new(u64::MAX),
+        })
+    }
+
     pub fn build_url(
         &self,
         request_type: RequestType,
@@ -406,17 +430,19 @@ impl Snapshotter {
                         X509Certificate::from_der(cert.certificate_der.as_slice())
                             .context("Unable to parse TLS certificate")?;
 
-                        let node = Node {
-                            // init to max, this value is updated with running health checks
-                            avg_latency_us: AtomicU64::new(u64::MAX),
-                            id: node_id.as_ref().0,
-                            subnet_id: subnet_id.as_ref().0,
+                        let addr = IpAddr::from_str(http_endpoint.ip_addr.as_str())
+                            .context("unable to parse IP address")?;
+                        let port = http_endpoint.port as u16; // Port is u16 anyway
+
+                        let node = Node::new(
+                            node_id.as_ref().0,
+                            subnet_id.as_ref().0,
                             subnet_type,
-                            addr: IpAddr::from_str(http_endpoint.ip_addr.as_str())
-                                .context("unable to parse IP address")?,
-                            port: http_endpoint.port as u16, // Port is u16 anyway
-                            tls_certificate: cert.certificate_der,
-                        };
+                            addr,
+                            port,
+                            cert.certificate_der,
+                        )
+                        .context("unable to create Node")?;
                         let node = Arc::new(node);
 
                         nodes_map.insert(node.id.to_string(), node.clone());
@@ -612,16 +638,17 @@ pub fn generate_stub_subnet(nodes: Vec<SocketAddr>) -> Subnet {
         .into_iter()
         .enumerate()
         .map(|(i, x)| {
-            Arc::new(Node {
-                // init to max, this value is updated with running health checks
-                avg_latency_us: AtomicU64::new(u64::MAX),
-                id: node_test_id(i as u64).get().0,
-                subnet_type: SubnetType::Application,
-                subnet_id,
-                addr: x.ip(),
-                port: x.port(),
-                tls_certificate: vec![],
-            })
+            Arc::new(
+                Node::new(
+                    node_test_id(i as u64).get().0,
+                    subnet_id,
+                    SubnetType::Application,
+                    x.ip(),
+                    x.port(),
+                    vec![],
+                )
+                .unwrap(),
+            )
         })
         .collect::<Vec<_>>();
 
