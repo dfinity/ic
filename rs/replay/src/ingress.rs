@@ -15,8 +15,10 @@ use ic_nns_governance_api::{
     ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Topic, Visibility,
     manage_neuron::{
         self, ClaimOrRefresh, Configure, Follow, IncreaseDissolveDelay, NeuronIdOrSubaccount,
+        SetFollowing,
         claim_or_refresh::{By, MemoAndController},
         configure::{self, Operation},
+        set_following::FolloweesForTopic,
     },
     manage_neuron_response,
 };
@@ -39,6 +41,7 @@ use ic_types::{
 use icp_ledger::{AccountIdentifier, Memo, SendArgs, Tokens};
 use prost::Message;
 use std::{convert::TryFrom, str::FromStr, time::Duration};
+use strum::IntoEnumIterator;
 use time::OffsetDateTime;
 
 pub struct IngressWithPrinter {
@@ -189,81 +192,14 @@ pub fn cmd_add_neuron(time: Time, cmd: &WithNeuronCmd) -> Result<Vec<IngressWith
 pub fn cmd_make_trusted_neurons_follow_neuron(
     time: Time,
     cmd: &WithTrustedNeuronsFollowingNeuronCmd,
-    // TODO: revert prints
-) -> Result<Vec<IngressWithPrinter>, String> {
+) -> Result<Vec<SignedIngress>, String> {
     let mut msgs = Vec::new();
 
-    let trusted_neurons: &[(&str, u64)] = &[
-        // NEEDED
-        // 3:   9_533_000_000 stake_e8s
-        // 40: 16_600_000_000 stake_e8s
-        // 80: 18_605_000_000 stake_e8s
-        // 31:  2_900_000_000 stake_e8s
-        (
-            // Done: 2, 3, 31, most of below
-            "4vnki-cqaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aae",
-            27,
-        ),
-        (
-            "4vnki-cqaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aae",
-            28,
-        ),
-        // (
-        //     // No followees
-        //     "fifde-6pi57-3dpl5-oycgf-z327u-eg2qd-hs5xa-wq26k-hrgeh-zf27k-yae",
-        //     1_843_600_617_989_033_124,
-        // ),
-        // (
-        //     // Done: 40, 80
-        //     "wyzjx-3pde2-wzr4k-fblse-7hzgm-v2kkx-lcuhl-dftmv-5ywr7-gsszf-6ae",
-        //     1_947_868_782_075_274_250,
-        // ),
-        // (
-        //     // Done: 40, 80, 664_254_380_223_776_936
-        //     "anwaw-3doat-tcjuc-mf7gn-um2ev-vjtji-vtp72-m4344-dnscv-tuvtq-vae",
-        //     9_014_191_754_770_650_971,
-        // ),
-        // (
-        //     // Done: 40, 80, 12_682_371_336_626_400_929
-        //     "b2awv-fl36c-bkxlz-vyxpm-wkuae-52neh-tiohy-biiwt-nozx4-65hmm-mae",
-        //     7_814_871_076_665_269_296,
-        // ),
-        // (
-        //     // Done: 27, 40, 80
-        //     "ivb6z-ulpog-a2avr-qnldg-m2fyp-k3o3l-pxto7-53cfg-mhy4j-c2zlm-4ae",
-        //     18_071_572_939_182_279_406,
-        // ),
-        // (
-        //     // Done: 10_830_144_167_278_912_733
-        //     "sbogt-fdoo4-66m2w-taan6-ukavw-ejxal-4rti5-jydyo-cexfj-tx3ga-fqe",
-        //     8_445_840_692_379_529_734,
-        // ),
-        // (
-        //     // Done: 27
-        //     "m6xfg-yh4dt-uhpxl-dl36s-vp4fr-4zxyj-nukol-jxfob-nfhic-uw4ad-nqe",
-        //     7_032_245_277_253_793_296,
-        // ),
-        // (
-        //     // No followees
-        //     "q7ov3-g2mqj-ngai2-lxqfw-dkl5d-7l4gb-vdfeg-4rs4h-jtuf3-zi7ee-7qe",
-        //     12_682_371_336_626_400_929,
-        // ),
-        // (
-        //     // No followees
-        //     "s2osw-rafqx-yhduo-prw4k-kxbs7-s2pey-2ckkp-tn2ot-lulzs-xzawe-gae",
-        //     2,
-        // ),
-        // (
-        //     // No followees
-        //     "bcsqz-d32y3-qxaqq-idz46-6zlhs-sbtkq-ar363-jbwzk-cqict-dyiig-eqe",
-        //     10_830_144_167_278_912_733,
-        // ),
-        // (
-        //     // No followees
-        //     "wokum-d6nd7-hbw2p-pi3tk-s5tjp-xbzvb-yzo7p-y5f2k-d3o4d-nun6i-rqe",
-        //     664_254_380_223_776_936,
-        // ),
-    ];
+    // It is enough to be followed only by Neuron 27 to pass all proposals as of December 2025.
+    let trusted_neurons = [(
+        "4vnki-cqaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aae",
+        27,
+    )];
 
     let user_agent = &agent_with_principal_as_sender(&cmd.neuron_controller)?;
     let make_public_payload = Encode!(&ManageNeuronRequest {
@@ -280,8 +216,8 @@ pub fn cmd_make_trusted_neurons_follow_neuron(
         })),
     })
     .expect("Couldn't encode payload for manage neuron command");
-    msgs.push(IngressWithPrinter {
-        ingress: make_signed_ingress(
+    msgs.push(
+        make_signed_ingress(
             user_agent,
             GOVERNANCE_CANISTER_ID,
             "manage_neuron",
@@ -289,63 +225,39 @@ pub fn cmd_make_trusted_neurons_follow_neuron(
             time,
         )
         .expect("Couldn't create message to make the neuron public"),
-        print: Some(|response: Vec<u8>| {
-            let v: ManageNeuronResponse =
-                decode_one(&response).expect("couldn't decode canister response");
-            match v.command {
-                Some(manage_neuron_response::Command::Configure(
-                    manage_neuron_response::ConfigureResponse {},
-                )) => {
-                    println!("Neuron made public successfully")
-                }
-                val => unreachable!("unexpected response: {:?}", val),
-            }
-        }),
-    });
+    );
 
     for (principal, neuron_id) in trusted_neurons {
-        // TODO: use ManageNeuronCommandRequest::SetFollowing to follow on multiple topics
-        for topic in (0..=18) {
-            if topic == 11 {
-                // skip unexistent topic 11
-                continue;
-            }
-            let principal = PrincipalId::from_str(principal).expect("Invalid principal");
-            let follow_payload = Encode!(&ManageNeuronRequest {
-                id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
-                    id: *neuron_id,
-                })),
-                command: Some(ManageNeuronCommandRequest::Follow(Follow {
-                    topic,
-                    followees: [NeuronId { id: cmd.neuron_id }].to_vec(),
-                })),
-            })
-            .expect("Couldn't encode payload for manage neuron command");
-            let user_agent = &agent_with_principal_as_sender(&principal)?;
-            msgs.push(IngressWithPrinter {
-                ingress: make_signed_ingress(
-                    user_agent,
-                    GOVERNANCE_CANISTER_ID,
-                    "manage_neuron",
-                    follow_payload,
-                    time,
-                )
-                .expect("Couldn't create message to make trusted neurons follow test neuron"),
-                print: Some(|response: Vec<u8>| {
-                    let v: ManageNeuronResponse =
-                        decode_one(&response).expect("couldn't decode canister response");
-                    match v.command {
-                        Some(manage_neuron_response::Command::Follow(
-                            manage_neuron_response::FollowResponse {},
-                        )) => {
-                            println!("Neuron now follows on topic",)
-                        }
-                        val => unreachable!("unexpected response: {:?}", val),
-                    }
-                }),
-            });
-        }
+        let principal = PrincipalId::from_str(principal).expect("Invalid principal");
+        let set_following_payload = Encode!(&ManageNeuronRequest {
+            id: None,
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+                id: neuron_id,
+            })),
+            // Make trusted neuron follow the test neuron on all topics
+            command: Some(ManageNeuronCommandRequest::SetFollowing(SetFollowing {
+                topic_following: Some(
+                    Topic::iter()
+                        .map(|topic| FolloweesForTopic {
+                            topic: Some(topic as i32),
+                            followees: Some(vec![NeuronId { id: cmd.neuron_id }]),
+                        })
+                        .collect()
+                ),
+            })),
+        })
+        .expect("Couldn't encode payload for manage neuron command");
+        let user_agent = &agent_with_principal_as_sender(&principal)?;
+        msgs.push(
+            make_signed_ingress(
+                user_agent,
+                GOVERNANCE_CANISTER_ID,
+                "manage_neuron",
+                set_following_payload,
+                time,
+            )
+            .expect("Couldn't create message to make trusted neurons follow test neuron"),
+        );
     }
 
     // Increase the neuron's delay
@@ -360,8 +272,8 @@ pub fn cmd_make_trusted_neurons_follow_neuron(
         })),
     })
     .expect("Couldn't encode payload for manage neuron command");
-    msgs.push(IngressWithPrinter {
-        ingress: make_signed_ingress(
+    msgs.push(
+        make_signed_ingress(
             user_agent,
             GOVERNANCE_CANISTER_ID,
             "manage_neuron",
@@ -369,19 +281,7 @@ pub fn cmd_make_trusted_neurons_follow_neuron(
             time,
         )
         .expect("Couldn't create message to make trusted neurons follow test neuron"),
-        print: Some(|response: Vec<u8>| {
-            let v: ManageNeuronResponse =
-                decode_one(&response).expect("couldn't decode canister response");
-            match v.command {
-                Some(manage_neuron_response::Command::Configure(
-                    manage_neuron_response::ConfigureResponse {},
-                )) => {
-                    println!("Neuron dissolve delay increased successfully",)
-                }
-                val => unreachable!("unexpected response: {:?}", val),
-            }
-        }),
-    });
+    );
     Ok(msgs)
 }
 
