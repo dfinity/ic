@@ -107,7 +107,7 @@ jobs:
                 # There are some changes staged
                 git config --global user.email "infra+github-automation@dfinity.org"
                 git config --global user.name "IDX GitHub Automation"
-                git commit -m "Automatically ran: bazel run :buildifier"
+                git commit -m "Automatically fixing code for linting and formatting issues"
                 git push
 
                 # Because the buildifier made changes, fail the PR
