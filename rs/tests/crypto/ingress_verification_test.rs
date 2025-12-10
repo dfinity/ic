@@ -729,6 +729,9 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
 
             let user = GenericIdentity::new(GenericIdentityType::Ed25519, rng);
 
+            // We create an agent with an identity we can control so that
+            // the universal canister is installed with `user` as a controller.
+            // Otherwise the canister_status calls would be rejected.
             let agent = agent_with_identity(node.get_public_url().as_str(), user.clone())
                 .await
                 .unwrap();
