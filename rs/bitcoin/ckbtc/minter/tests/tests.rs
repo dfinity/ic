@@ -299,6 +299,9 @@ fn test_upgrade_read_only() {
         matches!(res, Err(RetrieveBtcError::TemporarilyUnavailable(_))),
         "unexpected result: {res:?}"
     );
+
+    #[cfg(feature = "tla")]
+    check_traces(&env, minter_id);
 }
 
 #[test]
@@ -387,6 +390,9 @@ fn test_upgrade_restricted() {
         matches!(res, Err(UpdateBalanceError::TemporarilyUnavailable(_))),
         "unexpected result: {res:?}"
     );
+
+    #[cfg(feature = "tla")]
+    check_traces(&env, minter_id);
 }
 
 #[test]
@@ -438,6 +444,10 @@ fn test_no_new_utxos() {
             suspended_utxos: Some(vec![]),
         })
     );
+
+    #[cfg(feature = "tla")]
+    check_traces(ckbtc.env(), ckbtc.minter_id);
+
     ckbtc
         .check_minter_metrics()
         .assert_contains_metric_matching(
@@ -505,6 +515,10 @@ fn update_balance_should_return_correct_confirmations() {
             suspended_utxos: Some(vec![]),
         })
     );
+
+    #[cfg(feature = "tla")]
+    check_traces(ckbtc.env(), ckbtc.minter_id);
+
     ckbtc
         .check_minter_metrics()
         .assert_contains_metric_matching(
@@ -545,6 +559,9 @@ fn test_illegal_caller() {
         Encode!(&update_balance_args).unwrap(),
     );
     assert!(res.is_err());
+
+    #[cfg(feature = "tla")]
+    check_traces(&env, minter_id);
 }
 
 pub fn get_btc_address(
@@ -560,6 +577,23 @@ pub fn get_btc_address(
         String
     )
     .expect("failed to decode String response")
+}
+
+#[cfg(feature = "tla")]
+fn check_traces(env: &StateMachine, minter_id: CanisterId) {
+    use ic_ckbtc_minter::tla::perform_trace_check;
+    let res = env
+        .query(minter_id, "get_tla_traces", Encode!(&()).unwrap())
+        .expect("get_tla_traces query failed");
+    let traces = Decode!(&res.bytes(), Vec<ic_ckbtc_minter::tla::UpdateTrace>)
+        .expect("failed to decode get_tla_traces response");
+    perform_trace_check(traces);
+}
+
+#[cfg(feature = "tla")]
+fn disable_tla_logging(env: &StateMachine, minter_id: CanisterId) {
+    env.execute_ingress(minter_id, "disable_tla_logging", Encode!(&()).unwrap())
+        .expect("disable_tla_logging failed");
 }
 
 #[test]
@@ -769,6 +803,11 @@ impl CkBtcSetup {
             minter_id,
             btc_checker_id,
         }
+    }
+
+    #[cfg(feature = "tla")]
+    pub fn env(&self) -> &StateMachine {
+        &self.env
     }
 
     pub fn bitcoin_get_current_fee_percentiles(&self) -> Vec<MillisatoshiPerByte> {
@@ -1639,6 +1678,10 @@ fn test_transaction_resubmission_finalize_setup() -> (CkBtcSetup, u64, Txid, bit
 #[test]
 fn test_transaction_resubmission_finalize_new_above_threshold() {
     let ckbtc = CkBtcSetup::new();
+    // This test generates very long traces (lots of inter-canister
+    // calls). Disable TLA logging to avoid timeouts.
+    #[cfg(feature = "tla")]
+    disable_tla_logging(ckbtc.env(), ckbtc.minter_id);
     let user = Principal::from(ckbtc.caller);
 
     let deposit_value = 1_000_000;
@@ -2341,6 +2384,11 @@ fn test_retrieve_btc_with_approval_fail() {
 #[test]
 fn should_cancel_and_reimburse_large_withdrawal() {
     let ckbtc = CkBtcSetup::new();
+    // This test generates very long traces (lots of inter-canister
+    // calls to mint the UTXOs). Disable TLA logging to avoid timeouts.
+    #[cfg(feature = "tla")]
+    disable_tla_logging(ckbtc.env(), ckbtc.minter_id);
+
     let user = Principal::from(ckbtc.caller);
     let subaccount: Option<[u8; 32]> = Some([1; 32]);
     let user_account = Account {

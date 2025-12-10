@@ -4,6 +4,18 @@ load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs/tests:__subpackages__"])
 
+TLA_ENV = {
+    "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
+    "TLA_MODULES": "$(locations //rs/bitcoin/ckbtc/minter:tla_models)",
+    "JAVABASE": "$(JAVABASE)",
+}
+
+TLA_RUNTIME_DEPS = [
+    "//rs/bitcoin/ckbtc/minter:tla_models",
+    "@tla_apalache//:bin/apalache-mc",
+    "@bazel_tools//tools/jdk:current_java_runtime",
+]
+
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
@@ -61,7 +73,7 @@ rust_library(
 
 system_test_nns(
     name = "ckbtc_minter_basics_test",
-    env = MESSAGE_CANISTER_ENV | {
+    env = MESSAGE_CANISTER_ENV | TLA_ENV | {
         "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
         "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
         "IC_BTC_CHECKER_WASM_PATH": "$(rootpath //rs/bitcoin/checker:btc_checker_canister)",
@@ -74,7 +86,8 @@ system_test_nns(
     ],
     runtime_deps =
         MESSAGE_CANISTER_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        TLA_RUNTIME_DEPS + [
             # Keep sorted.
             "//rs/bitcoin/checker:btc_checker_canister",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
@@ -88,7 +101,7 @@ system_test_nns(
 
 system_test_nns(
     name = "ckbtc_minter_deposit_and_withdrawal",
-    env = MESSAGE_CANISTER_ENV | {
+    env = MESSAGE_CANISTER_ENV | TLA_ENV | {
         "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
         "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
         "IC_BTC_CHECKER_WASM_PATH": "$(rootpath //rs/bitcoin/checker:btc_checker_canister)",
@@ -101,7 +114,8 @@ system_test_nns(
     ],
     runtime_deps =
         MESSAGE_CANISTER_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        TLA_RUNTIME_DEPS + [
             # Keep sorted.
             "//rs/bitcoin/checker:btc_checker_canister",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
@@ -115,7 +129,7 @@ system_test_nns(
 
 system_test_nns(
     name = "ckbtc_minter_checker",
-    env = MESSAGE_CANISTER_ENV | {
+    env = MESSAGE_CANISTER_ENV | TLA_ENV | {
         "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
         "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
         "IC_BTC_CHECKER_WASM_PATH": "$(rootpath //rs/bitcoin/checker:btc_checker_canister)",
@@ -128,7 +142,8 @@ system_test_nns(
     ],
     runtime_deps =
         MESSAGE_CANISTER_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        TLA_RUNTIME_DEPS + [
             # Keep sorted.
             "//rs/bitcoin/checker:btc_checker_canister",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
@@ -142,7 +157,7 @@ system_test_nns(
 
 system_test_nns(
     name = "ckbtc_minter_update_balance",
-    env = MESSAGE_CANISTER_ENV | {
+    env = MESSAGE_CANISTER_ENV | TLA_ENV | {
         "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
         "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
         "IC_BTC_CHECKER_WASM_PATH": "$(rootpath //rs/bitcoin/checker:btc_checker_canister)",
@@ -155,7 +170,8 @@ system_test_nns(
     ],
     runtime_deps =
         MESSAGE_CANISTER_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        TLA_RUNTIME_DEPS + [
             # Keep sorted.
             "//rs/bitcoin/checker:btc_checker_canister",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
@@ -169,7 +185,7 @@ system_test_nns(
 
 system_test_nns(
     name = "ckbtc_minter_retrieve_btc",
-    env = MESSAGE_CANISTER_ENV | {
+    env = MESSAGE_CANISTER_ENV | TLA_ENV | {
         "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
         "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
         "IC_BTC_CHECKER_WASM_PATH": "$(rootpath //rs/bitcoin/checker:btc_checker_canister)",
@@ -182,7 +198,8 @@ system_test_nns(
     ],
     runtime_deps =
         MESSAGE_CANISTER_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        TLA_RUNTIME_DEPS + [
             # Keep sorted.
             "//rs/bitcoin/checker:btc_checker_canister",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
@@ -196,7 +213,7 @@ system_test_nns(
 
 system_test_nns(
     name = "ckbtc_minter_batching",
-    env = MESSAGE_CANISTER_ENV | {
+    env = MESSAGE_CANISTER_ENV | TLA_ENV | {
         "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
         "IC_BTC_CHECKER_WASM_PATH": "$(rootpath //rs/bitcoin/checker:btc_checker_canister)",
         "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
@@ -209,7 +226,8 @@ system_test_nns(
     ],
     runtime_deps =
         MESSAGE_CANISTER_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        TLA_RUNTIME_DEPS + [
             # Keep sorted.
             "//rs/bitcoin/checker:btc_checker_canister",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",

@@ -2,8 +2,18 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test")
+load(":feature_flags.bzl", "test_with_tla")
 
 package(default_visibility = ["//visibility:public"])
+
+# Allows temporarily disabling TLA checks from the command line;
+# just pass `--define tla_disabled=true` to your Bazel command
+# See feature_flags.bzl for how to disable TLA checks permanently
+# (in the CI)
+config_setting(
+    name = "tla_disabled",
+    define_values = {"tla_disabled": "true"},
+)
 
 LIB_DEPS = [
     # Keep sorted.
@@ -41,12 +51,25 @@ LIB_DEPS = [
     "@crate_index//:serde_json",
 ]
 
+TLA_DEPS = select({
+    "//rs/bitcoin/ckbtc/minter:tla_disabled": [],
+    "//conditions:default": [
+        "//rs/tla_instrumentation",
+        "//rs/tla_instrumentation:local_key",
+    ],
+})
+
 LIB_PROC_MACRO_DEPS = [
     # Keep sorted.
     "//packages/canlog_derive",
     "@crate_index//:async-trait",
     "@crate_index//:minicbor-derive",
 ]
+
+TLA_PROC_MACRO_DEPS = select({
+    "//rs/bitcoin/ckbtc/minter:tla_disabled": [],
+    "//conditions:default": ["//rs/tla_instrumentation:proc_macros"],
+})
 
 [
     rust_library(
@@ -57,23 +80,51 @@ LIB_PROC_MACRO_DEPS = [
         ),
         crate_features = features,
         crate_name = "ic_ckbtc_minter",
-        proc_macro_deps = LIB_PROC_MACRO_DEPS,
+        proc_macro_deps = LIB_PROC_MACRO_DEPS + extra_proc_macro_deps,
         version = "0.1.0",
         deps = LIB_DEPS + extra_deps,
     )
-    for (name, features, extra_deps) in [
+    for (name, features, extra_proc_macro_deps, extra_deps) in [
         (
             "ckbtc_minter_lib",
             [],
             [],
+            [],
+        ),
+        (
+            "ckbtc_minter_lib-tla",
+            test_with_tla(),
+            TLA_PROC_MACRO_DEPS,
+            TLA_DEPS,
         ),
         (
             "ckbtc_minter_lib-canbench",
             ["canbench-rs"],
+            [],
             ["@crate_index//:canbench-rs"],
         ),
     ]
 ]
+
+LIB_DEP_WITH_CONDITIONAL_TLA = select({
+    "//rs/bitcoin/ckbtc/minter:tla_disabled": [":ckbtc_minter_lib"],
+    "//conditions:default": [":ckbtc_minter_lib-tla"],
+})
+
+TLA_DATA = select({
+    "//rs/bitcoin/ckbtc/minter:tla_disabled": [],
+    "//conditions:default": [
+        ":tla_models",
+        "@tla_apalache//:bin/apalache-mc",
+        "@bazel_tools//tools/jdk:current_java_runtime",
+    ],
+})
+
+TLA_ENV = {
+    "JAVABASE": "$(JAVABASE)",
+    "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
+    "TLA_MODULES": "$(locations :tla_models)",
+}
 
 alias(
     name = "minter",
@@ -85,18 +136,15 @@ alias(
         name = name,
         srcs = ["src/main.rs"],
         compile_data = [":ckbtc_minter.did"],
-        crate_features = features,
+        crate_features = crate_features,
         crate_name = "ic_ckbtc_minter_canister",
-        proc_macro_deps = [
-            # Keep sorted.
-        ],
+        proc_macro_deps = proc_macro_deps,
         rustc_env = {
             "CKBTC_MINTER_DID_PATH": "$(execpath :ckbtc_minter.did)",
         },
         service_file = ":ckbtc_minter.did",
-        deps = [
+        deps = library_dep + [
             # Keep sorted.
-            ":ckbtc_minter_lib",
             "//packages/ic-dummy-getrandom-for-wasm",
             "//packages/ic-http-types",
             "//packages/icrc-ledger-types:icrc_ledger_types",
@@ -107,23 +155,30 @@ alias(
             "@crate_index//:serde_json",
         ],
     )
-    for (name, features) in [
-        # Production version without debug assertions.
+    for (name, crate_features, proc_macro_deps, library_dep) in [
         (
             "ckbtc_minter",
             [],
+            LIB_PROC_MACRO_DEPS,
+            [":ckbtc_minter_lib"],
         ),
-        # Test version with internal consistency checks.
         (
             "ckbtc_minter_debug",
-            ["self_check"],
+            ["self_check"] + test_with_tla(),
+            LIB_PROC_MACRO_DEPS + TLA_PROC_MACRO_DEPS,
+            LIB_DEP_WITH_CONDITIONAL_TLA + TLA_DEPS,
         ),
     ]
 ]
 
 rust_test(
     name = "ckbtc_minter_lib_unit_tests",
-    crate = ":ckbtc_minter_lib",
+    crate = ":ckbtc_minter_lib-tla",
+    crate_features = test_with_tla(),
+    data = TLA_DATA,
+    env = TLA_ENV,
+    proc_macro_deps = TLA_PROC_MACRO_DEPS,
+    toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
     deps = [
         # Keep sorted.
         "@crate_index//:assert_matches",
@@ -133,7 +188,12 @@ rust_test(
         "@crate_index//:proptest",
         "@crate_index//:simple_asn1",
         "@crate_index//:tokio",
-    ],
+    ] + TLA_DEPS,
+)
+
+filegroup(
+    name = "tla_models",
+    srcs = glob(["tla/*.tla"]),
 )
 
 rust_test(
@@ -202,22 +262,23 @@ rust_test(
 rust_ic_test(
     name = "ckbtc_minter_tests",
     srcs = ["tests/tests.rs"],
+    crate_features = test_with_tla(),
     data = [
         ":ckbtc_minter_debug.wasm.gz",
         "//rs/bitcoin/checker:btc_checker_canister",
         "//rs/bitcoin/mock:bitcoin_canister_mock",
         "//rs/ledger_suite/icrc1/ledger:ledger_canister",
-    ],
-    env = {
+    ] + TLA_DATA,
+    env = TLA_ENV | {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/ckbtc/minter",
         "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath :ckbtc_minter_debug.wasm.gz)",
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
         "IC_BTC_CHECKER_WASM_PATH": "$(rootpath //rs/bitcoin/checker:btc_checker_canister)",
         "IC_BITCOIN_CANISTER_MOCK_WASM_PATH": "$(rootpath //rs/bitcoin/mock:bitcoin_canister_mock)",
     },
-    deps = [
+    toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
+    deps = LIB_DEP_WITH_CONDITIONAL_TLA + [
         # Keep sorted.
-        ":ckbtc_minter_lib",
         "//packages/canlog",
         "//packages/ic-http-types",
         "//packages/ic-metrics-assert",

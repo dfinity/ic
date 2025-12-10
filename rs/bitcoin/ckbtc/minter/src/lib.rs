@@ -45,6 +45,11 @@ pub mod tasks;
 pub mod tx;
 pub mod updates;
 
+#[macro_use]
+pub mod tla_macros;
+#[cfg(feature = "tla")]
+pub mod tla;
+
 #[cfg(test)]
 pub mod test_fixtures;
 #[cfg(test)]

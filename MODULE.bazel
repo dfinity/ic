@@ -309,9 +309,9 @@ package(default_visibility = ["//visibility:public"])
 
 exports_files([ "bin/apalache-mc" ])
     """,
-    sha256 = "173a683707c2a639c955328746461cad39e4b8a5adff95e156ce3bf376ba293b",
-    strip_prefix = "apalache-0.44.11",
-    url = "https://github.com/apalache-mc/apalache/releases/download/v0.44.11/apalache-0.44.11.tgz",
+    sha256 = "c539711703fd2550d8e065e486f0cbc8286846e14c16e92ef93ba3ece0149ef3",
+    strip_prefix = "apalache-0.52.1",
+    url = "https://github.com/apalache-mc/apalache/releases/download/v0.52.1/apalache-0.52.1.tgz",
 )
 
 # Official WebAssembly test suite.

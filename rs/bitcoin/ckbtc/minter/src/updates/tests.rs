@@ -8,6 +8,8 @@ mod update_balance {
         ignored_utxo, init_args, init_state, ledger_account, mock::MockCanisterRuntime,
         quarantined_utxo, utxo,
     };
+    #[cfg(feature = "tla")]
+    use crate::tla::{TLA_TRACES_LKEY, check_traces as tla_check_traces};
     use crate::updates::get_btc_address::account_to_p2wpkh_address_from_state;
     use crate::updates::update_balance;
     use crate::updates::update_balance::{
@@ -20,8 +22,11 @@ mod update_balance {
     use icrc_ledger_types::icrc1::account::Account;
     use std::iter;
     use std::time::Duration;
+    #[cfg(feature = "tla")]
+    use tla_instrumentation_proc_macros::with_tla_trace_check;
 
     #[tokio::test]
+    #[cfg_attr(feature = "tla", with_tla_trace_check)]
     async fn should_not_add_event_when_reevaluated_utxo_still_ignored() {
         mock_constant_time(&mut MockCanisterRuntime::new(), NOW, 1);
 
@@ -33,6 +38,7 @@ mod update_balance {
     }
 
     #[tokio::test]
+    #[cfg_attr(feature = "tla", with_tla_trace_check)]
     async fn should_call_check_transaction_again_when_cycles_not_enough() {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
@@ -74,6 +80,7 @@ mod update_balance {
     }
 
     #[tokio::test]
+    #[cfg_attr(feature = "tla", with_tla_trace_check)]
     async fn should_do_btc_check_when_reevaluating_ignored_utxo() {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
@@ -127,6 +134,7 @@ mod update_balance {
     }
 
     #[tokio::test]
+    #[cfg_attr(feature = "tla", with_tla_trace_check)]
     async fn should_mint_reevaluated_ignored_utxo() {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
@@ -192,6 +200,7 @@ mod update_balance {
     }
 
     #[tokio::test]
+    #[cfg_attr(feature = "tla", with_tla_trace_check)]
     async fn should_not_add_event_when_reevaluated_utxo_still_tainted() {
         mock_constant_time(&mut MockCanisterRuntime::new(), NOW, 1);
 
@@ -203,6 +212,7 @@ mod update_balance {
     }
 
     #[tokio::test]
+    #[cfg_attr(feature = "tla", with_tla_trace_check)]
     async fn should_mint_reevaluated_tainted_utxo() {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
@@ -263,6 +273,7 @@ mod update_balance {
     }
 
     #[tokio::test]
+    #[cfg_attr(feature = "tla", with_tla_trace_check)]
     async fn should_not_evaluate_mint_unknown_utxo() {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
@@ -335,6 +346,7 @@ mod update_balance {
     }
 
     #[tokio::test]
+    #[cfg_attr(feature = "tla", with_tla_trace_check)]
     async fn should_observe_update_balance_latency_metrics() {
         init_state_with_ecdsa_public_key();
 
@@ -427,6 +439,7 @@ mod update_balance {
     }
 
     #[tokio::test]
+    #[cfg_attr(feature = "tla", with_tla_trace_check)]
     async fn should_observe_get_utxos_latency_metrics() {
         init_state_with_ecdsa_public_key();
 
@@ -554,6 +567,7 @@ mod update_balance {
     }
 
     #[tokio::test]
+    #[cfg_attr(feature = "tla", with_tla_trace_check)]
     async fn should_observe_get_utxos_cache_metrics() {
         init_state_with_ecdsa_public_key();
         mutate_state(|s| {
@@ -625,6 +639,7 @@ mod update_balance {
     }
 
     #[tokio::test]
+    #[cfg_attr(feature = "tla", with_tla_trace_check)]
     async fn should_observe_sign_with_ecdsa_metrics() {
         init_state_with_ecdsa_public_key();
 

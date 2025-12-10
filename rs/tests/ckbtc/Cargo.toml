@@ -50,6 +50,7 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
+tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation", optional = true }
 
 [[bin]]
 name = "ic-systest-ckbtc-minter-basics-test"
@@ -78,3 +79,6 @@ path = "ckbtc_minter_update_balance.rs"
 [[bin]]
 name = "ic-systest-adapter-basics-test"
 path = "adapter_basics_test.rs"
+
+[features]
+tla = ["tla_instrumentation"]
