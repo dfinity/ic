@@ -51,6 +51,15 @@ log_message() {
     echo "$message"
 }
 
+print_success_banner() {
+    local green="\033[32m"
+    local bold="\033[1m"
+    local reset="\033[0m"
+    echo
+    echo -e "${green}${bold}=== SUCCESS: Recovery completed successfully! ===${reset}"
+    echo
+}
+
 verify_hash() {
     local file_path="$1"
     local expected_hash="$2"
@@ -327,6 +336,9 @@ main() {
     log_message "Restarting guestos.service after manual upgrade installation"
     systemctl start guestos.service
     log_message "GuestOS service restarted successfully"
-}
+
+    # Log success banner in guestos-recovery-upgrader.sh so that it is visible when run manually
+    print_success_banner
+    }
 
 main "$@"
