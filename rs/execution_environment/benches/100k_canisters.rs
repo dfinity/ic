@@ -1,4 +1,4 @@
-use criterion::Criterion;
+use criterion::{BatchSize, Criterion};
 use ic_base_types::{CanisterId, NumSeconds, PrincipalId};
 use ic_replicated_state::{
     Memory,
@@ -162,7 +162,11 @@ fn clone_100k_canisters_with_memories(c: &mut Criterion) {
                 })
                 .collect();
         }
-        bench.iter(|| canisters.clone());
+        bench.iter_batched(
+            || {},
+            |_| black_box(&canisters).clone(),
+            BatchSize::NumIterations(1),
+        );
     });
 }
 
@@ -181,7 +185,11 @@ fn clone_100k_canisters_no_memories(c: &mut Criterion) {
                 })
                 .collect();
         }
-        bench.iter(|| canisters.clone());
+        bench.iter_batched(
+            || {},
+            |_| black_box(&canisters).clone(),
+            BatchSize::NumIterations(1),
+        );
     });
 }
 
@@ -202,9 +210,11 @@ fn clone_100k_memories(c: &mut Criterion) {
                 .collect();
         }
 
-        bench.iter(|| {
-            let _cloned = black_box(&memories).clone();
-        });
+        bench.iter_batched(
+            || (),
+            |_| black_box(&memories).clone(),
+            BatchSize::NumIterations(1),
+        );
     });
 }
 
