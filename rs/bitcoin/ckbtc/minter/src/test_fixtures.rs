@@ -230,7 +230,7 @@ pub mod arbitrary {
         signature::EncodedSignature,
         state::{
             ChangeOutput, Mode, ReimbursementReason, RetrieveBtcRequest, SuspendedReason,
-            eventlog::{Event, EventType, ReplacedReason},
+            eventlog::{EventType, ReplacedReason},
         },
         tx,
         tx::{SignedInput, TxOut, UnsignedInput},
@@ -454,7 +454,7 @@ pub mod arbitrary {
 
     pub fn event() -> impl Strategy<Value = CkBtcMinterEvent> {
         (any::<Option<u64>>(), event_type())
-            .prop_map(|(timestamp, payload)| Event { timestamp, payload })
+            .prop_map(|(timestamp, payload)| CkBtcMinterEvent { timestamp, payload })
     }
 
     // Some event types are deprecated, however we still want to use them in prop tests as we want

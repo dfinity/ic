@@ -1,9 +1,6 @@
 use crate::state::eventlog::CkBtcMinterEvent;
 use crate::storage::StorableEvent;
-use crate::{
-    state::eventlog::{Event, EventType},
-    test_fixtures::arbitrary,
-};
+use crate::{state::eventlog::EventType, test_fixtures::arbitrary};
 use proptest::proptest;
 use std::borrow::Cow;
 
@@ -31,7 +28,7 @@ proptest! {
 
         assert_eq!(
             decoded,
-            Event {
+            CkBtcMinterEvent {
                 timestamp: None,
                 payload: legacy_event,
             }

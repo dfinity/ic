@@ -272,14 +272,12 @@ mod event {
     }
 }
 
-pub type CkBtcMinterEvent = Event<EventType>;
-
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
-pub struct Event<T> {
+pub struct CkBtcMinterEvent {
     /// The canister time at which the minter generated this event.
     pub timestamp: Option<u64>,
     /// The event type.
-    pub payload: T,
+    pub payload: EventType,
 }
 
 /// Handle how events that register state modifications are recorded and

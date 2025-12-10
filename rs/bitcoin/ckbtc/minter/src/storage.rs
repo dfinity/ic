@@ -2,7 +2,7 @@
 mod tests;
 
 use crate::CanisterRuntime;
-use crate::state::eventlog::{CkBtcMinterEvent, Event, EventLogger, EventType};
+use crate::state::eventlog::{CkBtcMinterEvent, EventLogger, EventType};
 use ic_stable_structures::{
     DefaultMemoryImpl,
     log::{Log as StableLog, NoSuchEntry},
@@ -120,10 +120,10 @@ impl StorableEvent for CkBtcMinterEvent {
         #[serde(untagged)]
         enum SerializedEvent {
             Legacy(EventType),
-            Event(Event<EventType>),
+            Event(CkBtcMinterEvent),
         }
         match ciborium::de::from_reader(bytes.as_ref()).expect("failed to decode a minter event") {
-            SerializedEvent::Legacy(payload) => Event {
+            SerializedEvent::Legacy(payload) => CkBtcMinterEvent {
                 payload,
                 timestamp: None,
             },
@@ -217,7 +217,7 @@ pub fn record_event_v0<R: CanisterRuntime>(payload: EventType, runtime: &R) {
     // canister, and the memory dump is used in a canbench to measure
     // instruction counts. So the actual value of timestamps shouldn't
     // matter.
-    let event = Event {
+    let event = CkBtcMinterEvent {
         timestamp: Some(runtime.time()),
         payload,
     };
