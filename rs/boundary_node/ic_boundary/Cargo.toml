@@ -96,4 +96,5 @@ x509-parser = { workspace = true }
 
 [dev-dependencies]
 indoc = "1.0"
+tempfile = { workspace = true }
 tokio-tungstenite = "0.26"

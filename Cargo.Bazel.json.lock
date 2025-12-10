@@ -1,5 +1,5 @@
 {
-  "checksum": "5c80229443064db2a4523125f04d51cbdd2b83b0c8cf6ae28242b2622994dcdc",
+  "checksum": "5bba51aaf15cae3539a8811baf5d2a5022a20ec14bb5281436382786cc526224",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21640,7 +21640,7 @@
               "target": "ic_agent"
             },
             {
-              "id": "ic-bn-lib 0.1.4",
+              "id": "ic-bn-lib 0.1.7",
               "target": "ic_bn_lib"
             },
             {
@@ -22304,6 +22304,10 @@
             {
               "id": "sha3 0.10.8",
               "target": "sha3"
+            },
+            {
+              "id": "shell-escape 0.1.5",
+              "target": "shell_escape"
             },
             {
               "id": "signal-hook 0.3.17",
@@ -34968,14 +34972,14 @@
       ],
       "license_file": null
     },
-    "ic-bn-lib 0.1.4": {
+    "ic-bn-lib 0.1.7": {
       "name": "ic-bn-lib",
-      "version": "0.1.4",
+      "version": "0.1.7",
       "package_url": "https://github.com/dfinity/ic-bn-lib",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-bn-lib/0.1.4/download",
-          "sha256": "66746cb6f1df32057e5e1ff1bb37c211c9291c3726366f2db5ded805ac273b19"
+          "url": "https://static.crates.io/crates/ic-bn-lib/0.1.7/download",
+          "sha256": "37ea8c478ccaed485336dd12e48f1c745bc08b4eed354cbd790e776df06f3828"
         }
       },
       "targets": [
@@ -35329,11 +35333,13 @@
           ],
           "selects": {}
         },
-        "version": "0.1.4"
+        "version": "0.1.7"
       },
-      "license": null,
-      "license_ids": [],
-      "license_file": "LICENSE"
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
     },
     "ic-bn-lib-common 0.1.0": {
       "name": "ic-bn-lib-common",
@@ -36441,7 +36447,7 @@
               "target": "fqdn"
             },
             {
-              "id": "ic-bn-lib 0.1.4",
+              "id": "ic-bn-lib 0.1.7",
               "target": "ic_bn_lib"
             },
             {
@@ -36583,7 +36589,7 @@
               "target": "humantime"
             },
             {
-              "id": "ic-bn-lib 0.1.4",
+              "id": "ic-bn-lib 0.1.7",
               "target": "ic_bn_lib"
             },
             {
@@ -36771,7 +36777,7 @@
               "target": "fqdn"
             },
             {
-              "id": "ic-bn-lib 0.1.4",
+              "id": "ic-bn-lib 0.1.7",
               "target": "ic_bn_lib"
             },
             {
@@ -37127,7 +37133,7 @@
               "target": "humantime"
             },
             {
-              "id": "ic-bn-lib 0.1.4",
+              "id": "ic-bn-lib 0.1.7",
               "target": "ic_bn_lib"
             },
             {
@@ -74280,6 +74286,45 @@
       ],
       "license_file": "LICENSE"
     },
+    "shell-escape 0.1.5": {
+      "name": "shell-escape",
+      "version": "0.1.5",
+      "package_url": "https://github.com/sfackler/shell-escape",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/shell-escape/0.1.5/download",
+          "sha256": "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "shell_escape",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "shell_escape",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "0.1.5"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "shell-words 1.1.0": {
       "name": "shell-words",
       "version": "1.1.0",
@@ -97703,7 +97748,7 @@
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.12",
     "ic-agent 0.40.1",
-    "ic-bn-lib 0.1.4",
+    "ic-bn-lib 0.1.7",
     "ic-bn-lib-common 0.1.0",
     "ic-btc-interface 0.2.3",
     "ic-canister-log 0.2.0",
@@ -97874,6 +97919,7 @@
     "sev 7.1.0",
     "sha2 0.10.9",
     "sha3 0.10.8",
+    "shell-escape 0.1.5",
     "signal-hook 0.3.17",
     "signature 2.2.0",
     "simple_asn1 0.6.2",

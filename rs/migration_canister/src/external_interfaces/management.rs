@@ -3,7 +3,7 @@ use std::convert::Infallible;
 use candid::{CandidType, Principal, Reserved};
 use ic_cdk::{
     api::{canister_self, canister_version},
-    call::Call,
+    call::{Call, CallFailed, RejectCode},
     management_canister::{
         CanisterInfoArgs, CanisterInfoResult, canister_info, list_canister_snapshots,
     },
@@ -221,6 +221,8 @@ pub struct RenameToArgs {
     pub total_num_changes: u64,
 }
 
+/// This is a success if the call is a success or the target canister does not exist,
+/// i.e., a previous call to rename the target canister was a success.
 pub async fn rename_canister(
     source: Principal,
     source_version: u64,
@@ -241,7 +243,7 @@ pub async fn rename_canister(
     };
 
     // We have to await this call no matter what. Bounded wait is not an option.
-    match Call::unbounded_wait(target_subnet, "rename_canister")
+    match Call::bounded_wait(target_subnet, "rename_canister")
         .with_arg(args)
         .await
     {
@@ -251,9 +253,16 @@ pub async fn rename_canister(
                 "Call `rename_canister` for canister`: {}, subnet: {} failed: {:?}",
                 target, target_subnet, e
             );
-            // All fatal error conditions have been checked upfront and should not be possible now.
-            // CanisterAlreadyExists, RenameCanisterNotStopped, RenameCanisterHasSnapshot.
-            ProcessingResult::NoProgress
+            match e {
+                CallFailed::CallRejected(e) => {
+                    if e.reject_code() == Ok(RejectCode::DestinationInvalid) {
+                        ProcessingResult::Success(())
+                    } else {
+                        ProcessingResult::NoProgress
+                    }
+                }
+                _ => ProcessingResult::NoProgress,
+            }
         }
     }
 }
@@ -332,12 +341,14 @@ pub struct DeleteCanisterArgs {
     pub canister_id: Principal,
 }
 
+/// This is a success if the call is a success or the canister does not exist,
+/// i.e., a previous call to delete the canister was a success.
 pub async fn delete_canister(
     canister_id: Principal,
     subnet_id: Principal,
 ) -> ProcessingResult<(), Infallible> {
     let args = DeleteCanisterArgs { canister_id };
-    match Call::unbounded_wait(subnet_id, "delete_canister")
+    match Call::bounded_wait(subnet_id, "delete_canister")
         .with_arg(&args)
         .await
     {
@@ -347,7 +358,16 @@ pub async fn delete_canister(
                 "Call `delete_canister` for canister: {}, subnet: {}, failed: {:?}",
                 canister_id, subnet_id, e
             );
-            ProcessingResult::NoProgress
+            match e {
+                CallFailed::CallRejected(e) => {
+                    if e.reject_code() == Ok(RejectCode::DestinationInvalid) {
+                        ProcessingResult::Success(())
+                    } else {
+                        ProcessingResult::NoProgress
+                    }
+                }
+                _ => ProcessingResult::NoProgress,
+            }
         }
     }
 }

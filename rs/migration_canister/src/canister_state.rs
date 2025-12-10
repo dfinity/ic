@@ -10,7 +10,7 @@ use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
 };
 
-use crate::{Event, MAX_ONGOING_VALIDATIONS, RequestState};
+use crate::{CanisterMigrationArgs, Event, MAX_ONGOING_VALIDATIONS, RequestState};
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
@@ -38,8 +38,14 @@ thread_local! {
     /// with timestamps as keys and their counts as values.
     static LIMITER: RefCell<BTreeMap<u64, u64, Memory>> = RefCell::new(BTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2)))));
 
-    static HISTORY: RefCell<BTreeMap<Event, (), Memory>> =
+    /// Stores all events indexed by their sequence numbers
+    /// in the order of creation.
+    static HISTORY: RefCell<BTreeMap<u64, Event, Memory>> =
         RefCell::new(BTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(3)))));
+
+    /// Caches the index of the last event for a given pair of source and target canisters.
+    static LAST_EVENT: RefCell<BTreeMap<CanisterMigrationArgs, u64, Memory>> =
+        RefCell::new(BTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(4)))));
 
     // TODO: consider a fail counter for active requests.
     // This way we see if a request never makes progress which would
@@ -117,8 +123,8 @@ pub mod requests {
 // ============================== Events API ============================== //
 pub mod events {
     use crate::{
-        Event, EventType,
-        canister_state::{HISTORY, LIMITER},
+        CanisterMigrationArgs, Event, EventType,
+        canister_state::{HISTORY, LAST_EVENT, LIMITER},
     };
     use candid::Principal;
     use ic_cdk::api::time;
@@ -135,16 +141,33 @@ pub mod events {
             });
         }
         let event = Event { time, event };
-        HISTORY.with_borrow_mut(|h| h.insert(event, ()));
+        let args = CanisterMigrationArgs::from(&event);
+        let idx = HISTORY.with_borrow_mut(|h| {
+            let idx = h.len();
+            h.insert(idx, event);
+            idx
+        });
+        LAST_EVENT.with_borrow_mut(|l| {
+            l.insert(args, idx);
+        });
     }
 
     pub fn find_last_event(source: Principal, target: Principal) -> Option<Event> {
-        // TODO: should do a range scan for efficiency.
-        HISTORY.with_borrow(|r| {
-            r.keys()
-                .rev()
-                .find(|x| x.event.request().source == source && x.event.request().target == target)
-        })
+        let idx = LAST_EVENT.with_borrow(|l| {
+            let args = CanisterMigrationArgs { source, target };
+            l.get(&args)
+        });
+        if let Some(idx) = idx {
+            HISTORY.with_borrow(|h| {
+                let event = h.get(&idx);
+                if event.is_none() {
+                    println!("Missing event for source={} and target={} with idx={} in history! This is a bug!", source, target, idx);
+                }
+                event
+            })
+        } else {
+            None
+        }
     }
 }
 

@@ -2,7 +2,7 @@
 //! participants.
 
 use ic_crypto_internal_bls12_381_type::Polynomial;
-use ic_crypto_internal_bls12_381_type::{G2Affine, G2Projective, NodeIndex, Scalar};
+use ic_crypto_internal_bls12_381_type::{G2Affine, NodeIndex, Scalar};
 use ic_crypto_internal_threshold_sig_bls12381::types::{
     PublicCoefficients, PublicKey, ThresholdError,
 };
@@ -10,8 +10,8 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
 use std::ops::MulAssign;
 
-fn uint_to_g2(num: u32) -> G2Projective {
-    G2Affine::generator() * Scalar::from_u32(num)
+fn uint_to_g2(num: u32) -> G2Affine {
+    (G2Affine::generator() * Scalar::from_u32(num)).to_affine()
 }
 
 /// Polynomial evaluation for small polynomials; this will overflow and panic if
@@ -115,7 +115,9 @@ mod public_coefficients {
         let y = evaluate_integer_polynomial(x, integer_coefficients);
         let public_key = uint_to_g2(y);
         assert_eq!(
-            public_coefficients.evaluate_at(&Scalar::from_u32(x)),
+            public_coefficients
+                .evaluate_at(&Scalar::from_u32(x))
+                .to_affine(),
             public_key
         );
     }
@@ -123,14 +125,6 @@ mod public_coefficients {
     fn public_key_from_public_coefficients_are_correct() {
         test_public_key_from_public_coefficients_are_correct(3, &[1, 2, 3, 4, 5]);
         test_public_key_from_public_coefficients_are_correct(9, &[5, 0, 7, 11]);
-    }
-
-    #[test]
-    fn test_public_coefficients_summation_is_correct() {
-        assert_eq!(
-            uints_to_public_coefficients(&[1, 3, 5]) + uints_to_public_coefficients(&[10, 20, 30]),
-            uints_to_public_coefficients(&[11, 23, 35])
-        );
     }
 
     #[test]
@@ -210,6 +204,6 @@ mod public_coefficients {
         let random_points = [x_5, x_3, x_8];
         let interpolated_polynomial_at_0 =
             PublicCoefficients::interpolate_g2(&random_points).expect("Failed to interpolate");
-        assert_eq!(interpolated_polynomial_at_0, uint_to_g2(2));
+        assert_eq!(interpolated_polynomial_at_0.to_affine(), uint_to_g2(2));
     }
 }
