@@ -205,7 +205,6 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         result,
                     } = adapter_response.into_inner();
 
-                    //TODO(urgent): this string is too long.
                     info!(
                         log,
                         "Received canister http response from adapter: request_size: {}, \
@@ -635,8 +634,6 @@ mod tests {
             headers: adapter_headers.clone(),
             content: adapter_body.clone(),
         };
-        //TODO(urgent): also test the metrics
-        //TODO(urgent): also test the new custom errors.
         let mock_grpc_channel = setup_adapter_mock(Ok(create_result_from_response(response))).await;
 
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.

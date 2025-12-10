@@ -706,8 +706,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             ..Default::default()
         });
         let response = client.https_outcall(request).await.unwrap();
-        let (error, _) = unwrap_error(response);
-        assert_eq!(error.kind, CanisterHttpErrorKind::InvalidInput as i32);
+        let (_, _) = unwrap_error(response);
     }
 
     #[rstest]

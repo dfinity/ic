@@ -465,7 +465,7 @@ impl HttpsOutcallsService for CanisterHttp {
         }
         .await;
 
-        let result_envelope = match execution_result {
+        let http_result = match execution_result {
             Ok(response) => HttpsOutcallResult {
                 metrics: Some(CanisterHttpAdapterMetrics {
                     downloaded_bytes: total_downloaded_bytes,
@@ -481,7 +481,7 @@ impl HttpsOutcallsService for CanisterHttp {
             },
         };
 
-        Ok(Response::new(result_envelope))
+        Ok(Response::new(http_result))
     }
 }
 
