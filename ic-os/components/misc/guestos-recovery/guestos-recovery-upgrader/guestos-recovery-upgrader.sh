@@ -337,7 +337,7 @@ main() {
     systemctl start guestos.service
     log_message "GuestOS service restarted successfully"
 
-    # Log success banner in guestos-recovery-upgrader.sh so that it is visible when run manually
+    # Log success banner in so that it is visible in manual recovery fallback method
     print_success_banner
 }
 
