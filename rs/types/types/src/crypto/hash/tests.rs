@@ -493,12 +493,7 @@ mod crypto_hash_stability {
         let beacon = test_random_beacon();
         let hashed_beacon: HashedRandomBeacon = Hashed::new(crypto_hash, beacon);
         let state_hash: CryptoHashOfState = CryptoHashOf::new(CryptoHash(vec![0x42; 32]));
-        let data = CatchUpContent::new(
-            hashed_block,
-            hashed_beacon,
-            state_hash,
-            None, 
-        );
+        let data = CatchUpContent::new(hashed_block, hashed_beacon, state_hash, None);
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
@@ -515,12 +510,7 @@ mod crypto_hash_stability {
         let beacon = test_random_beacon();
         let hashed_beacon: HashedRandomBeacon = Hashed::new(crypto_hash, beacon);
         let state_hash: CryptoHashOfState = CryptoHashOf::new(CryptoHash(vec![0x42; 32]));
-        let cup_content = CatchUpContent::new(
-            hashed_block,
-            hashed_beacon,
-            state_hash,
-            None,
-        );
+        let cup_content = CatchUpContent::new(hashed_block, hashed_beacon, state_hash, None);
         let data = CatchUpShareContent::from(&cup_content);
         let hash = crypto_hash(&data);
         assert_eq!(
@@ -539,8 +529,8 @@ mod crypto_hash_stability {
             signature: vec![0x42; 48],
             signer: Some(pb::NiDkgId {
                 start_block_height: 42,
-                dealer_subnet: vec![0x42; 29], 
-                dkg_tag: 1,                    
+                dealer_subnet: vec![0x42; 29],
+                dkg_tag: 1,
                 remote_target_id: None,
                 key_id: None,
             }),
@@ -562,12 +552,7 @@ mod crypto_hash_stability {
         let beacon = test_random_beacon();
         let hashed_beacon: HashedRandomBeacon = Hashed::new(crypto_hash, beacon);
         let state_hash: CryptoHashOfState = CryptoHashOf::new(CryptoHash(vec![0x42; 32]));
-        let content = CatchUpContent::new(
-            hashed_block,
-            hashed_beacon,
-            state_hash,
-            None,
-        );
+        let content = CatchUpContent::new(hashed_block, hashed_beacon, state_hash, None);
         let data: CatchUpPackage = Signed {
             content,
             signature: ThresholdSignature {
