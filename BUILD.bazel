@@ -298,7 +298,6 @@ upload_artifacts(
 test_suite(
     name = "insta_tests",
     tests = [
-        # Note that we automatically run `bazel run :buildifier` on CI on PRs and commit the changes.
         "//bazel:buildifier_test",
         "//bazel:gazelle_test",
     ],
