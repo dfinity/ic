@@ -70,8 +70,8 @@ jobs:
           run: bazel test //:insta_tests
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
-  buildifier:
-    name: Buildifier
+  linter:
+    name: Linter
     runs-on: *dind-small-setup
     container: *container-setup
     timeout-minutes: 30
