@@ -53,8 +53,9 @@ jobs:
               --test_tag_filters="didc"
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
+# Runs linters and formatters on code to automatically fix issues
   autofix:
-    name: Lint and Format
+    name: Autofix
     runs-on: *dind-small-setup
     container: *container-setup
     timeout-minutes: 30
