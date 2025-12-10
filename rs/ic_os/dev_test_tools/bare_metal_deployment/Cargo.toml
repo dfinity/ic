@@ -1,6 +1,6 @@
 [package]
 name = "bare_metal_deployment"
-edition = "2021"
+edition.workspace = true
 
 [[bin]]
 name = "deploy"

@@ -8,7 +8,11 @@ fn main() {
 
     if env::var("RELOAD_ICOS_CMD").is_ok() {
         // Bazel build: include the actual file
-        fs::write(&dest_path, r#"const RELOAD_ICOS_CMD: &[u8] = include_bytes!(env!("RELOAD_ICOS_CMD"));"#).unwrap();
+        fs::write(
+            &dest_path,
+            r#"const RELOAD_ICOS_CMD: &[u8] = include_bytes!(env!("RELOAD_ICOS_CMD"));"#,
+        )
+        .unwrap();
     } else {
         // Cargo build: use empty bytes
         fs::write(&dest_path, r#"const RELOAD_ICOS_CMD: &[u8] = b"";"#).unwrap();

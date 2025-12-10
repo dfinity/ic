@@ -1,5 +1,7 @@
 use anyhow::{Context, Result, bail, ensure};
-use bare_metal_deployment::deploy::{DeploymentConfig, ImageSource, deploy_to_bare_metal, DeploymentError, establish_ssh_connection};
+use bare_metal_deployment::deploy::{
+    DeploymentConfig, DeploymentError, ImageSource, deploy_to_bare_metal, establish_ssh_connection,
+};
 use bare_metal_deployment::{BareMetalIpmiSession, LoginInfo, parse_login_info_from_csv};
 use clap::Parser;
 use std::fmt::Display;
