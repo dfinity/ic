@@ -718,6 +718,7 @@ fn can_get_canister_information() {
                 canister_history_size,
                 NumBytes::from(0),
                 NumBytes::from(0),
+                NumBytes::from(0),
                 num_cycles.get(),
                 ComputeAllocation::default().as_percent(),
                 None,
