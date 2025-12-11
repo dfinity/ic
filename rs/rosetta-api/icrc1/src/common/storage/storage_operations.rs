@@ -761,7 +761,16 @@ pub fn get_blocks_by_transaction_hash(
 pub fn get_highest_processed_block_idx(connection: &Connection) -> anyhow::Result<Option<u64>> {
     match get_rosetta_metadata(connection, METADATA_BLOCK_IDX)? {
         Some(value) => Ok(Some(u64::from_le_bytes(value.as_slice().try_into()?))),
-        None => Ok(None),
+        None => {
+            match connection
+                .prepare_cached("SELECT block_idx FROM account_balances WHERE block_idx = (SELECT MAX(block_idx) FROM account_balances)")?
+                .query_map(params![], |row| row.get(0))?
+                .next()
+            {
+                None => Ok(None),
+                Some(res) => Ok(res?),
+            }
+        }
     }
 }
 
