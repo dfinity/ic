@@ -7,10 +7,10 @@ use bitcoin::hashes::Hash;
 use candid::{Decode, Principal};
 use ic_bitcoin_canister_mock::{OutPoint, Utxo};
 use ic_ckdoge_minter::candid_api::EstimateWithdrawalFeeError;
+use ic_ckdoge_minter::event::RetrieveDogeRequest;
 use ic_ckdoge_minter::fees::DogecoinFeeEstimator;
 use ic_ckdoge_minter::{
-    BitcoinAddress, BurnMemo, MIN_RESUBMISSION_DELAY, RetrieveBtcRequest, Txid,
-    WithdrawalReimbursementReason,
+    BurnMemo, MIN_RESUBMISSION_DELAY, Txid, WithdrawalReimbursementReason,
     address::DogecoinAddress,
     candid_api::{
         GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeWithApprovalError,
@@ -138,12 +138,11 @@ where
             .assert_that_events()
             .ignoring_timestamp()
             .contains_only_once_in_order(&[CkDogeMinterEventType::AcceptedRetrieveDogeRequest(
-                RetrieveBtcRequest {
+                RetrieveDogeRequest {
                     amount: self.withdrawal_amount,
-                    address: BitcoinAddress::P2pkh(address.as_bytes().to_vec().try_into().unwrap()),
+                    address: address.clone(),
                     block_index: retrieve_doge_id.block_index,
                     received_at: 0, //not relevant
-                    kyt_provider: None,
                     reimbursement_account: Some(self.account),
                 },
             )]);

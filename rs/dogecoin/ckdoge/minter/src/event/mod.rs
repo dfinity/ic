@@ -1,4 +1,6 @@
+use crate::address::DogecoinAddress;
 use candid::Deserialize;
+use ic_ckbtc_minter::address::BitcoinAddress;
 use ic_ckbtc_minter::queries::WithdrawalFee;
 use ic_ckbtc_minter::state::eventlog::{
     CkBtcMinterEvent, EventLogger, EventType as CkBtcMinterEventType, ReplacedReason,
@@ -75,7 +77,7 @@ pub enum CkDogeMinterEventType {
     /// Indicates that the minter accepted a new retrieve_doge request.
     /// The minter emits this event _after_ it burnt ckDOGE.
     #[serde(rename = "accepted_retrieve_doge_request")]
-    AcceptedRetrieveDogeRequest(RetrieveBtcRequest),
+    AcceptedRetrieveDogeRequest(RetrieveDogeRequest),
 
     /// Indicates that the minter removed a previous retrieve_doge request
     /// because the retrieval amount was not enough to cover the transaction
@@ -192,6 +194,25 @@ pub enum CkDogeMinterEventType {
     },
 }
 
+/// A pending retrieve DOGE request
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
+pub struct RetrieveDogeRequest {
+    /// The amount to convert to DOGE.
+    /// The minter withdraws DOGE transfer fees from this amount.
+    pub amount: u64,
+    /// The destination DOGE address.
+    pub address: DogecoinAddress,
+    /// The BURN transaction index on the ledger.
+    /// Serves as a unique request identifier.
+    pub block_index: u64,
+    /// The time at which the minter accepted the request.
+    pub received_at: u64,
+    /// The reimbursement_account of the retrieve_doge transaction.
+    #[serde(rename = "reimbursement_account")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reimbursement_account: Option<Account>,
+}
+
 impl ic_ckbtc_minter::storage::StorableEvent for CkDogeMinterEvent {
     fn to_bytes<'a>(&'a self) -> Cow<'a, [u8]> {
         let mut buf = Vec::new();
@@ -240,9 +261,30 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                 to_account,
                 utxos,
             }),
-            CkBtcMinterEventType::AcceptedRetrieveBtcRequest(args) => {
-                Ok(CkDogeMinterEventType::AcceptedRetrieveDogeRequest(args))
-            }
+            CkBtcMinterEventType::AcceptedRetrieveBtcRequest(RetrieveBtcRequest {
+                amount,
+                address,
+                block_index,
+                received_at,
+                reimbursement_account,
+                kyt_provider: _,
+            }) => Ok(CkDogeMinterEventType::AcceptedRetrieveDogeRequest(
+                RetrieveDogeRequest {
+                    amount,
+                    address: match address {
+                        BitcoinAddress::P2wpkhV0(_)
+                        | BitcoinAddress::P2wshV0(_)
+                        | BitcoinAddress::P2trV1(_) => {
+                            Err(format!("BUG: unexpected address type {address:?}"))
+                        }
+                        BitcoinAddress::P2pkh(bytes) => Ok(DogecoinAddress::P2pkh(bytes)),
+                        BitcoinAddress::P2sh(bytes) => Ok(DogecoinAddress::P2pkh(bytes)),
+                    }?,
+                    block_index,
+                    received_at,
+                    reimbursement_account,
+                },
+            )),
             CkBtcMinterEventType::RemovedRetrieveBtcRequest { block_index } => {
                 Ok(CkDogeMinterEventType::RemovedRetrieveDogeRequest { block_index })
             }
@@ -356,9 +398,23 @@ impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
             CkDogeMinterEventType::CheckedUtxo { utxo, account } => {
                 CkBtcMinterEventType::CheckedUtxoV2 { utxo, account }
             }
-            CkDogeMinterEventType::AcceptedRetrieveDogeRequest(args) => {
-                CkBtcMinterEventType::AcceptedRetrieveBtcRequest(args)
-            }
+            CkDogeMinterEventType::AcceptedRetrieveDogeRequest(RetrieveDogeRequest {
+                amount,
+                address,
+                block_index,
+                received_at,
+                reimbursement_account,
+            }) => CkBtcMinterEventType::AcceptedRetrieveBtcRequest(RetrieveBtcRequest {
+                amount,
+                address: match address {
+                    DogecoinAddress::P2pkh(bytes) => BitcoinAddress::P2pkh(bytes),
+                    DogecoinAddress::P2sh(bytes) => BitcoinAddress::P2sh(bytes),
+                },
+                block_index,
+                received_at,
+                kyt_provider: None,
+                reimbursement_account,
+            }),
             CkDogeMinterEventType::RemovedRetrieveDogeRequest { block_index } => {
                 CkBtcMinterEventType::RemovedRetrieveBtcRequest { block_index }
             }

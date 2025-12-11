@@ -1,5 +1,5 @@
 use crate::only_one;
-use ic_ckdoge_minter::{RetrieveBtcRequest, event::CkDogeMinterEventType};
+use ic_ckdoge_minter::event::{CkDogeMinterEventType, RetrieveDogeRequest};
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -149,27 +149,24 @@ impl PartialEq for IgnoreTimestamp {
                     && new_utxos == rhs_new_utxos
             }
             (
-                CkDogeMinterEventType::AcceptedRetrieveDogeRequest(RetrieveBtcRequest {
+                CkDogeMinterEventType::AcceptedRetrieveDogeRequest(RetrieveDogeRequest {
                     amount,
                     address,
                     block_index,
                     received_at: _,
-                    kyt_provider,
                     reimbursement_account,
                 }),
-                CkDogeMinterEventType::AcceptedRetrieveDogeRequest(RetrieveBtcRequest {
+                CkDogeMinterEventType::AcceptedRetrieveDogeRequest(RetrieveDogeRequest {
                     amount: rhs_amount,
                     address: rhs_address,
                     block_index: rhs_block_index,
                     received_at: _,
-                    kyt_provider: rhs_kyt_provider,
                     reimbursement_account: rhs_reimbursement_account,
                 }),
             ) => {
                 amount == rhs_amount
                     && address == rhs_address
                     && block_index == rhs_block_index
-                    && kyt_provider == rhs_kyt_provider
                     && reimbursement_account == rhs_reimbursement_account
             }
             (_, _) => false,
