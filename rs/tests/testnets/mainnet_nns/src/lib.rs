@@ -81,7 +81,6 @@ const PATH_IC_CONFIG_SRC_PATH: &str = "/run/ic-node/config/ic.json5";
 const PATH_IC_REPLAY: &str = "ic-replay";
 const PATH_IC_RECOVERY: &str = "ic-recovery";
 const PATH_RECOVERED_NNS_PUBLIC_KEY_PEM: &str = "recovered_nns_public_key.pem";
-const PATH_NODE_OPERATOR_PRIVATE_KEY_PEM: &str = "node_operator_private_key.pem";
 const PATH_SET_TESTNET_ENV_VARS_SH: &str = "set_testnet_env_variables.sh";
 
 const AUX_NODE_NAME: &str = "aux";
@@ -95,15 +94,6 @@ const NEURON_SECRET_KEY_PEM: &str = "-----BEGIN PRIVATE KEY-----
 MFMCAQEwBQYDK2VwBCIEIKohpVANxO4xElQYXElAOXZHwJSVHERLE8feXSfoKwxX
 oSMDIQBqgs2z86b+S5X9HvsxtE46UZwfDHtebwmSQWSIcKr2ew==
 -----END PRIVATE KEY-----";
-
-// Node operator principal and private key for the API BN during registration
-const NODE_OPERATOR_PRINCIPAL: &str =
-    "7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe";
-const NODE_OPERATOR_PRIVATE_KEY_PEM: &str = "-----BEGIN EC PRIVATE KEY-----
-MHQCAQEEIJ61mhHntzgHe39PaCg7JY6QJcbe0g3dvS1UnEEbKVzdoAcGBSuBBAAK
-oUQDQgAEKSfx/T3gDtkfdGl1fiONzUHs0N7/hcfQ8zwcqIzwuvHK3qqSJ3EhY5OB
-WIgAGf+2BAs2ac0RonxQZdQTmZMvrw==
------END EC PRIVATE KEY-----";
 
 #[derive(Deserialize, Serialize)]
 pub struct RecoveredNnsNodeUrl {
@@ -681,9 +671,6 @@ fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcN
     )
     .expect("Could not patch NNS public key of API BN");
 
-    // Upload node operator private key to let the API BN re-register itself to the new registry
-    upload_node_operator_private_key(api_bn, &ssh_session)
-        .expect("Could not upload node operator private key to API BN");
 
     // Regenerate IC config and start ic-replica
     api_bn
@@ -771,22 +758,6 @@ fn patch_config_nns_public_key(
     )
 }
 
-fn upload_node_operator_private_key(node: &IcNodeSnapshot, session: &Session) -> Result<String> {
-    const PROD_NODE_OPERATOR_PRIVATE_KEY: &str = "/var/lib/ic/data/node_operator_private_key.pem";
-
-    node.block_on_bash_script_from_session(
-        &session,
-        &format!(
-            r#"
-                set -e
-                sudo tee {PROD_NODE_OPERATOR_PRIVATE_KEY} >/dev/null <<EOF
-{NODE_OPERATOR_PRIVATE_KEY_PEM}
-EOF
-            "#
-        ),
-    )
-}
-
 fn propose_to_turn_into_api_bn(
     env: &TestEnv,
     neuron_id: NeuronId,
@@ -842,7 +813,9 @@ fn propose_to_turn_into_api_bn(
 }
 
 fn setup_ic(env: TestEnv) {
-    let node_operator_principal = PrincipalId::from_str(NODE_OPERATOR_PRINCIPAL).unwrap();
+    let node_operator_principal =
+        PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
+            .unwrap();
 
     let dkg_interval = std::env::var("DKG_INTERVAL")
         .ok()
