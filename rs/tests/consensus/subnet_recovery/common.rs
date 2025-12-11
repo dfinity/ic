@@ -268,7 +268,7 @@ pub fn test_with_chain_keys_recoverable_corrupt_cup(env: TestEnv) {
         TestConfig {
             subnet_size: APP_NODES,
             upgrade: true,
-            chain_key: false,
+            chain_key: true,
             // A corrupted CUP whose NiDkgId can still be parsed can tell nodes to which subnet they
             // belong to, see the recovery CUP, and thus allow the recovery on the same nodes.
             corrupt_cup: CupCorruption::CorruptedWithValidNiDkgId,
