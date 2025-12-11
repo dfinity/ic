@@ -123,8 +123,6 @@ def _build_container_filesystem_impl(ctx):
         args.extend(["--base-image-tar-file-tag", ctx.attr.base_image_tar_file_tag])
         inputs.append(ctx.file.base_image_tar_file)
 
-    args.extend(["--no-cache"])
-
     _run_with_icos_wrapper(
         ctx,
         executable = ctx.executable._tool.path,

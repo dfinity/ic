@@ -7,10 +7,8 @@
 set -exo pipefail
 
 cleanup() {
-    sudo podman --root "${TMPFS}" rm -f "${CONTAINER}"
+    podman rm -f "${CONTAINER}"
     rm -rf "${TMPDIR}"
-    sudo umount "${TMPFS}"
-    rm -rf "${TMPFS}"
 }
 trap cleanup EXIT
 
@@ -26,14 +24,11 @@ while getopts "o:" OPT; do
     esac
 done
 
-TMPFS=$(mktemp -d /tmp/mytempdir.XXXXXX)
-sudo mount -t tmpfs tmpfs-podman "${TMPFS}"
-
 TMPDIR=$(mktemp -d -t build-image-XXXXXXXXXXXX)
 
 BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:6015f66923d7afbc53558d7ccffd325d43b4e249f41a6e93eef074c9505d2233"
 
-sudo podman --root "${TMPFS}" build --iidfile "${TMPDIR}/iidfile" - <<<"
+podman build --no-cache --iidfile "${TMPDIR}/iidfile" - <<<"
     FROM $BASE_IMAGE
     USER root:root
     RUN apt-get -y update && apt-get -y --no-install-recommends install grub-efi faketime
@@ -52,7 +47,7 @@ sudo podman --root "${TMPFS}" build --iidfile "${TMPDIR}/iidfile" - <<<"
 
 IMAGE_ID=$(cut -d':' -f2 <"${TMPDIR}/iidfile")
 
-CONTAINER=$(sudo podman --root "${TMPFS}" run --network=host --cgroupns=host -d "${IMAGE_ID}")
+CONTAINER=$(podman run -d "${IMAGE_ID}")
 
-sudo podman --root "${TMPFS}" export "${CONTAINER}" | tar --strip-components=1 -C "${TMPDIR}" -x build
+podman export "${CONTAINER}" | tar --strip-components=1 -C "${TMPDIR}" -x build
 tar cf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 "--mtime=UTC 1970-01-01 00:00:00" -C "${TMPDIR}" boot
