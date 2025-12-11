@@ -507,13 +507,6 @@ type DecodeLedgerMemoArgs = record {
     encoded_memo : blob;
 };
 
-type EncodedMemo = variant {
-    // The memo bytes as a hex encoded string.
-    Hex : text;
-    // The memo bytes as a blob.
-    Blob : blob;
-};
-
 type Status = variant {
     // The minter accepted a retrieve_btc request.
     Accepted;
