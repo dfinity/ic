@@ -3,7 +3,7 @@ use std::convert::Infallible;
 use candid::{CandidType, Principal, Reserved};
 use ic_cdk::{
     api::{canister_self, canister_version},
-    call::{Call, CallFailed, RejectCode},
+    call::{Call, CallFailed, Error as CallError, RejectCode},
     management_canister::{
         CanisterInfoArgs, CanisterInfoResult, canister_info, list_canister_snapshots,
     },
@@ -164,20 +164,16 @@ pub async fn canister_status(
                 canister_id, e
             );
             match e {
-                ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(_)
-                | ic_cdk::call::CallFailed::CallPerformFailed(_) => ProcessingResult::NoProgress,
-                ic_cdk::call::CallFailed::CallRejected(call_rejected) => {
-                    if call_rejected
-                        .reject_message()
-                        .contains("Only the controllers of the canister")
-                    {
-                        ProcessingResult::FatalFailure(ValidationError::NotController {
+                CallFailed::CallRejected(e) => {
+                    if e.reject_code() == Ok(RejectCode::DestinationInvalid) {
+                        ProcessingResult::FatalFailure(ValidationError::CanisterNotFound {
                             canister: canister_id,
                         })
                     } else {
                         ProcessingResult::NoProgress
                     }
                 }
+                _ => ProcessingResult::NoProgress,
             }
         }
     }
@@ -186,9 +182,10 @@ pub async fn canister_status(
 // ========================================================================= //
 // `canister_info`
 
-pub async fn get_canister_info(
-    canister_id: Principal,
-) -> ProcessingResult<CanisterInfoResult, Infallible> {
+/// This is a success if the call is a success
+/// and a fatal failure if the canister does not exist.
+/// Otherwise, this function returns no progress.
+pub async fn get_canister_info(canister_id: Principal) -> ProcessingResult<CanisterInfoResult, ()> {
     let args = CanisterInfoArgs {
         canister_id,
         num_requested_changes: None,
@@ -197,8 +194,17 @@ pub async fn get_canister_info(
     match canister_info(&args).await {
         Ok(canister_info) => ProcessingResult::Success(canister_info),
         Err(e) => {
-            println!("Call `canister_info` for {}, failed: {:?}", canister_id, e);
-            ProcessingResult::NoProgress
+            println!("Call `canister_info` for {} failed: {:?}", canister_id, e);
+            match e {
+                CallError::CallRejected(e) => {
+                    if e.reject_code() == Ok(RejectCode::DestinationInvalid) {
+                        ProcessingResult::FatalFailure(())
+                    } else {
+                        ProcessingResult::NoProgress
+                    }
+                }
+                _ => ProcessingResult::NoProgress,
+            }
         }
     }
 }

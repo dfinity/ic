@@ -169,12 +169,15 @@ pub async fn process_controllers_changed(
     get_canister_info(request.source)
         .await
         .map_success(|canister_info_result| RequestState::StoppedAndReady {
-            request,
+            request: request.clone(),
             stopped_since: time(),
             canister_version,
             canister_history_total_num: canister_info_result.total_num_changes,
         })
-        .or_retry()
+        .map_failure(|()| RequestState::Failed {
+            request,
+            reason: "Source has been deleted".to_string(),
+        })
 }
 
 pub async fn process_stopped(
