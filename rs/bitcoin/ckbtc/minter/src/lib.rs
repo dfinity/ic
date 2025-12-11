@@ -463,7 +463,7 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
     fee_millisatoshi_per_vbyte: u64,
     total_fee: WithdrawalFee,
     runtime: &R,
-) -> Result<(), CallError> {
+) -> Result<Txid, CallError> {
     log!(
         Priority::Debug,
         "[submit_pending_requests]: signing a new transaction: {}",
@@ -547,7 +547,7 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
             runtime,
         );
     });
-    Ok(())
+    Ok(txid)
 }
 
 fn finalization_time_estimate<R: CanisterRuntime>(
@@ -1370,6 +1370,7 @@ pub enum ConsolidateUtxosError {
     TooSoon,
     TooFewAvailableUtxos,
     EstimateFeeNotAvailable,
+    ResubmissionNotAvailable,
     BuildTx(BuildTxError),
     BurnCkbtc(updates::retrieve_btc::RetrieveBtcError, u64),
     SubmitRequest(CallError),
@@ -1392,7 +1393,7 @@ pub enum ConsolidateUtxosError {
 /// share the same logic as a retrieve_btc request.
 pub async fn consolidate_utxos<R: CanisterRuntime>(
     runtime: &R,
-) -> Result<u64, ConsolidateUtxosError> {
+) -> Result<Txid, ConsolidateUtxosError> {
     // TODO DEFI-2551: make this configurable
     const MIN_CONSOLIDATION_INTERVAL: Duration = Duration::from_secs(24 * 3600);
     let utxo_consolidation_threshold = read_state(|s| s.utxo_consolidation_threshold);
@@ -1412,39 +1413,44 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
         return Err(ConsolidateUtxosError::TooSoon);
     }
 
-    // If there is still an on-going transaction, submit it again.
-    if let Some((network, txid, signed_tx)) = read_state(|s| {
-        s.current_consolidate_utxos_request
-            .as_ref()
-            .and_then(|req| {
-                s.get_submitted_transaction(req.block_index).and_then(|tx| {
-                    tx.signed_tx
-                        .clone()
-                        .map(|signed_tx| (s.btc_network, tx.txid, signed_tx))
+    // If there is still an on-going transaction, try to submit it again.
+    if read_state(|s| s.current_consolidate_utxos_request.is_some()) {
+        if let Some((network, txid, signed_tx)) = read_state(|s| {
+            s.current_consolidate_utxos_request
+                .as_ref()
+                .and_then(|req| {
+                    s.get_submitted_transaction(req.block_index).and_then(|tx| {
+                        tx.signed_tx
+                            .clone()
+                            .map(|signed_tx| (s.btc_network, tx.txid, signed_tx))
+                    })
                 })
-            })
-    }) {
-        log!(
-            Priority::Info,
-            "[consolidate_utxos]: re-sending a signed transaction {}",
-            txid,
-        );
-        runtime
-            .send_transaction(&signed_tx, network)
-            .await
-            .inspect_err(|err| {
-                log!(
-                    Priority::Info,
-                    "[consolidate_utxos]: failed to send a Bitcoin transaction: {}",
-                    err
-                );
-            })
-            .map_err(ConsolidateUtxosError::SubmitRequest)?;
-        log!(
-            Priority::Debug,
-            "[consolidate_utxos]: successfully sent transaction {}",
-            &txid,
-        );
+        }) {
+            log!(
+                Priority::Info,
+                "[consolidate_utxos]: re-sending a signed transaction {}",
+                txid,
+            );
+            runtime
+                .send_transaction(&signed_tx, network)
+                .await
+                .inspect_err(|err| {
+                    log!(
+                        Priority::Info,
+                        "[consolidate_utxos]: failed to send a Bitcoin transaction: {}",
+                        err
+                    );
+                })
+                .map_err(ConsolidateUtxosError::SubmitRequest)?;
+            log!(
+                Priority::Debug,
+                "[consolidate_utxos]: successfully sent transaction {}",
+                &txid,
+            );
+            return Ok(txid);
+        } else {
+            return Err(ConsolidateUtxosError::ResubmissionNotAvailable);
+        }
     }
 
     mutate_state(|s| s.last_consolidate_utxos_request_created_time_ns = Some(now));
@@ -1541,12 +1547,12 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
         utxos,
     });
 
-    sign_and_submit_request(request, fee_millisatoshi_per_vbyte, total_fee, runtime)
+    let txid = sign_and_submit_request(request, fee_millisatoshi_per_vbyte, total_fee, runtime)
         .await
         .map_err(ConsolidateUtxosError::SubmitRequest)?;
 
     let _ = ScopeGuard::into_inner(request_created_guard);
-    Ok(block_index)
+    Ok(txid)
 }
 
 // Return UTXOs for consolidation and remove them from available_utxos.
