@@ -375,8 +375,7 @@ pub fn replay<I: CheckInvariants>(
                 for block_index in request_block_indices {
                     if let Some(request) = state.remove_pending_retrieve_btc_request(block_index) {
                         retrieve_btc_requests.insert(request);
-                    }
-                    if let Some(request) = state.get_consolidate_utxos_request(block_index) {
+                    } else if let Some(request) = state.get_consolidate_utxos_request(block_index) {
                         consolidate_utxos_request = Some(request.clone());
                     } else {
                         return Err(ReplayLogError::InconsistentLog(format!(
