@@ -837,7 +837,7 @@ pub async fn resubmit_transactions<
                 vec![(main_address.clone(), retrieve_btc_min_amount)]
             }
             state::SubmittedWithdrawalRequests::ToConsolidate { request } => {
-                vec![(main_address.clone(), request.amount)]
+                vec![(main_address.clone(), request.amount / 2)]
             }
         };
 
