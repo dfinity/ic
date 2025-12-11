@@ -304,13 +304,9 @@ pub fn update_account_balances(
     // This also makes the inserting of the account balances batchable and therefore faster
     let mut account_balances_cache: HashMap<Account, BTreeMap<u64, Nat>> = HashMap::new();
 
-    let mut current_fee_collector_107 = match get_rosetta_metadata(connection, METADATA_FEE_COL)? {
-        Some(value) => {
-            let fc: Option<Account> = candid::decode_one(&value)?;
-            Some(fc)
-        }
-        None => None,
-    };
+    let mut current_fee_collector_107 = get_rosetta_metadata(connection, METADATA_FEE_COL)?
+        .map(|value| candid::decode_one::<Option<Account>>(&value))
+        .transpose()?;
     let collector_before = current_fee_collector_107;
 
     // As long as there are blocks to be fetched, keep on iterating over the blocks in the database with the given BATCH_SIZE interval
