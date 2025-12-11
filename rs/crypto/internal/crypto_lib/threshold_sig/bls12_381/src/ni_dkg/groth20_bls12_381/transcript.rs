@@ -8,6 +8,7 @@ use super::encryption::decrypt;
 use crate::api::ni_dkg_errors;
 use crate::ni_dkg::fs_ni_dkg::forward_secure::SecretKey as ForwardSecureSecretKey;
 use crate::types as threshold_types;
+use ic_crypto_internal_bls12_381_type::{G2Projective, LagrangeCoefficients, NodeIndices};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381 as g20;
 use ic_types::{NodeIndex, NumberOfNodes};
 use std::collections::BTreeMap;
@@ -199,23 +200,30 @@ fn compute_transcript(
 
     // Combine the dealings
     let public_coefficients: g20::PublicCoefficientsBytes = {
-        let lagrange_coefficients = {
+        let coefficients = {
             let reshare_x: Vec<NodeIndex> = csp_dealings.keys().copied().collect();
 
-            threshold_types::PublicCoefficients::lagrange_coefficients_at_zero(&reshare_x)
-                .expect("Cannot fail because all x are distinct.")
+            let indices = NodeIndices::from_slice(&reshare_x)
+                .expect("Cannot fail because all x are distinct.");
+
+            LagrangeCoefficients::at_zero(&indices)
+                .coefficients()
+                .to_vec()
         };
 
-        let mut combined_public_coefficients = threshold_types::PublicCoefficients::zero();
+        let mut combined = vec![];
 
-        for ((_dealer_index, individual), factor) in individual_public_coefficients
-            .into_iter()
-            .zip(lagrange_coefficients)
-        {
-            // Aggregate the public coefficients:
-            combined_public_coefficients += individual * factor;
+        for i in 0..threshold.get() as usize {
+            let points = individual_public_coefficients
+                .iter()
+                .map(|pts| pts.1.coefficients[i].0.clone())
+                .collect::<Vec<_>>();
+            combined.push(crate::types::PublicKey(
+                G2Projective::muln_affine_vartime(&points, &coefficients).to_affine(),
+            ));
         }
 
+        let combined_public_coefficients = threshold_types::PublicCoefficients::new(combined);
         // This type conversion is needed because of the internal/CSP type duplication.
         g20::PublicCoefficientsBytes::from(&combined_public_coefficients)
     };

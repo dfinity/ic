@@ -10,7 +10,7 @@ use std::{borrow::Cow, fmt::Display, time::Duration};
 use strum_macros::Display;
 
 use crate::{
-    canister_state::{events::num_successes_in_past_24_h, num_active_requests},
+    canister_state::{limiter::num_successes_in_past_24_h, requests::num_requests},
     processing::{
         process_accepted, process_all_by_predicate, process_all_failed, process_all_succeeded,
         process_controllers_changed, process_renamed, process_routing_table,
@@ -77,6 +77,12 @@ pub enum ValidationError {
     },
 }
 
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+struct CanisterMigrationArgs {
+    pub source: Principal,
+    pub target: Principal,
+}
+
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Request {
     source: Principal,
@@ -117,19 +123,6 @@ impl Request {
         }
         None
     }
-
-    /// Dummy value to serve as a bound in composite bounds.
-    pub fn low_bound() -> Self {
-        Self {
-            source: Principal::management_canister(),
-            source_subnet: Principal::management_canister(),
-            source_original_controllers: vec![],
-            target: Principal::management_canister(),
-            target_subnet: Principal::management_canister(),
-            target_original_controllers: vec![],
-            caller: Principal::management_canister(),
-        }
-    }
 }
 
 impl Display for Request {
@@ -147,6 +140,15 @@ impl Display for Request {
             write!(f, "{}, ", x)?;
         }
         write!(f, "] }}")
+    }
+}
+
+impl From<&Request> for CanisterMigrationArgs {
+    fn from(request: &Request) -> Self {
+        Self {
+            source: request.source,
+            target: request.target,
+        }
     }
 }
 
@@ -318,6 +320,28 @@ impl Display for Event {
     }
 }
 
+impl From<&Event> for CanisterMigrationArgs {
+    fn from(x: &Event) -> Self {
+        x.event.request().into()
+    }
+}
+
+impl Storable for CanisterMigrationArgs {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Owned(to_vec(&self).expect("Canister migration argument serialization failed"))
+    }
+
+    fn into_bytes(self) -> Vec<u8> {
+        self.to_bytes().to_vec()
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        from_slice(&bytes).expect("Canister migration argument deserialization failed")
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
 impl Storable for Request {
     fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(to_vec(&self).expect("Request serialization failed"))
@@ -455,7 +479,7 @@ pub fn start_timers() {
 /// Within a sliding 24h window, we don't want to exceed some maximum of migrations.
 /// Therefore, we add currently active requests and successes in the past 24 hours.
 pub fn rate_limited() -> bool {
-    num_active_requests() + num_successes_in_past_24_h() >= RATE_LIMIT
+    num_requests() + num_successes_in_past_24_h() >= RATE_LIMIT
 }
 
 #[allow(dead_code)]

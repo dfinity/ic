@@ -78,8 +78,7 @@ pub fn setup(env: TestEnv) {
         .expect("failed to setup ic-gateway");
     let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
     let ic_gateway_url = ic_gateway.get_public_url();
-    let ic_gateway_domain = ic_gateway_url.domain().unwrap();
-    env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
+    env.sync_with_prometheus();
 
     install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, None);
     set_authorized_subnets(&env);

@@ -5,7 +5,6 @@ edition.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-async-trait = { workspace = true }
 devicemapper = { workspace = true }
 gpt = { workspace = true }
 loopdev-3 = { workspace = true }
