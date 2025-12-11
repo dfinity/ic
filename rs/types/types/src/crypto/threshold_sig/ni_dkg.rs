@@ -8,6 +8,8 @@ use crate::{Height, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, Sub
 use core::fmt;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{CspNiDkgDealing, CspNiDkgTranscript};
 #[cfg(test)]
+use ic_crypto_test_utils_ni_dkg::ni_dkg_csp_dealing;
+#[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{MasterPublicKeyId, VetKdKeyId};
 use ic_protobuf::proxy::ProxyDecodeError;
@@ -190,10 +192,11 @@ impl fmt::Display for NiDkgDealing {
     }
 }
 
+#[cfg(test)]
 impl NiDkgDealing {
     pub fn dummy_dealing_for_tests(seed: u8) -> NiDkgDealing {
         NiDkgDealing {
-            internal_dealing: CspNiDkgDealing::placeholder_to_delete(seed),
+            internal_dealing: ni_dkg_csp_dealing(seed),
         }
     }
 }
