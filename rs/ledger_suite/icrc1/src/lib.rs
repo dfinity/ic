@@ -139,7 +139,7 @@ impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<T
 }
 
 impl<Tokens: TokensType> TryFrom<(Option<String>, FlattenedTransaction<Tokens>)>
-for Transaction<Tokens>
+    for Transaction<Tokens>
 {
     type Error = String;
 
