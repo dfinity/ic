@@ -44,6 +44,7 @@ pub fn estimate_withdrawal_fee<F: FeeEstimator>(
     median_fee_millisatoshi_per_vbyte: u64,
     minter_address: BitcoinAddress,
     recipient_address: BitcoinAddress,
+    max_num_inputs_in_transaction: usize,
     fee_estimator: &F,
 ) -> Result<WithdrawalFee, BuildTxError> {
     // We simulate the algorithm that selects UTXOs for the
@@ -54,6 +55,7 @@ pub fn estimate_withdrawal_fee<F: FeeEstimator>(
         &selected_utxos,
         vec![(recipient_address, withdrawal_amount)],
         &minter_address,
+        max_num_inputs_in_transaction,
         median_fee_millisatoshi_per_vbyte,
         fee_estimator,
     )

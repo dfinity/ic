@@ -5,7 +5,7 @@ use crate::queries::WithdrawalFee;
 use crate::state::utxos::UtxoSet;
 use crate::{
     BuildTxError, ECDSAPublicKey, GetUtxosResponse, IC_CANISTER_RUNTIME, Network, Timestamp,
-    lifecycle, state, tx,
+    lifecycle, state, state::DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, tx,
 };
 use candid::Principal;
 use ic_base_types::CanisterId;
@@ -161,6 +161,7 @@ pub fn build_bitcoin_unsigned_transaction(
         available_utxos,
         outputs,
         &main_address,
+        DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
         fee_per_vbyte,
         &bitcoin_fee_estimator,
     )

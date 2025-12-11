@@ -333,6 +333,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
         None => return,
     };
     let fee_estimator = read_state(|s| runtime.fee_estimator(s));
+    let max_num_inputs_in_transaction = read_state(|s| s.max_num_inputs_in_transaction);
 
     let maybe_sign_request = state::mutate_state(|s| {
         let batch = s.build_batch(MAX_REQUESTS_PER_BATCH);
@@ -350,6 +351,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             &mut s.available_utxos,
             outputs,
             &main_address,
+            max_num_inputs_in_transaction,
             fee_millisatoshi_per_vbyte,
             &fee_estimator,
         ) {
@@ -847,10 +849,12 @@ pub async fn resubmit_transactions<
         let mut input_utxos = submitted_tx.used_utxos;
         let mut replaced_reason = state::eventlog::ReplacedReason::ToRetry;
         let mut new_tx_requests = submitted_tx.requests;
+        let max_num_inputs_in_transaction = read_state(|s| s.max_num_inputs_in_transaction);
         let build_result = match build_unsigned_transaction_from_inputs(
             &input_utxos,
             outputs,
             &main_address,
+            max_num_inputs_in_transaction,
             tx_fee_per_vbyte,
             fee_estimator,
         ) {
@@ -887,6 +891,7 @@ pub async fn resubmit_transactions<
                     &input_utxos,
                     outputs,
                     &main_address,
+                    max_num_inputs_in_transaction,
                     fee_per_vbyte, // Use normal fee
                     fee_estimator,
                 )
@@ -1191,6 +1196,7 @@ pub fn build_unsigned_transaction<F: FeeEstimator>(
     available_utxos: &mut UtxoSet,
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: &BitcoinAddress,
+    max_num_inputs_in_transaction: usize,
     fee_per_vbyte: u64,
     fee_estimator: &F,
 ) -> Result<
@@ -1212,6 +1218,7 @@ pub fn build_unsigned_transaction<F: FeeEstimator>(
         &inputs,
         outputs,
         main_address,
+        max_num_inputs_in_transaction,
         fee_per_vbyte,
         fee_estimator,
     ) {
@@ -1230,6 +1237,7 @@ pub fn build_unsigned_transaction_from_inputs<F: FeeEstimator>(
     input_utxos: &[Utxo],
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: &BitcoinAddress,
+    max_num_inputs_in_transaction: usize,
     fee_per_vbyte: u64,
     fee_estimator: &F,
 ) -> Result<(tx::UnsignedTransaction, state::ChangeOutput, WithdrawalFee), BuildTxError> {
@@ -1250,7 +1258,6 @@ pub fn build_unsigned_transaction_from_inputs<F: FeeEstimator>(
     if num_inputs == 0 {
         return Err(BuildTxError::NotEnoughFunds);
     }
-    let max_num_inputs_in_transaction = read_state(|s| s.max_num_inputs_in_transaction);
     if num_inputs > max_num_inputs_in_transaction {
         return Err(BuildTxError::InvalidTransaction(
             InvalidTransactionError::TooManyInputs {
@@ -1388,6 +1395,7 @@ pub fn estimate_retrieve_btc_fee<F: FeeEstimator>(
     available_utxos: &UtxoSet,
     withdrawal_amount: u64,
     median_fee_millisatoshi_per_vbyte: u64,
+    max_num_inputs_in_transaction: usize,
     fee_estimator: &F,
 ) -> Result<WithdrawalFee, BuildTxError> {
     // We simulate the algorithm that selects UTXOs for the
@@ -1404,6 +1412,7 @@ pub fn estimate_retrieve_btc_fee<F: FeeEstimator>(
         median_fee_millisatoshi_per_vbyte,
         dummy_minter_address,
         dummy_recipient_address,
+        max_num_inputs_in_transaction,
         fee_estimator,
     )
 }
@@ -1485,10 +1494,12 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
     let output_amount = total_amount / 2;
     let main_address = read_state(|s| runtime.derive_minter_address(s));
     let fee_estimator = read_state(|s| runtime.fee_estimator(s));
+    let max_num_inputs_in_transaction = read_state(|s| s.max_num_inputs_in_transaction);
     let (unsigned_tx, change_output, total_fee) = match build_unsigned_transaction_from_inputs(
         &input_utxos,
         vec![(main_address.clone(), output_amount)],
         &main_address,
+        max_num_inputs_in_transaction,
         fee_millisatoshi_per_vbyte,
         &fee_estimator,
     ) {
