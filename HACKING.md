@@ -13,7 +13,7 @@ Check your code using:
 ```
 Or run the commands in that script, like `cargo clippy`, individually.
 
-Build and test your code using bazel - this command runs all tests except for system_tests (which cannot be run locally):
+Build and test your code using bazel like this:
 ```
 bazel test //... --test_tag_filters=-system_test
 ```
