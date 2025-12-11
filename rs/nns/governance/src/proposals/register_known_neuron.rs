@@ -4,7 +4,9 @@ use crate::{
         GovernanceError, KnownNeuron, KnownNeuronData, SelfDescribingValue, Topic,
         governance_error::ErrorType,
     },
-    proposals::self_describing::{LocallyDescribableProposalAction, ValueBuilder},
+    proposals::self_describing::{
+        LocallyDescribableProposalAction, SelfDescribingProstEnum, ValueBuilder,
+    },
 };
 
 use ic_nervous_system_common_validation::validate_url;
@@ -200,10 +202,7 @@ impl From<KnownNeuronData> for SelfDescribingValue {
 
         let committed_topics: Vec<_> = committed_topics
             .into_iter()
-            .map(|topic| {
-                let topic = Topic::try_from(topic).unwrap_or(Topic::Unspecified);
-                format!("{:?}", topic)
-            })
+            .map(|topic| SelfDescribingProstEnum::<Topic>::new(topic, "Topic"))
             .collect();
 
         ValueBuilder::new()
