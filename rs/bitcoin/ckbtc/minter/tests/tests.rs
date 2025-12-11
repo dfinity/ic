@@ -2017,7 +2017,7 @@ fn test_utxo_consolidation_resubmit() {
 
     // Step 4: remove the transaction from mempool.
     ckbtc.reset_mempool();
-    assert!(ckbtc.mempool().get(&txid).is_none());
+    assert!(!ckbtc.mempool().contains_key(&txid));
 
     // wait for the same transaction to be re-submitted.
     ckbtc
@@ -2109,7 +2109,7 @@ fn test_utxo_consolidation_tx_recreate_and_resubmit() {
 
     // Step 4: remove the transaction from mempool.
     ckbtc.reset_mempool();
-    assert!(ckbtc.mempool().get(&txid).is_none());
+    assert!(!ckbtc.mempool().contains_key(&txid));
 
     // upgrade again to clear signed_tx from state.
     ckbtc
