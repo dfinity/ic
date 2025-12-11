@@ -76,7 +76,7 @@ impl Node {
         port: u16,
         tls_certificate: Vec<u8>,
     ) -> Result<Self, Error> {
-        let health_check_url = Url::from_str(&format!("https://{addr}:{port}/api/v2/status"))
+        let health_check_url = Url::from_str(&format!("https://{id}:{port}/api/v2/status"))
             .context("unable to create health check URL")?;
 
         Ok(Self {
