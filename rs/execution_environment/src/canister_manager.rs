@@ -2034,6 +2034,7 @@ impl CanisterManager {
             round_limits,
             validated_cycles_and_memory_usage,
         );
+        round_limits.instructions -= as_round_instructions(instructions);
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             canister.scheduler_state.heap_delta_debit = canister
@@ -2585,7 +2586,7 @@ impl CanisterManager {
         snapshot_id: SnapshotId,
         canister: &CanisterState,
         state: &ReplicatedState,
-    ) -> Result<ReadCanisterSnapshotMetadataResponse, CanisterManagerError> {
+    ) -> Result<(ReadCanisterSnapshotMetadataResponse, NumInstructions), CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
         let snapshot = self.get_snapshot(canister.canister_id(), snapshot_id, state)?;
@@ -2597,31 +2598,36 @@ impl CanisterManager {
         let maybe_instruction_counter = globals.pop();
         debug_assert!(maybe_instruction_counter.is_some());
 
-        Ok(ReadCanisterSnapshotMetadataResponse {
-            source: snapshot.source(),
-            taken_at_timestamp: snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
-            wasm_module_size: snapshot.execution_snapshot().wasm_binary.len() as u64,
-            globals,
-            wasm_memory_size: snapshot.execution_snapshot().wasm_memory.size.get() as u64
-                * WASM_PAGE_SIZE_IN_BYTES as u64,
-            stable_memory_size: snapshot.execution_snapshot().stable_memory.size.get() as u64
-                * WASM_PAGE_SIZE_IN_BYTES as u64,
-            wasm_chunk_store: snapshot
-                .chunk_store()
-                .keys()
-                .cloned()
-                .map(|x| ChunkHash { hash: x.to_vec() })
-                .collect(),
-            canister_version: snapshot.canister_version(),
-            certified_data: snapshot.certified_data().clone(),
-            global_timer: snapshot
-                .execution_snapshot()
-                .global_timer
-                .map(GlobalTimer::from),
-            on_low_wasm_memory_hook_status: snapshot
-                .execution_snapshot()
-                .on_low_wasm_memory_hook_status,
-        })
+        let num_instructions = self.config.canister_snapshot_data_baseline_instructions;
+
+        Ok((
+            ReadCanisterSnapshotMetadataResponse {
+                source: snapshot.source(),
+                taken_at_timestamp: snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
+                wasm_module_size: snapshot.execution_snapshot().wasm_binary.len() as u64,
+                globals,
+                wasm_memory_size: snapshot.execution_snapshot().wasm_memory.size.get() as u64
+                    * WASM_PAGE_SIZE_IN_BYTES as u64,
+                stable_memory_size: snapshot.execution_snapshot().stable_memory.size.get() as u64
+                    * WASM_PAGE_SIZE_IN_BYTES as u64,
+                wasm_chunk_store: snapshot
+                    .chunk_store()
+                    .keys()
+                    .cloned()
+                    .map(|x| ChunkHash { hash: x.to_vec() })
+                    .collect(),
+                canister_version: snapshot.canister_version(),
+                certified_data: snapshot.certified_data().clone(),
+                global_timer: snapshot
+                    .execution_snapshot()
+                    .global_timer
+                    .map(GlobalTimer::from),
+                on_low_wasm_memory_hook_status: snapshot
+                    .execution_snapshot()
+                    .on_low_wasm_memory_hook_status,
+            },
+            num_instructions,
+        ))
     }
 
     pub(crate) fn read_snapshot_data(
@@ -2632,19 +2638,21 @@ impl CanisterManager {
         kind: CanisterSnapshotDataKind,
         state: &ReplicatedState,
         subnet_size: usize,
-    ) -> Result<ReadCanisterSnapshotDataResponse, CanisterManagerError> {
+    ) -> Result<(ReadCanisterSnapshotDataResponse, NumInstructions), CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
         let snapshot = self.get_snapshot(canister.canister_id(), snapshot_id, state)?;
 
         // Charge upfront for the baseline plus the maximum possible size of the returned slice or fail.
         let num_response_bytes = get_response_size(&kind)?;
+        let num_instructions = self
+            .config
+            .canister_snapshot_data_baseline_instructions
+            .saturating_add(&NumInstructions::new(num_response_bytes));
         if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
             &sender,
             canister,
-            self.config
-                .canister_snapshot_data_baseline_instructions
-                .saturating_add(&NumInstructions::new(num_response_bytes)),
+            num_instructions,
             subnet_size,
             state.get_own_cost_schedule(),
             // For the `read_snapshot_data` operation, it does not matter if this is a Wasm64 or Wasm32 module.
@@ -2688,7 +2696,8 @@ impl CanisterManager {
                 Ok(chunk)
             }
         };
-        res.map(ReadCanisterSnapshotDataResponse::new)
+
+        res.map(|x| (ReadCanisterSnapshotDataResponse::new(x), num_instructions))
     }
 
     /// Creates a new snapshot based on the provided metadata and returns the new snapshot ID.
@@ -2819,6 +2828,7 @@ impl CanisterManager {
             round_limits,
             validated_cycles_and_memory_usage,
         );
+        round_limits.instructions -= as_round_instructions(instructions);
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             canister.scheduler_state.heap_delta_debit = canister
