@@ -194,6 +194,7 @@ pub fn setup(env: TestEnv) {
 
     write_sh_lib(&env, neuron_id, &http_gateway_url);
 
+    patch_env_local_store(&env);
 }
 
 fn setup_recovered_nns(
@@ -880,4 +881,39 @@ fn write_sh_lib(env: &TestEnv, neuron_id: NeuronId, http_gateway: &Url) {
     });
     let canonical_sh_lib_path = fs::canonicalize(set_testnet_env_vars_sh_path).unwrap();
     info!(logger, "source {canonical_sh_lib_path:?}");
+}
+
+// Overwrite the local store of the test environment with the new one, corresponding to the
+// recovered NNS. Any topology snapshot taken after this will reflect the new topology. This means
+// it will contain all mainnet subnets and nodes.
+fn patch_env_local_store(env: &TestEnv) {
+    let local_store_path = env
+        .get_path(PATH_RECOVERY_WORKING_DIR)
+        .join("data")
+        .join("ic_registry_local_store");
+    let mut cp = Command::new("cp");
+    cp.arg("-r")
+        .arg(local_store_path)
+        .arg(env.get_path("tmp_new_local_store"));
+    cp.output().expect("Failed to copy local store");
+
+    // Atomically swap the local stores, see `man 2 renameat2` for details.
+    nix::fcntl::renameat2(
+        None,
+        &fs::canonicalize(env.get_path("tmp_new_local_store")).unwrap(),
+        None,
+        &fs::canonicalize(
+            env.prep_dir("")
+                .map(|v| v.registry_local_store_path())
+                .unwrap(),
+        )
+        .unwrap(),
+        nix::fcntl::RenameFlags::RENAME_EXCHANGE,
+    )
+    .expect("Failed to atomically swap local stores");
+
+    let mut rm = Command::new("rm");
+    rm.arg("-rf").arg(env.get_path("tmp_new_local_store"));
+    rm.output()
+        .expect("Failed to remove temporary new local store");
 }
