@@ -374,7 +374,7 @@ pub async fn process_all_failed() {
 
 /// Accepts a `Failed` request, returns `EventType::Failed` or
 /// `RequestState::Failed` with updated recovery state.
-async fn process_failed(request: RequestState) -> ProcessingResult<EventType, RequestState> {
+async fn process_failed(request: RequestState) -> RecoveryResult {
     let RequestState::Failed {
         request,
         mut recovery_state,
@@ -382,7 +382,7 @@ async fn process_failed(request: RequestState) -> ProcessingResult<EventType, Re
     } = request
     else {
         println!("Error: list_failed returned bad variant");
-        return ProcessingResult::NoProgress;
+        return RecoveryResult::Unreachable;
     };
 
     recovery_state.restore_source_controllers = controller_recovery(
@@ -399,9 +399,9 @@ async fn process_failed(request: RequestState) -> ProcessingResult<EventType, Re
     .await;
 
     if recovery_state.is_done() {
-        ProcessingResult::Success(EventType::Failed { request, reason })
+        RecoveryResult::Success(EventType::Failed { request, reason })
     } else {
-        ProcessingResult::FatalFailure(RequestState::Failed {
+        RecoveryResult::InProgress(RequestState::Failed {
             request,
             recovery_state,
             reason,
@@ -510,20 +510,37 @@ impl ProcessingResult<RequestState, RequestState> {
     }
 }
 
-// Processing a `RequestState::Failure` successfully results in an `Event::Failed`.
-impl ProcessingResult<EventType, RequestState> {
+enum RecoveryResult {
+    Success(EventType),
+    InProgress(RequestState),
+    Unreachable,
+}
+
+// Processing (recovering) a `RequestState::Failure` successfully results in an `Event::Failed`;
+// otherwise, the recovery status stored in `RequestState::Failure` is updated.
+impl RecoveryResult {
+    fn is_success(&self) -> bool {
+        match self {
+            RecoveryResult::Success(_) => true,
+            RecoveryResult::InProgress(_) => false,
+            RecoveryResult::Unreachable => false,
+        }
+    }
+
     fn transition(self, old_state: RequestState) {
         match self {
-            ProcessingResult::Success(event) => {
-                // Cleanup successful.
+            RecoveryResult::Success(event) => {
+                // Recovery successful.
                 remove_request(&old_state);
                 insert_event(event);
             }
-            ProcessingResult::NoProgress => {}
-            ProcessingResult::FatalFailure(fail_state) => {
+            RecoveryResult::InProgress(new_state) => {
                 remove_request(&old_state);
-                insert_request(fail_state);
+                insert_request(new_state);
             }
+            // This arm should be unreachable, but we do not want
+            // to trap at runtime.
+            RecoveryResult::Unreachable => {}
         }
     }
 }
