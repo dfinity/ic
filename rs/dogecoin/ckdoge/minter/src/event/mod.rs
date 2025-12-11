@@ -1,9 +1,14 @@
 use candid::Deserialize;
-use ic_ckbtc_minter::state::CkBtcMinterState;
+use ic_ckbtc_minter::queries::WithdrawalFee;
 use ic_ckbtc_minter::state::eventlog::{
-    CkBtcEventLogger, CkBtcMinterEvent, EventLogger, EventType, ReplayLogError,
+    CkBtcMinterEvent, EventLogger, EventType as CkBtcMinterEventType, ReplacedReason,
+    ReplayLogError,
 };
 use ic_ckbtc_minter::state::invariants::CheckInvariants;
+use ic_ckbtc_minter::state::{ChangeOutput, RetrieveBtcRequest};
+use ic_ckbtc_minter::state::{CkBtcMinterState, SuspendedReason};
+use ic_ckbtc_minter::{Txid, Utxo};
+use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
 use std::borrow::Cow;
 
@@ -26,32 +31,10 @@ impl EventLogger for CkDogeEventLogger {
 
     fn replay<I: CheckInvariants>(
         &self,
-        mut events: impl Iterator<Item = Self::Event>,
+        events: impl Iterator<Item = Self::Event>,
     ) -> Result<CkBtcMinterState, ReplayLogError> {
-        let state = match events.next() {
-            Some(event) => match event.payload {
-                CkDogeMinterEventType::Init(args) => {
-                    CkBtcMinterState::from(ic_ckbtc_minter::lifecycle::init::InitArgs::from(args))
-                }
-                payload => {
-                    return Err(ReplayLogError::InconsistentLog(format!(
-                        "The first event is not Init: {payload:?}"
-                    )));
-                }
-            },
-            None => return Err(ReplayLogError::EmptyLog),
-        };
-        for event in events {
-            match event.payload {
-                CkDogeMinterEventType::Init(args) => {
-                    return Err(ReplayLogError::InconsistentLog(format!(
-                        "state re-initialization is not allowed: {args:?}"
-                    )));
-                }
-                _ => todo!(),
-            }
-        }
-        Ok(state)
+        ic_ckbtc_minter::state::eventlog::CkBtcEventLogger
+            .replay::<I>(events.map(CkBtcMinterEvent::from))
     }
 
     fn events_iter(&self) -> impl Iterator<Item = Self::Event> {
@@ -66,11 +49,15 @@ pub enum CkDogeMinterEventType {
     #[serde(rename = "init")]
     Init(crate::lifecycle::init::InitArgs),
 
+    /// Indicates the minter upgrade with specified arguments.
+    #[serde(rename = "upgrade")]
+    Upgrade(crate::lifecycle::init::UpgradeArgs),
+
     /// Indicates that the minter received new UTXOs to the specified account.
-    /// The minter emits this event _after_ it minted ckBTC.
+    /// The minter emits this event _after_ it minted ckDOGE.
     #[serde(rename = "received_utxos")]
     ReceivedUtxos {
-        /// The index of the transaction that mints ckBTC corresponding to the
+        /// The index of the transaction that mints ckDOGE corresponding to the
         /// received UTXOs.
         #[serde(rename = "mint_txid")]
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -82,28 +69,31 @@ pub enum CkDogeMinterEventType {
         utxos: Vec<Utxo>,
     },
 
-    /// Indicates that the minter accepted a new retrieve_btc request.
-    /// The minter emits this event _after_ it burnt ckBTC.
-    #[serde(rename = "accepted_retrieve_btc_request")]
-    AcceptedRetrieveBtcRequest(RetrieveBtcRequest),
+    #[serde(rename = "checked_utxo")]
+    CheckedUtxo { utxo: Utxo, account: Account },
 
-    /// Indicates that the minter removed a previous retrieve_btc request
+    /// Indicates that the minter accepted a new retrieve_doge request.
+    /// The minter emits this event _after_ it burnt ckDOGE.
+    #[serde(rename = "accepted_retrieve_doge_request")]
+    AcceptedRetrieveDogeRequest(RetrieveBtcRequest),
+
+    /// Indicates that the minter removed a previous retrieve_doge request
     /// because the retrieval amount was not enough to cover the transaction
     /// fees.
-    #[serde(rename = "removed_retrieve_btc_request")]
-    RemovedRetrieveBtcRequest {
+    #[serde(rename = "removed_retrieve_doge_request")]
+    RemovedRetrieveDogeRequest {
         #[serde(rename = "block_index")]
         block_index: u64,
     },
 
-    /// Indicates that the minter sent out a new transaction to the Bitcoin
+    /// Indicates that the minter sent out a new transaction to the Dogecoin
     /// network.
     #[serde(rename = "sent_transaction")]
-    SentBtcTransaction {
-        /// Block indices of retrieve_btc requests that caused the transaction.
+    SentDogeTransaction {
+        /// Block indices of retrieve_doge requests that caused the transaction.
         #[serde(rename = "requests")]
         request_block_indices: Vec<u64>,
-        /// The Txid of the Bitcoin transaction.
+        /// The Txid of the Dogecoin transaction.
         #[serde(rename = "txid")]
         txid: Txid,
         /// UTXOs used for the transaction.
@@ -127,13 +117,13 @@ pub enum CkDogeMinterEventType {
     },
 
     /// Indicates that the minter sent out a new transaction to replace an older transaction
-    /// because the old transaction did not appear on the Bitcoin blockchain.
+    /// because the old transaction did not appear on the Dogecoin blockchain.
     #[serde(rename = "replaced_transaction")]
-    ReplacedBtcTransaction {
-        /// The Txid of the old Bitcoin transaction.
+    ReplacedDogeTransaction {
+        /// The Txid of the old Dogecoin transaction.
         #[serde(rename = "old_txid")]
         old_txid: Txid,
-        /// The Txid of the new Bitcoin transaction.
+        /// The Txid of the new Dogecoin transaction.
         #[serde(rename = "new_txid")]
         new_txid: Txid,
         /// The output with the minter's change.
@@ -158,16 +148,17 @@ pub enum CkDogeMinterEventType {
         new_utxos: Option<Vec<Utxo>>,
     },
 
-    /// Indicates that the minter received enough confirmations for a bitcoin
+    /// Indicates that the minter received enough confirmations for a dogecoin
     /// transaction.
     #[serde(rename = "confirmed_transaction")]
-    ConfirmedBtcTransaction {
+    ConfirmedDogeTransaction {
         #[serde(rename = "txid")]
         txid: Txid,
     },
 
-    #[serde(rename = "checked_utxo_v2")]
-    CheckedUtxoV2 { utxo: Utxo, account: Account },
+    /// Indicates an UTXO is checked to be clean and pre-mint
+    #[serde(rename = "checked_utxo_mint_unknown")]
+    CheckedUtxoMintUnknown { account: Account, utxo: Utxo },
 
     /// Indicates a reimbursement.
     #[serde(rename = "schedule_withdrawal_reimbursement")]
@@ -177,7 +168,7 @@ pub enum CkDogeMinterEventType {
         /// The token amount to reimburse.
         amount: u64,
         /// The reason of the reimbursement.
-        reason: WithdrawalReimbursementReason,
+        reason: ic_ckbtc_minter::reimbursement::WithdrawalReimbursementReason,
         /// The corresponding burn block on the ledger.
         burn_block_index: u64,
     },
@@ -214,6 +205,226 @@ impl ic_ckbtc_minter::storage::StorableEvent for CkDogeMinterEvent {
 
 impl From<CkBtcMinterEvent> for CkDogeMinterEvent {
     fn from(CkBtcMinterEvent { timestamp, payload }: CkBtcMinterEvent) -> Self {
-        CkDogeMinterEvent { timestamp, payload }
+        CkDogeMinterEvent {
+            timestamp,
+            payload: payload.try_into().expect("BUG: when converting event type"),
+        }
+    }
+}
+
+impl From<CkDogeMinterEvent> for CkBtcMinterEvent {
+    fn from(CkDogeMinterEvent { timestamp, payload }: CkDogeMinterEvent) -> Self {
+        CkBtcMinterEvent {
+            timestamp,
+            payload: CkBtcMinterEventType::from(payload),
+        }
+    }
+}
+
+impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
+    type Error = String;
+    fn try_from(event: CkBtcMinterEventType) -> Result<Self, Self::Error> {
+        match event {
+            CkBtcMinterEventType::Init(args) => Ok(CkDogeMinterEventType::Init(
+                crate::lifecycle::init::InitArgs::from(args),
+            )),
+            CkBtcMinterEventType::Upgrade(args) => Ok(CkDogeMinterEventType::Upgrade(
+                crate::lifecycle::init::UpgradeArgs::from(args),
+            )),
+            CkBtcMinterEventType::ReceivedUtxos {
+                mint_txid,
+                to_account,
+                utxos,
+            } => Ok(CkDogeMinterEventType::ReceivedUtxos {
+                mint_txid,
+                to_account,
+                utxos,
+            }),
+            CkBtcMinterEventType::AcceptedRetrieveBtcRequest(args) => {
+                Ok(CkDogeMinterEventType::AcceptedRetrieveDogeRequest(args))
+            }
+            CkBtcMinterEventType::RemovedRetrieveBtcRequest { block_index } => {
+                Ok(CkDogeMinterEventType::RemovedRetrieveDogeRequest { block_index })
+            }
+            CkBtcMinterEventType::SentBtcTransaction {
+                request_block_indices,
+                txid,
+                utxos,
+                change_output,
+                submitted_at,
+                fee_per_vbyte,
+                withdrawal_fee,
+            } => Ok(CkDogeMinterEventType::SentDogeTransaction {
+                request_block_indices,
+                txid,
+                utxos,
+                change_output,
+                submitted_at,
+                fee_per_vbyte,
+                withdrawal_fee,
+            }),
+            CkBtcMinterEventType::ReplacedBtcTransaction {
+                old_txid,
+                new_txid,
+                change_output,
+                submitted_at,
+                fee_per_vbyte,
+                withdrawal_fee,
+                reason,
+                new_utxos,
+            } => Ok(CkDogeMinterEventType::ReplacedDogeTransaction {
+                old_txid,
+                new_txid,
+                change_output,
+                submitted_at,
+                fee_per_vbyte,
+                withdrawal_fee,
+                reason,
+                new_utxos,
+            }),
+            CkBtcMinterEventType::ConfirmedBtcTransaction { txid } => {
+                Ok(CkDogeMinterEventType::ConfirmedDogeTransaction { txid })
+            }
+            CkBtcMinterEventType::CheckedUtxoV2 { utxo, account } => {
+                Ok(CkDogeMinterEventType::CheckedUtxo { utxo, account })
+            }
+
+            CkBtcMinterEventType::CheckedUtxoMintUnknown { utxo, account } => {
+                Ok(CkDogeMinterEventType::CheckedUtxoMintUnknown { utxo, account })
+            }
+            CkBtcMinterEventType::ScheduleWithdrawalReimbursement {
+                account,
+                amount,
+                reason,
+                burn_block_index,
+            } => Ok(CkDogeMinterEventType::ScheduleWithdrawalReimbursement {
+                account,
+                amount,
+                reason,
+                burn_block_index,
+            }),
+            CkBtcMinterEventType::QuarantinedWithdrawalReimbursement { burn_block_index } => {
+                Ok(CkDogeMinterEventType::QuarantinedWithdrawalReimbursement { burn_block_index })
+            }
+            CkBtcMinterEventType::ReimbursedWithdrawal {
+                burn_block_index,
+                mint_block_index,
+            } => Ok(CkDogeMinterEventType::ReimbursedWithdrawal {
+                burn_block_index,
+                mint_block_index,
+            }),
+
+            CkBtcMinterEventType::SuspendedUtxo { reason, .. } => {
+                let explanation = match reason {
+                    SuspendedReason::ValueTooSmall => {
+                        "Unexpected ignored UTXO event since `check_fee` is null for ckDOGE"
+                    }
+                    SuspendedReason::Quarantined => {
+                        "Unexpected quarantined UTXO event since ckDOGE does not check whether UTXOs are tainted"
+                    }
+                };
+                Err(format!("{explanation}: {event:?}"))
+            }
+            // Ignore deprecated events for Dogecoin
+            #[allow(deprecated)]
+            CkBtcMinterEventType::DistributedKytFee { .. }
+            | CkBtcMinterEventType::CheckedUtxo { .. }
+            | CkBtcMinterEventType::IgnoredUtxo { .. }
+            | CkBtcMinterEventType::ReimbursedFailedDeposit { .. }
+            | CkBtcMinterEventType::ScheduleDepositReimbursement { .. }
+            | CkBtcMinterEventType::RetrieveBtcKytFailed { .. } => {
+                Err(format!("unexpected deprecated event: {event:?}"))
+            }
+        }
+    }
+}
+
+impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
+    fn from(event: CkDogeMinterEventType) -> Self {
+        match event {
+            CkDogeMinterEventType::Init(args) => CkBtcMinterEventType::Init(args.into()),
+            CkDogeMinterEventType::Upgrade(args) => CkBtcMinterEventType::Upgrade(args.into()),
+            CkDogeMinterEventType::ReceivedUtxos {
+                mint_txid,
+                to_account,
+                utxos,
+            } => CkBtcMinterEventType::ReceivedUtxos {
+                mint_txid,
+                to_account,
+                utxos,
+            },
+            CkDogeMinterEventType::CheckedUtxo { utxo, account } => {
+                CkBtcMinterEventType::CheckedUtxoV2 { utxo, account }
+            }
+            CkDogeMinterEventType::AcceptedRetrieveDogeRequest(args) => {
+                CkBtcMinterEventType::AcceptedRetrieveBtcRequest(args)
+            }
+            CkDogeMinterEventType::RemovedRetrieveDogeRequest { block_index } => {
+                CkBtcMinterEventType::RemovedRetrieveBtcRequest { block_index }
+            }
+            CkDogeMinterEventType::SentDogeTransaction {
+                request_block_indices,
+                txid,
+                utxos,
+                change_output,
+                submitted_at,
+                fee_per_vbyte,
+                withdrawal_fee,
+            } => CkBtcMinterEventType::SentBtcTransaction {
+                request_block_indices,
+                txid,
+                utxos,
+                change_output,
+                submitted_at,
+                fee_per_vbyte,
+                withdrawal_fee,
+            },
+            CkDogeMinterEventType::ReplacedDogeTransaction {
+                old_txid,
+                new_txid,
+                change_output,
+                submitted_at,
+                fee_per_vbyte,
+                withdrawal_fee,
+                reason,
+                new_utxos,
+            } => CkBtcMinterEventType::ReplacedBtcTransaction {
+                old_txid,
+                new_txid,
+                change_output,
+                submitted_at,
+                fee_per_vbyte,
+                withdrawal_fee,
+                reason,
+                new_utxos,
+            },
+            CkDogeMinterEventType::ConfirmedDogeTransaction { txid } => {
+                CkBtcMinterEventType::ConfirmedBtcTransaction { txid }
+            }
+            CkDogeMinterEventType::CheckedUtxoMintUnknown { account, utxo } => {
+                CkBtcMinterEventType::CheckedUtxoMintUnknown { account, utxo }
+            }
+            CkDogeMinterEventType::ScheduleWithdrawalReimbursement {
+                account,
+                amount,
+                reason,
+                burn_block_index,
+            } => CkBtcMinterEventType::ScheduleWithdrawalReimbursement {
+                account,
+                amount,
+                reason,
+                burn_block_index,
+            },
+            CkDogeMinterEventType::QuarantinedWithdrawalReimbursement { burn_block_index } => {
+                CkBtcMinterEventType::QuarantinedWithdrawalReimbursement { burn_block_index }
+            }
+            CkDogeMinterEventType::ReimbursedWithdrawal {
+                burn_block_index,
+                mint_block_index,
+            } => CkBtcMinterEventType::ReimbursedWithdrawal {
+                burn_block_index,
+                mint_block_index,
+            },
+        }
     }
 }

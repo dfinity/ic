@@ -171,7 +171,7 @@ where
             .iter()
             .flat_map(|(utxo, (mint_index, _minted_amount))| {
                 vec![
-                    CkDogeMinterEventType::CheckedUtxoV2 {
+                    CkDogeMinterEventType::CheckedUtxo {
                         utxo: utxo.clone(),
                         account: self.account,
                     },

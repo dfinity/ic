@@ -3,8 +3,7 @@ use crate::{MAX_TIME_IN_QUEUE, NNS_ROOT_PRINCIPAL};
 use candid::{Decode, Encode, Principal};
 use canlog::LogEntry;
 use ic_ckdoge_minter::{
-    EstimateFeeArg, EventType, Priority, Txid, UpdateBalanceArgs, UpdateBalanceError, Utxo,
-    UtxoStatus,
+    EstimateFeeArg, Priority, Txid, UpdateBalanceArgs, UpdateBalanceError, Utxo, UtxoStatus,
     candid_api::{
         EstimateWithdrawalFeeError, GetDogeAddressArgs, MinterInfo, RetrieveDogeOk,
         RetrieveDogeStatus, RetrieveDogeStatusRequest, RetrieveDogeWithApprovalArgs,

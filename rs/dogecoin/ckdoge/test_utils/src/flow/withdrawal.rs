@@ -9,7 +9,7 @@ use ic_bitcoin_canister_mock::{OutPoint, Utxo};
 use ic_ckdoge_minter::candid_api::EstimateWithdrawalFeeError;
 use ic_ckdoge_minter::fees::DogecoinFeeEstimator;
 use ic_ckdoge_minter::{
-    BitcoinAddress, BurnMemo, EventType, MIN_RESUBMISSION_DELAY, RetrieveBtcRequest, Txid,
+    BitcoinAddress, BurnMemo, MIN_RESUBMISSION_DELAY, RetrieveBtcRequest, Txid,
     WithdrawalReimbursementReason,
     address::DogecoinAddress,
     candid_api::{
@@ -137,7 +137,7 @@ where
         minter
             .assert_that_events()
             .ignoring_timestamp()
-            .contains_only_once_in_order(&[CkDogeMinterEventType::AcceptedRetrieveBtcRequest(
+            .contains_only_once_in_order(&[CkDogeMinterEventType::AcceptedRetrieveDogeRequest(
                 RetrieveBtcRequest {
                     amount: self.withdrawal_amount,
                     address: BitcoinAddress::P2pkh(address.as_bytes().to_vec().try_into().unwrap()),
@@ -222,10 +222,10 @@ where
             let sent_tx_event = minter
                 .assert_that_events()
                 .extract_exactly_one(
-                    |event| matches!(event, CkDogeMinterEventType::SentBtcTransaction {txid: sent_txid, ..} if sent_txid == &txid),
+                    |event| matches!(event, CkDogeMinterEventType::SentDogeTransaction {txid: sent_txid, ..} if sent_txid == &txid),
                 );
             match sent_tx_event {
-                CkDogeMinterEventType::SentBtcTransaction {
+                CkDogeMinterEventType::SentDogeTransaction {
                     request_block_indices,
                     txid: _,
                     utxos,
@@ -362,8 +362,8 @@ where
             .none_satisfy(|event| {
                 matches!(
                     event,
-                    CkDogeMinterEventType::SentBtcTransaction { .. }
-                        | CkDogeMinterEventType::ReplacedBtcTransaction { .. }
+                    CkDogeMinterEventType::SentDogeTransaction { .. }
+                        | CkDogeMinterEventType::ReplacedDogeTransaction { .. }
                 )
             })
             .contains_only_once_in_order(&[
@@ -452,7 +452,7 @@ where
             Txid::from(txid_bytes)
         );
         minter.assert_that_events().contains_only_once_in_order(&[
-            CkDogeMinterEventType::ConfirmedBtcTransaction {
+            CkDogeMinterEventType::ConfirmedDogeTransaction {
                 txid: txid_bytes.into(),
             },
         ]);
@@ -481,7 +481,7 @@ where
             .assert_that_events()
             .extract_exactly_one(
                 |event| matches!(event,
-                    CkDogeMinterEventType::ReplacedBtcTransaction {old_txid: event_old_txid, new_txid: event_new_txid, ..}
+                    CkDogeMinterEventType::ReplacedDogeTransaction {old_txid: event_old_txid, new_txid: event_new_txid, ..}
                     if event_old_txid == &old_txid && event_new_txid == &new_txid),
             );
         let new_tx = mempool_after

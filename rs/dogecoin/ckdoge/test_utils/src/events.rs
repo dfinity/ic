@@ -91,7 +91,7 @@ impl PartialEq for IgnoreTimestamp {
         }
         match (&self.0, &rhs.0) {
             (
-                CkDogeMinterEventType::SentBtcTransaction {
+                CkDogeMinterEventType::SentDogeTransaction {
                     request_block_indices,
                     txid,
                     utxos,
@@ -100,7 +100,7 @@ impl PartialEq for IgnoreTimestamp {
                     fee_per_vbyte,
                     withdrawal_fee,
                 },
-                CkDogeMinterEventType::SentBtcTransaction {
+                CkDogeMinterEventType::SentDogeTransaction {
                     request_block_indices: rhs_request_block_indices,
                     txid: rhs_txid,
                     utxos: rhs_utxos,
@@ -119,7 +119,7 @@ impl PartialEq for IgnoreTimestamp {
             }
 
             (
-                CkDogeMinterEventType::ReplacedBtcTransaction {
+                CkDogeMinterEventType::ReplacedDogeTransaction {
                     old_txid,
                     new_txid,
                     change_output,
@@ -129,7 +129,7 @@ impl PartialEq for IgnoreTimestamp {
                     reason,
                     new_utxos,
                 },
-                CkDogeMinterEventType::ReplacedBtcTransaction {
+                CkDogeMinterEventType::ReplacedDogeTransaction {
                     old_txid: rhs_old_txid,
                     new_txid: rhs_new_txid,
                     change_output: rhs_change_output,
@@ -149,7 +149,7 @@ impl PartialEq for IgnoreTimestamp {
                     && new_utxos == rhs_new_utxos
             }
             (
-                CkDogeMinterEventType::AcceptedRetrieveBtcRequest(RetrieveBtcRequest {
+                CkDogeMinterEventType::AcceptedRetrieveDogeRequest(RetrieveBtcRequest {
                     amount,
                     address,
                     block_index,
@@ -157,7 +157,7 @@ impl PartialEq for IgnoreTimestamp {
                     kyt_provider,
                     reimbursement_account,
                 }),
-                CkDogeMinterEventType::AcceptedRetrieveBtcRequest(RetrieveBtcRequest {
+                CkDogeMinterEventType::AcceptedRetrieveDogeRequest(RetrieveBtcRequest {
                     amount: rhs_amount,
                     address: rhs_address,
                     block_index: rhs_block_index,
