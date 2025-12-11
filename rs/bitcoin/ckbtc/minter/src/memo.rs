@@ -83,7 +83,7 @@ pub enum BurnMemo<'a> {
     #[n(1)]
     Consolidate {
         #[n(0)]
-        /// The total value of conslidated UTXOs.
+        /// The total value of consolidated UTXOs.
         value: u64,
         /// Number of consolidated UTXOs.
         #[n(1)]
