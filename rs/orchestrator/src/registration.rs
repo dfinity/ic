@@ -217,7 +217,7 @@ impl NodeRegistration {
         } else {
             // If we cannot determine the NNS public key, we log a warning but still proceed. The
             // agent will use the mainnet public key hardcoded in the agent library.
-            let message = "Failed to get NNS public key";
+            let message = "Failed to get NNS public key from config";
             warn!(self.log, "{}", message);
             UtilityCommand::notify_host(
                 format!("node-id {}: {}", self.node_id, message).as_str(),
