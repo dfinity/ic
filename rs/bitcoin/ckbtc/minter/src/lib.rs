@@ -779,6 +779,46 @@ pub async fn resubmit_transactions<
     fee_estimator: &Fee,
 ) {
     for (old_txid, submitted_tx) in transactions {
+        // ConsolidateUtxosRequest is directly re-sent if it already has signed_tx.
+        if let Some((network, txid, signed_tx)) = read_state(|s| {
+            s.current_consolidate_utxos_request
+                .as_ref()
+                .and_then(|req| {
+                    s.get_submitted_transaction(req.block_index).and_then(|tx| {
+                        if tx.txid == old_txid {
+                            tx.signed_tx
+                                .clone()
+                                .map(|signed_tx| (s.btc_network, tx.txid, signed_tx))
+                        } else {
+                            None
+                        }
+                    })
+                })
+        }) {
+            log!(
+                Priority::Info,
+                "[resubmit_transactions]: re-sending a signed consolidation transaction {}",
+                txid,
+            );
+            match runtime.send_transaction(&signed_tx, network).await {
+                Ok(_) => {
+                    log!(
+                        Priority::Debug,
+                        "[resubmit_transactions]: successfully sent transaction {}",
+                        txid,
+                    );
+                }
+                Err(err) => {
+                    log!(
+                        Priority::Info,
+                        "[resubmit_transactions]: failed to send transaction {} again: {}",
+                        txid,
+                        err
+                    );
+                }
+            }
+            continue;
+        }
         let tx_fee_per_vbyte = match submitted_tx.fee_per_vbyte {
             Some(prev_fee) => {
                 // Ensure that the fee is at least min relay fee higher than the previous
@@ -814,7 +854,7 @@ pub async fn resubmit_transactions<
             Err(BuildTxError::InvalidTransaction(err)) => {
                 log!(
                     Priority::Info,
-                    "[finalize_requests]: {:?}, transaction {} will be canceled",
+                    "[resubmit_transactions]: {:?}, transaction {} will be canceled",
                     err,
                     &submitted_tx.txid,
                 );
@@ -857,7 +897,7 @@ pub async fn resubmit_transactions<
             Err(err) => {
                 log!(
                     Priority::Debug,
-                    "[finalize_requests]: failed to rebuild stuck transaction {}: {:?}",
+                    "[resubmit_transactions]: failed to rebuild stuck transaction {}: {:?}",
                     &submitted_tx.txid,
                     err
                 );
@@ -880,7 +920,7 @@ pub async fn resubmit_transactions<
             Err(err) => {
                 log!(
                     Priority::Info,
-                    "[finalize_requests]: failed to sign a BTC transaction: {}",
+                    "[resubmit_transactions]: failed to sign a BTC transaction: {}",
                     err
                 );
                 continue;
@@ -1370,7 +1410,7 @@ pub enum ConsolidateUtxosError {
     TooSoon,
     TooFewAvailableUtxos,
     EstimateFeeNotAvailable,
-    ResubmissionNotAvailable,
+    StillProcessing,
     BuildTx(BuildTxError),
     BurnCkbtc(updates::retrieve_btc::RetrieveBtcError, u64),
     SubmitRequest(CallError),
@@ -1413,44 +1453,9 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
         return Err(ConsolidateUtxosError::TooSoon);
     }
 
-    // If there is still an on-going transaction, try to submit it again.
+    // Return early if there is still an on-going transaction.
     if read_state(|s| s.current_consolidate_utxos_request.is_some()) {
-        if let Some((network, txid, signed_tx)) = read_state(|s| {
-            s.current_consolidate_utxos_request
-                .as_ref()
-                .and_then(|req| {
-                    s.get_submitted_transaction(req.block_index).and_then(|tx| {
-                        tx.signed_tx
-                            .clone()
-                            .map(|signed_tx| (s.btc_network, tx.txid, signed_tx))
-                    })
-                })
-        }) {
-            log!(
-                Priority::Info,
-                "[consolidate_utxos]: re-sending a signed transaction {}",
-                txid,
-            );
-            runtime
-                .send_transaction(&signed_tx, network)
-                .await
-                .inspect_err(|err| {
-                    log!(
-                        Priority::Info,
-                        "[consolidate_utxos]: failed to send a Bitcoin transaction: {}",
-                        err
-                    );
-                })
-                .map_err(ConsolidateUtxosError::SubmitRequest)?;
-            log!(
-                Priority::Debug,
-                "[consolidate_utxos]: successfully sent transaction {}",
-                &txid,
-            );
-            return Ok(txid);
-        } else {
-            return Err(ConsolidateUtxosError::ResubmissionNotAvailable);
-        }
+        return Err(ConsolidateUtxosError::StillProcessing);
     }
 
     mutate_state(|s| s.last_consolidate_utxos_request_created_time_ns = Some(now));
