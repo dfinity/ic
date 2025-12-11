@@ -1,5 +1,5 @@
 use candid::Principal;
-use clap::{Args, Parser};
+use clap::{ArgGroup, Args, Parser};
 use humantime::parse_duration;
 use ic_bn_lib_common::{
     parse_size, parse_size_usize,
@@ -74,13 +74,14 @@ pub struct Cli {
 }
 
 #[derive(Args)]
+#[clap(group(ArgGroup::new("registry").required(true)))]
 pub struct Registry {
     /// Comma separated list of NNS URLs to bootstrap the registry
     #[clap(env, long, value_delimiter = ',', default_value = "https://ic0.app")]
     pub registry_nns_urls: Vec<Url>,
 
     /// The path to the NNS public key file.
-    /// If not specified - hardcoded one will be used.
+    /// Required if registry local store isn't initialized.
     #[clap(env, long)]
     pub registry_nns_pub_key_pem: Option<PathBuf>,
 
@@ -89,7 +90,7 @@ pub struct Registry {
     pub registry_nns_poll_interval: Duration,
 
     /// The registry local store path to be populated
-    #[clap(env, long)]
+    #[clap(env, long, group = "registry")]
     pub registry_local_store_path: Option<PathBuf>,
 
     /// Whether to disable internal registry replicator
@@ -99,7 +100,7 @@ pub struct Registry {
     /// Instead of using the registry - use the specified replica nodes.
     /// This disables the registry client, registry replicator and health checking.
     /// To be used mostly for testing.
-    #[clap(env, long)]
+    #[clap(env, long, group = "registry")]
     pub registry_stub_replica: Vec<SocketAddr>,
 
     /// Minimum snapshot version age to be useful for the initial publishing
@@ -116,17 +117,18 @@ pub struct Load {
 }
 
 #[derive(Args)]
+#[clap(group(ArgGroup::new("listen").required(true).multiple(true)))]
 pub struct Listen {
     /// Port to listen on for HTTP (listens on IPv6 wildcard "::")
-    #[clap(env, long)]
+    #[clap(env, long, group = "listen")]
     pub listen_http_port: Option<u16>,
 
     /// Port to listen for HTTPS (listens on IPv6 wildcard "::")
-    #[clap(env, long)]
+    #[clap(env, long, group = "listen")]
     pub listen_https_port: Option<u16>,
 
     /// Unix socket to listen on for HTTP
-    #[clap(env, long)]
+    #[clap(env, long, group = "listen")]
     pub listen_http_unix_socket: Option<PathBuf>,
 
     /// Port on 127.0.0.1 to listen on for loopback usage.
@@ -269,27 +271,28 @@ pub struct Observability {
     #[clap(env, long)]
     pub obs_log_anonymization_canister_id: Option<Principal>,
 
-    /// Frequency to poll the canister for the anonymization salt
+    /// How frequently to poll the canister for the anonymization salt
     #[clap(env, long, default_value = "60s", value_parser = parse_duration)]
     pub obs_log_anonymization_poll_interval: Duration,
 }
 
 #[derive(Args)]
 pub struct RateLimiting {
-    /// Allowed number of update calls per second per subnet per boundary node. Panics if 0 is passed!
-    #[clap(env, long)]
+    /// Allowed number of update calls per second per subnet per boundary node.
+    #[clap(env, long, value_parser = clap::value_parser!(u32).range(1..))]
     pub rate_limit_per_second_per_subnet: Option<u32>,
 
-    /// Allowed number of update calls per second per ip per boundary node. Panics if 0 is passed!
-    #[clap(env, long)]
+    /// Allowed number of update calls per second per ip per boundary node.
+    #[clap(env, long, value_parser = clap::value_parser!(u32).range(1..))]
     pub rate_limit_per_second_per_ip: Option<u32>,
 
     /// Path to a generic rate-limiter rules, if the file does not exist - no rules are applied.
-    /// File is checked every 10sec and is reloaded if the changes are detected.
+    /// File is re-read periodically (see below) and new rules are applied if the changes are detected.
+    ///
     /// Expecting YAML list with objects that have at least one of
     /// (canister_id, subnet_id, methods_regex, request_types, limit) fields.
-    /// E.g.
     ///
+    /// Example:
     /// - canister_id: aaaaa-aa
     ///   methods_regex: ^(foo|bar)$
     ///   request_types: [query]
@@ -330,11 +333,13 @@ pub struct RateLimiting {
 
 #[derive(Args)]
 pub struct Cache {
-    /// Maximum size of in-memory cache in bytes. Specify a size to enable caching.
+    /// Maximum size of in-memory cache in bytes.
+    /// Specify a size to enable caching.
     #[clap(env, long, value_parser = parse_size)]
     pub cache_size: Option<u64>,
 
-    /// Maximum size of a single cached response item in bytes
+    /// Maximum size of a single response item in bytes.
+    /// Responses larger than this will not be cached.
     #[clap(env, long, default_value = "10MB", value_parser = parse_size_usize)]
     pub cache_max_item_size: usize,
 
@@ -343,7 +348,7 @@ pub struct Cache {
     pub cache_ttl: Duration,
 
     /// Whether to cache non-anonymous requests
-    #[clap(env, long, default_value = "false")]
+    #[clap(env, long)]
     pub cache_non_anonymous: bool,
 }
 
@@ -351,16 +356,17 @@ pub struct Cache {
 pub struct Retry {
     /// How many times to retry a failed request.
     /// Should be in range [0..10], value of 0 disables the retries.
-    /// If there are less healthy nodes in the subnet - then less retries would be done.
+    /// If there are less healthy nodes in the subnet
+    /// then retry count will be capped by their count.
     #[clap(env, long, default_value = "2", value_parser = clap::value_parser!(u8).range(0..11))]
     pub retry_count: u8,
 
     /// Whether to retry update calls
-    #[clap(env, long, default_value = "false")]
+    #[clap(env, long)]
     pub retry_update_call: bool,
 
     /// Whether to use latency-based routing for /call
-    #[clap(env, long, default_value = "false")]
+    #[clap(env, long)]
     pub retry_disable_latency_routing: bool,
 }
 
@@ -370,17 +376,17 @@ pub struct Bouncer {
     #[clap(env, long)]
     pub bouncer_enable: bool,
 
-    /// Whether to use sudo to call `nft` executable
-    #[clap(env, long, default_value = "true")]
-    pub bouncer_sudo: bool,
+    /// Whether to avoid using sudo to call the `nft` executable
+    #[clap(env, long)]
+    pub bouncer_bypass_sudo: bool,
 
     /// Path to a sudo binary, defaults to /usr/bin/sudo
-    #[clap(env, long)]
-    pub bouncer_sudo_path: Option<String>,
+    #[clap(env, long, default_value = "/usr/bin/sudo")]
+    pub bouncer_sudo_path: String,
 
     /// Path to a nft binary, defaults to /usr/sbin/nft
-    #[clap(env, long)]
-    pub bouncer_nft_path: Option<String>,
+    #[clap(env, long, default_value = "/usr/sbin/nft")]
+    pub bouncer_nft_path: String,
 
     /// Number of requests per second that are allowed from a single IP
     #[clap(env, long, default_value = "300", value_parser = clap::value_parser!(u32).range(1..))]
@@ -437,7 +443,7 @@ pub struct Misc {
 
     /// Configuration of the node's crypto-vault to use with the IC agent.
     /// If not specified - then the agent will use anonymous sender.
-    #[clap(env, long, value_parser=parse_crypto_config)]
+    #[clap(env, long, value_parser = parse_crypto_config)]
     pub crypto_config: Option<CryptoConfig>,
 }
 
