@@ -178,7 +178,7 @@ mod deposit {
 
 mod withdrawal {
     use ic_ckdoge_minter::{
-        InvalidTransactionError, MAX_NUM_INPUTS_IN_TRANSACTION, UTXOS_COUNT_THRESHOLD,
+        DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, InvalidTransactionError, UTXOS_COUNT_THRESHOLD,
         WithdrawalReimbursementReason, candid_api::RetrieveDogeWithApprovalError,
     };
     use ic_ckdoge_minter_test_utils::flow::withdrawal::assert_uses_utxos;
@@ -394,7 +394,7 @@ mod withdrawal {
             .minter_await_withdrawal_reimbursed(WithdrawalReimbursementReason::InvalidTransaction(
                 InvalidTransactionError::TooManyInputs {
                     num_inputs: too_large_num_inputs as usize,
-                    max_num_inputs: MAX_NUM_INPUTS_IN_TRANSACTION,
+                    max_num_inputs: DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
                 },
             ));
     }
