@@ -55,7 +55,7 @@ if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
     bazel_args+=(
 
         # write execlog, mostly for build reproducibility checks
-        --execution_log_compact_file="$BAZEL_ACTION_METRICS_OUT/execlog-$command_timestamp.zst"
+        --execution_log_json_file="$BAZEL_ACTION_METRICS_OUT/execlog-$command_timestamp.json"
 
         --verbose_failures=true
 

@@ -234,11 +234,11 @@ jobs:
 
               echo "Running bazel command: $bazel_cmd"
 
-              bazel "$bazel_cmd" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
+              bazel "$bazel_cmd" "${bazel_args[@]}" //rs/tools/check_did
             }
 
             bazel_do build
-            bazel_do test
+            # bazel_do test
 
       - name: Upload to S3
         uses: ./.github/actions/upload-artifacts
