@@ -171,7 +171,7 @@ We will soon be accepting external contributions (date TBD). Please follow these
 
 === Bug Reports
 
-If you discover any bugs and vulnerabilities, please follow the procedure outling in link:SECURITY.md[SECURITY.md]
+If you discover any bugs and vulnerabilities, please follow the procedure outlined in link:SECURITY.md[SECURITY.md]
 
 === Rust Dependency Policy
 
