@@ -134,7 +134,7 @@ pub fn estimate_retrieve_doge_fee<F: FeeEstimator>(
     available_utxos: &UtxoSet,
     withdrawal_amount: u64,
     median_fee_millikoinu_per_byte: u64,
-    max_num_inputs_in_transaction: usize, 
+    max_num_inputs_in_transaction: usize,
     fee_estimator: &F,
 ) -> Result<WithdrawalFee, BuildTxError> {
     // We simulate the algorithm that selects UTXOs for the
