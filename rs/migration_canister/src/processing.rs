@@ -4,17 +4,18 @@
 //! process several requests concurrently.
 
 use crate::{
-    CYCLES_COST_PER_MIGRATION, EventType, RequestState, ValidationError,
+    CYCLES_COST_PER_MIGRATION, EventType, RecoveryState, RequestState, ValidationError,
     canister_state::{
         MethodGuard,
         events::insert_event,
         requests::{insert_request, list_by, remove_request},
     },
+    controller_recovery::controller_recovery,
     external_interfaces::{
         management::{
             CanisterStatusType, assert_no_snapshots, canister_status, delete_canister,
-            get_canister_info, get_registry_version, rename_canister, set_exclusive_controller,
-            set_original_controllers,
+            get_canister_info, get_registry_version, rename_canister, set_controllers,
+            set_exclusive_controller,
         },
         registry::migrate_canister,
     },
@@ -26,7 +27,7 @@ use ic_cdk::{
     println,
 };
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
-use std::{convert::Infallible, future::Future, iter::zip};
+use std::{future::Future, iter::zip};
 
 /// Given a lock tag, a filter predicate on `RequestState` and a processor function,
 /// invokes the processor on all requests in the given state concurrently and
@@ -70,6 +71,7 @@ pub async fn process_all_by_predicate<F>(
 }
 
 /// Accepts an `Accepted` request, returns `ControllersChanged` on success.
+/// This function is an exception in that it tries to make _two_ effectful calls.
 pub async fn process_accepted(
     request: RequestState,
 ) -> ProcessingResult<RequestState, RequestState> {
@@ -77,6 +79,7 @@ pub async fn process_accepted(
         println!("Error: list_by Accepted returned bad variant");
         return ProcessingResult::NoProgress;
     };
+
     // Set controller of source
     let res = set_exclusive_controller(request.source)
         .await
@@ -85,14 +88,12 @@ pub async fn process_accepted(
         })
         .map_failure(|reason| RequestState::Failed {
             request: request.clone(),
+            recovery_state: RecoveryState::new(),
             reason,
         });
     if !res.is_success() {
         return res;
     }
-    // This function is an exception in that it tries to make _two_ effectful calls. The reason is
-    // that the cleanup after failure must cleanup both source and target controllers in every
-    // case, so we are not making the cleanup worse by attempting both.
 
     // Set controller of target
     set_exclusive_controller(request.target)
@@ -100,7 +101,11 @@ pub async fn process_accepted(
         .map_success(|_| RequestState::ControllersChanged {
             request: request.clone(),
         })
-        .map_failure(|reason| RequestState::Failed { request, reason })
+        .map_failure(|reason| RequestState::Failed {
+            request,
+            recovery_state: RecoveryState::new(),
+            reason,
+        })
 }
 
 pub async fn process_controllers_changed(
@@ -118,12 +123,14 @@ pub async fn process_controllers_changed(
     if source_status.status != CanisterStatusType::Stopped {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
+            recovery_state: RecoveryState::new(),
             reason: "Source is not stopped.".to_string(),
         });
     }
     if !source_status.ready_for_migration {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
+            recovery_state: RecoveryState::new(),
             reason: "Source is not ready for migration.".to_string(),
         });
     }
@@ -131,6 +138,7 @@ pub async fn process_controllers_changed(
     if canister_version > u64::MAX / 2 {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
+            recovery_state: RecoveryState::new(),
             reason: "Source version is too large.".to_string(),
         });
     }
@@ -141,6 +149,7 @@ pub async fn process_controllers_changed(
     if target_status.status != CanisterStatusType::Stopped {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
+            recovery_state: RecoveryState::new(),
             reason: "Target is not stopped.".to_string(),
         });
     }
@@ -150,6 +159,7 @@ pub async fn process_controllers_changed(
         ProcessingResult::FatalFailure(_) => {
             return ProcessingResult::FatalFailure(RequestState::Failed {
                 request,
+                recovery_state: RecoveryState::new(),
                 reason: "Target has snapshots.".to_string(),
             });
         }
@@ -158,6 +168,7 @@ pub async fn process_controllers_changed(
     if source_status.cycles < CYCLES_COST_PER_MIGRATION {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
+            recovery_state: RecoveryState::new(),
             reason: format!(
                 "Source does not have sufficient cycles: {} < {}.",
                 source_status.cycles, CYCLES_COST_PER_MIGRATION
@@ -176,6 +187,7 @@ pub async fn process_controllers_changed(
         })
         .map_failure(|()| RequestState::Failed {
             request,
+            recovery_state: RecoveryState::new(),
             reason: "Source has been deleted".to_string(),
         })
 }
@@ -322,7 +334,10 @@ pub async fn process_source_deleted(
         .cloned()
         .collect::<Vec<Principal>>();
     let ProcessingResult::Success(()) =
-        set_original_controllers(request.source, controllers, request.target_subnet).await
+        // The migration canister is the exclusive controller of `request.source`
+        // and thus the following call cannot fail because of the caller
+        // not being a controller.
+        set_controllers(request.source, controllers, request.target_subnet).await
     else {
         return ProcessingResult::NoProgress;
     };
@@ -357,36 +372,41 @@ pub async fn process_all_failed() {
     );
 }
 
-/// Accepts a `Failed` request, returns `Event::Failed` or must be retried.
-// TODO: Confirm this only occurs before `rename_canister`, otherwise the subnet_id args are wrong.
-async fn process_failed(request: RequestState) -> ProcessingResult<EventType, Infallible> {
-    let RequestState::Failed { request, reason } = request else {
+/// Accepts a `Failed` request, returns `EventType::Failed` or
+/// `RequestState::Failed` with updated recovery state.
+async fn process_failed(request: RequestState) -> RecoveryResult {
+    let RequestState::Failed {
+        request,
+        mut recovery_state,
+        reason,
+    } = request
+    else {
         println!("Error: list_failed returned bad variant");
-        return ProcessingResult::NoProgress;
+        return RecoveryResult::Unreachable;
     };
 
-    let res1 = set_original_controllers(
+    recovery_state.restore_source_controllers = controller_recovery(
+        recovery_state.restore_source_controllers,
         request.source,
         request.source_original_controllers.clone(),
-        request.source_subnet,
     )
     .await;
-    let res2 = set_original_controllers(
+    recovery_state.restore_target_controllers = controller_recovery(
+        recovery_state.restore_target_controllers,
         request.target,
         request.target_original_controllers.clone(),
-        request.target_subnet,
     )
     .await;
 
-    if res1.is_fatal_failure() || res2.is_fatal_failure() {
-        println!("Error: Unreachable: `set_original_controllers` must not return Failure");
+    if recovery_state.is_done() {
+        RecoveryResult::Success(EventType::Failed { request, reason })
+    } else {
+        RecoveryResult::InProgress(RequestState::Failed {
+            request,
+            recovery_state,
+            reason,
+        })
     }
-    // If any did not succeed, we have to retry later.
-    if res1.is_no_progress() || res2.is_no_progress() {
-        return ProcessingResult::NoProgress;
-    }
-    // We successfully returned controllership.
-    ProcessingResult::Success(EventType::Failed { request, reason })
 }
 
 pub async fn process_all_succeeded() {
@@ -490,17 +510,41 @@ impl ProcessingResult<RequestState, RequestState> {
     }
 }
 
-// Processing a `RequestState::Failure` successfully results in an `Event::Failed`.
-impl ProcessingResult<EventType, Infallible> {
+enum RecoveryResult {
+    Success(EventType),
+    InProgress(RequestState),
+    Unreachable,
+}
+
+// Processing (recovering) a `RequestState::Failure` successfully results in an `Event::Failed`;
+// otherwise, the recovery status stored in `RequestState::Failure` is updated.
+impl RecoveryResult {
+    fn is_success(&self) -> bool {
+        match self {
+            RecoveryResult::Success(_) => true,
+            RecoveryResult::InProgress(_) => false,
+            RecoveryResult::Unreachable => false,
+        }
+    }
+
     fn transition(self, old_state: RequestState) {
         match self {
-            ProcessingResult::Success(event) => {
-                // Cleanup successful.
+            RecoveryResult::Success(event) => {
+                // Recovery successful.
                 remove_request(&old_state);
                 insert_event(event);
             }
-            ProcessingResult::NoProgress => {}
-            ProcessingResult::FatalFailure(_) => {}
+            RecoveryResult::InProgress(new_state) => {
+                remove_request(&old_state);
+                insert_request(new_state);
+            }
+            // This arm should be unreachable, but we do not want
+            // to trap at runtime.
+            RecoveryResult::Unreachable => {
+                println!(
+                    "We encountered `RecoveryResult::Unreachable` for request {old_state}. This is a bug!"
+                );
+            }
         }
     }
 }

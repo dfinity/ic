@@ -1010,6 +1010,7 @@ impl<'a> Action<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::complaints::tests::crypto_failing_basic_signing::CryptoWrapperFailingBasicSigning;
     use crate::test_utils::*;
     use assert_matches::assert_matches;
     use ic_consensus_utils::crypto::SignVerify;
@@ -1022,7 +1023,7 @@ mod tests {
     use ic_types::{
         Height,
         consensus::idkg::{IDkgMasterPublicKeyId, IDkgObject, PreSigId, RequestId, TranscriptRef},
-        crypto::AlgorithmId,
+        crypto::{AlgorithmId, CryptoError},
         messages::CallbackId,
         time::UNIX_EPOCH,
     };
@@ -2187,11 +2188,19 @@ mod tests {
                     .next()
                     .unwrap()
                     .crypto();
-                let (idkg_pool, complaint_handler) =
-                    create_complaint_dependencies_with_crypto(pool_config, logger, Some(crypto));
+                let crypto_failing_basic_signing = Arc::new(CryptoWrapperFailingBasicSigning::new(
+                    crypto,
+                    CryptoError::TransientInternalError {
+                        internal_error: "boom!".to_string(),
+                    },
+                ));
+                let (idkg_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
+                    pool_config,
+                    logger,
+                    Some(crypto_failing_basic_signing),
+                );
 
-                // Will attempt to create a complaint but fail since node ID of crypto and
-                // complaint_handler are different
+                // Will attempt to create a complaint but fail because basic signing fails
                 let status = complaint_handler.load_transcript(&idkg_pool, &transcript);
                 assert_matches!(status, TranscriptLoadStatus::Failure);
             })
@@ -2270,5 +2279,522 @@ mod tests {
                 assert_matches!(status, TranscriptLoadStatus::Success);
             })
         })
+    }
+
+    mod crypto_failing_basic_signing {
+        use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
+        use ic_interfaces::crypto::{
+            BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
+            IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
+            LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm,
+            ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSchnorrSigVerifier,
+            ThresholdSchnorrSigner, ThresholdSigVerifier, ThresholdSigVerifierByPublicKey,
+            ThresholdSigner, VetKdProtocol,
+        };
+        use ic_types::crypto::canister_threshold_sig::error::{
+            IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
+            IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
+            IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
+            IDkgVerifyInitialDealingsError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
+            ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
+            ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
+            ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
+            ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
+        };
+        use ic_types::crypto::canister_threshold_sig::idkg::{
+            BatchSignedIDkgDealings, IDkgComplaint, IDkgOpening, IDkgTranscript,
+            IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
+        };
+        use ic_types::crypto::canister_threshold_sig::{
+            ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
+            ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
+        };
+        use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
+        use ic_types::crypto::threshold_sig::ni_dkg::errors::{
+            create_dealing_error::DkgCreateDealingError,
+            create_transcript_error::DkgCreateTranscriptError,
+            key_removal_error::DkgKeyRemovalError, load_transcript_error::DkgLoadTranscriptError,
+            verify_dealing_error::DkgVerifyDealingError,
+        };
+        use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTranscript};
+        use ic_types::crypto::vetkd::{
+            VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdKeyShareCombinationError,
+            VetKdKeyShareCreationError, VetKdKeyShareVerificationError, VetKdKeyVerificationError,
+        };
+        use ic_types::crypto::{
+            BasicSigOf, CombinedMultiSigOf, CombinedThresholdSigOf, CryptoError, CryptoResult,
+            CurrentNodePublicKeys, IndividualMultiSigOf, Signable, ThresholdSigShareOf,
+            UserPublicKey,
+        };
+        use ic_types::signature::BasicSignatureBatch;
+        use ic_types::{NodeId, RegistryVersion, SubnetId};
+        use std::collections::{BTreeMap, BTreeSet, HashSet};
+        use std::sync::Arc;
+
+        pub struct CryptoWrapperFailingBasicSigning<C> {
+            crypto: Arc<C>,
+            sign_basic_error: CryptoError,
+        }
+
+        impl<C> CryptoWrapperFailingBasicSigning<C> {
+            pub fn new(crypto: Arc<C>, sign_basic_error: CryptoError) -> Self {
+                Self {
+                    crypto,
+                    sign_basic_error,
+                }
+            }
+        }
+
+        impl<C: BasicSigner<T>, T: Signable> BasicSigner<T> for CryptoWrapperFailingBasicSigning<C> {
+            fn sign_basic(
+                &self,
+                _message: &T,
+                _signer: NodeId,
+                _registry_version: RegistryVersion,
+            ) -> CryptoResult<BasicSigOf<T>> {
+                Err(self.sign_basic_error.clone())
+            }
+        }
+
+        impl<T: Signable, C: BasicSigVerifier<T>> BasicSigVerifier<T>
+            for CryptoWrapperFailingBasicSigning<C>
+        {
+            fn verify_basic_sig(
+                &self,
+                signature: &BasicSigOf<T>,
+                message: &T,
+                signer: NodeId,
+                registry_version: RegistryVersion,
+            ) -> CryptoResult<()> {
+                self.crypto
+                    .verify_basic_sig(signature, message, signer, registry_version)
+            }
+
+            fn combine_basic_sig(
+                &self,
+                signatures: BTreeMap<NodeId, &BasicSigOf<T>>,
+                registry_version: RegistryVersion,
+            ) -> CryptoResult<BasicSignatureBatch<T>> {
+                self.crypto.combine_basic_sig(signatures, registry_version)
+            }
+
+            fn verify_basic_sig_batch(
+                &self,
+                signature_batch: &BasicSignatureBatch<T>,
+                message: &T,
+                registry_version: RegistryVersion,
+            ) -> CryptoResult<()> {
+                self.crypto
+                    .verify_basic_sig_batch(signature_batch, message, registry_version)
+            }
+        }
+
+        impl<C: KeyManager> KeyManager for CryptoWrapperFailingBasicSigning<C> {
+            fn check_keys_with_registry(
+                &self,
+                registry_version: RegistryVersion,
+            ) -> Result<(), CheckKeysWithRegistryError> {
+                self.crypto.check_keys_with_registry(registry_version)
+            }
+
+            fn current_node_public_keys(
+                &self,
+            ) -> Result<CurrentNodePublicKeys, CurrentNodePublicKeysError> {
+                self.crypto.current_node_public_keys()
+            }
+
+            fn rotate_idkg_dealing_encryption_keys(
+                &self,
+                registry_version: RegistryVersion,
+            ) -> Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError> {
+                self.crypto
+                    .rotate_idkg_dealing_encryption_keys(registry_version)
+            }
+        }
+
+        impl<C: NiDkgAlgorithm> NiDkgAlgorithm for CryptoWrapperFailingBasicSigning<C> {
+            fn create_dealing(
+                &self,
+                config: &NiDkgConfig,
+            ) -> Result<NiDkgDealing, DkgCreateDealingError> {
+                self.crypto.create_dealing(config)
+            }
+
+            fn verify_dealing(
+                &self,
+                config: &NiDkgConfig,
+                dealer: NodeId,
+                dealing: &NiDkgDealing,
+            ) -> Result<(), DkgVerifyDealingError> {
+                self.crypto.verify_dealing(config, dealer, dealing)
+            }
+
+            fn create_transcript(
+                &self,
+                config: &NiDkgConfig,
+                verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+            ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
+                self.crypto.create_transcript(config, verified_dealings)
+            }
+
+            fn load_transcript(
+                &self,
+                transcript: &NiDkgTranscript,
+            ) -> Result<LoadTranscriptResult, DkgLoadTranscriptError> {
+                self.crypto.load_transcript(transcript)
+            }
+
+            fn retain_only_active_keys(
+                &self,
+                transcripts: HashSet<NiDkgTranscript>,
+            ) -> Result<(), DkgKeyRemovalError> {
+                self.crypto.retain_only_active_keys(transcripts)
+            }
+        }
+
+        impl<C: ThresholdSigner<T>, T: Signable> ThresholdSigner<T>
+            for CryptoWrapperFailingBasicSigning<C>
+        {
+            fn sign_threshold(
+                &self,
+                message: &T,
+                dkg_id: &NiDkgId,
+            ) -> CryptoResult<ThresholdSigShareOf<T>> {
+                self.crypto.sign_threshold(message, dkg_id)
+            }
+        }
+
+        impl<C: ThresholdSigVerifier<T>, T: Signable> ThresholdSigVerifier<T>
+            for CryptoWrapperFailingBasicSigning<C>
+        {
+            fn verify_threshold_sig_share(
+                &self,
+                signature: &ThresholdSigShareOf<T>,
+                message: &T,
+                dkg_id: &NiDkgId,
+                signer: NodeId,
+            ) -> CryptoResult<()> {
+                self.crypto
+                    .verify_threshold_sig_share(signature, message, dkg_id, signer)
+            }
+
+            fn combine_threshold_sig_shares(
+                &self,
+                shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
+                dkg_id: &NiDkgId,
+            ) -> CryptoResult<CombinedThresholdSigOf<T>> {
+                self.crypto.combine_threshold_sig_shares(shares, dkg_id)
+            }
+
+            fn verify_threshold_sig_combined(
+                &self,
+                signature: &CombinedThresholdSigOf<T>,
+                message: &T,
+                dkg_id: &NiDkgId,
+            ) -> CryptoResult<()> {
+                self.crypto
+                    .verify_threshold_sig_combined(signature, message, dkg_id)
+            }
+        }
+
+        impl<C: ThresholdSigVerifierByPublicKey<T>, T: Signable> ThresholdSigVerifierByPublicKey<T>
+            for CryptoWrapperFailingBasicSigning<C>
+        {
+            fn verify_combined_threshold_sig_by_public_key(
+                &self,
+                signature: &CombinedThresholdSigOf<T>,
+                message: &T,
+                subnet_id: SubnetId,
+                registry_version: RegistryVersion,
+            ) -> CryptoResult<()> {
+                self.crypto.verify_combined_threshold_sig_by_public_key(
+                    signature,
+                    message,
+                    subnet_id,
+                    registry_version,
+                )
+            }
+        }
+
+        impl<C: MultiSigner<T>, T: Signable> MultiSigner<T> for CryptoWrapperFailingBasicSigning<C> {
+            fn sign_multi(
+                &self,
+                message: &T,
+                signer: NodeId,
+                registry_version: RegistryVersion,
+            ) -> CryptoResult<IndividualMultiSigOf<T>> {
+                self.crypto.sign_multi(message, signer, registry_version)
+            }
+        }
+
+        impl<C: MultiSigVerifier<T>, T: Signable> MultiSigVerifier<T>
+            for CryptoWrapperFailingBasicSigning<C>
+        {
+            fn verify_multi_sig_individual(
+                &self,
+                signature: &IndividualMultiSigOf<T>,
+                message: &T,
+                signer: NodeId,
+                registry_version: RegistryVersion,
+            ) -> CryptoResult<()> {
+                self.crypto.verify_multi_sig_individual(
+                    signature,
+                    message,
+                    signer,
+                    registry_version,
+                )
+            }
+
+            fn combine_multi_sig_individuals(
+                &self,
+                signatures: BTreeMap<NodeId, IndividualMultiSigOf<T>>,
+                registry_version: RegistryVersion,
+            ) -> CryptoResult<CombinedMultiSigOf<T>> {
+                self.crypto
+                    .combine_multi_sig_individuals(signatures, registry_version)
+            }
+
+            fn verify_multi_sig_combined(
+                &self,
+                signature: &CombinedMultiSigOf<T>,
+                message: &T,
+                signers: BTreeSet<NodeId>,
+                registry_version: RegistryVersion,
+            ) -> CryptoResult<()> {
+                self.crypto
+                    .verify_multi_sig_combined(signature, message, signers, registry_version)
+            }
+        }
+
+        impl<C: IDkgProtocol> IDkgProtocol for CryptoWrapperFailingBasicSigning<C> {
+            fn create_dealing(
+                &self,
+                params: &IDkgTranscriptParams,
+            ) -> Result<SignedIDkgDealing, IDkgCreateDealingError> {
+                self.crypto.create_dealing(params)
+            }
+
+            fn verify_dealing_public(
+                &self,
+                params: &IDkgTranscriptParams,
+                signed_dealing: &SignedIDkgDealing,
+            ) -> Result<(), IDkgVerifyDealingPublicError> {
+                self.crypto.verify_dealing_public(params, signed_dealing)
+            }
+
+            fn verify_dealing_private(
+                &self,
+                params: &IDkgTranscriptParams,
+                signed_dealing: &SignedIDkgDealing,
+            ) -> Result<(), IDkgVerifyDealingPrivateError> {
+                self.crypto.verify_dealing_private(params, signed_dealing)
+            }
+
+            fn verify_initial_dealings(
+                &self,
+                params: &IDkgTranscriptParams,
+                initial_dealings: &InitialIDkgDealings,
+            ) -> Result<(), IDkgVerifyInitialDealingsError> {
+                self.crypto
+                    .verify_initial_dealings(params, initial_dealings)
+            }
+
+            fn create_transcript(
+                &self,
+                params: &IDkgTranscriptParams,
+                dealings: &BatchSignedIDkgDealings,
+            ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
+                self.crypto.create_transcript(params, dealings)
+            }
+
+            fn verify_transcript(
+                &self,
+                params: &IDkgTranscriptParams,
+                transcript: &IDkgTranscript,
+            ) -> Result<(), IDkgVerifyTranscriptError> {
+                self.crypto.verify_transcript(params, transcript)
+            }
+
+            fn load_transcript(
+                &self,
+                transcript: &IDkgTranscript,
+            ) -> Result<Vec<IDkgComplaint>, IDkgLoadTranscriptError> {
+                self.crypto.load_transcript(transcript)
+            }
+
+            fn verify_complaint(
+                &self,
+                transcript: &IDkgTranscript,
+                complainer_id: NodeId,
+                complaint: &IDkgComplaint,
+            ) -> Result<(), IDkgVerifyComplaintError> {
+                self.crypto
+                    .verify_complaint(transcript, complainer_id, complaint)
+            }
+
+            fn open_transcript(
+                &self,
+                transcript: &IDkgTranscript,
+                complainer_id: NodeId,
+                complaint: &IDkgComplaint,
+            ) -> Result<IDkgOpening, IDkgOpenTranscriptError> {
+                self.crypto
+                    .open_transcript(transcript, complainer_id, complaint)
+            }
+
+            fn verify_opening(
+                &self,
+                transcript: &IDkgTranscript,
+                opener: NodeId,
+                opening: &IDkgOpening,
+                complaint: &IDkgComplaint,
+            ) -> Result<(), IDkgVerifyOpeningError> {
+                self.crypto
+                    .verify_opening(transcript, opener, opening, complaint)
+            }
+
+            fn load_transcript_with_openings(
+                &self,
+                transcript: &IDkgTranscript,
+                openings: &BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
+            ) -> Result<(), IDkgLoadTranscriptError> {
+                self.crypto
+                    .load_transcript_with_openings(transcript, openings)
+            }
+
+            fn retain_active_transcripts(
+                &self,
+                active_transcripts: &HashSet<IDkgTranscript>,
+            ) -> Result<(), IDkgRetainKeysError> {
+                self.crypto.retain_active_transcripts(active_transcripts)
+            }
+        }
+
+        impl<C: ThresholdEcdsaSigner> ThresholdEcdsaSigner for CryptoWrapperFailingBasicSigning<C> {
+            fn create_sig_share(
+                &self,
+                inputs: &ThresholdEcdsaSigInputs,
+            ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaCreateSigShareError> {
+                self.crypto.create_sig_share(inputs)
+            }
+        }
+
+        impl<C: ThresholdEcdsaSigVerifier> ThresholdEcdsaSigVerifier
+            for CryptoWrapperFailingBasicSigning<C>
+        {
+            fn verify_sig_share(
+                &self,
+                signer: NodeId,
+                inputs: &ThresholdEcdsaSigInputs,
+                share: &ThresholdEcdsaSigShare,
+            ) -> Result<(), ThresholdEcdsaVerifySigShareError> {
+                self.crypto.verify_sig_share(signer, inputs, share)
+            }
+
+            fn combine_sig_shares(
+                &self,
+                inputs: &ThresholdEcdsaSigInputs,
+                shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
+            ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError>
+            {
+                self.crypto.combine_sig_shares(inputs, shares)
+            }
+
+            fn verify_combined_sig(
+                &self,
+                inputs: &ThresholdEcdsaSigInputs,
+                signature: &ThresholdEcdsaCombinedSignature,
+            ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
+                self.crypto.verify_combined_sig(inputs, signature)
+            }
+        }
+
+        impl<C: ThresholdSchnorrSigner> ThresholdSchnorrSigner for CryptoWrapperFailingBasicSigning<C> {
+            fn create_sig_share(
+                &self,
+                inputs: &ThresholdSchnorrSigInputs,
+            ) -> Result<ThresholdSchnorrSigShare, ThresholdSchnorrCreateSigShareError> {
+                self.crypto.create_sig_share(inputs)
+            }
+        }
+
+        impl<C: ThresholdSchnorrSigVerifier> ThresholdSchnorrSigVerifier
+            for CryptoWrapperFailingBasicSigning<C>
+        {
+            fn verify_sig_share(
+                &self,
+                signer: NodeId,
+                inputs: &ThresholdSchnorrSigInputs,
+                share: &ThresholdSchnorrSigShare,
+            ) -> Result<(), ThresholdSchnorrVerifySigShareError> {
+                self.crypto.verify_sig_share(signer, inputs, share)
+            }
+
+            fn combine_sig_shares(
+                &self,
+                inputs: &ThresholdSchnorrSigInputs,
+                shares: &BTreeMap<NodeId, ThresholdSchnorrSigShare>,
+            ) -> Result<ThresholdSchnorrCombinedSignature, ThresholdSchnorrCombineSigSharesError>
+            {
+                self.crypto.combine_sig_shares(inputs, shares)
+            }
+
+            fn verify_combined_sig(
+                &self,
+                inputs: &ThresholdSchnorrSigInputs,
+                signature: &ThresholdSchnorrCombinedSignature,
+            ) -> Result<(), ThresholdSchnorrVerifyCombinedSigError> {
+                self.crypto.verify_combined_sig(inputs, signature)
+            }
+        }
+
+        impl<C: VetKdProtocol> VetKdProtocol for CryptoWrapperFailingBasicSigning<C> {
+            fn create_encrypted_key_share(
+                &self,
+                args: VetKdArgs,
+            ) -> Result<VetKdEncryptedKeyShare, VetKdKeyShareCreationError> {
+                self.crypto.create_encrypted_key_share(args)
+            }
+
+            fn verify_encrypted_key_share(
+                &self,
+                signer: NodeId,
+                key_share: &VetKdEncryptedKeyShare,
+                args: &VetKdArgs,
+            ) -> Result<(), VetKdKeyShareVerificationError> {
+                self.crypto
+                    .verify_encrypted_key_share(signer, key_share, args)
+            }
+
+            fn combine_encrypted_key_shares(
+                &self,
+                shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
+                args: &VetKdArgs,
+            ) -> Result<VetKdEncryptedKey, VetKdKeyShareCombinationError> {
+                self.crypto.combine_encrypted_key_shares(shares, args)
+            }
+
+            fn verify_encrypted_key(
+                &self,
+                key: &VetKdEncryptedKey,
+                args: &VetKdArgs,
+            ) -> Result<(), VetKdKeyVerificationError> {
+                self.crypto.verify_encrypted_key(key, args)
+            }
+        }
+
+        impl<C: BasicSigVerifierByPublicKey<T>, T: Signable> BasicSigVerifierByPublicKey<T>
+            for CryptoWrapperFailingBasicSigning<C>
+        {
+            fn verify_basic_sig_by_public_key(
+                &self,
+                signature: &BasicSigOf<T>,
+                signed_bytes: &T,
+                public_key: &UserPublicKey,
+            ) -> CryptoResult<()> {
+                self.crypto
+                    .verify_basic_sig_by_public_key(signature, signed_bytes, public_key)
+            }
+        }
     }
 }
