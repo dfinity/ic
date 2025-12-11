@@ -495,7 +495,14 @@ type MinterArg = variant {
     Upgrade : opt UpgradeArgs;
 };
 
+type MemoType = variant {
+    Burn;
+    Mint;
+};
+
 type DecodeLedgerMemoArgs = record {
+    // The encoded memo type
+    memo_type : MemoType;
     // The encoded memo from a minter transaction on the ledger
     encoded_memo : blob;
 };

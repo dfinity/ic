@@ -170,8 +170,15 @@ pub fn http_request(req: HttpRequest) -> HttpResponse {
     }
 }
 
+#[derive(Clone, Copy, Debug, CandidType, Serialize, Deserialize)]
+pub enum MemoType {
+    Burn,
+    Mint,
+}
+
 #[derive(Debug, CandidType, Serialize, Deserialize)]
 pub struct DecodeLedgerMemoArgs {
+    pub memo_type: MemoType,
     pub encoded_memo: Vec<u8>,
 }
 
@@ -298,17 +305,20 @@ pub fn decode_ledger_memo(args: DecodeLedgerMemoArgs) -> DecodeLedgerMemoResult 
     args.validate_input()
         .map_err(DecodeLedgerMemoError::InvalidMemo)?;
 
-    // Try to decode as MintMemo first
-    if let Ok(mint_memo) = minicbor::decode::<memo::MintMemo>(&args.encoded_memo) {
-        return Ok(Some(DecodedMemo::Mint(Some(MintMemo::from(mint_memo)))));
+    match args.memo_type {
+        MemoType::Burn => match minicbor::decode::<memo::BurnMemo>(&args.encoded_memo) {
+            Ok(burn_memo) => Ok(Some(DecodedMemo::Burn(Some(BurnMemo::from(burn_memo))))),
+            Err(err) => Err(Some(DecodeLedgerMemoError::InvalidMemo(format!(
+                "Error decoding BurnMemo: {}",
+                err
+            )))),
+        },
+        MemoType::Mint => match minicbor::decode::<memo::MintMemo>(&args.encoded_memo) {
+            Ok(mint_memo) => Ok(Some(DecodedMemo::Mint(Some(MintMemo::from(mint_memo))))),
+            Err(err) => Err(Some(DecodeLedgerMemoError::InvalidMemo(format!(
+                "Error decoding MintMemo: {}",
+                err
+            )))),
+        },
     }
-
-    // Try to decode as BurnMemo
-    if let Ok(burn_memo) = minicbor::decode::<memo::BurnMemo>(&args.encoded_memo) {
-        return Ok(Some(DecodedMemo::Burn(Some(BurnMemo::from(burn_memo)))));
-    }
-
-    Err(Some(DecodeLedgerMemoError::InvalidMemo(
-        "Could not decode as MintMemo or BurnMemo".to_string(),
-    )))
 }

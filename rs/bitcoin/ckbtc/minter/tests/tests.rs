@@ -17,7 +17,7 @@ use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterAr
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::logs::Priority;
 use ic_ckbtc_minter::queries::{
-    DecodeLedgerMemoArgs, DecodeLedgerMemoResult, DecodedMemo, EstimateFeeArg,
+    DecodeLedgerMemoArgs, DecodeLedgerMemoResult, DecodedMemo, EstimateFeeArg, MemoType,
     RetrieveBtcStatusRequest, WithdrawalFee,
 };
 use ic_ckbtc_minter::reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason};
@@ -1439,14 +1439,22 @@ impl CkBtcSetup {
         );
     }
 
-    pub fn decode_ledger_memo(&self, encoded_memo: Vec<u8>) -> DecodeLedgerMemoResult {
+    pub fn decode_ledger_memo(
+        &self,
+        memo_type: MemoType,
+        encoded_memo: Vec<u8>,
+    ) -> DecodeLedgerMemoResult {
         Decode!(
             &assert_reply(
                 self.env
                     .query(
                         self.minter_id,
                         "decode_ledger_memo",
-                        Encode!(&DecodeLedgerMemoArgs { encoded_memo }).unwrap()
+                        Encode!(&DecodeLedgerMemoArgs {
+                            memo_type,
+                            encoded_memo
+                        })
+                        .unwrap()
                     )
                     .expect("failed to call decode_ledger_memo")
             ),
@@ -1948,7 +1956,7 @@ fn test_ledger_memo() {
     let memo = res.transactions[0].mint.clone().unwrap().memo.unwrap();
 
     // Test decoding the Mint memo using the decode_ledger_memo endpoint
-    let decoded_result = ckbtc.decode_ledger_memo(memo.0.to_vec());
+    let decoded_result = ckbtc.decode_ledger_memo(MemoType::Mint, memo.0.to_vec());
 
     assert!(decoded_result.is_ok(), "Failed to decode mint memo");
     if let Ok(Some(DecodedMemo::Mint(Some(mint_memo)))) = decoded_result {
@@ -1983,7 +1991,7 @@ fn test_ledger_memo() {
     let memo = res.transactions[0].burn.clone().unwrap().memo.unwrap();
 
     // Test decoding the Burn memo using the decode_ledger_memo endpoint
-    let decoded_result = ckbtc.decode_ledger_memo(memo.0.to_vec());
+    let decoded_result = ckbtc.decode_ledger_memo(MemoType::Burn, memo.0.to_vec());
 
     assert!(decoded_result.is_ok(), "Failed to decode burn memo");
     if let Ok(Some(DecodedMemo::Burn(Some(burn_memo)))) = decoded_result {
@@ -2001,7 +2009,8 @@ fn test_ledger_memo() {
 
     // Step 3: test decoding invalid memo smoke test
 
-    let decoded_result = ckbtc.decode_ledger_memo(vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+    let decoded_result =
+        ckbtc.decode_ledger_memo(MemoType::Mint, vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
 
     assert!(
         decoded_result.is_err(),
