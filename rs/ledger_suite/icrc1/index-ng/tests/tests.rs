@@ -1495,7 +1495,7 @@ fn test_fee_collector_107_irregular_op() {
         .expect_err("unrecognized block with btype '107feecol' but unrecognized tx.op parsed successfully by index");
     let expected_log_msg = "unknown fields";
     assert!(
-        index_err_logs.contains(&expected_log_msg),
+        index_err_logs.contains(expected_log_msg),
         "index logs did not contain expected string '{}': {}",
         expected_log_msg,
         index_err_logs
