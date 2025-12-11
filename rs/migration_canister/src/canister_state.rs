@@ -62,6 +62,10 @@ pub fn caller_allowed(id: &Principal) -> bool {
     })
 }
 
+pub fn num_validations() -> u64 {
+    ONGOING_VALIDATIONS.with_borrow(|num| *num)
+}
+
 // ============================== Privileged API ============================== //
 pub mod privileged {
     //! This API is only for controllers.

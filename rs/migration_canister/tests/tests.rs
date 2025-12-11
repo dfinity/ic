@@ -293,7 +293,6 @@ async fn fetch_metrics(pic: &PocketIc) -> Scrape {
         .collect::<Vec<_>>()
         .into_iter();
 
-    //String::from_utf8(response.body.into_vec()).unwrap()
     prometheus_parse::Scrape::parse(iterator).unwrap()
 }
 
