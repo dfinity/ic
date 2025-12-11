@@ -153,7 +153,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
 
     let stable_size_pages = ic_cdk::stable::stable_size();
-    let stable_size_bytes = stable_size_pages as u64 * ic_cdk::stable::WASM_PAGE_SIZE_IN_BYTES;
+    let stable_size_bytes = stable_size_pages * ic_cdk::stable::WASM_PAGE_SIZE_IN_BYTES;
 
     w.encode_gauge(
         "migration_canister_stable_memory_size_bytes",
