@@ -330,7 +330,7 @@ pub async fn retrieve_btc_with_approval<R: CanisterRuntime>(
         }),
     };
 
-    mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request, &IC_CANISTER_RUNTIME));
+    mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request, runtime));
 
     assert_eq!(
         crate::state::RetrieveBtcStatus::Pending,
