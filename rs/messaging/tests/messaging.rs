@@ -275,7 +275,7 @@ const MEMORY_ACCOUNTING_CONFIG: TestSubnetConfig = TestSubnetConfig {
 /// Ingress triggers are only sent to the principal canister on `subnet1`, which
 /// will then send downstream calls to all canisters. Through downstream calls,
 /// random calls going every which way is established after a few rounds.
-#[test_strategy::proptest(ProptestConfig::with_cases(3))]
+#[test_strategy::proptest(ProptestConfig::with_cases(3), max_shrink_iters = 0)]
 fn test_memory_accounting_and_sequence_errors(
     #[strategy(arb_test_subnets(MEMORY_ACCOUNTING_CONFIG.clone(), TestSubnetConfig::default()))]
     setup: TestSubnetSetup,
@@ -419,7 +419,7 @@ fn test_guaranteed_refunds(
 /// all calls conclude (without any canister trapping which indicates a sequencing error)
 /// and the canisters can be stopped, correct routing is implied because hanging calls would
 /// prevent stopping at least one canister and no sequencing errors have occurred.
-#[test_strategy::proptest(ProptestConfig::with_cases(3))]
+#[test_strategy::proptest(ProptestConfig::with_cases(3), max_shrink_iters = 0)]
 fn subnet_splitting_smoke_test(
     #[strategy(arb_test_subnets(
         TestSubnetConfig { canisters_count: 2, ..TestSubnetConfig::default() },
@@ -497,13 +497,19 @@ fn subnet_splitting_smoke_test(
         }
     }
 
-    // Inject the rest of the calls; note `canister2` is now on `subnet3`.
+    // Inject the rest of the calls; note that `canister2` is now on `subnet3`.
     let subnet3 = subnet3.unwrap();
     msg_ids1.append(&mut inject_calls(&mut calls1, 0, &subnet1));
     msg_ids2.append(&mut inject_calls(&mut calls2, 0, &subnet3));
     msg_ids3.append(&mut inject_calls(&mut calls3, 0, &subnet2));
 
-    while !msg_ids1.is_empty() || !msg_ids2.is_empty() || !msg_ids3.is_empty() {
+    while !msg_ids1.is_empty()
+        || !msg_ids2.is_empty()
+        || !msg_ids3.is_empty()
+        || subnet1.has_inflight_messages()
+        || subnet2.has_inflight_messages()
+        || subnet3.has_inflight_messages()
+    {
         subnet1.execute_round();
         subnet2.execute_round();
         subnet3.execute_round();

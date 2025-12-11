@@ -27,7 +27,7 @@ use ic_crypto_iccsa::{public_key_bytes_from_der, types::SignatureBytes, verify};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
-use ic_types::SubnetId;
+use ic_types::{RegistryVersion, SubnetId};
 use libc::{RLIMIT_NOFILE, getrlimit, rlimit, setrlimit};
 use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCanisterSigArg};
 use pocket_ic_server::BlobStore;
@@ -61,7 +61,7 @@ const DEFAULT_LOG_LEVELS: &str = "pocket_ic_server=info,tower_http=info,axum::re
 const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
-static MAINNET_ROUTING_TABLE: &[u8] = include_bytes!("mainnet_routing_table.json");
+static MAINNET_ROUTING_TABLE: &[u8] = include_bytes!(env!("MAINNET_ROUTING_TABLE"));
 
 #[derive(Parser)]
 #[clap(name = "pocket-ic-server")]
@@ -89,6 +89,10 @@ struct Args {
     /// and write it to the file path specified as `--mainnet-routing-table`.
     #[clap(long, default_value_t = false, requires = "mainnet_routing_table")]
     fetch_mainnet_routing_table: bool,
+    /// The mainnet registry version to use for fetching the mainnet routing table.
+    /// Defaults to the latest registry version.
+    #[clap(long, requires = "fetch_mainnet_routing_table")]
+    mainnet_registry_version: Option<u64>,
 }
 
 /// Get the path of the current running binary.
@@ -220,7 +224,8 @@ async fn start(runtime: Arc<Runtime>) {
     ));
     let mainnet_routing_table_json = if args.fetch_mainnet_routing_table {
         let nns_url = Url::parse("https://icp0.io").unwrap();
-        let (routing_table, _) = get_routing_table(vec![nns_url]);
+        let registry_version = args.mainnet_registry_version.map(RegistryVersion::from);
+        let (routing_table, _) = get_routing_table(vec![nns_url], registry_version);
         let routing_table_json = serde_json::to_string_pretty(&routing_table).unwrap();
         // `#[clap(long, default_value_t = false, requires = "mainnet_routing_table")]`
         // ensures that the mainnet routing table file path is specified.

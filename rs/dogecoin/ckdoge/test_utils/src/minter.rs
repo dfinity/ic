@@ -146,7 +146,7 @@ impl MinterCanister {
     ) -> Result<WithdrawalFee, EstimateWithdrawalFeeError> {
         let call_result = self
             .env
-            .query_call(
+            .update_call(
                 self.id,
                 Principal::anonymous(),
                 "estimate_withdrawal_fee",
