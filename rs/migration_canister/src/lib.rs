@@ -10,7 +10,7 @@ use std::{borrow::Cow, fmt::Display, time::Duration};
 use strum_macros::Display;
 
 use crate::{
-    canister_state::{limiter::num_successes_in_past_24_h, num_requests},
+    canister_state::{limiter::num_successes_in_past_24_h, requests::num_requests},
     controller_recovery::ControllerRecoveryState,
     processing::{
         process_accepted, process_all_by_predicate, process_all_failed, process_all_succeeded,

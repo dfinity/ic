@@ -13,11 +13,13 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/limits",
+        "//rs/rust_canisters/dfn_http_metrics",
         "@crate_index//:candid",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-management-canister-types",
+        "@crate_index//:ic-metrics-encoder",
         "@crate_index//:ic_stable_structures_next",
         "@crate_index//:itertools",
         "@crate_index//:serde",
@@ -38,11 +40,13 @@ rust_canister(
     deps = [
         # Keep sorted.
         "//rs/limits",
+        "//rs/rust_canisters/dfn_http_metrics",
         "@crate_index//:candid",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-management-canister-types",
+        "@crate_index//:ic-metrics-encoder",
         "@crate_index//:ic_stable_structures_next",
         "@crate_index//:itertools",
         "@crate_index//:serde",
@@ -63,12 +67,14 @@ rust_test(
         # Keep sorted.
         "//rs/limits",
         "//rs/nns/constants",
+        "//rs/rust_canisters/dfn_http_metrics",
         "@crate_index//:candid",
         "@crate_index//:candid_parser",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-management-canister-types",
+        "@crate_index//:ic-metrics-encoder",
         "@crate_index//:ic_stable_structures_next",
         "@crate_index//:itertools",
         "@crate_index//:rand",
@@ -103,7 +109,9 @@ rust_test(
     tags = ["cpu:16"],
     deps = [
         # Keep sorted
+        "//packages/ic-http-types",
         "//packages/pocket-ic",
+        "//rs/nervous_system/common/test_utils",
         "//rs/nns/common",
         "//rs/nns/constants",
         "//rs/nns/governance/api",
@@ -119,8 +127,10 @@ rust_test(
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-transport-types",
         "@crate_index//:itertools",
+        "@crate_index//:prometheus-parse",
         "@crate_index//:reqwest",
         "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
         "@crate_index//:serde_cbor",
         "@crate_index//:strum",
         "@crate_index//:tempfile",

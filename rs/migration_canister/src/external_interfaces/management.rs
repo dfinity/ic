@@ -217,6 +217,8 @@ pub struct RenameToArgs {
     pub total_num_changes: u64,
 }
 
+/// This is a success if the call is a success or the target canister does not exist,
+/// i.e., a previous call to rename the target canister was a success.
 pub async fn rename_canister(
     source: Principal,
     source_version: u64,
@@ -237,7 +239,7 @@ pub async fn rename_canister(
     };
 
     // We have to await this call no matter what. Bounded wait is not an option.
-    match Call::unbounded_wait(target_subnet, "rename_canister")
+    match Call::bounded_wait(target_subnet, "rename_canister")
         .with_arg(args)
         .await
     {
@@ -247,9 +249,16 @@ pub async fn rename_canister(
                 "Call `rename_canister` for canister`: {}, subnet: {} failed: {:?}",
                 target, target_subnet, e
             );
-            // All fatal error conditions have been checked upfront and should not be possible now.
-            // CanisterAlreadyExists, RenameCanisterNotStopped, RenameCanisterHasSnapshot.
-            ProcessingResult::NoProgress
+            match e {
+                CallFailed::CallRejected(e) => {
+                    if e.reject_code() == Ok(RejectCode::DestinationInvalid) {
+                        ProcessingResult::Success(())
+                    } else {
+                        ProcessingResult::NoProgress
+                    }
+                }
+                _ => ProcessingResult::NoProgress,
+            }
         }
     }
 }
