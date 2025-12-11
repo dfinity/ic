@@ -147,7 +147,7 @@ impl NodeRegistration {
         // Will contain information needed for the node operator
         // to approve the add node payload for onboarding.
         let node_information_for_onboarding = format!(
-            "Node id: {}\nQR code:\n{}",
+            "node-id: {}\nQR code:\n{}",
             self.node_id,
             encode_as_qrcode(self.node_id)
         );
