@@ -540,7 +540,11 @@ impl RecoveryResult {
             }
             // This arm should be unreachable, but we do not want
             // to trap at runtime.
-            RecoveryResult::Unreachable => {}
+            RecoveryResult::Unreachable => {
+                println!(
+                    "We encountered `RecoveryResult::Unreachable` for request {old_state}. This is a bug!"
+                );
+            }
         }
     }
 }
