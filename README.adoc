@@ -177,3 +177,5 @@ To make the mono repository a success, there needs to be some basic rules to mak
 * When bumping the semantic version of an external crate, please do it for the whole repository. Avoid importing the same crate with multiple versions.
 * Keep the rust-lang up-to-date for Bazel and Cargo.
 * Use Cargo workspace for inferring external crate versions by adding the new crate to the section `[workspace.dependencies]` of the workspace `Cargo.toml` and adding `new-crate = { workspace = true }` to each package-specific `Cargo.toml` that needs it.
+
+My new contribution
