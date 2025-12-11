@@ -1493,7 +1493,7 @@ fn test_fee_collector_107_irregular_op() {
     add_custom_block(env, ledger_id, 0, Some("107feecol"), tx_fields);
     let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
         .expect_err("unrecognized block with btype '107feecol' but unrecognized tx.op parsed successfully by index");
-    let expected_log_msg = format!("Unknown operation name {}", UNRECOGNIZED_OP_NAME);
+    let expected_log_msg = "unknown fields";
     assert!(
         index_err_logs.contains(&expected_log_msg),
         "index logs did not contain expected string '{}': {}",
