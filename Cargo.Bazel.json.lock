@@ -1,5 +1,5 @@
 {
-  "checksum": "5c80229443064db2a4523125f04d51cbdd2b83b0c8cf6ae28242b2622994dcdc",
+  "checksum": "f2b663842d4b3596c854e7277531a75307a2cc76fbaa0c6055c36667503f26bf",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7106,7 +7106,7 @@
               "-Zstrict-init-checks",
               "-Zsanitizer=address",
               "-Zexternal-clangrt",
-              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust~~rust~rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
+              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
             ]
           }
         },
@@ -8145,7 +8145,7 @@
               "-Zstrict-init-checks",
               "-Zsanitizer=address",
               "-Zexternal-clangrt",
-              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust~~rust~rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
+              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
             ]
           }
         },
@@ -8294,7 +8294,7 @@
               "-Zstrict-init-checks",
               "-Zsanitizer=address",
               "-Zexternal-clangrt",
-              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust~~rust~rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
+              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
             ]
           }
         },
@@ -11795,7 +11795,7 @@
               "-Zstrict-init-checks",
               "-Zsanitizer=address",
               "-Zexternal-clangrt",
-              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust~~rust~rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
+              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
             ]
           }
         },
@@ -21640,7 +21640,7 @@
               "target": "ic_agent"
             },
             {
-              "id": "ic-bn-lib 0.1.4",
+              "id": "ic-bn-lib 0.1.7",
               "target": "ic_bn_lib"
             },
             {
@@ -22304,6 +22304,10 @@
             {
               "id": "sha3 0.10.8",
               "target": "sha3"
+            },
+            {
+              "id": "shell-escape 0.1.5",
+              "target": "shell_escape"
             },
             {
               "id": "signal-hook 0.3.17",
@@ -34968,14 +34972,14 @@
       ],
       "license_file": null
     },
-    "ic-bn-lib 0.1.4": {
+    "ic-bn-lib 0.1.7": {
       "name": "ic-bn-lib",
-      "version": "0.1.4",
+      "version": "0.1.7",
       "package_url": "https://github.com/dfinity/ic-bn-lib",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-bn-lib/0.1.4/download",
-          "sha256": "66746cb6f1df32057e5e1ff1bb37c211c9291c3726366f2db5ded805ac273b19"
+          "url": "https://static.crates.io/crates/ic-bn-lib/0.1.7/download",
+          "sha256": "37ea8c478ccaed485336dd12e48f1c745bc08b4eed354cbd790e776df06f3828"
         }
       },
       "targets": [
@@ -35329,11 +35333,13 @@
           ],
           "selects": {}
         },
-        "version": "0.1.4"
+        "version": "0.1.7"
       },
-      "license": null,
-      "license_ids": [],
-      "license_file": "LICENSE"
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
     },
     "ic-bn-lib-common 0.1.0": {
       "name": "ic-bn-lib-common",
@@ -36441,7 +36447,7 @@
               "target": "fqdn"
             },
             {
-              "id": "ic-bn-lib 0.1.4",
+              "id": "ic-bn-lib 0.1.7",
               "target": "ic_bn_lib"
             },
             {
@@ -36583,7 +36589,7 @@
               "target": "humantime"
             },
             {
-              "id": "ic-bn-lib 0.1.4",
+              "id": "ic-bn-lib 0.1.7",
               "target": "ic_bn_lib"
             },
             {
@@ -36771,7 +36777,7 @@
               "target": "fqdn"
             },
             {
-              "id": "ic-bn-lib 0.1.4",
+              "id": "ic-bn-lib 0.1.7",
               "target": "ic_bn_lib"
             },
             {
@@ -37127,7 +37133,7 @@
               "target": "humantime"
             },
             {
-              "id": "ic-bn-lib 0.1.4",
+              "id": "ic-bn-lib 0.1.7",
               "target": "ic_bn_lib"
             },
             {
@@ -37989,7 +37995,7 @@
               "-Zstrict-init-checks",
               "-Zsanitizer=address",
               "-Zexternal-clangrt",
-              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust~~rust~rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
+              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
             ]
           }
         },
@@ -38061,7 +38067,7 @@
               "-Zstrict-init-checks",
               "-Zsanitizer=address",
               "-Zexternal-clangrt",
-              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust~~rust~rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
+              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
             ]
           }
         },
@@ -45659,7 +45665,7 @@
         ],
         "data": {
           "common": [
-            "@@_main~_repo_rules~openssl//:gen_dir"
+            "@@+_repo_rules+openssl//:gen_dir"
           ],
           "selects": {}
         },
@@ -46451,8 +46457,8 @@
         ],
         "data": {
           "common": [
-            "@@_main~_repo_rules~lmdb//:liblmdb",
-            "@@_main~_repo_rules~lmdb//:lmdb.h"
+            "@@+_repo_rules+lmdb//:liblmdb",
+            "@@+_repo_rules+lmdb//:lmdb.h"
           ],
           "selects": {}
         },
@@ -46474,8 +46480,8 @@
         },
         "build_script_env": {
           "common": {
-            "LMDB_H_PATH": "$(location @@_main~_repo_rules~lmdb//:lmdb.h)",
-            "LMDB_OVERRIDE": "$(location @@_main~_repo_rules~lmdb//:liblmdb)"
+            "LMDB_H_PATH": "$(location @@+_repo_rules+lmdb//:lmdb.h)",
+            "LMDB_OVERRIDE": "$(location @@+_repo_rules+lmdb//:liblmdb)"
           },
           "selects": {}
         }
@@ -53456,7 +53462,7 @@
         ],
         "data": {
           "common": [
-            "@@_main~_repo_rules~openssl//:gen_dir"
+            "@@+_repo_rules+openssl//:gen_dir"
           ],
           "selects": {}
         },
@@ -53482,8 +53488,8 @@
         },
         "build_script_env": {
           "common": {
-            "OPENSSL_INCLUDE_DIR": "$(execpath @@_main~_repo_rules~openssl//:gen_dir)/include",
-            "OPENSSL_LIB_DIR": "$(execpath @@_main~_repo_rules~openssl//:gen_dir)/lib64",
+            "OPENSSL_INCLUDE_DIR": "$(execpath @@+_repo_rules+openssl//:gen_dir)/include",
+            "OPENSSL_LIB_DIR": "$(execpath @@+_repo_rules+openssl//:gen_dir)/lib64",
             "OPENSSL_NO_VENDOR": "1",
             "OPENSSL_STATIC": "1"
           },
@@ -58866,7 +58872,7 @@
         ],
         "data": {
           "common": [
-            "@@protobuf~//:protoc"
+            "@@protobuf+//:protoc"
           ],
           "selects": {}
         },
@@ -58888,7 +58894,7 @@
         },
         "build_script_env": {
           "common": {
-            "PROTOC": "$(execpath @@protobuf~//:protoc)"
+            "PROTOC": "$(execpath @@protobuf+//:protoc)"
           },
           "selects": {}
         }
@@ -74280,6 +74286,45 @@
       ],
       "license_file": "LICENSE"
     },
+    "shell-escape 0.1.5": {
+      "name": "shell-escape",
+      "version": "0.1.5",
+      "package_url": "https://github.com/sfackler/shell-escape",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/shell-escape/0.1.5/download",
+          "sha256": "45bb67a18fa91266cc7807181f62f9178a6873bfad7dc788c42e6430db40184f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "shell_escape",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "shell_escape",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "0.1.5"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "shell-words 1.1.0": {
       "name": "shell-words",
       "version": "1.1.0",
@@ -80801,7 +80846,7 @@
           "common": [],
           "selects": {
             "x86_64-unknown-linux-gnu": [
-              "@@_main~_repo_rules~jemalloc//:libjemalloc"
+              "@@+_repo_rules+jemalloc//:libjemalloc"
             ]
           }
         },
@@ -80821,7 +80866,7 @@
           "common": {},
           "selects": {
             "x86_64-unknown-linux-gnu": {
-              "JEMALLOC_OVERRIDE": "$(location @@_main~_repo_rules~jemalloc//:libjemalloc)"
+              "JEMALLOC_OVERRIDE": "$(location @@+_repo_rules+jemalloc//:libjemalloc)"
             }
           }
         },
@@ -90104,7 +90149,7 @@
               "-Zstrict-init-checks",
               "-Zsanitizer=address",
               "-Zexternal-clangrt",
-              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust~~rust~rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
+              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
             ]
           }
         },
@@ -97703,7 +97748,7 @@
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.12",
     "ic-agent 0.40.1",
-    "ic-bn-lib 0.1.4",
+    "ic-bn-lib 0.1.7",
     "ic-bn-lib-common 0.1.0",
     "ic-btc-interface 0.2.3",
     "ic-canister-log 0.2.0",
@@ -97874,6 +97919,7 @@
     "sev 7.1.0",
     "sha2 0.10.9",
     "sha3 0.10.8",
+    "shell-escape 0.1.5",
     "signal-hook 0.3.17",
     "signature 2.2.0",
     "simple_asn1 0.6.2",

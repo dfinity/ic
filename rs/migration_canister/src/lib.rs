@@ -10,7 +10,8 @@ use std::{borrow::Cow, fmt::Display, time::Duration};
 use strum_macros::Display;
 
 use crate::{
-    canister_state::{limiter::num_successes_in_past_24_h, num_requests},
+    canister_state::{limiter::num_successes_in_past_24_h, requests::num_requests},
+    controller_recovery::ControllerRecoveryState,
     processing::{
         process_accepted, process_all_by_predicate, process_all_failed, process_all_succeeded,
         process_controllers_changed, process_renamed, process_routing_table,
@@ -21,6 +22,7 @@ use crate::{
 pub use crate::migration_canister::{MigrateCanisterArgs, MigrationStatus};
 
 mod canister_state;
+mod controller_recovery;
 mod external_interfaces;
 mod migration_canister;
 mod privileged;
@@ -75,6 +77,12 @@ pub enum ValidationError {
     CallFailed {
         reason: String,
     },
+}
+
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+struct CanisterMigrationArgs {
+    pub source: Principal,
+    pub target: Principal,
 }
 
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
@@ -134,6 +142,48 @@ impl Display for Request {
             write!(f, "{}, ", x)?;
         }
         write!(f, "] }}")
+    }
+}
+
+impl From<&Request> for CanisterMigrationArgs {
+    fn from(request: &Request) -> Self {
+        Self {
+            source: request.source,
+            target: request.target,
+        }
+    }
+}
+
+/// Represents the recovery state of a `Request` in `RequestState::Failed`,
+/// i.e., whether controllers of source and target must still be restored.
+#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecoveryState {
+    pub restore_source_controllers: ControllerRecoveryState,
+    pub restore_target_controllers: ControllerRecoveryState,
+}
+
+impl Default for RecoveryState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RecoveryState {
+    pub fn new() -> Self {
+        Self {
+            restore_source_controllers: ControllerRecoveryState::NoProgress,
+            restore_target_controllers: ControllerRecoveryState::NoProgress,
+        }
+    }
+
+    pub fn is_done(&self) -> bool {
+        matches!(
+            self.restore_source_controllers,
+            ControllerRecoveryState::Done
+        ) && matches!(
+            self.restore_target_controllers,
+            ControllerRecoveryState::Done
+        )
     }
 }
 
@@ -242,7 +292,11 @@ pub enum RequestState {
     /// We stay in this state until the controllers have been restored and then
     /// transition to a `Failed` state in the `HISTORY`.
     #[strum(to_string = "RequestState::Failed {{ request: {request}, reason: {reason} }}")]
-    Failed { request: Request, reason: String },
+    Failed {
+        request: Request,
+        recovery_state: RecoveryState,
+        reason: String,
+    },
 }
 
 impl RequestState {
@@ -303,6 +357,28 @@ impl Display for Event {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Event {{ time: {}, event: {} }}", self.time, self.event)
     }
+}
+
+impl From<&Event> for CanisterMigrationArgs {
+    fn from(x: &Event) -> Self {
+        x.event.request().into()
+    }
+}
+
+impl Storable for CanisterMigrationArgs {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Owned(to_vec(&self).expect("Canister migration argument serialization failed"))
+    }
+
+    fn into_bytes(self) -> Vec<u8> {
+        self.to_bytes().to_vec()
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        from_slice(&bytes).expect("Canister migration argument deserialization failed")
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 impl Storable for Request {

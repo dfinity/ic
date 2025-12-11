@@ -124,3 +124,16 @@ jobs:
               repo: context.repo.repo,
               body: message
             })
+
+  notify-slack-new-workflow-run:
+    name: Notify Slack for new External Contributor Workflow Run
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post to a Slack channel
+        id: slack
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        with:
+          channel-id: ${{ secrets.EXT_WORKFLOW_RUN_CHANNEL }} # for security reasons, keep this masked
+          slack-message: "External Contribution Workflow Run Started: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}>"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
