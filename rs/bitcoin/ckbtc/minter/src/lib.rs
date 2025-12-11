@@ -58,6 +58,9 @@ pub const MAX_REQUESTS_PER_BATCH: usize = 100;
 /// The minimum time the minter should wait before replacing a stuck transaction.
 pub const MIN_RESUBMISSION_DELAY: Duration = Duration::from_secs(24 * 60 * 60);
 
+/// Minimum interval between UTXO consolidations.
+pub const MIN_CONSOLIDATION_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+
 /// The maximum memo size of a transaction on the ckBTC ledger.
 /// The ckBTC minter requires at least 69 bytes, we choose 80
 /// to have some room for future modifications.
@@ -1434,8 +1437,6 @@ pub enum ConsolidateUtxosError {
 pub async fn consolidate_utxos<R: CanisterRuntime>(
     runtime: &R,
 ) -> Result<Txid, ConsolidateUtxosError> {
-    // TODO DEFI-2551: make this configurable
-    const MIN_CONSOLIDATION_INTERVAL: Duration = Duration::from_secs(24 * 3600);
     let utxo_consolidation_threshold = read_state(|s| s.utxo_consolidation_threshold);
 
     // Return early if number of available UTXOs is below consolidation threshold.
@@ -1445,9 +1446,8 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
 
     // Return early if MIN_CONSOLIDATION_INTERVAL is not met since last submission.
     let now = runtime.time();
-    let last_submission = read_state(|s| s.last_consolidate_utxos_request_created_time_ns);
-    if Timestamp::new(now)
-        .checked_duration_since(Timestamp::new(last_submission.unwrap_or_default()))
+    let last_submission = read_state(|s| s.last_consolidate_utxos_request_time_ns);
+    if Timestamp::new(now).checked_duration_since(Timestamp::new(last_submission))
         < Some(MIN_CONSOLIDATION_INTERVAL)
     {
         return Err(ConsolidateUtxosError::TooSoon);
@@ -1457,12 +1457,6 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
     if read_state(|s| s.current_consolidate_utxos_request.is_some()) {
         return Err(ConsolidateUtxosError::StillProcessing);
     }
-
-    mutate_state(|s| s.last_consolidate_utxos_request_created_time_ns = Some(now));
-    // In case of any error, restore the last request created time.
-    let request_created_guard = guard(last_submission, |last_submission| {
-        mutate_state(|s| s.last_consolidate_utxos_request_created_time_ns = last_submission);
-    });
 
     let input_utxos = mutate_state(|s| {
         select_utxos_to_consolidate(&mut s.available_utxos, s.max_num_inputs_in_transaction)
@@ -1552,12 +1546,9 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
         utxos,
     });
 
-    let txid = sign_and_submit_request(request, fee_millisatoshi_per_vbyte, total_fee, runtime)
+    sign_and_submit_request(request, fee_millisatoshi_per_vbyte, total_fee, runtime)
         .await
-        .map_err(ConsolidateUtxosError::SubmitRequest)?;
-
-    let _ = ScopeGuard::into_inner(request_created_guard);
-    Ok(txid)
+        .map_err(ConsolidateUtxosError::SubmitRequest)
 }
 
 // Return UTXOs for consolidation and remove them from available_utxos.

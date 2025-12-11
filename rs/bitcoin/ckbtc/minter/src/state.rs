@@ -467,7 +467,9 @@ pub struct CkBtcMinterState {
     pub last_transaction_submission_time_ns: Option<u64>,
 
     /// The created time of the last ConsolidateUtxosRequest.
-    pub last_consolidate_utxos_request_created_time_ns: Option<u64>,
+    // This is needed in addition to `current_consolidate_utxos_request` because the latter may be
+    // removed, but its time has to be remembered.
+    pub last_consolidate_utxos_request_time_ns: u64,
 
     /// Current consolidateUtxos request that has not yet finalized.
     pub current_consolidate_utxos_request: Option<ConsolidateUtxosRequest>,
@@ -1222,6 +1224,7 @@ impl CkBtcMinterState {
     /// This function panics if there is already an existing ConsolidateUtxosRequest.
     fn push_consolidate_utxos_request(&mut self, request: ConsolidateUtxosRequest) {
         assert!(self.current_consolidate_utxos_request.is_none());
+        self.last_consolidate_utxos_request_time_ns = request.received_at;
         self.current_consolidate_utxos_request = Some(request);
     }
 
@@ -1952,7 +1955,7 @@ impl From<InitArgs> for CkBtcMinterState {
             pending_retrieve_btc_requests: Default::default(),
             requests_in_flight: Default::default(),
             last_transaction_submission_time_ns: None,
-            last_consolidate_utxos_request_created_time_ns: None,
+            last_consolidate_utxos_request_time_ns: 0,
             current_consolidate_utxos_request: None,
             utxo_consolidation_threshold: DEFAULT_UTXO_CONSOLIDATION_THRESHOLD,
             max_num_inputs_in_transaction: DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
