@@ -236,6 +236,7 @@ pub async fn rejoin_test_many_canisters(
     let seed_canister_id = ic00
         .create_canister()
         .as_provisional_create_with_amount(None)
+        .with_effective_canister_id(agent_node.effective_canister_id())
         .call_and_wait()
         .await
         .expect("Failed to create the seed canister")

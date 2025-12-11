@@ -18,17 +18,19 @@ end::catalog[] */
 use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
 };
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
+use ic_system_test_driver::driver::simulate_network::{FixedNetworkSimulation, SimulateNetwork};
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
 };
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::block_on;
+use ic_system_test_driver::util::{get_app_subnet_and_node, block_on};
 use ic_types::Height;
 use rejoin_test_lib::rejoin_test_many_canisters;
 use std::time::Duration;
@@ -39,6 +41,13 @@ const NUM_CANISTERS: usize = 100_000;
 
 const NUM_NODES: usize = 13; // mainnet value
 const DKG_INTERVAL: u64 = 499; // mainnet value
+
+// Network parameters
+const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
+const LATENCY: Duration = Duration::from_millis(150); // artificial added latency
+const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
+    .with_latency(LATENCY)
+    .with_bandwidth(BANDWIDTH_MBITS);
 
 fn main() -> Result<()> {
     let config = Config::new(NUM_NODES, NUM_CANISTERS);
@@ -89,8 +98,15 @@ fn setup(env: TestEnv, config: Config) {
         boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2000)),
     };
     InternetComputer::new()
+        .with_required_host_features(vec![HostFeature::Performance])
         .add_subnet(
             Subnet::new(SubnetType::System)
+                .with_default_vm_resources(vm_resources)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .add_nodes(1),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
                 .with_default_vm_resources(vm_resources)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .add_nodes(config.nodes_count),
@@ -105,6 +121,14 @@ fn setup(env: TestEnv, config: Config) {
     });
 
     env.sync_with_prometheus();
+/*
+    let root_subnet = env.topology_snapshot().root_subnet();
+    root_subnet.apply_network_settings(NETWORK_SIMULATION);
+*/
+    let topology_snapshot = env.topology_snapshot();
+    let (app_subnet, _) = get_app_subnet_and_node(&topology_snapshot);
+
+    app_subnet.apply_network_settings(NETWORK_SIMULATION);
 }
 
 fn test(env: TestEnv, config: Config) {
@@ -112,7 +136,10 @@ fn test(env: TestEnv, config: Config) {
 }
 
 async fn test_async(env: TestEnv, config: Config) {
-    let mut nodes = env.topology_snapshot().root_subnet().nodes();
+    let topology_snapshot = env.topology_snapshot();
+    let (app_subnet, _) = get_app_subnet_and_node(&topology_snapshot);
+
+    let mut nodes = app_subnet.nodes();
     let agent_node = nodes.next().unwrap();
     let rejoin_node = nodes.next().unwrap();
     rejoin_test_many_canisters(
