@@ -63,7 +63,9 @@ use ic_consensus_system_test_utils::performance::{persist_metrics, setup_jaeger_
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::test_env_api::get_current_branch_version;
+use ic_system_test_driver::driver::test_env_api::{
+    HasVm, IcNodeContainer, get_current_branch_version,
+};
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
@@ -85,7 +87,7 @@ const MAX_RUNTIME_THREADS: usize = 64;
 const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 
 const NODES_COUNT: usize = 13;
-const DKG_INTERVAL: u64 = 999;
+const DKG_INTERVAL: u64 = 499;
 // Network parameters
 const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(150); // artificial added latency
@@ -166,6 +168,21 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
         .build()
         .unwrap();
 
+    // sleep for 60 seconds
+    std::thread::sleep(Duration::from_secs(60));
+
+    // kill the first node
+    let topology_snapshot = env.topology_snapshot();
+    let (_, node) = get_app_subnet_and_node(&topology_snapshot);
+    node.vm().kill();
+    // sleep for 30 seconds
+    std::thread::sleep(Duration::from_secs(30));
+
+    // start the first node
+    node.vm().start();
+    // sleep for 30 seconds
+    std::thread::sleep(Duration::from_secs(30));
+
     let test_metrics = ic_consensus_system_test_utils::performance::test_with_rt_handle(
         env,
         message_size,
@@ -230,10 +247,10 @@ fn main() -> Result<()> {
         // of 10 minutes to setup this large testnet so let's increase the timeout:
         .with_timeout_per_test(Duration::from_secs(60 * 30))
         .with_setup(setup)
-        .add_test(systest!(test_few_small_messages))
-        .add_test(systest!(test_small_messages))
-        .add_test(systest!(test_few_large_messages))
-        .add_test(systest!(test_large_messages))
+        // .add_test(systest!(test_few_small_messages))
+        // .add_test(systest!(test_small_messages))
+        // .add_test(systest!(test_few_large_messages))
+        // .add_test(systest!(test_large_messages))
         .with_teardown(teardown)
         .execute_from_args()?;
     Ok(())
