@@ -253,17 +253,7 @@ fn setup_recovered_nns(
     .unwrap();
 
     let api_bn = env.topology_snapshot().api_boundary_nodes().next().unwrap();
-    patch_api_bn(&env, &recovered_nns_node, &api_bn);
-
-    propose_to_turn_into_api_bn(
-        &env,
-        neuron_id,
-        Sender::SigKeys(
-            SigKeys::from_pem(NEURON_SECRET_KEY_PEM).expect("Failed to parse secret key"),
-        ),
-        &recovered_nns_node,
-        api_bn.node_id,
-    );
+    patch_api_bn(&env, &recovered_nns_node, neuron_id, &api_bn);
 
     neuron_id
 }
@@ -640,7 +630,12 @@ fn fetch_recovered_nns_public_key_pem(recovered_nns_node: &IcNodeSnapshot) -> Ve
     pem
 }
 
-fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcNodeSnapshot) {
+fn patch_api_bn(
+    env: &TestEnv,
+    recovered_nns_node: &IcNodeSnapshot,
+    neuron_id: NeuronId,
+    api_bn: &IcNodeSnapshot,
+) {
     let logger = env.logger();
     let recovered_nns_node_ipv6 = recovered_nns_node.get_ip_addr();
 
@@ -671,6 +666,15 @@ fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcN
     )
     .expect("Could not patch NNS public key of API BN");
 
+    propose_to_turn_into_api_bn(
+        &env,
+        neuron_id,
+        Sender::SigKeys(
+            SigKeys::from_pem(NEURON_SECRET_KEY_PEM).expect("Failed to parse secret key"),
+        ),
+        &recovered_nns_node,
+        api_bn.node_id,
+    );
 
     // Regenerate IC config and start ic-replica
     api_bn
@@ -680,12 +684,9 @@ fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcN
         )
         .expect("Could not restart ic-replica on API BN");
 
-    // TODO: needed?
-    info!(
-        logger,
-        "Waiting 30s for the API BN to restart ic-replica ..."
-    );
-    std::thread::sleep(Duration::from_secs(30));
+    api_bn
+        .await_status_is_healthy()
+        .expect("API BN did not become healthy after patching");
 }
 
 fn delete_local_store(node: &IcNodeSnapshot, session: &Session) -> Result<String> {
