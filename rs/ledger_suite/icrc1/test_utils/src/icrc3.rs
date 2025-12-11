@@ -163,7 +163,7 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
         op_name: Option<&str>,
         tx_fields: BTreeMap<String, ICRC3Value>,
     ) -> ICRC3Value {
-        self.build(Some(op_name), tx_fields)
+        self.build(op_name, tx_fields)
     }
 
     /// Build the final ICRC3Value block

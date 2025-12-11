@@ -1493,15 +1493,7 @@ fn test_fee_collector_107_irregular_op() {
     ];
 
     add_custom_block(env, ledger_id, 0, Some("107feecol"), tx_fields);
-    let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
-        .expect_err("unrecognized block with btype '107feecol' but unrecognized tx.op parsed successfully by index");
-    let expected_log_msg = "unknown fields";
-    assert!(
-        index_err_logs.contains(expected_log_msg),
-        "index logs did not contain expected string '{}': {}",
-        expected_log_msg,
-        index_err_logs
-    );
+    wait_until_sync_is_completed(env, index_id, ledger_id);
 }
 
 #[test]
@@ -1522,7 +1514,7 @@ fn test_fee_collector_107_mthd_instead_of_op() {
         .expect_err(
             "unrecognized block with '107feecol' but tx.mthd instead of tx.op parsed successfully by index",
         );
-    let expected_log_msg = "missing field `op`";
+    let expected_log_msg = "unknown fields";
     assert!(
         index_err_logs.contains(expected_log_msg),
         "index logs did not contain expected string '{}': {}",
@@ -1568,7 +1560,7 @@ fn test_block_with_no_btype_and_no_op() {
     add_custom_block(env, ledger_id, 0, None, tx_fields);
     let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
         .expect_err("unrecognized block with no btype and no tx.op parsed successfully by index");
-    let expected_log_msg = "missing field `op`";
+    let expected_log_msg = "No operation specified and/or unknown btype";
     assert!(
         index_err_logs.contains(expected_log_msg),
         "index logs did not contain expected string '{}': {}",
