@@ -8,8 +8,6 @@ use crate::{Height, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, Sub
 use core::fmt;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{CspNiDkgDealing, CspNiDkgTranscript};
 #[cfg(test)]
-use ic_crypto_test_utils_ni_dkg::ni_dkg_csp_dealing;
-#[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{MasterPublicKeyId, VetKdKeyId};
 use ic_protobuf::proxy::ProxyDecodeError;
@@ -196,7 +194,7 @@ impl fmt::Display for NiDkgDealing {
 impl NiDkgDealing {
     pub fn dummy_dealing_for_tests(seed: u8) -> NiDkgDealing {
         NiDkgDealing {
-            internal_dealing: ni_dkg_csp_dealing(seed),
+            internal_dealing: ic_crypto_test_utils_ni_dkg::ni_dkg_csp_dealing(seed),
         }
     }
 }
@@ -315,7 +313,7 @@ impl NiDkgTranscript {
             committee: NiDkgReceivers::new(committee.into_iter().collect())
                 .expect("Couldn't create non-interactive DKG committee"),
             registry_version: RegistryVersion::from(registry_version),
-            internal_csp_transcript: dummy_internal_transcript(),
+            internal_csp_transcript: ic_crypto_test_utils_ni_dkg::dummy_csp_transcript(),
         }
     }
     pub fn dummy_transcript_for_tests() -> Self {
@@ -347,16 +345,4 @@ impl From<NiDkgTranscript> for InitialNiDkgTranscriptRecord {
                 .expect("failed to serialize CSP NI-DKG transcript to CBOR"),
         }
     }
-}
-
-#[cfg(test)]
-fn dummy_internal_transcript() -> CspNiDkgTranscript {
-    use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381;
-    use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
-    CspNiDkgTranscript::Groth20_Bls12_381(ni_dkg_groth20_bls12_381::Transcript {
-        public_coefficients: ni_dkg_groth20_bls12_381::PublicCoefficientsBytes {
-            coefficients: vec![PublicKeyBytes([0; PublicKeyBytes::SIZE])],
-        },
-        receiver_data: std::collections::BTreeMap::new(),
-    })
 }
