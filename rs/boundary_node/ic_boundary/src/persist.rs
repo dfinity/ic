@@ -6,6 +6,7 @@ use std::{
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
+use derive_new::new;
 use ethnum::u256;
 use tracing::{debug, error};
 
@@ -54,21 +55,22 @@ pub struct Route {
     pub range_end: u256,
 }
 
+/// Routing table for fast canister_id -> subnet lookups
 #[derive(Eq, PartialEq, Debug)]
 pub struct Routes {
     pub node_count: u32,
     pub range_count: u32,
 
-    // Routes should be sorted by `range_start` field for the binary search to work
+    /// Routes should be sorted by `range_start` field for the binary search to work
     pub routes: Vec<Route>,
-    // Direct mapping from the Canister ID to the subnet for faster lookups
+    /// Direct mapping from the Canister ID to the subnet for faster lookups
     pub direct: HashMap<u256, Arc<Subnet>>,
-    // Mapping from Subnet ID to subnet
+    /// Mapping from Subnet ID to subnet
     pub subnet_map: HashMap<Principal, Arc<Subnet>>,
 }
 
 impl Routes {
-    // Look up the subnet by canister_id
+    /// Look up the subnet by canister_id
     pub fn lookup_by_canister_id(&self, canister_id: Principal) -> Option<Arc<Subnet>> {
         let canister_id_u256 = principal_to_u256(&canister_id);
 
@@ -77,6 +79,7 @@ impl Routes {
             return Some(v.clone());
         }
 
+        // Then do the binary search
         let idx = match self
             .routes
             .binary_search_by_key(&canister_id_u256, |x| x.range_start)
@@ -107,29 +110,25 @@ impl Routes {
         Some(route.subnet.clone())
     }
 
-    // Look up the subnet by subnet_id
+    /// Look up the subnet by subnet_id
     pub fn lookup_by_id(&self, subnet_id: Principal) -> Option<Arc<Subnet>> {
         self.subnet_map.get(&subnet_id).cloned()
     }
 }
 
+/// Persist the new routing table
 pub trait Persist: Send + Sync {
     fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus;
 }
 
+#[derive(new)]
 pub struct Persister {
     published_routes: Arc<ArcSwapOption<Routes>>,
 }
 
-impl Persister {
-    pub fn new(published_routes: Arc<ArcSwapOption<Routes>>) -> Self {
-        Self { published_routes }
-    }
-}
-
 #[async_trait]
 impl Persist for Persister {
-    // Construct a lookup table based on the provided subnet list
+    /// Construct & store a routing table based on the provided subnet list
     fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus {
         if subnets.is_empty() {
             return PersistStatus::SkippedEmpty;

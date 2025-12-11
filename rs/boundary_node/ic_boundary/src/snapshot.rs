@@ -39,6 +39,7 @@ use crate::{
     persist::principal_to_u256,
 };
 
+/// IC node
 #[derive(Debug)]
 pub struct Node {
     pub id: Principal,
@@ -51,7 +52,7 @@ pub struct Node {
     pub health_check_url: Url,
 }
 
-// Lightweight Eq, just compare principals
+// Lightweight Eq, just compare principals.
 // If one ever needs a deep comparison - this needs to be removed and #[derive(Eq)] used
 impl PartialEq for Node {
     fn eq(&self, other: &Self) -> bool {
@@ -131,6 +132,8 @@ impl Node {
     }
 }
 
+/// API Boundary Node.
+/// For now we only count them so the fields are unused.
 #[derive(Clone, Debug)]
 pub struct ApiBoundaryNode {
     pub _id: Principal,
@@ -138,6 +141,7 @@ pub struct ApiBoundaryNode {
     pub _port: u16,
 }
 
+/// Range of canister IDs, ends inclusive
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct CanisterRange {
     pub start: Principal,
@@ -150,7 +154,8 @@ impl CanisterRange {
         (principal_to_u256(&self.end) - principal_to_u256(&self.start)) + 1
     }
 
-    /// Returns a list of canister IDs in this range in u256 format
+    /// Returns a list of canister IDs in this range in u256 format.
+    /// Do not use for large ranges since this would consume *a lot* of memory.
     pub fn canisters(&self) -> Vec<u256> {
         let mut x = principal_to_u256(&self.start);
         let end = principal_to_u256(&self.end);
@@ -165,6 +170,7 @@ impl CanisterRange {
     }
 }
 
+/// IC Subnet
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Subnet {
     pub id: Principal,
@@ -174,7 +180,14 @@ pub struct Subnet {
     pub replica_version: String,
 }
 
+impl fmt::Display for Subnet {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.id)
+    }
+}
+
 impl Subnet {
+    /// Picks N random nodes from the subnet
     pub fn pick_random_nodes(&self, n: usize) -> Result<Vec<Arc<Node>>, ErrorCause> {
         let nodes = self
             .nodes
@@ -189,17 +202,18 @@ impl Subnet {
         Ok(nodes)
     }
 
-    // max acceptable number of malicious nodes in a subnet
+    /// Max acceptable number of malicious nodes in a subnet
     pub fn fault_tolerance_factor(&self) -> usize {
         (self.nodes.len() - 1) / 3
     }
 
+    /// Pick up to N random nodes out of up to M closest (by latency)
     pub fn pick_n_out_of_m_closest(
         &self,
         n: usize,
         m: usize,
     ) -> Result<Vec<Arc<Node>>, ErrorCause> {
-        // nodes should already be sorted by latency after persist() invocation
+        // Nodes should already be sorted by latency after persist() invocation
         let m = m.min(self.nodes.len());
         let nodes = &self.nodes[0..m];
 
@@ -216,16 +230,11 @@ impl Subnet {
     }
 }
 
-impl fmt::Display for Subnet {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.id)
-    }
-}
-
 pub trait Snapshot: Send + Sync {
     fn snapshot(&self) -> Result<SnapshotResult, Error>;
 }
 
+/// Preprocessed snapshot of the Registry
 #[derive(Clone, Debug)]
 pub struct RegistrySnapshot {
     pub version: u64,
@@ -236,24 +245,28 @@ pub struct RegistrySnapshot {
     pub api_bns: Vec<ApiBoundaryNode>,
 }
 
+/// Metadata about the RegistrySnapshot
 pub struct SnapshotInfo {
     pub version: u64,
     pub subnets: usize,
     pub nodes: usize,
 }
 
+/// Metadata about snapshot publication
 pub struct SnapshotInfoPublished {
     pub timestamp: u64,
     pub old: Option<SnapshotInfo>,
     pub new: SnapshotInfo,
 }
 
+/// Result of snapshot publication
 pub enum SnapshotResult {
     NoNewVersion,
     NotOldEnough(u64),
     Published(SnapshotInfoPublished),
 }
 
+/// Takes snapshots of the Registry, preprocesses & publishes them
 #[derive(derive_new::new)]
 pub struct Snapshotter {
     published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
@@ -269,6 +282,7 @@ pub struct Snapshotter {
 }
 
 impl Snapshotter {
+    /// Gets a list of API BNs from the Registry
     fn get_api_boundary_nodes(
         &self,
         version: RegistryVersion,
@@ -301,7 +315,7 @@ impl Snapshotter {
         Ok(nodes)
     }
 
-    // Creates a snapshot of the registry for given version
+    /// Creates a snapshot of the registry for given version
     fn get_snapshot(&self, version: RegistryVersion) -> Result<RegistrySnapshot, Error> {
         // Get routing table with canister ranges
         let routing_table = self
@@ -573,15 +587,17 @@ impl Run for RegistryReplicatorRunner {
     }
 }
 
-// Forked functions from ic-test-utilities to avoid depending on that crate
+/// Forked functions from ic-test-utilities to avoid depending on that crate
 pub fn subnet_test_id(i: u64) -> SubnetId {
     SubnetId::from(PrincipalId::new_subnet_test_id(i))
 }
 
+/// Forked functions from ic-test-utilities to avoid depending on that crate
 pub fn node_test_id(i: u64) -> NodeId {
     NodeId::from(PrincipalId::new_node_test_id(i))
 }
 
+/// Generate a stub registry snapshot with given subnets
 pub fn generate_stub_snapshot(subnets: Vec<Subnet>) -> RegistrySnapshot {
     let nodes = subnets
         .iter()
@@ -599,6 +615,7 @@ pub fn generate_stub_snapshot(subnets: Vec<Subnet>) -> RegistrySnapshot {
     }
 }
 
+/// Generate a stub subnet with given addresses as the nodes
 pub fn generate_stub_subnet(nodes: Vec<SocketAddr>) -> Subnet {
     let subnet_id = subnet_test_id(0).get().0;
 

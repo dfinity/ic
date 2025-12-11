@@ -93,7 +93,8 @@ pub struct Registry {
     #[clap(env, long, group = "registry")]
     pub registry_local_store_path: Option<PathBuf>,
 
-    /// Whether to disable internal registry replicator
+    /// Whether to disable internal registry replicator.
+    /// It will work only if the local registry state is initialized.
     #[clap(env, long)]
     pub registry_disable_replicator: bool,
 

@@ -485,6 +485,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     // Start the tasks
     tasks.start();
 
+    warn!("Started, waiting for shutdown signal");
     // Wait for Ctrl-C or SIGTERM
     let mut sigterm = tokio::signal::unix::signal(SignalKind::terminate()).unwrap();
     select! {
@@ -586,7 +587,8 @@ async fn create_identity(
     })
     .await??;
 
-    let node_id = derive_node_id(&public_key).expect("failed to derive node id");
+    let node_id =
+        derive_node_id(&public_key).map_err(|e| anyhow!("failed to derive node id: {e:?}"))?;
 
     // Custom Signer
     Ok(Box::new(
@@ -643,6 +645,7 @@ async fn setup_registry(
         &ic_config::logger::Config::default(),
     );
 
+    // Parse the NNS key if there was one provided
     let nns_pub_key = if let Some(v) = &cli.registry.registry_nns_pub_key_pem {
         Some(parse_threshold_sig_key(v).context("failed to parse NNS public key")?)
     } else {
@@ -752,7 +755,7 @@ fn setup_tls_resolver_acme(
 }
 
 /// Try to load the static resolver first, then ACME one.
-/// This is needed for integration tests where we cannot easily separate test/prod environments
+/// This is needed for the integration tests where we cannot easily separate test/prod environments.
 fn setup_tls_resolver(
     cli: &cli::Tls,
     tasks: &mut TaskManager,
