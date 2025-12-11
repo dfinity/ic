@@ -197,14 +197,10 @@ pub fn get_rosetta_metadata(connection: &Connection, key: &str) -> anyhow::Resul
         let entry: Vec<u8> = row?;
         result.push(entry);
     }
-    if result.len() == 1 {
-        Ok(Some(result[0].clone()))
-    } else if result.is_empty() {
-        // Return None if no metadata entry found
-        Ok(None)
-    } else {
-        // If more than one metadata entry was found return an error
-        bail!(format!("Multiple metadata entries found for key: {key}"))
+    match result.len() {
+        0 => Ok(None),
+        1 => Ok(Some(result.swap_remove(0))),
+        _ => bail!(format!("Multiple metadata entries found for key: {key}")),
     }
 }
 
