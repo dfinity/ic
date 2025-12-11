@@ -6,6 +6,9 @@ use std::cmp::max;
 
 pub trait FeeEstimator {
     const DUST_LIMIT: u64;
+    /// The minimum fee increment for transaction resubmission.
+    /// See https://en.bitcoin.it/wiki/Miner_fees#Relaying for more detail.
+    const MIN_RELAY_FEE_RATE_INCREASE: MillisatoshiPerByte;
 
     /// Estimate the median fees based on the given fee percentiles (slice of fee rates in milli base unit per vbyte/byte).
     fn estimate_median_fee(
@@ -21,6 +24,14 @@ pub trait FeeEstimator {
 
     /// Compute a new minimum withdrawal amount based on the current fee rate
     fn fee_based_minimum_withdrawal_amount(&self, median_fee: MillisatoshiPerByte) -> Satoshi;
+
+    /// Reimbursement fee in base unit for when a batch of *pending* withdrawal requests could not be processed,
+    /// e.g., because it would require too many inputs.
+    ///
+    /// No transaction was issued (not signed and not sent) but the minter still did some work:
+    /// 1) Burn on the ledger for each withdrawal request.
+    /// 2) Build transaction candidate to cover the amount in the batch of withdrawal requests.
+    fn reimbursement_fee_for_pending_withdrawal_requests(&self, num_requests: u64) -> u64;
 }
 
 pub struct BitcoinFeeEstimator {
@@ -36,6 +47,11 @@ impl BitcoinFeeEstimator {
     /// The minter's address is of type P2WPKH which means it has a dust limit of 294 sats.
     /// For additional safety, we round that value up.
     pub const MINTER_ADDRESS_P2WPKH_DUST_LIMIT: Satoshi = 300;
+
+    /// Cost in sats of 1B cycles.
+    ///
+    /// Use a lower bound on the price of Bitcoin of 1 BTC = 10_000 XDR, so that 10 sats correspond to 1B cycles.
+    pub const COST_OF_ONE_BILLION_CYCLES: Satoshi = 10;
 
     pub fn new(network: Network, retrieve_btc_min_amount: u64, check_fee: u64) -> Self {
         Self {
@@ -71,6 +87,8 @@ impl FeeEstimator for BitcoinFeeEstimator {
     // The threshold for other types is lower,
     // so we simply use 546 satoshi as the minimum amount per output.
     const DUST_LIMIT: u64 = 546;
+
+    const MIN_RELAY_FEE_RATE_INCREASE: MillisatoshiPerByte = 1_000;
 
     fn estimate_median_fee(
         &self,
@@ -133,5 +151,11 @@ impl FeeEstimator for BitcoinFeeEstimator {
     ) -> u64 {
         let tx_vsize = fake_sign(unsigned_tx).vsize();
         (tx_vsize as u64 * fee_per_vbyte) / 1000
+    }
+
+    fn reimbursement_fee_for_pending_withdrawal_requests(&self, num_requests: u64) -> u64 {
+        // Heuristic:
+        // * charge 1B cycles for each request (a burn on the ledger on the fiduciary subnet is probably around 50M cycles).
+        num_requests.saturating_mul(Self::COST_OF_ONE_BILLION_CYCLES)
     }
 }

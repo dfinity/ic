@@ -1,11 +1,12 @@
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 
 use anyhow::Result;
 
 use canister_test::Canister;
 use ic_consensus_threshold_sig_system_test_utils::{
-    enable_chain_key_signing_with_timeout_and_rotation_period, get_public_key_with_logger,
-    make_key_ids_for_all_idkg_schemes, setup_without_ecdsa_on_nns,
+    await_pre_signature_stash_size, enable_chain_key_signing_with_timeout_and_rotation_period,
+    get_public_key_with_logger, make_key_ids_for_all_idkg_schemes, set_pre_signature_stash_size,
+    setup_without_ecdsa_on_nns,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -18,6 +19,7 @@ use ic_system_test_driver::{
     systest,
     util::{MessageCanister, MetricsFetcher, block_on, runtime_from_url},
 };
+use ic_types::consensus::idkg::STORE_PRE_SIGNATURES_IN_STATE;
 use slog::info;
 
 const MASTER_KEY_TRANSCRIPTS_CREATED: &str = "consensus_master_key_transcripts_created";
@@ -42,22 +44,43 @@ fn test(test_env: TestEnv) {
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
         let key_ids = make_key_ids_for_all_idkg_schemes();
+        let key_rotation_period = Some(Duration::from_secs(50));
         enable_chain_key_signing_with_timeout_and_rotation_period(
             &governance,
             app_subnet.subnet_id,
             key_ids.clone(),
             None,
-            Some(Duration::from_secs(50)),
+            key_rotation_period,
             &log,
         )
         .await;
+        if STORE_PRE_SIGNATURES_IN_STATE {
+            // Stash size should be 5 before the roation
+            await_pre_signature_stash_size(&app_subnet, 5, key_ids.as_slice(), &log);
+            // Turn off pre-signature creation to verify that the stash is purged correctly
+            set_pre_signature_stash_size(
+                &governance,
+                app_subnet.subnet_id,
+                key_ids.as_slice(),
+                /* max_parallel_pre_signatures */ 0,
+                /* max_stash_size */ 5,
+                key_rotation_period,
+                &log,
+            )
+            .await;
+        }
+
         let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
         // Get the public key first to make sure feature is working
+        let mut pub_keys = BTreeMap::new();
         for key_id in &key_ids {
-            let _public_key = get_public_key_with_logger(key_id, &msg_can, &log)
+            let public_key = get_public_key_with_logger(key_id, &msg_can, &log)
                 .await
                 .unwrap();
+            pub_keys.insert(key_id, public_key);
+        }
 
+        for key_id in &key_ids {
             let mut count = 0;
             let mut created = 0;
             let metric_with_label =
@@ -68,6 +91,12 @@ fn test(test_env: TestEnv) {
                     Ok(val) => {
                         created = val[&metric_with_label][0];
                         if created > 1 {
+                            info!(
+                                log,
+                                "Observed key transcript for key {} being reshared {} times",
+                                key_id,
+                                created
+                            );
                             break;
                         }
                     }
@@ -85,6 +114,21 @@ fn test(test_env: TestEnv) {
             if created <= 1 {
                 panic!("Failed to observe key transcript being reshared more than once");
             }
+        }
+
+        if STORE_PRE_SIGNATURES_IN_STATE {
+            // Stash size should be 0 after the roation
+            await_pre_signature_stash_size(&app_subnet, 0, key_ids.as_slice(), &log);
+        }
+        // Ensure that public keys are the same after the rotation
+        for key_id in &key_ids {
+            let public_key = get_public_key_with_logger(key_id, &msg_can, &log)
+                .await
+                .unwrap();
+            assert_eq!(
+                public_key, pub_keys[key_id],
+                "Public key changed after rotation"
+            );
         }
     });
 }

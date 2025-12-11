@@ -14,6 +14,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
+RemainAfterExit=yes
 ExecStart=/opt/ic/bin/config generate-ic-config
 Restart=on-failure
 RestartSec=10

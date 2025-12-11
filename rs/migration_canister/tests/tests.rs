@@ -5,6 +5,9 @@ use ic_management_canister_types::{CanisterLogRecord, CanisterSettings};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, Payload as _,
 };
+use ic_nervous_system_common_test_utils::get_gauge;
+use ic_transport_types::Envelope;
+use ic_transport_types::EnvelopeContent::Call;
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
 use itertools::Itertools;
 use pocket_ic::{
@@ -12,7 +15,8 @@ use pocket_ic::{
     common::rest::{IcpFeatures, IcpFeaturesConfig},
     nonblocking::PocketIc,
 };
-use serde::Deserialize;
+use prometheus_parse::Scrape;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
     time::Duration,
@@ -249,7 +253,7 @@ async fn get_status(
     pic: &PocketIc,
     sender: Principal,
     args: &MigrateCanisterArgs,
-) -> Vec<MigrationStatus> {
+) -> Option<MigrationStatus> {
     let res = pic
         .update_call(
             MIGRATION_CANISTER_ID.into(),
@@ -259,7 +263,37 @@ async fn get_status(
         )
         .await
         .unwrap();
-    Decode!(&res, Vec<MigrationStatus>).unwrap()
+    Decode!(&res, Option<MigrationStatus>).unwrap()
+}
+
+async fn fetch_metrics(pic: &PocketIc) -> Scrape {
+    let http_request = ic_http_types::HttpRequest {
+        method: "GET".to_string(),
+        url: "/metrics".to_string(),
+        headers: vec![],
+        body: serde_bytes::ByteBuf::default(),
+    };
+
+    let res = pic
+        .query_call(
+            MIGRATION_CANISTER_ID.into(),
+            Principal::anonymous(),
+            "http_request",
+            Encode!(&http_request).unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let response = Decode!(&res, ic_http_types::HttpResponse).unwrap();
+
+    let iterator = String::from_utf8(response.body.into_vec())
+        .unwrap()
+        .lines()
+        .map(|s| Ok(s.to_owned()))
+        .collect::<Vec<_>>()
+        .into_iter();
+
+    prometheus_parse::Scrape::parse(iterator).unwrap()
 }
 
 /// Advances time by a second and executes enough ticks that the state machine
@@ -415,7 +449,7 @@ async fn migration_succeeds() {
     let mut logs = Logs::default();
 
     for _ in 0..100 {
-        // advance time by a lot such that the task which waits 5m can succeed quickly.
+        // advance time by a lot such that the task which waits 6m can succeed quickly.
         pic.advance_time(Duration::from_secs(250)).await;
         pic.tick().await;
 
@@ -498,6 +532,156 @@ async fn migration_succeeds() {
         }
         _ => panic!("Unexpected canister history entry: {:?}", rename_details),
     };
+}
+
+async fn call_request(
+    pic: &PocketIc,
+    ingress_expiry: u64,
+    canister_id: Principal,
+) -> (reqwest::Response, [u8; 32]) {
+    let content = Call {
+        nonce: None,
+        ingress_expiry,
+        sender: Principal::anonymous(),
+        canister_id,
+        method_name: "update".to_string(),
+        arg: wasm().reply().build(),
+    };
+    let envelope = Envelope {
+        content: std::borrow::Cow::Borrowed(&content),
+        sender_pubkey: None,
+        sender_sig: None,
+        sender_delegation: None,
+    };
+
+    let mut serialized_bytes = Vec::new();
+    let mut serializer = serde_cbor::Serializer::new(&mut serialized_bytes);
+    serializer.self_describe().unwrap();
+    envelope.serialize(&mut serializer).unwrap();
+
+    let endpoint = format!(
+        "instances/{}/api/v2/canister/{}/call",
+        pic.instance_id,
+        canister_id.to_text()
+    );
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(pic.get_server_url().join(&endpoint).unwrap())
+        .header(reqwest::header::CONTENT_TYPE, "application/cbor")
+        .body(serialized_bytes)
+        .send()
+        .await
+        .unwrap();
+    (resp, *content.to_request_id())
+}
+
+#[tokio::test]
+async fn replay_call_after_migration() {
+    let Setup {
+        pic,
+        sources,
+        targets,
+        source_controllers,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = source_controllers[0];
+    let source = sources[0];
+    let target = targets[0];
+
+    assert_eq!(
+        get_gauge(
+            &fetch_metrics(&pic).await,
+            "migration_canister_num_successes_in_past_24_h"
+        ),
+        0.0
+    );
+
+    // We deploy the universal canister WASM
+    // to both the "source" and "target" canisters
+    // so that we can call the "source" canister ID
+    // both before and after renaming.
+    for canister_id in [source, target] {
+        pic.add_cycles(canister_id, 1_000_000_000_000).await;
+        pic.install_canister(
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            Some(sender),
+        )
+        .await;
+    }
+
+    // We restart the "source" canister for a moment so that
+    // we can send an update call to it.
+    pic.start_canister(source, Some(sender)).await.unwrap();
+
+    // We manually submit an update call so that
+    // we can replay the exact same HTTP request later.
+    let ingress_expiry = pic.get_time().await.as_nanos_since_unix_epoch() + 330_000_000_000;
+    let (resp, _) = call_request(&pic, ingress_expiry, source).await;
+    assert_eq!(resp.status(), reqwest::StatusCode::ACCEPTED);
+
+    // We stop the "source" canister again so that
+    // we can kick off canister migration.
+    pic.stop_canister(source, Some(sender)).await.unwrap();
+
+    let args = MigrateCanisterArgs {
+        canister_id: source,
+        replace_canister_id: target,
+    };
+    migrate_canister(&pic, sender, &args).await.unwrap();
+
+    loop {
+        let status = get_status(&pic, sender, &args).await;
+        if let MigrationStatus::Succeeded { .. } = status.unwrap() {
+            break;
+        }
+        // We proceed in small steps here so that
+        // we reply the update call as soon as possible.
+        pic.advance_time(Duration::from_secs(1)).await;
+        pic.tick().await;
+    }
+
+    assert_eq!(
+        get_gauge(
+            &fetch_metrics(&pic).await,
+            "migration_canister_num_successes_in_past_24_h"
+        ),
+        1.0
+    );
+
+    // We restart the "source" canister right away.
+    pic.start_canister(source, Some(sender)).await.unwrap();
+
+    // Replaying the update call from before should fail.
+    let (resp, _) = call_request(&pic, ingress_expiry, source).await;
+    assert_eq!(resp.status(), reqwest::StatusCode::BAD_REQUEST);
+    let message = String::from_utf8(resp.bytes().await.unwrap().to_vec()).unwrap();
+    assert!(message.contains("Invalid request expiry"));
+    assert_eq!(
+        get_gauge(
+            &fetch_metrics(&pic).await,
+            "migration_canister_num_successes_in_past_24_h"
+        ),
+        1.0
+    );
+}
+
+#[tokio::test]
+async fn metrics() {
+    let Setup { pic, .. } = setup(Settings::default()).await;
+
+    let metrics = fetch_metrics(&pic).await;
+
+    assert_eq!(
+        get_gauge(&metrics, "migration_canister_num_successes_in_past_24_h"),
+        0.0
+    );
+
+    assert_eq!(
+        get_gauge(&metrics, "migration_canister_migrations_enabled"),
+        1.0
+    );
 }
 
 async fn concurrent_migration(
@@ -1044,7 +1228,7 @@ async fn status_correct() {
 
     let status = get_status(&pic, sender, &args).await;
     assert_eq!(
-        status[0],
+        status.unwrap(),
         MigrationStatus::InProgress {
             status: "Accepted".to_string()
         }
@@ -1053,7 +1237,7 @@ async fn status_correct() {
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     assert_eq!(
-        status[0],
+        status.unwrap(),
         MigrationStatus::InProgress {
             status: "ControllersChanged".to_string()
         }
@@ -1062,7 +1246,7 @@ async fn status_correct() {
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     assert_eq!(
-        status[0],
+        status.unwrap(),
         MigrationStatus::InProgress {
             status: "StoppedAndReady".to_string()
         }
@@ -1071,7 +1255,7 @@ async fn status_correct() {
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     assert_eq!(
-        status[0],
+        status.unwrap(),
         MigrationStatus::InProgress {
             status: "RenamedTarget".to_string()
         }
@@ -1080,7 +1264,7 @@ async fn status_correct() {
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     assert_eq!(
-        status[0],
+        status.unwrap(),
         MigrationStatus::InProgress {
             status: "UpdatedRoutingTable".to_string()
         }
@@ -1089,7 +1273,7 @@ async fn status_correct() {
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     assert_eq!(
-        status[0],
+        status.unwrap(),
         MigrationStatus::InProgress {
             status: "RoutingTableChangeAccepted".to_string()
         }
@@ -1098,16 +1282,16 @@ async fn status_correct() {
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     assert_eq!(
-        status[0],
+        status.unwrap(),
         MigrationStatus::InProgress {
             status: "SourceDeleted".to_string()
         }
     );
-    pic.advance_time(Duration::from_secs(310)).await;
+    pic.advance_time(Duration::from_secs(360)).await;
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     assert_eq!(
-        status[0],
+        status.unwrap(),
         MigrationStatus::InProgress {
             status: "RestoredControllers".to_string()
         }
@@ -1137,7 +1321,7 @@ async fn after_validation_source_not_stopped() {
     advance(&pic).await;
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
-    let MigrationStatus::Failed { ref reason, .. } = status[0] else {
+    let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
         panic!()
     };
     assert_eq!(reason, &"Source is not stopped.".to_string());
@@ -1166,7 +1350,7 @@ async fn after_validation_target_not_stopped() {
     advance(&pic).await;
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
-    let MigrationStatus::Failed { ref reason, .. } = status[0] else {
+    let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
         panic!()
     };
     assert_eq!(reason, &"Target is not stopped.".to_string());
@@ -1207,7 +1391,7 @@ async fn after_validation_target_has_snapshot() {
     advance(&pic).await;
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
-    let MigrationStatus::Failed { ref reason, .. } = status[0] else {
+    let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
         panic!()
     };
     assert_eq!(reason, &"Target has snapshots.".to_string());
@@ -1249,7 +1433,7 @@ async fn after_validation_insufficient_cycles() {
     advance(&pic).await;
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
-    let MigrationStatus::Failed { ref reason, .. } = status[0] else {
+    let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
         panic!()
     };
     assert!(reason.contains("Source does not have sufficient cycles"));
@@ -1279,7 +1463,7 @@ async fn failure_controllers_restored() {
     advance(&pic).await;
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
-    let MigrationStatus::Failed { .. } = status[0] else {
+    let MigrationStatus::Failed { .. } = status.unwrap() else {
         panic!()
     };
     let mut source_controllers_after = pic.get_controllers(source).await;
@@ -1313,13 +1497,13 @@ async fn success_controllers_restored() {
     for _ in 0..10 {
         advance(&pic).await;
     }
-    pic.advance_time(Duration::from_secs(300)).await;
+    pic.advance_time(Duration::from_secs(360)).await;
     for _ in 0..10 {
         advance(&pic).await;
     }
     let status = get_status(&pic, sender, &args).await;
-    let MigrationStatus::Succeeded { .. } = status[0] else {
-        panic!("status: {:?}", status[0]);
+    let MigrationStatus::Succeeded { .. } = status.as_ref().unwrap() else {
+        panic!("status: {:?}", status.unwrap());
     };
     let mut source_controllers_after = pic.get_controllers(source).await;
     source_controllers_after.sort();
@@ -1382,7 +1566,7 @@ async fn parallel_migrations() {
             },
         )
         .await;
-        let MigrationStatus::InProgress { ref status } = status[0] else {
+        let MigrationStatus::InProgress { ref status } = status.unwrap() else {
             panic!()
         };
         assert_eq!(status, "SourceDeleted");

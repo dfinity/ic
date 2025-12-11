@@ -342,12 +342,8 @@ mod block_encoding_stability {
         };
         let builder = BlockBuilder::<Tokens>::new(7, 0x31313131)
             .with_parent_hash(vec![0xa6u8; 32])
-            .transfer_from(
-                account1,
-                account2,
-                account3,
-                Tokens::from_e8s(0x73377337u64),
-            );
+            .transfer(account1, account2, Tokens::from_e8s(0x73377337u64))
+            .with_spender(account3);
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
     }
 

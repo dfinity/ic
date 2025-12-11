@@ -78,7 +78,6 @@ pub async fn prepare_direct_boot(
                 file_system: GRUB_PARTITION_FS,
             },
         )
-        .await
         .context("Could not mount grub partition")?;
 
     let grubenv_path = grub_partition.mount_point().join("grubenv");
@@ -113,7 +112,6 @@ pub async fn prepare_direct_boot(
                 file_system: BOOT_PARTITION_FS,
             },
         )
-        .await
         .with_context(|| format!("Could not mount boot partition {boot_alternative}"))?;
 
     let boot_args_path = boot_partition.mount_point().join("boot_args");

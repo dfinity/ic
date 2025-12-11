@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -45,13 +45,4 @@ rust_test(
     name = "metrics_tool_test",
     crate = ":metrics_tool",
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
-)
-
-rust_test_suite(
-    name = "metrics_tool_integration",
-    srcs = glob(["tests/**/*.rs"]),
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
-    deps = [":metrics_tool_bin"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

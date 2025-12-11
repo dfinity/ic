@@ -2,7 +2,6 @@
 //!
 //!
 use candid::{CandidType, Principal, Reserved};
-use ic_cdk::futures::spawn;
 use ic_cdk_timers::set_timer_interval;
 use ic_stable_structures::{Storable, storable::Bound};
 use serde::{Deserialize, Serialize};
@@ -11,7 +10,7 @@ use std::{borrow::Cow, fmt::Display, time::Duration};
 use strum_macros::Display;
 
 use crate::{
-    canister_state::{events::num_successes_in_past_24_h, num_active_requests},
+    canister_state::{limiter::num_successes_in_past_24_h, requests::num_requests},
     processing::{
         process_accepted, process_all_by_predicate, process_all_failed, process_all_succeeded,
         process_controllers_changed, process_renamed, process_routing_table,
@@ -78,6 +77,12 @@ pub enum ValidationError {
     },
 }
 
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+struct CanisterMigrationArgs {
+    pub source: Principal,
+    pub target: Principal,
+}
+
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Request {
     source: Principal,
@@ -118,19 +123,6 @@ impl Request {
         }
         None
     }
-
-    /// Dummy value to serve as a bound in composite bounds.
-    pub fn low_bound() -> Self {
-        Self {
-            source: Principal::management_canister(),
-            source_subnet: Principal::management_canister(),
-            source_original_controllers: vec![],
-            target: Principal::management_canister(),
-            target_subnet: Principal::management_canister(),
-            target_original_controllers: vec![],
-            caller: Principal::management_canister(),
-        }
-    }
 }
 
 impl Display for Request {
@@ -148,6 +140,15 @@ impl Display for Request {
             write!(f, "{}, ", x)?;
         }
         write!(f, "] }}")
+    }
+}
+
+impl From<&Request> for CanisterMigrationArgs {
+    fn from(request: &Request) -> Self {
+        Self {
+            source: request.source,
+            target: request.target,
+        }
     }
 }
 
@@ -319,6 +320,28 @@ impl Display for Event {
     }
 }
 
+impl From<&Event> for CanisterMigrationArgs {
+    fn from(x: &Event) -> Self {
+        x.event.request().into()
+    }
+}
+
+impl Storable for CanisterMigrationArgs {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Owned(to_vec(&self).expect("Canister migration argument serialization failed"))
+    }
+
+    fn into_bytes(self) -> Vec<u8> {
+        self.to_bytes().to_vec()
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        from_slice(&bytes).expect("Canister migration argument deserialization failed")
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
 impl Storable for Request {
     fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(to_vec(&self).expect("Request serialization failed"))
@@ -389,67 +412,74 @@ impl Storable for Event {
 #[allow(clippy::disallowed_methods)]
 pub fn start_timers() {
     let interval = Duration::from_secs(1);
-    set_timer_interval(interval, || {
-        spawn(process_all_by_predicate(
+    set_timer_interval(interval, async || {
+        process_all_by_predicate(
             "accepted",
             |r| matches!(r, RequestState::Accepted { .. }),
             process_accepted,
-        ))
+        )
+        .await
     });
-    set_timer_interval(interval, || {
-        spawn(process_all_by_predicate(
+    set_timer_interval(interval, async || {
+        process_all_by_predicate(
             "controllers_changed",
             |r| matches!(r, RequestState::ControllersChanged { .. }),
             process_controllers_changed,
-        ))
+        )
+        .await
     });
-    set_timer_interval(interval, || {
-        spawn(process_all_by_predicate(
+    set_timer_interval(interval, async || {
+        process_all_by_predicate(
             "stopped",
             |r| matches!(r, RequestState::StoppedAndReady { .. }),
             process_stopped,
-        ))
+        )
+        .await
     });
-    set_timer_interval(interval, || {
-        spawn(process_all_by_predicate(
+    set_timer_interval(interval, async || {
+        process_all_by_predicate(
             "renamed_target",
             |r| matches!(r, RequestState::RenamedTarget { .. }),
             process_renamed,
-        ))
+        )
+        .await
     });
-    set_timer_interval(interval, || {
-        spawn(process_all_by_predicate(
+    set_timer_interval(interval, async || {
+        process_all_by_predicate(
             "updated_routing_table",
             |r| matches!(r, RequestState::UpdatedRoutingTable { .. }),
             process_updated,
-        ))
+        )
+        .await
     });
-    set_timer_interval(interval, || {
-        spawn(process_all_by_predicate(
+    set_timer_interval(interval, async || {
+        process_all_by_predicate(
             "routing_table_change_accepted",
             |r| matches!(r, RequestState::RoutingTableChangeAccepted { .. }),
             process_routing_table,
-        ))
+        )
+        .await
     });
-    set_timer_interval(interval, || {
-        spawn(process_all_by_predicate(
+    set_timer_interval(interval, async || {
+        process_all_by_predicate(
             "source_deleted",
             |r| matches!(r, RequestState::SourceDeleted { .. }),
             process_source_deleted,
-        ))
+        )
+        .await
     });
 
-    set_timer_interval(interval, || spawn(process_all_succeeded()));
+    set_timer_interval(interval, async || process_all_succeeded().await);
 
     // This one has a different type from the generic ones above.
-    set_timer_interval(interval, || spawn(process_all_failed()));
+    set_timer_interval(interval, async || process_all_failed().await);
 }
 
 /// Rate limit active requests:
 /// Within a sliding 24h window, we don't want to exceed some maximum of migrations.
 /// Therefore, we add currently active requests and successes in the past 24 hours.
 pub fn rate_limited() -> bool {
-    num_active_requests() + num_successes_in_past_24_h() >= RATE_LIMIT
+    num_requests() + num_successes_in_past_24_h() >= RATE_LIMIT
 }
 
 #[allow(dead_code)]

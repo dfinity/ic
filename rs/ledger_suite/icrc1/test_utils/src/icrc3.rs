@@ -6,7 +6,7 @@ use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 
 /// Helper function to convert Account to ICRC3Value array format
-fn account_to_icrc3_value(account: &Account) -> ICRC3Value {
+pub fn account_to_icrc3_value(account: &Account) -> ICRC3Value {
     let mut account_array = vec![ICRC3Value::Blob(ByteBuf::from(account.owner.as_slice()))];
     if let Some(subaccount) = account.subaccount {
         account_array.push(ICRC3Value::Blob(ByteBuf::from(subaccount)));
@@ -149,12 +149,25 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
         }
     }
 
-    /// Build the final ICRC3Value block
+    /// Create a block with a custom transaction
+    pub fn custom_transaction(self) -> CustomTxBuilder<Tokens> {
+        CustomTxBuilder {
+            builder: self,
+            tx_fields: Default::default(),
+        }
+    }
+
+    /// Build the final ICRC3Value block with an operation
     fn build_with_operation(
         self,
         op_name: Option<&str>,
         tx_fields: BTreeMap<String, ICRC3Value>,
     ) -> ICRC3Value {
+        self.build(Some(op_name), tx_fields)
+    }
+
+    /// Build the final ICRC3Value block
+    fn build(self, op_name: Option<&str>, tx_fields: BTreeMap<String, ICRC3Value>) -> ICRC3Value {
         let mut block_map = BTreeMap::new();
 
         // Add timestamp
@@ -363,6 +376,24 @@ impl<Tokens: TokensType> FeeCollectorBuilder<Tokens> {
         }
         self.builder
             .build_with_operation(self.op.as_deref(), tx_fields)
+    }
+}
+
+/// Builder for custom transactions
+pub struct CustomTxBuilder<Tokens: TokensType> {
+    builder: BlockBuilder<Tokens>,
+    tx_fields: BTreeMap<String, ICRC3Value>,
+}
+
+impl<Tokens: TokensType> CustomTxBuilder<Tokens> {
+    pub fn add_field(mut self, name: &str, value: ICRC3Value) -> Self {
+        self.tx_fields.insert(name.to_string(), value);
+        self
+    }
+
+    /// Build the custom transaction block
+    pub fn build(self) -> ICRC3Value {
+        self.builder.build(None, self.tx_fields)
     }
 }
 

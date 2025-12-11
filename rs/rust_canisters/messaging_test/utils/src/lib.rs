@@ -1,9 +1,15 @@
+use ic_limits::MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET;
 use ic_types::{CanisterId, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64};
 use messaging_test::{Call, CallMessage, Reply, ReplyMessage, decode, encode};
 use proptest::prelude::*;
 use std::ops::RangeInclusive;
 
 const MAX_PAYLOAD_SIZE: usize = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
+/// `SignedIngress::count_bytes()` takes the size of the serialized
+/// `HttpRequest<SignedIngressContent>` plus `EXPECTED_MESSAGE_ID_LENGTH`
+/// So just subtract a healthy amount, to make sure we never hit it.
+const MAX_INGRESS_PAYLOAD_SIZE: usize =
+    MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize - (10 << 10);
 
 /*
  * The proptest crate has dependencies that don't play nice with Wasm, therefore
@@ -61,6 +67,7 @@ pub fn arb_call(receiver: CanisterId, config: CallConfig) -> impl Strategy<Value
         (
             arb_simple_call(CallConfig {
                 receivers: vec![receiver],
+                call_bytes_range: 0..=MAX_INGRESS_PAYLOAD_SIZE,
                 ..config.clone()
             }),
             proptest::collection::vec(arb_simple_call(config.clone()), config.call_tree_size),
@@ -142,7 +149,8 @@ pub fn to_encoded_ingress(call: Call) -> (CanisterId, Vec<u8>) {
             reply_bytes: call.reply_bytes,
             downstream_calls: call.downstream_calls,
         },
-        call.call_bytes as usize,
+        // Avoid exceeding the ingress message size limit.
+        (call.call_bytes as usize).min(MAX_INGRESS_PAYLOAD_SIZE),
     );
     (into_canister_id(call.receiver), payload)
 }

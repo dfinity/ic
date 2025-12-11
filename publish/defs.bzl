@@ -4,7 +4,7 @@ For example, you might want to build some targets with optimizations enabled
 no matter what the current Bazel flags are.
 """
 
-def _release_nostrip_transition(_settings, _attr):
+def _release_nostrip_transition_impl(_settings, _attr):
     return {
         "//command_line_option:compilation_mode": "opt",
         "//command_line_option:strip": "never",
@@ -12,7 +12,7 @@ def _release_nostrip_transition(_settings, _attr):
     }
 
 release_nostrip_transition = transition(
-    implementation = _release_nostrip_transition,
+    implementation = _release_nostrip_transition_impl,
     inputs = [],
     outputs = [
         "//command_line_option:compilation_mode",
@@ -22,14 +22,11 @@ release_nostrip_transition = transition(
 )
 
 def _release_nostrip_impl(ctx):
-    bin = ctx.attr.binary[0]
-    info = bin[DefaultInfo]
-
-    executable = ctx.actions.declare_file(ctx.label.name)
-    ctx.actions.symlink(output = executable, target_file = ctx.file.binary)
+    release_bin = ctx.actions.declare_file(ctx.label.name)
+    ctx.actions.symlink(output = release_bin, target_file = ctx.file.binary)
 
     return [
-        DefaultInfo(files = info.files, runfiles = info.default_runfiles, executable = executable),
+        DefaultInfo(executable = release_bin),
     ]
 
 release_nostrip_binary = rule(

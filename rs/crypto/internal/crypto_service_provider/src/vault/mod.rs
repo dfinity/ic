@@ -8,7 +8,7 @@ use ic_adapter_metrics_client::AdapterMetrics;
 use ic_config::crypto::{CryptoConfig, CspVaultType};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_logger::{ReplicaLogger, info};
-use ic_types::crypto::CryptoError;
+use ic_types::crypto::{AlgorithmId, CryptoError};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -92,35 +92,26 @@ fn unix_socket_vault(
 impl From<CspBasicSignatureError> for CryptoError {
     fn from(e: CspBasicSignatureError) -> CryptoError {
         match e {
-            CspBasicSignatureError::SecretKeyNotFound { algorithm, key_id } => {
-                CryptoError::SecretKeyNotFound {
-                    algorithm,
-                    key_id: key_id.to_string(),
-                }
-            }
-            CspBasicSignatureError::UnsupportedAlgorithm { algorithm } => {
-                CryptoError::AlgorithmNotSupported {
-                    algorithm,
-                    reason: "Unsupported algorithm".to_string(),
-                }
-            }
-            CspBasicSignatureError::WrongSecretKeyType {
-                algorithm,
-                secret_key_variant,
-            } => CryptoError::InvalidArgument {
-                message: format!(
-                    "Wrong secret key type: {secret_key_variant} incompatible with {algorithm:?}"
-                ),
+            CspBasicSignatureError::SecretKeyNotFound(key_id) => CryptoError::SecretKeyNotFound {
+                algorithm: AlgorithmId::Ed25519,
+                key_id: key_id.to_string(),
             },
-            CspBasicSignatureError::MalformedSecretKey { algorithm } => {
-                CryptoError::MalformedSecretKey {
-                    algorithm,
-                    internal_error: "Malformed secret key".to_string(),
+            CspBasicSignatureError::WrongSecretKeyType { secret_key_variant } => {
+                CryptoError::InvalidArgument {
+                    message: format!("Wrong secret key type: {secret_key_variant}"),
                 }
             }
             CspBasicSignatureError::TransientInternalError { internal_error } => {
                 CryptoError::TransientInternalError { internal_error }
             }
+            CspBasicSignatureError::PublicKeyNotFound => CryptoError::InternalError {
+                internal_error: "missing node signing public key in public key store".to_string(),
+            },
+            CspBasicSignatureError::MalformedPublicKey(error) => CryptoError::InternalError {
+                internal_error: format!(
+                    "malformed node signing public key in public key store: {error}"
+                ),
+            },
         }
     }
 }

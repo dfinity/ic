@@ -369,11 +369,13 @@ impl SystemMetadata {
             node_public_keys: Default::default(),
             api_boundary_nodes: Default::default(),
             split_from: None,
+
             // StateManager populates proper values of these fields before
             // committing each state.
             prev_state_hash: Default::default(),
             state_sync_version: CURRENT_STATE_SYNC_VERSION,
             certification_version: CURRENT_CERTIFICATION_VERSION,
+
             heap_delta_estimate: NumBytes::from(0),
             subnet_metrics: Default::default(),
             expected_compiled_wasms: BTreeSet::new(),
@@ -630,7 +632,7 @@ impl SystemMetadata {
         // Destructure `self` in order for the compiler to enforce an explicit decision
         // whenever new fields are added.
         //
-        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS A `match`!
         let &mut SystemMetadata {
             ref mut ingress_history,
             streams: _,
@@ -642,8 +644,8 @@ impl SystemMetadata {
             // Overwritten as soon as the round begins, no explicit action needed.
             network_topology: _,
             ref own_subnet_id,
-            // `own_subnet_type` has been set by `load_checkpoint()` based on the subnet
-            // registry record of B, do not touch it.
+            // `own_subnet_type` has been set by `load_checkpoint()` based on the respective
+            // subnet registry record, do not touch it.
             own_subnet_type: _,
             // Overwritten as soon as the round begins, no explicit action needed.
             own_subnet_features: _,
@@ -662,6 +664,7 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: _,
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
+            // Overwritten as soon as the round begins, no explicit action needed.
             cost_schedule: _,
         } = self;
 
@@ -686,20 +689,26 @@ impl SystemMetadata {
         self.reject_in_progress_management_calls_after_split(&is_local_canister, subnet_queues);
     }
 
-    /// Creates rejects for all in-progress management messages that cannot or should
-    /// not be handled on this subnet in the second phase of a subnet split.
-    /// Enqueues reject responses into the provided `subnet_queues` for calls originating
-    /// from canisters; and records a `Failed` state in `self.ingress_history` for calls
-    /// originating from ingress messages. The rejects are created for:
-    ///     - All in-progress subnet messages whose target canisters are no longer
-    ///     on this subnet.
-    ///       On the other subnet (which must be *subnet B*), the execution of these same
-    ///     messages, now without matching subnet call contexts, will be silently
-    ///     aborted / rolled back (without producing a response). This is the only way
-    ///     to ensure consistency for a message that would otherwise be executing on one
-    ///     subnet, but for which a response may only be produced by another subnet.
-    ///     - Specific requests that must be entirely handled by the local subnet where
-    ///    the originator canister exists.
+    /// Creates rejects for all in-progress management messages that can no longer
+    /// be handled on *subnet A'* following a subnet split.
+    ///
+    /// Enqueues reject responses into the provided `subnet_queues` for canister
+    /// calls; and records a `Failed` state in `ingress_history` for calls
+    /// originating from ingress messages.
+    ///
+    /// Rejects are created for:
+    ///
+    ///  * All in-progress subnet messages whose target canisters are no longer
+    ///    on this subnet (e.g. install, stop).
+    ///
+    ///    On *subnet B*, the execution of these same messages, now without matching
+    ///    subnet call contexts, will be silently aborted / rolled back (without
+    ///    producing a response). This is the only way to ensure consistency for a
+    ///    message that would otherwise be executing on *subnet B*, but for which a
+    ///    only a response from *subnet A'* could be inducted.
+    ///
+    ///  * Specific requests that must be entirely handled by the local subnet where
+    ///    the originator canister exists (e.g. `raw_rand`).
     fn reject_in_progress_management_calls_after_split<F>(
         &mut self,
         is_local_canister: F,
@@ -1558,16 +1567,10 @@ impl BlockmakerMetricsTimeSeries {
 /// by the checkpointing logic.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum UnflushedCheckpointOp {
-    /// A snapshot was deleted.
-    DeleteSnapshot(SnapshotId),
     /// A new snapshot was taken from a canister.
     TakeSnapshot(CanisterId, SnapshotId),
     /// A snapshot was loaded to a canister.
     LoadSnapshot(CanisterId, SnapshotId),
-    /// A snapshot was created via metadata upload.
-    UploadSnapshotMetadata(SnapshotId),
-    /// Binary data was uploaded to a snapshot
-    UploadSnapshotData(SnapshotId),
     /// A canister was renamed.
     RenameCanister(CanisterId, CanisterId),
 }
@@ -1592,11 +1595,6 @@ impl UnflushedCheckpointOps {
         self.operations.len()
     }
 
-    pub fn delete_snapshot(&mut self, snapshot_id: SnapshotId) {
-        self.operations
-            .push(UnflushedCheckpointOp::DeleteSnapshot(snapshot_id));
-    }
-
     pub fn take_snapshot(&mut self, canister_id: CanisterId, snapshot_id: SnapshotId) {
         self.operations.push(UnflushedCheckpointOp::TakeSnapshot(
             canister_id,
@@ -1609,16 +1607,6 @@ impl UnflushedCheckpointOps {
             canister_id,
             snapshot_id,
         ));
-    }
-
-    pub fn create_snapshot_from_metadata(&mut self, snapshot_id: SnapshotId) {
-        self.operations
-            .push(UnflushedCheckpointOp::UploadSnapshotMetadata(snapshot_id));
-    }
-
-    pub fn upload_data(&mut self, snapshot_id: SnapshotId) {
-        self.operations
-            .push(UnflushedCheckpointOp::UploadSnapshotData(snapshot_id));
     }
 
     pub fn rename_canister(&mut self, old_canister_id: CanisterId, new_canister_id: CanisterId) {
