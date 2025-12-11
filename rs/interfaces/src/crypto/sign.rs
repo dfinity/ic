@@ -44,19 +44,15 @@ pub trait BasicSigner<T: Signable>: Send + Sync {
     /// Creates a (non-malleable) basic signature.
     ///
     /// # Errors
-    /// * `CryptoError::RegistryClient`: if the registry cannot be accessed at
-    ///   `registry_version`.
-    /// * `CryptoError::PublicKeyNotFound`: if the `signer`'s public key cannot
-    ///   be found at the given `registry_version`.
-    /// * `CryptoError::MalformedPublicKey`: if the `signer`'s public key
+    /// * `CryptoError::InternalError`: if the public key in the node's public
+    ///   key store is not found or malformed.
     ///   obtained from the registry is malformed.
-    /// * `CryptoError::AlgorithmNotSupported`: if the `signer`'s public key
-    ///   obtained from the registry is for an unsupported algorithm.
+    /// * `CryptoError::InvalidArgument`: if the secret key in the node's
+    ///   secret key store has the wrong type.
     /// * `CryptoError::SecretKeyNotFound`: if the `signer`'s secret key cannot
     ///   be found in the secret key store.
-    /// * `CryptoError::MalformedSecretKey`: if the secret key is malformed.
-    /// * `CryptoError::InvalidArgument`: if the signature algorithm is not
-    ///   supported.
+    /// * `CryptoError::TransientInternalError`: if there is a transient internal
+    ///   error during signing (e.g. RPC error when calling the crypto vault).
     ///
     /// When called within a Tokio runtime the function should be wrapped inside
     /// 'tokio::task::spawn_blocking' when in async function or
