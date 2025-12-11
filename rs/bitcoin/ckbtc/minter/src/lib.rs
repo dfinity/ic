@@ -535,6 +535,12 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
     // successfully.
     let (requests, used_utxos) = ScopeGuard::into_inner(requests_guard);
 
+    // Only fill signed_tx when it is a consolidation transaction.
+    let signed_tx = match requests {
+        state::SubmittedWithdrawalRequests::ToConsolidate { .. } => Some(signed_tx.serialize()),
+        _ => None,
+    };
+
     state::mutate_state(|s| {
         s.last_transaction_submission_time_ns = Some(runtime.time());
         state::audit::sent_transaction(
@@ -547,7 +553,7 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
                 submitted_at: runtime.time(),
                 fee_per_vbyte: Some(fee_millisatoshi_per_vbyte),
                 withdrawal_fee: Some(total_fee),
-                signed_tx: Some(signed_tx.serialize()),
+                signed_tx,
             },
             runtime,
         );
@@ -967,7 +973,8 @@ pub async fn resubmit_transactions<
                     change_output: Some(change_output),
                     fee_per_vbyte: Some(tx_fee_per_vbyte),
                     withdrawal_fee: Some(total_fee),
-                    signed_tx: Some(signed_tx.serialize()),
+                    // Do not fill signed_tx because this is not a consolidation transaction
+                    signed_tx: None,
                 };
                 replace_transaction(old_txid, new_tx, replaced_reason);
             }
