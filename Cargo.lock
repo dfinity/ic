@@ -8010,6 +8010,7 @@ dependencies = [
  "ic-consensus-mocks",
  "ic-consensus-utils",
  "ic-crypto",
+ "ic-crypto-interfaces-sig-verification",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-crypto-returning-ok",
@@ -15347,6 +15348,7 @@ dependencies = [
  "ic-crypto-internal-types",
  "ic-crypto-sha2",
  "ic-crypto-test-utils-canister-threshold-sigs",
+ "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash",
  "ic-error-types 0.2.0",
@@ -18031,6 +18033,7 @@ name = "messaging-test-utils"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "ic-limits",
  "ic-types",
  "messaging-test",
  "proptest",
