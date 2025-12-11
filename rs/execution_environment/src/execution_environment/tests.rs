@@ -902,7 +902,8 @@ fn get_canister_status_memory_metrics() {
     let log_memory_store_size = csr.log_memory_store_size();
     let snapshots_size = csr.snapshots_size();
 
-    let system_memory_size = canister_history_size + wasm_chunk_store_size + snapshots_size;
+    let system_memory_size =
+        canister_history_size + wasm_chunk_store_size + snapshots_size + log_memory_store_size;
 
     let memory_size = csr.memory_size();
     assert_eq!(memory_size, execution_memory_size + system_memory_size);
