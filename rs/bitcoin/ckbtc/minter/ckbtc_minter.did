@@ -237,7 +237,7 @@ type InitArgs = record {
     utxo_consolidation_threshold: opt nat64;
 
     /// The maximum number of input UTXOs allowed in a transaction.
-    pub max_num_inputs_in_transaction: Option<u64>,
+    max_num_inputs_in_transaction: opt nat64;
 };
 
 // The upgrade parameters of the minter canister.
@@ -273,6 +273,9 @@ type UpgradeArgs = record {
 
     /// The minimum number of available UTXOs to trigger a consolidation.
     utxo_consolidation_threshold: opt nat64;
+
+    /// The maximum number of input UTXOs allowed in a transaction.
+    max_num_inputs_in_transaction: opt nat64;
 };
 
 type RetrieveBtcStatus = variant {
@@ -447,6 +450,7 @@ type EventType = variant {
         submitted_at : nat64;
         fee: opt nat64;
         withdrawal_fee : opt WithdrawalFee;
+        signed_tx: opt blob;
     };
     replaced_transaction : record {
         new_txid : blob;
