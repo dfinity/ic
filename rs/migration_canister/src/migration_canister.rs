@@ -13,9 +13,10 @@ use crate::{
     RequestState, ValidationError,
     canister_state::{
         ValidationGuard, caller_allowed,
-        events::find_last_event,
-        migrations_disabled,
-        requests::{find_request, insert_request},
+        events::{find_last_event, history_len},
+        limiter::num_successes_in_past_24_h,
+        migrations_disabled, num_validations,
+        requests::{find_request, insert_request, num_requests},
         set_allowlist,
     },
     rate_limited, start_timers,
@@ -118,4 +119,56 @@ fn migration_status(args: MigrateCanisterArgs) -> Option<MigrationStatus> {
     } else {
         None
     }
+}
+
+fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+    w.encode_gauge(
+        "migration_canister_requests_in_flight",
+        num_requests() as f64,
+        "Number of currently ongoing migration requests.",
+    )?;
+
+    w.encode_gauge(
+        "migration_canister_num_successes_in_past_24_h",
+        num_successes_in_past_24_h() as f64,
+        "Number of successful migrations in the past 24 hours.",
+    )?;
+
+    w.encode_gauge(
+        "migration_canister_history_len",
+        history_len() as f64,
+        "Number of entries in the history.",
+    )?;
+
+    w.encode_gauge(
+        "migration_canister_migrations_enabled",
+        !migrations_disabled() as u32 as f64,
+        "Whether canister migrations are currently enabled.",
+    )?;
+
+    w.encode_gauge(
+        "migration_canister_validations_in_flight",
+        num_validations() as f64,
+        "Number of currently ongoing validations.",
+    )?;
+
+    let stable_size_pages = ic_cdk::stable::stable_size();
+    let stable_size_bytes = stable_size_pages * ic_cdk::stable::WASM_PAGE_SIZE_IN_BYTES;
+
+    w.encode_gauge(
+        "migration_canister_stable_memory_size_bytes",
+        stable_size_bytes as f64,
+        "Size of the stable memory in bytes.",
+    )?;
+
+    Ok(())
+}
+
+#[unsafe(export_name = "canister_query http_request")]
+fn http_request() {
+    if ic_cdk::api::in_replicated_execution() {
+        ic_cdk::api::trap("Metrics can only be fetched via non-replicated query calls.");
+    }
+
+    dfn_http_metrics::serve_metrics(encode_metrics);
 }

@@ -57,10 +57,6 @@ pub fn migrations_disabled() -> bool {
     DISABLED.with_borrow(|x| *x.get())
 }
 
-pub fn num_requests() -> u64 {
-    REQUESTS.with_borrow(|req| req.len())
-}
-
 pub fn set_allowlist(arg: Option<Vec<Principal>>) {
     ALLOWLIST.set(arg);
 }
@@ -70,6 +66,10 @@ pub fn caller_allowed(id: &Principal) -> bool {
         Some(allowlist) => allowlist.contains(id),
         None => true,
     })
+}
+
+pub fn num_validations() -> u64 {
+    ONGOING_VALIDATIONS.with_borrow(|num| *num)
 }
 
 // ============================== Privileged API ============================== //
@@ -87,6 +87,10 @@ pub mod requests {
     use candid::Principal;
 
     use crate::{RequestState, canister_state::REQUESTS};
+
+    pub fn num_requests() -> u64 {
+        REQUESTS.with_borrow(|req| req.len())
+    }
 
     pub fn insert_request(request: RequestState) {
         REQUESTS.with_borrow_mut(|r| r.insert(request, ()));
@@ -150,6 +154,10 @@ pub mod events {
         LAST_EVENT.with_borrow_mut(|l| {
             l.insert(args, idx);
         });
+    }
+
+    pub fn history_len() -> u64 {
+        HISTORY.with_borrow(|h| h.len())
     }
 
     pub fn find_last_event(source: Principal, target: Principal) -> Option<Event> {
