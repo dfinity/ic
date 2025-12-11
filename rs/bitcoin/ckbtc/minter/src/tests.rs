@@ -48,6 +48,7 @@ fn default_init_args() -> InitArgs {
         kyt_fee: None,
         get_utxos_cache_expiration_seconds: None,
         utxo_consolidation_threshold: None,
+        max_num_inputs_in_transaction: None,
     }
 }
 
@@ -1219,7 +1220,7 @@ fn test_build_consolidation_transaction() {
     let mut runner = TestRunner::new(Config::default());
     let mut utxos: UtxoSet = strategy.new_tree(&mut runner).unwrap().current();
 
-    let input_utxos = select_utxos_to_consolidate(&mut utxos);
+    let input_utxos = select_utxos_to_consolidate(&mut utxos, 1000);
     let max_input_value: u64 = input_utxos.iter().map(|x| x.value).max().unwrap();
     assert!(utxos.iter().all(|x| x.value > max_input_value));
 

@@ -39,6 +39,7 @@ pub fn init_args() -> InitArgs {
         kyt_fee: None,
         get_utxos_cache_expiration_seconds: None,
         utxo_consolidation_threshold: None,
+        max_num_inputs_in_transaction: None,
     }
 }
 
@@ -506,6 +507,7 @@ pub mod arbitrary {
                         kyt_principal: args.kyt_principal,
                         get_utxos_cache_expiration_seconds: args.get_utxos_cache_expiration_seconds,
                         utxo_consolidation_threshold: args.utxo_consolidation_threshold,
+                        max_num_inputs_in_transaction: args.max_num_inputs_in_transaction,
                     },
                 )
         }
@@ -522,6 +524,7 @@ pub mod arbitrary {
                 kyt_principal: option::of(canister_id()),
                 get_utxos_cache_expiration_seconds: option::of(any::<u64>()),
                 utxo_consolidation_threshold: option::of(any::<u64>()),
+                max_num_inputs_in_transaction: option::of(any::<u64>()),
             })
         }
 

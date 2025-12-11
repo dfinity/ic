@@ -29,8 +29,8 @@ use ic_ckbtc_minter::updates::update_balance::{
     PendingUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
 };
 use ic_ckbtc_minter::{
-    CKBTC_LEDGER_MEMO_SIZE, FEE_COLLECTOR_SUBACCOUNT, MAX_NUM_INPUTS_IN_TRANSACTION,
-    MIN_RESUBMISSION_DELAY, MinterInfo, Network, UTXOS_COUNT_THRESHOLD,
+    CKBTC_LEDGER_MEMO_SIZE, FEE_COLLECTOR_SUBACCOUNT, MIN_RESUBMISSION_DELAY, MinterInfo, Network,
+    UTXOS_COUNT_THRESHOLD,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
@@ -70,6 +70,7 @@ fn default_init_args() -> CkbtcMinterInitArgs {
         kyt_fee: None,
         get_utxos_cache_expiration_seconds: None,
         utxo_consolidation_threshold: None,
+        max_num_inputs_in_transaction: None,
     }
 }
 
@@ -1858,6 +1859,7 @@ fn test_transaction_resubmission_finalize_middle() {
 fn test_utxo_consolidation() {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use num_traits::ToPrimitive;
+    const MAX_NUM_INPUTS_IN_TRANSACTION: usize = 100;
 
     const COUNT: usize = MAX_NUM_INPUTS_IN_TRANSACTION * 2;
 
@@ -1890,6 +1892,7 @@ fn test_utxo_consolidation() {
     // Step 2: upgrade to trigger consolidation task by setting a lower threshold.
     // upgrade
     let upgrade_args = UpgradeArgs {
+        max_num_inputs_in_transaction: Some(MAX_NUM_INPUTS_IN_TRANSACTION as u64),
         utxo_consolidation_threshold: Some(1 + MAX_NUM_INPUTS_IN_TRANSACTION as u64),
         ..Default::default()
     };
@@ -2525,7 +2528,7 @@ fn should_cancel_and_reimburse_large_withdrawal() {
             reason: WithdrawalReimbursementReason::InvalidTransaction(
                 InvalidTransactionError::TooManyInputs {
                     num_inputs: 1800,
-                    max_num_inputs: MAX_NUM_INPUTS_IN_TRANSACTION,
+                    max_num_inputs: ic_ckbtc_minter::state::DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
                 }
             ),
             burn_block_index: block_index,

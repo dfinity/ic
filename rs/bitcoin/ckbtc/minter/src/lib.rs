@@ -68,10 +68,6 @@ pub const CKBTC_LEDGER_MEMO_SIZE: u16 = 80;
 /// when building transactions.
 pub const UTXOS_COUNT_THRESHOLD: usize = 1_000;
 
-/// Maximum number of inputs that can be used for a Bitcoin transaction (ckBTC -> BTC)
-/// to ensure that the resulting signed transaction is standard.
-pub const MAX_NUM_INPUTS_IN_TRANSACTION: usize = 1_000;
-
 /// Fee collector subaccount
 pub const FEE_COLLECTOR_SUBACCOUNT: Subaccount = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x0f,
@@ -1211,10 +1207,11 @@ pub fn build_unsigned_transaction_from_inputs<F: FeeEstimator>(
     if num_inputs == 0 {
         return Err(BuildTxError::NotEnoughFunds);
     }
-    if num_inputs > MAX_NUM_INPUTS_IN_TRANSACTION {
+    let max_num_inputs_in_transaction = read_state(|s| s.max_num_inputs_in_transaction);
+    if num_inputs > max_num_inputs_in_transaction {
         return Err(BuildTxError::InvalidTransaction(
             InvalidTransactionError::TooManyInputs {
-                max_num_inputs: MAX_NUM_INPUTS_IN_TRANSACTION,
+                max_num_inputs: max_num_inputs_in_transaction,
                 num_inputs,
             },
         ));
@@ -1398,10 +1395,10 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
 ) -> Result<u64, ConsolidateUtxosError> {
     // TODO DEFI-2551: make this configurable
     const MIN_CONSOLIDATION_INTERVAL: Duration = Duration::from_secs(24 * 3600);
-    let min_consolidation_utxo_required = read_state(|s| s.utxo_consolidation_threshold) as usize;
+    let utxo_consolidation_threshold = read_state(|s| s.utxo_consolidation_threshold);
 
     // Return early if number of available UTXOs is below consolidation threshold.
-    if read_state(|s| s.available_utxos.len() < min_consolidation_utxo_required) {
+    if read_state(|s| s.available_utxos.len() < utxo_consolidation_threshold) {
         return Err(ConsolidateUtxosError::TooFewAvailableUtxos);
     }
 
@@ -1456,7 +1453,9 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
         mutate_state(|s| s.last_consolidate_utxos_request_created_time_ns = last_submission);
     });
 
-    let input_utxos = mutate_state(|s| select_utxos_to_consolidate(&mut s.available_utxos));
+    let input_utxos = mutate_state(|s| {
+        select_utxos_to_consolidate(&mut s.available_utxos, s.max_num_inputs_in_transaction)
+    });
     let input_utxos_len = input_utxos.len();
     let restore_utxos = |utxos| {
         mutate_state(|s| {
@@ -1551,9 +1550,9 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
 }
 
 // Return UTXOs for consolidation and remove them from available_utxos.
-fn select_utxos_to_consolidate(available_utxos: &mut UtxoSet) -> Vec<Utxo> {
-    let mut utxos = Vec::with_capacity(MAX_NUM_INPUTS_IN_TRANSACTION);
-    while utxos.len() < MAX_NUM_INPUTS_IN_TRANSACTION {
+fn select_utxos_to_consolidate(available_utxos: &mut UtxoSet, num_inputs: usize) -> Vec<Utxo> {
+    let mut utxos = Vec::with_capacity(num_inputs);
+    while utxos.len() < num_inputs {
         if let Some(utxo) = available_utxos.pop_first() {
             utxos.push(utxo);
         } else {

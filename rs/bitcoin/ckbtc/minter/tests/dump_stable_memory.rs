@@ -95,6 +95,7 @@ fn default_init_args() -> CkbtcMinterInitArgs {
         kyt_fee: None,
         get_utxos_cache_expiration_seconds: None,
         utxo_consolidation_threshold: None,
+        max_num_inputs_in_transaction: None,
     }
 }
 

@@ -46,7 +46,11 @@ use std::time::Duration;
 const MAX_FINALIZED_REQUESTS: usize = 100;
 
 /// The default minimum number of available UTXOs to trigger a consolidation.
-const DEFAULT_UTXO_CONSOLIDATION_THRESHOLD: u64 = 10_000;
+const DEFAULT_UTXO_CONSOLIDATION_THRESHOLD: usize = 10_000;
+
+/// Default maximum number of inputs that can be used for a Bitcoin transaction (ckBTC -> BTC)
+/// to ensure that the resulting signed transaction is standard.
+pub const DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION: usize = 1_000;
 
 thread_local! {
     static __STATE: RefCell<Option<CkBtcMinterState>> = RefCell::default();
@@ -469,7 +473,10 @@ pub struct CkBtcMinterState {
     pub current_consolidate_utxos_request: Option<ConsolidateUtxosRequest>,
 
     /// Minimum number of available UTXOs to trigger a consolidation.
-    pub utxo_consolidation_threshold: u64,
+    pub utxo_consolidation_threshold: usize,
+
+    /// The maximum number of input UTXOs allowed in a transaction.
+    pub max_num_inputs_in_transaction: usize,
 
     /// BTC transactions waiting for finalization.
     pub submitted_transactions: Vec<SubmittedBtcTransaction>,
@@ -617,6 +624,7 @@ impl CkBtcMinterState {
             kyt_fee,
             get_utxos_cache_expiration_seconds,
             utxo_consolidation_threshold,
+            max_num_inputs_in_transaction,
         }: InitArgs,
     ) {
         self.btc_network = btc_network;
@@ -639,9 +647,12 @@ impl CkBtcMinterState {
             self.get_utxos_cache
                 .set_expiration(Duration::from_secs(expiration));
         }
+        if let Some(max) = max_num_inputs_in_transaction {
+            self.max_num_inputs_in_transaction = max as usize;
+        }
         if let Some(threshold) = utxo_consolidation_threshold {
-            if threshold > crate::MAX_NUM_INPUTS_IN_TRANSACTION as u64 {
-                self.utxo_consolidation_threshold = threshold;
+            if threshold > self.max_num_inputs_in_transaction as u64 {
+                self.utxo_consolidation_threshold = threshold as usize;
             } else {
                 log!(
                     Priority::Info,
@@ -667,6 +678,7 @@ impl CkBtcMinterState {
             kyt_fee,
             get_utxos_cache_expiration_seconds,
             utxo_consolidation_threshold,
+            max_num_inputs_in_transaction,
         }: UpgradeArgs,
     ) {
         if let Some(retrieve_btc_min_amount) = retrieve_btc_min_amount {
@@ -703,9 +715,12 @@ impl CkBtcMinterState {
             self.get_utxos_cache
                 .set_expiration(Duration::from_secs(expiration));
         }
+        if let Some(max) = max_num_inputs_in_transaction {
+            self.max_num_inputs_in_transaction = max as usize;
+        }
         if let Some(threshold) = utxo_consolidation_threshold {
-            if threshold > crate::MAX_NUM_INPUTS_IN_TRANSACTION as u64 {
-                self.utxo_consolidation_threshold = threshold;
+            if threshold > self.max_num_inputs_in_transaction as u64 {
+                self.utxo_consolidation_threshold = threshold as usize;
             } else {
                 log!(
                     Priority::Info,
@@ -1634,8 +1649,18 @@ impl CkBtcMinterState {
             "retrieve_btc_account_to_block_indices does not match"
         );
 
-        let my_txs = as_sorted_vec(self.submitted_transactions.iter().cloned(), |tx| tx.txid);
-        let other_txs = as_sorted_vec(other.submitted_transactions.iter().cloned(), |tx| tx.txid);
+        fn remove_signed_tx(mut txs: Vec<SubmittedBtcTransaction>) -> Vec<SubmittedBtcTransaction> {
+            txs.iter_mut().for_each(|tx| tx.signed_tx = None);
+            txs
+        }
+        let my_txs = remove_signed_tx(as_sorted_vec(
+            self.submitted_transactions.iter().cloned(),
+            |tx| tx.txid,
+        ));
+        let other_txs = remove_signed_tx(as_sorted_vec(
+            other.submitted_transactions.iter().cloned(),
+            |tx| tx.txid,
+        ));
         ensure_eq!(my_txs, other_txs, "submitted_transactions do not match");
 
         ensure_eq!(
@@ -1930,6 +1955,7 @@ impl From<InitArgs> for CkBtcMinterState {
             last_consolidate_utxos_request_created_time_ns: None,
             current_consolidate_utxos_request: None,
             utxo_consolidation_threshold: DEFAULT_UTXO_CONSOLIDATION_THRESHOLD,
+            max_num_inputs_in_transaction: DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
             submitted_transactions: Default::default(),
             replacement_txid: Default::default(),
             retrieve_btc_account_to_block_indices: Default::default(),

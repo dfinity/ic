@@ -53,6 +53,10 @@ pub struct UpgradeArgs {
     /// The minimum number of available UTXOs required to trigger a conslidation.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub utxo_consolidation_threshold: Option<u64>,
+
+    /// The maximum number of input UTXOs allowed in a transaction.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_num_inputs_in_transaction: Option<u64>,
 }
 
 pub fn post_upgrade<R: CanisterRuntime>(upgrade_args: Option<UpgradeArgs>, runtime: &R) {

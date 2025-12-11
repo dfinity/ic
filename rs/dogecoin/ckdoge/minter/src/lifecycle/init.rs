@@ -103,6 +103,7 @@ impl From<InitArgs> for CkbtcMinterInitArgs {
             kyt_principal: None,
             get_utxos_cache_expiration_seconds: args.get_utxos_cache_expiration_seconds,
             utxo_consolidation_threshold: None,
+            max_num_inputs_in_transaction: None,
         }
     }
 }
