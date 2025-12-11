@@ -1,5 +1,5 @@
 use crate::canister_state::system_state::log_memory_store::{
-    header::{Header, MAGIC},
+    header::Header,
     log_record::LogRecord,
     memory::{MemoryAddress, MemorySize},
     struct_io::StructIO,
@@ -67,7 +67,7 @@ impl RingBuffer {
     /// Returns an existing ring buffer if present.
     pub fn load_checked(page_map: PageMap) -> Option<Self> {
         let io = StructIO::new(page_map);
-        if io.load_header().magic != *MAGIC {
+        if !io.load_header().is_valid() {
             return None;
         }
         Some(Self { io })
@@ -81,6 +81,9 @@ impl RingBuffer {
     /// including header, index table and data region.
     pub fn total_allocated_bytes(&self) -> usize {
         let header = self.io.load_header();
+        if !header.is_valid() {
+            return 0;
+        }
         HEADER_SIZE.get() as usize
             + header.index_table_pages as usize * PAGE_SIZE
             + header.data_capacity.get() as usize
