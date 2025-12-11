@@ -46,7 +46,6 @@ pub trait BasicSigner<T: Signable>: Send + Sync {
     /// # Errors
     /// * `CryptoError::InternalError`: if the public key in the node's public
     ///   key store is not found or malformed.
-    ///   obtained from the registry is malformed.
     /// * `CryptoError::InvalidArgument`: if the secret key in the node's
     ///   secret key store has the wrong type.
     /// * `CryptoError::SecretKeyNotFound`: if the `signer`'s secret key cannot
