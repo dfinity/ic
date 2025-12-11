@@ -262,21 +262,6 @@ pub fn test_with_chain_keys(env: TestEnv) {
     );
 }
 
-pub fn test_with_chain_keys_recoverable_corrupt_cup(env: TestEnv) {
-    app_subnet_recovery_test(
-        env,
-        TestConfig {
-            subnet_size: APP_NODES,
-            upgrade: true,
-            chain_key: true,
-            // A corrupted CUP whose NiDkgId can still be parsed can tell nodes to which subnet they
-            // belong to, see the recovery CUP, and thus allow the recovery on the same nodes.
-            corrupt_cup: CupCorruption::CorruptedWithValidNiDkgId,
-            local_recovery: false,
-        },
-    );
-}
-
 pub fn test_without_chain_keys(env: TestEnv) {
     // Test the unrecoverable corrupt CUP case when recovering on failover nodes because nodes will
     // not be able to see the recovery CUP in the registry
@@ -345,6 +330,21 @@ pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
             chain_key: false,
             corrupt_cup: CupCorruption::NotCorrupted,
             local_recovery: true,
+        },
+    );
+}
+
+pub fn test_recoverable_corrupt_cup_with_chain_keys(env: TestEnv) {
+    app_subnet_recovery_test(
+        env,
+        TestConfig {
+            subnet_size: APP_NODES,
+            upgrade: true,
+            chain_key: true,
+            // A corrupted CUP whose NiDkgId can still be parsed can tell nodes to which subnet they
+            // belong to, see the recovery CUP, and thus allow the recovery on the same nodes.
+            corrupt_cup: CupCorruption::CorruptedWithValidNiDkgId,
+            local_recovery: false,
         },
     );
 }
