@@ -233,9 +233,9 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     let (channel_snapshot_send, channel_snapshot_recv) = tokio::sync::watch::channel(None);
 
     // Registry Client
-    let registry_client = if let Some(v) = &cli.registry.registry_local_store_path {
+    let registry_client = if let Some(local_store_path) = &cli.registry.registry_local_store_path {
         // Store
-        let local_store = Arc::new(LocalStoreImpl::new(v.clone()));
+        let local_store = Arc::new(LocalStoreImpl::new(local_store_path.clone()));
 
         // Client
         let registry_client = Arc::new(RegistryClientImpl::new(local_store.clone(), None));
@@ -246,7 +246,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         // Snapshotting
         setup_registry(
             &cli,
-            v,
+            local_store_path,
             registry_client.clone(),
             registry_snapshot.clone(),
             WithMetricsPersist(persister, MetricParamsPersist::new(&metrics_registry)),
