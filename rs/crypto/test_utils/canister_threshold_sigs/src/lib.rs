@@ -2729,7 +2729,7 @@ impl IDkgTranscriptBuilder {
     }
 
     pub fn corrupt_algorithm_id(mut self) -> Self {
-        self.algorithm_id = AlgorithmId::Placeholder;
+        self.algorithm_id = AlgorithmId::Unspecified;
         self
     }
 

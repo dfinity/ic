@@ -521,7 +521,7 @@ pub mod specialise {
         } else {
             let unexpected_type_name: &'static str = secret_key.into();
             Err(ni_dkg_errors::MalformedSecretKeyError {
-                algorithm: AlgorithmId::Placeholder, // There is no on expected algorithm ID.
+                algorithm: AlgorithmId::Unspecified, // There is no on expected algorithm ID.
                 internal_error: format!("Unexpected variant: {unexpected_type_name}"),
             })
         }
