@@ -262,7 +262,10 @@ mod tests {
         assert!(s.is_empty());
         assert_eq!(s.bytes_used(), 0);
         assert_eq!(s.byte_capacity(), 0);
-        assert_eq!(s.log_memory_limit(), DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
+        assert_eq!(
+            s.log_memory_limit(),
+            NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64)
+        );
         assert_eq!(s.total_allocated_bytes(), 0);
         assert_eq!(s.records(None).len(), 0);
     }
@@ -276,7 +279,10 @@ mod tests {
         assert!(s.is_empty());
         assert_eq!(s.bytes_used(), 0);
         assert_eq!(s.byte_capacity(), 0);
-        assert_eq!(s.log_memory_limit(), DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
+        assert_eq!(
+            s.log_memory_limit(),
+            NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64)
+        );
         assert_eq!(s.total_allocated_bytes(), 0);
         assert_eq!(s.records(None).len(), 0);
 
@@ -294,7 +300,10 @@ mod tests {
         assert!(s.bytes_used() > 0);
         assert!(s.bytes_used() < DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
         assert_eq!(s.byte_capacity(), DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
-        assert_eq!(s.log_memory_limit(), DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
+        assert_eq!(
+            s.log_memory_limit(),
+            NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64)
+        );
         assert!(s.total_allocated_bytes() > DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
         assert_eq!(s.records(None).len(), 3);
     }
@@ -480,7 +489,7 @@ mod tests {
     #[test]
     fn test_increasing_capacity_preserves_records() {
         let mut store = LogMemoryStore::new_for_testing();
-        store.set_log_memory_limit(1_000_000); // 1 MB
+        store.set_log_memory_limit(NumBytes::new(1_000_000)); // 1 MB
 
         // Append 200 KB records in batches of 100 KB deltas of ~1KB record each.
         append_deltas(&mut store, 0, 200_000, 100_000, 1_000);
@@ -489,7 +498,7 @@ mod tests {
         let bytes_used_before = store.bytes_used();
 
         // Increase capacity.
-        store.set_log_memory_limit(2_000_000); // 2 MB
+        store.set_log_memory_limit(NumBytes::new(2_000_000)); // 2 MB
 
         let records_after = store.records(None);
         let bytes_used_after = store.bytes_used();
@@ -502,7 +511,7 @@ mod tests {
     #[test]
     fn test_decreasing_capacity_drops_oldest_records_but_preserves_recent() {
         let mut store = LogMemoryStore::new_for_testing();
-        store.set_log_memory_limit(500_000); // 500 KB
+        store.set_log_memory_limit(NumBytes::new(500_000)); // 500 KB
 
         // Append 200 KB records in batches of 100 KB deltas of ~1KB record each.
         append_deltas(&mut store, 0, 200_000, 100_000, 1_000);
@@ -512,7 +521,7 @@ mod tests {
         let next_idx_before = store.next_idx();
 
         // Decrease capacity.
-        store.set_log_memory_limit(100_000); // 100 KB
+        store.set_log_memory_limit(NumBytes::new(100_000)); // 100 KB
 
         let records_after = store.records(None);
         let bytes_used_after = store.bytes_used();
@@ -529,7 +538,7 @@ mod tests {
         let mut store = LogMemoryStore::new_for_testing();
         // Set a very small capacity, smaller than 146 bytes (INDEX_ENTRY_COUNT_MAX).
         // 146 entries. If capacity is 100. 100 / 146 = 0.
-        store.set_log_memory_limit(100);
+        store.set_log_memory_limit(NumBytes::new(100));
 
         let mut delta = CanisterLog::new_delta_with_next_index(0, 100);
         // Add multiple records.
@@ -556,7 +565,7 @@ mod tests {
     fn test_multiple_records_in_same_segment() {
         let mut store = LogMemoryStore::new_for_testing();
         // Capacity 100KB. Segment size ~685 bytes.
-        store.set_log_memory_limit(100_000);
+        store.set_log_memory_limit(NumBytes::new(100_000));
 
         let mut delta = CanisterLog::new_delta_with_next_index(0, 100_000);
         // Add 10 records, each ~21 bytes. All should fit in segment 0.
@@ -585,10 +594,10 @@ mod tests {
     fn test_very_small_capacity_single_byte() {
         let mut store = LogMemoryStore::new_for_testing();
         // Set capacity to 1 byte - this will be clamped to DATA_CAPACITY_MIN (4096 bytes).
-        store.set_log_memory_limit(1);
+        store.set_log_memory_limit(NumBytes::new(1));
 
         // Verify log memory limit was clamped to minimum.
-        assert_eq!(store.log_memory_limit(), 4096);
+        assert_eq!(store.log_memory_limit(), NumBytes::new(4096));
         assert_eq!(store.byte_capacity(), 0); // Actual capacity is 0 because no records were added.
 
         let mut delta = CanisterLog::new_delta_with_next_index(0, 4096);
@@ -609,7 +618,7 @@ mod tests {
     #[test]
     fn test_small_capacity_with_eviction() {
         let mut store = LogMemoryStore::new_for_testing();
-        let capacity = 4096;
+        let capacity = NumBytes::new(4096);
         store.set_log_memory_limit(capacity);
 
         assert_eq!(store.log_memory_limit(), capacity);
@@ -618,23 +627,25 @@ mod tests {
         // Fill the buffer with records until we're close to capacity.
         // Each record is ~21 bytes (8+8+4+1), so we can fit ~195 records.
         let record_size = 21;
-        let max_records = capacity / record_size; // ~195
+        let max_records = capacity.get() as usize / record_size; // ~195
 
         // Add records to fill the buffer.
         for i in 0..max_records {
-            let mut delta = CanisterLog::new_delta_with_next_index(i as u64, capacity);
+            let mut delta =
+                CanisterLog::new_delta_with_next_index(i as u64, capacity.get() as usize);
             delta.add_record(i as u64, vec![i as u8]);
             store.append_delta_log(&mut delta);
         }
 
         // Verify all records fit.
-        assert_eq!(store.byte_capacity(), capacity);
+        assert_eq!(store.byte_capacity(), capacity.get() as usize);
         assert_eq!(store.next_idx(), max_records as u64);
         let records = store.records(None);
         assert_eq!(records.len(), max_records);
 
         // Add one more record - this should evict the oldest one.
-        let mut delta = CanisterLog::new_delta_with_next_index(max_records as u64, capacity);
+        let mut delta =
+            CanisterLog::new_delta_with_next_index(max_records as u64, capacity.get() as usize);
         delta.add_record(max_records as u64, vec![255]);
         store.append_delta_log(&mut delta);
 
@@ -650,7 +661,7 @@ mod tests {
     fn test_filtering_with_multiple_records_in_same_segment() {
         let mut store = LogMemoryStore::new_for_testing();
         // Capacity 100KB. Segment size ~685 bytes.
-        store.set_log_memory_limit(100_000);
+        store.set_log_memory_limit(NumBytes::new(100_000));
 
         let mut delta = CanisterLog::new_delta_with_next_index(0, 100_000);
         // Add 20 records, each ~21 bytes. All should fit in segment 0.
