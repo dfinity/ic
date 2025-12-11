@@ -5,7 +5,8 @@ use crate::pb::v1::{
 };
 
 use ic_base_types::PrincipalId;
-use std::collections::HashMap;
+use ic_cdk::println;
+use std::{collections::HashMap, marker::PhantomData};
 
 /// A proposal action that can be described locally, without having to call `canister_metadata`
 /// management canister method to get the candid file of an external canister. Every proposal action
@@ -133,13 +134,54 @@ where
     }
 }
 
-impl<T: Into<SelfDescribingValue>> From<Vec<T>> for SelfDescribingValue {
+impl<T> From<Vec<T>> for SelfDescribingValue
+where
+    SelfDescribingValue: From<T>,
+{
     fn from(value: Vec<T>) -> Self {
         SelfDescribingValue {
             value: Some(Array(SelfDescribingValueArray {
-                values: value.into_iter().map(Into::into).collect(),
+                values: value.into_iter().map(SelfDescribingValue::from).collect(),
             })),
         }
+    }
+}
+
+pub(crate) struct SelfDescribingProstEnum<E> {
+    value: i32,
+    enum_name: &'static str,
+    prost_type: PhantomData<E>,
+}
+
+impl<E> SelfDescribingProstEnum<E>
+where
+    E: TryFrom<i32>,
+{
+    pub fn new(value: i32, enum_name: &'static str) -> Self {
+        Self {
+            value,
+            enum_name,
+            prost_type: PhantomData,
+        }
+    }
+}
+
+impl<E> From<SelfDescribingProstEnum<E>> for SelfDescribingValue
+where
+    E: TryFrom<i32> + std::fmt::Debug,
+{
+    fn from(prost_enum: SelfDescribingProstEnum<E>) -> Self {
+        let SelfDescribingProstEnum {
+            value, enum_name, ..
+        } = prost_enum;
+        let value = match E::try_from(value) {
+            Ok(value) => format!("{value:?}"),
+            Err(_) => {
+                println!("Unknown value for enum {enum_name}: {value}");
+                format!("UNKNOWN_{}_{}", enum_name.to_ascii_uppercase(), value)
+            }
+        };
+        SelfDescribingValue::from(value)
     }
 }
 
@@ -148,10 +190,13 @@ impl<T: Into<SelfDescribingValue>> From<Vec<T>> for SelfDescribingValue {
 /// potential conflicts.
 pub(crate) trait ToSelfDescribingNat: Into<candid::Nat> {}
 
-impl<T: ToSelfDescribingNat> From<T> for SelfDescribingValue {
+impl<T> From<T> for SelfDescribingValue
+where
+    T: ToSelfDescribingNat,
+{
     fn from(value: T) -> Self {
         SelfDescribingValue {
-            value: Some(to_self_describing_nat(value)),
+            value: Some(to_self_describing_nat(value.into())),
         }
     }
 }
@@ -159,15 +204,21 @@ impl<T: ToSelfDescribingNat> From<T> for SelfDescribingValue {
 // Types we want to be able to convert to a SelfDescribingValue as an unsigned integer.
 impl ToSelfDescribingNat for u64 {}
 
-pub(crate) fn to_self_describing_nat(n: impl Into<candid::Nat>) -> Value {
-    let n = n.into();
+pub(crate) fn to_self_describing_nat<N>(n: N) -> Value
+where
+    candid::Nat: From<N>,
+{
+    let n = candid::Nat::from(n);
     let mut bytes = Vec::new();
     n.encode(&mut bytes).expect("Failed to encode Nat");
     Value::Nat(bytes)
 }
 
-pub(crate) fn to_self_describing_int(i: impl Into<candid::Int>) -> Value {
-    let i = i.into();
+pub(crate) fn to_self_describing_int<I>(i: I) -> Value
+where
+    candid::Int: From<I>,
+{
+    let i = candid::Int::from(i);
     let mut bytes = Vec::new();
     i.encode(&mut bytes).expect("Failed to encode Int");
     Value::Int(bytes)

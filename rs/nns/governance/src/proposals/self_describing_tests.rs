@@ -1,5 +1,7 @@
 use super::*;
 
+use crate::pb::v1::{SelfDescribingValue as SelfDescribingValuePb, Topic};
+
 use ic_base_types::PrincipalId;
 use ic_nns_governance_api::SelfDescribingValue;
 use maplit::hashmap;
@@ -14,6 +16,22 @@ fn assert_self_describing_value_is(
     // more straightforward to construct (while the protobuf type only exists for storage).
     let value = SelfDescribingValue::from(value.unwrap());
     assert_eq!(value, expected);
+}
+
+#[test]
+fn test_prost_enum_to_self_describing() {
+    let test_cases = vec![
+        (Topic::Unspecified as i32, "Unspecified"),
+        (Topic::Governance as i32, "Governance"),
+        (100_i32, "UNKNOWN_TOPIC_100"),
+    ];
+    for (value, expected) in test_cases {
+        let prost_enum = SelfDescribingProstEnum::<Topic>::new(value, "Topic");
+        assert_eq!(
+            SelfDescribingValue::from(SelfDescribingValuePb::from(prost_enum)),
+            SelfDescribingValue::Text(expected.to_string())
+        );
+    }
 }
 
 #[test]
