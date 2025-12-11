@@ -165,7 +165,7 @@ upgrade proposals published via the Network Nervous System (NNS).
 All code of the Internet Computer is be licensed under the Apache 2.0 license, except for a
 few components licensed under the link:licenses/IC-1.0.txt[Internet Computer Community Source License] and link:licenses/IC-shared-1.0.txt[Internet Computer Shared Community Source License] which are more restrictive than the Apache 2.0 license to protect the Intellectual Property (IP) of the DFINITY Foundation.
 
-=== Contributing
+=== Submitting New Contributions
 
 We will soon be accepting external contributions (date TBD). Please follow these guidelines link:CONTRIBUTING.md[CONTRIBUTING.md]
 
