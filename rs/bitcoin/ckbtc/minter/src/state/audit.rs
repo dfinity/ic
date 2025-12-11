@@ -97,6 +97,7 @@ pub fn sent_transaction<R: CanisterRuntime>(
             submitted_at: tx.submitted_at,
             fee_per_vbyte: tx.fee_per_vbyte,
             withdrawal_fee: tx.withdrawal_fee,
+            signed_tx: tx.signed_tx.clone(),
         },
         runtime,
     );

@@ -2042,7 +2042,7 @@ fn test_utxo_consolidation_resubmit() {
 }
 
 #[test]
-fn test_utxo_consolidation_tx_recreate_and_resubmit() {
+fn test_utxo_consolidation_upgrade_and_resubmit() {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use num_traits::ToPrimitive;
     const MAX_NUM_INPUTS_IN_TRANSACTION: usize = 100;
@@ -2107,7 +2107,7 @@ fn test_utxo_consolidation_tx_recreate_and_resubmit() {
     );
     assert_eq!(tx.output.len(), 2, "expect 2 output utxos: {tx:?}");
 
-    // Step 4: remove the transaction from mempool.
+    // Step 4: remove the transaction from mempool, upgrade, and resubmit.
     ckbtc.reset_mempool();
     assert!(!ckbtc.mempool().contains_key(&txid));
 
@@ -2120,33 +2120,23 @@ fn test_utxo_consolidation_tx_recreate_and_resubmit() {
             Encode!(&minter_arg).unwrap(),
         )
         .expect("Failed to upgrade the minter canister");
-
-    // wait for the transaction to be re-created and re-submitted.
     ckbtc
         .env
         .advance_time(MIN_RESUBMISSION_DELAY + Duration::from_secs(1));
-    // wait enough ticks for signing
-    for _ in 0..MAX_NUM_INPUTS_IN_TRANSACTION * 6 {
+    for _ in 0..10 {
         ckbtc.env.tick();
         ckbtc.env.advance_time(Duration::from_secs(1));
     }
 
-    let new_txid = ckbtc.await_btc_transaction(burn_index, 10);
-    assert!(txid != new_txid);
     let mempool = ckbtc.mempool();
-    let new_tx = mempool.get(&new_txid).unwrap_or_else(|| {
-        panic!(
-            "the mempool does not contain the new transaction {}",
-            new_txid
-        )
-    });
-    // Check if we indeed pays a higher fee
-    assert!(tx.output[0] > new_tx.output[0]);
-    assert_eq!(tx.output[1], new_tx.output[1]);
+    let new_tx = mempool
+        .get(&txid)
+        .unwrap_or_else(|| panic!("the mempool does not contain transaction {}", txid));
+    assert_eq!(new_tx, tx);
 
-    // Step 5: finalize the new transaction
-    ckbtc.finalize_transaction(new_tx);
-    assert_eq!(ckbtc.await_finalization(burn_index, 10), new_txid);
+    // Step 5: finalize the transaction
+    ckbtc.finalize_transaction(tx);
+    assert_eq!(ckbtc.await_finalization(burn_index, 10), txid);
     ckbtc.minter_self_check();
 
     let new_count = COUNT - MAX_NUM_INPUTS_IN_TRANSACTION + 2;

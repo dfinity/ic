@@ -115,6 +115,10 @@ mod event {
             #[serde(rename = "withdrawal_fee")]
             #[serde(skip_serializing_if = "Option::is_none")]
             withdrawal_fee: Option<WithdrawalFee>,
+            /// The signed transaction bytes. Only for ConsolidateUtxosRequest.
+            #[serde(rename = "signed_tx")]
+            #[serde(skip_serializing_if = "Option::is_none")]
+            signed_tx: Option<Vec<u8>>,
         },
 
         /// Indicates that the minter sent out a new transaction to replace an older transaction
@@ -364,6 +368,7 @@ pub fn replay<I: CheckInvariants>(
                 change_output,
                 submitted_at,
                 withdrawal_fee,
+                signed_tx,
             } => {
                 let mut retrieve_btc_requests = BTreeSet::new();
                 let mut consolidate_utxos_request = None;
@@ -399,7 +404,7 @@ pub fn replay<I: CheckInvariants>(
                     change_output,
                     submitted_at,
                     withdrawal_fee,
-                    signed_tx: None,
+                    signed_tx,
                 });
             }
             EventType::ReplacedBtcTransaction {

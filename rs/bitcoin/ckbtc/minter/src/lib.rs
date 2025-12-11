@@ -547,7 +547,7 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
                 submitted_at: runtime.time(),
                 fee_per_vbyte: Some(fee_millisatoshi_per_vbyte),
                 withdrawal_fee: Some(total_fee),
-                signed_tx: Some(signed_tx),
+                signed_tx: Some(signed_tx.serialize()),
             },
             runtime,
         );
@@ -791,6 +791,8 @@ pub async fn resubmit_transactions<
                 .and_then(|req| {
                     s.get_submitted_transaction(req.block_index).and_then(|tx| {
                         if tx.txid == old_txid {
+                            // For ConsolidatedUtxosRequest, signed_tx should always exist.
+                            assert!(tx.signed_tx.is_some());
                             tx.signed_tx
                                 .clone()
                                 .map(|signed_tx| (s.btc_network, tx.txid, signed_tx))
@@ -805,7 +807,7 @@ pub async fn resubmit_transactions<
                 "[resubmit_transactions]: re-sending a signed consolidation transaction {}",
                 txid,
             );
-            match runtime.send_transaction(&signed_tx, network).await {
+            match runtime.send_raw_transaction(signed_tx, network).await {
                 Ok(_) => {
                     log!(
                         Priority::Debug,
@@ -965,7 +967,7 @@ pub async fn resubmit_transactions<
                     change_output: Some(change_output),
                     fee_per_vbyte: Some(tx_fee_per_vbyte),
                     withdrawal_fee: Some(total_fee),
-                    signed_tx: Some(signed_tx),
+                    signed_tx: Some(signed_tx.serialize()),
                 };
                 replace_transaction(old_txid, new_tx, replaced_reason);
             }
@@ -1658,6 +1660,12 @@ pub trait CanisterRuntime {
         network: Network,
     ) -> Result<(), CallError>;
 
+    async fn send_raw_transaction(
+        &self,
+        raw_transaction: Vec<u8>,
+        network: Network,
+    ) -> Result<(), CallError>;
+
     /// Check if the given address is blocked.
     async fn check_address(
         &self,
@@ -1738,6 +1746,19 @@ impl CanisterRuntime for IcCanisterRuntime {
         network: Network,
     ) -> Result<(), CallError> {
         management::send_transaction(transaction, network).await
+    }
+
+    async fn send_raw_transaction(
+        &self,
+        transaction: Vec<u8>,
+        network: Network,
+    ) -> Result<(), CallError> {
+        bitcoin_canister::bitcoin_send_transaction(&bitcoin_canister::SendTransactionRequest {
+            transaction,
+            network: network.into(),
+        })
+        .await
+        .map_err(|err| CallError::from_cdk_call_error("bitcoin_send_transaction", err))
     }
 
     fn block_time(&self, network: Network) -> Duration {

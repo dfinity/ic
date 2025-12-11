@@ -188,7 +188,7 @@ pub struct SubmittedBtcTransaction {
     /// Include both the fee paid for the transaction and the minter fee.
     pub withdrawal_fee: Option<WithdrawalFee>,
     /// Signed transaction if included.
-    pub signed_tx: Option<crate::tx::SignedTransaction>,
+    pub signed_tx: Option<Vec<u8>>,
 }
 
 /// BtcTransactionRequest is either a RetrieveBtcRequest or ConsolidateUtxosRequest.
