@@ -124,13 +124,13 @@ pub fn swap_two_dealings_in_transcript(
         .content
         .into_builder()
         .with_dealer_id(dealer_a.id())
-        .build_with_signature(params, dealer_a, dealer_a.id());
+        .build_with_signature(dealer_a, dealer_a.id());
 
     let dealing_ab = dealing_a
         .content
         .into_builder()
         .with_dealer_id(dealer_b.id())
-        .build_with_signature(params, dealer_b, dealer_b.id());
+        .build_with_signature(dealer_b, dealer_b.id());
 
     let dealing_ab_signed = env
         .nodes
@@ -174,7 +174,7 @@ pub fn copy_dealing_in_transcript(
         .content
         .into_builder()
         .with_dealer_id(dealer_to.id())
-        .build_with_signature(params, dealer_to, dealer_to.id());
+        .build_with_signature(dealer_to, dealer_to.id());
 
     let dealing_to_signed = env
         .nodes
@@ -1878,7 +1878,7 @@ pub fn corrupt_signed_idkg_dealing<R: CryptoRng + RngCore, T: BasicSigner<IDkgDe
     Ok(idkg_dealing
         .into_builder()
         .corrupt_internal_dealing_raw_by_changing_ciphertexts(&[node_index], rng)
-        .build_with_signature(transcript_params, basic_signer, signer_id))
+        .build_with_signature(basic_signer, signer_id))
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -2362,7 +2362,6 @@ impl SignedIDkgDealingBuilder {
 
     pub fn build_with_signature<T: BasicSigner<IDkgDealing>>(
         mut self,
-        _params: &IDkgTranscriptParams,
         basic_signer: &T,
         signer_id: NodeId,
     ) -> SignedIDkgDealing {
