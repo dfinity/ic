@@ -560,6 +560,12 @@ fn test_schema_version_none() -> anyhow::Result<()> {
     let connection = Connection::open(&db_path)?;
     schema::create_tables(&connection)?;
 
+    let updated_schema_version = match get_rosetta_metadata(&connection, METADATA_SCHEMA_VERSION)? {
+        Some(value) => u64::from_le_bytes(value.as_slice().try_into()?),
+        None => 0,
+    };
+    assert_eq!(updated_schema_version, schema::SCHEMA_VERSION);
+
     Ok(())
 }
 
@@ -584,6 +590,12 @@ fn test_schema_version_zero() -> anyhow::Result<()> {
     )?;
 
     schema::create_tables(&connection)?;
+
+    let updated_schema_version = match get_rosetta_metadata(&connection, METADATA_SCHEMA_VERSION)? {
+        Some(value) => u64::from_le_bytes(value.as_slice().try_into()?),
+        None => 0,
+    };
+    assert_eq!(updated_schema_version, schema::SCHEMA_VERSION);
 
     Ok(())
 }
