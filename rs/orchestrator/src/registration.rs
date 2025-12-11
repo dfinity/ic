@@ -160,10 +160,16 @@ impl NodeRegistration {
                 .poll_delay_duration_ms,
         );
         while let Err(e) = self.check_node_registered().await {
-            let message = format!("Node registration not complete: {e:?}. Trying to register it.",);
-            warn!(self.log, "{}", message);
+            info!(
+                self.log,
+                "Node registration not complete: {e:?}. Trying to register it."
+            );
             UtilityCommand::notify_host(
-                format!("node-id {}: {}", self.node_id, message).as_str(),
+                format!(
+                    "node-id {}: Node registration not complete. Trying to register it.",
+                    self.node_id
+                )
+                .as_str(),
                 1,
             );
 
