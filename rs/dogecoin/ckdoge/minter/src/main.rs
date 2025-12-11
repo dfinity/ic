@@ -2,7 +2,7 @@ use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
 use ic_ckbtc_minter::{BuildTxError, CanisterRuntime};
-use ic_ckdoge_minter::candid_api::EstimateWithdrawalFeeError;
+use ic_ckdoge_minter::candid_api::{EstimateWithdrawalFeeError, MinterInfo};
 use ic_ckdoge_minter::{
     DOGECOIN_CANISTER_RUNTIME, EstimateFeeArg, Event, EventType, GetEventsArg, UpdateBalanceArgs,
     UpdateBalanceError, Utxo, UtxoStatus,
@@ -30,6 +30,9 @@ fn init(args: MinterArg) {
             #[cfg(feature = "self_check")]
             ok_or_die(check_invariants())
         }
+        MinterArg::Upgrade(_) => {
+            panic!("expected InitArgs got UpgradeArgs");
+        }
     }
 }
 
@@ -52,8 +55,18 @@ fn timer() {
 }
 
 #[post_upgrade]
-fn post_upgrade() {
-    todo!("XC-495")
+fn post_upgrade(minter_arg: Option<MinterArg>) {
+    let upgrade_args = match minter_arg {
+        Some(MinterArg::Init(_)) => {
+            panic!("expected Option<UpgradeArgs> got InitArgs.")
+        }
+        Some(MinterArg::Upgrade(upgrade_arg)) => {
+            upgrade_arg.map(ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs::from)
+        }
+        None => None,
+    };
+    ic_ckbtc_minter::lifecycle::upgrade::post_upgrade(upgrade_args, &DOGECOIN_CANISTER_RUNTIME);
+    setup_tasks();
 }
 
 #[update]
@@ -79,12 +92,14 @@ async fn update_balance(args: UpdateBalanceArgs) -> Result<Vec<UtxoStatus>, Upda
 fn estimate_withdrawal_fee(
     arg: EstimateFeeArg,
 ) -> Result<WithdrawalFee, EstimateWithdrawalFeeError> {
-    ic_ckbtc_minter::state::read_state(|s| {
+    // This is a **query** endpoint, so mutating the state is not an issue
+    // (even when called in replicated mode) since any change will be discarded.
+    ic_ckbtc_minter::state::mutate_state(|s| {
         let fee_estimator = DOGECOIN_CANISTER_RUNTIME.fee_estimator(s);
         let withdrawal_amount = arg.amount.unwrap_or(s.fee_based_retrieve_btc_min_amount);
 
         ic_ckdoge_minter::fees::estimate_retrieve_doge_fee(
-            &s.available_utxos,
+            &mut s.available_utxos,
             withdrawal_amount,
             s.last_median_fee_per_vbyte
                 .expect("Bitcoin current fee percentiles not retrieved yet."),
@@ -177,6 +192,23 @@ fn retrieve_doge_status(req: RetrieveDogeStatusRequest) -> RetrieveDogeStatus {
     ic_ckbtc_minter::state::read_state(|s| {
         RetrieveDogeStatus::from(s.retrieve_btc_status_v2(req.block_index))
     })
+}
+
+#[query]
+fn get_minter_info() -> MinterInfo {
+    ic_ckbtc_minter::state::read_state(|s| MinterInfo {
+        min_confirmations: s.min_confirmations,
+        retrieve_doge_min_amount: s.fee_based_retrieve_btc_min_amount,
+    })
+}
+
+#[update]
+async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusResult {
+    ic_cdk::management_canister::canister_status(&ic_cdk::management_canister::CanisterStatusArgs {
+        canister_id: ic_cdk::api::canister_self(),
+    })
+    .await
+    .expect("failed to fetch canister status")
 }
 
 // TODO XC-495: Currently events from ckBTC are re-used and it might be worthwhile to split

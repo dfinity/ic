@@ -1,85 +1,11 @@
 use super::*;
-use crate::common::test_utils::crypto_component::crypto_component_with_csp;
 use crate::sign::tests::*;
 use assert_matches::assert_matches;
-use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::{AlgorithmId, SignableMock};
 use ic_types::messages::MessageId;
-use ic_types::registry::RegistryClientError;
 use ic_types_test_utils::arbitrary as arbitrary_types;
-use ic_types_test_utils::ids::NODE_1;
-
-mod sign_basic {
-    use super::*;
-    use crate::common::test_utils::basic_sig;
-    use crate::common::test_utils::basic_sig::TestVector::ED25519_STABILITY_1;
-
-    #[test]
-    fn should_fail_with_key_not_found_if_public_key_not_found_in_registry() {
-        let crypto = crypto_component_with_csp(
-            MockAllCryptoServiceProvider::new(),
-            registry_returning_none(),
-        );
-
-        let result = crypto.sign_basic(&SignableMock::new(vec![]), NODE_1, REG_V1);
-
-        assert_matches!(result, Err(CryptoError::PublicKeyNotFound { .. }));
-    }
-
-    #[test]
-    fn should_fail_with_registry_error_if_registry_version_too_new() {
-        let crypto = crypto_component_with_csp(
-            MockAllCryptoServiceProvider::new(),
-            registry_returning(RegistryClientError::VersionNotAvailable { version: REG_V2 }),
-        );
-
-        let result = crypto.sign_basic(&SignableMock::new(vec![]), NODE_1, REG_V2);
-
-        assert_matches!(result, Err(CryptoError::RegistryClient(_)));
-    }
-
-    #[test]
-    fn should_fail_with_secret_key_not_found_if_secret_key_not_found_in_key_store() {
-        let (_, pk, _, _) = basic_sig::testvec(ED25519_STABILITY_1);
-        let key_record =
-            node_signing_record_with(NODE_1, pk.ed25519_bytes().unwrap().to_vec(), REG_V2);
-        let mut csp = MockAllCryptoServiceProvider::new();
-        let key_id = KeyId::from(&pk);
-        let expected_error = CryptoError::SecretKeyNotFound {
-            algorithm: AlgorithmId::Ed25519,
-            key_id: key_id.to_string(),
-        };
-        csp.expect_sign()
-            .times(1)
-            .return_const(Err(expected_error.clone()));
-        let crypto = crypto_component_with_csp(csp, registry_with(key_record));
-
-        let result = crypto.sign_basic(&SignableMock::new(vec![]), NODE_1, REG_V2);
-
-        assert_matches!(result, Err(error) if error == expected_error);
-    }
-
-    #[test]
-    fn should_delegate_to_csp_to_sign() {
-        use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
-        let (_, pk, _, _) = basic_sig::testvec(ED25519_STABILITY_1);
-        let key_record =
-            node_signing_record_with(NODE_1, pk.ed25519_bytes().unwrap().to_vec(), REG_V2);
-        let mut csp = MockAllCryptoServiceProvider::new();
-        let expected_signature = CspSignature::Ed25519(ed25519_types::SignatureBytes([42; 64]));
-        csp.expect_sign()
-            .times(1)
-            .return_const(Ok(expected_signature.clone()));
-        let crypto = crypto_component_with_csp(csp, registry_with(key_record));
-
-        let result = crypto.sign_basic(&SignableMock::new(vec![]), NODE_1, REG_V2);
-
-        assert_matches!(result, Ok(signature)
-            if signature == BasicSigOf::new(BasicSig(expected_signature.as_ref().to_vec())));
-    }
-}
 
 mod verify_basic_sig {
     use super::*;

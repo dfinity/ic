@@ -617,7 +617,8 @@ proptest! {
 
         let fee_estimator = bitcoin_fee_estimator();
         let minter_address= BitcoinAddress::P2wpkhV0(main_pkhash);
-        let fee_estimate = estimate_retrieve_btc_fee(&utxos, target, fee_per_vbyte, DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, &fee_estimator).unwrap();
+        let mut utxos2 = utxos.clone();
+        let fee_estimate = estimate_retrieve_btc_fee(&mut utxos2, target, fee_per_vbyte, DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, &fee_estimator).unwrap();
         let fee_estimate = fee_estimate.minter_fee + fee_estimate.bitcoin_fee;
 
         let (unsigned_tx, _, _, _) = build_unsigned_transaction(
@@ -1006,7 +1007,7 @@ proptest! {
 
     #[test]
     fn test_fee_range(
-        utxos in arbitrary::utxo_set(5_000u64..1_000_000_000, 20..40),
+        mut utxos in arbitrary::utxo_set(5_000u64..1_000_000_000, 20..40),
         amount in 0_u64..15_000, //can be covered by UTXOs
         fee_per_vbyte in 2000..10000u64,
     ) {
@@ -1015,7 +1016,7 @@ proptest! {
 
         let fee_estimator = bitcoin_fee_estimator();
         let amount = max(amount, fee_estimator.fee_based_minimum_withdrawal_amount(fee_per_vbyte));
-        let estimate = estimate_retrieve_btc_fee(&utxos, amount, fee_per_vbyte, DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, &fee_estimator).unwrap();
+        let estimate = estimate_retrieve_btc_fee(&mut utxos, amount, fee_per_vbyte, DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, &fee_estimator).unwrap();
         let lower_bound = MIN_MINTER_FEE + SMALLEST_TX_SIZE_VBYTES * fee_per_vbyte / 1000;
         let estimate_amount = estimate.minter_fee + estimate.bitcoin_fee;
         prop_assert!(

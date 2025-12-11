@@ -50,7 +50,6 @@ system_test(
     name = "query_stats_https_outcalls",
     env = UNIVERSAL_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps = GRAFANA_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,

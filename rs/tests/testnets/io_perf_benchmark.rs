@@ -54,7 +54,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
 };
-use ic_system_test_driver::driver::ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm};
+use ic_system_test_driver::driver::ic_gateway_vm::IcGatewayVm;
 use ic_system_test_driver::driver::pot_dsl::PotSetupFn;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
@@ -303,8 +303,5 @@ pub fn setup(env: TestEnv, config: Config) {
             .start(&env)
             .expect("failed to setup ic-gateway");
     }
-    let ic_gateway = env.get_deployed_ic_gateway("ic-gateway-0").unwrap();
-    let ic_gateway_url = ic_gateway.get_public_url();
-    let ic_gateway_domain = ic_gateway_url.domain().unwrap();
-    env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
+    env.sync_with_prometheus();
 }

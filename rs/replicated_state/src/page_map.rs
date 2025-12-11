@@ -22,7 +22,7 @@ pub use storage::{
 };
 use storage::{OverlayFile, OverlayVersion, Storage};
 
-use ic_types::{Height, MAX_STABLE_MEMORY_IN_BYTES, NumOsPages};
+use ic_types::Height;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use int_map::{Bounds, IntMap};
@@ -34,6 +34,9 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::os::unix::io::RawFd;
 use std::sync::Arc;
+
+#[cfg(test)]
+use ic_types::{MAX_STABLE_MEMORY_IN_BYTES, NumOsPages};
 
 const LABEL_OP: &str = "op";
 const LABEL_TYPE: &str = "type";
@@ -979,7 +982,8 @@ impl Buffer {
     ///
     /// This function assumes the write doesn't extend beyond the maximum stable
     /// memory size (in which case the memory would fail anyway).
-    pub fn dirty_pages_from_write(&self, offset: u64, size: u64) -> NumOsPages {
+    #[cfg(test)]
+    fn dirty_pages_from_write(&self, offset: u64, size: u64) -> NumOsPages {
         if size == 0 {
             return NumOsPages::from(0);
         }

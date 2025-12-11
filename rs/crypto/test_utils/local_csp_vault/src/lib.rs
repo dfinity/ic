@@ -63,12 +63,7 @@ mock! {
     pub LocalCspVault {}
 
     impl BasicSignatureCspVault for LocalCspVault {
-        fn sign(
-            &self,
-            algorithm_id: AlgorithmId,
-            message: Vec<u8>,
-            key_id: KeyId,
-        ) -> Result<CspSignature, CspBasicSignatureError>;
+        fn sign(&self, message: Vec<u8>) -> Result<CspSignature, CspBasicSignatureError>;
 
         fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CspBasicSignatureKeygenError>;
     }
