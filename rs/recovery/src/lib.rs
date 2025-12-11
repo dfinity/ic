@@ -132,7 +132,11 @@ impl Recovery {
         registry_nns_url: Url,
         registry_polling_strategy: RegistryPollingStrategy,
     ) -> RecoveryResult<Self> {
-        let ssh_confirmation = !args.skip_prompts;
+        //  If `args.test_mode` is false, we are in production mode and should always ask for
+        //  confirmation for SSH operations (even if `args.skip_prompts` is true), as production
+        //  Yubikeys need physical confirmation.
+        //  Otherwise, then rely on `args.skip_prompts`.
+        let ssh_confirmation = !args.test_mode || !args.skip_prompts;
         let recovery_dir = args.dir.join(RECOVERY_DIRECTORY_NAME);
         let binary_dir = if args.use_local_binaries {
             PathBuf::from_str("/opt/ic/bin/").expect("bad file path string")
