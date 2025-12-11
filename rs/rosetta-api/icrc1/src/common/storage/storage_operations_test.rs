@@ -552,3 +552,102 @@ fn test_repair_fee_collector_edge_cases() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_schema_version_none() -> anyhow::Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test_fee_collector_db.sqlite");
+    let connection = Connection::open(&db_path)?;
+    schema::create_tables(&connection)?;
+
+    Ok(())
+}
+
+#[test]
+fn test_schema_version_zero() -> anyhow::Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test_fee_collector_db.sqlite");
+    let connection = Connection::open(&db_path)?;
+
+    connection.execute(
+        r#"
+        CREATE TABLE IF NOT EXISTS rosetta_metadata (
+            key TEXT PRIMARY KEY,
+            value BLOB NOT NULL
+        );
+        "#,
+        [],
+    )?;
+    connection.execute(
+        "INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2)",
+        params![METADATA_SCHEMA_VERSION, 0u64.to_le_bytes()],
+    )?;
+
+    schema::create_tables(&connection)?;
+
+    Ok(())
+}
+
+#[test]
+fn test_schema_version_current() -> anyhow::Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test_fee_collector_db.sqlite");
+    let connection = Connection::open(&db_path)?;
+
+    connection.execute(
+        r#"
+        CREATE TABLE IF NOT EXISTS rosetta_metadata (
+            key TEXT PRIMARY KEY,
+            value BLOB NOT NULL
+        );
+        "#,
+        [],
+    )?;
+    connection.execute(
+        "INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2)",
+        params![
+            METADATA_SCHEMA_VERSION,
+            schema::SCHEMA_VERSION.to_le_bytes()
+        ],
+    )?;
+
+    schema::create_tables(&connection)?;
+
+    Ok(())
+}
+
+#[test]
+fn test_schema_version_next() -> anyhow::Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test_fee_collector_db.sqlite");
+    let connection = Connection::open(&db_path)?;
+
+    connection.execute(
+        r#"
+        CREATE TABLE IF NOT EXISTS rosetta_metadata (
+            key TEXT PRIMARY KEY,
+            value BLOB NOT NULL
+        );
+        "#,
+        [],
+    )?;
+    connection.execute(
+        "INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2)",
+        params![
+            METADATA_SCHEMA_VERSION,
+            (schema::SCHEMA_VERSION + 1).to_le_bytes()
+        ],
+    )?;
+
+    match schema::create_tables(&connection) {
+        Ok(()) => anyhow::bail!("schema version check should fail"),
+        Err(e) => {
+            assert!(
+                e.to_string()
+                    .contains("incompatible with current schema version")
+            );
+        }
+    };
+
+    Ok(())
+}
