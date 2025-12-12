@@ -1171,7 +1171,9 @@ pub async fn set_pre_signature_stash_size(
                 .iter()
                 .map(|key_id| KeyConfigUpdate {
                     key_id: Some(key_id.clone()),
-                    pre_signatures_to_create_in_advance: Some(pre_signatures_to_create_in_advance),
+                    pre_signatures_to_create_in_advance: key_id
+                        .requires_pre_signatures()
+                        .then_some(pre_signatures_to_create_in_advance),
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 })
                 .collect(),

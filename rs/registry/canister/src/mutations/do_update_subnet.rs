@@ -376,6 +376,7 @@ impl TryFrom<KeyConfig> for KeyConfigInternal {
                 "KeyConfig.pre_signatures_to_create_in_advance must be specified for key {key_id}."
             ));
         };
+        // Ensure absence of `pre_signatures_to_create_in_advance` for keys that do not require it.
         if !key_id.requires_pre_signatures() && pre_signatures_to_create_in_advance.is_some() {
             return Err(format!(
                 "KeyConfig.pre_signatures_to_create_in_advance must not be specified for key {key_id} because it does not require pre-signatures."
@@ -388,7 +389,7 @@ impl TryFrom<KeyConfig> for KeyConfigInternal {
 
         Ok(Self {
             key_id,
-            pre_signatures_to_create_in_advance: pre_signatures_to_create_in_advance.unwrap_or(0),
+            pre_signatures_to_create_in_advance,
             max_queue_size,
         })
     }
