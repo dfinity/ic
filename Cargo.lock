@@ -13735,6 +13735,7 @@ version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "hex",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-icrc1-test-utils",
  "ic-rosetta-api",
  "ic-types",
