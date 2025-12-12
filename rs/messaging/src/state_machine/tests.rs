@@ -68,7 +68,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
     let metrics = MessageRoutingMetrics::new(&metrics_registry);
 
     let round = ExecutionRound::from(provided_batch.batch_number.get());
-    let round_type = if provided_batch.requires_full_state_hash {
+    let round_type = if provided_batch.requires_full_state_hash() {
         ExecutionRoundType::CheckpointRound
     } else {
         ExecutionRoundType::OrdinaryRound
@@ -335,7 +335,6 @@ fn test_online_split(new_subnet_id: SubnetId, other_subnet_id: SubnetId) -> Repl
     let split_batch = Batch {
         batch_number: Height::from(0),
         batch_summary: None,
-        requires_full_state_hash: false,
         content: BatchContent::Splitting {
             new_subnet_id,
             other_subnet_id,

@@ -275,12 +275,14 @@ impl CryptoMetrics {
             m.cache_size.set(size as i64);
 
             let prev_hits = m.cache_hits.get();
-            debug_assert!(prev_hits <= hits);
-            m.cache_hits.inc_by(hits - prev_hits);
+            if hits > prev_hits {
+                m.cache_hits.inc_by(hits - prev_hits);
+            }
 
             let prev_misses = m.cache_misses.get();
-            debug_assert!(prev_misses <= misses);
-            m.cache_misses.inc_by(misses - prev_misses);
+            if misses > prev_misses {
+                m.cache_misses.inc_by(misses - prev_misses);
+            }
         }
     }
 
@@ -291,12 +293,14 @@ impl CryptoMetrics {
             m.cache_size.set(size as i64);
 
             let prev_hits = m.cache_hits.get();
-            debug_assert!(prev_hits <= hits);
-            m.cache_hits.inc_by(hits - prev_hits);
+            if hits > prev_hits {
+                m.cache_hits.inc_by(hits - prev_hits);
+            }
 
             let prev_misses = m.cache_misses.get();
-            debug_assert!(prev_misses <= misses);
-            m.cache_misses.inc_by(misses - prev_misses);
+            if misses > prev_misses {
+                m.cache_misses.inc_by(misses - prev_misses);
+            }
         }
     }
 
@@ -307,12 +311,14 @@ impl CryptoMetrics {
             m.cache_size.set(size as i64);
 
             let prev_hits = m.cache_hits.get();
-            debug_assert!(prev_hits <= hits);
-            m.cache_hits.inc_by(hits - prev_hits);
+            if hits > prev_hits {
+                m.cache_hits.inc_by(hits - prev_hits);
+            }
 
             let prev_misses = m.cache_misses.get();
-            debug_assert!(prev_misses <= misses);
-            m.cache_misses.inc_by(misses - prev_misses);
+            if misses > prev_misses {
+                m.cache_misses.inc_by(misses - prev_misses);
+            }
         }
     }
 

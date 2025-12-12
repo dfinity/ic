@@ -2888,6 +2888,13 @@ impl StateMachine {
     /// Advances time by 1ns (to make sure that time is strictly monotonic)
     /// and triggers a single round of execution with the given payload as input.
     pub fn execute_payload(&self, payload: PayloadBuilder) -> Height {
+        let checkpoint_interval_length = self.checkpoint_interval_length.load(Ordering::Relaxed);
+        let checkpoint_interval_length_plus_one = checkpoint_interval_length.saturating_add(1);
+        let requires_full_state_hash = self
+            .message_routing
+            .expected_batch_height()
+            .get()
+            .is_multiple_of(checkpoint_interval_length_plus_one);
         let content = BatchContent::Data {
             batch_messages: BatchMessages {
                 signed_ingress_msgs: payload.ingress_messages,
@@ -2904,6 +2911,7 @@ impl StateMachine {
                 nidkg_ids: self.ni_dkg_ids.clone(),
             },
             consensus_responses: payload.consensus_responses,
+            requires_full_state_hash,
         };
         let blockmaker_metrics = payload
             .blockmaker_metrics
@@ -2936,9 +2944,6 @@ impl StateMachine {
             next_checkpoint_height: next_checkpoint_height.into(),
             current_interval_length: checkpoint_interval_length.into(),
         }));
-        let requires_full_state_hash = batch_number
-            .get()
-            .is_multiple_of(checkpoint_interval_length_plus_one);
 
         let current_time = self.get_time();
         let time_of_next_round = if current_time == *self.time_of_last_round.read().unwrap() {
@@ -2950,7 +2955,6 @@ impl StateMachine {
         let batch = Batch {
             batch_number,
             batch_summary,
-            requires_full_state_hash,
             blockmaker_metrics,
             content,
             randomness: Randomness::from(seed),
