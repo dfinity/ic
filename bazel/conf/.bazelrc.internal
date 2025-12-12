@@ -8,8 +8,8 @@ build:bes --remote_build_event_upload=minimal
 
 # DFINITY internal remote cache setup
 build --remote_cache=bazel-remote.idx.dfinity.network
-build --remote_cache_async
-build --remote_cache_compression # If enabled, compress/decompress cache blobs with zstd.
+build --experimental_remote_cache_async
+build --experimental_remote_cache_compression # If enabled, compress/decompress cache blobs with zstd.
 # TODO: re-enable after fixing the error like this:
 # `Failed to fetch file with hash 'xxx' because it does not exist remotely. --remote_download_outputs=minimal does not work if your remote cache evicts files during builds.`
 # Probably disabling `--experimental_remote_cache_async` will help
