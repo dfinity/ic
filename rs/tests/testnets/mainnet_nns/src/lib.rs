@@ -127,6 +127,12 @@ impl TestEnvAttribute for RecoveredNnsDictatorNeuron {
 ///
 /// The single-node system subnet will run an initial NNS
 /// that is required to perform the recovery but can be ignored after that.
+///
+/// At the end of this function, there will be an HTTP gateway connected to an API BN connected to
+/// a single-node NNS subnet running mainnet state.
+/// The registry of the test environment (as in env.topology_snapshot()) is also patched to reflect
+/// mainnet state. This means that subsequent calls will see all subnets and nodes of mainnet,
+/// except the root subnet (tdb26), which will contain only the single-node NNS subnet.
 pub fn setup(env: TestEnv) {
     // Since we're creating the IC concurrently with fetching the state we use a channel to tell the
     // thread fetching the state when the IC is ready such that it can scp the ic.json5 config file
