@@ -236,6 +236,9 @@ fn convert_action(
         pb::proposal::Action::FulfillSubnetRentalRequest(v) => {
             pb_api::proposal::Action::FulfillSubnetRentalRequest(v.clone().into())
         }
+        pb::proposal::Action::BlessAlternativeGuestOsVersion(v) => {
+            pb_api::proposal::Action::BlessAlternativeGuestOsVersion(v.clone().into())
+        }
 
         // The action types with potentially large fields need to be converted in a way that avoids
         // cloning the action first.

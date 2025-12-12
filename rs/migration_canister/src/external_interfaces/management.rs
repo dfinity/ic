@@ -3,7 +3,7 @@ use std::convert::Infallible;
 use candid::{CandidType, Principal, Reserved};
 use ic_cdk::{
     api::{canister_self, canister_version},
-    call::Call,
+    call::{Call, CallFailed, Error as CallError, RejectCode},
     management_canister::{
         CanisterInfoArgs, CanisterInfoResult, canister_info, list_canister_snapshots,
     },
@@ -28,6 +28,9 @@ struct UpdateSettingsArgs {
     pub settings: CanisterSettings,
 }
 
+/// This is a success if the call is a success
+/// and a fatal failure otherwise.
+/// We never retry this due to potential data races.
 pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResult<(), String> {
     let args = UpdateSettingsArgs {
         canister_id,
@@ -40,35 +43,25 @@ pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResul
         .await
     {
         Ok(_) => ProcessingResult::Success(()),
-        // if we fail due to not being controller, this is a fatal failure
         Err(e) => {
             println!("Call `update_settings` for {} failed: {:?}", canister_id, e);
-            match e {
-                ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(_)
-                | ic_cdk::call::CallFailed::CallPerformFailed(_) => ProcessingResult::NoProgress,
-                ic_cdk::call::CallFailed::CallRejected(call_rejected) => {
-                    if call_rejected
-                        .reject_message()
-                        .contains("Only the controllers of the canister")
-                    {
-                        ProcessingResult::FatalFailure(format!(
-                            "Failed to set controller of canister {canister_id}"
-                        ))
-                    } else {
-                        ProcessingResult::NoProgress
-                    }
-                }
-            }
+            ProcessingResult::FatalFailure(format!(
+                "Failed to set the migration canister as the exclusive controller of canister {canister_id}: {e}",
+            ))
         }
     }
 }
 
-/// This is a success if the call is a success OR if it fails with "we are not controller"
-pub async fn set_original_controllers(
+/// This is a success if the call is a success
+/// and a fatal failure if the canister does not exist.
+/// Otherwise, this function returns no progress.
+/// If applicable, failures due to the caller not being a controller of the given canister
+/// should be detected separately using `canister_info`.
+pub async fn set_controllers(
     canister_id: Principal,
     controllers: Vec<Principal>,
     subnet_id: Principal,
-) -> ProcessingResult<(), Infallible> {
+) -> ProcessingResult<(), ()> {
     let args = UpdateSettingsArgs {
         canister_id,
         settings: CanisterSettings {
@@ -80,25 +73,19 @@ pub async fn set_original_controllers(
         .await
     {
         Ok(_) => ProcessingResult::Success(()),
-        // If we fail due to not being controller, this is a success
-        Err(ref e) => match e {
-            ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(_)
-            | ic_cdk::call::CallFailed::CallPerformFailed(_) => ProcessingResult::NoProgress,
-            ic_cdk::call::CallFailed::CallRejected(call_rejected) => {
-                if call_rejected
-                    .reject_message()
-                    .contains("Only the controllers of the canister")
-                {
-                    ProcessingResult::Success(())
-                } else {
-                    println!(
-                        "Call `update_settings` for canister: {} subnet: {} failed: {:?}",
-                        canister_id, subnet_id, e
-                    );
-                    ProcessingResult::NoProgress
+        Err(ref e) => {
+            println!("Call `update_settings` for {} failed: {:?}", canister_id, e);
+            match e {
+                CallFailed::CallRejected(e) => {
+                    if e.reject_code() == Ok(RejectCode::DestinationInvalid) {
+                        ProcessingResult::FatalFailure(())
+                    } else {
+                        ProcessingResult::NoProgress
+                    }
                 }
+                _ => ProcessingResult::NoProgress,
             }
-        },
+        }
     }
 }
 
@@ -186,9 +173,9 @@ pub async fn canister_status(
 // ========================================================================= //
 // `canister_info`
 
-pub async fn get_canister_info(
-    canister_id: Principal,
-) -> ProcessingResult<CanisterInfoResult, Infallible> {
+/// This is a success if the call is a success
+/// and a fatal failure if the canister does not exist.
+pub async fn get_canister_info(canister_id: Principal) -> ProcessingResult<CanisterInfoResult, ()> {
     let args = CanisterInfoArgs {
         canister_id,
         num_requested_changes: None,
@@ -197,8 +184,17 @@ pub async fn get_canister_info(
     match canister_info(&args).await {
         Ok(canister_info) => ProcessingResult::Success(canister_info),
         Err(e) => {
-            println!("Call `canister_info` for {}, failed: {:?}", canister_id, e);
-            ProcessingResult::NoProgress
+            println!("Call `canister_info` for {} failed: {:?}", canister_id, e);
+            match e {
+                CallError::CallRejected(e) => {
+                    if e.reject_code() == Ok(RejectCode::DestinationInvalid) {
+                        ProcessingResult::FatalFailure(())
+                    } else {
+                        ProcessingResult::NoProgress
+                    }
+                }
+                _ => ProcessingResult::NoProgress,
+            }
         }
     }
 }
@@ -221,6 +217,8 @@ pub struct RenameToArgs {
     pub total_num_changes: u64,
 }
 
+/// This is a success if the call is a success or the target canister does not exist,
+/// i.e., a previous call to rename the target canister was a success.
 pub async fn rename_canister(
     source: Principal,
     source_version: u64,
@@ -241,7 +239,7 @@ pub async fn rename_canister(
     };
 
     // We have to await this call no matter what. Bounded wait is not an option.
-    match Call::unbounded_wait(target_subnet, "rename_canister")
+    match Call::bounded_wait(target_subnet, "rename_canister")
         .with_arg(args)
         .await
     {
@@ -251,9 +249,16 @@ pub async fn rename_canister(
                 "Call `rename_canister` for canister`: {}, subnet: {} failed: {:?}",
                 target, target_subnet, e
             );
-            // All fatal error conditions have been checked upfront and should not be possible now.
-            // CanisterAlreadyExists, RenameCanisterNotStopped, RenameCanisterHasSnapshot.
-            ProcessingResult::NoProgress
+            match e {
+                CallFailed::CallRejected(e) => {
+                    if e.reject_code() == Ok(RejectCode::DestinationInvalid) {
+                        ProcessingResult::Success(())
+                    } else {
+                        ProcessingResult::NoProgress
+                    }
+                }
+                _ => ProcessingResult::NoProgress,
+            }
         }
     }
 }
@@ -315,7 +320,7 @@ pub async fn get_registry_version(subnet_id: Principal) -> ProcessingResult<u64,
         },
         Err(e) => {
             println!(
-                "Call `subnet_info` for subnet: {}, failed: {:?}",
+                "Call `subnet_info` for subnet: {} failed: {:?}",
                 subnet_id, e
             );
             ProcessingResult::NoProgress
@@ -332,12 +337,14 @@ pub struct DeleteCanisterArgs {
     pub canister_id: Principal,
 }
 
+/// This is a success if the call is a success or the canister does not exist,
+/// i.e., a previous call to delete the canister was a success.
 pub async fn delete_canister(
     canister_id: Principal,
     subnet_id: Principal,
 ) -> ProcessingResult<(), Infallible> {
     let args = DeleteCanisterArgs { canister_id };
-    match Call::unbounded_wait(subnet_id, "delete_canister")
+    match Call::bounded_wait(subnet_id, "delete_canister")
         .with_arg(&args)
         .await
     {
@@ -347,7 +354,16 @@ pub async fn delete_canister(
                 "Call `delete_canister` for canister: {}, subnet: {}, failed: {:?}",
                 canister_id, subnet_id, e
             );
-            ProcessingResult::NoProgress
+            match e {
+                CallFailed::CallRejected(e) => {
+                    if e.reject_code() == Ok(RejectCode::DestinationInvalid) {
+                        ProcessingResult::Success(())
+                    } else {
+                        ProcessingResult::NoProgress
+                    }
+                }
+                _ => ProcessingResult::NoProgress,
+            }
         }
     }
 }

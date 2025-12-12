@@ -954,7 +954,6 @@ macro_rules! define_affine_and_projective_types {
                     Self { tbl }
                 }
 
-
                 /// Perform scalar multiplication using the precomputed table
                 fn mul(&self, scalar: &Scalar) -> $projective {
                     let s = scalar.serialize();
@@ -966,6 +965,24 @@ macro_rules! define_affine_and_projective_types {
 
                         let b = Self::get_window(&s, Self::WINDOW_BITS*i);
                         accum += Self::ct_select(tbl_for_i, b as usize);
+                    }
+
+                    <$projective>::new(accum)
+                }
+
+                /// Perform scalar multiplication using the precomputed table
+                fn mul_vartime(&self, scalar: &Scalar) -> $projective {
+                    let s = scalar.serialize();
+
+                    let mut accum = <ic_bls12_381::$projective>::identity();
+
+                    for i in 0..Self::WINDOWS {
+                        let tbl_for_i = &self.tbl[Self::WINDOW_ELEMENTS*i..Self::WINDOW_ELEMENTS*(i+1)];
+
+                        let b = Self::get_window(&s, Self::WINDOW_BITS*i);
+                        if b > 0 {
+                            accum += tbl_for_i[(b - 1) as usize]; // variable time table lookup
+                        }
                     }
 
                     <$projective>::new(accum)
@@ -1090,6 +1107,19 @@ macro_rules! define_affine_and_projective_types {
                     tbl.mul(scalar)
                 } else {
                     <$projective>::from(self).windowed_mul(scalar)
+                }
+            }
+
+            /// Perform variable time point multiplication
+            ///
+            /// Warning: this function leaks information about the scalars via
+            /// memory-based side channels. Do not use this function with secret
+            /// scalars.
+            pub fn mul_vartime(&self, scalar: &Scalar) -> $projective {
+                if let Some(ref tbl) = self.precomputed {
+                    tbl.mul_vartime(scalar)
+                } else {
+                    <$projective>::from(self).windowed_mul_vartime(scalar)
                 }
             }
 
@@ -1251,9 +1281,35 @@ macro_rules! define_affine_and_projective_types {
             }
 
             /// Batch multiplication
+            ///
+            /// Warning: this function leaks information about the scalars via
+            /// memory-based side channels. Do not use this function with secret
+            /// scalars.
+            pub fn batch_mul_vartime(&self, scalars: &[Scalar]) -> Vec<Self> {
+                // It might be possible to optimize this function by taking advantage of
+                // the fact that we are using the same point for several multiplications,
+                // for example by using larger precomputed tables
+
+                let mut result = Vec::with_capacity(scalars.len());
+                for scalar in scalars {
+                    result.push(self.mul_vartime(scalar));
+                }
+                $projective::batch_normalize(&result)
+            }
+
+            /// Batch multiplication
             pub fn batch_mul_array<const N: usize>(&self, scalars: &[Scalar; N]) -> [Self; N] {
                 let v = scalars.clone().map(|s| self * s);
                 $projective::batch_normalize_array(&v)
+            }
+
+            /// Sum some points
+            pub fn sum(pts: &[Self]) -> $projective {
+                let mut sum = ic_bls12_381::$projective::identity();
+                for pt in pts {
+                    sum += pt.inner();
+                }
+                $projective::new(sum)
             }
         }
 
@@ -1318,33 +1374,12 @@ macro_rules! define_affine_and_projective_types {
                 Self::new(sum)
             }
 
-            /// Deserialize a point (compressed format only)
-            ///
-            /// This version verifies that the decoded point is within the prime order
-            /// subgroup, and is safe to call on untrusted inputs.
-            pub fn deserialize<B: AsRef<[u8]>>(bytes: &B) -> Result<Self, PairingInvalidPoint> {
-                let pt = $affine::deserialize(bytes)?;
-                Ok(pt.into())
-            }
-
-            /// Serialize a point in compressed format in some specific type
-            pub fn serialize_to<T: From<[u8; Self::BYTES]>>(&self) -> T {
-                T::from(self.serialize())
-            }
-
-            /// Deserialize a point (compressed format only), trusted bytes edition
-            ///
-            /// As only compressed format is accepted, it is not possible to
-            /// create a point which is not on the curve. However it is possible
-            /// using this function to create a point which is not within the
-            /// prime-order subgroup. This can be detected by calling is_torsion_free
-            pub fn deserialize_unchecked<B: AsRef<[u8]>>(bytes: &B) -> Result<Self, PairingInvalidPoint> {
-                let pt = $affine::deserialize_unchecked(bytes)?;
-                Ok(pt.into())
-            }
-
             /// Serialize this point in compressed format
-            pub fn serialize(&self) -> [u8; Self::BYTES] {
+            ///
+            /// This exists for implementing Debug but is intentionally pub(crate)
+            /// since it hides the expensive affine conversion so should be avoided
+            /// in production code.
+            pub(crate) fn serialize(&self) -> [u8; Self::BYTES] {
                 $affine::from(self).serialize()
             }
 
@@ -2014,6 +2049,43 @@ macro_rules! declare_windowed_scalar_mul_ops_for {
 
                 accum
             }
+
+            pub(crate) fn windowed_mul_vartime(&self, scalar: &Scalar) -> Self {
+                // Configurable window size: can be in 1..=8
+                type Window = WindowInfo<$window>;
+
+                // Derived constants
+                const TABLE_SIZE: usize = Window::ELEMENTS;
+
+                let mut tbl = Self::identities(TABLE_SIZE);
+
+                for i in 1..TABLE_SIZE {
+                    tbl[i] = if i % 2 == 0 {
+                        tbl[i / 2].double()
+                    } else {
+                        &tbl[i - 1] + self
+                    };
+                }
+
+                let s = scalar.serialize();
+
+                let mut accum = Self::identity();
+
+                for i in 0..Window::WINDOWS {
+                    if i > 0 {
+                        for _ in 0..Window::SIZE {
+                            accum = accum.double();
+                        }
+                    }
+
+                    let w = Window::extract(&s, i);
+                    if w > 0 {
+                        accum += &tbl[w as usize]; // variable time table lookup
+                    }
+                }
+
+                accum
+            }
         }
 
         impl std::ops::Mul<&Scalar> for &$typ {
@@ -2297,6 +2369,15 @@ impl Gt {
         extract4(&tag, 0) ^ extract4(&tag, 32)
     }
 
+    /// Perform variable time point multiplication
+    ///
+    /// Warning: this function leaks information about the scalars via
+    /// memory-based side channels. Do not use this function with secret
+    /// scalars.
+    pub fn mul_vartime(&self, scalar: &Scalar) -> Self {
+        self.windowed_mul_vartime(scalar)
+    }
+
     /// Return the result of g*val where g is the standard generator
     ///
     /// This function avoids leaking val through timing side channels,
@@ -2350,11 +2431,23 @@ impl G2Prepared {
     pub fn neg_generator() -> &'static Self {
         &G2PREPARED_NEG_G
     }
+
+    /// Return statistics related to the G2Prepared cache
+    pub fn cache_statistics() -> crate::cache::G2PreparedCacheStatistics {
+        crate::cache::G2PreparedCache::global().cache_statistics()
+    }
 }
 
 impl From<&G2Affine> for G2Prepared {
     fn from(v: &G2Affine) -> Self {
-        Self::new((*v.inner()).into())
+        let bytes = v.serialize();
+        if let Some(prep) = crate::cache::G2PreparedCache::global().get(&bytes) {
+            prep
+        } else {
+            let prep = Self::new((*v.inner()).into());
+            crate::cache::G2PreparedCache::global().insert(bytes, prep.clone());
+            prep
+        }
     }
 }
 
