@@ -46,6 +46,7 @@ use ic_system_test_driver::nns::{
 use ic_system_test_driver::retry_with_msg;
 use ic_system_test_driver::util::{block_on, runtime_from_url};
 use ic_types::{Height, NodeId, ReplicaVersion, SubnetId};
+use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use registry_canister::mutations::{
     do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
     do_add_node_operator::AddNodeOperatorPayload,
@@ -238,6 +239,12 @@ fn setup_recovered_nns(
 
     recover_nns_subnet(&env, &nns_node, &recovered_nns_node, &aux_node);
     test_recovered_nns(&env, neuron_id, &recovered_nns_node);
+
+    let dkg_interval = std::env::var("DKG_INTERVAL")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(DKG_INTERVAL_HEIGHT);
+    propose_to_reduce_dkg_interval(&env, neuron_id, &recovered_nns_node, dkg_interval);
 
     let recovered_nns_pub_key = fetch_recovered_nns_public_key_pem(&recovered_nns_node);
 
@@ -612,6 +619,87 @@ fn bless_replica_version(
     );
 }
 
+fn propose_to_reduce_dkg_interval(
+    env: &TestEnv,
+    neuron_id: NeuronId,
+    nns_node: &IcNodeSnapshot,
+    dkg_interval: u64,
+) {
+    info!(
+        env.logger(),
+        "Submitting proposal to reduce DKG interval to {} ...", dkg_interval
+    );
+
+    let logger = env.logger();
+    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    let governance_canister = get_governance_canister(&nns_runtime);
+    let sig_keys = SigKeys::from_pem(NEURON_SECRET_KEY_PEM).expect("Failed to parse secret key");
+    let proposal_sender = Sender::SigKeys(sig_keys);
+
+    let proposal_id = {
+        let logger = logger.clone();
+        block_on(async move {
+            let proposal_id = submit_external_update_proposal_allowing_error(
+                &governance_canister,
+                proposal_sender,
+                neuron_id,
+                NnsFunction::UpdateConfigOfSubnet,
+                UpdateSubnetPayload {
+                    subnet_id: SubnetId::from(PrincipalId::from_str(ORIGINAL_NNS_ID).unwrap()),
+                    max_ingress_bytes_per_message: None,
+                    max_ingress_messages_per_block: None,
+                    max_block_payload_size: None,
+                    unit_delay_millis: None,
+                    initial_notary_delay_millis: None,
+                    dkg_interval_length: Some(dkg_interval),
+                    dkg_dealings_per_block: None,
+                    start_as_nns: None,
+                    subnet_type: None,
+                    is_halted: None,
+                    halt_at_cup_height: None,
+                    features: None,
+                    chain_key_config: None,
+                    chain_key_signing_enable: None,
+                    chain_key_signing_disable: None,
+                    max_number_of_canisters: None,
+                    ssh_readonly_access: None,
+                    ssh_backup_access: None,
+                    max_artifact_streams_per_peer: None,
+                    max_chunk_wait_ms: None,
+                    max_duplicity: None,
+                    max_chunk_size: None,
+                    receive_check_cache_size: None,
+                    pfn_evaluation_period_ms: None,
+                    registry_poll_period_ms: None,
+                    retransmission_request_ms: None,
+                    set_gossip_config_to_default: false,
+                },
+                format!("Reduce DKG interval of the NNS subnet to {}", dkg_interval),
+                "".to_string(),
+            )
+            .await
+            .expect("Failed to submit proposal to reduce DKG interval");
+
+            info!(
+                logger,
+                "Proposal {:?} to reduce DKG interval to {} has been submitted",
+                proposal_id.to_string(),
+                dkg_interval,
+            );
+
+            wait_for_final_state(&governance_canister, proposal_id).await;
+            proposal_id
+        })
+    };
+
+    info!(
+        logger,
+        "Proposal {:?} to reduce DKG interval to {} has been executed",
+        proposal_id.to_string(),
+        dkg_interval,
+    );
+}
+
 fn fetch_recovered_nns_public_key_pem(recovered_nns_node: &IcNodeSnapshot) -> Vec<u8> {
     let recovered_nns_agent = ic_agent::Agent::builder()
         .with_url(recovered_nns_node.get_public_url())
@@ -819,22 +907,13 @@ fn setup_ic(env: TestEnv) {
         PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
             .unwrap();
 
-    let dkg_interval = std::env::var("DKG_INTERVAL")
-        .ok()
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or(DKG_INTERVAL_HEIGHT);
-
     InternetComputer::new()
         .with_default_vm_resources(VmResources {
             vcpus: None,
             memory_kibibytes: None,
             boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
         })
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .add_nodes(1)
-                .with_dkg_interval_length(Height::from(dkg_interval)),
-        )
+        .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .with_api_boundary_nodes(1)
         .with_unassigned_nodes(1)
         .with_unassigned_config()
