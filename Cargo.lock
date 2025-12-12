@@ -6904,9 +6904,11 @@ dependencies = [
  "ic-limits",
  "ic-logger",
  "ic-protobuf",
+ "ic-registry-client",
  "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",
+ "ic-registry-local-store",
  "ic-registry-proto-data-provider",
  "ic-registry-replicator",
  "ic-registry-routing-table",
@@ -11313,6 +11315,7 @@ dependencies = [
 name = "ic-migration-canister"
 version = "0.9.0"
 dependencies = [
+ "async-trait",
  "candid",
  "candid_parser",
  "canister-test",
@@ -11327,6 +11330,7 @@ dependencies = [
  "ic-management-canister-types-private",
  "ic-metrics-encoder",
  "ic-nervous-system-common-test-utils",
+ "ic-nns-constants",
  "ic-nns-test-utils",
  "ic-stable-structures 0.7.0",
  "ic-transport-types 0.40.1",
@@ -11334,6 +11338,7 @@ dependencies = [
  "itertools 0.12.1",
  "pocket-ic",
  "prometheus-parse",
+ "rand 0.8.5",
  "registry-canister",
  "reqwest 0.12.24",
  "serde",

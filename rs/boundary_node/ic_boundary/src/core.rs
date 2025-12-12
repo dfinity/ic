@@ -47,11 +47,14 @@ use ic_interfaces::crypto::{BasicSigner, KeyManager};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_protobuf::registry::crypto::v1::{AlgorithmId, PublicKey};
+use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{crypto::CryptoRegistry, subnet::SubnetRegistry};
+use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::messages::MessageId;
 use nix::unistd::{Pid, getpgid, setpgid};
 use rustls::{client::danger::ServerCertVerifier, server::ResolvesServerCert};
+use std::path::Path;
 use tokio::{
     select,
     signal::unix::SignalKind,
@@ -222,24 +225,33 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     let (channel_snapshot_send, channel_snapshot_recv) = tokio::sync::watch::channel(None);
 
     // Registry Client
-    let registry_client = if cli.registry.registry_local_store_path.is_some() {
-        let persister = WithMetricsPersist(persister, MetricParamsPersist::new(&metrics_registry));
+    let registry_client = if let Some(local_store_path) = &cli.registry.registry_local_store_path {
+        // Store
+        let local_store = Arc::new(LocalStoreImpl::new(local_store_path.clone()));
+
+        // Client
+        let registry_client = Arc::new(RegistryClientImpl::new(local_store.clone(), None));
+        registry_client
+            .fetch_and_start_polling()
+            .context("failed to start registry client")?;
 
         // Snapshotting
-        Some(
-            setup_registry(
-                &cli,
-                registry_snapshot.clone(),
-                persister,
-                http_client_check,
-                &metrics_registry,
-                channel_snapshot_send,
-                channel_snapshot_recv.clone(),
-                &mut tasks,
-            )
-            .await
-            .context("unable to init Registry")?,
+        setup_registry(
+            &cli,
+            local_store_path,
+            registry_client.clone(),
+            registry_snapshot.clone(),
+            WithMetricsPersist(persister, MetricParamsPersist::new(&metrics_registry)),
+            http_client_check,
+            &metrics_registry,
+            channel_snapshot_send,
+            channel_snapshot_recv.clone(),
+            &mut tasks,
         )
+        .await
+        .context("unable to init Registry")?;
+
+        Some(registry_client as Arc<dyn RegistryClient>)
     } else {
         // Prepare a stub routing table and snapshot if there's no local store specified
         let subnet = generate_stub_subnet(cli.registry.registry_stub_replica.clone());
@@ -631,6 +643,8 @@ async fn create_agent(
 /// Sets up registry-related stuff
 async fn setup_registry(
     cli: &Cli,
+    local_store_path: &Path,
+    registry_client: Arc<dyn RegistryClient>,
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     persister: WithMetricsPersist<Persister>,
     http_client_check: Arc<dyn Client>,
@@ -638,28 +652,24 @@ async fn setup_registry(
     channel_snapshot_send: watch::Sender<Option<Arc<RegistrySnapshot>>>,
     channel_snapshot_recv: watch::Receiver<Option<Arc<RegistrySnapshot>>>,
     tasks: &mut TaskManager,
-) -> Result<Arc<dyn RegistryClient>, Error> {
-    // Notice no-op logger
-    let logger = ic_logger::new_replica_logger(
-        slog::Logger::root(tracing_slog::TracingSlogDrain, slog::o!()),
-        &ic_config::logger::Config::default(),
-    );
+) -> Result<(), Error> {
+    // Snapshots
+    let snapshotter = WithMetricsSnapshot(
+        {
+            let mut snapshotter = Snapshotter::new(
+                registry_snapshot.clone(),
+                channel_snapshot_send,
+                registry_client.clone(),
+                cli.registry.registry_min_version_age,
+            );
 
-    // Parse the NNS key if there was one provided
-    let nns_pub_key = if let Some(v) = &cli.registry.registry_nns_pub_key_pem {
-        Some(parse_threshold_sig_key(v).context("failed to parse NNS public key")?)
-    } else {
-        None
-    };
+            if let Some(v) = &cli.nftables.nftables_system_replicas_path {
+                let fw_reloader = SystemdReloader::new(SYSTEMCTL_BIN.into(), "nftables", "reload");
 
-    let replicator = RegistryReplicator::new(
-        logger,
-        cli.registry.registry_local_store_path.clone().unwrap(),
-        cli.registry.registry_nns_poll_interval,
-        cli.registry.registry_nns_urls.clone(),
-        nns_pub_key,
-    )
-    .await;
+                let fw_generator = FirewallGenerator::new(
+                    v.clone(),
+                    cli.nftables.nftables_system_replicas_var.clone(),
+                );
 
     let client = replicator.get_registry_client();
 
@@ -689,8 +699,29 @@ async fn setup_registry(
     tasks.add("check_runner", Arc::new(check_runner));
 
     if cli.registry.registry_disable_replicator {
-        return Ok(client);
+        return Ok(());
     }
+
+    // Notice no-op logger
+    let logger = ic_logger::new_replica_logger(
+        slog::Logger::root(tracing_slog::TracingSlogDrain, slog::o!()),
+        &ic_config::logger::Config::default(),
+    );
+
+    let nns_pub_key = cli
+        .registry
+        .registry_nns_pub_key_pem
+        .as_ref()
+        .map(|path| parse_threshold_sig_key(path).expect("failed to parse NNS public key"));
+
+    let replicator = RegistryReplicator::new(
+        logger,
+        local_store_path,
+        cli.registry.registry_nns_poll_interval,
+        cli.registry.registry_nns_urls.clone(),
+        nns_pub_key,
+    )
+    .await;
 
     let replicator_runner = RegistryReplicatorRunner::new(replicator);
     tasks.add("registry_replicator", Arc::new(replicator_runner));
