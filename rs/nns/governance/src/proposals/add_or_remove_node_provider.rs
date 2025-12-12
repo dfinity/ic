@@ -105,9 +105,7 @@ impl From<ValidAddNodeProvider> for SelfDescribingValue {
 
 impl From<ValidAccountIdentifier> for SelfDescribingValue {
     fn from(value: ValidAccountIdentifier) -> Self {
-        ValueBuilder::new()
-            .add_field("account_identifier", value.0.to_hex())
-            .build()
+        Self::from(value.0.to_hex())
     }
 }
 
