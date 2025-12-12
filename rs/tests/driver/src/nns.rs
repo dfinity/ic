@@ -394,7 +394,7 @@ pub async fn vote_on_proposal(governance_canister: &Canister<'_>, proposal_id: P
             proposal: Some(ic_nns_common::pb::v1::ProposalId { id: proposal_id.0 }),
         })),
     };
-    let result: ManageNeuronResponse = governance_canister
+    let _result: ManageNeuronResponse = governance_canister
         .update_from_sender(
             "manage_neuron",
             candid_one,
