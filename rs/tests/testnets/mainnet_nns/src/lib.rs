@@ -178,13 +178,6 @@ pub fn setup(env: TestEnv) {
 
     let http_gateway = deploy_gateway_thread.join().unwrap();
     let neuron_id = recover_nns_thread.join().unwrap();
-    // After the NNS has been recovered and the API BN fixed, we should restart the HTTP gateway to
-    // reconnect to the patched API BN.
-    // Alternatively, we could start deploying the HTTP gateway only now. But deploying it in
-    // parallel earlier and only having to restart the container now is faster.
-    http_gateway
-        .block_on_bash_script("docker restart ic-gateway")
-        .unwrap();
 
     let http_gateway_url = http_gateway.get_public_url();
     info!(
