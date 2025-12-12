@@ -10,7 +10,7 @@ mod load_transcript_error_conversions {
     #[test]
     fn should_return_error_on_malformed_transcript_error() {
         let malformed_data_error = MalformedDataError {
-            algorithm: AlgorithmId::Placeholder,
+            algorithm: AlgorithmId::Unspecified,
             internal_error: "some error".to_string(),
             data: None,
         };
@@ -21,7 +21,7 @@ mod load_transcript_error_conversions {
         assert_eq!(
             result,
             DkgLoadTranscriptError::InvalidTranscript(InvalidArgumentError {
-                message: "Malformed Placeholder data: 0xNone. Internal error: some error"
+                message: "Malformed Unspecified data: 0xNone. Internal error: some error"
                     .to_string()
             })
         );
@@ -60,21 +60,21 @@ mod load_transcript_error_conversions {
 
     #[test]
     #[should_panic(
-        expected = "NI-DKG load_transcript error on loading private key - UnsupportedAlgorithmId: The algorithm id Placeholder is unsupported."
+        expected = "NI-DKG load_transcript error on loading private key - UnsupportedAlgorithmId: The algorithm id Unspecified is unsupported."
     )]
     fn should_panic_on_unsupported_algorithm_id_error() {
-        let csp_error = CspDkgLoadPrivateKeyError::UnsupportedAlgorithmId(AlgorithmId::Placeholder);
+        let csp_error = CspDkgLoadPrivateKeyError::UnsupportedAlgorithmId(AlgorithmId::Unspecified);
 
         let _panic = DkgLoadTranscriptError::from(csp_error);
     }
 
     #[test]
     #[should_panic(
-        expected = "NI-DKG load_transcript error on loading private key - MalformedSecretKeyError: MalformedSecretKeyError { algorithm: Placeholder, internal_error: \"some error\" }"
+        expected = "NI-DKG load_transcript error on loading private key - MalformedSecretKeyError: MalformedSecretKeyError { algorithm: Unspecified, internal_error: \"some error\" }"
     )]
     fn should_panic_on_malformed_secret_key_error() {
         let malformed_secret_key_error = MalformedSecretKeyError {
-            algorithm: AlgorithmId::Placeholder,
+            algorithm: AlgorithmId::Unspecified,
             internal_error: "some error".to_string(),
         };
         let csp_error =

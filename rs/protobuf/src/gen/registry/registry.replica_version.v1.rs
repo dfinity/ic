@@ -14,7 +14,14 @@ pub struct ReplicaVersionRecord {
     pub guest_launch_measurements: ::core::option::Option<GuestLaunchMeasurements>,
 }
 #[derive(
-    serde::Serialize, serde::Deserialize, candid::CandidType, Eq, Clone, PartialEq, ::prost::Message,
+    serde::Serialize,
+    serde::Deserialize,
+    Eq,
+    candid::CandidType,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
 )]
 pub struct GuestLaunchMeasurements {
     /// A list of valid SEV-SNP measurements. One release can have multiple valid
@@ -24,7 +31,14 @@ pub struct GuestLaunchMeasurements {
     pub guest_launch_measurements: ::prost::alloc::vec::Vec<GuestLaunchMeasurement>,
 }
 #[derive(
-    serde::Serialize, serde::Deserialize, candid::CandidType, Eq, Clone, PartialEq, ::prost::Message,
+    serde::Serialize,
+    serde::Deserialize,
+    Eq,
+    candid::CandidType,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
 )]
 pub struct GuestLaunchMeasurement {
     /// SEV-SNP measurement (48 bytes)
@@ -39,7 +53,14 @@ pub struct GuestLaunchMeasurement {
     pub encoded_measurement: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(
-    serde::Serialize, serde::Deserialize, candid::CandidType, Eq, Clone, PartialEq, ::prost::Message,
+    serde::Serialize,
+    serde::Deserialize,
+    Eq,
+    candid::CandidType,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
 )]
 pub struct GuestLaunchMeasurementMetadata {
     /// Kernel command line string used to launch the guest

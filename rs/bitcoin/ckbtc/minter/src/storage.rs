@@ -264,7 +264,8 @@ mod benches {
                 crate::build_unsigned_transaction(
                     &mut s.available_utxos,
                     vec![(dummy_recipient_address, withdrawal_amount)],
-                    dummy_minter_address,
+                    &dummy_minter_address,
+                    s.max_num_inputs_in_transaction,
                     median_fee_millisatoshi_per_vbyte,
                     &fee_estimator,
                 )
@@ -292,6 +293,7 @@ mod benches {
                     &mut s.available_utxos,
                     withdrawal_amount,
                     s.last_median_fee_per_vbyte.unwrap(),
+                    s.max_num_inputs_in_transaction,
                     &fee_estimator,
                 )
                 .unwrap()
