@@ -1941,6 +1941,16 @@ impl ExecutionTest {
             )
             .unwrap();
     }
+
+    pub fn online_split_state(&mut self, subnet_id: SubnetId, other_subnet_id: SubnetId) {
+        let state = self.state.take().unwrap();
+
+        // Reset the split marker, just in case.
+        // state.metadata.subnet_split_from = None;
+
+        let state_after_split = state.online_split(subnet_id, other_subnet_id).unwrap();
+        self.state = Some(state_after_split);
+    }
 }
 
 /// A builder for `ExecutionTest`.
