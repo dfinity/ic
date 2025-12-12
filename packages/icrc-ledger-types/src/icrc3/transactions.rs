@@ -14,6 +14,13 @@ use super::{
     blocks::GetBlocksRequest,
 };
 
+// Constants for tx.kind
+pub const TRANSACTION_APPROVE: &str = "approve";
+pub const TRANSACTION_BURN: &str = "burn";
+pub const TRANSACTION_MINT: &str = "mint";
+pub const TRANSACTION_TRANSFER: &str = "transfer";
+pub const TRANSACTION_FEE_COLLECTOR: &str = "107feecol";
+
 pub type GenericTransaction = Value;
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -81,7 +88,7 @@ pub struct Transaction {
 impl Transaction {
     pub fn burn(burn: Burn, timestamp: u64) -> Self {
         Self {
-            kind: "burn".into(),
+            kind: TRANSACTION_BURN.into(),
             timestamp,
             mint: None,
             burn: Some(burn),
@@ -93,7 +100,7 @@ impl Transaction {
 
     pub fn mint(mint: Mint, timestamp: u64) -> Self {
         Self {
-            kind: "mint".into(),
+            kind: TRANSACTION_MINT.into(),
             timestamp,
             mint: Some(mint),
             burn: None,
@@ -105,7 +112,7 @@ impl Transaction {
 
     pub fn transfer(transfer: Transfer, timestamp: u64) -> Self {
         Self {
-            kind: "transfer".into(),
+            kind: TRANSACTION_TRANSFER.into(),
             timestamp,
             mint: None,
             burn: None,
@@ -117,7 +124,7 @@ impl Transaction {
 
     pub fn approve(approve: Approve, timestamp: u64) -> Self {
         Self {
-            kind: "approve".into(),
+            kind: TRANSACTION_APPROVE.into(),
             timestamp,
             mint: None,
             burn: None,
@@ -129,7 +136,7 @@ impl Transaction {
 
     pub fn set_fee_collector(fee_collector: FeeCollector, timestamp: u64) -> Self {
         Self {
-            kind: "107feecol".into(),
+            kind: TRANSACTION_FEE_COLLECTOR.into(),
             timestamp,
             mint: None,
             burn: None,

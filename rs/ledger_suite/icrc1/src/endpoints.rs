@@ -7,7 +7,8 @@ use icrc_ledger_types::icrc1::transfer::TransferError;
 use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
 use icrc_ledger_types::icrc3::transactions::{
-    Approve, Burn, FeeCollector, Mint, Transaction, Transfer,
+    Approve, Burn, FeeCollector, Mint, TRANSACTION_APPROVE, TRANSACTION_BURN,
+    TRANSACTION_FEE_COLLECTOR, TRANSACTION_MINT, TRANSACTION_TRANSFER, Transaction, Transfer,
 };
 use serde::Deserialize;
 
@@ -169,7 +170,7 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
 
         match b.transaction.operation {
             Operation::Mint { to, amount, fee } => {
-                tx.kind = "mint".to_string();
+                tx.kind = TRANSACTION_MINT.to_string();
                 tx.mint = Some(Mint {
                     to,
                     amount: amount.into(),
@@ -184,7 +185,7 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                 amount,
                 fee,
             } => {
-                tx.kind = "burn".to_string();
+                tx.kind = TRANSACTION_BURN.to_string();
                 tx.burn = Some(Burn {
                     from,
                     spender,
@@ -201,7 +202,7 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                 amount,
                 fee,
             } => {
-                tx.kind = "transfer".to_string();
+                tx.kind = TRANSACTION_TRANSFER.to_string();
                 tx.transfer = Some(Transfer {
                     from,
                     to,
@@ -220,7 +221,7 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                 expires_at,
                 fee,
             } => {
-                tx.kind = "approve".to_string();
+                tx.kind = TRANSACTION_APPROVE.to_string();
                 tx.approve = Some(Approve {
                     from,
                     spender,
@@ -239,7 +240,7 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                 caller,
                 op,
             } => {
-                tx.kind = "107feecol".to_string();
+                tx.kind = TRANSACTION_FEE_COLLECTOR.to_string();
                 tx.fee_collector = Some(FeeCollector {
                     fee_collector,
                     caller,
