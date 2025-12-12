@@ -64,7 +64,7 @@ fn test(env: TestEnv) {
 
 #[derive(Clone, Debug, CandidType)]
 struct MigrateCanisterArgs {
-    pub canister_id: Principal,
+    pub migrated_canister_id: Principal,
     pub replace_canister_id: Principal,
 }
 
@@ -379,12 +379,12 @@ async fn test_async(env: TestEnv) {
     pause_canister_migrations(&governance_canister).await;
 
     let args = Encode!(&MigrateCanisterArgs {
-        canister_id: migrated_canister.canister_id(),
+        migrated_canister_id: migrated_canister.canister_id(),
         replace_canister_id: replaced_canister.canister_id(),
     })
     .unwrap();
     let args2 = Encode!(&MigrateCanisterArgs {
-        canister_id: migrated_canister2.canister_id(),
+        migrated_canister_id: migrated_canister2.canister_id(),
         replace_canister_id: replaced_canister2.canister_id(),
     })
     .unwrap();

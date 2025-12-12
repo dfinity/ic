@@ -4,7 +4,7 @@ type MigrationStatus = variant {
   InProgress : record { status : text };
 };
 
-type MigrateCanisterArgs = record { canister_id : principal; replace_canister_id : principal };
+type MigrateCanisterArgs = record { migrated_canister_id : principal; replace_canister_id : principal };
 
 type MigrationCanisterResult = variant { Ok; Err : opt MigrationCanisterError };
 type MigrationCanisterError = variant { CallerNotAuthorized : reserved };
