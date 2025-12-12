@@ -63,4 +63,7 @@ jobs:
         run: |
           set -eEuxo pipefail
 
-          time python ci/src/mainnet_revisions/mainnet_revisions.py canisters
+          retry --times=7 \
+            -- time python \
+            ci/src/mainnet_revisions/mainnet_revisions.py \
+            canisters
