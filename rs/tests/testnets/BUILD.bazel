@@ -1,3 +1,4 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "IC_GATEWAY_RUNTIME_DEPS", "MAINNET_ENV", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_ENV", "SNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
@@ -318,15 +319,10 @@ system_test_nns(
     ],
 )
 
-system_test_nns(
-    name = "nns_recovery",
-    tags = [
-        "dynamic_testnet",
-        "manual",
-    ],
-    uses_guestos_test_update = True,
-    uses_setupos_img = True,
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
+rust_binary(
+    name = "nns_recovery_testnet_bin",
+    testonly = True,
+    srcs = ["nns_recovery.rs"],
     deps = [
         # Keep sorted.
         "//rs/limits",
@@ -340,8 +336,22 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "nns_recovery",
+    env = {
+        "USE_MAINNET_STATE": "false",
+    },
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    test_driver_target = ":nns_recovery_testnet_bin",
+    uses_guestos_test_update = True,
+    uses_setupos_img = True,
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
+)
+
+system_test_nns(
     name = "mainnet_nns_recovery",
-    srcs = ["nns_recovery.rs"],
     env_inherit = ["SSH_AUTH_SOCK"],
     env = MAINNET_ENV | {
         "USE_MAINNET_STATE": "true",
@@ -353,6 +363,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
+    test_driver_target = ":nns_recovery_testnet_bin",
     uses_guestos_img = False,
     uses_guestos_mainnet_nns_img = True,
     uses_guestos_test_update = True,
@@ -362,16 +373,6 @@ system_test_nns(
         # TODO (CON-1624): Remove those dependencies once changes reached mainnet NNS
         "//rs/recovery:ic-recovery",
         "//rs/replay:ic-replay",
-    ],
-    deps = [
-        # Keep sorted.
-        "//rs/limits",
-        "//rs/tests/consensus/subnet_recovery:lib",
-        "//rs/tests/driver:ic-system-test-driver",
-        "//rs/tests/nested",
-        "//rs/tests/nested/nns_recovery:common",
-        "@crate_index//:anyhow",
-        "@crate_index//:slog",
     ],
 )
 

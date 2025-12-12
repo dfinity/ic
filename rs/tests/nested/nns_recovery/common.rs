@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{net::IpAddr, path::Path};
 
 use anyhow::bail;
 use ic_consensus_system_test_subnet_recovery::utils::{
@@ -95,12 +95,12 @@ pub fn replace_nns_with_nested_vms(env: &TestEnv) {
     let nns_subnet = topology.root_subnet();
     let original_node = nns_subnet.nodes().next().unwrap();
 
-    let nested_vm_ips = env
+    let nested_vm_ips: Vec<IpAddr> = env
         .get_all_nested_vms()
         .unwrap()
         .iter()
-        .map(|vm| vm.get_nested_network().unwrap().guest_ip)
-        .collect::<Vec<_>>();
+        .map(|vm| vm.get_nested_network().unwrap().guest_ip.into())
+        .collect();
     let new_node_ids = topology
         .unassigned_nodes()
         .filter(|n| nested_vm_ips.contains(&n.get_ip_addr()))

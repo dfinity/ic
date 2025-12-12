@@ -215,11 +215,11 @@ fn maybe_break_at_height(env: TestEnv) {
 fn main() -> Result<()> {
     let use_mainnet_state = std::env::var("USE_MAINNET_STATE")
         .map(|v| v == "1" || v.to_lowercase() == "true")
-        .unwrap_or(false);
+        .expect("USE_MAINNET_STATE environment variable not set");
 
     SystemTestGroup::new()
         .with_timeout_per_test(Duration::from_secs(90 * 60))
-        .with_setup(|env| setup(env, use_mainnet_state))
+        .with_setup(move |env| setup(env, use_mainnet_state))
         .add_test(systest!(test))
         .execute_from_args()?;
     Ok(())
