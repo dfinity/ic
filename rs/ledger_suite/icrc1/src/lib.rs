@@ -217,11 +217,6 @@ impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Operation<Tok
                     expires_at: value.expires_at,
                     fee: value.fee,
                 }),
-                "107set_fee_collector" => Ok(Operation::FeeCollector {
-                    fee_collector: value.fee_collector,
-                    caller: value.caller,
-                    op: value.op,
-                }),
                 unknown_op => Err(format!("Unknown operation name {unknown_op}")),
             }
         } else {
