@@ -64,7 +64,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
     let metrics = MessageRoutingMetrics::new(&metrics_registry);
 
     let round = ExecutionRound::from(initial_height.get() + 1);
-    let round_type = if provided_batch.requires_full_state_hash {
+    let round_type = if provided_batch.requires_full_state_hash() {
         ExecutionRoundType::CheckpointRound
     } else {
         ExecutionRoundType::OrdinaryRound

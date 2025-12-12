@@ -32,12 +32,12 @@ use crate::{
         self,
         proposal_conversions::{ProposalDisplayOptions, proposal_data_to_info},
         v1::{
-            ArchivedMonthlyNodeProviderRewards, Ballot, CreateServiceNervousSystem, Followees,
-            FulfillSubnetRentalRequest, GetNeuronsFundAuditInfoRequest,
-            GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
-            InstallCode, KnownNeuron, ListKnownNeuronsResponse, ManageNeuron,
-            MonthlyNodeProviderRewards, Motion, NetworkEconomics, NeuronState,
-            NeuronsFundAuditInfo, NeuronsFundData,
+            ArchivedMonthlyNodeProviderRewards, Ballot, BlessAlternativeGuestOsVersion,
+            CreateServiceNervousSystem, Followees, FulfillSubnetRentalRequest,
+            GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+            Governance as GovernanceProto, GovernanceError, InstallCode, KnownNeuron,
+            ListKnownNeuronsResponse, ManageNeuron, MonthlyNodeProviderRewards, Motion,
+            NetworkEconomics, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
             NeuronsFundParticipation as NeuronsFundParticipationPb,
             NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
             ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
@@ -511,6 +511,9 @@ impl Action {
             Action::StopOrStartCanister(_) => "ACTION_STOP_OR_START_CANISTER",
             Action::UpdateCanisterSettings(_) => "ACTION_UPDATE_CANISTER_SETTINGS",
             Action::FulfillSubnetRentalRequest(_) => "ACTION_FULFILL_SUBNET_RENTAL_REQUEST",
+            Action::BlessAlternativeGuestOsVersion(_) => {
+                "ACTION_BLESS_ALTERNATIVE_GUEST_OS_VERSION"
+            }
         }
     }
 }
@@ -4237,6 +4240,12 @@ impl Governance {
                 self.perform_fulfill_subnet_rental_request(pid, fulfill_subnet_rental_request)
                     .await
             }
+            ValidProposalAction::BlessAlternativeGuestOsVersion(
+                bless_alternative_guest_os_version,
+            ) => self.perform_bless_alternative_guest_os_version(
+                pid,
+                bless_alternative_guest_os_version,
+            ),
         }
     }
 
@@ -4305,6 +4314,15 @@ impl Governance {
         let result = fulfill_subnet_rental_request
             .execute(ProposalId { id: proposal_id }, &self.env)
             .await;
+        self.set_proposal_execution_status(proposal_id, result);
+    }
+
+    fn perform_bless_alternative_guest_os_version(
+        &mut self,
+        proposal_id: u64,
+        bless_alternative_guest_os_version: BlessAlternativeGuestOsVersion,
+    ) {
+        let result = bless_alternative_guest_os_version.execute();
         self.set_proposal_execution_status(proposal_id, result);
     }
 
@@ -4824,6 +4842,9 @@ impl Governance {
             ValidProposalAction::DeregisterKnownNeuron(deregister_known_neuron) => {
                 deregister_known_neuron.validate(&self.neuron_store)
             }
+            ValidProposalAction::BlessAlternativeGuestOsVersion(
+                bless_alternative_guest_os_version,
+            ) => bless_alternative_guest_os_version.validate(),
         }
     }
 
@@ -5125,13 +5146,14 @@ impl Governance {
             ));
         }
 
-        let self_describing_action = if is_self_describing_proposal_actions_enabled() {
-            // TODO(NNS1-4271): handle the error case when the self-describing action is fully
-            // implemented.
-            action.to_self_describing(self.env.clone()).await.ok()
-        } else {
-            None
-        };
+        let self_describing_action =
+            if is_self_describing_proposal_actions_enabled() && cfg!(target_arch = "wasm32") {
+                // TODO(NNS1-4271): handle the error case when the self-describing action is fully
+                // implemented.
+                action.to_self_describing(self.env.clone()).await.ok()
+            } else {
+                None
+            };
 
         // Before actually modifying anything, we first make sure that
         // the neuron is allowed to make this proposal and create the

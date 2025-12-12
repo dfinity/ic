@@ -3,6 +3,7 @@ use crate::dashboard::build_dashboard;
 use crate::fees::FeeEstimator;
 use crate::metrics::encode_metrics;
 use crate::state::read_state;
+use crate::state::utxos::UtxoSet;
 use crate::updates::update_balance::UpdateBalanceArgs;
 use crate::{BuildTxError, build_unsigned_transaction_from_inputs, utxos_selection};
 use crate::{CKBTC_LEDGER_MEMO_SIZE, memo};
@@ -11,7 +12,6 @@ use ic_btc_interface::Utxo;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
 
 #[cfg(test)]
 mod tests;
@@ -43,7 +43,7 @@ pub fn get_known_utxos(args: UpdateBalanceArgs) -> Vec<Utxo> {
 }
 
 pub fn estimate_withdrawal_fee<F: FeeEstimator>(
-    available_utxos: &mut BTreeSet<Utxo>,
+    available_utxos: &mut UtxoSet,
     withdrawal_amount: u64,
     median_fee_millisatoshi_per_vbyte: u64,
     minter_address: BitcoinAddress,

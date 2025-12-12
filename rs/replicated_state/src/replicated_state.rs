@@ -1289,38 +1289,7 @@ impl ReplicatedState {
         snapshot_id: SnapshotId,
         snapshot: Arc<CanisterSnapshot>,
     ) {
-        self.metadata
-            .unflushed_checkpoint_ops
-            .create_snapshot_from_metadata(snapshot_id);
         self.canister_snapshots.push(snapshot_id, snapshot);
-    }
-
-    /// This records a data upload event such that the data can be flushed to disk before a checkpoint.
-    pub fn record_snapshot_data_upload(&mut self, snapshot_id: SnapshotId) {
-        self.metadata
-            .unflushed_checkpoint_ops
-            .upload_data(snapshot_id);
-    }
-
-    /// Delete a snapshot from the list of snapshots.
-    pub fn delete_snapshot(&mut self, snapshot_id: SnapshotId) -> Option<Arc<CanisterSnapshot>> {
-        let result = self.canister_snapshots.remove(snapshot_id);
-        if result.is_some() {
-            self.metadata
-                .unflushed_checkpoint_ops
-                .delete_snapshot(snapshot_id)
-        }
-        result
-    }
-
-    /// Delete all snapshots belonging to the given canister id.
-    pub fn delete_snapshots(&mut self, canister_id: CanisterId) {
-        let deleted = self.canister_snapshots.delete_snapshots(canister_id);
-        for snapshot_id in deleted {
-            self.metadata
-                .unflushed_checkpoint_ops
-                .delete_snapshot(snapshot_id);
-        }
     }
 
     /// Splits the replicated state as part of subnet splitting phase 1, retaining
@@ -1395,7 +1364,7 @@ impl ReplicatedState {
         }
 
         // Retain only one copy of the refund pool, on subnet A'. Refund messages have
-        // no explicit origin, so it doesn't matter which of the two subnets they
+        // no explicit origin, so it does not matter which of the two subnets they
         // originate from.
         if metadata.own_subnet_id != subnet_id {
             refunds = RefundPool::default();
@@ -1403,16 +1372,10 @@ impl ReplicatedState {
 
         // Obtain a new metadata state for subnet B. No-op for subnet A' (apart from
         // setting the split marker).
-        let mut metadata = metadata.split(subnet_id, new_subnet_batch_time)?;
+        let metadata = metadata.split(subnet_id, new_subnet_batch_time)?;
 
         // Retain only the canister snapshots belonging to the local canisters.
-        let deleted =
-            canister_snapshots.split(|canister_id| canister_states.contains_key(&canister_id));
-        for snapshot_id in deleted {
-            metadata
-                .unflushed_checkpoint_ops
-                .delete_snapshot(snapshot_id);
-        }
+        canister_snapshots.split(|canister_id| canister_states.contains_key(&canister_id));
 
         Ok(Self {
             canister_states,
@@ -1437,19 +1400,16 @@ impl ReplicatedState {
         // Destructure `self` in order for the compiler to enforce an explicit decision
         // whenever new fields are added.
         //
-        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS A `match`!
         let Self {
             canister_states,
             metadata,
             subnet_queues,
             consensus_queue: _,
             refunds: _,
-            epoch_query_stats: _,
+            epoch_query_stats,
             canister_snapshots: _,
         } = self;
-
-        // Reset query stats after subnet split
-        self.epoch_query_stats = RawQueryStats::default();
 
         metadata
             .split_from
@@ -1481,6 +1441,9 @@ impl ReplicatedState {
             |canister_id| canister_states.contains_key(&canister_id),
             subnet_queues,
         );
+
+        // Reset query stats after subnet split.
+        *epoch_query_stats = RawQueryStats::default();
     }
 
     /// Records the loss of `cycles` due to dropping messages (e.g. late best-effort
