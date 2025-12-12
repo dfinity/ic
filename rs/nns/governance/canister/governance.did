@@ -1088,7 +1088,7 @@ type GuestLaunchMeasurements = record {
 
 type GuestLaunchMeasurement = record {
   // encoded SEV-SNP measurement (48 bytes, hex)
-  encoded_measurement : opt text;
+  encoded_measurement : text;
 
   // Metadata associated with the measurement.
   metadata : opt GuestLaunchMeasurementMetadata;

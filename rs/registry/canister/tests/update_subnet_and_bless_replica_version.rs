@@ -39,13 +39,13 @@ fn guest_launch_measurements_for_test() -> Option<GuestLaunchMeasurements> {
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: "foo=bar".into(),
                 }),
-                encoded_measurement: Some(hex::encode(vec![0x01, 0x02, 0x03])),
+                encoded_measurement: hex::encode(vec![0x01, 0x02, 0x03]),
             },
             GuestLaunchMeasurement {
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: "hello=world".into(),
                 }),
-                encoded_measurement: Some(hex::encode(vec![0x04, 0x05, 0x06])),
+                encoded_measurement: hex::encode(vec![0x04, 0x05, 0x06]),
             },
         ],
     })
