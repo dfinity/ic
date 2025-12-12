@@ -563,6 +563,9 @@ fn test_subnet_split(
         .prop_flat_map(|canisters| {
             let config = CallConfig {
                 receivers: canisters.clone(),
+                // Want all ingress messages to be inducted on the first round. Else, we would
+                // have to explicitly wait for them to be inducted before splitting the subnet;
+                // or run the risk of orphaning them in the `subnet1` ingress pool.
                 call_bytes_range: 0..=0,
                 reply_bytes_range: 0..=0,
                 call_tree_size: 10,
@@ -635,6 +638,7 @@ fn test_subnet_split(
     msg_ids2.append(&mut inject_calls(&mut calls2, 0, &subnet3));
     msg_ids3.append(&mut inject_calls(&mut calls3, 0, &subnet2));
 
+    let mut round = 0;
     while !msg_ids1.is_empty()
         || !msg_ids2.is_empty()
         || !msg_ids3.is_empty()
@@ -649,6 +653,11 @@ fn test_subnet_split(
         msg_ids1 = subnet1.check_and_drop_completed(msg_ids1, &check_for_traps);
         msg_ids2 = subnet3.check_and_drop_completed(msg_ids2, &check_for_traps);
         msg_ids3 = subnet2.check_and_drop_completed(msg_ids3, &check_for_traps);
+
+        round += 1;
+        if round >= 1000 {
+            panic!("Calls did not conclude after 1000 rounds");
+        }
     }
 
     // All calls have concluded without trapping; we should be able to stop them now.
