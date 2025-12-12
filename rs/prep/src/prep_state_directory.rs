@@ -1,10 +1,10 @@
 #![allow(dead_code)]
-use std::{
-    fmt, io,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
+use ic_crypto_utils_threshold_sig_der::{
+    parse_threshold_sig_key_from_pem_file, threshold_sig_public_key_to_der,
+};
 
 use crate::internet_computer::{IC_REGISTRY_LOCAL_STORE_PATH, IC_ROOT_PUB_KEY_PATH};
 
@@ -27,7 +27,11 @@ impl IcPrepStateDir {
 
     /// DER-encoded root public key.
     pub fn root_public_key(&self) -> Result<Vec<u8>> {
-        parse_threshold_sig_key(self.root_public_key_path())
+        let path = self.root_public_key_path();
+        let pk = parse_threshold_sig_key_from_pem_file(&path)
+            .with_context(|| format!("failed to parse threshold sig key from {:?}", path))?;
+        threshold_sig_public_key_to_der(pk)
+            .with_context(|| "failed to convert threshold sig public key to DER")
     }
 
     /// Returns the path to the PEM-encoded root public key.
@@ -43,37 +47,6 @@ impl IcPrepStateDir {
     pub fn path(&self) -> PathBuf {
         self.prep_dir.clone()
     }
-}
-
-fn parse_threshold_sig_key<P: AsRef<Path> + fmt::Debug>(pem_file: P) -> Result<Vec<u8>> {
-    fn invalid_data_err(msg: impl std::string::ToString) -> io::Error {
-        io::Error::new(io::ErrorKind::InvalidData, msg.to_string())
-    }
-
-    let buf =
-        std::fs::read(&pem_file).with_context(|| format!("failed to read from {:?}", &pem_file))?;
-    let s = String::from_utf8_lossy(&buf);
-    let lines: Vec<_> = s.trim_end().lines().collect();
-    let n = lines.len();
-
-    if n < 3 {
-        bail!("input file is too short: {:?}", &pem_file);
-    }
-
-    if !lines[0].starts_with("-----BEGIN PUBLIC KEY-----") {
-        bail!(
-            "PEM file doesn't start with BEGIN PK block: {:?}",
-            &pem_file
-        );
-    }
-    if !lines[n - 1].starts_with("-----END PUBLIC KEY-----") {
-        bail!("PEM file doesn't end with END PK block: {:?}", &pem_file);
-    }
-
-    let decoded = base64::decode(lines[1..n - 1].join(""))
-        .with_context(|| format!("failed to decode base64 from: {:?}", &pem_file))?;
-
-    Ok(decoded)
 }
 
 #[cfg(test)]
