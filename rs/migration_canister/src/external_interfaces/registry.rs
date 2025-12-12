@@ -71,7 +71,7 @@ pub async fn get_subnet_for_canister(canister_id: Principal) -> Result<Principal
 #[derive(Clone, Debug, CandidType, Deserialize)]
 struct MigrateCanistersArgs {
     canister_ids: Vec<Principal>,
-    replaced_subnet_id: Principal,
+    replaced_canister_subnet_id: Principal,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
@@ -81,11 +81,11 @@ struct MigrateCanisterResponse {
 
 pub async fn migrate_canister(
     migrated: Principal,
-    replaced_subnet: Principal,
+    replaced_canister_subnet: Principal,
 ) -> ProcessingResult<u64, Infallible> {
     let args = MigrateCanistersArgs {
         canister_ids: vec![migrated],
-        replaced_subnet_id: replaced_subnet,
+        replaced_canister_subnet_id: replaced_canister_subnet,
     };
 
     match Call::bounded_wait(

@@ -242,7 +242,7 @@ async fn test_async(env: TestEnv) {
                 let mut requests = BTreeMap::new();
                 // Ingress message to the migrating canister, sent to the migrated subnet directly.
                 requests.insert(
-                    "migrated_subnet".to_string(),
+                    "migrated_canister_subnet".to_string(),
                     original_canister.update(wasm().reply_data(&data)),
                 );
                 // Ingress message to the migrating canister, sent to the replaced subnet directly.

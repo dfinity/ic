@@ -14,7 +14,7 @@ use crate::{
     controller_recovery::ControllerRecoveryState,
     processing::{
         process_accepted, process_all_by_predicate, process_all_failed, process_all_succeeded,
-        process_controllers_changed, process_migrated_deleted, process_renamed,
+        process_controllers_changed, process_migrated_canister_deleted, process_renamed,
         process_routing_table, process_stopped, process_updated,
     },
 };
@@ -88,31 +88,31 @@ struct CanisterMigrationArgs {
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Request {
     migrated: Principal,
-    migrated_subnet: Principal,
-    migrated_original_controllers: Vec<Principal>,
+    migrated_canister_subnet: Principal,
+    migrated_canister_original_controllers: Vec<Principal>,
     replaced: Principal,
-    replaced_subnet: Principal,
-    replaced_original_controllers: Vec<Principal>,
+    replaced_canister_subnet: Principal,
+    replaced_canister_original_controllers: Vec<Principal>,
     caller: Principal,
 }
 
 impl Request {
     pub fn new(
         migrated: Principal,
-        migrated_subnet: Principal,
-        migrated_original_controllers: Vec<Principal>,
+        migrated_canister_subnet: Principal,
+        migrated_canister_original_controllers: Vec<Principal>,
         replaced: Principal,
-        replaced_subnet: Principal,
-        replaced_original_controllers: Vec<Principal>,
+        replaced_canister_subnet: Principal,
+        replaced_canister_original_controllers: Vec<Principal>,
         caller: Principal,
     ) -> Self {
         Self {
             migrated,
-            migrated_subnet,
-            migrated_original_controllers,
+            migrated_canister_subnet,
+            migrated_canister_original_controllers,
             replaced,
-            replaced_subnet,
-            replaced_original_controllers,
+            replaced_canister_subnet,
+            replaced_canister_original_controllers,
             caller,
         }
     }
@@ -131,14 +131,18 @@ impl Display for Request {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Request {{ migrated: {}, migrated_subnet: {}, replaced: {}, replaced_subnet: {}, caller: {}, migrated_original_controllers: [",
-            self.migrated, self.migrated_subnet, self.replaced, self.replaced_subnet, self.caller
+            "Request {{ migrated: {}, migrated_canister_subnet: {}, replaced: {}, replaced_canister_subnet: {}, caller: {}, migrated_canister_original_controllers: [",
+            self.migrated,
+            self.migrated_canister_subnet,
+            self.replaced,
+            self.replaced_canister_subnet,
+            self.caller
         )?;
-        for x in self.migrated_original_controllers.iter() {
+        for x in self.migrated_canister_original_controllers.iter() {
             write!(f, "{}, ", x)?;
         }
-        write!(f, "], replaced_original_controllers: [",)?;
-        for x in self.replaced_original_controllers.iter() {
+        write!(f, "], replaced_canister_original_controllers: [",)?;
+        for x in self.replaced_canister_original_controllers.iter() {
             write!(f, "{}, ", x)?;
         }
         write!(f, "] }}")
@@ -158,8 +162,8 @@ impl From<&Request> for CanisterMigrationArgs {
 /// i.e., whether controllers of migrated and replaced must still be restored.
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecoveryState {
-    pub restore_migrated_controllers: ControllerRecoveryState,
-    pub restore_replaced_controllers: ControllerRecoveryState,
+    pub restore_migrated_canister_controllers: ControllerRecoveryState,
+    pub restore_replaced_canister_controllers: ControllerRecoveryState,
 }
 
 impl Default for RecoveryState {
@@ -171,17 +175,17 @@ impl Default for RecoveryState {
 impl RecoveryState {
     pub fn new() -> Self {
         Self {
-            restore_migrated_controllers: ControllerRecoveryState::NoProgress,
-            restore_replaced_controllers: ControllerRecoveryState::NoProgress,
+            restore_migrated_canister_controllers: ControllerRecoveryState::NoProgress,
+            restore_replaced_canister_controllers: ControllerRecoveryState::NoProgress,
         }
     }
 
     pub fn is_done(&self) -> bool {
         matches!(
-            self.restore_migrated_controllers,
+            self.restore_migrated_canister_controllers,
             ControllerRecoveryState::Done
         ) && matches!(
-            self.restore_replaced_controllers,
+            self.restore_replaced_canister_controllers,
             ControllerRecoveryState::Done
         )
     }
@@ -501,9 +505,9 @@ pub fn start_timers() {
     });
     set_timer_interval(interval, async || {
         process_all_by_predicate(
-            "migrated_deleted",
+            "migrated_canister_deleted",
             |r| matches!(r, RequestState::MigratedDeleted { .. }),
-            process_migrated_deleted,
+            process_migrated_canister_deleted,
         )
         .await
     });

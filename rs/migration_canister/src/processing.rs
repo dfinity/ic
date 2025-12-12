@@ -117,24 +117,26 @@ pub async fn process_controllers_changed(
     };
 
     // These checks are repeated because the canisters may have changed since validation:
-    let ProcessingResult::Success(migrated_status) = canister_status(request.migrated).await else {
+    let ProcessingResult::Success(migrated_canister_status) =
+        canister_status(request.migrated).await
+    else {
         return ProcessingResult::NoProgress;
     };
-    if migrated_status.status != CanisterStatusType::Stopped {
+    if migrated_canister_status.status != CanisterStatusType::Stopped {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
             recovery_state: RecoveryState::new(),
             reason: "Migrated is not stopped.".to_string(),
         });
     }
-    if !migrated_status.ready_for_migration {
+    if !migrated_canister_status.ready_for_migration {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
             recovery_state: RecoveryState::new(),
             reason: "Migrated is not ready for migration.".to_string(),
         });
     }
-    let canister_version = migrated_status.version;
+    let canister_version = migrated_canister_status.version;
     if canister_version > u64::MAX / 2 {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
@@ -143,10 +145,12 @@ pub async fn process_controllers_changed(
         });
     }
 
-    let ProcessingResult::Success(replaced_status) = canister_status(request.replaced).await else {
+    let ProcessingResult::Success(replaced_canister_status) =
+        canister_status(request.replaced).await
+    else {
         return ProcessingResult::NoProgress;
     };
-    if replaced_status.status != CanisterStatusType::Stopped {
+    if replaced_canister_status.status != CanisterStatusType::Stopped {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
             recovery_state: RecoveryState::new(),
@@ -165,13 +169,13 @@ pub async fn process_controllers_changed(
         }
     }
 
-    if migrated_status.cycles < CYCLES_COST_PER_MIGRATION {
+    if migrated_canister_status.cycles < CYCLES_COST_PER_MIGRATION {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
             recovery_state: RecoveryState::new(),
             reason: format!(
                 "Migrated does not have sufficient cycles: {} < {}.",
-                migrated_status.cycles, CYCLES_COST_PER_MIGRATION
+                migrated_canister_status.cycles, CYCLES_COST_PER_MIGRATION
             ),
         });
     }
@@ -212,7 +216,7 @@ pub async fn process_stopped(
         request.migrated,
         canister_version,
         request.replaced,
-        request.replaced_subnet,
+        request.replaced_canister_subnet,
         canister_history_total_num,
         request.caller,
     )
@@ -236,7 +240,7 @@ pub async fn process_renamed(
         return ProcessingResult::NoProgress;
     };
 
-    migrate_canister(request.migrated, request.replaced_subnet)
+    migrate_canister(request.migrated, request.replaced_canister_subnet)
         .await
         .map_success(|registry_version| RequestState::UpdatedRoutingTable {
             request,
@@ -259,17 +263,19 @@ pub async fn process_updated(
         return ProcessingResult::NoProgress;
     };
     // call both subnets
-    let ProcessingResult::Success(migrated_subnet_version) =
-        get_registry_version(request.migrated_subnet).await
+    let ProcessingResult::Success(migrated_canister_subnet_version) =
+        get_registry_version(request.migrated_canister_subnet).await
     else {
         return ProcessingResult::NoProgress;
     };
-    let ProcessingResult::Success(replaced_subnet_version) =
-        get_registry_version(request.replaced_subnet).await
+    let ProcessingResult::Success(replaced_canister_subnet_version) =
+        get_registry_version(request.replaced_canister_subnet).await
     else {
         return ProcessingResult::NoProgress;
     };
-    if migrated_subnet_version < registry_version || replaced_subnet_version < registry_version {
+    if migrated_canister_subnet_version < registry_version
+        || replaced_canister_subnet_version < registry_version
+    {
         return ProcessingResult::NoProgress;
     }
     ProcessingResult::Success(RequestState::RoutingTableChangeAccepted {
@@ -290,7 +296,7 @@ pub async fn process_routing_table(
         return ProcessingResult::NoProgress;
     };
     let ProcessingResult::Success(()) =
-        delete_canister(request.migrated, request.migrated_subnet).await
+        delete_canister(request.migrated, request.migrated_canister_subnet).await
     else {
         return ProcessingResult::NoProgress;
     };
@@ -300,7 +306,7 @@ pub async fn process_routing_table(
     })
 }
 
-pub async fn process_migrated_deleted(
+pub async fn process_migrated_canister_deleted(
     request: RequestState,
 ) -> ProcessingResult<RequestState, RequestState> {
     let RequestState::MigratedDeleted {
@@ -328,7 +334,7 @@ pub async fn process_migrated_deleted(
     }
     // restore controllers of replaced
     let controllers = request
-        .migrated_original_controllers
+        .migrated_canister_original_controllers
         .iter()
         .filter(|x| **x != canister_self())
         .cloned()
@@ -337,7 +343,7 @@ pub async fn process_migrated_deleted(
         // The migration canister is the exclusive controller of `request.migrated`
         // and thus the following call cannot fail because of the caller
         // not being a controller.
-        set_controllers(request.migrated, controllers, request.replaced_subnet).await
+        set_controllers(request.migrated, controllers, request.replaced_canister_subnet).await
     else {
         return ProcessingResult::NoProgress;
     };
@@ -385,16 +391,16 @@ async fn process_failed(request: RequestState) -> RecoveryResult {
         return RecoveryResult::Unreachable;
     };
 
-    recovery_state.restore_migrated_controllers = controller_recovery(
-        recovery_state.restore_migrated_controllers,
+    recovery_state.restore_migrated_canister_controllers = controller_recovery(
+        recovery_state.restore_migrated_canister_controllers,
         request.migrated,
-        request.migrated_original_controllers.clone(),
+        request.migrated_canister_original_controllers.clone(),
     )
     .await;
-    recovery_state.restore_replaced_controllers = controller_recovery(
-        recovery_state.restore_replaced_controllers,
+    recovery_state.restore_replaced_canister_controllers = controller_recovery(
+        recovery_state.restore_replaced_canister_controllers,
         request.replaced,
-        request.replaced_original_controllers.clone(),
+        request.replaced_canister_original_controllers.clone(),
     )
     .await;
 

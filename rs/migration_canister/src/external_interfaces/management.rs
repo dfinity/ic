@@ -221,9 +221,9 @@ pub struct RenameToArgs {
 /// i.e., a previous call to rename the replaced canister was a success.
 pub async fn rename_canister(
     migrated: Principal,
-    migrated_version: u64,
+    migrated_canister_version: u64,
     replaced: Principal,
-    replaced_subnet: Principal,
+    replaced_canister_subnet: Principal,
     total_num_changes: u64,
     requested_by: Principal,
 ) -> ProcessingResult<(), Infallible> {
@@ -231,7 +231,7 @@ pub async fn rename_canister(
         canister_id: replaced,
         rename_to: RenameToArgs {
             canister_id: migrated,
-            version: migrated_version,
+            version: migrated_canister_version,
             total_num_changes,
         },
         requested_by,
@@ -239,7 +239,7 @@ pub async fn rename_canister(
     };
 
     // We have to await this call no matter what. Bounded wait is not an option.
-    match Call::bounded_wait(replaced_subnet, "rename_canister")
+    match Call::bounded_wait(replaced_canister_subnet, "rename_canister")
         .with_arg(args)
         .await
     {
@@ -247,7 +247,7 @@ pub async fn rename_canister(
         Err(e) => {
             println!(
                 "Call `rename_canister` for canister`: {}, subnet: {} failed: {:?}",
-                replaced, replaced_subnet, e
+                replaced, replaced_canister_subnet, e
             );
             match e {
                 CallFailed::CallRejected(e) => {

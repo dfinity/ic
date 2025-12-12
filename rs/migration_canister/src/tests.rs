@@ -14,16 +14,16 @@ use crate::{
 fn test() {
     let migrated = Principal::self_authenticating(vec![1]);
     let replaced = Principal::self_authenticating(vec![2]);
-    let migrated_subnet = Principal::self_authenticating(vec![3]);
-    let replaced_subnet = Principal::self_authenticating(vec![4]);
+    let migrated_canister_subnet = Principal::self_authenticating(vec![3]);
+    let replaced_canister_subnet = Principal::self_authenticating(vec![4]);
     let caller = Principal::self_authenticating(vec![5]);
 
     let request = Request::new(
         migrated,
-        migrated_subnet,
+        migrated_canister_subnet,
         vec![],
         replaced,
-        replaced_subnet,
+        replaced_canister_subnet,
         vec![],
         caller,
     );
