@@ -13,6 +13,7 @@ use ic_protobuf::registry::subnet::v1::{
 };
 use ic_registry_keys::make_catch_up_package_contents_key;
 use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key};
+use ic_registry_subnet_features::ChainKeyConfig;
 use ic_registry_transport::insert;
 use ic_types::RegistryVersion;
 use ic_types::crypto::CurrentNodePublicKeys;
@@ -680,7 +681,7 @@ mod chain_key_enabled_subnet_lists {
 
     #[test]
     #[should_panic(
-        expected = "pre_signatures_to_create_in_advance for key ecdsa:Secp256k1:ecdsa_key of subnet ya35z-hhham-aaaaa-aaaap-yai must be present and non-zero"
+        expected = "Missing required struct field: KeyConfig::pre_signatures_to_create_in_advance"
     )]
     fn should_fail_if_missing_pre_signatures_for_key_that_requires_pre_signatures() {
         let mut config = invariant_compliant_chain_key_config();

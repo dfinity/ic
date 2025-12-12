@@ -803,6 +803,37 @@ mod test {
 
     #[test]
     #[should_panic(
+        expected = "KeyConfig.pre_signatures_to_create_in_advance must be specified for key ecdsa:Secp256k1:some_key_name"
+    )]
+    fn should_panic_when_key_requiring_pre_signatures_is_missing_pre_signatures_to_create() {
+        // ECDSA keys require pre-signatures, so not specifying
+        // pre_signatures_to_create_in_advance should return an error
+        let mut registry = invariant_compliant_registry(0);
+        let subnet_id = subnet_test_id(1000);
+
+        let mut payload = get_default_recover_subnet_payload(subnet_id);
+        payload.chain_key_config = Some(InitialChainKeyConfig {
+            key_configs: vec![KeyConfigRequest {
+                key_config: Some(KeyConfig {
+                    key_id: Some(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                        curve: EcdsaCurve::Secp256k1,
+                        name: "some_key_name".to_string(),
+                    })),
+                    pre_signatures_to_create_in_advance: None,
+                    max_queue_size: Some(155),
+                }),
+                subnet_id: Some(subnet_id.get()),
+            }],
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
+        });
+
+        futures::executor::block_on(registry.do_recover_subnet(payload));
+    }
+
+    #[test]
+    #[should_panic(
         expected = "KeyConfig.pre_signatures_to_create_in_advance must not be specified for key vetkd:Bls12_381_G2:some_key_name"
     )]
     fn should_panic_when_key_not_requiring_pre_signatures_has_pre_signatures_to_create() {

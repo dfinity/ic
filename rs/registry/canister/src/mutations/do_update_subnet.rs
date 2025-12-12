@@ -501,7 +501,7 @@ mod tests {
         prepare_registry_with_nodes,
     };
     use ic_management_canister_types_private::{
-        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId,
+        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
     };
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::subnet::v1::{
@@ -1317,6 +1317,62 @@ mod tests {
         };
 
         // Should panic because we are trying to delete an existing key
+        registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "KeyConfig.pre_signatures_to_create_in_advance must be specified for key ecdsa:Secp256k1:some_key_name"
+    )]
+    fn should_panic_when_key_requiring_pre_signatures_is_missing_pre_signatures_to_create() {
+        // ECDSA keys require pre-signatures, so not specifying
+        // pre_signatures_to_create_in_advance should return an error
+        let mut registry = invariant_compliant_registry(0);
+        let subnet_id = subnet_test_id(1000);
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.chain_key_config = Some(ChainKeyConfig {
+            key_configs: vec![KeyConfig {
+                key_id: Some(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: "some_key_name".to_string(),
+                })),
+                pre_signatures_to_create_in_advance: None,
+                max_queue_size: Some(155),
+            }],
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
+        });
+
+        registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "KeyConfig.pre_signatures_to_create_in_advance must not be specified for key vetkd:Bls12_381_G2:some_key_name"
+    )]
+    fn should_panic_when_key_not_requiring_pre_signatures_has_pre_signatures_to_create() {
+        // VetKd keys don't require pre-signatures, so specifying
+        // pre_signatures_to_create_in_advance should return an error
+        let mut registry = invariant_compliant_registry(0);
+        let subnet_id = subnet_test_id(1000);
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.chain_key_config = Some(ChainKeyConfig {
+            key_configs: vec![KeyConfig {
+                key_id: Some(MasterPublicKeyId::VetKd(VetKdKeyId {
+                    curve: VetKdCurve::Bls12_381_G2,
+                    name: "some_key_name".to_string(),
+                })),
+                pre_signatures_to_create_in_advance: Some(99),
+                max_queue_size: Some(155),
+            }],
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
+        });
+
         registry.do_update_subnet(payload);
     }
 }
