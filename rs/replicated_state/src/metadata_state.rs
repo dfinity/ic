@@ -1768,16 +1768,10 @@ impl BlockmakerMetricsTimeSeries {
 /// by the checkpointing logic.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum UnflushedCheckpointOp {
-    /// A snapshot was deleted.
-    DeleteSnapshot(SnapshotId),
     /// A new snapshot was taken from a canister.
     TakeSnapshot(CanisterId, SnapshotId),
     /// A snapshot was loaded to a canister.
     LoadSnapshot(CanisterId, SnapshotId),
-    /// A snapshot was created via metadata upload.
-    UploadSnapshotMetadata(SnapshotId),
-    /// Binary data was uploaded to a snapshot
-    UploadSnapshotData(SnapshotId),
     /// A canister was renamed.
     RenameCanister(CanisterId, CanisterId),
 }
@@ -1802,11 +1796,6 @@ impl UnflushedCheckpointOps {
         self.operations.len()
     }
 
-    pub fn delete_snapshot(&mut self, snapshot_id: SnapshotId) {
-        self.operations
-            .push(UnflushedCheckpointOp::DeleteSnapshot(snapshot_id));
-    }
-
     pub fn take_snapshot(&mut self, canister_id: CanisterId, snapshot_id: SnapshotId) {
         self.operations.push(UnflushedCheckpointOp::TakeSnapshot(
             canister_id,
@@ -1819,16 +1808,6 @@ impl UnflushedCheckpointOps {
             canister_id,
             snapshot_id,
         ));
-    }
-
-    pub fn create_snapshot_from_metadata(&mut self, snapshot_id: SnapshotId) {
-        self.operations
-            .push(UnflushedCheckpointOp::UploadSnapshotMetadata(snapshot_id));
-    }
-
-    pub fn upload_data(&mut self, snapshot_id: SnapshotId) {
-        self.operations
-            .push(UnflushedCheckpointOp::UploadSnapshotData(snapshot_id));
     }
 
     pub fn rename_canister(&mut self, old_canister_id: CanisterId, new_canister_id: CanisterId) {

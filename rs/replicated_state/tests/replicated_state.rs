@@ -1341,7 +1341,7 @@ fn online_split() {
         .split_input_schedules(&CANISTER_1, &expected.canister_states);
     expected.canister_states.insert(CANISTER_1, canister_state);
     // The snapshot of `CANISTER_2` should have been deleted.
-    expected.delete_snapshot(canister_2_snapshot_id);
+    expected.canister_snapshots.remove(canister_2_snapshot_id);
 
     // And the split marker should be set.
     expected.metadata.subnet_split_from = Some(SUBNET_A);
@@ -1373,7 +1373,7 @@ fn online_split() {
     canister_state.system_state.task_queue = Default::default();
     expected.canister_states.insert(CANISTER_2, canister_state);
     // The snapshot of `CANISTER_1` should have been deleted.
-    expected.delete_snapshot(canister_1_snapshot_id);
+    expected.canister_snapshots.remove(canister_1_snapshot_id);
 
     // Streams, subnet queues and refunds should be empty.
     expected.take_streams();
