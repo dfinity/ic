@@ -6622,6 +6622,7 @@ dependencies = [
  "ic-config",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-crypto-returning-ok",
+ "ic-crypto-test-utils-ni-dkg",
  "ic-interfaces",
  "ic-limits",
  "ic-logger",
