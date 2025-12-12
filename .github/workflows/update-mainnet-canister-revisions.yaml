@@ -63,7 +63,12 @@ jobs:
         run: |
           set -eEuxo pipefail
 
-          retry --times=7 \
+          # Run mainnet_revisions.py with exponential backoff, because it is
+          # sensitive to network issues, which are pretty frequent yet
+          # transient.
+          retry \
+            --times=10 \
+            --delay=1,2,4,8,16,30,60,120,300,600 \
             -- time python \
             ci/src/mainnet_revisions/mainnet_revisions.py \
             canisters
