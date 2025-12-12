@@ -346,8 +346,7 @@ impl NodeRegistration {
         .unwrap()
         {
             Ok(IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(rotation_outcome)) => {
-                self.register_key(registry_version, PublicKey::from(rotation_outcome))
-                    .await
+                self.register_key(PublicKey::from(rotation_outcome)).await
             }
             Ok(IDkgKeyRotationResult::LatestRotationTooRecent) => {}
             Err(e) => {
@@ -358,10 +357,10 @@ impl NodeRegistration {
         }
     }
 
-    async fn register_key(&self, registry_version: RegistryVersion, idkg_pk: PublicKey) {
+    async fn register_key(&self, idkg_pk: PublicKey) {
         self.metrics
             .observe_key_rotation_status(KeyRotationStatus::Registering);
-        match self.try_to_register_key(registry_version, idkg_pk).await {
+        match self.try_to_register_key(idkg_pk).await {
             Ok(()) => {
                 self.metrics
                     .observe_key_rotation_status(KeyRotationStatus::Registered);
@@ -438,14 +437,9 @@ impl NodeRegistration {
         is_time_to_rotate_in_subnet(delta, subnet_size, node_key_timestamps)
     }
 
-    async fn try_to_register_key(
-        &self,
-        registry_version: RegistryVersion,
-        idkg_pk: PublicKey,
-    ) -> Result<(), String> {
+    async fn try_to_register_key(&self, idkg_pk: PublicKey) -> Result<(), String> {
         info!(self.log, "Trying to register rotated idkg key...");
 
-        let node_id = self.node_id;
         let Some(nns_url) = self
             .get_random_nns_url_from_registry()
             .or_else(|| self.get_random_nns_url_from_config())
@@ -479,7 +473,7 @@ impl NodeRegistration {
             #[allow(clippy::disallowed_methods)]
             tokio::task::block_in_place(|| {
                 key_handler
-                    .sign_basic(msg, node_id, registry_version)
+                    .sign_basic(msg)
                     .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
                     .map(|value| value.get().0)
             })
@@ -980,8 +974,6 @@ mod tests {
                 fn sign_basic(
                     &self,
                     message: &MessageId,
-                    signer: NodeId,
-                    registry_version: RegistryVersion,
                 ) -> CryptoResult<BasicSigOf<MessageId>>;
             }
 
