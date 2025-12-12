@@ -175,7 +175,11 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentImpl<C> {
         // locking congestion or similar, we should be able to notice that.
         let stats = ic_crypto_internal_bls12_381_type::G2Affine::deserialize_cached_statistics();
         self.metrics
-            .observe_bls12_381_sig_cache_stats(stats.size, stats.hits, stats.misses);
+            .observe_bls12_381_point_cache_stats(stats.size, stats.hits, stats.misses);
+
+        let stats = ic_crypto_internal_bls12_381_type::G2Prepared::cache_statistics();
+        self.metrics
+            .observe_bls12_381_g2_prep_cache_stats(stats.size, stats.hits, stats.misses);
 
         self.metrics.observe_parameter_size(
             MetricsDomain::NiDkgAlgorithm,

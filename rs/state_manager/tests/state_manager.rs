@@ -7131,7 +7131,7 @@ fn can_create_and_delete_canister_snapshot() {
 
         let (_height, mut state) = state_manager.take_tip();
 
-        state.delete_snapshot(snapshot_id);
+        state.canister_snapshots.remove(snapshot_id);
 
         state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
