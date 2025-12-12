@@ -55,6 +55,19 @@ use slog::{info, warn};
 use std::time::Duration;
 
 fn setup(env: TestEnv, use_mainnet_state: bool) {
+    let mut prometheus_vm = PrometheusVm::default();
+    if use_mainnet_state {
+        // Using mainnet state requires more resources to scrape mainnet topology.
+        prometheus_vm = prometheus_vm.with_vm_resources(VmResources {
+            vcpus: Some(NrOfVCPUs::new(32)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(125000000)), // ~128 GiB
+            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+        })
+    }
+    prometheus_vm
+        .start(&env)
+        .expect("failed to start prometheus VM");
+
     let subnet_size = std::env::var("SUBNET_SIZE")
         .ok()
         .and_then(|s| s.parse::<usize>().ok())
@@ -75,18 +88,7 @@ fn setup(env: TestEnv, use_mainnet_state: bool) {
         },
     );
 
-    let mut prometheus_vm = PrometheusVm::default();
-    if use_mainnet_state {
-        // Using mainnet state requires more resources to scrape mainnet topology.
-        prometheus_vm = prometheus_vm.with_vm_resources(VmResources {
-            vcpus: Some(NrOfVCPUs::new(4)),
-            memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
-            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(100)),
-        })
-    }
-    prometheus_vm
-        .start(&env)
-        .expect("failed to start prometheus VM");
+    env.sync_with_prometheus();
 }
 
 fn test(env: TestEnv) {
