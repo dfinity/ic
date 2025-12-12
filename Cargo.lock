@@ -12085,6 +12085,7 @@ dependencies = [
  "cycles-minting-canister",
  "dyn-clone",
  "futures",
+ "hex",
  "ic-base-types",
  "ic-cdk",
  "ic-cdk-timers",

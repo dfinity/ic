@@ -149,6 +149,7 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/compare_dirs",
     "//rs/tla_instrumentation",
     "//rs/tla_instrumentation:local_key",
+    "@crate_index//:hex",
     "@crate_index//:prometheus-parse",
     "@crate_index//:proptest",
     "@crate_index//:tempfile",

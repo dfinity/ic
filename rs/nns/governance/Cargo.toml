@@ -118,6 +118,7 @@ build-info-build = { workspace = true }
 candid_parser = { workspace = true }
 criterion = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
+hex = { workspace = true }
 ic-config = { path = "../../config" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nns-governance = { path = ".", features = ["test"] }

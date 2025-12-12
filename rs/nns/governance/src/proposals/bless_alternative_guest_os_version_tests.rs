@@ -93,9 +93,12 @@ fn test_validate_base_guest_launch_measurements_empty() {
 fn test_validate_base_guest_launch_measurements_valid() {
     let _guard = temporarily_enable_bless_alternative_guest_os_version_proposals();
 
+    let measurement_bytes = vec![0u8; 48];
     let guest_launch_measurements = GuestLaunchMeasurements {
         guest_launch_measurements: vec![GuestLaunchMeasurement {
-            measurement: vec![0u8; 48],
+            encoded_measurement: Some(hex::encode(&measurement_bytes)),
+            #[allow(deprecated)]
+            measurement: measurement_bytes,
             metadata: Some(GuestLaunchMeasurementMetadata {
                 kernel_cmdline: "console=ttyS0".to_string(),
             }),
@@ -109,31 +112,41 @@ fn test_validate_base_guest_launch_measurements_valid() {
 fn test_validate_base_guest_launch_measurements_multiple_defects() {
     let _guard = temporarily_enable_bless_alternative_guest_os_version_proposals();
 
+    let measurement_bytes = vec![0u8; 48];
+    let measurement_bytes_short = vec![0u8; 32];
     let measurements = GuestLaunchMeasurements {
         guest_launch_measurements: vec![
             // Valid measurement
             GuestLaunchMeasurement {
-                measurement: vec![0u8; 48],
+                encoded_measurement: Some(hex::encode(&measurement_bytes)),
+                #[allow(deprecated)]
+                measurement: measurement_bytes.clone(),
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: "console=ttyS0".to_string(),
                 }),
             },
             // Wrong measurement size
             GuestLaunchMeasurement {
-                measurement: vec![0u8; 32],
+                encoded_measurement: Some(hex::encode(&measurement_bytes_short)),
+                #[allow(deprecated)]
+                measurement: measurement_bytes_short,
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: "console=ttyS0".to_string(),
                 }),
             },
             // Missing metadata. This is ok.
             GuestLaunchMeasurement {
-                measurement: vec![0u8; 48],
+                encoded_measurement: Some(hex::encode(&measurement_bytes)),
+                #[allow(deprecated)]
+                measurement: measurement_bytes.clone(),
                 metadata: None,
             },
             // Empty kernel_cmdline. This is NOT ok, even though metadata is
             // optional.
             GuestLaunchMeasurement {
-                measurement: vec![0u8; 48],
+                encoded_measurement: Some(hex::encode(&measurement_bytes)),
+                #[allow(deprecated)]
+                measurement: measurement_bytes,
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: "".to_string(),
                 }),
@@ -157,12 +170,15 @@ fn test_validate_base_guest_launch_measurements_multiple_defects() {
 fn test_bless_alternative_guest_os_version_validate_valid() {
     let _guard = temporarily_enable_bless_alternative_guest_os_version_proposals();
 
+    let measurement_bytes = vec![0u8; 48];
     let proposal = BlessAlternativeGuestOsVersion {
         chip_ids: vec![vec![0u8; 64]],
         rootfs_hash: "abc123".to_string(),
         base_guest_launch_measurements: Some(GuestLaunchMeasurements {
             guest_launch_measurements: vec![GuestLaunchMeasurement {
-                measurement: vec![0u8; 48],
+                encoded_measurement: Some(hex::encode(&measurement_bytes)),
+                #[allow(deprecated)]
+                measurement: measurement_bytes,
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: "console=ttyS0".to_string(),
                 }),
@@ -207,12 +223,15 @@ fn test_bless_alternative_guest_os_version_disabled() {
     // Explicitly disable the flag - test that proposals are rejected when disabled
     let _guard = temporarily_disable_bless_alternative_guest_os_version_proposals();
 
+    let measurement_bytes = vec![0u8; 48];
     let proposal = BlessAlternativeGuestOsVersion {
         chip_ids: vec![vec![0u8; 64]],
         rootfs_hash: "abc123".to_string(),
         base_guest_launch_measurements: Some(GuestLaunchMeasurements {
             guest_launch_measurements: vec![GuestLaunchMeasurement {
-                measurement: vec![0u8; 48],
+                encoded_measurement: Some(hex::encode(&measurement_bytes)),
+                #[allow(deprecated)]
+                measurement: measurement_bytes,
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: "console=ttyS0".to_string(),
                 }),
