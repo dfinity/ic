@@ -4,9 +4,11 @@ use crate::pb::v1::{AddOrRemoveNodeProvider, NodeProvider, add_or_remove_node_pr
 
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
+use ic_nns_governance_api::SelfDescribingValue as ApiValue;
 use icp_ledger::{
     AccountIdentifier, Subaccount, protobuf::AccountIdentifier as AccountIdentifierProto,
 };
+use maplit::hashmap;
 
 fn create_test_node_provider(id: u64) -> NodeProvider {
     NodeProvider {
@@ -257,4 +259,52 @@ fn test_execute_remove_non_existing_node_provider_fails() {
     );
 
     assert_eq!(node_providers, original_node_providers);
+}
+
+#[test]
+fn test_to_self_describing_value() {
+    let account =
+        AccountIdentifier::new(PrincipalId::new_user_test_id(2), Some(Subaccount([1; 32])));
+    let add_node_provider = AddOrRemoveNodeProvider {
+        change: Some(Change::ToAdd(NodeProvider {
+            id: Some(PrincipalId::new_user_test_id(1)),
+            reward_account: Some(account.into_proto_with_checksum()),
+        })),
+    };
+
+    assert_eq!(
+        ApiValue::from(
+            ValidAddOrRemoveNodeProvider::try_from(add_node_provider)
+                .unwrap()
+                .to_self_describing_value()
+        ),
+        ApiValue::Map(hashmap! {
+            "to_add".to_string() => ApiValue::Map(hashmap! {
+                "id".to_string() => ApiValue::Text("6fyp7-3ibaa-aaaaa-aaaap-4ai".to_string()),
+                "reward_account".to_string() => ApiValue::Array(vec![
+                    ApiValue::Text(account.to_hex())
+                ])
+            })
+        })
+    );
+
+    let remove_node_provider = AddOrRemoveNodeProvider {
+        change: Some(Change::ToRemove(NodeProvider {
+            id: Some(PrincipalId::new_user_test_id(1)),
+            reward_account: None,
+        })),
+    };
+
+    assert_eq!(
+        ApiValue::from(
+            ValidAddOrRemoveNodeProvider::try_from(remove_node_provider)
+                .unwrap()
+                .to_self_describing_value()
+        ),
+        ApiValue::Map(hashmap! {
+            "to_remove".to_string() => ApiValue::Map(hashmap! {
+                "id".to_string() => ApiValue::Text("6fyp7-3ibaa-aaaaa-aaaap-4ai".to_string())
+            })
+        })
+    );
 }
