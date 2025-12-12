@@ -1710,31 +1710,35 @@ macro_rules! declare_compute_mul2_table_inline {
             let yi = (i >> Window::SIZE) % Window::ELEMENTS;
 
             let next = {
+                // Here each access of previous elements of the table is offset
+                // by one to handle the omission of the identity element which
+                // would typically be at tbl[0]
+
                 if xi % 2 == 0 && yi % 2 == 0 {
                     // Here the table is just the double of an existing element
                     tbl[(i / 2) - 1].double()
                 } else if xi > 0 && yi > 0 {
                     // A combination of x and y
                     if xi == 1 {
-                        &tbl[(yi << Window::SIZE) - 1] + $x
+                        &tbl[$tbl_typ::row(yi) - 1] + $x
                     } else if yi == 1 {
-                        &tbl[xi - 1] + $y
+                        &tbl[$tbl_typ::col(xi) - 1] + $y
                     } else {
-                        &tbl[xi - 1] + &tbl[(yi << Window::SIZE) - 1]
+                        &tbl[$tbl_typ::col(xi) - 1] + &tbl[$tbl_typ::row(yi) - 1]
                     }
                 } else if xi > 0 && yi == 0 {
                     // A multiple of x with no y component
                     if xi == 1 {
                         <$projective>::from($x)
                     } else {
-                        &tbl[xi - 1 - 1] + $x
+                        &tbl[$tbl_typ::col(xi - 1) - 1] + $x
                     }
                 } else if yi > 0 && xi == 0 {
                     // A multiple of y with no x component
                     if yi == 1 {
                         <$projective>::from($y)
                     } else {
-                        &tbl[((yi - 1) << Window::SIZE) - 1] + $y
+                        &tbl[$tbl_typ::row(yi - 1) - 1] + $y
                     }
                 } else {
                     unreachable!();
