@@ -35,11 +35,11 @@ use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 
-pub(crate) use basic_sig::{BasicSigVerifierInternal, BasicSignerInternal};
+pub(crate) use basic_sig::BasicSigVerifierInternal;
 pub(crate) use threshold_sig::lazily_calculated_public_key_from_store;
 pub use threshold_sig::{ThresholdSigDataStore, ThresholdSigDataStoreImpl};
 
-mod basic_sig;
+pub(crate) mod basic_sig;
 mod canister_threshold_sig;
 mod multi_sig;
 mod threshold_sig;
@@ -58,12 +58,7 @@ use ic_types::signature::BasicSignatureBatch;
 impl<C: CryptoServiceProvider + Send + Sync, H: Signable> BasicSigner<H>
     for CryptoComponentImpl<C>
 {
-    fn sign_basic(
-        &self,
-        message: &H,
-        signer: NodeId,
-        registry_version: RegistryVersion,
-    ) -> CryptoResult<BasicSigOf<H>> {
+    fn sign_basic(&self, message: &H) -> CryptoResult<BasicSigOf<H>> {
         let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
@@ -72,18 +67,12 @@ impl<C: CryptoServiceProvider + Send + Sync, H: Signable> BasicSigner<H>
         );
         debug!(logger;
             crypto.description => "start",
-            crypto.registry_version => registry_version.get(),
             crypto.signed_bytes => format!("0x{}", hex::encode(message.as_signed_bytes())),
-            crypto.signer => format!("{:?}", signer),
         );
         let start_time = self.metrics.now();
-        let result = BasicSignerInternal::sign_basic(
-            &self.csp,
-            self.registry_client.as_ref(),
-            message,
-            signer,
-            registry_version,
-        );
+
+        let result = basic_sig::sign(message, self.vault.as_ref(), &self.metrics);
+
         self.metrics.observe_duration_seconds(
             MetricsDomain::BasicSignature,
             MetricsScope::Full,
