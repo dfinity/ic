@@ -213,6 +213,15 @@ impl ValidProposalAction {
             ValidProposalAction::DeregisterKnownNeuron(deregister_known_neuron) => {
                 Ok(deregister_known_neuron.to_self_describing_action())
             }
+            ValidProposalAction::InstallCode(install_code) => {
+                Ok(install_code.to_self_describing_action())
+            }
+            ValidProposalAction::StopOrStartCanister(stop_or_start_canister) => {
+                Ok(stop_or_start_canister.to_self_describing_action())
+            }
+            ValidProposalAction::UpdateCanisterSettings(update_canister_settings) => {
+                Ok(update_canister_settings.to_self_describing_action())
+            }
             _ => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 "Self describing proposal actions are not supported for this proposal action yet.",
