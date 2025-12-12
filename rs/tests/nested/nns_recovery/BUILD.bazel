@@ -33,6 +33,7 @@ rust_library(
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nested",
+        "//rs/tests/testnets/mainnet_nns:lib",
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:rand",
@@ -62,18 +63,27 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "nr_large",
+    name = "nr_large_with_mainnet_state",
     enable_head_nns_variant = False,
-    env = ENV,
+    env = ENV | {
+        # TODO (CON-1624): Remove those dependencies once changes reached mainnet NNS
+        "IC_RECOVERY_PATH": "$(rootpath //rs/recovery:ic-recovery)",
+        "IC_REPLAY_PATH": "$(rootpath //rs/replay:ic-replay)",
+    },
     flaky = True,
     tags = [
         "system_test_large",
     ],
     test_timeout = "eternal",
+    uses_guestos_img = False,
+    uses_guestos_mainnet_nns_img = True,
     uses_guestos_test_update = True,
-    uses_setupos_img = True,
+    uses_setupos_mainnet_latest_img = True,
     runtime_deps = RUNTIME_DEPS + [
         "//rs/tests:recovery/binaries",
+        # TODO (CON-1624): Remove those dependencies once changes reached mainnet NNS
+        "//rs/recovery:ic-recovery",
+        "//rs/replay:ic-replay",
     ],
     deps = [
         # Keep sorted.

@@ -8,7 +8,7 @@ use ic_system_test_driver::{
     retry_with_msg,
     util::block_on,
 };
-use slog::info;
+use slog::{info, warn};
 
 pub mod util;
 use util::{NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT, setup_ic_infrastructure};
@@ -40,16 +40,20 @@ pub fn registration(env: TestEnv) {
 
     let initial_topology = block_on(
         env.topology_snapshot()
-            .block_for_min_registry_version(ic_types::RegistryVersion::from(1)),
+            .block_for_newest_mainnet_registry_version(),
     )
     .unwrap();
 
-    // Check that there are initially no unassigned nodes.
-    let num_unassigned_nodes = initial_topology.unassigned_nodes().count();
-    assert_eq!(num_unassigned_nodes, 0);
+    // Keep track of the initial number of unassigned nodes.
+    let initial_num_unassigned_nodes = initial_topology.unassigned_nodes().count();
 
     let nested_vms = env.get_all_nested_vms().unwrap();
     let n = nested_vms.len();
+    if n == 0 {
+        warn!(logger, "No nested VMs found to register.");
+        return;
+    }
+
     for node in nested_vms {
         let node_name = &node.vm_name();
         info!(
@@ -74,6 +78,7 @@ pub fn registration(env: TestEnv) {
     // If the nodes are able to join successfully, the registry will be updated,
     // and the new node IDs will enter the unassigned pool.
     let mut new_topology = initial_topology;
+    let expected_num_unassigned_nodes = initial_num_unassigned_nodes + n;
     retry_with_msg!(
         format!("Waiting for all {n} nodes to join ..."),
         logger.clone(),
@@ -88,10 +93,10 @@ pub fn registration(env: TestEnv) {
             )
             .unwrap();
             let num_unassigned_nodes = new_topology.unassigned_nodes().count();
-            if num_unassigned_nodes == n {
+            if num_unassigned_nodes == expected_num_unassigned_nodes {
                 Ok(())
             } else {
-                bail!("Expected {n} unassigned nodes, but found {num_unassigned_nodes}. Waiting for the rest to register ...");
+                bail!("Expected {expected_num_unassigned_nodes} unassigned nodes, but found {num_unassigned_nodes}. Waiting for the rest to register ...");
             }
         }
     ).unwrap();

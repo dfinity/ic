@@ -18,7 +18,7 @@ Success::
 . NNS subnet is functional after the recovery.
 
 Variant::
-. This test variant performs the recovery on a large NNS subnet, better reflecting the scale of the production NNS.
+. This test variant performs the recovery on a large NNS subnet holding mainnet state, better reflecting the production setup.
 
 end::catalog[] */
 
@@ -36,6 +36,7 @@ fn main() -> Result<()> {
                 env,
                 SetupConfig {
                     impersonate_upstreams: true,
+                    use_mainnet_state: true,
                     subnet_size: LARGE_SUBNET_SIZE,
                     dkg_interval: LARGE_DKG_INTERVAL,
                 },

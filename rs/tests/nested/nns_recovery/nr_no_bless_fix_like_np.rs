@@ -37,6 +37,7 @@ fn main() -> Result<()> {
                 env,
                 SetupConfig {
                     impersonate_upstreams: true,
+                    use_mainnet_state: false,
                     subnet_size: SUBNET_SIZE,
                     dkg_interval: DKG_INTERVAL,
                 },

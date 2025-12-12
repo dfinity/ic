@@ -37,6 +37,7 @@ use ic_system_test_driver::{
     retry_with_msg_async,
     util::block_on,
 };
+use ic_testnet_mainnet_nns::setup as setup_with_mainnet_state;
 use ic_types::ReplicaVersion;
 use manual_guestos_recovery::recovery_utils::build_recovery_upgrader_command;
 use nested::util::setup_ic_infrastructure;
@@ -68,6 +69,7 @@ pub const RECOVERY_GUESTOS_IMG_VERSION: &str = "RECOVERY_VERSION";
 
 pub struct SetupConfig {
     pub impersonate_upstreams: bool,
+    pub use_mainnet_state: bool,
     pub subnet_size: usize,
     pub dkg_interval: u64,
 }
@@ -85,15 +87,30 @@ fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
     (1..=num_hosts).map(|i| format!("host-{i}")).collect()
 }
 
-pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
+pub fn replace_nns_with_nested_vms(env: &TestEnv) {
     let logger = env.logger();
 
-    info!(logger, "Adding all unassigned nodes to the NNS subnet...");
+    info!(logger, "Adding all nested VMs to the NNS subnet...");
     let topology = env.topology_snapshot();
     let nns_subnet = topology.root_subnet();
     let original_node = nns_subnet.nodes().next().unwrap();
 
-    let new_node_ids: Vec<_> = topology.unassigned_nodes().map(|n| n.node_id).collect();
+    let nested_vm_ips = env
+        .get_all_nested_vms()
+        .unwrap()
+        .iter()
+        .map(|vm| vm.get_nested_network().unwrap().guest_ip)
+        .collect::<Vec<_>>();
+    let new_node_ids = topology
+        .unassigned_nodes()
+        .filter(|n| nested_vm_ips.contains(&n.get_ip_addr()))
+        .map(|n| n.node_id)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        new_node_ids.len(),
+        nested_vm_ips.len(),
+        "Not all nested VMs have registered as IC nodes"
+    );
     block_on(change_subnet_membership(
         original_node.get_public_url(),
         nns_subnet.subnet_id,
@@ -178,7 +195,11 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
         impersonate_upstreams::setup_upstreams_uvm(&env);
     }
 
-    setup_ic_infrastructure(&env, Some(cfg.dkg_interval), /*is_fast=*/ false);
+    if cfg.use_mainnet_state {
+        setup_with_mainnet_state(env.clone());
+    } else {
+        setup_ic_infrastructure(&env, Some(cfg.dkg_interval), /*is_fast=*/ false);
+    }
 
     let host_vm_names = get_host_vm_names(cfg.subnet_size);
     NestedNodes::new_with_resources(&host_vm_names, NNS_RECOVERY_VM_RESOURCES)
@@ -207,7 +228,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     } = get_admin_keys_and_generate_backup_keys(&env);
 
     nested::registration(env.clone());
-    replace_nns_with_unassigned_nodes(&env);
+    replace_nns_with_nested_vms(&env);
     grant_backup_access_to_all_nns_nodes(&env, &backup_auth, &ssh_backup_pub_key);
 
     let current_version = get_guestos_img_version();
