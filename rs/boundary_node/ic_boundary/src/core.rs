@@ -41,7 +41,7 @@ use ic_bn_lib_common::{
 };
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
-use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, threshold_sig_public_key_to_der};
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_interfaces::crypto::{BasicSigner, KeyManager};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
