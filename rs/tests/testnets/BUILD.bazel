@@ -340,6 +340,42 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "mainnet_nns_recovery",
+    srcs = ["nns_recovery.rs"],
+    env_inherit = ["SSH_AUTH_SOCK"],
+    env = MAINNET_ENV | {
+        "USE_MAINNET_STATE": "true",
+        # TODO (CON-1624): Remove those dependencies once changes reached mainnet NNS
+        "IC_RECOVERY_PATH": "$(rootpath //rs/recovery:ic-recovery)",
+        "IC_REPLAY_PATH": "$(rootpath //rs/replay:ic-replay)",
+    },
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    uses_guestos_img = False,
+    uses_guestos_mainnet_nns_img = True,
+    uses_guestos_test_update = True,
+    uses_setupos_mainnet_latest_img = True,
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS + [
+        "//rs/tests:recovery/binaries",
+        # TODO (CON-1624): Remove those dependencies once changes reached mainnet NNS
+        "//rs/recovery:ic-recovery",
+        "//rs/replay:ic-replay",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/limits",
+        "//rs/tests/consensus/subnet_recovery:lib",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nested",
+        "//rs/tests/nested/nns_recovery:common",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
+
+system_test_nns(
     name = "mainnet_nns",
     env_inherit = ["SSH_AUTH_SOCK"],
     env = MAINNET_ENV | {
@@ -353,8 +389,6 @@ system_test_nns(
     ],
     uses_guestos_img = False,
     uses_guestos_mainnet_nns_img = True,
-    uses_guestos_test_update = True,
-    uses_setupos_mainnet_latest_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS + [
         "//rs/tests:recovery/binaries",
         # TODO (CON-1624): Remove those dependencies once changes reached mainnet NNS
