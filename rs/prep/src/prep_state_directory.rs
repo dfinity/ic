@@ -82,7 +82,7 @@ mod tests {
     use crate::internet_computer::{IcConfig, TopologyConfig};
     use crate::node::{NodeConfiguration, NodeIndex};
     use crate::subnet_configuration::{SubnetConfig, SubnetRunningState};
-    use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
+    use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
     use ic_registry_subnet_type::SubnetType;
     use ic_types::ReplicaVersion;
     use std::collections::BTreeMap;
@@ -111,7 +111,7 @@ mod tests {
         let pk = ic_prep_state_dir
             .root_public_key()
             .expect("Could not parse public key pem file.");
-        assert!(threshold_sig_public_key_from_der(&pk).is_ok());
+        assert!(parse_threshold_sig_key_from_der(&pk).is_ok());
     }
 
     fn init_ic() -> Result<(TempDir, IcPrepStateDir)> {

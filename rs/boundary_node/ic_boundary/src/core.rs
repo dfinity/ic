@@ -42,7 +42,9 @@ use ic_bn_lib_common::{
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
-use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, threshold_sig_public_key_to_der};
+use ic_crypto_utils_threshold_sig_der::{
+    parse_threshold_sig_key_from_pem_file, threshold_sig_public_key_to_der,
+};
 use ic_interfaces::crypto::{BasicSigner, KeyManager};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
@@ -237,11 +239,9 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
             &ic_config::logger::Config::default(),
         );
 
-        let nns_pub_key = cli
-            .registry
-            .registry_nns_pub_key_pem
-            .as_ref()
-            .map(|path| parse_threshold_sig_key(path).expect("failed to parse NNS public key"));
+        let nns_pub_key = cli.registry.registry_nns_pub_key_pem.as_ref().map(|path| {
+            parse_threshold_sig_key_from_pem_file(path).expect("failed to parse NNS public key")
+        });
 
         let registry_replicator = RegistryReplicator::new(
             logger,
@@ -316,7 +316,8 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
             agent.set_root_key(der_encoded_root_key);
         } else if let Some(v) = &cli.registry.registry_nns_pub_key_pem {
             // Set the root key if it was provided
-            let root_key = parse_threshold_sig_key(v).context("failed to parse NNS public key")?;
+            let root_key = parse_threshold_sig_key_from_pem_file(v)
+                .context("failed to parse NNS public key")?;
             let der_encoded_root_key = threshold_sig_public_key_to_der(root_key)
                 .context("failed to convert NNS key to DER")?;
             agent.set_root_key(der_encoded_root_key);

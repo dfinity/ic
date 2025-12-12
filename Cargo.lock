@@ -9329,6 +9329,7 @@ dependencies = [
  "ic-types",
  "simple_asn1",
  "tempfile",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
