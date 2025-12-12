@@ -65,10 +65,10 @@ pub fn get_subnet_holding_chain_keys(
     subnet_record.chain_key_config = Some(ChainKeyConfigPb {
         key_configs: key_ids
             .into_iter()
-            .map(|key_id| KeyConfig {
-                key_id: key_id.clone(),
+            .map(|key_id| KeyConfigPb {
+                key_id: Some(MasterPublicKeyIdPb::from(&key_id)),
                 pre_signatures_to_create_in_advance: key_id.requires_pre_signatures().then_some(1),
-                max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             })
             .collect(),
         signature_request_timeout_ns: None,
