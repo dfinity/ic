@@ -1946,7 +1946,7 @@ fn test_utxo_consolidation_burn_failure() {
     let fee_account_balance = 100;
     let result = ckbtc.transfer(
         Principal::from(ckbtc.minter_id),
-        fee_account.clone(),
+        fee_account,
         fee_account_balance,
     );
     let transfer_index = result.0.to_u64().unwrap();
@@ -2014,7 +2014,7 @@ fn test_utxo_consolidation_multiple() {
     let mut fee_account_balance = 1_000_000;
     let result = ckbtc.transfer(
         Principal::from(ckbtc.minter_id),
-        fee_account.clone(),
+        fee_account,
         fee_account_balance,
     );
     let transfer_index = result.0.to_u64().unwrap();
