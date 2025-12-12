@@ -1,4 +1,5 @@
 use std::{
+    fmt::Display,
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -21,9 +22,6 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
-const SERVICE: &str = "AnonymizationSaltFetcher";
-const METRIC_PREFIX: &str = "anonymization_salt";
-
 struct Metrics {
     last_successful_fetch: IntGauge,
     fetches: IntCounterVec,
@@ -32,6 +30,8 @@ struct Metrics {
 
 impl Metrics {
     fn new(registry: &Registry) -> Self {
+        const METRIC_PREFIX: &str = "anonymization_salt";
+
         Self {
             last_successful_fetch: register_int_gauge_with_registry!(
                 format!("{METRIC_PREFIX}_last_successful_fetch"),
@@ -58,12 +58,19 @@ impl Metrics {
     }
 }
 
+/// Fetches & applies the anonymization salt from the canister
 pub struct AnonymizationSaltFetcher {
     agent: Agent,
     canister_id: Principal,
     polling_interval: Duration,
     anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
     metrics: Metrics,
+}
+
+impl Display for AnonymizationSaltFetcher {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "AnonymizationSaltFetcher")
+    }
 }
 
 impl AnonymizationSaltFetcher {
@@ -101,12 +108,12 @@ impl AnonymizationSaltFetcher {
             Ok(response) if !response.is_empty() => response,
             Ok(_) => {
                 update_fetch_metric("failure", "empty_response");
-                warn!("{SERVICE}: got empty response from the canister");
+                warn!("{self}: got empty response from the canister");
                 return;
             }
             Err(err) => {
                 update_fetch_metric("failure", "update_call_failure");
-                warn!("{SERVICE}: failed to get salt from the canister: {err:#}");
+                warn!("{self}: failed to get salt from the canister: {err:#}");
                 return;
             }
         };
@@ -115,7 +122,7 @@ impl AnonymizationSaltFetcher {
             Ok(response) => response,
             Err(err) => {
                 update_fetch_metric("failure", "response_decoding_failure");
-                warn!("{SERVICE}: failed to decode candid response: {err:?}");
+                warn!("{self}: failed to decode candid response: {err:?}");
                 return;
             }
         };
@@ -141,7 +148,7 @@ impl AnonymizationSaltFetcher {
                     GetSaltError::Internal(_) => "internal",
                 };
                 update_fetch_metric("failure", message);
-                warn!("{SERVICE}: get_salt failed: {err:?}");
+                warn!("{self}: get_salt failed: {err:?}");
             }
         }
     }

@@ -26,16 +26,16 @@ use crate::{
     snapshot::{RegistrySnapshot, Subnet},
 };
 
+/// HTTP request as it's represented inside the IC request
 #[derive(Debug, Clone, PartialEq, Hash, CandidType, Deserialize)]
 pub struct HttpRequest {
     pub method: String,
     pub url: String,
     pub headers: Vec<(String, String)>,
-    #[serde(with = "serde_bytes")]
     pub body: Vec<u8>,
 }
 
-// Object that holds per-request information
+/// Per-request information
 #[derive(Debug, Clone, Default)]
 pub struct RequestContext {
     pub request_type: RequestType,
@@ -49,19 +49,20 @@ pub struct RequestContext {
     pub ingress_expiry: Option<u64>,
     pub arg: Option<Vec<u8>>,
 
-    // Filled in when the request is HTTP
+    // Filled in when the inner request is HTTP
     pub http_request: Option<HttpRequest>,
 }
 
 impl RequestContext {
+    /// Returns if the given request is using an anonymous identity
     pub fn is_anonymous(&self) -> Option<bool> {
         self.sender.map(|x| x == ANONYMOUS_PRINCIPAL)
     }
 }
 
-// Hash and Eq are implemented for request caching
-// They should both work on the same fields so that
-// k1 == k2 && hash(k1) == hash(k2)
+/// Hash and Eq are implemented for request caching
+/// They should both work on the same fields so that
+/// k1 == k2 && hash(k1) == hash(k2)
 impl Hash for RequestContext {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.canister_id.hash(state);
@@ -224,7 +225,7 @@ impl Health for ProxyRouter {
     }
 }
 
-// Middleware: looks up the target subnet in the routing table
+/// Middleware that looks up the target subnet in the routing table
 pub async fn lookup_subnet(
     State(lk): State<Arc<dyn Lookup>>,
     mut request: Request,
@@ -235,7 +236,9 @@ pub async fn lookup_subnet(
     } else if let Some(subnet_id) = request.extensions().get::<SubnetId>() {
         lk.lookup_subnet_by_id(subnet_id)?
     } else {
-        panic!("canister_id and subnet_id can't be both empty for a request")
+        return Err(ApiError::ProxyError(ErrorCause::Other(
+            "both CanisterId and SubnetId are missing, something's not right".into(),
+        )));
     };
 
     // Inject subnet into request

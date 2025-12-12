@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::cli::Cli;
-use anyhow::Error;
+use anyhow::{Context as _, Error};
 use serde::ser::{SerializeMap, Serializer as _};
 use serde_json::Serializer;
 use std::os::unix::net::UnixDatagram;
@@ -15,7 +15,7 @@ use tracing_subscriber::{
 
 // 1k is an average request log message which is a vast majority of log entries
 const LOG_ENTRY_SIZE: usize = 1024;
-const JOURNALD_PATH: &str = "/run/systemd/journal/socket";
+const JOURNALD_SOCKET_PATH: &str = "/run/systemd/journal/socket";
 
 // Journald protocol helper functions, stolen from tracing-journald crate
 fn put_value(buf: &mut Vec<u8>, value: &[u8]) {
@@ -44,7 +44,7 @@ fn put_priority(buf: &mut Vec<u8>, meta: &tracing::Metadata) {
     );
 }
 
-// Prepare the JSON-serialized message from a tracing event
+/// Prepare the JSON-serialized message from a tracing event
 fn event_to_json(event: &tracing::Event) -> Result<Vec<u8>, Error> {
     let mut msg = Vec::with_capacity(LOG_ENTRY_SIZE);
     let mut ser = Serializer::new(&mut msg);
@@ -66,7 +66,7 @@ fn event_to_json(event: &tracing::Event) -> Result<Vec<u8>, Error> {
     Ok(msg)
 }
 
-// tracing_subscriber Layer implementation that logs the events to Journald in JSON format
+/// `tracing_subscriber::Layer` implementation that logs the events to Journald in JSON format
 struct JournaldLayer {
     socket: UnixDatagram,
 }
@@ -74,9 +74,9 @@ struct JournaldLayer {
 impl JournaldLayer {
     fn new() -> Result<Self, Error> {
         let socket = UnixDatagram::unbound()?;
-        socket.connect(JOURNALD_PATH)?;
+        socket.connect(JOURNALD_SOCKET_PATH)?;
         // Ping journald to check the connection
-        socket.send(&[])?;
+        socket.send(&[]).context("JournalD socket ping failed")?;
         Ok(Self { socket })
     }
 }
@@ -86,7 +86,7 @@ where
     S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
 {
     fn on_event(&self, event: &tracing::Event, _ctx: Context<'_, S>) {
-        // Do stuff in closure to simplify error handling
+        // Do stuff in the closure to simplify error handling
         let send = || -> Result<(), Error> {
             let msg = event_to_json(event)?;
 
@@ -107,7 +107,7 @@ where
     }
 }
 
-// Sets up logging
+/// Sets up logging
 pub fn setup_logging(cli: &Cli) -> Result<(), Error> {
     let level_filter = LevelFilter::from_level(cli.obs.obs_max_logging_level);
 
