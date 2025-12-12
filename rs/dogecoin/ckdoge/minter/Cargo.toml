@@ -15,6 +15,7 @@ async-trait = { workspace = true }
 bs58 = "0.5.0"
 candid = { workspace = true }
 candid_parser = { workspace = true }
+ciborium = { workspace = true }
 hex = { workspace = true }
 ic-cdk = { workspace = true }
 ic-ckbtc-minter = { path = "../../../bitcoin/ckbtc/minter" }

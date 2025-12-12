@@ -24,6 +24,7 @@ rust_library(
         "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
         "@crate_index//:bs58",
         "@crate_index//:candid",
+        "@crate_index//:ciborium",
         "@crate_index//:hex",
         "@crate_index//:ic-cdk",
         "@crate_index//:serde",

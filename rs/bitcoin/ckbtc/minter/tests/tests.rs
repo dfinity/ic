@@ -18,7 +18,7 @@ use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::logs::Priority;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
 use ic_ckbtc_minter::reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason};
-use ic_ckbtc_minter::state::eventlog::{Event, EventType};
+use ic_ckbtc_minter::state::eventlog::{CkBtcMinterEvent, EventType};
 use ic_ckbtc_minter::state::{BtcRetrievalStatusV2, Mode, RetrieveBtcStatus, RetrieveBtcStatusV2};
 use ic_ckbtc_minter::updates::get_btc_address::GetBtcAddressArgs;
 use ic_ckbtc_minter::updates::retrieve_btc::{
@@ -886,7 +886,7 @@ impl CkBtcSetup {
             .entries
     }
 
-    pub fn get_events(&self) -> Vec<Event> {
+    pub fn get_events(&self) -> Vec<CkBtcMinterEvent> {
         const MAX_EVENTS_PER_QUERY: u64 = 2000;
         let mut events = Vec::new();
         loop {
@@ -899,7 +899,7 @@ impl CkBtcSetup {
         events
     }
 
-    fn get_events_batch(&self, start: u64, length: u64) -> Vec<Event> {
+    fn get_events_batch(&self, start: u64, length: u64) -> Vec<CkBtcMinterEvent> {
         use ic_ckbtc_minter::state::eventlog::GetEventsArg;
 
         Decode!(
@@ -912,7 +912,7 @@ impl CkBtcSetup {
                     )
                     .expect("failed to query minter events")
             ),
-            Vec<Event>
+            Vec<CkBtcMinterEvent>
         )
         .expect("Failed to call get_events")
     }
