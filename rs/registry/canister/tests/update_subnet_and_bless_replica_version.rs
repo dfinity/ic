@@ -36,16 +36,12 @@ fn guest_launch_measurements_for_test() -> Option<GuestLaunchMeasurements> {
     Some(GuestLaunchMeasurements {
         guest_launch_measurements: vec![
             GuestLaunchMeasurement {
-                #[allow(deprecated)]
-                measurement: vec![0x01, 0x02, 0x03],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: "foo=bar".into(),
                 }),
                 encoded_measurement: Some(hex::encode(vec![0x01, 0x02, 0x03])),
             },
             GuestLaunchMeasurement {
-                #[allow(deprecated)]
-                measurement: vec![0x04, 0x05, 0x06],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: "hello=world".into(),
                 }),
