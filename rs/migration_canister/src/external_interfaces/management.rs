@@ -151,20 +151,16 @@ pub async fn canister_status(
                 canister_id, e
             );
             match e {
-                ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(_)
-                | ic_cdk::call::CallFailed::CallPerformFailed(_) => ProcessingResult::NoProgress,
-                ic_cdk::call::CallFailed::CallRejected(call_rejected) => {
-                    if call_rejected
-                        .reject_message()
-                        .contains("Only the controllers of the canister")
-                    {
-                        ProcessingResult::FatalFailure(ValidationError::NotController {
+                CallFailed::CallRejected(e) => {
+                    if e.reject_code() == Ok(RejectCode::DestinationInvalid) {
+                        ProcessingResult::FatalFailure(ValidationError::CanisterNotFound {
                             canister: canister_id,
                         })
                     } else {
                         ProcessingResult::NoProgress
                     }
                 }
+                _ => ProcessingResult::NoProgress,
             }
         }
     }
@@ -175,6 +171,7 @@ pub async fn canister_status(
 
 /// This is a success if the call is a success
 /// and a fatal failure if the canister does not exist.
+/// Otherwise, this function returns no progress.
 pub async fn get_canister_info(canister_id: Principal) -> ProcessingResult<CanisterInfoResult, ()> {
     let args = CanisterInfoArgs {
         canister_id,
@@ -217,21 +214,21 @@ pub struct RenameToArgs {
     pub total_num_changes: u64,
 }
 
-/// This is a success if the call is a success or the target canister does not exist,
-/// i.e., a previous call to rename the target canister was a success.
+/// This is a success if the call is a success or the replaced canister does not exist,
+/// i.e., a previous call to rename the replaced canister was a success.
 pub async fn rename_canister(
-    source: Principal,
-    source_version: u64,
-    target: Principal,
-    target_subnet: Principal,
+    migrated: Principal,
+    migrated_canister_version: u64,
+    replaced: Principal,
+    replaced_canister_subnet: Principal,
     total_num_changes: u64,
     requested_by: Principal,
 ) -> ProcessingResult<(), Infallible> {
     let args = RenameCanisterArgs {
-        canister_id: target,
+        canister_id: replaced,
         rename_to: RenameToArgs {
-            canister_id: source,
-            version: source_version,
+            canister_id: migrated,
+            version: migrated_canister_version,
             total_num_changes,
         },
         requested_by,
@@ -239,7 +236,7 @@ pub async fn rename_canister(
     };
 
     // We have to await this call no matter what. Bounded wait is not an option.
-    match Call::bounded_wait(target_subnet, "rename_canister")
+    match Call::bounded_wait(replaced_canister_subnet, "rename_canister")
         .with_arg(args)
         .await
     {
@@ -247,7 +244,7 @@ pub async fn rename_canister(
         Err(e) => {
             println!(
                 "Call `rename_canister` for canister`: {}, subnet: {} failed: {:?}",
-                target, target_subnet, e
+                replaced, replaced_canister_subnet, e
             );
             match e {
                 CallFailed::CallRejected(e) => {
@@ -272,7 +269,7 @@ pub async fn assert_no_snapshots(canister_id: Principal) -> ProcessingResult<(),
             if snapshots.is_empty() {
                 ProcessingResult::Success(())
             } else {
-                ProcessingResult::FatalFailure(ValidationError::TargetHasSnapshots(Reserved))
+                ProcessingResult::FatalFailure(ValidationError::ReplacedHasSnapshots(Reserved))
             }
         }
         Err(e) => {

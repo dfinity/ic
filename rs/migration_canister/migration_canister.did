@@ -4,7 +4,7 @@ type MigrationStatus = variant {
   InProgress : record { status : text };
 };
 
-type MigrateCanisterArgs = record { canister_id : principal; replace_canister_id : principal };
+type MigrateCanisterArgs = record { migrated_canister_id : principal; replace_canister_id : principal };
 
 type MigrationCanisterResult = variant { Ok; Err : opt MigrationCanisterError };
 type MigrationCanisterError = variant { CallerNotAuthorized : reserved };
@@ -15,16 +15,16 @@ type ValidationError = variant {
   CallFailed : record { reason : text };
   NotController : record { canister : principal };
   CallerNotController : record { canister : principal };
-  TargetHasSnapshots : reserved;
+  ReplacedHasSnapshots : reserved;
   MigrationInProgress : record { canister : principal };
   ValidationInProgress : record { canister : principal };
-  SourceNotStopped : reserved;
+  MigratedNotStopped : reserved;
   RateLimited : reserved;
   MigrationsDisabled : reserved;
-  SourceNotReady : reserved;
-  SourceInsufficientCycles : reserved;
+  MigratedNotReady : reserved;
+  MigratedInsufficientCycles : reserved;
   SameSubnet : reserved;
-  TargetNotStopped : reserved;
+  ReplacedNotStopped : reserved;
 };
 
 type MigrationCanisterInitArgs = record { allowlist : opt vec principal };

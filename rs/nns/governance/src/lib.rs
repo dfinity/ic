@@ -209,6 +209,9 @@ thread_local! {
 
     static ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS: Cell<bool>
         = const { Cell::new(false) };
+
+    static ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
 }
 
 thread_local! {
@@ -282,6 +285,20 @@ pub fn temporarily_enable_self_describing_proposal_actions() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_self_describing_proposal_actions() -> Temporary {
     Temporary::new(&ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS, false)
+}
+
+pub fn are_bless_alternative_guest_os_version_proposals_enabled() -> bool {
+    ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_bless_alternative_guest_os_version_proposals() -> Temporary {
+    Temporary::new(&ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_bless_alternative_guest_os_version_proposals() -> Temporary {
+    Temporary::new(&ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {
