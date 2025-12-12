@@ -342,7 +342,7 @@ impl IDkgProtocol for CryptoReturningOk {
             registry_version: RegistryVersion::from(1),
             verified_dealings: Arc::new(dealings_by_index),
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
-            algorithm_id: AlgorithmId::Placeholder,
+            algorithm_id: AlgorithmId::Unspecified,
             internal_transcript_raw: vec![],
         })
     }
