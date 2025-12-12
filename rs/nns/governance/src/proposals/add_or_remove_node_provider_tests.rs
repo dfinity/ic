@@ -1,8 +1,12 @@
 use super::*;
+
 use crate::pb::v1::{AddOrRemoveNodeProvider, NodeProvider, add_or_remove_node_provider::Change};
+
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
-use icp_ledger::protobuf::AccountIdentifier as AccountIdentifierProto;
+use ic_nns_governance_api::SelfDescribingValue as ApiValue;
+use icp_ledger::{Subaccount, protobuf::AccountIdentifier as AccountIdentifierProto};
+use maplit::hashmap;
 
 fn create_test_node_provider(id: u64) -> NodeProvider {
     NodeProvider {
@@ -12,35 +16,12 @@ fn create_test_node_provider(id: u64) -> NodeProvider {
 }
 
 fn create_test_node_provider_with_account(id: u64) -> NodeProvider {
-    let account = AccountIdentifier::new(PrincipalId::new_user_test_id(id), None);
+    let account =
+        AccountIdentifier::new(PrincipalId::new_user_test_id(id), Some(Subaccount([1; 32])));
     NodeProvider {
         id: Some(PrincipalId::new_user_test_id(id)),
         reward_account: Some(account.into_proto_with_checksum()),
     }
-}
-
-fn create_test_node_providers() -> Vec<NodeProvider> {
-    vec![create_test_node_provider(1), create_test_node_provider(2)]
-}
-
-#[test]
-fn test_try_from_success_to_add() {
-    let proposal = AddOrRemoveNodeProvider {
-        change: Some(Change::ToAdd(create_test_node_provider(3))),
-    };
-
-    let result = ValidAddOrRemoveNodeProvider::try_from(proposal);
-    assert!(result.is_ok(), "Expected TryFrom to succeed for ToAdd");
-}
-
-#[test]
-fn test_try_from_success_to_remove() {
-    let proposal = AddOrRemoveNodeProvider {
-        change: Some(Change::ToRemove(create_test_node_provider(1))),
-    };
-
-    let result = ValidAddOrRemoveNodeProvider::try_from(proposal);
-    assert!(result.is_ok(), "Expected TryFrom to succeed for ToRemove");
 }
 
 #[test]
@@ -129,37 +110,70 @@ fn test_try_from_invalid_reward_account_28_bytes() {
 }
 
 #[test]
-fn test_try_from_valid_reward_account() {
+fn test_add_new_node_provider() {
+    let mut node_providers = vec![create_test_node_provider(1), create_test_node_provider(2)];
+    let new_provider = create_test_node_provider(3);
     let proposal = AddOrRemoveNodeProvider {
-        change: Some(Change::ToAdd(create_test_node_provider_with_account(3))),
+        change: Some(Change::ToAdd(new_provider.clone())),
     };
 
-    let result = ValidAddOrRemoveNodeProvider::try_from(proposal);
-    assert!(
-        result.is_ok(),
-        "Expected TryFrom to succeed with valid reward account"
+    let valid_proposal =
+        ValidAddOrRemoveNodeProvider::try_from(proposal).expect("try_from should succeed");
+
+    assert_eq!(valid_proposal.validate(&node_providers), Ok(()));
+
+    valid_proposal
+        .execute(&mut node_providers)
+        .expect("execute should succeed");
+
+    // The ordering doesn't matter, so ideally we should either sort or convert to a set before
+    // comparing. On the other hand, it's very unlikely that we want to change the ordering of node
+    // providers when adding a new one. Therefore, we simply compare, assuming the new node provider
+    // is added to the end.
+    assert_eq!(
+        node_providers,
+        vec![
+            create_test_node_provider(1),
+            create_test_node_provider(2),
+            new_provider
+        ]
     );
 }
 
 #[test]
-fn test_validate_add_new_node_provider_success() {
-    let node_providers = create_test_node_providers();
+fn test_add_node_provider_with_reward_account() {
+    let mut node_providers = vec![create_test_node_provider(1), create_test_node_provider(2)];
+    let new_provider = create_test_node_provider_with_account(3);
     let proposal = AddOrRemoveNodeProvider {
-        change: Some(Change::ToAdd(create_test_node_provider(3))),
+        change: Some(Change::ToAdd(new_provider.clone())),
     };
-    let valid_proposal =
-        ValidAddOrRemoveNodeProvider::try_from(proposal).expect("Should create valid proposal");
 
-    let result = valid_proposal.validate(&node_providers);
-    assert!(
-        result.is_ok(),
-        "Expected validation to succeed for new node provider"
+    let valid_proposal =
+        ValidAddOrRemoveNodeProvider::try_from(proposal).expect("try_from should succeed");
+
+    assert_eq!(valid_proposal.validate(&node_providers), Ok(()));
+
+    valid_proposal
+        .execute(&mut node_providers)
+        .expect("execute should succeed");
+
+    // The ordering doesn't matter, so ideally we should either sort or convert to a set before
+    // comparing. On the other hand, it's very unlikely that we want to change the ordering of node
+    // providers when adding a new one. Therefore, we simply compare, assuming the new node provider
+    // is added to the end.
+    assert_eq!(
+        node_providers,
+        vec![
+            create_test_node_provider(1),
+            create_test_node_provider(2),
+            new_provider
+        ]
     );
 }
 
 #[test]
 fn test_validate_add_existing_node_provider_fails() {
-    let node_providers = create_test_node_providers();
+    let node_providers = vec![create_test_node_provider(1), create_test_node_provider(2)];
     let proposal = AddOrRemoveNodeProvider {
         change: Some(Change::ToAdd(create_test_node_provider(1))), // Already exists
     };
@@ -169,30 +183,41 @@ fn test_validate_add_existing_node_provider_fails() {
     let result = valid_proposal.validate(&node_providers);
     assert_matches!(
         result,
-        Err(error) if error.error_type == ErrorType::InvalidProposal as i32
-            && error.error_message.contains("cannot add already existing Node Provider")
+        Err(error) if error.error_type == ErrorType::PreconditionFailed as i32
+            && error.error_message.contains("already exists")
     );
 }
 
 #[test]
-fn test_validate_remove_existing_node_provider_success() {
-    let node_providers = create_test_node_providers();
+fn test_remove_existing_node_provider() {
+    let mut node_providers = vec![
+        create_test_node_provider(1),
+        create_test_node_provider(2),
+        create_test_node_provider(3),
+    ];
+    let provider_to_remove = create_test_node_provider(2);
     let proposal = AddOrRemoveNodeProvider {
-        change: Some(Change::ToRemove(create_test_node_provider(1))),
+        change: Some(Change::ToRemove(provider_to_remove.clone())),
     };
-    let valid_proposal =
-        ValidAddOrRemoveNodeProvider::try_from(proposal).expect("Should create valid proposal");
 
-    let result = valid_proposal.validate(&node_providers);
-    assert!(
-        result.is_ok(),
-        "Expected validation to succeed for existing node provider"
+    let valid_proposal =
+        ValidAddOrRemoveNodeProvider::try_from(proposal).expect("try_from should succeed");
+
+    assert_eq!(valid_proposal.validate(&node_providers), Ok(()));
+
+    valid_proposal
+        .execute(&mut node_providers)
+        .expect("execute should succeed");
+
+    assert_eq!(
+        node_providers,
+        vec![create_test_node_provider(1), create_test_node_provider(3)]
     );
 }
 
 #[test]
 fn test_validate_remove_non_existing_node_provider_fails() {
-    let node_providers = create_test_node_providers();
+    let node_providers = vec![create_test_node_provider(1), create_test_node_provider(2)];
     let proposal = AddOrRemoveNodeProvider {
         change: Some(Change::ToRemove(create_test_node_provider(999))), // Doesn't exist
     };
@@ -202,37 +227,15 @@ fn test_validate_remove_non_existing_node_provider_fails() {
     let result = valid_proposal.validate(&node_providers);
     assert_matches!(
         result,
-        Err(error) if error.error_type == ErrorType::InvalidProposal as i32
+        Err(error) if error.error_type == ErrorType::PreconditionFailed as i32
             && error.error_message.contains("must target an existing Node Provider")
     );
 }
 
 #[test]
-fn test_execute_add_node_provider_success() {
-    let mut node_providers = create_test_node_providers();
-    let new_provider = create_test_node_provider(3);
-    let proposal = AddOrRemoveNodeProvider {
-        change: Some(Change::ToAdd(new_provider.clone())),
-    };
-    let valid_proposal =
-        ValidAddOrRemoveNodeProvider::try_from(proposal).expect("Should create valid proposal");
-
-    let result = valid_proposal.execute(&mut node_providers);
-    assert!(result.is_ok(), "Expected execution to succeed");
-    assert_eq!(
-        node_providers.len(),
-        3,
-        "Expected 3 node providers after adding"
-    );
-    assert!(
-        node_providers.iter().any(|np| np.id == new_provider.id),
-        "Expected new node provider to be in the list"
-    );
-}
-
-#[test]
 fn test_execute_add_existing_node_provider_fails() {
-    let mut node_providers = create_test_node_providers();
+    let mut node_providers = vec![create_test_node_provider(1), create_test_node_provider(2)];
+    let original_node_providers = node_providers.clone();
     let proposal = AddOrRemoveNodeProvider {
         change: Some(Change::ToAdd(create_test_node_provider(1))), // Already exists
     };
@@ -245,36 +248,14 @@ fn test_execute_add_existing_node_provider_fails() {
         Err(error) if error.error_type == ErrorType::PreconditionFailed as i32
             && error.error_message.contains("already exists")
     );
-}
 
-#[test]
-fn test_execute_remove_node_provider_success() {
-    let mut node_providers = create_test_node_providers();
-    let provider_to_remove = create_test_node_provider(1);
-    let proposal = AddOrRemoveNodeProvider {
-        change: Some(Change::ToRemove(provider_to_remove.clone())),
-    };
-    let valid_proposal =
-        ValidAddOrRemoveNodeProvider::try_from(proposal).expect("Should create valid proposal");
-
-    let result = valid_proposal.execute(&mut node_providers);
-    assert!(result.is_ok(), "Expected execution to succeed");
-    assert_eq!(
-        node_providers.len(),
-        1,
-        "Expected 1 node provider after removing"
-    );
-    assert!(
-        !node_providers
-            .iter()
-            .any(|np| np.id == provider_to_remove.id),
-        "Expected removed node provider to not be in the list"
-    );
+    assert_eq!(node_providers, original_node_providers);
 }
 
 #[test]
 fn test_execute_remove_non_existing_node_provider_fails() {
-    let mut node_providers = create_test_node_providers();
+    let mut node_providers = vec![create_test_node_provider(1), create_test_node_provider(2)];
+    let original_node_providers = node_providers.clone();
     let proposal = AddOrRemoveNodeProvider {
         change: Some(Change::ToRemove(create_test_node_provider(999))), // Doesn't exist
     };
@@ -284,31 +265,63 @@ fn test_execute_remove_non_existing_node_provider_fails() {
     let result = valid_proposal.execute(&mut node_providers);
     assert_matches!(
         result,
-        Err(error) if error.error_type == ErrorType::NotFound as i32
-            && error.error_message.contains("Can't find a NodeProvider")
+        Err(error) if error.error_type == ErrorType::PreconditionFailed as i32
+            && error.error_message.contains("must target an existing Node Provider")
     );
+
+    assert_eq!(node_providers, original_node_providers);
 }
 
 #[test]
-fn test_execute_preserves_other_node_providers() {
-    let mut node_providers = create_test_node_providers();
-    let original_count = node_providers.len();
-    let proposal = AddOrRemoveNodeProvider {
-        change: Some(Change::ToRemove(create_test_node_provider(1))),
+fn test_to_self_describing_value() {
+    let account_identifer_hex = "5b116adf01010101010101010101010101010101010101010101010101010101";
+    let account = AccountIdentifier::from_hex(account_identifer_hex)
+        .unwrap()
+        .into_proto_with_checksum();
+    let add_node_provider = AddOrRemoveNodeProvider {
+        change: Some(Change::ToAdd(NodeProvider {
+            id: Some(PrincipalId::new_user_test_id(1)),
+            reward_account: Some(account),
+        })),
     };
-    let valid_proposal =
-        ValidAddOrRemoveNodeProvider::try_from(proposal).expect("Should create valid proposal");
 
-    valid_proposal
-        .execute(&mut node_providers)
-        .expect("Execute should succeed");
+    assert_eq!(
+        ApiValue::from(
+            ValidAddOrRemoveNodeProvider::try_from(add_node_provider)
+                .unwrap()
+                .to_self_describing_value()
+        ),
+        ApiValue::Map(hashmap! {
+            "to_add".to_string() => ApiValue::Map(hashmap! {
+                "id".to_string() => ApiValue::Text("6fyp7-3ibaa-aaaaa-aaaap-4ai".to_string()),
+                "reward_account".to_string() => ApiValue::Array(vec![
+                    ApiValue::Map(hashmap! {
+                        "account_identifier".to_string() => ApiValue::Text(
+                            account_identifer_hex.to_string()
+                        )
+                    })
+                ])
+            })
+        })
+    );
 
-    // Verify that the other node provider is still there
-    assert_eq!(node_providers.len(), original_count - 1);
-    assert!(
-        node_providers
-            .iter()
-            .any(|np| np.id == Some(PrincipalId::new_user_test_id(2))),
-        "Expected node provider 2 to still be in the list"
+    let remove_node_provider = AddOrRemoveNodeProvider {
+        change: Some(Change::ToRemove(NodeProvider {
+            id: Some(PrincipalId::new_user_test_id(1)),
+            reward_account: None,
+        })),
+    };
+
+    assert_eq!(
+        ApiValue::from(
+            ValidAddOrRemoveNodeProvider::try_from(remove_node_provider)
+                .unwrap()
+                .to_self_describing_value()
+        ),
+        ApiValue::Map(hashmap! {
+            "to_remove".to_string() => ApiValue::Map(hashmap! {
+                "id".to_string() => ApiValue::Text("6fyp7-3ibaa-aaaaa-aaaap-4ai".to_string())
+            })
+        })
     );
 }
