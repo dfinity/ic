@@ -30,7 +30,7 @@ use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{
-    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
+    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResources,
 };
 use ic_system_test_driver::driver::ic_gateway_vm::{
     HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm,
@@ -824,10 +824,9 @@ fn setup_ic(env: TestEnv) {
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(DKG_INTERVAL_HEIGHT);
 
-    // TODO: Something is fishy with the firewall. API BN is unreachable at port 22
     InternetComputer::new()
         .with_default_vm_resources(VmResources {
-            vcpus: Some(NrOfVCPUs::new(16)),
+            vcpus: None,
             memory_kibibytes: None,
             boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
         })

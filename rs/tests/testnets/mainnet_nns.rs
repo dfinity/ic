@@ -39,6 +39,7 @@
 use anyhow::Result;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
+    ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
 };
@@ -49,7 +50,13 @@ fn setup(env: TestEnv) {
     // Start a p8s VM concurrently:
     let env_clone = env.clone();
     let prometheus_thread = std::thread::spawn(move || {
+        // Requires more resources to scrape mainnet topology
         PrometheusVm::default()
+            .with_vm_resources(VmResources {
+                vcpus: Some(NrOfVCPUs::new(4)),
+                memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
+                boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(100)),
+            })
             .start(&env_clone)
             .expect("Failed to start prometheus VM")
     });
