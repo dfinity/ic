@@ -43,7 +43,14 @@ jobs:
         env:
           GH_CLI_VERSION: 2.74.0
         run: |
-          curl -o gh_cli.tar.gz -L https://github.com/cli/cli/releases/download/v${GH_CLI_VERSION}/gh_${GH_CLI_VERSION}_linux_386.tar.gz
+          # Without --fail, 4xx and 5xx are considered "success", because UNIX.
+          # If this keeps failing, consider applying other --retry-??? flags.
+          curl \
+            --location https://github.com/cli/cli/releases/download/v${GH_CLI_VERSION}/gh_${GH_CLI_VERSION}_linux_386.tar.gz \
+            --output gh_cli.tar.gz \
+            --fail \
+            --retry 7
+
           tar -xvf gh_cli.tar.gz
           mv "gh_${GH_CLI_VERSION}_linux_386" gh_cli
           chmod +x ./gh_cli/bin/gh
