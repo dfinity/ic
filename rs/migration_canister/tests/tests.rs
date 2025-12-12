@@ -1057,7 +1057,7 @@ async fn validation_fails_caller_not_controller() {
         replaced_canister_controllers,
         ..
     } = setup(Settings::default()).await;
-    // sender not controller of migrated
+    // sender not controller of migrated canister
     let bad_sender = replaced_canister_controllers[1];
     let migrated = migrateds[0];
     let replaced = replaceds[0];
@@ -1075,7 +1075,7 @@ async fn validation_fails_caller_not_controller() {
     };
     assert_eq!(canister, migrated);
 
-    // sender not controller of replaced
+    // sender not controller of replaced canister
     let bad_sender = migrated_canister_controllers[1];
     let Err(ValidationError::CallerNotController { canister }) = migrate_canister(
         &pic,
@@ -1105,7 +1105,7 @@ async fn validation_fails_mc_not_migrated_canister_controller() {
         ..Default::default()
     })
     .await;
-    // MC not controller of migrated
+    // MC not controller of migrated canister
     let sender = migrated_canister_controllers[0];
     let migrated = migrateds[0];
     let replaced = replaceds[0];
@@ -1137,7 +1137,7 @@ async fn validation_fails_mc_not_replaced_canister_controller() {
         ..Default::default()
     })
     .await;
-    // MC not controller of replaced
+    // MC not controller of replaced canister
     let sender = migrated_canister_controllers[0];
     let migrated = migrateds[0];
     let replaced = replaceds[0];
@@ -1169,7 +1169,6 @@ async fn validation_fails_not_stopped() {
     let migrated = migrateds[0];
     let replaced = replaceds[0];
 
-    // migrated
     pic.start_canister(migrated, Some(sender)).await.unwrap();
     assert!(matches!(
         migrate_canister(
@@ -1186,7 +1185,6 @@ async fn validation_fails_not_stopped() {
 
     pic.stop_canister(migrated, Some(sender)).await.unwrap();
 
-    // replaced
     pic.start_canister(replaced, Some(sender)).await.unwrap();
     assert!(matches!(
         migrate_canister(

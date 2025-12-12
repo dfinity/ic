@@ -240,17 +240,17 @@ async fn test_async(env: TestEnv) {
 
             let call_from_everywhere = async |counts: &mut BTreeMap<(String, String), usize>| {
                 let mut requests = BTreeMap::new();
-                // Ingress message to the migrating canister, sent to the migrated canister subnet directly.
+                // Ingress message to the migrated canister, sent to the migrated canister subnet directly.
                 requests.insert(
                     "migrated_canister_subnet".to_string(),
                     original_canister.update(wasm().reply_data(&data)),
                 );
-                // Ingress message to the migrating canister, sent to the replaced canister subnet directly.
+                // Ingress message to the migrated canister, sent to the replaced canister subnet directly.
                 requests.insert(
                     "replaced_canister_subnet".to_string(),
                     migrated_canister.update(wasm().reply_data(&data)),
                 );
-                // Ingress message to the migrating canister, sent to the boundary node.
+                // Ingress message to the migrated canister, sent to the boundary node.
                 requests.insert(
                     "boundary node".to_string(),
                     bn_canister.update(wasm().reply_data(&data)),
@@ -260,7 +260,7 @@ async fn test_async(env: TestEnv) {
                     "replaced canister".to_string(),
                     replaced_canister.update(wasm().reply_data(&data)),
                 );
-                // XNet message to the migrating canister, sent from the migrated canister subnet.
+                // XNet message to the migrated canister, sent from the migrated canister subnet.
                 requests.insert(
                     "xnet from migrated_canister_subnet".to_string(),
                     other_canister1.update(
@@ -272,7 +272,7 @@ async fn test_async(env: TestEnv) {
                         ),
                     ),
                 );
-                // XNet message to the migrating canister, sent from the replaced canister subnet.
+                // XNet message to the migrated canister, sent from the replaced canister subnet.
                 requests.insert(
                     "xnet from replaced_canister_subnet".to_string(),
                     other_canister2.update(
@@ -284,7 +284,7 @@ async fn test_async(env: TestEnv) {
                         ),
                     ),
                 );
-                // XNet message to the migrating canister, sent from a subnet not involved in the migration.
+                // XNet message to the migrated canister, sent from a subnet not involved in the migration.
                 requests.insert(
                     "xnet from third".to_string(),
                     other_canister3.update(

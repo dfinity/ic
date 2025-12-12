@@ -80,7 +80,7 @@ pub async fn process_accepted(
         return ProcessingResult::NoProgress;
     };
 
-    // Set controller of migrated
+    // Set controller of migrated canister
     let res = set_exclusive_controller(request.migrated)
         .await
         .map_success(|_| RequestState::ControllersChanged {
@@ -95,7 +95,7 @@ pub async fn process_accepted(
         return res;
     }
 
-    // Set controller of replaced
+    // Set controller of replaced canister
     set_exclusive_controller(request.replaced)
         .await
         .map_success(|_| RequestState::ControllersChanged {
@@ -180,7 +180,7 @@ pub async fn process_controllers_changed(
         });
     }
 
-    // Determine history length of migrated
+    // Determine history length of migrated canister
     get_canister_info(request.migrated)
         .await
         .map_success(|canister_info_result| RequestState::StoppedAndReady {
