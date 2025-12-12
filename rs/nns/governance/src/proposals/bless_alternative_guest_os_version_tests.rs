@@ -156,12 +156,14 @@ fn test_validate_base_guest_launch_measurements_multiple_defects() {
 
     let defects = validate_base_guest_launch_measurements(&Some(measurements));
 
-    assert_eq!(defects.len(), 2, "{defects:#?}");
+    assert_eq!(defects.len(), 3, "{defects:#?}");
 
     assert_contains_all_key_words(&defects[0], &["guest_launch_measurements[1]", "48", "32"]);
 
+    assert_contains_all_key_words(&defects[1], &["guest_launch_measurements[1]", "48", "32"]);
+
     assert_contains_all_key_words(
-        &defects[1],
+        &defects[2],
         &["guest_launch_measurements[3]", "kernel_cmdline", "empty"],
     );
 }

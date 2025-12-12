@@ -1090,6 +1090,9 @@ type GuestLaunchMeasurement = record {
   // SEV-SNP measurement (48 bytes).
   measurement : opt blob;
 
+  // encoded SEV-SNP measurement (48 bytes, hex)
+  encoded_measurement : opt text;
+
   // Metadata associated with the measurement.
   metadata : opt GuestLaunchMeasurementMetadata;
 };

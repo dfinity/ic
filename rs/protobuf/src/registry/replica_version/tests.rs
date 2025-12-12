@@ -28,11 +28,16 @@ fn test_validate_guest_launch_measurement_wrong_size() {
         }),
     };
     let defects = measurement.validate().unwrap_err();
-    assert_eq!(defects.len(), 1, "{defects:#?}");
+    assert_eq!(defects.len(), 2, "{defects:#?}");
     assert!(
         defects[0].contains("48") && defects[0].contains("32"),
         "Expected error message to contain '48' and '32', got: {}",
         defects[0]
+    );
+    assert!(
+        defects[1].contains("48") && defects[1].contains("32"),
+        "Expected error message to contain '48' and '32', got: {}",
+        defects[1]
     );
 }
 
@@ -82,11 +87,16 @@ fn test_validate_guest_launch_measurement_multiple_defects() {
     };
     let defects = measurement.validate().unwrap_err();
     // Should report measurement size error. Metadata missing is allowed though.
-    assert_eq!(defects.len(), 1, "{defects:#?}");
+    assert_eq!(defects.len(), 2, "{defects:#?}");
     assert!(
         defects[0].contains("48"),
         "Expected error message to contain '48', got: {}",
         defects[0]
+    );
+    assert!(
+        defects[1].contains("48"),
+        "Expected error message to contain '48', got: {}",
+        defects[1]
     );
 }
 
@@ -167,7 +177,7 @@ fn test_validate_guest_launch_measurements_multiple_defects() {
 
     let defects = measurements.validate().unwrap_err();
 
-    assert_eq!(defects.len(), 2, "{defects:#?}");
+    assert_eq!(defects.len(), 3, "{defects:#?}");
 
     assert!(
         defects[0].contains("guest_launch_measurements[1]")
@@ -178,10 +188,18 @@ fn test_validate_guest_launch_measurements_multiple_defects() {
     );
 
     assert!(
-        defects[1].contains("guest_launch_measurements[3]")
-            && defects[1].contains("kernel_cmdline")
-            && defects[1].contains("empty"),
-        "Expected error message to contain 'guest_launch_measurements[3]', 'kernel_cmdline', and 'empty', got: {}",
+        defects[1].contains("guest_launch_measurements[1]")
+            && defects[1].contains("48")
+            && defects[1].contains("32"),
+        "Expected error message to contain 'guest_launch_measurements[1]', '48', and '32', got: {}",
         defects[1]
+    );
+
+    assert!(
+        defects[2].contains("guest_launch_measurements[3]")
+            && defects[2].contains("kernel_cmdline")
+            && defects[2].contains("empty"),
+        "Expected error message to contain 'guest_launch_measurements[3]', 'kernel_cmdline', and 'empty', got: {}",
+        defects[2]
     );
 }
