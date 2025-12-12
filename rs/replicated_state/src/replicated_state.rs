@@ -1414,6 +1414,7 @@ impl ReplicatedState {
         metadata
             .split_from
             .expect("Not a state resulting from a subnet split");
+        assert_eq!(None, metadata.subnet_split_from);
 
         // Adjust `CanisterQueues::(local|remote)_subnet_input_schedule` based on which
         // canisters are present in `canister_states`.
