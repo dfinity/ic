@@ -1108,11 +1108,19 @@ mod test {
         loop {
             let req = client.get("https://127.0.0.1:5001/health").build().unwrap();
             let res = client.execute(req).await;
-            if let Ok(v) = res
-                && v.status() == StatusCode::NO_CONTENT
-            {
-                return;
-            }
+            match res {
+                Ok(v) => {
+                    if v.status() == StatusCode::NO_CONTENT {
+                        return;
+                    }
+
+                    println!("Status code incorrect: {}", v.status());
+                }
+
+                Err(e) => {
+                    println!("Error: {e:#}");
+                }
+            };
 
             if start.elapsed() > Duration::from_secs(120) {
                 break;
