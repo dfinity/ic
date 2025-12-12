@@ -964,7 +964,7 @@ async fn validation_fails_not_found() {
     .await
     .unwrap_err();
     assert!(
-        matches!(err, ValidationError::CallFailed { reason } if reason.contains(&format!("Call to management canister (`canister_status`) failed. Ensure that the canister {} is the expected source and try again later.", nonexistent_canister)))
+        matches!(err, ValidationError::CanisterNotFound {canister} if canister == nonexistent_canister)
     );
 
     let err = migrate_canister(
@@ -978,7 +978,7 @@ async fn validation_fails_not_found() {
     .await
     .unwrap_err();
     assert!(
-        matches!(err, ValidationError::CallFailed { reason } if reason.contains(&format!("Call to management canister (`canister_status`) failed. Ensure that the canister {} is the expected target and try again later.", nonexistent_canister)))
+        matches!(err, ValidationError::CanisterNotFound {canister} if canister == nonexistent_canister)
     );
 }
 
