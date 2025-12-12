@@ -159,7 +159,7 @@ impl From<&Request> for CanisterMigrationArgs {
 }
 
 /// Represents the recovery state of a `Request` in `RequestState::Failed`,
-/// i.e., whether controllers of migrated and replaced must still be restored.
+/// i.e., whether controllers of migrated and replaced canisters must still be restored.
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecoveryState {
     pub restore_migrated_canister_controllers: ControllerRecoveryState,
@@ -207,12 +207,12 @@ impl RecoveryState {
 pub enum RequestState {
     /// Request was validated successfully.
     /// * Called registry `get_subnet_for_canister` to determine:
-    ///     * Existence of migrated and replaced.
-    ///     * Subnet of migrated and replaced.
+    ///     * Existence of migrated and replaced canisters.
+    ///     * Subnet of migrated and replaced canisters.
     /// * Called mgmt `canister_status` to determine:
-    ///     * We are controller of migrated and replaced.
-    ///     * The original controllers of migrated and replaced.
-    ///     * If the replaced has sufficient cycles above the freezing threshold.
+    ///     * We are controller of migrated and replaced canisters.
+    ///     * The original controllers of migrated and replaced canisters.
+    ///     * If the replaced canister has sufficient cycles above the freezing threshold.
     #[strum(to_string = "RequestState::Accepted {{ request: {request} }}")]
     Accepted { request: Request },
 
@@ -224,14 +224,14 @@ pub enum RequestState {
     ControllersChanged { request: Request },
 
     /// * Called mgmt `canister_status` to determine:
-    ///     * Migrated and replaced are stopped.
-    ///     * Migrated is ready for migration.
-    ///     * Replaced has no snapshots.
-    ///     * Replaced has sufficient cycles above the freezing threshold.
+    ///     * Migrated and replaced canisters are stopped.
+    ///     * Migrated canister is ready for migration.
+    ///     * Replaced canister has no snapshots.
+    ///     * Replaced canister has sufficient cycles above the freezing threshold.
     ///     * Migrated canister version is not absurdly high.
-    /// * Called mgmt `canister_info` to determine the history length of migrated.
+    /// * Called mgmt `canister_info` to determine the history length of migrated canister.
     ///
-    /// Record the canister version and history length of migrated and the current time.
+    /// Record the canister version and history length of migrated canister and the current time.
     #[strum(
         to_string = "RequestState::StoppedAndReady {{ request: {request}, stopped_since: {stopped_since}, canister_version: {canister_version}, canister_history_total_num: {canister_history_total_num} }}"
     )]
@@ -282,9 +282,9 @@ pub enum RequestState {
         stopped_since: u64,
     },
 
-    /// Five minutes have passed since `stopped_since` such that any messages to the
-    /// migrated subnet have expired by now.
-    /// Restored the controllers of the replaced canister (now addressed with migrated's id).
+    /// Six minutes have passed since `stopped_since` such that any messages to the
+    /// migrated canister subnet have expired by now.
+    /// Restored the controllers of the replaced canister (now addressed with migrated canister's id).
     ///
     /// This state transitions to a success event without any additional work.
     ///

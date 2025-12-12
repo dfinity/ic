@@ -126,14 +126,14 @@ pub async fn process_controllers_changed(
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
             recovery_state: RecoveryState::new(),
-            reason: "Migrated is not stopped.".to_string(),
+            reason: "Migrated canister is not stopped.".to_string(),
         });
     }
     if !migrated_canister_status.ready_for_migration {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
             recovery_state: RecoveryState::new(),
-            reason: "Migrated is not ready for migration.".to_string(),
+            reason: "Migrated canister is not ready for migration.".to_string(),
         });
     }
     let canister_version = migrated_canister_status.version;
@@ -141,7 +141,7 @@ pub async fn process_controllers_changed(
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
             recovery_state: RecoveryState::new(),
-            reason: "Migrated version is too large.".to_string(),
+            reason: "Migrated canister version is too large.".to_string(),
         });
     }
 
@@ -154,7 +154,7 @@ pub async fn process_controllers_changed(
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
             recovery_state: RecoveryState::new(),
-            reason: "Replaced is not stopped.".to_string(),
+            reason: "Replaced canister is not stopped.".to_string(),
         });
     }
     match assert_no_snapshots(request.replaced).await {
@@ -164,7 +164,7 @@ pub async fn process_controllers_changed(
             return ProcessingResult::FatalFailure(RequestState::Failed {
                 request,
                 recovery_state: RecoveryState::new(),
-                reason: "Replaced has snapshots.".to_string(),
+                reason: "Replaced canister has snapshots.".to_string(),
             });
         }
     }
@@ -174,7 +174,7 @@ pub async fn process_controllers_changed(
             request,
             recovery_state: RecoveryState::new(),
             reason: format!(
-                "Migrated does not have sufficient cycles: {} < {}.",
+                "Migrated canister does not have sufficient cycles: {} < {}.",
                 migrated_canister_status.cycles, CYCLES_COST_PER_MIGRATION
             ),
         });
@@ -192,7 +192,7 @@ pub async fn process_controllers_changed(
         .map_failure(|()| RequestState::Failed {
             request,
             recovery_state: RecoveryState::new(),
-            reason: "Migrated has been deleted".to_string(),
+            reason: "Migrated canister has been deleted".to_string(),
         })
 }
 
@@ -322,8 +322,8 @@ pub async fn process_migrated_canister_deleted(
     // is never more than `MAX_INGRESS_TTL + PERMITTED_DRIFT_AT_VALIDATOR` into the future
     // w.r.t. the subnet time that executed the ingress message.
     // Hence, we must wait for at least `MAX_INGRESS_TTL + PERMITTED_DRIFT_AT_VALIDATOR`
-    // and also additionally account for a clock drift between the migrated and replaced subnet
-    // that we bound by 30 seconds.
+    // and also additionally account for a clock drift between the migrated canister
+    // and replaced canister subnet that we bound by 30 seconds.
     let max_subnet_clock_drift_nanos = 30 * 1_000_000_000;
     if time().saturating_sub(stopped_since)
         < MAX_INGRESS_TTL.as_nanos() as u64
@@ -332,7 +332,7 @@ pub async fn process_migrated_canister_deleted(
     {
         return ProcessingResult::NoProgress;
     }
-    // restore controllers of replaced
+    // restore controllers
     let controllers = request
         .migrated_canister_original_controllers
         .iter()

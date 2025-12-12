@@ -964,7 +964,7 @@ async fn validation_fails_not_found() {
     .await
     .unwrap_err();
     assert!(
-        matches!(err, ValidationError::CallFailed { reason } if reason.contains(&format!("Call to management canister (`canister_status`) failed. Ensure that the canister {} is the expected migrated and try again later.", nonexistent_canister)))
+        matches!(err, ValidationError::CallFailed { reason } if reason.contains(&format!("Call to management canister (`canister_status`) failed. Ensure that the canister {} is the expected migrated canister and try again later.", nonexistent_canister)))
     );
 
     let err = migrate_canister(
@@ -978,7 +978,7 @@ async fn validation_fails_not_found() {
     .await
     .unwrap_err();
     assert!(
-        matches!(err, ValidationError::CallFailed { reason } if reason.contains(&format!("Call to management canister (`canister_status`) failed. Ensure that the canister {} is the expected replaced and try again later.", nonexistent_canister)))
+        matches!(err, ValidationError::CallFailed { reason } if reason.contains(&format!("Call to management canister (`canister_status`) failed. Ensure that the canister {} is the expected replaced canister and try again later.", nonexistent_canister)))
     );
 }
 
@@ -1425,7 +1425,7 @@ async fn after_validation_migrated_canister_not_stopped() {
     let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
         panic!()
     };
-    assert_eq!(reason, &"Migrated is not stopped.".to_string());
+    assert_eq!(reason, &"Migrated canister is not stopped.".to_string());
 }
 
 #[tokio::test]
@@ -1455,7 +1455,7 @@ async fn after_validation_replaced_canister_not_stopped() {
     let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
         panic!()
     };
-    assert_eq!(reason, &"Replaced is not stopped.".to_string());
+    assert_eq!(reason, &"Replaced canister is not stopped.".to_string());
 }
 
 #[tokio::test]
@@ -1497,7 +1497,7 @@ async fn after_validation_replaced_canister_has_snapshot() {
     let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
         panic!()
     };
-    assert_eq!(reason, &"Replaced has snapshots.".to_string());
+    assert_eq!(reason, &"Replaced canister has snapshots.".to_string());
 }
 
 #[tokio::test]
@@ -1540,7 +1540,7 @@ async fn after_validation_insufficient_cycles() {
     let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
         panic!()
     };
-    assert!(reason.contains("Migrated does not have sufficient cycles"));
+    assert!(reason.contains("Migrated canister does not have sufficient cycles"));
 }
 
 #[tokio::test]

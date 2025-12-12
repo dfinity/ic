@@ -46,9 +46,9 @@ impl InternetComputer for ProductionInternetComputer {
     }
 }
 
-/// Represents the recovery state for controllers of either migrated or replaced.
+/// Represents the recovery state for controllers of either migrated or replaced canisters.
 /// Such a recovery is needed for a failed request in order to restore
-/// the original controllers of migrated or replaced, respectively.
+/// the original controllers of migrated or replaced canisters, respectively.
 #[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ControllerRecoveryState {
     /// Controller recovery is pending and no progress has been made so far.
