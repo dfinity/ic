@@ -7,6 +7,7 @@ name = "ic-migration-canister"
 version.workspace = true
 
 [dependencies]
+async-trait = { workspace = true }
 candid = { workspace = true }
 dfn_http_metrics = { path = "../rust_canisters/dfn_http_metrics" }
 futures = { workspace = true }
@@ -30,11 +31,13 @@ ic-http-types = { path = "../../packages/ic-http-types" }
 ic-management-canister-types = { workspace = true }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-nervous-system-common-test-utils = { path = "../nervous_system/common/test_utils" }
+ic-nns-constants = { path = "../nns/constants" }
 ic-nns-test-utils = { path = "../nns/test_utils" }
 ic-transport-types = { workspace = true }
 ic-universal-canister = { path = "../universal_canister/lib" }
 pocket-ic = { path = "../../packages/pocket-ic" }
 prometheus-parse = { workspace = true }
+rand = { workspace = true }
 registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
 serde_bytes = { workspace = true }
