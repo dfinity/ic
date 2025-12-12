@@ -1,6 +1,6 @@
 use crate::MetadataEntry;
 use crate::common::storage::types::{RosettaBlock, RosettaCounter};
-use anyhow::{Context, bail};
+use anyhow::{Context, anyhow, bail};
 use candid::Nat;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::tokens::Zero;
@@ -477,9 +477,9 @@ pub fn update_account_balances(
                     })?;
             }
         }
-        if collector_before != current_fee_collector_107
-            && let Some(collector) = current_fee_collector_107
-        {
+        if collector_before != current_fee_collector_107 {
+            let collector = current_fee_collector_107
+                .ok_or_else(|| anyhow!("Cannot switch from fee collector 107 to legacy"))?;
             insert_tx.prepare_cached("INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = excluded.value;")?.execute(params![METADATA_FEE_COL, candid::encode_one(collector)?])?;
         }
         let last_block_index_bytes = last_block_index.to_le_bytes();
