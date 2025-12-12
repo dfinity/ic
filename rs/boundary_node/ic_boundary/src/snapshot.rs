@@ -22,7 +22,6 @@ use ic_registry_client_helpers::{
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
-use ic_registry_replicator::RegistryReplicator;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use rand::seq::SliceRandom;
@@ -566,22 +565,6 @@ impl<T: Snapshot> Run for WithMetricsSnapshot<T> {
 
             SnapshotResult::NoNewVersion => {}
         }
-
-        Ok(())
-    }
-}
-
-/// Wrapper for registry replicator to run it as Task
-#[derive(derive_new::new)]
-pub struct RegistryReplicatorRunner(RegistryReplicator);
-
-#[async_trait]
-impl Run for RegistryReplicatorRunner {
-    async fn run(&self, token: CancellationToken) -> Result<(), Error> {
-        self.0
-            .start_polling(token)
-            .context("unable to start polling Registry")?
-            .await; // This terminates when `token` is cancelled
 
         Ok(())
     }

@@ -13,7 +13,6 @@ use ic_config::crypto::CryptoConfig;
 use ic_types::CanisterId;
 use std::time::Duration;
 use std::{net::SocketAddr, path::PathBuf};
-use url::Url;
 
 use crate::{
     core::{AUTHOR_NAME, SERVICE_NAME},
@@ -76,27 +75,9 @@ pub struct Cli {
 #[derive(Args)]
 #[clap(group(ArgGroup::new("registry").required(true)))]
 pub struct Registry {
-    /// Comma separated list of NNS URLs to bootstrap the registry
-    #[clap(env, long, value_delimiter = ',', default_value = "https://ic0.app")]
-    pub registry_nns_urls: Vec<Url>,
-
-    /// The path to the NNS public key file.
-    /// Required if registry local store isn't initialized.
-    #[clap(env, long)]
-    pub registry_nns_pub_key_pem: Option<PathBuf>,
-
-    /// The delay between NNS polls
-    #[clap(env, long, default_value = "5s", value_parser = parse_duration)]
-    pub registry_nns_poll_interval: Duration,
-
     /// The registry local store path to be populated
     #[clap(env, long, group = "registry")]
     pub registry_local_store_path: Option<PathBuf>,
-
-    /// Whether to disable internal registry replicator.
-    /// It will work only if the local registry state is initialized.
-    #[clap(env, long)]
-    pub registry_disable_replicator: bool,
 
     /// Instead of using the registry - use the specified replica nodes.
     /// This disables the registry client, registry replicator and health checking.
