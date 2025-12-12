@@ -6,63 +6,12 @@ use ic_protobuf::registry::{
 };
 use logs::{LogEntry, RewardsPerNodeProviderLog};
 use std::collections::{BTreeMap, HashMap};
-use std::fmt::{Display, Formatter};
-
 pub mod logs;
 
 #[derive(Debug, PartialEq)]
 pub struct RewardsPerNodeProvider {
     pub rewards_per_node_provider: BTreeMap<PrincipalId, u64>,
     pub computation_log: BTreeMap<PrincipalId, RewardsPerNodeProviderLog>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NodeOperator {
-    pub node_operator_principal_id: PrincipalId,
-    pub node_allowance: u64,
-    pub node_provider_principal_id: PrincipalId,
-    pub dc_id: String,
-    pub rewardable_nodes: std::collections::BTreeMap<String, u32>,
-    pub ipv6: Option<String>,
-    pub max_rewardable_nodes: std::collections::BTreeMap<String, u32>,
-}
-
-impl Display for NodeOperator {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "NodeOperator {{ node_operator_principal_id: {}, node_allowance: {}, node_provider_principal_id: {}, dc_id: {}, rewardable_nodes: {:?}, ipv6: {:?}, max_rewardable_nodes: {:?} }}",
-            self.node_operator_principal_id,
-            self.node_allowance,
-            self.node_provider_principal_id,
-            self.dc_id,
-            self.rewardable_nodes,
-            self.ipv6,
-            self.max_rewardable_nodes,
-        )
-    }
-}
-
-impl TryFrom<NodeOperatorRecord> for NodeOperator {
-    type Error = String;
-
-    fn try_from(value: NodeOperatorRecord) -> Result<Self, Self::Error> {
-        Ok(NodeOperator {
-            node_operator_principal_id: PrincipalId::try_from(
-                value.node_operator_principal_id.clone(),
-            )
-            .map_err(|e| format!("Failed to convert node_operator_principal_id: {}", e))?,
-            node_allowance: value.node_allowance,
-            node_provider_principal_id: PrincipalId::try_from(
-                value.node_provider_principal_id.clone(),
-            )
-            .map_err(|e| format!("Failed to convert node_provider_principal_id: {}", e))?,
-            dc_id: value.dc_id,
-            rewardable_nodes: value.rewardable_nodes,
-            ipv6: value.ipv6,
-            max_rewardable_nodes: value.max_rewardable_nodes,
-        })
-    }
 }
 
 pub fn calculate_rewards_v0(
@@ -79,9 +28,6 @@ pub fn calculate_rewards_v0(
     let mut computation_log = BTreeMap::new();
 
     for (key_string, node_operator) in node_operators.iter() {
-        let str_no: NodeOperator = node_operator.clone().try_into()?;
-        ic_cdk::println!("node operator with key:{} {}", key_string, str_no);
-
         let node_operator_id = PrincipalId::try_from(&node_operator.node_operator_principal_id)
             .map_err(|e| {
                 format!(

@@ -2,6 +2,7 @@
 use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
+use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
@@ -242,6 +243,32 @@ fn test_registry_migration_with_golden_state() {
     for _ in 0..100 {
         state_machine.advance_time(std::time::Duration::from_secs(1));
         state_machine.tick();
+    }
+
+    let rewards: MonthlyNodeProviderRewards =
+        nns_get_most_recent_monthly_node_provider_rewards(&state_machine).unwrap();
+
+    let xdr_permyriad_per_icp = rewards
+        .xdr_conversion_rate
+        .clone()
+        .unwrap()
+        .xdr_permyriad_per_icp
+        .unwrap();
+
+    for node_provider_rewards in rewards.rewards {
+        let node_provider = node_provider_rewards.node_provider.unwrap().id.unwrap();
+
+        let rewards_icp =
+            (node_provider_rewards.amount_e8s as u128 / TOKEN_SUBDIVIDABLE_BY as u128) as u64;
+        let xdr_permyriad_reward = ((node_provider_rewards.amount_e8s as u128
+            * xdr_permyriad_per_icp as u128)
+            / TOKEN_SUBDIVIDABLE_BY as u128) as u64
+            + 1;
+
+        println!(
+            "Node Provider: {}, Rewards: {} ICP ({} XDR permyriad)",
+            node_provider, rewards_icp, xdr_permyriad_reward
+        );
     }
 }
 
