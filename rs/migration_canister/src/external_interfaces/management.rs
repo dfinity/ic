@@ -151,20 +151,16 @@ pub async fn canister_status(
                 canister_id, e
             );
             match e {
-                ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(_)
-                | ic_cdk::call::CallFailed::CallPerformFailed(_) => ProcessingResult::NoProgress,
-                ic_cdk::call::CallFailed::CallRejected(call_rejected) => {
-                    if call_rejected
-                        .reject_message()
-                        .contains("Only the controllers of the canister")
-                    {
-                        ProcessingResult::FatalFailure(ValidationError::NotController {
+                CallFailed::CallRejected(e) => {
+                    if e.reject_code() == Ok(RejectCode::DestinationInvalid) {
+                        ProcessingResult::FatalFailure(ValidationError::CanisterNotFound {
                             canister: canister_id,
                         })
                     } else {
                         ProcessingResult::NoProgress
                     }
                 }
+                _ => ProcessingResult::NoProgress,
             }
         }
     }
@@ -175,6 +171,7 @@ pub async fn canister_status(
 
 /// This is a success if the call is a success
 /// and a fatal failure if the canister does not exist.
+/// Otherwise, this function returns no progress.
 pub async fn get_canister_info(canister_id: Principal) -> ProcessingResult<CanisterInfoResult, ()> {
     let args = CanisterInfoArgs {
         canister_id,

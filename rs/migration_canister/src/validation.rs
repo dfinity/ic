@@ -16,10 +16,51 @@ use crate::{
     canister_state::CanisterGuard,
     canister_state::requests::list_by,
     external_interfaces::{
-        management::{CanisterStatusType, assert_no_snapshots, canister_status},
+        management::{
+            CanisterStatusResponse, CanisterStatusType, assert_no_snapshots, canister_status,
+            get_canister_info,
+        },
         registry::get_subnet_for_canister,
     },
+    processing::ProcessingResult,
 };
+
+async fn check_controllers_and_get_status(
+    canister_id: Principal,
+    caller: Principal,
+) -> Result<CanisterStatusResponse, ValidationError> {
+    let canister_info = match get_canister_info(canister_id).await {
+        ProcessingResult::Success(canister_info) => canister_info,
+        ProcessingResult::NoProgress => {
+            return Err(ValidationError::CallFailed {
+                reason: "Call to management canister (`canister_info`) failed. Try again later."
+                    .to_string(),
+            });
+        }
+        ProcessingResult::FatalFailure(()) => {
+            return Err(ValidationError::CanisterNotFound {
+                canister: canister_id,
+            });
+        }
+    };
+    if !canister_info.controllers.contains(&canister_self()) {
+        return Err(ValidationError::NotController {
+            canister: canister_id,
+        });
+    }
+    if !canister_info.controllers.contains(&caller) {
+        return Err(ValidationError::CallerNotController {
+            canister: canister_id,
+        });
+    }
+    let ProcessingResult::Success(canister_status) = canister_status(canister_id).await else {
+        return Err(ValidationError::CallFailed {
+            reason: "Call to management canister (`canister_status`) failed. Try again later."
+                .to_string(),
+        });
+    };
+    Ok(canister_status)
+}
 
 /// Given caller-provided data, returns
 /// - a `Request` that can very likely be processed and
@@ -42,28 +83,10 @@ pub async fn validate_request(
         return Err(ValidationError::SameSubnet(Reserved));
     }
 
-    // 2. Is the caller controller of the migrated canister? This call also fails if we are not controller.
-    let migrated_canister_status = canister_status(migrated)
-        .await
-        .into_result(&format!("Call to management canister (`canister_status`) failed. Ensure that the canister {} is the expected migrated canister and try again later.", migrated))?;
-    if !migrated_canister_status
-        .settings
-        .controllers
-        .contains(&caller)
-    {
-        return Err(ValidationError::CallerNotController { canister: migrated });
-    }
-    // 3. Is the caller controller of the replaced canister? This call also fails if we are not controller.
-    let replaced_canister_status = canister_status(replaced)
-        .await
-        .into_result(&format!("Call to management canister (`canister_status`) failed. Ensure that the canister {} is the expected replaced canister and try again later.", replaced))?;
-    if !replaced_canister_status
-        .settings
-        .controllers
-        .contains(&caller)
-    {
-        return Err(ValidationError::CallerNotController { canister: replaced });
-    }
+    // 2. Is the caller controller of the migrated canister?
+    let migrated_canister_status = check_controllers_and_get_status(migrated, caller).await?;
+    // 3. Is the caller controller of the replaced canister?
+    let replaced_canister_status = check_controllers_and_get_status(replaced, caller).await?;
 
     // Now we can acquire the locks
     // to prevent reentrancy bugs across asynchronous calls
