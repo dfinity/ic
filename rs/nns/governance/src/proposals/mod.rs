@@ -200,6 +200,10 @@ impl ValidProposalAction {
             ValidProposalAction::ApproveGenesisKyc(approve_genesis_kyc) => {
                 Ok(approve_genesis_kyc.to_self_describing_action())
             }
+            ValidProposalAction::AddOrRemoveNodeProvider(add_or_remove_node_provider) => {
+                Ok(add_or_remove_node_provider.to_self_describing_action())
+            }
+
             ValidProposalAction::ExecuteNnsFunction(execute_nns_function) => {
                 execute_nns_function.to_self_describing_action(env).await
             }
