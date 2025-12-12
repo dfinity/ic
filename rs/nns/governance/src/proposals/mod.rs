@@ -38,7 +38,7 @@ mod decode_candid_args_to_self_describing_value;
 /// Unlike the protobuf Action enum, this enum only includes non-obsolete actions.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq)]
-pub enum ValidProposalAction {
+pub(crate) enum ValidProposalAction {
     ManageNeuron(Box<ManageNeuron>),
     ManageNetworkEconomics(NetworkEconomics),
     Motion(Motion),

@@ -2,35 +2,34 @@ use crate::pb::v1::{
     AddOrRemoveNodeProvider, GovernanceError, NodeProvider, add_or_remove_node_provider::Change,
     governance_error::ErrorType,
 };
+
 use ic_base_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, protobuf::AccountIdentifier as AccountIdentifierPb};
 
-/// A validated AddOrRemoveNodeProvider proposal.
-/// This enum ensures that invalid states cannot be represented.
+/// A validated AddOrRemoveNodeProvider proposal action.
 #[derive(Debug, Clone, PartialEq)]
-pub enum ValidAddOrRemoveNodeProvider {
+pub(crate) enum ValidAddOrRemoveNodeProvider {
     ToAdd(ValidAddNodeProvider),
     ToRemove(ValidRemoveNodeProvider),
 }
 
 /// A validated node provider to be added.
-/// All fields are guaranteed to be valid at construction time.
 #[derive(Debug, Clone, PartialEq)]
-pub struct ValidAddNodeProvider {
+pub(crate) struct ValidAddNodeProvider {
     id: PrincipalId,
     reward_account: Option<ValidAccountIdentifier>,
 }
 
 /// A validated node provider to be removed.
-/// The ID is guaranteed to be valid at construction time.
 #[derive(Debug, Clone, PartialEq)]
-pub struct ValidRemoveNodeProvider {
+pub(crate) struct ValidRemoveNodeProvider {
     id: PrincipalId,
 }
 
 /// A validated account identifier that is guaranteed to be 32 bytes (including checksum).
+// It can also be used other places where we prefer 32-byte account identifiers for consistency.
 #[derive(Debug, Clone, PartialEq)]
-pub struct ValidAccountIdentifier(AccountIdentifier);
+pub(crate) struct ValidAccountIdentifier(AccountIdentifier);
 
 impl TryFrom<AccountIdentifierPb> for ValidAccountIdentifier {
     type Error = String;
@@ -54,48 +53,20 @@ impl TryFrom<AddOrRemoveNodeProvider> for ValidAddOrRemoveNodeProvider {
     type Error = GovernanceError;
 
     fn try_from(value: AddOrRemoveNodeProvider) -> Result<Self, Self::Error> {
-        match value.change {
-            None => Err(GovernanceError::new_with_message(
+        let Some(change) = value.change else {
+            return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 "AddOrRemoveNodeProvider proposal must have a change field",
+            ));
+        };
+
+        match change {
+            Change::ToAdd(to_add) => Ok(ValidAddOrRemoveNodeProvider::ToAdd(
+                ValidAddNodeProvider::try_from(to_add)?,
             )),
-            Some(Change::ToAdd(node_provider)) => {
-                let NodeProvider { id, reward_account } = node_provider;
-                let id = id.ok_or_else(|| {
-                    GovernanceError::new_with_message(
-                        ErrorType::InvalidProposal,
-                        "AddOrRemoveNodeProvider proposal must have a node provider id",
-                    )
-                })?;
-                let reward_account = reward_account
-                    .map(ValidAccountIdentifier::try_from)
-                    .transpose()
-                    .map_err(|e| {
-                        GovernanceError::new_with_message(
-                            ErrorType::InvalidProposal,
-                            format!("The account_identifier field is invalid: {e}"),
-                        )
-                    })?;
-                Ok(ValidAddOrRemoveNodeProvider::ToAdd(ValidAddNodeProvider {
-                    id,
-                    reward_account,
-                }))
-            }
-            Some(Change::ToRemove(node_provider)) => {
-                let NodeProvider {
-                    id,
-                    reward_account: _,
-                } = node_provider;
-                let id = id.ok_or_else(|| {
-                    GovernanceError::new_with_message(
-                        ErrorType::InvalidProposal,
-                        "AddOrRemoveNodeProvider proposal must have a node provider id",
-                    )
-                })?;
-                Ok(ValidAddOrRemoveNodeProvider::ToRemove(
-                    ValidRemoveNodeProvider { id },
-                ))
-            }
+            Change::ToRemove(to_remove) => Ok(ValidAddOrRemoveNodeProvider::ToRemove(
+                ValidRemoveNodeProvider::try_from(to_remove)?,
+            )),
         }
     }
 }
@@ -104,8 +75,8 @@ impl ValidAddOrRemoveNodeProvider {
     /// Validates the proposal against the current state of node providers.
     ///
     /// Preconditions:
-    /// - For ToAdd: The node provider must not already exist in the registry.
-    /// - For ToRemove: The node provider must exist in the registry.
+    /// - For ToAdd: The node provider must not already exist in the `node_providers` list.
+    /// - For ToRemove: The node provider must exist in the `node_providers` list.
     pub fn validate(&self, node_providers: &[NodeProvider]) -> Result<(), GovernanceError> {
         match self {
             ValidAddOrRemoveNodeProvider::ToAdd(valid_add_node_provider) => {
@@ -132,34 +103,51 @@ impl ValidAddOrRemoveNodeProvider {
     }
 }
 
+impl TryFrom<NodeProvider> for ValidAddNodeProvider {
+    type Error = GovernanceError;
+
+    fn try_from(value: NodeProvider) -> Result<Self, Self::Error> {
+        let NodeProvider { id, reward_account } = value;
+
+        let id = id.ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "AddOrRemoveNodeProvider proposal must have a node provider id",
+            )
+        })?;
+
+        let reward_account = reward_account
+            .map(ValidAccountIdentifier::try_from)
+            .transpose()
+            .map_err(|e| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("The account_identifier field is invalid: {e}"),
+                )
+            })?;
+
+        Ok(ValidAddNodeProvider { id, reward_account })
+    }
+}
+
 impl ValidAddNodeProvider {
     pub fn validate(&self, node_providers: &[NodeProvider]) -> Result<(), GovernanceError> {
-        if node_providers
+        let already_exists = node_providers
             .iter()
-            .any(|node_provider| node_provider.id == Some(self.id))
-        {
+            .any(|node_provider| node_provider.id == Some(self.id));
+        if already_exists {
             return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                format!(
-                    "AddOrRemoveNodeProvider cannot add already existing Node Provider: {}",
-                    self.id
-                ),
+                ErrorType::PreconditionFailed,
+                format!("NodeProvider with id {} already exists", self.id),
             ));
         }
+
         Ok(())
     }
 
     pub fn execute(&self, node_providers: &mut Vec<NodeProvider>) -> Result<(), GovernanceError> {
-        // Double-check that the node provider doesn't already exist
-        if node_providers
-            .iter()
-            .any(|node_provider| node_provider.id == Some(self.id))
-        {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "A node provider with the same principal already exists.",
-            ));
-        }
+        // Validate again at execution time, since the state may have changed since validation.
+        self.validate(node_providers)?;
 
         let reward_account = self
             .reward_account
@@ -174,38 +162,56 @@ impl ValidAddNodeProvider {
     }
 }
 
+impl TryFrom<NodeProvider> for ValidRemoveNodeProvider {
+    type Error = GovernanceError;
+
+    fn try_from(value: NodeProvider) -> Result<Self, Self::Error> {
+        let NodeProvider {
+            id,
+            // The reward_account is not used for a removal.
+            reward_account: _,
+        } = value;
+
+        let id = id.ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "AddOrRemoveNodeProvider proposal must have a node provider id",
+            )
+        })?;
+
+        Ok(ValidRemoveNodeProvider { id })
+    }
+}
+
 impl ValidRemoveNodeProvider {
     pub fn validate(&self, node_providers: &[NodeProvider]) -> Result<(), GovernanceError> {
-        if !node_providers
-            .iter()
-            .any(|node_provider| node_provider.id == Some(self.id))
-        {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                format!(
-                    "AddOrRemoveNodeProvider ToRemove must target an existing Node Provider \
-                      but targeted {}",
-                    self.id
-                ),
-            ));
-        }
+        self.find_existing_node_provider_position(node_providers)?;
         Ok(())
     }
 
     pub fn execute(&self, node_providers: &mut Vec<NodeProvider>) -> Result<(), GovernanceError> {
-        // Find and remove the node provider
-        if let Some(pos) = node_providers
+        let existing_node_provider_position =
+            self.find_existing_node_provider_position(node_providers)?;
+        node_providers.remove(existing_node_provider_position);
+        Ok(())
+    }
+
+    fn find_existing_node_provider_position(
+        &self,
+        node_providers: &[NodeProvider],
+    ) -> Result<usize, GovernanceError> {
+        node_providers
             .iter()
             .position(|node_provider| node_provider.id == Some(self.id))
-        {
-            node_providers.remove(pos);
-            Ok(())
-        } else {
-            Err(GovernanceError::new_with_message(
-                ErrorType::NotFound,
-                "Can't find a NodeProvider with the same principal id.",
-            ))
-        }
+            .ok_or_else(|| {
+                GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    format!(
+                        "AddOrRemoveNodeProvider ToRemove must target an existing Node Provider but targeted {}",
+                        self.id
+                    ),
+                )
+            })
     }
 }
 

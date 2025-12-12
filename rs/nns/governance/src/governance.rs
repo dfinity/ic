@@ -4128,8 +4128,9 @@ impl Governance {
                 let result = self.approve_genesis_kyc(&proposal.principals);
                 self.set_proposal_execution_status(pid, result);
             }
-            ValidProposalAction::AddOrRemoveNodeProvider(proposal) => {
-                let result = proposal.execute(&mut self.heap_data.node_providers);
+            ValidProposalAction::AddOrRemoveNodeProvider(add_or_remove_node_provider) => {
+                let result =
+                    add_or_remove_node_provider.execute(&mut self.heap_data.node_providers);
                 self.set_proposal_execution_status(pid, result);
             }
             ValidProposalAction::RewardNodeProvider(ref reward) => {
