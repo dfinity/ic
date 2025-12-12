@@ -68,7 +68,7 @@ jobs:
           # transient.
           retry \
             --times=10 \
-            --delay=1,2,4,8,16,30,60,120,300,600 \
+            --delay=1,2,4,8,15,30,60,120,300,600 \
             -- time python \
             ci/src/mainnet_revisions/mainnet_revisions.py \
             canisters
