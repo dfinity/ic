@@ -182,7 +182,7 @@ rust_ic_test_suite(
         "@crate_index//:more-asserts",
         "@crate_index//:num-traits",
         "@crate_index//:proptest",
-        "@crate_index//:regex",
+        "@crate_index//:regex-lite",
         "@crate_index//:rstest",
         "@crate_index//:serde",
         "@crate_index//:tokio",
