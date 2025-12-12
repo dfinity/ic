@@ -1,6 +1,6 @@
 [package]
 name = "pocket-ic-server"
-version = "10.0.0"
+version = "11.0.0"
 edition.workspace = true
 
 [dependencies]

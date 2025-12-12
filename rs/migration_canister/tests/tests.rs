@@ -5,6 +5,7 @@ use ic_management_canister_types::{CanisterLogRecord, CanisterSettings};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, Payload as _,
 };
+use ic_nervous_system_common_test_utils::get_gauge;
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::Call;
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
@@ -14,6 +15,7 @@ use pocket_ic::{
     common::rest::{IcpFeatures, IcpFeaturesConfig},
     nonblocking::PocketIc,
 };
+use prometheus_parse::Scrape;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
@@ -262,6 +264,36 @@ async fn get_status(
         .await
         .unwrap();
     Decode!(&res, Option<MigrationStatus>).unwrap()
+}
+
+async fn fetch_metrics(pic: &PocketIc) -> Scrape {
+    let http_request = ic_http_types::HttpRequest {
+        method: "GET".to_string(),
+        url: "/metrics".to_string(),
+        headers: vec![],
+        body: serde_bytes::ByteBuf::default(),
+    };
+
+    let res = pic
+        .query_call(
+            MIGRATION_CANISTER_ID.into(),
+            Principal::anonymous(),
+            "http_request",
+            Encode!(&http_request).unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let response = Decode!(&res, ic_http_types::HttpResponse).unwrap();
+
+    let iterator = String::from_utf8(response.body.into_vec())
+        .unwrap()
+        .lines()
+        .map(|s| Ok(s.to_owned()))
+        .collect::<Vec<_>>()
+        .into_iter();
+
+    prometheus_parse::Scrape::parse(iterator).unwrap()
 }
 
 /// Advances time by a second and executes enough ticks that the state machine
@@ -556,6 +588,14 @@ async fn replay_call_after_migration() {
     let source = sources[0];
     let target = targets[0];
 
+    assert_eq!(
+        get_gauge(
+            &fetch_metrics(&pic).await,
+            "migration_canister_num_successes_in_past_24_h"
+        ),
+        0.0
+    );
+
     // We deploy the universal canister WASM
     // to both the "source" and "target" canisters
     // so that we can call the "source" canister ID
@@ -602,6 +642,14 @@ async fn replay_call_after_migration() {
         pic.tick().await;
     }
 
+    assert_eq!(
+        get_gauge(
+            &fetch_metrics(&pic).await,
+            "migration_canister_num_successes_in_past_24_h"
+        ),
+        1.0
+    );
+
     // We restart the "source" canister right away.
     pic.start_canister(source, Some(sender)).await.unwrap();
 
@@ -610,6 +658,30 @@ async fn replay_call_after_migration() {
     assert_eq!(resp.status(), reqwest::StatusCode::BAD_REQUEST);
     let message = String::from_utf8(resp.bytes().await.unwrap().to_vec()).unwrap();
     assert!(message.contains("Invalid request expiry"));
+    assert_eq!(
+        get_gauge(
+            &fetch_metrics(&pic).await,
+            "migration_canister_num_successes_in_past_24_h"
+        ),
+        1.0
+    );
+}
+
+#[tokio::test]
+async fn metrics() {
+    let Setup { pic, .. } = setup(Settings::default()).await;
+
+    let metrics = fetch_metrics(&pic).await;
+
+    assert_eq!(
+        get_gauge(&metrics, "migration_canister_num_successes_in_past_24_h"),
+        0.0
+    );
+
+    assert_eq!(
+        get_gauge(&metrics, "migration_canister_migrations_enabled"),
+        1.0
+    );
 }
 
 async fn concurrent_migration(
@@ -719,6 +791,106 @@ async fn concurrent_migration_target() {
         replace_canister_id: target,
     };
     concurrent_migration(&pic, sender, args1, args2, target).await;
+}
+
+async fn canister_changed_before_migration<F, Fut>(setup: &Setup, race: F)
+where
+    F: Fn() -> Fut,
+    Fut: Future<Output = Principal>,
+{
+    let Setup {
+        pic,
+        sources,
+        targets,
+        source_controllers,
+        ..
+    } = setup;
+    let sender = source_controllers[0];
+    let source = sources[0];
+    let target = targets[0];
+
+    let args = MigrateCanisterArgs {
+        canister_id: source,
+        replace_canister_id: target,
+    };
+    migrate_canister(pic, sender, &args).await.unwrap();
+
+    // Change the canister (source or target) right away after requesting its migration;
+    // in particular, before the (accepted) request is processed in a timer.
+    let canister = race().await;
+    assert!(canister == source || canister == target);
+
+    for _ in 0..10 {
+        // Advance time so that timers are triggered.
+        pic.advance_time(Duration::from_secs(1)).await;
+        pic.tick().await;
+    }
+
+    let status = get_status(pic, sender, &args).await;
+    assert!(matches!(
+        status.unwrap(),
+        MigrationStatus::Failed {reason, ..} if reason.contains(&format!("Failed to set the migration canister as the exclusive controller of canister {}", canister))
+    ));
+}
+
+#[tokio::test]
+async fn source_controllers_changed_before_migration() {
+    let setup = setup(Settings::default()).await;
+
+    let pic = &setup.pic;
+    let sender = setup.source_controllers[0];
+    let source = setup.sources[0];
+    let race = || async {
+        pic.set_controllers(source, Some(sender), vec![sender])
+            .await
+            .unwrap();
+        source
+    };
+    canister_changed_before_migration(&setup, race).await;
+}
+
+#[tokio::test]
+async fn source_deleted_before_migration() {
+    let setup = setup(Settings::default()).await;
+
+    let pic = &setup.pic;
+    let sender = setup.source_controllers[0];
+    let source = setup.sources[0];
+    let race = || async {
+        pic.delete_canister(source, Some(sender)).await.unwrap();
+        source
+    };
+    canister_changed_before_migration(&setup, race).await;
+}
+
+#[tokio::test]
+async fn target_controllers_changed_before_migration() {
+    let setup = setup(Settings::default()).await;
+
+    let pic = &setup.pic;
+    let sender = setup.source_controllers[0];
+    let target = setup.targets[0];
+    let race = || async {
+        pic.set_controllers(target, Some(sender), vec![sender])
+            .await
+            .unwrap();
+        target
+    };
+    canister_changed_before_migration(&setup, race).await;
+}
+
+#[tokio::test]
+async fn target_deleted_before_migration() {
+    let setup = setup(Settings::default()).await;
+
+    let pic = &setup.pic;
+    let sender = setup.source_controllers[0];
+    let target = setup.targets[0];
+    let race = || async {
+        pic.delete_canister(target, Some(sender)).await.unwrap();
+        target
+    };
+    canister_changed_before_migration(&setup, race).await;
 }
 
 #[tokio::test]
@@ -1248,6 +1420,7 @@ async fn after_validation_source_not_stopped() {
     advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
+    advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
         panic!()
@@ -1274,6 +1447,7 @@ async fn after_validation_target_not_stopped() {
     migrate_canister(&pic, sender, &args).await.unwrap();
     // validation succeeded. now we break migration by interfering.
     pic.start_canister(target, Some(sender)).await.unwrap();
+    advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
@@ -1315,6 +1489,7 @@ async fn after_validation_target_has_snapshot() {
         .await
         .unwrap();
 
+    advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
@@ -1360,6 +1535,7 @@ async fn after_validation_insufficient_cycles() {
     advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
+    advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
         panic!()
@@ -1387,6 +1563,7 @@ async fn failure_controllers_restored() {
     migrate_canister(&pic, sender, &args).await.unwrap();
     // Validation succeeded. Now we break migration by interfering.
     pic.start_canister(source, Some(sender)).await.unwrap();
+    advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;

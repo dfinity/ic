@@ -93,7 +93,6 @@ rust_test(
     name = "config_lib_test_dev",
     crate = ":config_lib_dev",
     crate_features = ["dev"],
-    data = glob(["golden/*"]),
     env = {"CARGO_MANIFEST_DIR": "rs/ic_os/generate_guestos_vm_config"},
     deps = TEST_DEPENDENCIES,
 )

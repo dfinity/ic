@@ -1,5 +1,5 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
 
@@ -60,7 +60,6 @@ rust_library(
     name = "root",
     srcs = glob([
         "src/**",
-        "gen/**",
     ]),
     aliases = ALIASES,
     crate_name = "ic_sns_root",
@@ -134,18 +133,4 @@ rust_test(
         ":build_script",
         ":root",
     ],
-)
-
-rust_test_suite(
-    name = "root_integration",
-    srcs = glob(
-        ["tests/**/*.rs"],
-        exclude = ["tests/check_generated_files.rs"],
-    ),
-    aliases = ALIASES,
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/sns/root/",
-    },
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":root"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
