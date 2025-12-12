@@ -77,7 +77,7 @@ pub fn parse_threshold_sig_key_from_pem_file(
 pub fn parse_threshold_sig_key_from_der(
     der_bytes: &[u8],
 ) -> Result<ThresholdSigPublicKey, KeyConversionError> {
-    let pk_bytes = public_key_from_der(der_bytes).map_err(|e| KeyConversionError::InvalidDer(e))?;
+    let pk_bytes = public_key_from_der(der_bytes).map_err(KeyConversionError::InvalidDer)?;
     Ok(ThresholdSigPublicKey::from(PublicKeyBytes(pk_bytes)))
 }
 
@@ -89,7 +89,7 @@ pub fn threshold_sig_public_key_to_der(
     pk: ThresholdSigPublicKey,
 ) -> Result<Vec<u8>, KeyConversionError> {
     let key = PublicKeyBytes(pk.into_bytes());
-    public_key_to_der(&key.0).map_err(|e| KeyConversionError::DerEncoding(e))
+    public_key_to_der(&key.0).map_err(KeyConversionError::DerEncoding)
 }
 
 /// Encodes a threshold signature public key into PEM format.
