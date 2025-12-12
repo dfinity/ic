@@ -141,11 +141,7 @@ fn crypto_ed25519_basicsig_sign<M: Measurement, R: Rng + CryptoRng>(
 
     group.bench_function("sign", |bench| {
         bench.iter(|| {
-            assert!(
-                temp_crypto
-                    .sign_basic(&message, NODE_1, REGISTRY_VERSION)
-                    .is_ok()
-            );
+            assert!(temp_crypto.sign_basic(&message).is_ok());
         })
     });
 }
