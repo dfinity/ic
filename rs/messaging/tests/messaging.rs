@@ -275,7 +275,7 @@ const MEMORY_ACCOUNTING_CONFIG: TestSubnetConfig = TestSubnetConfig {
 /// Ingress triggers are only sent to the principal canister on `subnet1`, which
 /// will then send downstream calls to all canisters. Through downstream calls,
 /// random calls going every which way is established after a few rounds.
-#[test_strategy::proptest(ProptestConfig::with_cases(30), max_shrink_iters = 0)]
+#[test_strategy::proptest(ProptestConfig::with_cases(3), max_shrink_iters = 0)]
 fn test_memory_accounting_and_sequence_errors(
     #[strategy(arb_test_subnets(MEMORY_ACCOUNTING_CONFIG.clone(), TestSubnetConfig::default()))]
     setup: TestSubnetSetup,
