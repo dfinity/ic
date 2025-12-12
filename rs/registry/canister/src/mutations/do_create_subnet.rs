@@ -789,35 +789,35 @@ mod test {
         futures::executor::block_on(registry.do_create_subnet(payload));
     }
 
-        #[test]
-        #[should_panic(
-            expected = "KeyConfig.pre_signatures_to_create_in_advance must not be specified for key vetkd:Bls12_381_G2:some_key_name"
-        )]
-        fn should_panic_when_key_not_requiring_pre_signatures_has_pre_signatures_to_create() {
-            // VetKd keys don't require pre-signatures, so specifying
-            // pre_signatures_to_create_in_advance should return an error
-            let mut registry = invariant_compliant_registry(0);
-            let payload = CreateSubnetPayload {
-                replica_version_id: ReplicaVersion::default().into(),
-                chain_key_config: Some(InitialChainKeyConfig {
-                    key_configs: vec![KeyConfigRequest {
-                        key_config: Some(KeyConfig {
-                            key_id: Some(MasterPublicKeyId::VetKd(VetKdKeyId {
-                                curve: VetKdCurve::Bls12_381_G2,
-                                name: "some_key_name".to_string(),
-                            })),
-                            pre_signatures_to_create_in_advance: Some(99),
-                            max_queue_size: Some(155),
-                        }),
-                        subnet_id: Some(*TEST_USER1_PRINCIPAL),
-                    }],
-                    signature_request_timeout_ns: None,
-                    idkg_key_rotation_period_ms: None,
-                    max_parallel_pre_signature_transcripts_in_creation: None,
-                }),
-                ..Default::default()
-            };
+    #[test]
+    #[should_panic(
+        expected = "KeyConfig.pre_signatures_to_create_in_advance must not be specified for key vetkd:Bls12_381_G2:some_key_name"
+    )]
+    fn should_panic_when_key_not_requiring_pre_signatures_has_pre_signatures_to_create() {
+        // VetKd keys don't require pre-signatures, so specifying
+        // pre_signatures_to_create_in_advance should return an error
+        let mut registry = invariant_compliant_registry(0);
+        let payload = CreateSubnetPayload {
+            replica_version_id: ReplicaVersion::default().into(),
+            chain_key_config: Some(InitialChainKeyConfig {
+                key_configs: vec![KeyConfigRequest {
+                    key_config: Some(KeyConfig {
+                        key_id: Some(MasterPublicKeyId::VetKd(VetKdKeyId {
+                            curve: VetKdCurve::Bls12_381_G2,
+                            name: "some_key_name".to_string(),
+                        })),
+                        pre_signatures_to_create_in_advance: Some(99),
+                        max_queue_size: Some(155),
+                    }),
+                    subnet_id: Some(*TEST_USER1_PRINCIPAL),
+                }],
+                signature_request_timeout_ns: None,
+                idkg_key_rotation_period_ms: None,
+                max_parallel_pre_signature_transcripts_in_creation: None,
+            }),
+            ..Default::default()
+        };
 
-            futures::executor::block_on(registry.do_create_subnet(payload));
-        }
+        futures::executor::block_on(registry.do_create_subnet(payload));
+    }
 }
