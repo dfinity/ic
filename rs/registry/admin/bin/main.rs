@@ -18,7 +18,7 @@ use ic_btc_interface::{Fees, Flag, SetConfigRequest};
 use ic_canister_client::{Agent, Sender};
 use ic_canister_client_sender::SigKeys;
 use ic_crypto_utils_threshold_sig_der::{
-    parse_threshold_sig_key, parse_threshold_sig_key_from_der,
+    parse_threshold_sig_key_from_der, parse_threshold_sig_key_from_pem_file,
 };
 use ic_http_utils::file_downloader::{FileDownloader, check_file_hash};
 use ic_interfaces_registry::{RegistryClient, RegistryDataProvider};
@@ -6047,19 +6047,11 @@ fn print_routing_table(routing_table: &Vec<(CanisterIdRange, SubnetId)>, version
 pub fn store_threshold_sig_pk<P: AsRef<Path>>(pk: &PublicKey, path: P) {
     let pk = ThresholdSigPublicKey::try_from(pk.clone())
         .expect("failed to parse threshold signature PK from protobuf");
-    let der_bytes = ic_crypto_utils_threshold_sig_der::public_key_to_der(&pk.into_bytes())
-        .expect("failed to encode threshold signature PK into DER");
-
-    let mut bytes = vec![];
-    bytes.extend_from_slice(b"-----BEGIN PUBLIC KEY-----\r\n");
-    for chunk in base64::encode(&der_bytes[..]).as_bytes().chunks(64) {
-        bytes.extend_from_slice(chunk);
-        bytes.extend_from_slice(b"\r\n");
-    }
-    bytes.extend_from_slice(b"-----END PUBLIC KEY-----\r\n");
+    let pem_bytes = ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_pem(pk)
+        .expect("failed to encode threshold signature PK into PEM");
 
     let path = path.as_ref();
-    std::fs::write(path, bytes)
+    std::fs::write(path, pem_bytes)
         .unwrap_or_else(|e| panic!("failed to store public key to {}: {}", path.display(), e));
 }
 
@@ -6360,7 +6352,7 @@ fn parse_nns_public_key(
     // If we talk to `ic0.app` we verify against mainnet root key by default.
     if verify_nns_responses || is_mainnet(&nns_url) {
         let nns_key = if let Some(path) = nns_public_key_pem_file {
-            parse_threshold_sig_key(&path).expect("Failed to parse PEM file.")
+            parse_threshold_sig_key_from_pem_file(&path).expect("Failed to parse PEM file.")
         } else {
             let decoded_nns_mainnet_key = base64::decode(IC_ROOT_PUBLIC_KEY_BASE64)
                 .expect("Failed to decode mainnet public key from base64.");

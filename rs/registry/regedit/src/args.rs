@@ -1,10 +1,9 @@
 use anyhow::{Context, Result, bail};
 use clap::Parser;
-use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_pem_file;
 use ic_registry_client::client::RegistryVersion;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use serde_json::Value;
-use std::fmt;
 use std::{collections::HashSet, fs::File, io::BufReader, path::PathBuf};
 use thiserror::Error;
 use url::Url;
@@ -338,43 +337,11 @@ impl From<Option<i64>> for VersionSpec {
     }
 }
 
-// This code is taken from rs/prep/src/prep_state_directory.rs
-fn parse_threshold_sig_key<P: AsRef<std::path::Path> + fmt::Debug>(pem_file: P) -> Result<Vec<u8>> {
-    let buf =
-        std::fs::read(&pem_file).with_context(|| format!("failed to read from {:?}", &pem_file))?;
-    let s = String::from_utf8_lossy(&buf);
-    let lines: Vec<_> = s.trim_end().lines().collect();
-    let n = lines.len();
-
-    if n < 3 {
-        bail!("input file is too short: {:?}", &pem_file);
-    }
-
-    if !lines[0].starts_with("-----BEGIN PUBLIC KEY-----") {
-        bail!(
-            "PEM file doesn't start with BEGIN PUBLIC KEY block: {:?}",
-            &pem_file
-        );
-    }
-    if !lines[n - 1].starts_with("-----END PUBLIC KEY-----") {
-        bail!(
-            "PEM file doesn't end with END PUBLIC KEY block: {:?}",
-            &pem_file
-        );
-    }
-
-    let decoded = base64::decode(lines[1..n - 1].join(""))
-        .with_context(|| format!("failed to decode base64 from: {:?}", &pem_file))?;
-
-    Ok(decoded)
-}
-
 fn get_key_material(nns_public_key: Option<PathBuf>) -> Result<Option<ThresholdSigPublicKey>> {
-    if let Some(nns_pk) = nns_public_key {
-        let encoded_nns_pk = parse_threshold_sig_key(nns_pk)?;
-        return Ok(Some(threshold_sig_public_key_from_der(
-            encoded_nns_pk.as_slice(),
-        )?));
+    if let Some(nns_pk) = &nns_public_key {
+        let pk = parse_threshold_sig_key_from_pem_file(nns_pk)
+            .with_context(|| format!("failed to parse threshold sig key from {:?}", nns_pk))?;
+        return Ok(Some(pk));
     }
     Ok(None)
 }

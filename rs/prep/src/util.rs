@@ -1,4 +1,4 @@
-use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_pem;
 use ic_protobuf::registry::crypto::v1::PublicKey as PbPublicKey;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::RegistryVersion;
@@ -43,18 +43,10 @@ where
 pub fn store_threshold_sig_pk<P: AsRef<Path>>(pk: &PbPublicKey, path: P) {
     let pk = ThresholdSigPublicKey::try_from(pk.clone())
         .expect("failed to parse threshold signature PK from protobuf");
-    let der_bytes = threshold_sig_public_key_to_der(pk)
-        .expect("failed to encode threshold signature PK into DER");
-
-    let mut bytes = vec![];
-    bytes.extend_from_slice(b"-----BEGIN PUBLIC KEY-----\r\n");
-    for chunk in base64::encode(&der_bytes[..]).as_bytes().chunks(64) {
-        bytes.extend_from_slice(chunk);
-        bytes.extend_from_slice(b"\r\n");
-    }
-    bytes.extend_from_slice(b"-----END PUBLIC KEY-----\r\n");
+    let pem_bytes = threshold_sig_public_key_to_pem(pk)
+        .expect("failed to encode threshold signature PK into PEM");
 
     let path = path.as_ref();
-    std::fs::write(path, bytes)
+    std::fs::write(path, pem_bytes)
         .unwrap_or_else(|e| panic!("failed to store public key to {}: {}", path.display(), e));
 }

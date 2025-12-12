@@ -4,7 +4,7 @@ use crate::{
     util::{block_on, write_public_key_to_file},
 };
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
-use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, public_key_to_der};
+use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key_from_pem_file, public_key_to_der};
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
@@ -171,7 +171,7 @@ fn get_nns_public_key(
         download_nns_pem(nns_url, nns_pem_path, logger)?;
     }
 
-    let key = parse_threshold_sig_key(nns_pem_path)
+    let key = parse_threshold_sig_key_from_pem_file(nns_pem_path)
         .map_err(|e| RecoveryError::RegistryError(format!("Failed to read nns.pem file: {e}")))?;
 
     let downloaded_key = read_file(nns_pem_path)

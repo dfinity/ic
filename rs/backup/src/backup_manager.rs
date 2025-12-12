@@ -10,7 +10,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_pem_file;
 use ic_logger::ReplicaLogger;
 use ic_recovery::command_helper::exec_cmd;
 use ic_registry_replicator::RegistryReplicator;
@@ -70,7 +70,7 @@ impl BackupManager {
         let local_store_dir = config.root_dir.join("ic_registry_local_store");
         let nns_urls = vec![config.nns_url.expect("Missing NNS Url")];
         let nns_public_key =
-            parse_threshold_sig_key(&config.nns_pem).expect("Missing NNS public key");
+            parse_threshold_sig_key_from_pem_file(&config.nns_pem).expect("Missing NNS public key");
 
         let registry_replicator = RegistryReplicator::new(
             replica_logger,

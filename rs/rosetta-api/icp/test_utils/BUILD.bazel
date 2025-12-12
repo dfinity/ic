@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/crypto/utils/threshold_sig_der",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1/test_utils",
     "//rs/rosetta-api/common/rosetta_core:rosetta-core",
