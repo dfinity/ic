@@ -134,9 +134,9 @@ impl VectorVm {
         let log = env.logger();
         info!(log, "Syncing vector targets.");
 
-        let total_nodes = env
+        let testnet_nodes = env
             .read_json_object::<NodesInfo, _>(NODES_INFO)
-            .expect("Couldn't read info of the nodes from a file.")
+            .expect("Couldn't read info of the nodes from file")
             .into_keys()
             .collect::<Vec<NodeId>>();
         match env.safe_topology_snapshot() {
@@ -155,8 +155,8 @@ impl VectorVm {
                     let node_id = node.node_id;
                     // Only consider nodes that are part of the testnet to make up for system tests
                     // that use mainnet state, where the registry could contain nodes that are not
-                    // part of testnet.
-                    if !total_nodes.contains(&node_id) {
+                    // part of the testnet.
+                    if !testnet_nodes.contains(&node_id) {
                         continue;
                     }
 
