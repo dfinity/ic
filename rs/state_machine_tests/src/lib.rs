@@ -1109,13 +1109,18 @@ pub struct StateMachine {
     // The atomicity is required for internal mutability and sending across threads.
     checkpoint_interval_length: AtomicU64,
     nonce: AtomicU64,
-    // the time used to derive the time of the next round that is:
-    //  - equal to `time` + 1ns if `time` = `time_of_last_round`;
-    //  - equal to `time`       otherwise.
+    /// The time used to derive the time of the next round that is:
+    ///  - equal to `time + execute_round_time_increment` if `time == time_of_last_round`;
+    ///  - equal to `time` otherwise.
     time: AtomicU64,
-    // the time of the last round
-    // (equal to `time` when this `StateMachine` is initialized)
+    /// The time of the last round
+    /// (equal to `time` when this `StateMachine` is initialized)
     time_of_last_round: RwLock<Time>,
+    /// Time increment between two rounds, automatically applied if `time` has not
+    /// been explicitly updated.
+    ///
+    /// Defaults to 1 ns.
+    execute_round_time_increment: Duration,
     chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     chain_key_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
     ni_dkg_ids: BTreeMap<NiDkgMasterPublicKeyId, NiDkgId>,
@@ -1205,6 +1210,7 @@ pub struct StateMachineBuilder {
     features: SubnetFeatures,
     runtime: Option<Arc<Runtime>>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
+    execute_round_time_increment: Duration,
     lsmt_override: Option<LsmtConfig>,
     seed: [u8; 32],
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
@@ -1249,6 +1255,7 @@ impl StateMachineBuilder {
             },
             runtime: None,
             registry_data_provider: Arc::new(ProtoRegistryDataProvider::new()),
+            execute_round_time_increment: StateMachine::EXECUTE_ROUND_TIME_INCREMENT,
             lsmt_override: None,
             seed: [42; 32],
             with_extra_canister_range: None,
@@ -1469,6 +1476,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_execute_round_time_increment(self, execute_round_time_increment: Duration) -> Self {
+        Self {
+            execute_round_time_increment,
+            ..self
+        }
+    }
+
     pub fn with_log_level(self, log_level: Option<Level>) -> Self {
         Self { log_level, ..self }
     }
@@ -1535,6 +1549,7 @@ impl StateMachineBuilder {
                     .expect("failed to create a tokio runtime")
                     .into()
             }),
+            self.execute_round_time_increment,
             self.registry_data_provider,
             self.lsmt_override,
             self.seed,
@@ -1874,6 +1889,7 @@ impl StateMachine {
         is_snapshot_upload_enabled: bool,
         features: SubnetFeatures,
         runtime: Arc<Runtime>,
+        execute_round_time_increment: Duration,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         lsmt_override: Option<LsmtConfig>,
         seed: [u8; 32],
@@ -2245,6 +2261,7 @@ impl StateMachine {
             nonce: AtomicU64::new(nonce),
             time: AtomicU64::new(time.as_nanos_since_unix_epoch()),
             time_of_last_round: RwLock::new(time),
+            execute_round_time_increment,
             chain_key_subnet_public_keys,
             chain_key_subnet_secret_keys,
             ni_dkg_ids,
@@ -2891,7 +2908,7 @@ impl StateMachine {
 
         let current_time = self.get_time();
         let time_of_next_round = if current_time == *self.time_of_last_round.read().unwrap() {
-            current_time + Self::EXECUTE_ROUND_TIME_INCREMENT
+            current_time + self.execute_round_time_increment
         } else {
             current_time
         };
@@ -2903,7 +2920,6 @@ impl StateMachine {
         let batch = Batch {
             batch_number,
             batch_summary,
-            requires_full_state_hash,
             blockmaker_metrics,
             content: BatchContent::Data {
                 batch_messages: BatchMessages {
@@ -2921,6 +2937,7 @@ impl StateMachine {
                     nidkg_ids: self.ni_dkg_ids.clone(),
                 },
                 consensus_responses: payload.consensus_responses,
+                requires_full_state_hash,
             },
             randomness: Randomness::from(seed),
             registry_version: self.registry_client.get_latest_version(),
@@ -5157,6 +5174,9 @@ fn multi_subnet_setup(
         .with_subnet_seed([subnet_seed; 32])
         .with_subnet_type(subnet_type)
         .with_registry_data_provider(registry_data_provider)
+        // For XNet tests, advance time by 1 second between rounds, to make it possible
+        // for any bounded wait calls to eventually expire and for canisters to stop.
+        .with_execute_round_time_increment(Duration::from_secs(1))
         .build_with_subnets(subnets)
 }
 

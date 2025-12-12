@@ -611,6 +611,7 @@ bytes = "1.9.0"
 canbench-rs = "0.4.0"
 candid = { version = "0.10.20" }
 candid_parser = { version = "0.1.2" }
+comparable = { version = "0.5", features = ["derive"] }
 chrono = { version = "0.4.42", default-features = false, features = [
     "alloc",
     "clock",
@@ -683,14 +684,12 @@ ic-cdk-timers = "1.0.0"
 ic-certificate-verification = "3"
 ic-certification = "3"
 ic-doge-interface = { git = "https://github.com/dfinity/dogecoin-canister", rev = "74e6dc9a10ba64d2dbad013282c26d74cd49863f" }
-ic-ed25519 = "0.4.0"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "92ee522a4514584ccf6de487ba40d92063effd9a", default-features = false }
 ic-http-certification = "3.0.3"
 ic-http-gateway = { git = "https://github.com/dfinity/http-gateway", rev = "c17ad1b378df3a85441ce2c6853ec61b6f83f730" }
 ic-identity-hsm = "0.40.1"
 ic-management-canister-types = "0.5.0"
 ic-response-verification = "3"
-ic-secp256k1 = "0.3.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.40.1" }

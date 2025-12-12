@@ -108,15 +108,15 @@ fn test_canister_migration() {
         canister_id
     };
 
-    let source_canister = create_canister_on_subnet(subnet_1);
-    let target_canister = create_canister_on_subnet(subnet_2);
+    let migrated_canister = create_canister_on_subnet(subnet_1);
+    let replaced_canister = create_canister_on_subnet(subnet_2);
 
-    assert_eq!(pic.get_subnet(source_canister).unwrap(), subnet_1);
-    assert_eq!(pic.get_subnet(target_canister).unwrap(), subnet_2);
+    assert_eq!(pic.get_subnet(migrated_canister).unwrap(), subnet_1);
+    assert_eq!(pic.get_subnet(replaced_canister).unwrap(), subnet_2);
 
     let migrate_canister_args = MigrateCanisterArgs {
-        canister_id: source_canister,
-        replace_canister_id: target_canister,
+        migrated_canister_id: migrated_canister,
+        replace_canister_id: replaced_canister,
     };
     let res = update_candid::<_, (Result<(), Option<MigrationValidatonError>>,)>(
         &pic,
@@ -144,13 +144,13 @@ fn test_canister_migration() {
         }
     }
 
-    pic.start_canister(source_canister, None).unwrap();
+    pic.start_canister(migrated_canister, None).unwrap();
 
-    assert_eq!(pic.get_subnet(source_canister).unwrap(), subnet_2);
-    assert!(pic.get_subnet(target_canister).is_none());
+    assert_eq!(pic.get_subnet(migrated_canister).unwrap(), subnet_2);
+    assert!(pic.get_subnet(replaced_canister).is_none());
 
-    let res = update_candid::<_, (String,)>(&pic, source_canister, "whoami", ()).unwrap();
-    assert_eq!(res.0, source_canister.to_string());
+    let res = update_candid::<_, (String,)>(&pic, migrated_canister, "whoami", ()).unwrap();
+    assert_eq!(res.0, migrated_canister.to_string());
 }
 
 #[test]

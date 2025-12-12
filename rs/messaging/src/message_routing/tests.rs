@@ -1029,11 +1029,11 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         batch_processor.process_batch(Batch {
             batch_number: height.increment().increment(),
             batch_summary: None,
-            requires_full_state_hash: false,
             content: BatchContent::Data {
                 batch_messages: BatchMessages::default(),
                 consensus_responses: Vec::new(),
                 chain_key_data: Default::default(),
+                requires_full_state_hash: false,
             },
             randomness: Randomness::new([123; 32]),
             registry_version: fixture.registry.get_latest_version(),
@@ -1818,11 +1818,11 @@ fn process_batch_updates_subnet_metrics() {
         batch_processor.process_batch(Batch {
             batch_number: height.increment().increment(),
             batch_summary: None,
-            requires_full_state_hash: false,
             content: BatchContent::Data {
                 batch_messages: BatchMessages::default(),
                 consensus_responses: Vec::new(),
                 chain_key_data: Default::default(),
+                requires_full_state_hash: false,
             },
             randomness: Randomness::new([123; 32]),
             registry_version: fixture.registry.get_latest_version(),
