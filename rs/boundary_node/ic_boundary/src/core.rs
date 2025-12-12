@@ -709,11 +709,9 @@ async fn setup_registry(
         &ic_config::logger::Config::default(),
     );
 
-    let nns_pub_key = cli
-        .registry
-        .registry_nns_pub_key_pem
-        .as_ref()
-        .map(|path| parse_threshold_sig_key(path).expect("failed to parse NNS public key"));
+    let nns_pub_key = cli.registry.registry_nns_pub_key_pem.as_ref().map(|path| {
+        parse_threshold_sig_key_from_pem_file(path).expect("failed to parse NNS public key")
+    });
 
     let replicator = RegistryReplicator::new(
         logger,
