@@ -1292,6 +1292,9 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         }
 
         // If the subnet is starting up after a split, execute splitting phase 2.
+        //
+        // TODO(DSM-57): Drop the `split_from` field and the `split()` and
+        // `after_split()` methods once online splitting is fully rolled out.
         if let Some(split_from) = state.metadata.split_from {
             info!(
                 self.log,
