@@ -24,7 +24,7 @@ BASE_URLS=(
 )
 
 # Global parameters
-MODE=""                    # must be provided: run | prep | install
+MODE="" # must be provided: run | prep | install
 STAGE_DIR="/run/guestos-recovery/stage"
 METADATA_FILE="${STAGE_DIR}/prep-info"
 PRESERVE_STAGE_DIR=false
@@ -289,7 +289,9 @@ download_recovery_and_hash() {
     local recovery_hash_prefix="$1"
     local tmpdir="$2"
 
-    local url_path="/recovery/${recovery_hash_prefix}/recovery.tar.zst"
+    # local url_path="/recovery/${recovery_hash_prefix}/recovery.tar.zst"
+    #LEAVE THIS FOR TESTING:
+    local url_path="/recovery/7ff9e45010f7a343712dc05bbf67fba26971c2b48df8cfbee09cee1895d3e907/recovery.tar.zst"
     local output_file="$tmpdir/recovery.tar.zst"
 
     if ! download_file "$url_path" "$output_file" "recovery artifact"; then
@@ -357,7 +359,7 @@ main() {
 
     log_message "Parsed VERSION='$VERSION' MODE='$MODE' RECOVERY_HASH_PREFIX='$RECOVERY_HASH_PREFIX'"
 
-    if [[ -z "$MODE" || ( "$MODE" != "run" && "$MODE" != "prep" && "$MODE" != "install" ) ]]; then
+    if [[ -z "$MODE" || ("$MODE" != "run" && "$MODE" != "prep" && "$MODE" != "install") ]]; then
         log_message "ERROR: mode must be one of run|prep|install"
         exit 1
     fi
