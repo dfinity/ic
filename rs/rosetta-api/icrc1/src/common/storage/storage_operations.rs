@@ -14,6 +14,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 use tracing::{info, trace};
 
+pub const METADATA_SCHEMA_VERSION: &str = "schema_version";
 pub const METADATA_FEE_COL: &str = "fee_collector_107";
 pub const METADATA_BLOCK_IDX: &str = "highest_processed_block_index";
 

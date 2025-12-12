@@ -1,11 +1,17 @@
 use crate::common::storage::{
-    storage_operations::initialize_counter_if_missing, types::RosettaCounter,
+    storage_operations::{
+        METADATA_SCHEMA_VERSION, get_rosetta_metadata, initialize_counter_if_missing,
+    },
+    types::RosettaCounter,
 };
-use rusqlite::{Connection, Result};
+use anyhow::bail;
+use rusqlite::{Connection, params};
+
+pub const SCHEMA_VERSION: u64 = 1;
 
 /// Creates all the necessary tables for the ICRC1 Rosetta storage system.
 /// This function is used by both production code and tests to ensure consistency.
-pub fn create_tables(connection: &Connection) -> Result<()> {
+pub fn create_tables(connection: &Connection) -> anyhow::Result<()> {
     // Metadata table
     connection.execute(
         r#"
@@ -91,8 +97,8 @@ pub fn create_tables(connection: &Connection) -> Result<()> {
         [],
     )?;
 
-    // The rosetta_metadata table is meant to store values like the index
-    // of the highest processed block. This is different than the metadata
+    // The rosetta_metadata table is meant to store values like the rosetta
+    // database schema version, etc. This is different than the metadata
     // table above which stores the ICRC1 token metadata.
     connection.execute(
         r#"
@@ -104,11 +110,29 @@ pub fn create_tables(connection: &Connection) -> Result<()> {
         [],
     )?;
 
+    let stored_schema_version = match get_rosetta_metadata(connection, METADATA_SCHEMA_VERSION)? {
+        Some(value) => u64::from_le_bytes(value.as_slice().try_into()?),
+        None => 0,
+    };
+
+    if stored_schema_version > SCHEMA_VERSION {
+        bail!(format!(
+            "Selected database has schema version {stored_schema_version} which is incompatible with current schema version {SCHEMA_VERSION}."
+        ));
+    }
+
+    if stored_schema_version != SCHEMA_VERSION {
+        connection.execute(
+        "INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = excluded.value;",
+        params![METADATA_SCHEMA_VERSION, SCHEMA_VERSION.to_le_bytes()],
+    )?;
+    }
+
     create_indexes(connection)
 }
 
 /// Creates all the necessary indexes for optimal query performance.
-pub fn create_indexes(connection: &Connection) -> Result<()> {
+pub fn create_indexes(connection: &Connection) -> anyhow::Result<()> {
     connection.execute(
         r#"
         CREATE INDEX IF NOT EXISTS block_idx_account_balances
