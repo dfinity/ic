@@ -244,7 +244,7 @@ pub fn as_num_instructions(a: RoundInstructions) -> NumInstructions {
 #[derive(Clone, Debug, Default)]
 pub struct RoundLimits {
     /// Keeps track of remaining instructions in this execution round.
-    pub instructions: RoundInstructions,
+    instructions: RoundInstructions,
 
     /// Keeps track of the available storage memory. It decreases if
     /// - Wasm execution grows the Wasm/stable memory.
@@ -265,10 +265,44 @@ pub struct RoundLimits {
     pub subnet_memory_reservation: NumBytes,
 }
 
+/// Token representing a decrease of `round_limits.instructions` by a message execution cost,
+/// excluding instructions for compilation and others.
+
+#[derive(Clone, Debug)]
+#[must_use]
+pub struct MessageExecutionInstructions {
+    instructions: NumInstructions,
+}
+
+impl MessageExecutionInstructions {
+    pub fn none() -> Self {
+        Self {
+            instructions: NumInstructions::from(0),
+        }
+    }
+    pub fn amount(self) -> NumInstructions {
+        self.instructions
+    }
+}
+
 impl RoundLimits {
     /// Returns true if the instructions limit has been reached.
     pub fn instructions_reached(&self) -> bool {
         self.instructions <= RoundInstructions::from(0)
+    }
+
+    /// Used for message execution cost only. For other instruction costs, use `charge_other_instruction_cost`.
+    pub fn charge_message_execution_cost(
+        &mut self,
+        instructions: NumInstructions,
+    ) -> MessageExecutionInstructions {
+        self.instructions -= as_round_instructions(instructions);
+        MessageExecutionInstructions { instructions }
+    }
+
+    /// Used for other instruction costs only. For message execution cost, use `charge_message_execution_cost`.
+    pub fn charge_other_instruction_cost(&mut self, instructions: NumInstructions) {
+        self.instructions -= as_round_instructions(instructions);
     }
 }
 
