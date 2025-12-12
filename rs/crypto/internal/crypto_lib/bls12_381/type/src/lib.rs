@@ -1341,14 +1341,14 @@ macro_rules! define_affine_and_projective_types {
 
             /// Constant time selection
             ///
-            /// Equivalent to from[index] except avoids leaking the index
-            /// through side channels.
-            ///
-            /// If index is out of range, returns the identity element
+            /// Equivalent to from[index - 1] except avoids leaking the index
+            /// through side channels. If index is zero or out of range,
+            /// returns the identity element
             pub(crate) fn ct_select(from: &[Self], index: usize) -> Self {
                 use subtle::{ConditionallySelectable, ConstantTimeEq};
                 let mut val = ic_bls12_381::$projective::identity();
 
+                let index = index.wrapping_sub(1);
                 for v in 0..from.len() {
                     val.conditional_assign(from[v].inner(), usize::ct_eq(&v, &index));
                 }
@@ -1524,6 +1524,12 @@ macro_rules! define_affine_and_projective_types {
             }
         }
 
+        impl std::convert::From<&$projective> for $projective {
+            fn from(pt: &$projective) -> Self {
+                Self::new(*pt.inner())
+            }
+        }
+
         impl std::convert::From<$projective> for $affine {
             fn from(pt: $projective) -> Self {
                 Self::new(pt.inner().into())
@@ -1633,7 +1639,11 @@ macro_rules! declare_mul2_table_impl {
                     let w2 = Window::extract(&s2, 0);
                     let window = $tbl_typ::col(w1 as usize) + $tbl_typ::row(w2 as usize);
                     // Variable time lookup
-                    self.0[window].clone()
+                    if window > 0 {
+                        self.0[window - 1].clone()
+                    } else {
+                        <$projective>::identity()
+                    }
                 };
 
                 for i in 1..Window::WINDOWS {
@@ -1647,7 +1657,7 @@ macro_rules! declare_mul2_table_impl {
 
                     // This is the only difference from the constant time version:
                     if window > 0 {
-                        accum += &self.0[window];
+                        accum += &self.0[window - 1];
                     }
                 }
 
@@ -1673,8 +1683,8 @@ macro_rules! declare_compute_mul2_table_inline {
         // Configurable window size: can be in 1..=8
         type Window = WindowInfo<$window_size>;
 
-        // Derived constants
-        const TABLE_SIZE: usize = Window::ELEMENTS * Window::ELEMENTS;
+        // The size of the table (the identity element is omitted thus the -1)
+        const TABLE_SIZE: usize = Window::ELEMENTS * Window::ELEMENTS - 1;
 
         /*
         A table which can be viewed as a 2^WINDOW_SIZE x 2^WINDOW_SIZE matrix
@@ -1689,24 +1699,49 @@ macro_rules! declare_compute_mul2_table_inline {
         We build up the table incrementally using additions and doubling, to
         avoid the cost of full scalar mul.
          */
-        let mut tbl = <$projective>::identities(TABLE_SIZE);
+        let mut tbl : Vec<$projective> = Vec::with_capacity(TABLE_SIZE);
 
-        // Precompute the table (tbl[0] is left as the identity)
-        for i in 1..TABLE_SIZE {
+        // Precompute the table
+        for idx in 0..TABLE_SIZE {
             // The indexing here depends just on i, which is a public loop index
 
+            let i = (idx + 1);
             let xi = i % Window::ELEMENTS;
             let yi = (i >> Window::SIZE) % Window::ELEMENTS;
 
-            if xi % 2 == 0 && yi % 2 == 0 {
-                tbl[i] = tbl[i / 2].double();
-            } else if xi > 0 && yi > 0 {
-                tbl[i] = &tbl[$tbl_typ::col(xi)] + &tbl[$tbl_typ::row(yi)];
-            } else if xi > 0 {
-                tbl[i] = &tbl[$tbl_typ::col(xi - 1)] + $x;
-            } else if yi > 0 {
-                tbl[i] = &tbl[$tbl_typ::row(yi - 1)] + $y;
-            }
+            let next = {
+                if xi % 2 == 0 && yi % 2 == 0 {
+                    // Here the table is just the double of an existing element
+                    tbl[(i / 2) - 1].double()
+                } else if xi > 0 && yi > 0 {
+                    // A combination of x and y
+                    if xi == 1 {
+                        &tbl[(yi << Window::SIZE) - 1] + $x
+                    } else if yi == 1 {
+                        &tbl[xi - 1] + $y
+                    } else {
+                        &tbl[xi - 1] + &tbl[(yi << Window::SIZE) - 1]
+                    }
+                } else if xi > 0 && yi == 0 {
+                    // A multiple of x with no y component
+                    if xi == 1 {
+                        <$projective>::from($x)
+                    } else {
+                        &tbl[xi - 1 - 1] + $x
+                    }
+                } else if yi > 0 && xi == 0 {
+                    // A multiple of y with no x component
+                    if yi == 1 {
+                        <$projective>::from($y)
+                    } else {
+                        &tbl[((yi - 1) << Window::SIZE) - 1] + $y
+                    }
+                } else {
+                    unreachable!();
+                }
+            };
+
+            tbl.push(next);
         }
 
         $tbl_typ(tbl)
@@ -2064,8 +2099,7 @@ macro_rules! declare_windowed_scalar_mul_ops_for {
 
                 let mut accum = {
                     let w = Window::extract(&s, 0);
-                    // See comment below regarding the wrapping sub
-                    Self::ct_select(&tbl, (w as usize).wrapping_sub(1))
+                    Self::ct_select(&tbl, w as usize)
                 };
 
                 for i in 1..Window::WINDOWS {
@@ -2074,13 +2108,7 @@ macro_rules! declare_windowed_scalar_mul_ops_for {
                     }
 
                     let w = Window::extract(&s, i);
-
-                    /*
-                    This wrapping sub means that for w == 0 then usize::MAX is
-                    passed to ct_select - this results in the identity element being
-                    returned since the index is out of range.
-                    */
-                    accum += Self::ct_select(&tbl, (w as usize).wrapping_sub(1));
+                    accum += Self::ct_select(&tbl, w as usize);
                 }
 
                 accum
@@ -2295,14 +2323,14 @@ impl Gt {
 
     /// Constant time selection
     ///
-    /// Equivalent to from[index] except avoids leaking the index
-    /// through side channels.
-    ///
-    /// If index is out of range, returns the identity element
+    /// Equivalent to from[index - 1] except avoids leaking the index
+    /// through side channels. If index is zero or out of range,
+    /// returns the identity element
     pub(crate) fn ct_select(from: &[Self], index: usize) -> Self {
         use subtle::{ConditionallySelectable, ConstantTimeEq};
         let mut val = ic_bls12_381::Gt::identity();
 
+        let index = index.wrapping_sub(1);
         for v in 0..from.len() {
             val.conditional_assign(from[v].inner(), usize::ct_eq(&v, &index));
         }
