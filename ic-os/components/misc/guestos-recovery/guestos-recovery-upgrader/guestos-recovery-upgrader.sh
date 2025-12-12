@@ -233,14 +233,19 @@ download_upgrade_and_hash() {
 
 extract_upgrade() {
     local tmpdir="$1"
+    local extract_dir="$2"
     log_message "Extracting upgrade file..."
-    zstd -d "$tmpdir/upgrade.tar.zst" -o "$tmpdir/upgrade.tar"
-    tar -xf "$tmpdir/upgrade.tar" -C "$tmpdir"
-    log_message "Extraction completed"
+
+    # Extract to /tmp to avoid running out of space in /run (tmpfs)
+    log_message "Using temporary extraction directory: $extract_dir"
+    zstd -d "$tmpdir/upgrade.tar.zst" -o "$extract_dir/upgrade.tar"
+    tar -xf "$extract_dir/upgrade.tar" -C "$extract_dir"
+    log_message "Extraction completed. Files available in $extract_dir"
 }
 
 install_upgrade() {
     local tmpdir="$1"
+    local extract_dir="$2"
     log_message "Installing upgrade..."
 
     log_message "=== Recovery Upgrader Mode ==="
@@ -248,8 +253,8 @@ install_upgrade() {
     log_message "Boot device: ${boot_target}"
     log_message "Root device: ${root_target}"
     log_message "Var device: ${var_target}"
-    log_message "Boot image: $tmpdir/boot.img"
-    log_message "Root image: $tmpdir/root.img"
+    log_message "Boot image: $extract_dir/boot.img"
+    log_message "Root image: $extract_dir/root.img"
 
     log_message "Reading grubenv configuration..."
     read_grubenv "${grubdir}/grubenv"
@@ -257,11 +262,11 @@ install_upgrade() {
     log_message "Current boot cycle: ${boot_cycle}"
 
     log_message "Writing boot image to ${boot_target}..."
-    dd if="$tmpdir/boot.img" of="${boot_target}" bs=1M status=progress
+    dd if="$extract_dir/boot.img" of="${boot_target}" bs=1M status=progress
     log_message "Boot image written successfully"
 
     log_message "Writing root image to ${root_target}..."
-    dd if="$tmpdir/root.img" of="${root_target}" bs=1M status=progress
+    dd if="$extract_dir/root.img" of="${root_target}" bs=1M status=progress
     log_message "Root image written successfully"
 
     log_message "Wiping var partition header on ${var_target}..."
@@ -344,6 +349,10 @@ guestos_upgrade_cleanup() {
         rm -rf "${workdir}"
         log_message "Removed temporary directory ${workdir}"
     fi
+    if [ -n "${extract_dir}" ] && [ -d "${extract_dir}" ]; then
+        rm -rf "${extract_dir}"
+        log_message "Removed extraction directory ${extract_dir}"
+    fi
     if [ "$PRESERVE_STAGE_DIR" != "true" ] && [ -n "${STAGE_DIR}" ] && [ -d "${STAGE_DIR}" ]; then
         rm -rf "${STAGE_DIR}"
         log_message "Removed staging directory ${STAGE_DIR}"
@@ -371,6 +380,11 @@ main() {
     fi
 
     mkdir -p "$(dirname "${STAGE_DIR}")"
+
+    extract_dir=""
+    if [ "$MODE" != "prep" ]; then
+        extract_dir="$(mktemp -d)"
+    fi
 
     trap 'guestos_upgrade_cleanup' EXIT
 
@@ -401,13 +415,13 @@ main() {
 
     prepare_guestos_upgrade
 
-    extract_upgrade "$STAGE_DIR"
+    extract_upgrade "$STAGE_DIR" "$extract_dir"
 
     log_message "Stopping guestos.service for manual upgrade"
     systemctl stop guestos.service
     log_message "GuestOS service stopped"
 
-    install_upgrade "$STAGE_DIR"
+    install_upgrade "$STAGE_DIR" "$extract_dir"
 
     log_message "Recovery Upgrader completed successfully"
 
