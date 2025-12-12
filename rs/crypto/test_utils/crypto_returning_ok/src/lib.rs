@@ -47,12 +47,7 @@ pub struct CryptoReturningOk {
 }
 
 impl<T: Signable> BasicSigner<T> for CryptoReturningOk {
-    fn sign_basic(
-        &self,
-        _message: &T,
-        _signer: NodeId,
-        _registry_version: RegistryVersion,
-    ) -> CryptoResult<BasicSigOf<T>> {
+    fn sign_basic(&self, _message: &T) -> CryptoResult<BasicSigOf<T>> {
         Ok(BasicSigOf::new(BasicSig(vec![])))
     }
 }
