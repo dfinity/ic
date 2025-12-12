@@ -1,71 +1,42 @@
 use anyhow::Result;
-use dfn_candid::candid_one;
-use flate2::read::GzDecoder;
 use ic_base_types::PrincipalId;
 use ic_canister_client::Sender;
 use ic_canister_client_sender::SigKeys;
-use ic_consensus_system_test_subnet_recovery::utils::BACKUP_USERNAME;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_system_test_utils::set_sandbox_env_vars;
-use ic_consensus_system_test_utils::ssh_access::execute_bash_command;
-use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nervous_system_common::E8;
-use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_governance_api::add_or_remove_node_provider::Change;
-use ic_nns_governance_api::manage_neuron::{NeuronIdOrSubaccount, RegisterVote};
-use ic_nns_governance_api::manage_neuron_response::Command as CommandResponse;
-use ic_nns_governance_api::{
-    AddOrRemoveNodeProvider, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, NnsFunction, NodeProvider, ProposalActionRequest, Vote,
-};
+use ic_nns_common::types::NeuronId;
+use ic_nns_governance_api::NnsFunction;
 use ic_nns_test_utils::governance::submit_external_update_proposal_allowing_error;
 use ic_nns_test_utils::governance::wait_for_final_state;
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
-use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
-use ic_registry_client_helpers::crypto::CryptoRegistry;
-use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
-use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{
-    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResources,
-};
+use ic_system_test_driver::driver::ic::{ImageSizeGiB, InternetComputer, Subnet, VmResources};
 use ic_system_test_driver::driver::ic_gateway_vm::{
     HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm,
 };
-use ic_system_test_driver::driver::nested::NestedNodes;
-use ic_system_test_driver::driver::test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute};
+use ic_system_test_driver::driver::test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::driver::universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms};
 use ic_system_test_driver::nns::{
     get_governance_canister, submit_update_elected_replica_versions_proposal,
-    vote_execute_proposal_assert_executed,
 };
-use ic_system_test_driver::retry_with_msg;
 use ic_system_test_driver::util::{block_on, runtime_from_url};
-use ic_types::{Height, NodeId, ReplicaVersion, SubnetId};
+use ic_types::{NodeId, ReplicaVersion, SubnetId};
+use registry_canister::mutations::do_add_api_boundary_nodes::AddApiBoundaryNodesPayload;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
-use registry_canister::mutations::{
-    do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
-    do_add_node_operator::AddNodeOperatorPayload,
-};
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
 use ssh2::Session;
-use std::collections::BTreeMap;
-use std::fs::{self, File, OpenOptions};
-use std::io::Cursor;
-use std::net::IpAddr;
-use std::os::unix::fs::OpenOptionsExt;
+use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::process::Output;
 use std::str::FromStr;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
-use std::{io::Write, process::Command, time::Duration};
+use std::{io::Write, process::Command};
 use url::Url;
 
 // Default path to the mainnet NNS state tarball on the backup pod. Can be overridden through the
