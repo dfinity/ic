@@ -1699,7 +1699,7 @@ macro_rules! declare_compute_mul2_table_inline {
         We build up the table incrementally using additions and doubling, to
         avoid the cost of full scalar mul.
          */
-        let mut tbl : Vec<$projective> = Vec::with_capacity(TABLE_SIZE);
+        let mut tbl: Vec<$projective> = Vec::with_capacity(TABLE_SIZE);
 
         // Precompute the table
         for idx in 0..TABLE_SIZE {
