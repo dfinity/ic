@@ -111,6 +111,10 @@ pub fn replace_nns_with_nested_vms(env: &TestEnv) {
         nested_vm_ips.len(),
         "Not all nested VMs have registered as IC nodes"
     );
+    assert!(
+        new_node_ids.len() > 0,
+        "No nested VMs found to add to the NNS subnet"
+    );
     block_on(change_subnet_membership(
         original_node.get_public_url(),
         nns_subnet.subnet_id,
