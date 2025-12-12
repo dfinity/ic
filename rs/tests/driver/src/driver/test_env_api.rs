@@ -1072,7 +1072,7 @@ impl IcNodeSnapshot {
             set -e
             ADAPTER_UID=$(id -u ic-http-adapter)
             RULE_PATTERN="meta skuid $ADAPTER_UID ip6 daddr ::1"
-            
+
             sudo nft list chain ip6 filter OUTPUT | grep -qF "$RULE_PATTERN"
         "#;
 
@@ -1338,7 +1338,7 @@ pub trait HasGroupSetup {
 impl HasGroupSetup for TestEnv {
     fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool) {
         let log = self.logger();
-        if self.get_json_path(GroupSetup::attribute_name()).exists() {
+        if GroupSetup::attribute_exists(self) {
             let group_setup = GroupSetup::read_attribute(self);
             info!(
                 log,

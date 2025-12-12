@@ -2021,6 +2021,28 @@ fn canister_status_of_deleted_canister() {
 }
 
 #[test]
+fn deleting_already_deleted_canister() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(*INITIAL_CYCLES);
+
+    let _ = test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+
+    test.delete_canister(canister_id).unwrap();
+
+    let err = test.delete_canister(canister_id).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterNotFound);
+    assert!(
+        err.description()
+            .contains(&format!("Canister {canister_id} not found"))
+    );
+
+    // The migration canister relies on this particular reject code.
+    assert_eq!(err.reject_code(), RejectCode::DestinationInvalid);
+}
+
+#[test]
 fn delete_canister_via_inter_canister_call() {
     let mut test = ExecutionTestBuilder::new()
         .with_initial_canister_cycles(1_u128 << 62)
@@ -6410,9 +6432,15 @@ fn rename_canister(
             .call_simple(
                 management_canister,
                 Method::RenameCanister,
-                call_args()
-                    .other_side(arguments.encode())
-                    .on_reject(PayloadBuilder::default().reject_message().reject().build()),
+                call_args().other_side(arguments.encode()).on_reject(
+                    PayloadBuilder::default()
+                        .reject_code()
+                        .int_to_blob()
+                        .reject_message()
+                        .concat()
+                        .reject()
+                        .build(),
+                ),
             )
             .build(),
     );
@@ -6593,6 +6621,27 @@ fn can_rename_canister() {
         true,
     );
     assert_matches!(wasm_result, WasmResult::Reply(r) if r == EmptyBlob.encode());
+
+    // Trying to rename the canister again results in an error
+    // with `RejectCode::DestinationInvalid`. This reject code
+    // is expected by the migration canister for this error cause
+    // and thus any change to the reject code must be reflected
+    // in the migration canister.
+    let wasm_result = rename_canister(
+        &env1,
+        &env2,
+        canister_id1,
+        new_canister_id,
+        third_canister_id,
+        third_version,
+        third_num_changes,
+        true,
+    );
+    let reject = get_reject(Ok(wasm_result));
+    assert_eq!(
+        reject.as_bytes()[0..4],
+        (RejectCode::DestinationInvalid as u32).to_le_bytes()
+    );
 
     let expected_history_entry = CanisterChangeDetails::rename_canister(
         new_canister_id.into(),

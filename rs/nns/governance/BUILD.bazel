@@ -211,6 +211,24 @@ rust_library(
     ],
 )
 
+# We are not relying on test feature for this test because we want to test only the performance-based-rewards related code in isolation.
+# Enabling test feature causes the Governance to fail the upgrade leading to its panic when running golden-state test.
+# The upgrades fails because it doesn't complete after 50B instructions.
+# This feature will be removed once the performance-based-rewards feature is active on mainnet.
+# TODO(DRE-645): Remove this feature once performance-based-rewards is active on mainnet.
+rust_library(
+    name = "governance--pbr_feature",
+    srcs = LIB_SRCS,
+    aliases = ALIASES,
+    crate_features = ["performance-based-rewards"],
+    crate_name = "ic_nns_governance",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES + [
+        ":build_script",
+    ],
+)
+
 rust_library(
     name = "governance--canbench_feature",
     srcs = LIB_SRCS,
@@ -302,6 +320,20 @@ rust_canister(
     ],
 )
 
+rust_canister(
+    name = "governance-canister-pbr",
+    srcs = ["canister/canister.rs"],
+    aliases = ALIASES,
+    compile_data = ["canister/governance.did"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":canister/governance.did",
+    visibility = ["//visibility:public"],
+    deps = DEPENDENCIES + [
+        ":build_script",
+        ":governance--pbr_feature",
+    ],
+)
+
 generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
@@ -310,6 +342,7 @@ generated_files_check(
         "//rs/ledger_suite/icp:protos",
         "//rs/nervous_system/proto:protos",
         "//rs/nns/common:protos",
+        "//rs/protobuf:protos",
         "//rs/sns/root:protos",
         "//rs/sns/swap:protos",
         "//rs/types/base_types:protos",

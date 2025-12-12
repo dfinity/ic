@@ -5,10 +5,10 @@ on:
     types: [opened, reopened]
 
 jobs:
-  notify-slack:
-    name: Notify Slack for External Contributors
+  notify-slack-new-pr:
+    name: Notify Slack for new External Contributor PR
     runs-on: ubuntu-latest
-    if: github.event.pull_request.head.repo.full_name != github.repository
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository
     steps:
       - name: Post to a Slack channel
         id: slack
