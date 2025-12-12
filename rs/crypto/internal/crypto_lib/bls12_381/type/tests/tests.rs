@@ -1911,7 +1911,10 @@ test_point_operation!(mul2_vartime, [g1, g2], {
     let zero = Scalar::zero();
     let one = Scalar::one();
 
-    assert_eq!(Projective::mul2_vartime(g, &zero, g, &zero), Projective::identity());
+    assert_eq!(
+        Projective::mul2_vartime(g, &zero, g, &zero),
+        Projective::identity()
+    );
     assert_eq!(Projective::mul2_vartime(g, &one, g, &zero), *g);
     assert_eq!(Projective::mul2_vartime(g, &zero, g, &one), *g);
 
