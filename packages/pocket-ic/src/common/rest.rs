@@ -369,8 +369,6 @@ impl From<Principal> for RawNodeId {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Default)]
 pub struct RawTickConfigs {
     pub blockmakers: Option<Vec<RawSubnetBlockmakers>>,
-    pub first_subnet: Option<RawSubnetId>,
-    pub last_subnet: Option<RawSubnetId>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]

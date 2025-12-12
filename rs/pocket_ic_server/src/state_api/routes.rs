@@ -36,11 +36,10 @@ use axum_extra::headers;
 use axum_extra::headers::HeaderMapExt;
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
-use candid::Principal;
 use ic_boundary::{ErrorClientFacing, MAX_REQUEST_BODY_SIZE};
 use ic_http_endpoints_public::{cors_layer, make_plaintext_response, query, read_state};
 use ic_registry_routing_table::RoutingTable;
-use ic_types::{CanisterId, PrincipalId, SnapshotId, SubnetId};
+use ic_types::{CanisterId, SnapshotId, SubnetId};
 use pocket_ic::RejectResponse;
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
@@ -1407,17 +1406,7 @@ pub async fn handler_tick(
                 .collect()
         })
         .unwrap_or_default();
-    let to_subnet_id = |subnet_id: RawSubnetId| {
-        let subnet_principal: Principal = subnet_id.into();
-        SubnetId::from(PrincipalId(subnet_principal))
-    };
-    let first_subnet = tick_configs.first_subnet.map(to_subnet_id);
-    let last_subnet = tick_configs.last_subnet.map(to_subnet_id);
-    let op = Tick {
-        blockmakers,
-        first_subnet,
-        last_subnet,
-    };
+    let op = Tick { blockmakers };
     let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))
 }

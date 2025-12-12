@@ -10,7 +10,7 @@ use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
 use pocket_ic::{
     DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult, PocketIc, PocketIcBuilder,
-    PocketIcState, RejectCode, StartServerParams, TickConfigs, Time,
+    PocketIcState, RejectCode, StartServerParams, Time,
     common::rest::{
         AutoProgressConfig, BlobCompression, CanisterHttpReply, CanisterHttpResponse,
         CanisterIdRange, CreateInstanceResponse, HttpGatewayDetails, HttpsConfig, IcpFeatures,
@@ -3231,77 +3231,4 @@ fn deterministic_registry() {
     };
 
     assert_eq!(registry_bytes(), registry_bytes());
-}
-
-#[test]
-fn bounded_wait() {
-    let pic = PocketIcBuilder::new()
-        .with_application_subnet()
-        .with_application_subnet()
-        .build();
-
-    let app_subnets = pic.topology().get_app_subnets();
-
-    let subnet_1 = app_subnets[0];
-    let canister_1 = pic.create_canister_on_subnet(None, None, subnet_1);
-    let subnet_2 = app_subnets[1];
-    let canister_2 = pic.create_canister_on_subnet(None, None, subnet_2);
-    for canister_id in [canister_1, canister_2] {
-        pic.add_cycles(canister_id, INIT_CYCLES);
-        pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
-    }
-
-    let nonce_in_logs = |canister_id: Principal, nonce: u64| {
-        let logs = pic
-            .fetch_canister_logs(canister_id, Principal::anonymous())
-            .unwrap();
-        logs.into_iter()
-            .any(|log| String::from_utf8(log.content.clone()).unwrap() == format!("nonce: {nonce}"))
-    };
-
-    let mut nonce: u64 = 0;
-    let canister_subnet_1 = (canister_1, subnet_1);
-    let canister_subnet_2 = (canister_2, subnet_2);
-
-    for caller_first in [true, false] {
-        for ((caller_id, caller_subnet), (callee_id, callee_subnet)) in [
-            (canister_subnet_1, canister_subnet_2),
-            (canister_subnet_2, canister_subnet_1),
-        ] {
-            let msg_id = pic
-                .submit_call(
-                    caller_id,
-                    Principal::anonymous(),
-                    "bounded_wait",
-                    Encode!(&callee_id, &nonce).unwrap(),
-                )
-                .unwrap();
-            let (first_subnet, last_subnet) = if caller_first {
-                (caller_subnet, callee_subnet)
-            } else {
-                (callee_subnet, caller_subnet)
-            };
-            let tick_configs = TickConfigs {
-                blockmakers: None,
-                first_subnet: Some(first_subnet),
-                last_subnet: Some(last_subnet),
-            };
-            pic.tick_with_configs(tick_configs);
-            // We advance time so that the inter-canister call
-            // gets expired for the caller.
-            pic.advance_time(Duration::from_secs(600));
-            let res = pic.await_call(msg_id).unwrap();
-            // Consequently, the caller gets the reject code of 6.
-            let code = Decode!(&res, u64).unwrap();
-            assert_eq!(code, 6);
-            // If the caller subnet is executed before the callee subnet
-            // in the round before advancing time, then the callee
-            // processes the message before the deadline and logs the nonce.
-            // If the caller subnet is executed after the callee subnet
-            // in the round before advancing time, then the callee
-            // processes the message after the deadline and does not log the nonce.
-            assert!(nonce_in_logs(callee_id, nonce) == caller_first);
-            nonce += 1;
-        }
-    }
 }

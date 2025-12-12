@@ -3538,8 +3538,6 @@ impl Operation for PubKey {
 #[derive(Clone, Debug)]
 pub struct Tick {
     pub blockmakers: Vec<SubnetBlockmakers>,
-    pub first_subnet: Option<SubnetId>,
-    pub last_subnet: Option<SubnetId>,
 }
 
 impl Tick {
@@ -3579,38 +3577,10 @@ impl Operation for Tick {
             return error;
         }
 
-        if let Some(first_subnet) = self.first_subnet
-            && let Some(last_subnet) = self.last_subnet
-            && first_subnet == last_subnet
-        {
-            return OpOut::Error(PocketIcError::InvalidTickConfigs(
-                "The first and last subnet must be different.".to_string(),
-            ));
-        }
-
-        let get_state_machine = |subnet_id: Option<SubnetId>| {
-            if let Some(subnet_id) = subnet_id {
-                match pic.subnets.get(subnet_id) {
-                    Some(state_machine) => Ok(Some(state_machine)),
-                    None => Err(OpOut::Error(PocketIcError::SubnetNotFound(
-                        subnet_id.get().0,
-                    ))),
-                }
-            } else {
-                Ok(None)
-            }
-        };
-        let first_state_machine = match get_state_machine(self.first_subnet) {
-            Ok(res) => res,
-            Err(e) => return e,
-        };
-        let last_state_machine = match get_state_machine(self.last_subnet) {
-            Ok(res) => res,
-            Err(e) => return e,
-        };
-
-        let tick_subnet = |state_machine: Arc<StateMachine>| {
+        for subnet in pic.subnets.get_all() {
+            let state_machine = subnet.state_machine.clone();
             let subnet_id = state_machine.get_subnet_id();
+
             let blockmaker_metrics = self
                 .blockmakers
                 .iter()
@@ -3624,27 +3594,6 @@ impl Operation for Tick {
                 Some(metrics) => state_machine.execute_round_with_blockmaker_metrics(metrics),
                 None => state_machine.execute_round(),
             }
-        };
-
-        if let Some(state_machine) = first_state_machine {
-            tick_subnet(state_machine);
-        }
-        for subnet in pic.subnets.get_all() {
-            let subnet_id = subnet.state_machine.get_subnet_id();
-            if let Some(first_subnet_id) = self.first_subnet
-                && subnet_id == first_subnet_id
-            {
-                continue;
-            }
-            if let Some(last_subnet_id) = self.last_subnet
-                && subnet_id == last_subnet_id
-            {
-                continue;
-            }
-            tick_subnet(subnet.state_machine.clone());
-        }
-        if let Some(state_machine) = last_state_machine {
-            tick_subnet(state_machine);
         }
 
         OpOut::NoOutput

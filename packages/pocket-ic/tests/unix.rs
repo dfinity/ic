@@ -383,8 +383,6 @@ fn test_custom_blockmaker_metrics() {
 
     let tick_configs = TickConfigs {
         blockmakers: Some(blockmakers),
-        first_subnet: None,
-        last_subnet: None,
     };
     let daily_blocks = 5;
 

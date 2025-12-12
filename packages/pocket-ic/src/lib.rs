@@ -1894,8 +1894,6 @@ pub enum IngressStatusResult {
 #[derive(Clone, Debug, Default)]
 pub struct TickConfigs {
     pub blockmakers: Option<Vec<SubnetBlockmakers>>,
-    pub first_subnet: Option<Principal>,
-    pub last_subnet: Option<Principal>,
 }
 
 impl From<TickConfigs> for RawTickConfigs {
@@ -1907,8 +1905,6 @@ impl From<TickConfigs> for RawTickConfigs {
                     .map(|blockmaker| blockmaker.into())
                     .collect()
             }),
-            first_subnet: tick_configs.first_subnet.map(|p| p.into()),
-            last_subnet: tick_configs.last_subnet.map(|p| p.into()),
         }
     }
 }

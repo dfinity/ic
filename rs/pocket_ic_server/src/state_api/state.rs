@@ -280,7 +280,6 @@ pub enum PocketIcError {
     BlockmakerContainedInFailed(NodeId),
     InvalidCanisterSnapshotDirectory(String),
     CanisterSnapshotError(String),
-    InvalidTickConfigs(String),
 }
 
 impl std::fmt::Debug for OpOut {
@@ -351,9 +350,6 @@ impl std::fmt::Debug for OpOut {
             }
             OpOut::Error(PocketIcError::CanisterSnapshotError(msg)) => {
                 write!(f, "CanisterSnapshotError({msg})")
-            }
-            OpOut::Error(PocketIcError::InvalidTickConfigs(msg)) => {
-                write!(f, "InvalidTickConfigs({msg})")
             }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
             OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
