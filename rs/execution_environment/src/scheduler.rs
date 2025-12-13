@@ -1343,6 +1343,9 @@ impl Scheduler for SchedulerImpl {
             }
         };
 
+        // Sleep for 1.25 seconds
+        std::thread::sleep(std::time::Duration::from_millis(1250));
+
         // Execute subnet messages.
         {
             // Drain the consensus queue.
