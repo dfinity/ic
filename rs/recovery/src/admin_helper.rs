@@ -27,7 +27,8 @@ pub struct RegistryParams {
 struct KeyConfigRequest {
     subnet_id: SubnetId,
     key_id: String,
-    pre_signatures_to_create_in_advance: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pre_signatures_to_create_in_advance: Option<String>,
     max_queue_size: String,
 }
 
@@ -182,17 +183,15 @@ impl AdminHelper {
                 .map(|key_config| KeyConfigRequest {
                     subnet_id,
                     key_id: key_config.key_id.to_string(),
-                    pre_signatures_to_create_in_advance: if key_config
+                    pre_signatures_to_create_in_advance: key_config
                         .key_id
                         .requires_pre_signatures()
-                    {
-                        key_config
-                            .pre_signatures_to_create_in_advance
-                            .unwrap_or_default()
-                            .to_string()
-                    } else {
-                        "".to_string()
-                    },
+                        .then_some(
+                            key_config
+                                .pre_signatures_to_create_in_advance
+                                .unwrap_or_default()
+                                .to_string(),
+                        ),
                     max_queue_size: key_config.max_queue_size.to_string(),
                 })
                 .collect::<Vec<_>>();
