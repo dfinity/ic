@@ -19133,6 +19133,7 @@ dependencies = [
  "ic-crypto-test-utils-tls",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-dashboard",
  "ic-ed25519 0.5.0",
  "ic-http-endpoints-async-utils",
