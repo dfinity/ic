@@ -1,9 +1,8 @@
-use assert_matches::assert_matches;
-
 use super::*;
-use crate::crypto::threshold_sig::ni_dkg::dummy_internal_transcript;
 use crate::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetSubnet};
 use crate::{Height, PrincipalId, SubnetId};
+use assert_matches::assert_matches;
+use ic_crypto_test_utils_ni_dkg::dummy_csp_transcript;
 
 pub const NODE_1: u64 = 1;
 pub const NODE_2: u64 = 2;
@@ -25,7 +24,7 @@ fn should_succeed_creating_valid_config_for_single_node() {
         threshold: dkg_threshold(1),
         committee: NiDkgReceivers::new(set_of(&[node_id(NODE_1)])).unwrap(),
         registry_version: REG_V1,
-        internal_csp_transcript: dummy_internal_transcript(),
+        internal_csp_transcript: dummy_csp_transcript(),
     };
     let config_data = NiDkgConfigData {
         dkg_id: dkg_id(1),
@@ -319,7 +318,7 @@ fn should_correctly_format_config_display_message() {
                         threshold: NiDkgThreshold { threshold: 2 }, \
                         committee: NiDkgReceivers { receivers: {3jo2y-lqbaa-aaaaa-aaaap-2ai, gfvbo-licaa-aaaaa-aaaap-2ai, 32uhy-eydaa-aaaaa-aaaap-2ai}, count: 3 }, \
                         registry_version: 2, \
-                        internal_csp_transcript: Groth20_Bls12_381(Transcript { public_coefficients: PublicCoefficientsBytes { coefficients: [0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000] }, receiver_data: {} }) }) \
+                        internal_csp_transcript: Groth20_Bls12_381(Transcript { public_coefficients: PublicCoefficientsBytes { coefficients: [0xadf65638a53056b2222c91bb2457b0274bca95198a5acbdadfe7fd72178f069bdea8d99e9479d8087a2686fc81bf3c4b11fe275570d481f1698f79d468afe0e57acc1e298f8b69798da7a891bbec197093ec5f475909923d48bfed6843dbed1f] }, receiver_data: {} }) }) \
                         }"
     );
 }
@@ -467,7 +466,7 @@ fn transcript() -> NiDkgTranscript {
         ]))
         .unwrap(),
         registry_version: REG_V2,
-        internal_csp_transcript: dummy_internal_transcript(),
+        internal_csp_transcript: dummy_csp_transcript(),
     }
 }
 

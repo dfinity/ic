@@ -68,83 +68,86 @@ async fn check_controllers_and_get_status(
 ///   into canister state;
 /// - or an informative error.
 pub async fn validate_request(
-    source: Principal,
-    target: Principal,
+    migrated: Principal,
+    replaced: Principal,
     caller: Principal,
 ) -> Result<(Request, Vec<CanisterGuard>), ValidationError> {
     // We first check if the caller is authorized (i.e.,
-    // if the caller is a controller of both the source and target)
-    // before acquiring locks for the source and target
+    // if the caller is a controller of both the migrated and replaced canisters)
+    // before acquiring locks for the migrated and replaced canisters
     // to prevent unauthorized callers from acquiring the lock
     // and blocking authorized callers from performing canister migration.
 
-    // 1. The source must not be equal to the target.
-    if source == target {
+    // 1. The migrated canister must not be equal to the replaced canister.
+    if migrated == replaced {
         return Err(ValidationError::SameSubnet(Reserved));
     }
 
-    // 2. Is the caller controller of the source?
-    let source_status = check_controllers_and_get_status(source, caller).await?;
-    // 3. Is the caller controller of the target?
-    let target_status = check_controllers_and_get_status(target, caller).await?;
+    // 2. Is the caller controller of the migrated canister?
+    let migrated_canister_status = check_controllers_and_get_status(migrated, caller).await?;
+    // 3. Is the caller controller of the replaced canister?
+    let replaced_canister_status = check_controllers_and_get_status(replaced, caller).await?;
 
     // Now we can acquire the locks
     // to prevent reentrancy bugs across asynchronous calls
-    // while validating the source and target.
-    let Ok(source_guard) = CanisterGuard::new(source) else {
-        return Err(ValidationError::ValidationInProgress { canister: source });
+    // while validating the migrated and replaced canisters.
+    let Ok(migrated_canister_guard) = CanisterGuard::new(migrated) else {
+        return Err(ValidationError::ValidationInProgress { canister: migrated });
     };
-    let Ok(target_guard) = CanisterGuard::new(target) else {
-        return Err(ValidationError::ValidationInProgress { canister: target });
+    let Ok(replaced_canister_guard) = CanisterGuard::new(replaced) else {
+        return Err(ValidationError::ValidationInProgress { canister: replaced });
     };
 
     // 4. Is any of these canisters already in a migration process?
     for request in list_by(|_| true) {
-        if let Some(id) = request.request().affects_canister(source, target) {
+        if let Some(id) = request.request().affects_canister(migrated, replaced) {
             return Err(ValidationError::MigrationInProgress { canister: id });
         }
     }
-    // 5. Are the source and target on the same subnet?
-    let source_subnet = get_subnet_for_canister(source).await?;
-    let target_subnet = get_subnet_for_canister(target).await?;
-    if source_subnet == target_subnet {
+    // 5. Are the migrated and replaced canisters on the same subnet?
+    let migrated_canister_subnet = get_subnet_for_canister(migrated).await?;
+    let replaced_canister_subnet = get_subnet_for_canister(replaced).await?;
+    if migrated_canister_subnet == replaced_canister_subnet {
         return Err(ValidationError::SameSubnet(Reserved));
     }
-    // 6. Is the source stopped?
-    if source_status.status != CanisterStatusType::Stopped {
-        return Err(ValidationError::SourceNotStopped(Reserved));
+    // 6. Is the migrated canister stopped?
+    if migrated_canister_status.status != CanisterStatusType::Stopped {
+        return Err(ValidationError::MigratedNotStopped(Reserved));
     }
-    // 7. Is the source ready for migration?
-    if !source_status.ready_for_migration {
-        return Err(ValidationError::SourceNotReady(Reserved));
+    // 7. Is the migrated canister ready for migration?
+    if !migrated_canister_status.ready_for_migration {
+        return Err(ValidationError::MigratedNotReady(Reserved));
     }
-    // 8. Is the target stopped?
-    if target_status.status != CanisterStatusType::Stopped {
-        return Err(ValidationError::TargetNotStopped(Reserved));
+    // 8. Is the replaced canister stopped?
+    if replaced_canister_status.status != CanisterStatusType::Stopped {
+        return Err(ValidationError::ReplacedNotStopped(Reserved));
     }
-    // 9. Does the target have snapshots?
-    assert_no_snapshots(target).await.into_result(
+    // 9. Does the replaced canister have snapshots?
+    assert_no_snapshots(replaced).await.into_result(
         "Call to management canister `list_canister_snapshots` failed. Try again later.",
     )?;
 
-    // 10. Does the source have sufficient cycles for the migration?
-    if source_status.cycles < CYCLES_COST_PER_MIGRATION {
-        return Err(ValidationError::SourceInsufficientCycles(Reserved));
+    // 10. Does the migrated canister have sufficient cycles for the migration?
+    if migrated_canister_status.cycles < CYCLES_COST_PER_MIGRATION {
+        return Err(ValidationError::MigratedInsufficientCycles(Reserved));
     }
 
-    let mut source_original_controllers = source_status.settings.controllers;
-    source_original_controllers.retain(|e| *e != canister_self());
-    let mut target_original_controllers = target_status.settings.controllers;
-    target_original_controllers.retain(|e| *e != canister_self());
+    let mut migrated_canister_original_controllers = migrated_canister_status.settings.controllers;
+    migrated_canister_original_controllers.retain(|e| *e != canister_self());
+    let mut replaced_canister_original_controllers = replaced_canister_status.settings.controllers;
+    replaced_canister_original_controllers.retain(|e| *e != canister_self());
     let request = Request {
-        source,
-        source_subnet,
-        source_original_controllers,
-        target,
-        target_subnet,
-        target_original_controllers,
+        migrated,
+        migrated_canister_subnet,
+        migrated_canister_original_controllers,
+        replaced,
+        replaced_canister_subnet,
+        replaced_canister_original_controllers,
         caller,
     };
 
-    Ok((request, vec![source_guard, target_guard]))
+    Ok((
+        request,
+        vec![migrated_canister_guard, replaced_canister_guard],
+    ))
 }
