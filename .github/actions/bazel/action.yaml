@@ -166,6 +166,15 @@ runs:
             --exclude "${excludes[*]}"
         done > '${{ steps.metrics-tmpdir.outputs.dir }}/execlogs.csv'
 
+
+    - name: Upload execution log json
+      if: (success() || failure()) && inputs.execlogs-artifact-name != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.execlogs-artifact-name }}-json
+        path: |
+          ${{ steps.metrics-tmpdir.outputs.dir }}/execlog-*.json
+
     - name: Upload execution log
       if: (success() || failure()) && inputs.execlogs-artifact-name != ''
       uses: actions/upload-artifact@v4
