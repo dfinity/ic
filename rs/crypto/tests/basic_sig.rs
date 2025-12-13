@@ -45,7 +45,7 @@ fn should_sign_and_verify() {
 }
 
 #[test]
-fn should_fail_signing_with_secret_key_not_found_if_secret_key_not_found_in_key_store() {
+fn should_fail_signing_with_internal_error_if_secret_key_not_found_in_key_store() {
     let mut vault = MockLocalCspVault::new();
     vault
         .expect_sign()
@@ -54,11 +54,11 @@ fn should_fail_signing_with_secret_key_not_found_if_secret_key_not_found_in_key_
 
     let result = crypto.sign_basic(&SignableMock::new(b"message".to_vec()));
 
-    assert_matches!(result, Err(CryptoError::SecretKeyNotFound { .. }));
+    assert_matches!(result, Err(CryptoError::InternalError { .. }));
 }
 
 #[test]
-fn should_fail_signing_with_public_key_not_found_if_public_key_not_found_in_key_store() {
+fn should_fail_signing_with_internal_error_if_public_key_not_found_in_key_store() {
     let mut vault = MockLocalCspVault::new();
     vault
         .expect_sign()
@@ -71,7 +71,7 @@ fn should_fail_signing_with_public_key_not_found_if_public_key_not_found_in_key_
 }
 
 #[test]
-fn should_fail_signing_with_malformed_public_key_if_public_key_is_malformed() {
+fn should_fail_signing_with_internal_error_if_public_key_is_malformed() {
     let mut vault = MockLocalCspVault::new();
     vault.expect_sign().return_once(|_msg| {
         Err(CspBasicSignatureError::MalformedPublicKey(
@@ -86,7 +86,7 @@ fn should_fail_signing_with_malformed_public_key_if_public_key_is_malformed() {
 }
 
 #[test]
-fn should_fail_signing_with_wrong_secret_key_type_if_secret_key_type_is_wrong() {
+fn should_fail_signing_with_internal_error_if_secret_key_type_is_wrong() {
     let mut vault = MockLocalCspVault::new();
     vault.expect_sign().return_once(|_msg| {
         Err(CspBasicSignatureError::WrongSecretKeyType {
@@ -97,7 +97,7 @@ fn should_fail_signing_with_wrong_secret_key_type_if_secret_key_type_is_wrong() 
 
     let result = crypto.sign_basic(&SignableMock::new(b"message".to_vec()));
 
-    assert_matches!(result, Err(CryptoError::InvalidArgument { .. }));
+    assert_matches!(result, Err(CryptoError::InternalError { .. }));
 }
 
 #[test]
