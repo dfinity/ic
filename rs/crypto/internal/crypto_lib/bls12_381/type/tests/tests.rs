@@ -1904,6 +1904,34 @@ test_point_operation!(mul2, [g1, g2], {
     }
 });
 
+test_point_operation!(mul2_vartime, [g1, g2], {
+    let rng = &mut reproducible_rng();
+
+    let g = Projective::generator();
+    let zero = Scalar::zero();
+    let one = Scalar::one();
+
+    assert_eq!(
+        Projective::mul2_vartime(g, &zero, g, &zero),
+        Projective::identity()
+    );
+    assert_eq!(Projective::mul2_vartime(g, &one, g, &zero), *g);
+    assert_eq!(Projective::mul2_vartime(g, &zero, g, &one), *g);
+
+    for _ in 0..1000 {
+        let s1 = Scalar::biased(rng);
+        let s2 = Scalar::biased(rng);
+
+        let p1 = Projective::biased(rng);
+        let p2 = Projective::biased(rng);
+
+        let reference = &p1 * &s1 + &p2 * &s2;
+
+        assert_eq!(Projective::mul2_vartime(&p1, &s1, &p2, &s2), reference);
+        assert_eq!(Projective::mul2_vartime(&p2, &s2, &p1, &s1), reference);
+    }
+});
+
 test_point_operation!(muln_sparse, [g1, g2], {
     let rng = &mut reproducible_rng();
 
