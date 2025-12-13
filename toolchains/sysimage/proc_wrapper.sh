@@ -12,5 +12,5 @@ tmpfs_tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
 sudo mount -t tmpfs none "${tmpfs_tmpdir}"
 
 tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
-trap 'sudo umount "${tmpfs_tmpdir}"; sudo rm -rf "$tmpdir" "${tmpfs_tmpdir}"' INT TERM EXIT
+trap 'sudo umount "${tmpfs_tmpdir}"; ls -lahR "$tmpdir" "${tmpfs_tmpdir}"; sudo rm -rf "$tmpdir" "${tmpfs_tmpdir}"' INT TERM EXIT
 TMPDIR="$tmpdir" TMPFS_TMPDIR="${tmpfs_tmpdir}" "$@"
