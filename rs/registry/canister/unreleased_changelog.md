@@ -10,8 +10,12 @@ on the process that this file is part of, see
 ## Added
 
 ## Changed
+Guest launch measurements should now be stored hex encoded under
+`encoded_measurement` as well as the deprecated `measurement`.
 
 ## Deprecated
+The `measurement` field is now deprecated, but should continue to be populated
+until it is completely removed.
 
 ## Removed
 

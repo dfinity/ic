@@ -6,7 +6,7 @@ edition.workspace = true
 anyhow = { workspace = true }
 candid = { workspace = true }
 der = { workspace = true, features = ["alloc", "derive", "std"] }
-itertools = { workspace = true }
+hex = { workspace = true }
 pem = { workspace = true }
 prost = { workspace = true }
 ring = { workspace = true }
