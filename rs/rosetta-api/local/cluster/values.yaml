@@ -107,4 +107,3 @@ cadvisor:
   nodeSelector: {}
   tolerations: []
   affinity: {}
-
