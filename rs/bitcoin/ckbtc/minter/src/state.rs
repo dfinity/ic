@@ -349,7 +349,6 @@ pub enum Mode {
     DepositsRestrictedTo(Vec<Principal>),
     #[default]
     /// No restrictions on the minter interactions.
-    #[default]
     GeneralAvailability,
 }
 
