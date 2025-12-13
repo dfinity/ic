@@ -1,3 +1,4 @@
+use candid::Encode;
 use canister_test::{Canister, Runtime, Wasm};
 use futures::future::join_all;
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -5,6 +6,8 @@ use ic_system_test_driver::driver::test_env_api::get_dependency_path;
 use ic_system_test_driver::driver::test_env_api::retry_async;
 use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasVm, IcNodeSnapshot};
 use ic_system_test_driver::util::{MetricsFetcher, UniversalCanister, runtime_from_url};
+use ic_types::messages::ReplicaHealthStatus;
+use ic_utils::interfaces::management_canister::ManagementCanister;
 use slog::info;
 use std::collections::BTreeMap;
 use std::env;
@@ -212,6 +215,103 @@ pub async fn rejoin_test_large_state(
     store_and_read_stable(&logger, message, &universal_canister).await;
 
     assert_state_sync_has_happened(&logger, rejoin_node, base_count).await;
+}
+
+pub async fn rejoin_test_many_canisters(
+    env: TestEnv,
+    num_canisters: usize,
+    dkg_interval: u64,
+    rejoin_node: IcNodeSnapshot,
+    agent_node: IcNodeSnapshot,
+) {
+    let logger = env.logger();
+    let agent = agent_node.build_default_agent_async().await;
+    let ic00 = ManagementCanister::create(&agent);
+
+    info!(
+        logger,
+        "Installing the seed canister on a node {} ...",
+        agent_node.get_public_url()
+    );
+    let seed_canister_id = ic00
+        .create_canister()
+        .as_provisional_create_with_amount(None)
+        .with_effective_canister_id(agent_node.effective_canister_id())
+        .call_and_wait()
+        .await
+        .expect("Failed to create the seed canister")
+        .0;
+    let seed_canister_wasm_path = get_dependency_path(
+        env::var("STATESYNC_TEST_CANISTER_WASM_PATH")
+            .expect("STATESYNC_TEST_CANISTER_WASM_PATH not set"),
+    );
+    let seed_canister_wasm = std::fs::read(seed_canister_wasm_path)
+        .expect("Could not read STATESYNC_TEST_CANISTER_WASM_PATH");
+    ic00.install(&seed_canister_id, &seed_canister_wasm)
+        .await
+        .expect("Failed to install the seed canister");
+
+    info!(
+        logger,
+        "Creating {} canisters via the seed canister {} ...", num_canisters, seed_canister_id
+    );
+    let bytes =
+        Encode!(&num_canisters).expect("Failed to candid encode argument for the seed canister");
+    agent
+        .update(&seed_canister_id, "create_many_canisters")
+        .with_arg(bytes)
+        .call_and_wait()
+        .await
+        .expect("Failed to create canisters via the seed canister");
+
+    info!(
+        logger,
+        "Killing a node: {} ...",
+        rejoin_node.get_public_url()
+    );
+    rejoin_node.vm().kill();
+    rejoin_node
+        .await_status_is_unavailable()
+        .expect("Node still healthy");
+
+    // Wait for the subnet to produce a CUP and then restart the rejoin_node.
+    // This way, the restarted node starts from that CUP
+    // and we can assert it to catch up until the next CUP.
+    info!(logger, "Waiting for a CUP ...");
+    let res =
+        fetch_metrics::<u64>(&logger, agent_node.clone(), vec![LATEST_CERTIFIED_HEIGHT]).await;
+    let latest_certified_height = res[LATEST_CERTIFIED_HEIGHT][0];
+    wait_for_cup(&logger, latest_certified_height, agent_node.clone()).await;
+
+    info!(logger, "Start the killed node again ...");
+    rejoin_node.vm().start();
+
+    info!(logger, "Waiting for the next CUP ...");
+    let last_cup_height = wait_for_cup(
+        &logger,
+        latest_certified_height + dkg_interval + 1,
+        agent_node.clone(),
+    )
+    .await;
+
+    let rejoin_node_status = rejoin_node
+        .status_async()
+        .await
+        .expect("Failed to get status of rejoin_node");
+    let rejoin_node_certified_height = rejoin_node_status
+        .certified_height
+        .expect("Failed to get certified height of rejoin_node")
+        .get();
+    assert!(
+        rejoin_node_certified_height >= last_cup_height,
+        "The rejoin_node certified height {} is less than the last CUP height {}.",
+        rejoin_node_certified_height,
+        last_cup_height
+    );
+    let rejoin_node_health_status = rejoin_node_status
+        .replica_health_status
+        .expect("Failed to get replica health status of rejoin_node");
+    assert_eq!(rejoin_node_health_status, ReplicaHealthStatus::Healthy);
 }
 
 pub async fn assert_state_sync_has_happened(
