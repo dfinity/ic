@@ -85,15 +85,26 @@ hex_to_idl_byte_array() {
 # TODO deduplicate this from icos_deploy.sh by moving into lib.sh
 disk_image_exists() {
     GIT_REVISION=$1
+    # Check for update-img.tar.zst (current path where disk images are uploaded)
     curl --output /dev/null --silent --head --fail \
-        "https://download.dfinity.systems/ic/${GIT_REVISION}/guest-os/disk-img-dev/disk-img.tar.zst" \
+        "https://download.dfinity.systems/ic/${GIT_REVISION}/guest-os/update-img/update-img.tar.zst" \
+        || curl --output /dev/null --silent --head --fail \
+            "https://download.dfinity.systems/ic/${GIT_REVISION}/guest-os/update-img-dev/update-img.tar.zst" \
+        || curl --output /dev/null --silent --head --fail \
+            "https://download.dfinity.systems/ic/${GIT_REVISION}/guest-os/disk-img-dev/disk-img.tar.zst" \
         || curl --output /dev/null --silent --head --fail \
             "https://download.dfinity.systems/ic/${GIT_REVISION}/guest-os/disk-img.tar.zst"
 }
 
 ##: latest_commit_with_prebuilt_artifacts
-## Gets the latest git commit with a prebuilt governance canister WASM and a disk image
+## Gets the latest git commit with a prebuilt governance canister WASM and optionally a disk image
+## Usage: latest_commit_with_prebuilt_artifacts [--require-disk-image]
+##   --require-disk-image: Also require disk image to exist (default: false, only WASM required)
 latest_commit_with_prebuilt_artifacts() {
+    REQUIRE_DISK_IMAGE=false
+    if [ "${1:-}" = "--require-disk-image" ]; then
+        REQUIRE_DISK_IMAGE=true
+    fi
 
     IC_REPO=$(repo_root)
     pushd "$IC_REPO" >/dev/null
@@ -103,10 +114,17 @@ latest_commit_with_prebuilt_artifacts() {
 
     for HASH in $RECENT_CHANGES; do
         echo >&2 "Checking $HASH..."
-        GZ=$(_download_canister_gz "governance-canister" "$HASH")
+        GZ=$(_download_canister_gz "node-rewards-canister" "$HASH")
 
         if ungzip "$GZ" >/dev/null 2>&1; then
-            if disk_image_exists "$HASH"; then
+            # If disk image is required, check for it; otherwise, just return the commit with WASM
+            if [ "$REQUIRE_DISK_IMAGE" = "true" ]; then
+                if disk_image_exists "$HASH"; then
+                    echo "$HASH"
+                    return 0
+                fi
+            else
+                # WASM exists and is valid, return this commit
                 echo "$HASH"
                 return 0
             fi
