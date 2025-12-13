@@ -10,3 +10,5 @@ sh_binary(
         "fuzz_test",
     ],
 )
+
+# Testing a change
