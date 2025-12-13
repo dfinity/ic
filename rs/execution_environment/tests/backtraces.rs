@@ -27,8 +27,8 @@ const IC0_TRAP_ERROR: &str =
 const IC0_TRAP_BACKTRACE: &str = r#"
 Canister Backtrace:
 ic_cdk_executor::machinery::setup_panic_hook::{{closure}}::{{closure}}
-std::panicking::rust_panic_with_hook
-std::panicking::begin_panic_handler::{{closure}}
+std::panicking::panic_with_hook
+std::panicking::panic_handler::{{closure}}
 std::sys::backtrace::__rust_end_short_backtrace
 __rustc::rust_begin_unwind
 core::panicking::panic_fmt
