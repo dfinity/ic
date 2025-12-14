@@ -244,9 +244,9 @@ pub enum RequestState {
 
     /// Called mgmt `rename_canister`. Subsequent mgmt calls have to use the explicit subnet ID, not `aaaaa-aa`.
     #[strum(
-        to_string = "RequestState::RenamedReplaced {{ request: {request}, stopped_since: {stopped_since} }}"
+        to_string = "RequestState::RenamedReplacedCanister {{ request: {request}, stopped_since: {stopped_since} }}"
     )]
-    RenamedReplaced {
+    RenamedReplacedCanister {
         request: Request,
         stopped_since: u64,
     },
@@ -275,9 +275,9 @@ pub enum RequestState {
 
     /// Called mgmt `delete_canister`.
     #[strum(
-        to_string = "RequestState::MigratedDeleted {{ request: {request}, stopped_since: {stopped_since} }}"
+        to_string = "RequestState::MigratedCanisterDeleted {{ request: {request}, stopped_since: {stopped_since} }}"
     )]
-    MigratedDeleted {
+    MigratedCanisterDeleted {
         request: Request,
         stopped_since: u64,
     },
@@ -309,10 +309,10 @@ impl RequestState {
             RequestState::Accepted { request }
             | RequestState::ControllersChanged { request }
             | RequestState::StoppedAndReady { request, .. }
-            | RequestState::RenamedReplaced { request, .. }
+            | RequestState::RenamedReplacedCanister { request, .. }
             | RequestState::UpdatedRoutingTable { request, .. }
             | RequestState::RoutingTableChangeAccepted { request, .. }
-            | RequestState::MigratedDeleted { request, .. }
+            | RequestState::MigratedCanisterDeleted { request, .. }
             | RequestState::RestoredControllers { request }
             | RequestState::Failed { request, .. } => request,
         }
@@ -323,10 +323,10 @@ impl RequestState {
             RequestState::Accepted { .. } => "Accepted",
             RequestState::ControllersChanged { .. } => "ControllersChanged",
             RequestState::StoppedAndReady { .. } => "StoppedAndReady",
-            RequestState::RenamedReplaced { .. } => "RenamedReplaced",
+            RequestState::RenamedReplacedCanister { .. } => "RenamedReplacedCanister",
             RequestState::UpdatedRoutingTable { .. } => "UpdatedRoutingTable",
             RequestState::RoutingTableChangeAccepted { .. } => "RoutingTableChangeAccepted",
-            RequestState::MigratedDeleted { .. } => "MigratedDeleted",
+            RequestState::MigratedCanisterDeleted { .. } => "MigratedCanisterDeleted",
             RequestState::RestoredControllers { .. } => "RestoredControllers",
             RequestState::Failed { .. } => "Failed",
         }
@@ -482,7 +482,7 @@ pub fn start_timers() {
     set_timer_interval(interval, async || {
         process_all_by_predicate(
             "renamed_replaced",
-            |r| matches!(r, RequestState::RenamedReplaced { .. }),
+            |r| matches!(r, RequestState::RenamedReplacedCanister { .. }),
             process_renamed,
         )
         .await
@@ -506,7 +506,7 @@ pub fn start_timers() {
     set_timer_interval(interval, async || {
         process_all_by_predicate(
             "migrated_canister_deleted",
-            |r| matches!(r, RequestState::MigratedDeleted { .. }),
+            |r| matches!(r, RequestState::MigratedCanisterDeleted { .. }),
             process_migrated_canister_deleted,
         )
         .await

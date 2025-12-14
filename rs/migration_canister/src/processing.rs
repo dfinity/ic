@@ -221,7 +221,7 @@ pub async fn process_stopped(
         request.caller,
     )
     .await
-    .map_success(|_| RequestState::RenamedReplaced {
+    .map_success(|_| RequestState::RenamedReplacedCanister {
         request,
         stopped_since,
     })
@@ -231,12 +231,12 @@ pub async fn process_stopped(
 pub async fn process_renamed(
     request: RequestState,
 ) -> ProcessingResult<RequestState, RequestState> {
-    let RequestState::RenamedReplaced {
+    let RequestState::RenamedReplacedCanister {
         request,
         stopped_since,
     } = request
     else {
-        println!("Error: list_by RenamedReplaced returned bad variant");
+        println!("Error: list_by RenamedReplacedCanister returned bad variant");
         return ProcessingResult::NoProgress;
     };
 
@@ -300,7 +300,7 @@ pub async fn process_routing_table(
     else {
         return ProcessingResult::NoProgress;
     };
-    ProcessingResult::Success(RequestState::MigratedDeleted {
+    ProcessingResult::Success(RequestState::MigratedCanisterDeleted {
         request,
         stopped_since,
     })
@@ -309,12 +309,12 @@ pub async fn process_routing_table(
 pub async fn process_migrated_canister_deleted(
     request: RequestState,
 ) -> ProcessingResult<RequestState, RequestState> {
-    let RequestState::MigratedDeleted {
+    let RequestState::MigratedCanisterDeleted {
         request,
         stopped_since,
     } = request
     else {
-        println!("Error: list_by MigratedDeleted returned bad variant");
+        println!("Error: list_by MigratedCanisterDeleted returned bad variant");
         return ProcessingResult::NoProgress;
     };
     // The protocol ensures the following:

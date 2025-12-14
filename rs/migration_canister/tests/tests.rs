@@ -1357,7 +1357,7 @@ async fn status_correct() {
     assert_eq!(
         status.unwrap(),
         MigrationStatus::InProgress {
-            status: "RenamedReplaced".to_string()
+            status: "RenamedReplacedCanister".to_string()
         }
     );
 
@@ -1384,7 +1384,7 @@ async fn status_correct() {
     assert_eq!(
         status.unwrap(),
         MigrationStatus::InProgress {
-            status: "MigratedDeleted".to_string()
+            status: "MigratedCanisterDeleted".to_string()
         }
     );
     pic.advance_time(Duration::from_secs(360)).await;
@@ -1683,7 +1683,7 @@ async fn parallel_migrations() {
         let MigrationStatus::InProgress { ref status } = status.unwrap() else {
             panic!()
         };
-        assert_eq!(status, "MigratedDeleted");
+        assert_eq!(status, "MigratedCanisterDeleted");
     }
 }
 
