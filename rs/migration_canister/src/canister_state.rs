@@ -124,7 +124,7 @@ pub mod requests {
         });
         assert!(
             requests.len() <= 1,
-            "There should only be a single request for a given pair of canister IDs."
+            "There should only be a single request for a given pair of migrated and replaced canisters."
         );
         requests.first().cloned()
     }

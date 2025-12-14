@@ -481,7 +481,7 @@ pub fn start_timers() {
     });
     set_timer_interval(interval, async || {
         process_all_by_predicate(
-            "renamed_replaced",
+            "renamed_replaced_canister",
             |r| matches!(r, RequestState::RenamedReplacedCanister { .. }),
             process_renamed,
         )
