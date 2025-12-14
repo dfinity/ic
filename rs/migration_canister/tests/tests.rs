@@ -67,8 +67,8 @@ enum MigrationStatus {
 
 pub struct Setup {
     pub pic: PocketIc,
-    pub migrateds: Vec<Principal>,
-    pub replaceds: Vec<Principal>,
+    pub migrated_canisters: Vec<Principal>,
+    pub replaced_canisters: Vec<Principal>,
     pub migrated_canister_controllers: Vec<Principal>,
     pub replaced_canister_controllers: Vec<Principal>,
     pub migrated_canister_subnet: Principal,
@@ -163,8 +163,8 @@ async fn setup(
     let migrated_canister_subnet = subnets[0];
     let replaced_canister_subnet = subnets[1];
 
-    let mut migrateds = vec![];
-    let mut replaceds = vec![];
+    let mut migrated_canisters = vec![];
+    let mut replaced_canisters = vec![];
     for _ in 0..num_migrations {
         // migrated canister
         let mut new_controllers = migrated_canister_controllers.clone();
@@ -190,7 +190,7 @@ async fn setup(
             pic.add_cycles(migrated, 2_000_000).await;
         }
         pic.stop_canister(migrated, Some(c1)).await.unwrap();
-        migrateds.push(migrated);
+        migrated_canisters.push(migrated);
 
         // replaced canister
         let mut new_controllers = replaced_canister_controllers.clone();
@@ -216,12 +216,12 @@ async fn setup(
             pic.add_cycles(replaced, 2_000_000).await;
         }
         pic.stop_canister(replaced, Some(c1)).await.unwrap();
-        replaceds.push(replaced)
+        replaced_canisters.push(replaced)
     }
     Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         migrated_canister_controllers,
         replaced_canister_controllers,
         migrated_canister_subnet,
@@ -379,16 +379,16 @@ async fn canister_info(
 async fn migration_succeeds() {
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         migrated_canister_controllers,
         system_controller,
         replaced_canister_subnet,
         ..
     } = setup(Settings::default()).await;
     let sender = migrated_canister_controllers[0];
-    let migrated = migrateds[0];
-    let replaced = replaceds[0];
+    let migrated = migrated_canisters[0];
+    let replaced = replaced_canisters[0];
 
     // We deploy a universal canister acting as a proxy canister
     // for retrieving canister history.
@@ -579,14 +579,14 @@ async fn call_request(
 async fn replay_call_after_migration() {
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         migrated_canister_controllers,
         ..
     } = setup(Settings::default()).await;
     let sender = migrated_canister_controllers[0];
-    let migrated = migrateds[0];
-    let replaced = replaceds[0];
+    let migrated = migrated_canisters[0];
+    let replaced = replaced_canisters[0];
 
     assert_eq!(
         get_gauge(
@@ -738,8 +738,8 @@ async fn concurrent_migration_migrated() {
     const NUM_MIGRATIONS: usize = 2;
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         migrated_canister_controllers,
         ..
     } = setup(Settings {
@@ -748,9 +748,9 @@ async fn concurrent_migration_migrated() {
     })
     .await;
     let sender = migrated_canister_controllers[0];
-    let migrated = migrateds[0];
-    let replaced1 = replaceds[0];
-    let replaced2 = replaceds[1];
+    let migrated = migrated_canisters[0];
+    let replaced1 = replaced_canisters[0];
+    let replaced2 = replaced_canisters[1];
 
     let args1 = MigrateCanisterArgs {
         migrated_canister_id: migrated,
@@ -768,8 +768,8 @@ async fn concurrent_migration_replaced() {
     const NUM_MIGRATIONS: usize = 2;
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         migrated_canister_controllers,
         ..
     } = setup(Settings {
@@ -778,9 +778,9 @@ async fn concurrent_migration_replaced() {
     })
     .await;
     let sender = migrated_canister_controllers[0];
-    let migrated1 = migrateds[0];
-    let migrated2 = migrateds[1];
-    let replaced = replaceds[0];
+    let migrated1 = migrated_canisters[0];
+    let migrated2 = migrated_canisters[1];
+    let replaced = replaced_canisters[0];
 
     let args1 = MigrateCanisterArgs {
         migrated_canister_id: migrated1,
@@ -800,14 +800,14 @@ where
 {
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         migrated_canister_controllers,
         ..
     } = setup;
     let sender = migrated_canister_controllers[0];
-    let migrated = migrateds[0];
-    let replaced = replaceds[0];
+    let migrated = migrated_canisters[0];
+    let replaced = replaced_canisters[0];
 
     let args = MigrateCanisterArgs {
         migrated_canister_id: migrated,
@@ -839,7 +839,7 @@ async fn migrated_canister_controllers_changed_before_migration() {
 
     let pic = &setup.pic;
     let sender = setup.migrated_canister_controllers[0];
-    let migrated = setup.migrateds[0];
+    let migrated = setup.migrated_canisters[0];
     let race = || async {
         pic.set_controllers(migrated, Some(sender), vec![sender])
             .await
@@ -855,7 +855,7 @@ async fn migrated_canister_deleted_before_migration() {
 
     let pic = &setup.pic;
     let sender = setup.migrated_canister_controllers[0];
-    let migrated = setup.migrateds[0];
+    let migrated = setup.migrated_canisters[0];
     let race = || async {
         pic.delete_canister(migrated, Some(sender)).await.unwrap();
         migrated
@@ -869,7 +869,7 @@ async fn replaced_canister_controllers_changed_before_migration() {
 
     let pic = &setup.pic;
     let sender = setup.migrated_canister_controllers[0];
-    let replaced = setup.replaceds[0];
+    let replaced = setup.replaced_canisters[0];
     let race = || async {
         pic.set_controllers(replaced, Some(sender), vec![sender])
             .await
@@ -885,7 +885,7 @@ async fn replaced_canister_deleted_before_migration() {
 
     let pic = &setup.pic;
     let sender = setup.migrated_canister_controllers[0];
-    let replaced = setup.replaceds[0];
+    let replaced = setup.replaced_canisters[0];
     let race = || async {
         pic.delete_canister(replaced, Some(sender)).await.unwrap();
         replaced
@@ -898,8 +898,8 @@ async fn validation_fails_not_allowlisted() {
     let special_caller = Principal::self_authenticating(vec![42]);
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         migrated_canister_controllers,
         ..
     } = setup(Settings {
@@ -908,8 +908,8 @@ async fn validation_fails_not_allowlisted() {
     })
     .await;
     let sender = migrated_canister_controllers[0];
-    let migrated = migrateds[0];
-    let replaced = replaceds[0];
+    let migrated = migrated_canisters[0];
+    let replaced = replaced_canisters[0];
 
     let Err(ValidationError::MigrationsDisabled(Reserved)) = migrate_canister(
         &pic,
@@ -943,14 +943,14 @@ async fn validation_fails_not_allowlisted() {
 async fn validation_fails_not_found() {
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         migrated_canister_controllers,
         ..
     } = setup(Settings::default()).await;
     let sender = migrated_canister_controllers[0];
-    let migrated = migrateds[0];
-    let replaced = replaceds[0];
+    let migrated = migrated_canisters[0];
+    let replaced = replaced_canisters[0];
     let nonexistent_canister = Principal::from_text("222ay-6aaaa-aaaah-alvrq-cai").unwrap();
 
     let err = migrate_canister(
@@ -986,12 +986,12 @@ async fn validation_fails_not_found() {
 async fn validation_fails_same_canister() {
     let Setup {
         pic,
-        migrateds,
+        migrated_canisters,
         migrated_canister_controllers,
         ..
     } = setup(Settings::default()).await;
     let sender = migrated_canister_controllers[0];
-    let migrated = migrateds[0];
+    let migrated = migrated_canisters[0];
 
     let Err(ValidationError::SameSubnet(Reserved)) = migrate_canister(
         &pic,
@@ -1011,13 +1011,13 @@ async fn validation_fails_same_canister() {
 async fn validation_fails_same_subnet() {
     let Setup {
         pic,
-        migrateds,
+        migrated_canisters,
         migrated_canister_subnet,
         migrated_canister_controllers,
         ..
     } = setup(Settings::default()).await;
     let sender = migrated_canister_controllers[0];
-    let migrated = migrateds[0];
+    let migrated = migrated_canisters[0];
 
     // Create a replaced canister on the same subnet.
     let mut new_controllers = migrated_canister_controllers.clone();
@@ -1051,16 +1051,16 @@ async fn validation_fails_same_subnet() {
 async fn validation_fails_caller_not_controller() {
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         migrated_canister_controllers,
         replaced_canister_controllers,
         ..
     } = setup(Settings::default()).await;
     // sender not controller of migrated canister
     let bad_sender = replaced_canister_controllers[1];
-    let migrated = migrateds[0];
-    let replaced = replaceds[0];
+    let migrated = migrated_canisters[0];
+    let replaced = replaced_canisters[0];
     let Err(ValidationError::CallerNotController { canister }) = migrate_canister(
         &pic,
         bad_sender,
@@ -1096,8 +1096,8 @@ async fn validation_fails_caller_not_controller() {
 async fn validation_fails_mc_not_migrated_canister_controller() {
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         migrated_canister_controllers,
         ..
     } = setup(Settings {
@@ -1107,8 +1107,8 @@ async fn validation_fails_mc_not_migrated_canister_controller() {
     .await;
     // MC not controller of migrated canister
     let sender = migrated_canister_controllers[0];
-    let migrated = migrateds[0];
-    let replaced = replaceds[0];
+    let migrated = migrated_canisters[0];
+    let replaced = replaced_canisters[0];
     let Err(ValidationError::NotController { canister }) = migrate_canister(
         &pic,
         sender,
@@ -1128,8 +1128,8 @@ async fn validation_fails_mc_not_migrated_canister_controller() {
 async fn validation_fails_mc_not_replaced_canister_controller() {
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         migrated_canister_controllers,
         ..
     } = setup(Settings {
@@ -1139,8 +1139,8 @@ async fn validation_fails_mc_not_replaced_canister_controller() {
     .await;
     // MC not controller of replaced canister
     let sender = migrated_canister_controllers[0];
-    let migrated = migrateds[0];
-    let replaced = replaceds[0];
+    let migrated = migrated_canisters[0];
+    let replaced = replaced_canisters[0];
     let Err(ValidationError::NotController { canister }) = migrate_canister(
         &pic,
         sender,
@@ -1160,14 +1160,14 @@ async fn validation_fails_mc_not_replaced_canister_controller() {
 async fn validation_fails_not_stopped() {
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         migrated_canister_controllers,
         ..
     } = setup(Settings::default()).await;
     let sender = migrated_canister_controllers[0];
-    let migrated = migrateds[0];
-    let replaced = replaceds[0];
+    let migrated = migrated_canisters[0];
+    let replaced = replaced_canisters[0];
 
     pic.start_canister(migrated, Some(sender)).await.unwrap();
     assert!(matches!(
@@ -1204,15 +1204,15 @@ async fn validation_fails_not_stopped() {
 async fn validation_fails_disabled() {
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         migrated_canister_controllers,
         system_controller,
         ..
     } = setup(Settings::default()).await;
     let sender = migrated_canister_controllers[0];
-    let migrated = migrateds[0];
-    let replaced = replaceds[0];
+    let migrated = migrated_canisters[0];
+    let replaced = replaced_canisters[0];
     // disable canister API
     pic.update_call(
         MIGRATION_CANISTER_ID.into(),
@@ -1241,14 +1241,14 @@ async fn validation_fails_disabled() {
 async fn validation_fails_snapshot() {
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         replaced_canister_controllers,
         ..
     } = setup(Settings::default()).await;
     let sender = replaced_canister_controllers[0];
-    let migrated = migrateds[0];
-    let replaced = replaceds[0];
+    let migrated = migrated_canisters[0];
+    let replaced = replaced_canisters[0];
     // install a minimal Wasm module
     pic.install_canister(
         replaced,
@@ -1279,8 +1279,8 @@ async fn validation_fails_snapshot() {
 async fn validation_fails_insufficient_cycles() {
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         migrated_canister_controllers,
         ..
     } = setup(Settings {
@@ -1289,8 +1289,8 @@ async fn validation_fails_insufficient_cycles() {
     })
     .await;
     let sender = migrated_canister_controllers[0];
-    let migrated = migrateds[0];
-    let replaced = replaceds[0];
+    let migrated = migrated_canisters[0];
+    let replaced = replaced_canisters[0];
 
     assert!(matches!(
         migrate_canister(
@@ -1310,14 +1310,14 @@ async fn validation_fails_insufficient_cycles() {
 async fn status_correct() {
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         migrated_canister_controllers,
         ..
     } = setup(Settings::default()).await;
     let sender = migrated_canister_controllers[0];
-    let migrated = migrateds[0];
-    let replaced = replaceds[0];
+    let migrated = migrated_canisters[0];
+    let replaced = replaced_canisters[0];
     let args = MigrateCanisterArgs {
         migrated_canister_id: migrated,
         replace_canister_id: replaced,
@@ -1400,14 +1400,14 @@ async fn status_correct() {
 async fn after_validation_migrated_canister_not_stopped() {
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         migrated_canister_controllers,
         ..
     } = setup(Settings::default()).await;
     let sender = migrated_canister_controllers[0];
-    let migrated = migrateds[0];
-    let replaced = replaceds[0];
+    let migrated = migrated_canisters[0];
+    let replaced = replaced_canisters[0];
     let args = MigrateCanisterArgs {
         migrated_canister_id: migrated,
         replace_canister_id: replaced,
@@ -1430,14 +1430,14 @@ async fn after_validation_migrated_canister_not_stopped() {
 async fn after_validation_replaced_canister_not_stopped() {
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         migrated_canister_controllers,
         ..
     } = setup(Settings::default()).await;
     let sender = migrated_canister_controllers[0];
-    let migrated = migrateds[0];
-    let replaced = replaceds[0];
+    let migrated = migrated_canisters[0];
+    let replaced = replaced_canisters[0];
     let args = MigrateCanisterArgs {
         migrated_canister_id: migrated,
         replace_canister_id: replaced,
@@ -1460,14 +1460,14 @@ async fn after_validation_replaced_canister_not_stopped() {
 async fn after_validation_replaced_canister_has_snapshot() {
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         replaced_canister_controllers,
         ..
     } = setup(Settings::default()).await;
     let sender = replaced_canister_controllers[0];
-    let migrated = migrateds[0];
-    let replaced = replaceds[0];
+    let migrated = migrated_canisters[0];
+    let replaced = replaced_canisters[0];
     let args = MigrateCanisterArgs {
         migrated_canister_id: migrated,
         replace_canister_id: replaced,
@@ -1502,8 +1502,8 @@ async fn after_validation_replaced_canister_has_snapshot() {
 async fn after_validation_insufficient_cycles() {
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         replaced_canister_controllers,
         ..
     } = setup(Settings {
@@ -1512,8 +1512,8 @@ async fn after_validation_insufficient_cycles() {
     })
     .await;
     let sender = replaced_canister_controllers[0];
-    let migrated = migrateds[0];
-    let replaced = replaceds[0];
+    let migrated = migrated_canisters[0];
+    let replaced = replaced_canisters[0];
     // Top up just enough to pass validation..
     pic.add_cycles(migrated, 10_000_000_000_000).await;
     let args = MigrateCanisterArgs {
@@ -1545,15 +1545,15 @@ async fn after_validation_insufficient_cycles() {
 async fn failure_controllers_restored() {
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         mut migrated_canister_controllers,
         mut replaced_canister_controllers,
         ..
     } = setup(Settings::default()).await;
     let sender = migrated_canister_controllers[0];
-    let migrated = migrateds[0];
-    let replaced = replaceds[0];
+    let migrated = migrated_canisters[0];
+    let replaced = replaced_canisters[0];
     let args = MigrateCanisterArgs {
         migrated_canister_id: migrated,
         replace_canister_id: replaced,
@@ -1590,14 +1590,14 @@ async fn failure_controllers_restored() {
 async fn success_controllers_restored() {
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         mut migrated_canister_controllers,
         ..
     } = setup(Settings::default()).await;
     let sender = migrated_canister_controllers[0];
-    let migrated = migrateds[0];
-    let replaced = replaceds[0];
+    let migrated = migrated_canisters[0];
+    let replaced = replaced_canisters[0];
     let args = MigrateCanisterArgs {
         migrated_canister_id: migrated,
         replace_canister_id: replaced,
@@ -1631,8 +1631,8 @@ async fn parallel_migrations() {
     const NUM_MIGRATIONS: usize = 51;
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         migrated_canister_controllers,
         ..
     } = setup(Settings {
@@ -1646,8 +1646,8 @@ async fn parallel_migrations() {
             &pic,
             migrated_canister_controllers[0],
             &MigrateCanisterArgs {
-                migrated_canister_id: migrateds[i],
-                replace_canister_id: replaceds[i],
+                migrated_canister_id: migrated_canisters[i],
+                replace_canister_id: replaced_canisters[i],
             },
         )
         .await
@@ -1658,8 +1658,8 @@ async fn parallel_migrations() {
         &pic,
         migrated_canister_controllers[0],
         &MigrateCanisterArgs {
-            migrated_canister_id: migrateds[NUM_MIGRATIONS - 1],
-            replace_canister_id: replaceds[NUM_MIGRATIONS - 1],
+            migrated_canister_id: migrated_canisters[NUM_MIGRATIONS - 1],
+            replace_canister_id: replaced_canisters[NUM_MIGRATIONS - 1],
         },
     )
     .await;
@@ -1673,8 +1673,8 @@ async fn parallel_migrations() {
             &pic,
             migrated_canister_controllers[0],
             &MigrateCanisterArgs {
-                migrated_canister_id: migrateds[i],
-                replace_canister_id: replaceds[i],
+                migrated_canister_id: migrated_canisters[i],
+                replace_canister_id: replaced_canisters[i],
             },
         )
         .await;
@@ -1690,8 +1690,8 @@ async fn parallel_validations() {
     const NUM_MIGRATIONS: usize = 260;
     let Setup {
         pic,
-        migrateds,
-        replaceds,
+        migrated_canisters,
+        replaced_canisters,
         ..
     } = setup(Settings {
         num_migrations: NUM_MIGRATIONS as u64,
@@ -1707,8 +1707,8 @@ async fn parallel_validations() {
                 Principal::anonymous(),
                 "migrate_canister",
                 Encode!(&MigrateCanisterArgs {
-                    migrated_canister_id: migrateds[i],
-                    replace_canister_id: replaceds[i],
+                    migrated_canister_id: migrated_canisters[i],
+                    replace_canister_id: replaced_canisters[i],
                 })
                 .unwrap(),
             )
