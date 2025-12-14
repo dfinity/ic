@@ -4,14 +4,15 @@ Title:: Nodes can rejoin a subnet with many canisters
 
 Runbook::
 . setup the testnet of 3f + 1 nodes with f = 4 (like on mainnet)
-. pick a random node and install the state sync test canister through it
-. create 100,000 canisters via the state sync test canister
-. pick another random node rejoin_node and kill that node
+. pick a random node and install 4 "seed" canisters through it (the state sync test canister is used as "seed")
+. create 100,000 canisters via the "seed" canisters (in parallel)
+. deploy 8 "busy" canisters (universal canister with heartbeats executing 1.8B instructions)
+. pick another random node and kill that node
 . wait for the subnet producing a CUP
-. start the rejoin_node
+. start the killed node
 
 Success::
-.. if the rejoin_node catches up w.r.t. its certified height until the next CUP
+.. if the restarted node catches up w.r.t. its certified height and becomes healthy until the next CUP
 
 end::catalog[] */
 
@@ -124,8 +125,8 @@ async fn test_async(env: TestEnv, config: Config) {
     let (app_subnet, _) = get_app_subnet_and_node(&topology_snapshot);
 
     let mut nodes = app_subnet.nodes();
-    let agent_node = nodes.next().unwrap();
     let rejoin_node = nodes.next().unwrap();
+    let agent_node = nodes.next().unwrap();
     rejoin_test_many_canisters(
         env,
         config.num_canisters,
