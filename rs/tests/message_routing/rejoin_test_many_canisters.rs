@@ -128,7 +128,7 @@ fn setup(env: TestEnv, config: Config) {
     let topology_snapshot = env.topology_snapshot();
     let (app_subnet, _) = get_app_subnet_and_node(&topology_snapshot);
 
-    app_subnet.apply_network_settings(NETWORK_SIMULATION);
+    //app_subnet.apply_network_settings(NETWORK_SIMULATION);
 }
 
 fn test(env: TestEnv, config: Config) {
