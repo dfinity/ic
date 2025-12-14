@@ -269,7 +269,9 @@ pub async fn assert_no_snapshots(canister_id: Principal) -> ProcessingResult<(),
             if snapshots.is_empty() {
                 ProcessingResult::Success(())
             } else {
-                ProcessingResult::FatalFailure(ValidationError::ReplacedHasSnapshots(Reserved))
+                ProcessingResult::FatalFailure(ValidationError::ReplacedCanisterHasSnapshots(
+                    Reserved,
+                ))
             }
         }
         Err(e) => {

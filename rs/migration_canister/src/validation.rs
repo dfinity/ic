@@ -112,15 +112,15 @@ pub async fn validate_request(
     }
     // 6. Is the migrated canister stopped?
     if migrated_canister_status.status != CanisterStatusType::Stopped {
-        return Err(ValidationError::MigratedNotStopped(Reserved));
+        return Err(ValidationError::MigratedCanisterNotStopped(Reserved));
     }
     // 7. Is the migrated canister ready for migration?
     if !migrated_canister_status.ready_for_migration {
-        return Err(ValidationError::MigratedNotReady(Reserved));
+        return Err(ValidationError::MigratedCanisterNotReady(Reserved));
     }
     // 8. Is the replaced canister stopped?
     if replaced_canister_status.status != CanisterStatusType::Stopped {
-        return Err(ValidationError::ReplacedNotStopped(Reserved));
+        return Err(ValidationError::ReplacedCanisterNotStopped(Reserved));
     }
     // 9. Does the replaced canister have snapshots?
     assert_no_snapshots(replaced).await.into_result(
@@ -129,7 +129,9 @@ pub async fn validate_request(
 
     // 10. Does the migrated canister have sufficient cycles for the migration?
     if migrated_canister_status.cycles < CYCLES_COST_PER_MIGRATION {
-        return Err(ValidationError::MigratedInsufficientCycles(Reserved));
+        return Err(ValidationError::MigratedCanisterInsufficientCycles(
+            Reserved,
+        ));
     }
 
     let mut migrated_canister_original_controllers = migrated_canister_status.settings.controllers;

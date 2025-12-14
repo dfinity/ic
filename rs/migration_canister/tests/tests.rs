@@ -47,11 +47,11 @@ pub enum ValidationError {
     SameSubnet(Reserved),
     CallerNotController { canister: Principal },
     NotController { canister: Principal },
-    MigratedNotStopped(Reserved),
-    MigratedNotReady(Reserved),
-    ReplacedNotStopped(Reserved),
-    ReplacedHasSnapshots(Reserved),
-    MigratedInsufficientCycles(Reserved),
+    MigratedCanisterNotStopped(Reserved),
+    MigratedCanisterNotReady(Reserved),
+    ReplacedCanisterNotStopped(Reserved),
+    ReplacedCanisterHasSnapshots(Reserved),
+    MigratedCanisterInsufficientCycles(Reserved),
     CallFailed { reason: String },
 }
 
@@ -1180,7 +1180,7 @@ async fn validation_fails_not_stopped() {
             }
         )
         .await,
-        Err(ValidationError::MigratedNotStopped(Reserved))
+        Err(ValidationError::MigratedCanisterNotStopped(Reserved))
     ));
 
     pic.stop_canister(migrated, Some(sender)).await.unwrap();
@@ -1196,7 +1196,7 @@ async fn validation_fails_not_stopped() {
             }
         )
         .await,
-        Err(ValidationError::ReplacedNotStopped(Reserved))
+        Err(ValidationError::ReplacedCanisterNotStopped(Reserved))
     ));
 }
 
@@ -1271,7 +1271,7 @@ async fn validation_fails_snapshot() {
             }
         )
         .await,
-        Err(ValidationError::ReplacedHasSnapshots(Reserved))
+        Err(ValidationError::ReplacedCanisterHasSnapshots(Reserved))
     ));
 }
 
@@ -1302,7 +1302,9 @@ async fn validation_fails_insufficient_cycles() {
             }
         )
         .await,
-        Err(ValidationError::MigratedInsufficientCycles(Reserved))
+        Err(ValidationError::MigratedCanisterInsufficientCycles(
+            Reserved
+        ))
     ));
 }
 

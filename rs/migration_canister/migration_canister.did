@@ -15,16 +15,16 @@ type ValidationError = variant {
   CallFailed : record { reason : text };
   NotController : record { canister : principal };
   CallerNotController : record { canister : principal };
-  ReplacedHasSnapshots : reserved;
+  ReplacedCanisterHasSnapshots : reserved;
   MigrationInProgress : record { canister : principal };
   ValidationInProgress : record { canister : principal };
-  MigratedNotStopped : reserved;
+  MigratedCanisterNotStopped : reserved;
   RateLimited : reserved;
   MigrationsDisabled : reserved;
-  MigratedNotReady : reserved;
-  MigratedInsufficientCycles : reserved;
+  MigratedCanisterNotReady : reserved;
+  MigratedCanisterInsufficientCycles : reserved;
   SameSubnet : reserved;
-  ReplacedNotStopped : reserved;
+  ReplacedCanisterNotStopped : reserved;
 };
 
 type MigrationCanisterInitArgs = record { allowlist : opt vec principal };

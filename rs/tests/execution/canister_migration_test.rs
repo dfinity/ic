@@ -78,11 +78,11 @@ pub enum ValidationError {
     SameSubnet(Reserved),
     CallerNotController { canister: Principal },
     NotController { canister: Principal },
-    MigratedNotStopped(Reserved),
-    MigratedNotReady(Reserved),
-    ReplacedNotStopped(Reserved),
-    ReplacedHasSnapshots(Reserved),
-    MigratedInsufficientCycles(Reserved),
+    MigratedCanisterNotStopped(Reserved),
+    MigratedCanisterNotReady(Reserved),
+    ReplacedCanisterNotStopped(Reserved),
+    ReplacedCanisterHasSnapshots(Reserved),
+    MigratedCanisterInsufficientCycles(Reserved),
     CallFailed { reason: String },
 }
 

@@ -68,11 +68,11 @@ pub enum ValidationError {
     NotController {
         canister: Principal,
     },
-    MigratedNotStopped(Reserved),
-    MigratedNotReady(Reserved),
-    ReplacedNotStopped(Reserved),
-    ReplacedHasSnapshots(Reserved),
-    MigratedInsufficientCycles(Reserved),
+    MigratedCanisterNotStopped(Reserved),
+    MigratedCanisterNotReady(Reserved),
+    ReplacedCanisterNotStopped(Reserved),
+    ReplacedCanisterHasSnapshots(Reserved),
+    MigratedCanisterInsufficientCycles(Reserved),
     #[strum(to_string = "ValidationError::CallFailed {{ reason: {reason} }}")]
     CallFailed {
         reason: String,
