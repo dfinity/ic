@@ -12,7 +12,7 @@ rust_library(
         "//rs/rust_canisters/dfn_candid",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
-	"//rs/universal_canister/lib",
+        "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:chrono",
