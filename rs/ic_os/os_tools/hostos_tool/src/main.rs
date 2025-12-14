@@ -4,7 +4,7 @@ use config::{DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
-use guestos_recovery_tui::GuestOSRecoveryApp;
+use manual_guestos_recovery::GuestOSRecoveryApp;
 use network::generate_network_config;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use std::path::Path;

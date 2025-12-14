@@ -4,6 +4,11 @@ use crate::pb::v1 as pb;
 use candid::{Int, Nat};
 use ic_crypto_sha2::Sha256;
 use ic_nns_governance_api as pb_api;
+use ic_protobuf::registry::replica_version::v1::{
+    GuestLaunchMeasurement as PbGuestLaunchMeasurement,
+    GuestLaunchMeasurementMetadata as PbGuestLaunchMeasurementMetadata,
+    GuestLaunchMeasurements as PbGuestLaunchMeasurements,
+};
 use std::collections::HashMap;
 
 #[cfg(test)]
@@ -455,6 +460,9 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             pb_api::proposal::Action::FulfillSubnetRentalRequest(v) => {
                 pb::proposal::Action::FulfillSubnetRentalRequest(v.into())
             }
+            pb_api::proposal::Action::BlessAlternativeGuestOsVersion(v) => {
+                pb::proposal::Action::BlessAlternativeGuestOsVersion(v.into())
+            }
         }
     }
 }
@@ -503,6 +511,9 @@ impl From<pb_api::ProposalActionRequest> for pb::proposal::Action {
             }
             pb_api::ProposalActionRequest::FulfillSubnetRentalRequest(v) => {
                 pb::proposal::Action::FulfillSubnetRentalRequest(v.into())
+            }
+            pb_api::ProposalActionRequest::BlessAlternativeGuestOsVersion(v) => {
+                pb::proposal::Action::BlessAlternativeGuestOsVersion(v.into())
             }
         }
     }
@@ -2684,6 +2695,94 @@ impl From<pb_api::FulfillSubnetRentalRequest> for pb::FulfillSubnetRentalRequest
             node_ids: item.node_ids.unwrap_or_default(),
             replica_version_id: item.replica_version_id.unwrap_or_default(),
         }
+    }
+}
+
+impl From<pb::BlessAlternativeGuestOsVersion> for pb_api::BlessAlternativeGuestOsVersion {
+    fn from(item: pb::BlessAlternativeGuestOsVersion) -> Self {
+        Self {
+            chip_ids: Some(item.chip_ids),
+            rootfs_hash: Some(item.rootfs_hash),
+            base_guest_launch_measurements: item
+                .base_guest_launch_measurements
+                .map(convert_guest_launch_measurements_from_pb_to_pb_api),
+        }
+    }
+}
+
+impl From<pb_api::BlessAlternativeGuestOsVersion> for pb::BlessAlternativeGuestOsVersion {
+    fn from(item: pb_api::BlessAlternativeGuestOsVersion) -> Self {
+        Self {
+            chip_ids: item.chip_ids.unwrap_or_default(),
+            rootfs_hash: item.rootfs_hash.unwrap_or_default(),
+            base_guest_launch_measurements: item
+                .base_guest_launch_measurements
+                .map(convert_guest_launch_measurements_from_pb_api_to_pb),
+        }
+    }
+}
+
+fn convert_guest_launch_measurements_from_pb_to_pb_api(
+    item: PbGuestLaunchMeasurements,
+) -> pb_api::GuestLaunchMeasurements {
+    pb_api::GuestLaunchMeasurements {
+        guest_launch_measurements: Some(
+            item.guest_launch_measurements
+                .into_iter()
+                .map(convert_guest_launch_measurement_from_pb_to_pb_api)
+                .collect(),
+        ),
+    }
+}
+
+fn convert_guest_launch_measurements_from_pb_api_to_pb(
+    item: pb_api::GuestLaunchMeasurements,
+) -> PbGuestLaunchMeasurements {
+    PbGuestLaunchMeasurements {
+        guest_launch_measurements: item
+            .guest_launch_measurements
+            .unwrap_or_default()
+            .into_iter()
+            .map(convert_guest_launch_measurement_from_pb_api_to_pb)
+            .collect(),
+    }
+}
+
+fn convert_guest_launch_measurement_from_pb_to_pb_api(
+    item: PbGuestLaunchMeasurement,
+) -> pb_api::GuestLaunchMeasurement {
+    pb_api::GuestLaunchMeasurement {
+        measurement: Some(item.measurement),
+        metadata: item
+            .metadata
+            .map(convert_guest_launch_measurement_metadata_from_pb_to_pb_api),
+    }
+}
+
+fn convert_guest_launch_measurement_from_pb_api_to_pb(
+    item: pb_api::GuestLaunchMeasurement,
+) -> PbGuestLaunchMeasurement {
+    PbGuestLaunchMeasurement {
+        measurement: item.measurement.unwrap_or_default(),
+        metadata: item
+            .metadata
+            .map(convert_guest_launch_measurement_metadata_from_pb_api_to_pb),
+    }
+}
+
+fn convert_guest_launch_measurement_metadata_from_pb_to_pb_api(
+    item: PbGuestLaunchMeasurementMetadata,
+) -> pb_api::GuestLaunchMeasurementMetadata {
+    pb_api::GuestLaunchMeasurementMetadata {
+        kernel_cmdline: Some(item.kernel_cmdline),
+    }
+}
+
+fn convert_guest_launch_measurement_metadata_from_pb_api_to_pb(
+    item: pb_api::GuestLaunchMeasurementMetadata,
+) -> PbGuestLaunchMeasurementMetadata {
+    PbGuestLaunchMeasurementMetadata {
+        kernel_cmdline: item.kernel_cmdline.unwrap_or_default(),
     }
 }
 

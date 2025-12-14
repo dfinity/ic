@@ -750,7 +750,7 @@ fn algorithm_id_should_match_algorithm_id_proto() {
     assert!(AlgorithmIdProto::try_from(algorithm_id_variants as i32).is_err());
 
     assert_eq!(
-        AlgorithmId::Placeholder as i32,
+        AlgorithmId::Unspecified as i32,
         AlgorithmIdProto::Unspecified as i32
     );
     assert_eq!(

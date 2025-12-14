@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-12-05: Proposal 139678
+
+http://dashboard.internetcomputer.org/proposal/139678
+
+## Fixed
+
+- Typo in error message about obsolete proposal type SetDefaultFollowees.
+
+
 # 2025-11-28: Proposal 139575
 
 http://dashboard.internetcomputer.org/proposal/139575

@@ -778,7 +778,6 @@ impl Player {
         let mut extra_batch = Batch {
             batch_number: message_routing.expected_batch_height(),
             batch_summary: None,
-            requires_full_state_hash: false,
             content: BatchContent::Data {
                 batch_messages: BatchMessages {
                     signed_ingress_msgs: extra_ingresses,
@@ -786,6 +785,7 @@ impl Player {
                 },
                 chain_key_data: Default::default(),
                 consensus_responses: Vec::new(),
+                requires_full_state_hash: false,
             },
             // Use a fake randomness here since we don't have random tape for extra messages
             randomness,
@@ -804,7 +804,7 @@ impl Player {
                     self.wait_for_state(extra_batch.batch_number);
 
                     // We are done once we delivered a batch for a new checkpoint
-                    if extra_batch.requires_full_state_hash {
+                    if extra_batch.requires_full_state_hash() {
                         break;
                     }
 
@@ -812,7 +812,7 @@ impl Player {
                     // empty batches. If all messages could be completed, we need to deliver one
                     // more batch triggering checkpoint creation.
                     let msg_status = self.ingress_history_reader.get_latest_status();
-                    let incomplete_msgs_exists =
+                    let have_incomplete_msgs =
                         extra_msgs
                             .iter()
                             .any(|msg| match msg_status(&msg.ingress.id()) {
@@ -825,13 +825,10 @@ impl Player {
                         batch_messages: BatchMessages::default(),
                         chain_key_data: Default::default(),
                         consensus_responses: Vec::new(),
+                        requires_full_state_hash: !have_incomplete_msgs,
                     };
                     extra_batch.batch_number = message_routing.expected_batch_height();
                     extra_batch.time += Duration::from_nanos(1);
-
-                    if !incomplete_msgs_exists {
-                        extra_batch.requires_full_state_hash = true;
-                    }
                 }
                 Err(MessageRoutingError::QueueIsFull) => std::thread::sleep(WAIT_DURATION),
                 Err(MessageRoutingError::Ignored { .. }) => {

@@ -1,7 +1,6 @@
 {
     "boundary-node": "eng-boundary-nodes",
     "Consensus": "eng-consensus-prs",
-    "crypto-team": "eng-crypto-mr",
     "defi-team": "eng-defi-prs",
     "DRE": "eng-release-bots",
     "ic-support": "ic-support-notifications",
@@ -9,7 +8,6 @@
     "ic-owners-owners": "owners-owners",
     "InfraSec": "eng-infrasec",
     "languages": "eng-motoko",
-    "networking": "eng-networking",
     "governance-team": "eng-nns-prs",
     "node": "eng-node-prs",
     "Platform Operations": "eng-platform-ops",

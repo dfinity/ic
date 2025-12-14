@@ -1,0 +1,27 @@
+# rules_rust uses a wrapper that causes issues:
+# https://github.com/bazelbuild/rules_rust/pull/3764
+diff --git a/rust/private/rust.bzl b/rust/private/rust.bzl
+index 2f695cbbb..118076c25 100644
+--- a/rust/private/rust.bzl
++++ b/rust/private/rust.bzl
+@@ -511,12 +511,14 @@ def _rust_test_impl(ctx):
+     )
+     data = getattr(ctx.attr, "data", [])
+
+-    env = expand_dict_value_locations(
+-        ctx,
+-        getattr(ctx.attr, "env", {}),
+-        data,
+-        {},
+-    )
++    env = {
++        key: ctx.expand_make_variables(
++            "env",
++            ctx.expand_location(value, ctx.attr.data, short_paths = True),
++            {},
++        )
++        for key, value in ctx.attr.env.items()
++    }
+     if toolchain.llvm_cov and ctx.configuration.coverage_enabled:
+         if not toolchain.llvm_profdata:
+             fail("toolchain.llvm_profdata is required if toolchain.llvm_cov is set.")

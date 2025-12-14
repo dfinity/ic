@@ -1,6 +1,6 @@
 //! Tests for PublicCoefficients conversions
 
-use ic_crypto_internal_bls12_381_type::{G2Projective, Polynomial};
+use ic_crypto_internal_bls12_381_type::{G2Affine, Polynomial};
 use ic_crypto_internal_threshold_sig_bls12381::crypto::public_key_from_secret_key;
 use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::pub_key_bytes_from_pub_coeff_bytes;
 use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::try_number_of_nodes_from_pub_coeff_bytes;
@@ -23,7 +23,7 @@ fn public_coefficients_size_should_be_correct() {
             NumberOfNodes::try_from(&public_coefficients).expect("Invalid size"),
             NumberOfNodes::from(size)
         );
-        public_keys.push(PublicKey(G2Projective::generator().clone()));
+        public_keys.push(PublicKey(G2Affine::generator().clone()));
     }
 }
 
@@ -59,11 +59,11 @@ fn public_coefficients_from_polynomial_should_be_correct() {
 
 #[test]
 fn public_key_for_public_coefficients_should_be_correct() {
-    let mut test_vectors: Vec<(PublicCoefficients, G2Projective)> = vec![(
+    let mut test_vectors: Vec<(PublicCoefficients, G2Affine)> = vec![(
         PublicCoefficients {
             coefficients: Vec::new(),
         },
-        G2Projective::identity(),
+        G2Affine::identity(),
     )];
     let rng = &mut ChaChaRng::from_seed([1u8; 32]);
     for _ in 0..3 {
@@ -84,7 +84,7 @@ fn public_key_for_empty_public_coefficients_should_be_zero() {
         coefficients: Vec::new(),
     };
     let public_key = PublicKey::from(&public_coefficients);
-    assert_eq!(G2Projective::identity(), public_key.0);
+    assert_eq!(G2Affine::identity(), public_key.0);
 }
 
 /// Verifies that the public key for non-empty public coefficients is the first
@@ -124,7 +124,7 @@ fn public_key_from_empty_public_coefficients_bytes_should_be_zero() {
     };
     assert_eq!(
         PublicKey::try_from(&public_coefficients_bytes),
-        Ok(PublicKey(G2Projective::identity()))
+        Ok(PublicKey(G2Affine::identity()))
     );
 }
 

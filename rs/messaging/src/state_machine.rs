@@ -111,16 +111,25 @@ impl StateMachine for StateMachineImpl {
                 .observe_no_canister_allocation_range(&self.log, message);
         }
 
-        let (batch_messages, mut consensus_responses, chain_key_data) = match batch.content {
-            // Regular batch, proceed with round execution.
-            BatchContent::Data {
-                batch_messages,
-                consensus_responses,
-                chain_key_data,
-            } => (batch_messages, consensus_responses, chain_key_data),
+        let (batch_messages, mut consensus_responses, chain_key_data, requires_full_state_hash) =
+            match batch.content {
+                // Regular batch, proceed with round execution.
+                BatchContent::Data {
+                    batch_messages,
+                    consensus_responses,
+                    chain_key_data,
+                    requires_full_state_hash,
+                } => (
+                    batch_messages,
+                    consensus_responses,
+                    chain_key_data,
+                    requires_full_state_hash,
+                ),
 
-            BatchContent::Splitting { .. } => unimplemented!("Subnet splitting is not yet enabled"),
-        };
+                BatchContent::Splitting { .. } => {
+                    unimplemented!("Subnet splitting is not yet enabled")
+                }
+            };
 
         // Get query stats from blocks and add them to the state, so that they can be aggregated later.
         if let Some(query_stats) = &batch_messages.query_stats {
@@ -183,7 +192,7 @@ impl StateMachine for StateMachineImpl {
 
         self.observe_phase_duration(PHASE_INDUCTION, &since);
 
-        let execution_round_type = if batch.requires_full_state_hash {
+        let execution_round_type = if requires_full_state_hash {
             ExecutionRoundType::CheckpointRound
         } else {
             ExecutionRoundType::OrdinaryRound

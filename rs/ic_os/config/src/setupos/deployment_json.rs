@@ -16,18 +16,6 @@ pub struct DeploymentSettings {
     pub dev_vm_resources: VmResources,
 }
 
-// NOTE #7037: We should always use DeploymentSettings directly, but we need to
-// be compatible with old naming for some tests.
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
-pub struct CompatDeploymentSettings {
-    pub deployment: Deployment,
-    #[serde(default)]
-    pub logging: Logging,
-    pub nns: Nns,
-    pub vm_resources: Option<VmResources>,
-    pub dev_vm_resources: Option<VmResources>,
-}
-
 #[serde_as]
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Deployment {

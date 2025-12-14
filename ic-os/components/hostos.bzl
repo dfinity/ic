@@ -48,6 +48,7 @@ component_files = {
     Label("hostos/misc/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
     Label("hostos/misc/20-ipmi.rules"): "/etc/udev/rules.d/20-ipmi.rules",
     Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.sh"): "/opt/ic/bin/guestos-recovery-upgrader.sh",
+    Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-launcher.sh"): "/opt/ic/bin/guestos-recovery-launcher.sh",
     Label("misc/systemd-user/user@.service"): "/etc/systemd/system/user@.service",
 
     # monitoring

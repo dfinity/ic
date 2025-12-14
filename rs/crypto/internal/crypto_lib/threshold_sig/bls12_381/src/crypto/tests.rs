@@ -7,7 +7,7 @@ use super::super::types::{
 };
 use crate::crypto::hash_message_to_g1;
 use crate::types::PublicKey;
-use ic_crypto_internal_bls12_381_type::{G2Projective, LagrangeCoefficients, NodeIndices, Scalar};
+use ic_crypto_internal_bls12_381_type::{G2Affine, LagrangeCoefficients, NodeIndices, Scalar};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::error::InvalidArgumentError;
@@ -19,6 +19,7 @@ use rand_chacha::ChaChaRng;
 
 pub mod util {
     use super::*;
+    use ic_crypto_internal_bls12_381_type::G2Projective;
     use ic_crypto_internal_seed::Seed;
 
     // A public key as computed by the holder of the private key is the same as the
@@ -161,11 +162,19 @@ pub mod util {
         message: &[u8],
     ) {
         // Sum public_coefficients and secret keys.
-        let public_coefficients = &generations
-            .iter()
-            .cloned()
-            .map(|(public_coefficients, _)| public_coefficients)
-            .sum::<PublicCoefficients>();
+        let public_coefficients = {
+            let len = generations[0].0.coefficients.len();
+            let mut accum = vec![G2Projective::identity(); len];
+
+            for (pc, _) in generations.iter() {
+                for (i, val) in accum.iter_mut().enumerate() {
+                    *val += &pc.coefficients[i].0;
+                }
+            }
+
+            let affine = G2Projective::batch_normalize(&accum);
+            PublicCoefficients::new(affine.iter().cloned().map(PublicKey).collect())
+        };
 
         let mut secret_keys = Polynomial::zero();
 
@@ -175,7 +184,13 @@ pub mod util {
 
         let secret_keys = secret_keys.coefficients().to_vec();
 
-        test_valid_public_coefficients(public_coefficients, &secret_keys, threshold, seed, message);
+        test_valid_public_coefficients(
+            &public_coefficients,
+            &secret_keys,
+            threshold,
+            seed,
+            message,
+        );
     }
 }
 
@@ -186,7 +201,7 @@ fn test_distinct_messages_yield_distinct_hashes() {
     let number_of_messages = 100;
     let points: HashSet<_> = (0..number_of_messages as u32)
         .map(|number| {
-            let g1 = hash_message_to_g1(&number.to_be_bytes()[..]);
+            let g1 = hash_message_to_g1(&number.to_be_bytes()[..]).to_affine();
             let bytes = g1.serialize();
             // It suffices to prove that the first 32 bytes are distinct.  More requires a
             // custom hash implementation.
@@ -354,12 +369,16 @@ mod resharing_util {
     /// Given multiple public keys (y values) at different points (which give x
     /// values) interpolate the value at zero.
     pub fn interpolate_public_key(shares: &[PublicKey]) -> PublicKey {
-        let shares: Vec<(NodeIndex, G2Projective)> = shares
+        let shares: Vec<(NodeIndex, G2Affine)> = shares
             .iter()
             .enumerate()
             .map(|(index, share)| ((index as NodeIndex), share.0.clone()))
             .collect();
-        PublicKey(PublicCoefficients::interpolate_g2(&shares).unwrap())
+        PublicKey(
+            PublicCoefficients::interpolate_g2(&shares)
+                .unwrap()
+                .to_affine(),
+        )
     }
 
     /// For each active new receiver, this provides a single encrypted secret

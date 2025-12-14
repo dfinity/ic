@@ -195,7 +195,6 @@ pub fn dummy_transcript_for_tests_with_params(
     // - We cannot use the functions in this `ic-crypto-test-utils-ni-dkg` crate from the `ic-types`
     //   crate even just for tests, due to the quasi-circular dependency that it would introduce.
     // Since the code is not very complex and a dozen lines, duplicating it is not a big issue.
-    use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
     NiDkgTranscript {
         dkg_id: NiDkgId {
             start_block_height: Height::from(0),
@@ -208,17 +207,23 @@ pub fn dummy_transcript_for_tests_with_params(
         committee: NiDkgReceivers::new(committee.into_iter().collect())
             .expect("Couldn't create non-interactive DKG committee"),
         registry_version: RegistryVersion::from(registry_version),
-        internal_csp_transcript: CspNiDkgTranscript::Groth20_Bls12_381(
-            ni_dkg_groth20_bls12_381::Transcript {
-                public_coefficients: ni_dkg_groth20_bls12_381::PublicCoefficientsBytes {
-                    // the following public key matches the one used in StateMachine tests
-                    coefficients: vec![PublicKeyBytes(hex::decode("adf65638a53056b2222c91bb2457b0274bca95198a5acbdadfe7fd72178f069bdea8d99e9479d8087a2686fc81bf3c4b11fe275570d481f1698f79d468afe0e57acc1e298f8b69798da7a891bbec197093ec5f475909923d48bfed6843dbed1f").unwrap().try_into().unwrap())],
-                },
-                receiver_data: BTreeMap::new(),
-            },
-        ),
+        internal_csp_transcript: dummy_csp_transcript(),
     }
 }
+
+pub fn dummy_csp_transcript() -> CspNiDkgTranscript {
+    use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
+    CspNiDkgTranscript::Groth20_Bls12_381(
+        ni_dkg_groth20_bls12_381::Transcript {
+            public_coefficients: ni_dkg_groth20_bls12_381::PublicCoefficientsBytes {
+                // the following public key matches the one used in StateMachine tests
+                coefficients: vec![PublicKeyBytes(hex::decode("adf65638a53056b2222c91bb2457b0274bca95198a5acbdadfe7fd72178f069bdea8d99e9479d8087a2686fc81bf3c4b11fe275570d481f1698f79d468afe0e57acc1e298f8b69798da7a891bbec197093ec5f475909923d48bfed6843dbed1f").unwrap().try_into().unwrap())],
+            },
+            receiver_data: BTreeMap::new(),
+        },
+    )
+}
+
 pub fn dummy_transcript_for_tests() -> NiDkgTranscript {
     dummy_transcript_for_tests_with_params(
         vec![NodeId::from(PrincipalId::new_node_test_id(0))],
@@ -226,6 +231,12 @@ pub fn dummy_transcript_for_tests() -> NiDkgTranscript {
         1,
         0,
     )
+}
+
+pub fn dummy_dealing(seed: u8) -> NiDkgDealing {
+    NiDkgDealing {
+        internal_dealing: ni_dkg_csp_dealing(seed),
+    }
 }
 
 pub fn ni_dkg_csp_dealing(seed: u8) -> CspNiDkgDealing {

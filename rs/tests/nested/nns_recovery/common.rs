@@ -38,6 +38,7 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use ic_types::ReplicaVersion;
+use manual_guestos_recovery::recovery_utils::build_recovery_upgrader_command;
 use nested::util::setup_ic_infrastructure;
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
@@ -498,10 +499,9 @@ async fn simulate_node_provider_action(
         img_version_hash,
         artifacts_hash
     );
-    let recovery_upgrader_command = format!(
-        "sudo -n /opt/ic/bin/guestos-recovery-upgrader.sh version={} version-hash={} recovery-hash={}",
-        img_version, img_version_hash, artifacts_hash
-    );
+    let recovery_upgrader_command =
+        build_recovery_upgrader_command(img_version, img_version_hash, artifacts_hash)
+            .to_shell_string();
     host.block_on_bash_script_async(&recovery_upgrader_command)
         .await
         .expect("Failed to run guestos-recovery-upgrader");

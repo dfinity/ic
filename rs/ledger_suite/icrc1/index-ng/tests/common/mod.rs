@@ -227,6 +227,16 @@ pub fn wait_until_sync_is_completed(
     index_id: CanisterId,
     ledger_id: CanisterId,
 ) {
+    wait_until_sync_is_completed_or_error(env, index_id, ledger_id).unwrap()
+}
+
+/// Wait for the index to sync with the ledger.
+/// Return the index error logs in case it is not able to sync.
+pub fn wait_until_sync_is_completed_or_error(
+    env: &StateMachine,
+    index_id: CanisterId,
+    ledger_id: CanisterId,
+) -> Result<(), String> {
     let mut num_blocks_synced = u64::MAX;
     let mut chain_length = u64::MAX;
     for _i in 0..MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT {
@@ -235,7 +245,7 @@ pub fn wait_until_sync_is_completed(
         num_blocks_synced = status(env, index_id).num_blocks_synced.0.to_u64().unwrap();
         chain_length = ledger_get_all_blocks(env, ledger_id, 0, 1).chain_length;
         if num_blocks_synced == chain_length {
-            return;
+            return Ok(());
         }
     }
     let log = parse_index_logs(&get_logs(env, index_id));
@@ -246,10 +256,10 @@ pub fn wait_until_sync_is_completed(
             entry.timestamp, entry.file, entry.line, entry.message
         ));
     }
-    panic!(
+    Err(format!(
         "The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}.\nLogs:\n{}",
         num_blocks_synced, chain_length, log_lines
-    );
+    ))
 }
 
 #[cfg(feature = "icrc3_disabled")]

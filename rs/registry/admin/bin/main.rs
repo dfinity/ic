@@ -348,7 +348,7 @@ enum SubCommand {
     GetGuestOSVersion(GetGuestOsVersionCmd),
 
     /// Get the latest routing table.
-    GetRoutingTable,
+    GetRoutingTable(GetRoutingTableCmd),
 
     /// Get the last version of a subnet from the registry.
     GetSubnet(GetSubnetCmd),
@@ -673,6 +673,14 @@ struct GetNodeCmd {
 struct ConvertNumericNodeIdtoPrincipalIdCmd {
     /// The integer Id of the node to convert to actual node id.
     node_id: u64,
+}
+
+/// Sub-command to fetch a `RoutingTable` from the registry.
+#[derive(Parser)]
+struct GetRoutingTableCmd {
+    /// The registry version to use. Defaults to the latest registry version.
+    #[clap(long)]
+    registry_version: Option<u64>,
 }
 
 /// Sub-command to fetch a `SubnetRecord` from the registry.
@@ -4252,8 +4260,9 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::GetRoutingTable => {
-            let (routing_table, version) = get_routing_table(reachable_nns_urls);
+        SubCommand::GetRoutingTable(cmd) => {
+            let registry_version = cmd.registry_version.map(RegistryVersion::from);
+            let (routing_table, version) = get_routing_table(reachable_nns_urls, registry_version);
             if opts.json {
                 let routing_table_json = serde_json::to_string_pretty(&routing_table).unwrap();
                 println!("{}", routing_table_json);

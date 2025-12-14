@@ -7,6 +7,7 @@ import "ic_ledger/pb/v1/types.proto";
 import "ic_nervous_system/pb/v1/nervous_system.proto";
 import "ic_nns_common/pb/v1/types.proto";
 import "ic_sns_swap/pb/v1/swap.proto";
+import "registry/replica_version/v1/replica_version.proto";
 
 // The entity that owns the nodes that run the network.
 //
@@ -703,6 +704,9 @@ message Proposal {
     UpdateCanisterSettings update_canister_settings = 27;
     // Create a rented subnet.
     FulfillSubnetRentalRequest fulfill_subnet_rental_request = 28;
+    // Allow node operators to manually intervene in case of disaster to run
+    // (NNS-approved) new software.
+    BlessAlternativeGuestOsVersion bless_alternative_guest_os_version = 31;
   }
 }
 
@@ -1919,6 +1923,12 @@ message FulfillSubnetRentalRequest {
   ic_base_types.pb.v1.PrincipalId user = 1;
   repeated ic_base_types.pb.v1.PrincipalId node_ids = 3;
   string replica_version_id = 2;
+}
+
+message BlessAlternativeGuestOsVersion {
+  repeated bytes chip_ids = 1;
+  string rootfs_hash = 2;
+  registry.replica_version.v1.GuestLaunchMeasurements base_guest_launch_measurements = 3;
 }
 
 // This represents the whole NNS governance system. It contains all

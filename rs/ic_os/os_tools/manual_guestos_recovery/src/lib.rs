@@ -1,3 +1,4 @@
+pub mod recovery_utils;
 mod ui;
 
 use anyhow::{Context, Result};
@@ -9,8 +10,9 @@ use ratatui::crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode, size,
 };
 use ratatui::{Frame, Terminal, backend::CrosstermBackend};
+use recovery_utils::build_recovery_upgrader_command;
 use std::io::{self, BufRead, BufReader, IsTerminal, Read};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -27,9 +29,6 @@ const HASH_LENGTH: usize = 64; // SHA256 hash length (hex characters)
 // Process monitoring constants
 const MAX_ERROR_LINES: usize = 30; // Maximum number of error lines to display
 const PROCESS_POLL_INTERVAL_MS: u64 = 100; // Polling interval for process monitoring
-
-// Script paths
-const RECOVERY_UPGRADER_SCRIPT: &str = "/opt/ic/bin/guestos-recovery-upgrader.sh";
 
 // ============================================================================
 // Types and Data Structures
@@ -221,7 +220,13 @@ pub struct RecoveryTask {
 
 impl RecoveryTask {
     pub fn start(params: &RecoveryParams) -> Result<Self> {
-        let mut cmd = build_upgrader_command(params);
+        let mut cmd = build_recovery_upgrader_command(
+            &params.version,
+            &params.version_hash,
+            &params.recovery_hash,
+        )
+        .to_command();
+
         cmd.stdout(Stdio::piped());
         // Redirect stderr to null to avoid cluttering the TUI output
         cmd.stderr(Stdio::null());
@@ -762,16 +767,6 @@ impl GuestOSRecoveryApp {
 // ============================================================================
 // Process and Log Monitoring
 // ============================================================================
-
-fn build_upgrader_command(params: &RecoveryParams) -> Command {
-    let mut cmd = Command::new("sudo");
-    cmd.arg("-n")
-        .arg(RECOVERY_UPGRADER_SCRIPT)
-        .arg(format!("version={}", params.version))
-        .arg(format!("version-hash={}", params.version_hash))
-        .arg(format!("recovery-hash={}", params.recovery_hash));
-    cmd
-}
 
 /// Spawns a thread to read lines from stdout and append them to a shared log buffer
 fn start_log_capture<R>(stream: R, log_lines: Arc<Mutex<Vec<String>>>) -> thread::JoinHandle<()>

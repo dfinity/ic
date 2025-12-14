@@ -36,11 +36,11 @@ mod create_transcript_error_conversions {
 
     #[test]
     #[should_panic(
-        expected = "NI-DKG create_transcript error - UnsupportedAlgorithmId: The algorithm id Placeholder is unsupported."
+        expected = "NI-DKG create_transcript error - UnsupportedAlgorithmId: The algorithm id Unspecified is unsupported."
     )]
     fn should_panic_on_unsupported_algorithm_id_error() {
         let csp_error =
-            CspDkgCreateReshareTranscriptError::UnsupportedAlgorithmId(AlgorithmId::Placeholder);
+            CspDkgCreateReshareTranscriptError::UnsupportedAlgorithmId(AlgorithmId::Unspecified);
 
         let _panic = DkgCreateTranscriptError::from(csp_error);
     }
@@ -93,7 +93,7 @@ mod create_transcript_error_conversions {
 
     fn malformed_pk_error() -> MalformedPublicKeyError {
         MalformedPublicKeyError {
-            algorithm: AlgorithmId::Placeholder,
+            algorithm: AlgorithmId::Unspecified,
             key_bytes: None,
             internal_error: "some error".to_string(),
         }

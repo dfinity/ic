@@ -37,7 +37,7 @@ pub fn user_public_key_from_bytes(
 ) -> CryptoResult<(UserPublicKey, KeyBytesContentType)> {
     let (pkix_algo_id, pk_bytes) = der_utils::algo_id_and_public_key_bytes_from_der(bytes)
         .map_err(|e| CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Placeholder,
+            algorithm: AlgorithmId::Unspecified,
             key_bytes: Some(bytes.to_vec()),
             internal_error: e.internal_error,
         })?;
@@ -86,7 +86,7 @@ pub fn user_public_key_from_bytes(
         )
     } else {
         return Err(CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Placeholder,
+            algorithm: AlgorithmId::Unspecified,
             key_bytes: Some(bytes.to_vec()),
             internal_error: "Unsupported or unparsable public key".to_string(),
         });

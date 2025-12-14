@@ -1,7 +1,10 @@
 #[cfg(test)]
 mod tests;
 use crate::reimbursement::reimburse_withdrawals;
-use crate::{CanisterRuntime, estimate_fee_per_vbyte, finalize_requests, submit_pending_requests};
+use crate::{
+    CanisterRuntime, consolidate_utxos, estimate_fee_per_vbyte, finalize_requests,
+    submit_pending_requests,
+};
 use scopeguard::guard;
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
@@ -16,6 +19,7 @@ thread_local! {
 pub enum TaskType {
     ProcessLogic(bool),
     RefreshFeePercentiles,
+    ConsolidateUtxos,
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
@@ -159,6 +163,29 @@ pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
                 None => return,
             };
             let _ = estimate_fee_per_vbyte(&runtime).await;
+        }
+        TaskType::ConsolidateUtxos => {
+            const CONSOLIDATION_TASK_INTERVAL: Duration = Duration::from_secs(3600);
+
+            let _enqueue_followup_guard = guard((), |_| {
+                schedule_after(
+                    CONSOLIDATION_TASK_INTERVAL,
+                    TaskType::ConsolidateUtxos,
+                    &runtime,
+                )
+            });
+
+            let _guard = match crate::guard::TimerLogicGuard::new() {
+                Some(guard) => guard,
+                None => return,
+            };
+            let result = consolidate_utxos(&runtime).await;
+            // This is a low frequency log
+            canlog::log!(
+                crate::logs::Priority::Info,
+                "[run_task] consolidate_utxos returns {:?}",
+                result
+            );
         }
     }
 }

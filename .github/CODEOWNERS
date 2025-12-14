@@ -4,7 +4,6 @@
 
 # [Misc]
 /.devcontainer/           @dfinity/idx
-.rclone*                  @dfinity/idx
 /buf.yaml                 @dfinity/team-dsm
 /cpp/                     @dfinity/node
 /licenses/                @dfinity/idx
@@ -32,7 +31,6 @@ clippy.toml               @dfinity/ic-interface-owners
 # [Golang]
 go.mod                    @dfinity/idx
 go.sum                    @dfinity/idx
-go_deps.bzl               @dfinity/idx
 
 # [DevEnv]
 .vscode/                  @dfinity/idx
@@ -88,7 +86,6 @@ go_deps.bzl               @dfinity/idx
 /ci/scripts/repro-check                                                  @dfinity/dre
 /.pre-commit-config.yaml                                                 @dfinity/idx
 /pre-commit/                                                             @dfinity/idx
-/.mergify.yaml                                                           @dfinity/idx
 
 # [Rust]
 /rs/                                                    @dfinity/ic-interface-owners

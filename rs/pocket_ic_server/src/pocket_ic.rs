@@ -111,7 +111,7 @@ use ic_types::batch::BlockmakerMetrics;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{CertificateDelegationFormat, CertificateDelegationMetadata};
 use ic_types::{
-    CanisterId, Cycles, Height, NodeId, NumInstructions, PrincipalId, RegistryVersion, SnapshotId,
+    CanisterId, Cycles, Height, NumInstructions, PrincipalId, RegistryVersion, SnapshotId,
     SubnetId,
     artifact::UnvalidatedArtifactMutation,
     canister_http::{
@@ -4501,8 +4501,6 @@ impl BasicSigner<QueryResponseHash> for PocketNodeSigner {
     fn sign_basic(
         &self,
         message: &QueryResponseHash,
-        _signer: NodeId,
-        _registry_version: RegistryVersion,
     ) -> CryptoResult<BasicSigOf<QueryResponseHash>> {
         Ok(BasicSigOf::new(BasicSig(
             self.0.sign_message(&message.as_signed_bytes()).to_vec(),

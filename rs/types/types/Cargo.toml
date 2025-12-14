@@ -46,6 +46,7 @@ chrono = { workspace = true }
 assert_matches = { workspace = true }
 hex-literal = "0.4.1"
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../../crypto/test_utils/canister_threshold_sigs" }
+ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-exhaustive-derive = { path = "../exhaustive_derive" }
 ic-types-test-utils = { path = "../types_test_utils" }

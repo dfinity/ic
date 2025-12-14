@@ -232,6 +232,12 @@ type InitArgs = record {
 
     /// The expiration duration (in seconds) for cached entries in the get_utxos cache.
     get_utxos_cache_expiration_seconds: opt nat64;
+
+    /// The minimum number of available UTXOs to trigger a consolidation.
+    utxo_consolidation_threshold: opt nat64;
+
+    /// The maximum number of input UTXOs allowed in a transaction.
+    max_num_inputs_in_transaction: opt nat64;
 };
 
 // The upgrade parameters of the minter canister.
@@ -264,6 +270,12 @@ type UpgradeArgs = record {
 
     /// The expiration duration (in seconds) for cached entries in the get_utxos cache.
     get_utxos_cache_expiration_seconds: opt nat64;
+
+    /// The minimum number of available UTXOs to trigger a consolidation.
+    utxo_consolidation_threshold: opt nat64;
+
+    /// The maximum number of input UTXOs allowed in a transaction.
+    max_num_inputs_in_transaction: opt nat64;
 };
 
 type RetrieveBtcStatus = variant {
@@ -418,6 +430,12 @@ type EventType = variant {
         kyt_provider : opt principal;
         reimbursement_account : opt Account;
     };
+    created_consolidate_utxos_request : record {
+        amount : nat64;
+        address : BitcoinAddress;
+        block_index : nat64;
+        received_at : nat64;
+    };
     distributed_kyt_fee : record {
         kyt_provider : principal;
         amount : nat64;
@@ -432,6 +450,7 @@ type EventType = variant {
         submitted_at : nat64;
         fee: opt nat64;
         withdrawal_fee : opt WithdrawalFee;
+        signed_tx: opt blob;
     };
     replaced_transaction : record {
         new_txid : blob;

@@ -1,4 +1,6 @@
-use ic_crypto_internal_threshold_sig_canister_threshold_sig::DeriveThresholdPublicKeyError;
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+    DerivationPath, DeriveThresholdPublicKeyError,
+};
 use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::canister_threshold_sig::error::CanisterThresholdGetPublicKeyError;
 use ic_types::crypto::canister_threshold_sig::{MasterPublicKey, PublicKey};
@@ -7,11 +9,11 @@ use ic_types::crypto::canister_threshold_sig::{MasterPublicKey, PublicKey};
 /// the given `extended_derivation_path`.
 pub fn derive_threshold_public_key(
     master_public_key: &MasterPublicKey,
-    extended_derivation_path: &ExtendedDerivationPath,
+    extended_derivation_path: ExtendedDerivationPath,
 ) -> Result<PublicKey, CanisterThresholdGetPublicKeyError> {
     ic_crypto_internal_threshold_sig_canister_threshold_sig::derive_threshold_public_key(
         master_public_key,
-        &extended_derivation_path.into(),
+        &DerivationPath::from(extended_derivation_path),
     )
     .map_err(|e| match e {
         DeriveThresholdPublicKeyError::InvalidArgument(s) => {

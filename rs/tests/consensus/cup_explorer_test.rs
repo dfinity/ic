@@ -48,7 +48,6 @@ use registry_canister::mutations::do_recover_subnet::RecoverSubnetPayload;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::info;
 use tempfile::NamedTempFile;
-use tokio::runtime::Runtime;
 
 const DKG_INTERVAL: u64 = 14;
 const NODES_COUNT: usize = 4;
@@ -88,10 +87,8 @@ fn test(env: TestEnv) {
         app_subnet.subnet_id,
         Some(cup_path.into()),
     ));
-    let runtime = Runtime::new().unwrap();
     info!(log, "Verifying that subnet is running according to CUP");
     let status = verify(
-        runtime.handle().clone(),
         nns_node.get_public_url(),
         Some(nns_public_key.clone()),
         cup_path,
@@ -127,7 +124,6 @@ fn test(env: TestEnv) {
                 Some(cup_path.into()),
             ));
             let status = verify(
-                runtime.handle().clone(),
                 nns_node.get_public_url(),
                 Some(nns_public_key.clone()),
                 cup_path,
@@ -184,7 +180,6 @@ fn test(env: TestEnv) {
         &log,
     ));
     let status = verify(
-        runtime.handle().clone(),
         nns_node.get_public_url(),
         Some(nns_public_key.clone()),
         cup_path,

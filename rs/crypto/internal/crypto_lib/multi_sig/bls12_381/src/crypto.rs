@@ -7,7 +7,7 @@ use crate::types::{
 };
 
 use ic_crypto_internal_bls12_381_type::{
-    G1Projective, G2Affine, G2Projective, Scalar, verify_bls_signature,
+    G1Affine, G1Projective, G2Affine, Scalar, verify_bls_signature,
 };
 
 use ic_crypto_sha2::DomainSeparationContext;
@@ -56,12 +56,12 @@ pub fn keypair_from_seed(seed: [u64; 4]) -> (SecretKey, PublicKey) {
 
 pub fn keypair_from_rng<R: Rng + CryptoRng>(rng: &mut R) -> (SecretKey, PublicKey) {
     let secret_key = Scalar::random(rng);
-    let public_key = G2Affine::generator() * &secret_key;
+    let public_key = (G2Affine::generator() * &secret_key).to_affine();
     (secret_key, public_key)
 }
 
 pub fn sign_point(point: &G1Projective, secret_key: &SecretKey) -> IndividualSignature {
-    point * secret_key
+    (point * secret_key).to_affine()
 }
 pub fn sign_message(message: &[u8], secret_key: &SecretKey) -> IndividualSignature {
     sign_point(&hash_message_to_g1(message), secret_key)
@@ -80,22 +80,23 @@ pub fn create_pop(public_key: &PublicKey, secret_key: &SecretKey) -> Pop {
 }
 
 pub fn combine_signatures(signatures: &[IndividualSignature]) -> CombinedSignature {
-    G1Projective::sum(signatures)
+    G1Affine::sum(signatures).to_affine()
 }
 pub fn combine_public_keys(public_keys: &[PublicKey]) -> CombinedPublicKey {
-    G2Projective::sum(public_keys)
+    G2Affine::sum(public_keys).to_affine()
 }
 
-pub fn verify_point(hash: &G1Projective, signature: &G1Projective, public_key: &PublicKey) -> bool {
-    verify_bls_signature(&signature.into(), &public_key.into(), &hash.into())
+pub fn verify_point(hash: &G1Affine, signature: &G1Affine, public_key: &PublicKey) -> bool {
+    verify_bls_signature(signature, public_key, hash)
 }
+
 pub fn verify_individual_message_signature(
     message: &[u8],
     signature: &IndividualSignature,
     public_key: &PublicKey,
 ) -> bool {
     let hash = hash_message_to_g1(message);
-    verify_point(&hash, signature, public_key)
+    verify_point(&hash.to_affine(), signature, public_key)
 }
 pub fn verify_pop(pop: &Pop, public_key: &PublicKey) -> bool {
     let public_key_bytes = PublicKeyBytes::from(public_key);
@@ -104,7 +105,7 @@ pub fn verify_pop(pop: &Pop, public_key: &PublicKey) -> bool {
         .extend(DomainSeparationContext::new(DOMAIN_MULTI_SIG_BLS12_381_POP).as_bytes());
     domain_separated_public_key.extend(&public_key_bytes.0[..]);
     let hash = hash_public_key_to_g1(&domain_separated_public_key);
-    verify_point(&hash, pop, public_key)
+    verify_point(&hash.to_affine(), pop, public_key)
 }
 
 pub fn verify_combined_message_signature(
@@ -114,5 +115,5 @@ pub fn verify_combined_message_signature(
 ) -> bool {
     let hash = hash_message_to_g1(message);
     let public_key = combine_public_keys(public_keys);
-    verify_point(&hash, signature, &public_key)
+    verify_point(&hash.to_affine(), signature, &public_key)
 }

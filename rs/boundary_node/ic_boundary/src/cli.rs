@@ -4,6 +4,7 @@ use humantime::parse_duration;
 use ic_bn_lib_common::{
     parse_size, parse_size_usize,
     types::{
+        acme::AcmeUrl,
         http::{HttpClientCli, HttpServerCli},
         shed::{ShedShardedCli, ShedSystemCli},
     },
@@ -200,9 +201,14 @@ pub struct Tls {
     #[clap(env, long)]
     pub tls_acme_credentials_path: Option<PathBuf>,
 
-    /// Whether to use LetsEncrypt staging environment.
+    /// ACME URL to use. Can be "le_stag", "le_prod" or an actual URL.
+    #[clap(env, long, default_value = "le_prod")]
+    pub tls_acme_url: AcmeUrl,
+
+    /// Don't check ACME server TLS certificates.
+    /// To be used only in tests.
     #[clap(env, long)]
-    pub tls_acme_staging: bool,
+    pub tls_acme_disable_tls_cert_verification: bool,
 
     /// The path to the TLS certificate in PEM format.
     /// This is required if the ACME client is not used.

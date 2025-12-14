@@ -8,7 +8,7 @@ fn should_be_maximal_algorithm_index_id_to_ensure_all_variants_covered_by_strate
         AlgorithmId::from(MAX_ALGORITHM_ID_INDEX)
     );
     assert_eq!(
-        AlgorithmId::Placeholder,
+        AlgorithmId::Unspecified,
         AlgorithmId::from(MAX_ALGORITHM_ID_INDEX + 1)
     );
 }

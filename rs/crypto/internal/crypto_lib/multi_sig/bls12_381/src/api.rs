@@ -93,13 +93,13 @@ pub fn combine(
 
 fn key_from_bytes_with_cache(public_key_bytes: &PublicKeyBytes) -> Result<PublicKey, CryptoError> {
     // This can't be defined on PublicKey because it is just a typedef for G2Projective at the moment
-    ic_crypto_internal_bls12_381_type::G2Affine::deserialize_cached(&public_key_bytes.0)
-        .map_err(|_| CryptoError::MalformedPublicKey {
+    ic_crypto_internal_bls12_381_type::G2Affine::deserialize_cached(&public_key_bytes.0).map_err(
+        |_| CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::MultiBls12_381,
             key_bytes: Some(public_key_bytes.0.to_vec()),
             internal_error: "Point decoding failed".to_string(),
-        })
-        .map(|pt| pt.into())
+        },
+    )
 }
 
 /// Verifies an individual signature over the given `message` using the given

@@ -1,7 +1,10 @@
 use crate::canister_state::system_state::log_memory_store::{
     memory::{MemoryAddress, MemoryPosition, MemorySize},
-    ring_buffer::{DATA_REGION_OFFSET, INDEX_TABLE_PAGES, MAGIC},
+    ring_buffer::{DATA_REGION_OFFSET, INDEX_TABLE_PAGES},
 };
+
+/// Magic prefix that marks a properly initialized canister log buffer.
+pub(crate) const MAGIC: &[u8; 3] = b"CLB";
 
 /// Header structure for the log memory store (version 1).
 /// This is the in-memory representation of the header.

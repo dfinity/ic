@@ -3273,7 +3273,7 @@ impl ExecutionEnvironment {
     ) -> Result<PublicKey, UserError> {
         derive_threshold_public_key(
             subnet_public_key,
-            &ExtendedDerivationPath {
+            ExtendedDerivationPath {
                 caller,
                 derivation_path,
             },
