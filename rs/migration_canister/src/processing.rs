@@ -81,7 +81,7 @@ pub async fn process_accepted(
     };
 
     // Set controller of migrated canister
-    let res = set_exclusive_controller(request.migrated)
+    let res = set_exclusive_controller(request.migrated_canister)
         .await
         .map_success(|_| RequestState::ControllersChanged {
             request: request.clone(),
@@ -96,7 +96,7 @@ pub async fn process_accepted(
     }
 
     // Set controller of replaced canister
-    set_exclusive_controller(request.replaced)
+    set_exclusive_controller(request.replaced_canister)
         .await
         .map_success(|_| RequestState::ControllersChanged {
             request: request.clone(),
@@ -118,7 +118,7 @@ pub async fn process_controllers_changed(
 
     // These checks are repeated because the canisters may have changed since validation:
     let ProcessingResult::Success(migrated_canister_status) =
-        canister_status(request.migrated).await
+        canister_status(request.migrated_canister).await
     else {
         return ProcessingResult::NoProgress;
     };
@@ -146,7 +146,7 @@ pub async fn process_controllers_changed(
     }
 
     let ProcessingResult::Success(replaced_canister_status) =
-        canister_status(request.replaced).await
+        canister_status(request.replaced_canister).await
     else {
         return ProcessingResult::NoProgress;
     };
@@ -157,7 +157,7 @@ pub async fn process_controllers_changed(
             reason: "Replaced canister is not stopped.".to_string(),
         });
     }
-    match assert_no_snapshots(request.replaced).await {
+    match assert_no_snapshots(request.replaced_canister).await {
         ProcessingResult::Success(_) => {}
         ProcessingResult::NoProgress => return ProcessingResult::NoProgress,
         ProcessingResult::FatalFailure(_) => {
@@ -181,7 +181,7 @@ pub async fn process_controllers_changed(
     }
 
     // Determine history length of migrated canister
-    get_canister_info(request.migrated)
+    get_canister_info(request.migrated_canister)
         .await
         .map_success(|canister_info_result| RequestState::StoppedAndReady {
             request: request.clone(),
@@ -213,9 +213,9 @@ pub async fn process_stopped(
         return ProcessingResult::NoProgress;
     };
     rename_canister(
-        request.migrated,
+        request.migrated_canister,
         canister_version,
-        request.replaced,
+        request.replaced_canister,
         request.replaced_canister_subnet,
         canister_history_total_num,
         request.caller,
@@ -240,7 +240,7 @@ pub async fn process_renamed(
         return ProcessingResult::NoProgress;
     };
 
-    migrate_canister(request.migrated, request.replaced_canister_subnet)
+    migrate_canister(request.migrated_canister, request.replaced_canister_subnet)
         .await
         .map_success(|registry_version| RequestState::UpdatedRoutingTable {
             request,
@@ -296,7 +296,7 @@ pub async fn process_routing_table(
         return ProcessingResult::NoProgress;
     };
     let ProcessingResult::Success(()) =
-        delete_canister(request.migrated, request.migrated_canister_subnet).await
+        delete_canister(request.migrated_canister, request.migrated_canister_subnet).await
     else {
         return ProcessingResult::NoProgress;
     };
@@ -340,10 +340,10 @@ pub async fn process_migrated_canister_deleted(
         .cloned()
         .collect::<Vec<Principal>>();
     let ProcessingResult::Success(()) =
-        // The migration canister is the exclusive controller of `request.migrated`
+        // The migration canister is the exclusive controller of `request.migrated_canister`
         // and thus the following call cannot fail because of the caller
         // not being a controller.
-        set_controllers(request.migrated, controllers, request.replaced_canister_subnet).await
+        set_controllers(request.migrated_canister, controllers, request.replaced_canister_subnet).await
     else {
         return ProcessingResult::NoProgress;
     };
@@ -393,13 +393,13 @@ async fn process_failed(request: RequestState) -> RecoveryResult {
 
     recovery_state.restore_migrated_canister_controllers = controller_recovery(
         recovery_state.restore_migrated_canister_controllers,
-        request.migrated,
+        request.migrated_canister,
         request.migrated_canister_original_controllers.clone(),
     )
     .await;
     recovery_state.restore_replaced_canister_controllers = controller_recovery(
         recovery_state.restore_replaced_canister_controllers,
-        request.replaced,
+        request.replaced_canister,
         request.replaced_canister_original_controllers.clone(),
     )
     .await;

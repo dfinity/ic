@@ -68,8 +68,8 @@ async fn check_controllers_and_get_status(
 ///   into canister state;
 /// - or an informative error.
 pub async fn validate_request(
-    migrated: Principal,
-    replaced: Principal,
+    migrated_canister: Principal,
+    replaced_canister: Principal,
     caller: Principal,
 ) -> Result<(Request, Vec<CanisterGuard>), ValidationError> {
     // We first check if the caller is authorized (i.e.,
@@ -79,34 +79,43 @@ pub async fn validate_request(
     // and blocking authorized callers from performing canister migration.
 
     // 1. The migrated canister must not be equal to the replaced canister.
-    if migrated == replaced {
+    if migrated_canister == replaced_canister {
         return Err(ValidationError::SameSubnet(Reserved));
     }
 
     // 2. Is the caller controller of the migrated canister?
-    let migrated_canister_status = check_controllers_and_get_status(migrated, caller).await?;
+    let migrated_canister_status =
+        check_controllers_and_get_status(migrated_canister, caller).await?;
     // 3. Is the caller controller of the replaced canister?
-    let replaced_canister_status = check_controllers_and_get_status(replaced, caller).await?;
+    let replaced_canister_status =
+        check_controllers_and_get_status(replaced_canister, caller).await?;
 
     // Now we can acquire the locks
     // to prevent reentrancy bugs across asynchronous calls
     // while validating the migrated and replaced canisters.
-    let Ok(migrated_canister_guard) = CanisterGuard::new(migrated) else {
-        return Err(ValidationError::ValidationInProgress { canister: migrated });
+    let Ok(migrated_canister_guard) = CanisterGuard::new(migrated_canister) else {
+        return Err(ValidationError::ValidationInProgress {
+            canister: migrated_canister,
+        });
     };
-    let Ok(replaced_canister_guard) = CanisterGuard::new(replaced) else {
-        return Err(ValidationError::ValidationInProgress { canister: replaced });
+    let Ok(replaced_canister_guard) = CanisterGuard::new(replaced_canister) else {
+        return Err(ValidationError::ValidationInProgress {
+            canister: replaced_canister,
+        });
     };
 
     // 4. Is any of these canisters already in a migration process?
     for request in list_by(|_| true) {
-        if let Some(id) = request.request().affects_canister(migrated, replaced) {
+        if let Some(id) = request
+            .request()
+            .affects_canister(migrated_canister, replaced_canister)
+        {
             return Err(ValidationError::MigrationInProgress { canister: id });
         }
     }
     // 5. Are the migrated and replaced canisters on the same subnet?
-    let migrated_canister_subnet = get_subnet_for_canister(migrated).await?;
-    let replaced_canister_subnet = get_subnet_for_canister(replaced).await?;
+    let migrated_canister_subnet = get_subnet_for_canister(migrated_canister).await?;
+    let replaced_canister_subnet = get_subnet_for_canister(replaced_canister).await?;
     if migrated_canister_subnet == replaced_canister_subnet {
         return Err(ValidationError::SameSubnet(Reserved));
     }
@@ -123,7 +132,7 @@ pub async fn validate_request(
         return Err(ValidationError::ReplacedCanisterNotStopped(Reserved));
     }
     // 9. Does the replaced canister have snapshots?
-    assert_no_snapshots(replaced).await.into_result(
+    assert_no_snapshots(replaced_canister).await.into_result(
         "Call to management canister `list_canister_snapshots` failed. Try again later.",
     )?;
 
@@ -139,10 +148,10 @@ pub async fn validate_request(
     let mut replaced_canister_original_controllers = replaced_canister_status.settings.controllers;
     replaced_canister_original_controllers.retain(|e| *e != canister_self());
     let request = Request {
-        migrated,
+        migrated_canister,
         migrated_canister_subnet,
         migrated_canister_original_controllers,
-        replaced,
+        replaced_canister,
         replaced_canister_subnet,
         replaced_canister_original_controllers,
         caller,

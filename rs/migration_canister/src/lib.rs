@@ -81,16 +81,16 @@ pub enum ValidationError {
 
 #[derive(Clone, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 struct CanisterMigrationArgs {
-    pub migrated: Principal,
-    pub replaced: Principal,
+    pub migrated_canister: Principal,
+    pub replaced_canister: Principal,
 }
 
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Request {
-    migrated: Principal,
+    migrated_canister: Principal,
     migrated_canister_subnet: Principal,
     migrated_canister_original_controllers: Vec<Principal>,
-    replaced: Principal,
+    replaced_canister: Principal,
     replaced_canister_subnet: Principal,
     replaced_canister_original_controllers: Vec<Principal>,
     caller: Principal,
@@ -98,29 +98,29 @@ pub struct Request {
 
 impl Request {
     pub fn new(
-        migrated: Principal,
+        migrated_canister: Principal,
         migrated_canister_subnet: Principal,
         migrated_canister_original_controllers: Vec<Principal>,
-        replaced: Principal,
+        replaced_canister: Principal,
         replaced_canister_subnet: Principal,
         replaced_canister_original_controllers: Vec<Principal>,
         caller: Principal,
     ) -> Self {
         Self {
-            migrated,
+            migrated_canister,
             migrated_canister_subnet,
             migrated_canister_original_controllers,
-            replaced,
+            replaced_canister,
             replaced_canister_subnet,
             replaced_canister_original_controllers,
             caller,
         }
     }
     fn affects_canister(&self, src_id: Principal, tgt_id: Principal) -> Option<Principal> {
-        if self.migrated == src_id || self.replaced == src_id {
+        if self.migrated_canister == src_id || self.replaced_canister == src_id {
             return Some(src_id);
         }
-        if self.migrated == tgt_id || self.replaced == tgt_id {
+        if self.migrated_canister == tgt_id || self.replaced_canister == tgt_id {
             return Some(tgt_id);
         }
         None
@@ -131,10 +131,10 @@ impl Display for Request {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Request {{ migrated: {}, migrated_canister_subnet: {}, replaced: {}, replaced_canister_subnet: {}, caller: {}, migrated_canister_original_controllers: [",
-            self.migrated,
+            "Request {{ migrated_canister: {}, migrated_canister_subnet: {}, replaced_canister: {}, replaced_canister_subnet: {}, caller: {}, migrated_canister_original_controllers: [",
+            self.migrated_canister,
             self.migrated_canister_subnet,
-            self.replaced,
+            self.replaced_canister,
             self.replaced_canister_subnet,
             self.caller
         )?;
@@ -152,8 +152,8 @@ impl Display for Request {
 impl From<&Request> for CanisterMigrationArgs {
     fn from(request: &Request) -> Self {
         Self {
-            migrated: request.migrated,
-            replaced: request.replaced,
+            migrated_canister: request.migrated_canister,
+            replaced_canister: request.replaced_canister,
         }
     }
 }
