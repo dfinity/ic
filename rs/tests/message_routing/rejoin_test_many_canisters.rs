@@ -17,20 +17,20 @@ end::catalog[] */
 
 use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::farm::HostFeature;
+use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
 };
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
-use ic_system_test_driver::driver::simulate_network::{FixedNetworkSimulation, SimulateNetwork};
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
+use ic_system_test_driver::driver::simulate_network::{FixedNetworkSimulation, SimulateNetwork};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
 };
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{get_app_subnet_and_node, block_on};
+use ic_system_test_driver::util::{block_on, get_app_subnet_and_node};
 use ic_types::Height;
 use rejoin_test_lib::rejoin_test_many_canisters;
 use std::time::Duration;
@@ -121,10 +121,10 @@ fn setup(env: TestEnv, config: Config) {
     });
 
     env.sync_with_prometheus();
-/*
-    let root_subnet = env.topology_snapshot().root_subnet();
-    root_subnet.apply_network_settings(NETWORK_SIMULATION);
-*/
+    /*
+        let root_subnet = env.topology_snapshot().root_subnet();
+        root_subnet.apply_network_settings(NETWORK_SIMULATION);
+    */
     let topology_snapshot = env.topology_snapshot();
     let (app_subnet, _) = get_app_subnet_and_node(&topology_snapshot);
 

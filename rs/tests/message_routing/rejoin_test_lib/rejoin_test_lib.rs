@@ -6,10 +6,10 @@ use ic_system_test_driver::driver::test_env_api::get_dependency_path;
 use ic_system_test_driver::driver::test_env_api::retry_async;
 use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasVm, IcNodeSnapshot};
 use ic_system_test_driver::util::{MetricsFetcher, UniversalCanister, runtime_from_url};
-use ic_types::messages::ReplicaHealthStatus;
 use ic_types::PrincipalId;
-use ic_utils::interfaces::management_canister::ManagementCanister;
+use ic_types::messages::ReplicaHealthStatus;
 use ic_universal_canister::wasm;
+use ic_utils::interfaces::management_canister::ManagementCanister;
 use slog::info;
 use std::collections::BTreeMap;
 use std::env;
@@ -219,7 +219,10 @@ pub async fn rejoin_test_large_state(
     assert_state_sync_has_happened(&logger, rejoin_node, base_count).await;
 }
 
-async fn deploy_seed_canister(ic00: &ManagementCanister<'_>, effective_canister_id: PrincipalId) -> Principal {
+async fn deploy_seed_canister(
+    ic00: &ManagementCanister<'_>,
+    effective_canister_id: PrincipalId,
+) -> Principal {
     let seed_canister_id = ic00
         .create_canister()
         .as_provisional_create_with_amount(None)
@@ -260,7 +263,8 @@ pub async fn rejoin_test_many_canisters(
     );
     let mut seed_canisters = vec![];
     for _ in 0..num_seed_canisters {
-        let seed_canister_id = deploy_seed_canister(&ic00, agent_node.effective_canister_id()).await;
+        let seed_canister_id =
+            deploy_seed_canister(&ic00, agent_node.effective_canister_id()).await;
         seed_canisters.push(seed_canister_id);
     }
 
@@ -271,12 +275,12 @@ pub async fn rejoin_test_many_canisters(
     let num_canisters_per_seed_canister = num_canisters / num_seed_canisters;
     let mut create_many_canisters_futs = vec![];
     for seed_canister_id in seed_canisters {
-    let bytes =
-        Encode!(&num_canisters_per_seed_canister).expect("Failed to candid encode argument for a seed canister");
+        let bytes = Encode!(&num_canisters_per_seed_canister)
+            .expect("Failed to candid encode argument for a seed canister");
         let fut = agent
-        .update(&seed_canister_id, "create_many_canisters")
-        .with_arg(bytes)
-        .call_and_wait();
+            .update(&seed_canister_id, "create_many_canisters")
+            .with_arg(bytes)
+            .call_and_wait();
         create_many_canisters_futs.push(fut);
     }
     let res = join_all(create_many_canisters_futs).await;
@@ -285,13 +289,32 @@ pub async fn rejoin_test_many_canisters(
     }
 
     let num_busy_canisters = 8;
-    info!(logger, "Deploying {} busy canisters on a node {} ...",
+    info!(
+        logger,
+        "Deploying {} busy canisters on a node {} ...",
         num_busy_canisters,
         agent_node.get_public_url()
     );
     for _ in 0..num_busy_canisters {
-        let universal_canister = UniversalCanister::new_with_retries(&agent, agent_node.effective_canister_id(), &logger).await;
-        universal_canister.update(wasm().set_heartbeat(wasm().instruction_counter_is_at_least(1_800_000_000).build()).reply().build()).await.expect("Failed to set up a busy canister.");
+        let universal_canister = UniversalCanister::new_with_retries(
+            &agent,
+            agent_node.effective_canister_id(),
+            &logger,
+        )
+        .await;
+        universal_canister
+            .update(
+                wasm()
+                    .set_heartbeat(
+                        wasm()
+                            .instruction_counter_is_at_least(1_800_000_000)
+                            .build(),
+                    )
+                    .reply()
+                    .build(),
+            )
+            .await
+            .expect("Failed to set up a busy canister.");
     }
 
     info!(
