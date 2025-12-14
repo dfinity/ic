@@ -21351,6 +21351,7 @@ dependencies = [
  "ic-agent 0.40.1",
  "ic-system-test-driver",
  "ic-types",
+ "ic-universal-canister",
  "ic-utils 0.40.1",
  "slog",
  "tokio",

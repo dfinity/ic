@@ -24,7 +24,6 @@ use ic_system_test_driver::driver::ic::{
 };
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
-use ic_system_test_driver::driver::simulate_network::{FixedNetworkSimulation, SimulateNetwork};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
@@ -41,13 +40,6 @@ const NUM_CANISTERS: usize = 100_000;
 
 const NUM_NODES: usize = 13; // mainnet value
 const DKG_INTERVAL: u64 = 499; // mainnet value
-
-// Network parameters
-const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
-const LATENCY: Duration = Duration::from_millis(150); // artificial added latency
-const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
-    .with_latency(LATENCY)
-    .with_bandwidth(BANDWIDTH_MBITS);
 
 fn main() -> Result<()> {
     let config = Config::new(NUM_NODES, NUM_CANISTERS);
@@ -121,14 +113,6 @@ fn setup(env: TestEnv, config: Config) {
     });
 
     env.sync_with_prometheus();
-    /*
-        let root_subnet = env.topology_snapshot().root_subnet();
-        root_subnet.apply_network_settings(NETWORK_SIMULATION);
-    */
-    let topology_snapshot = env.topology_snapshot();
-    let (app_subnet, _) = get_app_subnet_and_node(&topology_snapshot);
-
-    //app_subnet.apply_network_settings(NETWORK_SIMULATION);
 }
 
 fn test(env: TestEnv, config: Config) {

@@ -15,6 +15,7 @@ futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
+ic-universal-canister = { path = "../../../universal_canister/lib" }
 ic-utils = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
