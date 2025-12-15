@@ -101,6 +101,11 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 -----END PRIVATE KEY-----
 ";
 
+    const INVALID_HEADER_KEY: &str = "invalid-ascii-value";
+    const INVALID_HEADER_VALUE: &str = "x√ab c";
+    const VALID_HEADER_KEY: &str = "valid-ascii-value";
+    const VALID_HEADER_VALUE: &str = "abc";
+
     // Variable that stores the directory of our cert/key files.
     // This is a oncecell because we don't want each test to call
     // `generate_certs` and generate a race on the SSL_CERT_FILE
@@ -141,8 +146,12 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let invalid_header = warp::get().and(warp::path("invalid")).map(|| unsafe {
             Response::builder()
                 .header(
-                    "invalid-ascii-value",
-                    HeaderValue::from_maybe_shared_unchecked("x√ab c".as_bytes()),
+                    INVALID_HEADER_KEY,
+                    HeaderValue::from_maybe_shared_unchecked(INVALID_HEADER_VALUE.as_bytes()),
+                )
+                .header(
+                    VALID_HEADER_KEY,
+                    HeaderValue::from_maybe_shared_unchecked(VALID_HEADER_VALUE.as_bytes()),
                 )
                 .body("hi")
         });
@@ -681,8 +690,12 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         assert!(error.message.contains("Failed to parse headers"));
 
         // Important: check that even though parsing headers failed and the adapter returned an error,
-        // we still report how much data was downloaded (non negative).
-        assert!(metrics.downloaded_bytes > 0);
+        // we still report how much data was downloaded (all the headers)
+        let minimum_expected_downloaded_bytes = (INVALID_HEADER_KEY.len()
+            + INVALID_HEADER_VALUE.len()
+            + VALID_HEADER_KEY.len()
+            + VALID_HEADER_VALUE.len()) as u64;
+        assert!(metrics.downloaded_bytes >= minimum_expected_downloaded_bytes);
     }
 
     #[tokio::test]

@@ -368,35 +368,33 @@ impl HttpsOutcallsService for CanisterHttp {
 
             let status = http_resp.status().as_u16() as u32;
 
-            // Parse received headers.
             let mut headers_size_bytes = 0;
-            let headers_result = http_resp
+            for (k, v) in http_resp.headers() {
+                headers_size_bytes += k.as_str().len() + v.len();
+            }
+
+            total_downloaded_bytes += headers_size_bytes as u64;
+
+            let headers = http_resp
                 .headers()
                 .iter()
                 .map(|(k, v)| {
                     let name = k.to_string();
-                    // Use the header value in bytes for the size.
-                    // It is possible that bytes.len() > str.len().
-                    headers_size_bytes += name.len() + v.len();
                     let value = v.to_str()?.to_string();
                     Ok(HttpHeader { name, value })
                 })
-                .collect::<Result<Vec<_>, ToStrError>>();
-
-            // Update metric immediately after receiving headers
-            total_downloaded_bytes += headers_size_bytes as u64;
-
-            let headers = headers_result.map_err(|err| {
-                debug!(self.logger, "Failed to parse headers: {}", err);
-                self.metrics
-                    .request_errors
-                    .with_label_values(&[LABEL_RESPONSE_HEADERS])
-                    .inc();
-                CanisterHttpError {
-                    kind: CanisterHttpErrorKind::Internal as i32,
-                    message: format!("Failed to parse headers: {err}"),
-                }
-            })?;
+                .collect::<Result<Vec<_>, ToStrError>>()
+                .map_err(|err| {
+                    debug!(self.logger, "Failed to parse headers: {}", err);
+                    self.metrics
+                        .request_errors
+                        .with_label_values(&[LABEL_RESPONSE_HEADERS])
+                        .inc();
+                    CanisterHttpError {
+                        kind: CanisterHttpErrorKind::Internal as i32,
+                        message: format!("Failed to parse headers: {err}"),
+                    }
+                })?;
 
             let remaining_limit = req
                 .max_response_size_bytes
@@ -466,22 +464,15 @@ impl HttpsOutcallsService for CanisterHttp {
         .await;
 
         let http_result = match execution_result {
-            Ok(response) => HttpsOutcallResult {
-                metrics: Some(CanisterHttpAdapterMetrics {
-                    downloaded_bytes: total_downloaded_bytes,
-                }),
-                result: Some(https_outcall_result::Result::Response(response)),
-            },
-            Err(error) => HttpsOutcallResult {
-                metrics: Some(CanisterHttpAdapterMetrics {
-                    // Ensure we report whatever we managed to download up to the failure
-                    downloaded_bytes: total_downloaded_bytes,
-                }),
-                result: Some(https_outcall_result::Result::Error(error)),
-            },
+            Ok(response) => https_outcall_result::Result::Response(response),
+            Err(error) => https_outcall_result::Result::Error(error),
         };
-
-        Ok(Response::new(http_result))
+        Ok(Response::new(HttpsOutcallResult {
+            metrics: Some(CanisterHttpAdapterMetrics {
+                downloaded_bytes: total_downloaded_bytes,
+            }),
+            result: Some(http_result),
+        }))
     }
 }
 

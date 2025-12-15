@@ -219,22 +219,18 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     );
 
                     let response = match result {
-                        Some(result) => {
-                            match result {
-                                https_outcall_result::Result::Response(https_outcall_response) => {
-                                    Ok(https_outcall_response)
-                                },
-                                https_outcall_result::Result::Error(canister_http_error) => {
-                                    let code = match CanisterHttpErrorKind::try_from(canister_http_error.kind).unwrap_or(CanisterHttpErrorKind::Unspecified) {
-                                        CanisterHttpErrorKind::InvalidInput => RejectCode::SysFatal,
-                                        CanisterHttpErrorKind::Connection => RejectCode::SysTransient,
-                                        CanisterHttpErrorKind::LimitExceeded => RejectCode::SysFatal,
-                                        CanisterHttpErrorKind::Internal => RejectCode::SysTransient,
-                                        CanisterHttpErrorKind::Unspecified => RejectCode::SysFatal,
-                                    };
-                                    Err((code, canister_http_error.message))
-                                }
-                            }
+                        Some(https_outcall_result::Result::Response(https_outcall_response)) => {
+                            Ok(https_outcall_response)
+                        },
+                        Some(https_outcall_result::Result::Error(canister_http_error)) => {
+                            let code = match canister_http_error.kind() {
+                                CanisterHttpErrorKind::InvalidInput => RejectCode::SysFatal,
+                                CanisterHttpErrorKind::Connection => RejectCode::SysTransient,
+                                CanisterHttpErrorKind::LimitExceeded => RejectCode::SysFatal,
+                                CanisterHttpErrorKind::Internal => RejectCode::SysTransient,
+                                CanisterHttpErrorKind::Unspecified => RejectCode::SysFatal,
+                            };
+                            Err((code, canister_http_error.message))
                         }
                         None => {
                             Err((
