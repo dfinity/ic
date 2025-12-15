@@ -4,8 +4,6 @@ use std::{
 };
 
 use ic_canister_client::{Agent, Sender};
-use ic_config::crypto::CryptoConfig;
-use ic_crypto::CryptoComponent;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::types::v1 as pb;
@@ -19,12 +17,12 @@ use ic_types::{
     },
 };
 use prost::Message;
-use tokio::{fs, runtime::Handle, task};
+use tokio::{fs, task};
 use url::Url;
 
 use crate::{
     registry::{RegistryCanisterClient, get_nodes},
-    util::{https_url, make_logger},
+    util::https_url,
 };
 
 pub mod registry;
@@ -150,28 +148,14 @@ pub enum SubnetStatus {
 /// 3. Verify that the subnet was halted on this CUP (meaning the CUP represents the latest state)
 /// 4. Search for a subsequent recover proposal that restarted the subnet, and confirm that the
 ///    correct parameters were used.
-pub fn verify(
-    handle: Handle,
-    nns_url: Url,
-    nns_pem: Option<PathBuf>,
-    cup_path: &Path,
-) -> SubnetStatus {
+pub fn verify(nns_url: Url, nns_pem: Option<PathBuf>, cup_path: &Path) -> SubnetStatus {
     let client = Arc::new(RegistryCanisterClient::new(nns_url, nns_pem));
     let latest_version = client.get_latest_version();
     println!("Registry client created. Latest registry version: {latest_version}",);
 
     println!("\nCreating crypto component...");
-    let (crypto_config, _tmp) = CryptoConfig::new_in_temp_dir();
-    ic_crypto_node_key_generation::generate_node_keys_once(&crypto_config, Some(handle.clone()))
-        .expect("error generating node public keys");
     let client_clone = Arc::clone(&client);
-    let crypto = Arc::new(CryptoComponent::new(
-        &crypto_config,
-        Some(handle),
-        client_clone,
-        make_logger().into(),
-        None,
-    ));
+    let crypto = Arc::new(ic_crypto_for_verification_only::new(client_clone));
 
     println!("\nReading CUP file at {cup_path:?}");
     let bytes = std::fs::read(cup_path).expect("Failed to read file");

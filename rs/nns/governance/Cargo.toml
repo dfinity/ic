@@ -27,6 +27,7 @@ build-info = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
+candid_parser = { workspace = true }
 chrono = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
 dyn-clone = "1.0.14"
@@ -131,5 +132,6 @@ tokio-test = { workspace = true }
 
 [features]
 test = ["ic-sns-swap/test"]
+performance-based-rewards = []
 canbench-rs = ["dep:canbench-rs"]
 tla = ["local_key", "tla_instrumentation", "tla_instrumentation_proc_macros"]

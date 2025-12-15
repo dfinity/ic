@@ -29,6 +29,7 @@ ic-consensus-dkg = { path = "../consensus/dkg" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
+ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-dashboard = { path = "./dashboard" }
 ic-ed25519 = { path = "../../packages/ic-ed25519" }
 ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
@@ -67,6 +68,7 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 url = { workspace = true }
+qrcode = { workspace = true }
 
 [dev-dependencies]
 async-stream = { workspace = true }

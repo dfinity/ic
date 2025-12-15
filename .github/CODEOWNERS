@@ -4,7 +4,6 @@
 
 # [Misc]
 /.devcontainer/           @dfinity/idx
-.rclone*                  @dfinity/idx
 /buf.yaml                 @dfinity/team-dsm
 /cpp/                     @dfinity/node
 /licenses/                @dfinity/idx
@@ -32,7 +31,6 @@ clippy.toml               @dfinity/ic-interface-owners
 # [Golang]
 go.mod                    @dfinity/idx
 go.sum                    @dfinity/idx
-go_deps.bzl               @dfinity/idx
 
 # [DevEnv]
 .vscode/                  @dfinity/idx
@@ -88,7 +86,6 @@ go_deps.bzl               @dfinity/idx
 /ci/scripts/repro-check                                                  @dfinity/dre
 /.pre-commit-config.yaml                                                 @dfinity/idx
 /pre-commit/                                                             @dfinity/idx
-/.mergify.yaml                                                           @dfinity/idx
 
 # [Rust]
 /rs/                                                    @dfinity/ic-interface-owners
@@ -192,6 +189,7 @@ go_deps.bzl               @dfinity/idx
 /rs/query_stats/                                        @dfinity/team-dsm @dfinity/consensus
 /rs/recovery/                                           @dfinity/consensus
 /rs/registry/                                           @dfinity/governance-team
+/rs/registry/canister/src/invariants/crypto.rs          @dfinity/consensus
 /rs/registry/helpers/src/crypto.rs                      @dfinity/consensus
 /rs/registry/helpers/src/crypto/                        @dfinity/consensus
 /rs/registry/helpers/src/firewall.rs                    @dfinity/consensus
@@ -263,9 +261,6 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/node/                                         @dfinity/node
 /rs/tests/query_stats/                                  @dfinity/team-dsm @dfinity/consensus
 /rs/tests/sdk/                                          @dfinity/sdk
-/rs/tests/src/ledger_tests/                             @dfinity/defi-team
-/rs/tests/src/rosetta_test.rs                           @dfinity/defi-team
-/rs/tests/src/rosetta_tests/                            @dfinity/defi-team
 /rs/tla_instrumentation/                                @dfinity/research @dfinity/formal-models
 /rs/tools/                                              @dfinity/ic-interface-owners
 /rs/tools/check_did/                                    @dfinity/defi-team

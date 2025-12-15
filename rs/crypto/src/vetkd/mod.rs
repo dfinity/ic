@@ -1,7 +1,7 @@
 use super::get_log_id;
 use crate::sign::BasicSigVerifierInternal;
-use crate::sign::BasicSignerInternal;
 use crate::sign::ThresholdSigDataStore;
+use crate::sign::basic_sig;
 use crate::sign::lazily_calculated_public_key_from_store;
 use crate::{CryptoComponentImpl, LockableThresholdSigDataStore};
 use ic_crypto_internal_bls12_381_vetkd::{
@@ -14,6 +14,7 @@ use ic_crypto_internal_csp::api::ThresholdSignatureCspClient;
 use ic_crypto_internal_csp::key_id::KeyIdInstantiationError;
 use ic_crypto_internal_csp::vault::api::VetKdEncryptedKeyShareCreationVaultError;
 use ic_crypto_internal_csp::{CryptoServiceProvider, key_id::KeyId, vault::api::CspVault};
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::PublicCoefficients;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
@@ -24,6 +25,7 @@ use ic_logger::{ReplicaLogger, debug, info, new_logger};
 use ic_types::NodeId;
 use ic_types::crypto::threshold_sig::errors::threshold_sig_data_not_found_error::ThresholdSigDataNotFoundError;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
+use ic_types::crypto::vetkd::VetKdDerivationContext;
 use ic_types::crypto::vetkd::{
     VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdKeyShareCombinationError,
     VetKdKeyShareCreationError, VetKdKeyShareVerificationError, VetKdKeyVerificationError,
@@ -52,11 +54,9 @@ impl<C: CryptoServiceProvider> VetKdProtocol for CryptoComponentImpl<C> {
         let start_time = self.metrics.now();
         let result = create_encrypted_key_share_internal(
             &self.lockable_threshold_sig_data_store,
-            self.registry_client.as_ref(),
             self.vault.as_ref(),
-            &self.csp,
+            &self.metrics,
             args,
-            self.node_id,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::VetKd,
@@ -192,22 +192,16 @@ impl<C: CryptoServiceProvider> VetKdProtocol for CryptoComponentImpl<C> {
 
 // TODO(CRP-2639): Adapt VetKdKeyShareCreationError so that clippy exception is no longer needed
 #[allow(clippy::result_large_err)]
-fn create_encrypted_key_share_internal<S: CspSigner>(
+fn create_encrypted_key_share_internal(
     lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
-    registry: &dyn RegistryClient,
     vault: &dyn CspVault,
-    csp_signer: &S,
+    metrics: &CryptoMetrics,
     args: VetKdArgs,
-    self_node_id: NodeId,
 ) -> Result<VetKdEncryptedKeyShare, VetKdKeyShareCreationError> {
-    let (pub_coeffs_from_store, registry_version_from_store) = lockable_threshold_sig_data_store
+    let pub_coeffs_from_store = lockable_threshold_sig_data_store
         .read()
-        .transcript_data(&args.ni_dkg_id)
-        .map(|transcript_data| {
-            let pub_coeffs = transcript_data.public_coefficients().clone();
-            let registry_version = transcript_data.registry_version();
-            (pub_coeffs, registry_version)
-        })
+        .transcript_data(args.ni_dkg_id)
+        .map(|transcript_data| transcript_data.public_coefficients().clone())
         .ok_or_else(|| {
             VetKdKeyShareCreationError::ThresholdSigDataNotFound(
                 ThresholdSigDataNotFoundError::ThresholdSigDataNotFound {
@@ -238,21 +232,17 @@ fn create_encrypted_key_share_internal<S: CspSigner>(
         .create_encrypted_vetkd_key_share(
             key_id,
             master_public_key.as_bytes().to_vec(),
-            args.transport_public_key,
-            args.context,
-            args.input,
+            args.transport_public_key.clone(),
+            VetKdDerivationContext {
+                caller: *args.context.caller,
+                context: args.context.context.clone(),
+            },
+            args.input.clone(),
         )
         .map_err(vetkd_key_share_creation_error_from_vault_error)?;
 
-    let signature = BasicSignerInternal::sign_basic(
-        csp_signer,
-        registry,
-        &encrypted_key_share,
-        self_node_id,
-        // TODO(CRP-2666): Cleanup: Remove registry_version from BasicSigner::sign_basic API
-        registry_version_from_store,
-    )
-    .map_err(VetKdKeyShareCreationError::KeyShareSigningError)?;
+    let signature = basic_sig::sign(&encrypted_key_share, vault, metrics)
+        .map_err(VetKdKeyShareCreationError::KeyShareSigningError)?;
 
     Ok(VetKdEncryptedKeyShare {
         encrypted_key_share,
@@ -291,7 +281,7 @@ fn verify_encrypted_key_share_internal<S: CspSigner>(
 ) -> Result<(), VetKdKeyShareVerificationError> {
     let registry_version_from_store = lockable_threshold_sig_data_store
         .read()
-        .transcript_data(&args.ni_dkg_id)
+        .transcript_data(args.ni_dkg_id)
         .map(|transcript_data| transcript_data.registry_version())
         .ok_or_else(|| {
             VetKdKeyShareVerificationError::ThresholdSigDataNotFound(
@@ -323,12 +313,12 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
     ensure_sufficient_shares_to_fail_fast(
         shares,
         lockable_threshold_sig_data_store,
-        &args.ni_dkg_id,
+        args.ni_dkg_id,
     )?;
 
     let transcript_data_from_store = lockable_threshold_sig_data_store
         .read()
-        .transcript_data(&args.ni_dkg_id)
+        .transcript_data(args.ni_dkg_id)
         .cloned()
         .ok_or_else(|| {
             VetKdKeyShareCombinationError::ThresholdSigDataNotFound(
@@ -341,7 +331,7 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
         PublicCoefficients::Bls12_381(pub_coeffs) => &pub_coeffs.coefficients,
     };
     let reconstruction_threshold = pub_coeffs_from_store.len();
-    let master_public_key = master_pubkey_from_coeffs(pub_coeffs_from_store, &args.ni_dkg_id)
+    let master_public_key = master_pubkey_from_coeffs(pub_coeffs_from_store, args.ni_dkg_id)
         .map_err(|error| match error {
             MasterPubkeyFromCoeffsError::InternalError(msg) => {
                 VetKdKeyShareCombinationError::InternalError(msg)
@@ -350,8 +340,8 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
                 VetKdKeyShareCombinationError::InvalidArgumentMasterPublicKey
             }
         })?;
-    let transport_public_key = TransportPublicKey::deserialize(&args.transport_public_key)
-        .map_err(|e| match e {
+    let transport_public_key =
+        TransportPublicKey::deserialize(args.transport_public_key).map_err(|e| match e {
             TransportPublicKeyDeserializationError::InvalidPublicKey => {
                 VetKdKeyShareCombinationError::InvalidArgumentEncryptionPublicKey
             }
@@ -380,7 +370,7 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
         .iter()
         .map(|(_node_id, node_index, clib_share)| (*node_index, clib_share.clone()))
         .collect();
-    let context = DerivationContext::new(args.context.caller.as_slice(), &args.context.context);
+    let context = DerivationContext::new(args.context.caller.as_slice(), args.context.context);
 
     match ic_crypto_internal_bls12_381_vetkd::EncryptedKey::combine_all(
         &clib_shares_for_combine_all,
@@ -388,7 +378,7 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
         &master_public_key,
         &transport_public_key,
         &context,
-        &args.input,
+        args.input,
     ) {
         Ok(encrypted_key) => Ok(encrypted_key),
         Err(EncryptedKeyCombinationError::InsufficientShares) => {
@@ -408,7 +398,7 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
                     let node_public_key = lazily_calculated_public_key_from_store(
                         lockable_threshold_sig_data_store,
                         threshold_sig_csp_client,
-                        &args.ni_dkg_id,
+                        args.ni_dkg_id,
                         node_id,
                     )
                     .map_err(|e| {
@@ -432,7 +422,7 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
                 &master_public_key,
                 &transport_public_key,
                 &context,
-                &args.input,
+                args.input,
             )
             .map_err(|e| {
                 VetKdKeyShareCombinationError::CombinationError(format!(
@@ -465,7 +455,7 @@ fn verify_encrypted_key_internal(
     let master_public_key = {
         let pub_coeffs_from_store = lockable_threshold_sig_data_store
             .read()
-            .transcript_data(&args.ni_dkg_id)
+            .transcript_data(args.ni_dkg_id)
             .map(|data| data.public_coefficients().clone())
             .ok_or_else(|| {
                 VetKdKeyVerificationError::ThresholdSigDataNotFound(
@@ -476,7 +466,7 @@ fn verify_encrypted_key_internal(
             })?;
         match pub_coeffs_from_store {
             PublicCoefficients::Bls12_381(bls_coeffs_trusted) => {
-                master_pubkey_from_coeffs(&bls_coeffs_trusted.coefficients, &args.ni_dkg_id)
+                master_pubkey_from_coeffs(&bls_coeffs_trusted.coefficients, args.ni_dkg_id)
                     .map_err(|error| match error {
                         MasterPubkeyFromCoeffsError::InternalError(msg) => {
                             VetKdKeyVerificationError::InternalError(msg)
@@ -489,8 +479,8 @@ fn verify_encrypted_key_internal(
         }
     };
 
-    let transport_public_key = TransportPublicKey::deserialize(&args.transport_public_key)
-        .map_err(|e| match e {
+    let transport_public_key =
+        TransportPublicKey::deserialize(args.transport_public_key).map_err(|e| match e {
             TransportPublicKeyDeserializationError::InvalidPublicKey => {
                 VetKdKeyVerificationError::InvalidArgumentEncryptionPublicKey
             }
@@ -498,8 +488,8 @@ fn verify_encrypted_key_internal(
 
     match encrypted_key.is_valid(
         &master_public_key,
-        &DerivationContext::new(args.context.caller.as_slice(), &args.context.context),
-        &args.input,
+        &DerivationContext::new(args.context.caller.as_slice(), args.context.context),
+        args.input,
         &transport_public_key,
     ) {
         true => Ok(()),

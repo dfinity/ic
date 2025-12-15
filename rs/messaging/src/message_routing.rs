@@ -1255,8 +1255,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
 impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<RegistryClient_> {
     #[instrument(skip_all)]
     fn process_batch(&self, batch: Batch) {
-        let _process_batch_start = Instant::now();
         let since = Instant::now();
+        let _process_batch_start = since;
 
         // Fetch the mutable tip from StateManager
         let mut state = match self
@@ -1309,7 +1309,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         debug!(self.log, "Processing batch {}", batch.batch_number);
         let commit_height = Height::from(batch.batch_number.get());
 
-        let certification_scope = if batch.requires_full_state_hash {
+        let certification_scope = if batch.requires_full_state_hash() {
             CertificationScope::Full
         } else {
             CertificationScope::Metadata
@@ -1357,6 +1357,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         if certification_scope == CertificationScope::Full {
             state_after_round.garbage_collect_canister_queues();
         }
+        state_after_round.metadata.subnet_metrics.num_canisters =
+            state_after_round.canister_states.len() as u64;
         let total_memory_usage = self.observe_canisters_memory_usage(&state_after_round);
         state_after_round
             .metadata
@@ -1441,6 +1443,12 @@ impl BatchProcessor for FakeBatchProcessorImpl {
         let time = batch.time;
         state.metadata.batch_time = time;
 
+        let certification_scope = if batch.requires_full_state_hash() {
+            CertificationScope::Full
+        } else {
+            CertificationScope::Metadata
+        };
+
         // Get only ingress out of the batch_messages
         let signed_ingress_msgs = match batch.content {
             BatchContent::Data { batch_messages, .. } => batch_messages.signed_ingress_msgs,
@@ -1473,12 +1481,6 @@ impl BatchProcessor for FakeBatchProcessorImpl {
 
         // Postprocess the state and consolidate the Streams.
         let state_after_stream_builder = self.stream_builder.build_streams(state);
-
-        let certification_scope = if batch.requires_full_state_hash {
-            CertificationScope::Full
-        } else {
-            CertificationScope::Metadata
-        };
 
         self.state_manager.commit_and_certify(
             state_after_stream_builder,

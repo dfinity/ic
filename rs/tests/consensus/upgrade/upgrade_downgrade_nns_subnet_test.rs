@@ -44,24 +44,11 @@ fn upgrade_downgrade_nns_subnet(env: TestEnv) {
 
     let target_version = bless_target_version(&env, &nns_node);
     info!(log, "Upgrading NNS subnet to {} ...", target_version);
-    let (faulty_node, can_id, msg) = upgrade(
-        &env,
-        &nns_node,
-        &target_version,
-        SubnetType::System,
-        None,
-        /*assert_graceful_orchestrator_tasks_exits=*/ false,
-    );
+    let (faulty_node, can_id, msg) =
+        upgrade(&env, &nns_node, &target_version, SubnetType::System, None);
     let initial_version = get_guestos_img_version();
     info!(log, "Downgrading NNS subnet to {} ...", initial_version);
-    upgrade(
-        &env,
-        &nns_node,
-        &initial_version,
-        SubnetType::System,
-        None,
-        /*assert_graceful_orchestrator_tasks_exits=*/ true,
-    );
+    upgrade(&env, &nns_node, &initial_version, SubnetType::System, None);
 
     info!(
         log,

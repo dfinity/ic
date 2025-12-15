@@ -1,5 +1,5 @@
 use crate::{
-    canister_manager::{types::AddCanisterChangeToHistory, uninstall_canister},
+    canister_manager::uninstall_canister,
     execution_environment::{
         ExecuteCanisterResult, ExecutionEnvironment, RoundInstructions, RoundLimits,
         as_num_instructions, as_round_instructions, execute_canister,
@@ -934,7 +934,6 @@ impl SchedulerImpl {
                         canister,
                         None, /* we're at the end of a round so no need to update round limits */
                         state_time,
-                        AddCanisterChangeToHistory::No,
                         Arc::clone(&self.fd_factory),
                     ));
                     canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
@@ -956,7 +955,7 @@ impl SchedulerImpl {
         // Delete any snapshots associated with the canister
         // that ran out of cycles.
         for canister_id in uninstalled_canisters {
-            state.delete_snapshots(canister_id);
+            state.canister_snapshots.delete_snapshots(canister_id);
         }
 
         // Send rejects to any requests that were forcibly closed while uninstalling.
