@@ -8,9 +8,11 @@ use crate::driver::{
 };
 use slog::{debug, info};
 
+pub(crate) const KEEPALIVE_TASK_NAME: &str = "keepalive";
+
 pub(crate) fn keepalive_task(group_ctx: GroupContext) -> () {
     let logger = group_ctx.logger().clone();
-    debug!(logger, ">>> keepalive");
+    debug!(logger, ">>> {KEEPALIVE_TASK_NAME}");
     loop {
         let group_ctx: GroupContext = group_ctx.clone();
         let setup_dir = group_ctx.group_dir.join(GROUP_SETUP_DIR);

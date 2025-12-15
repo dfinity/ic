@@ -36,4 +36,5 @@ pub mod test_env_api;
 pub mod test_setup;
 pub mod timeout;
 pub mod universal_vm;
+pub mod vector_logging_task;
 pub mod vector_vm;
