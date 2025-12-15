@@ -1385,20 +1385,21 @@ fn test_fee_collector_107() {
         block_id + 1
     };
 
-    let add_fee_collector_107_block = |block_id: u64, fc: Option<Account>| {
-        let fee_collector = BlockBuilder::<Tokens>::new(block_id, block_id)
-            .with_btype("107feecol".to_string())
-            .fee_collector(fc, None, None)
-            .build();
+    let add_fee_collector_107_block =
+        |block_id: u64, fc: Option<Account>, op_name: Option<String>| {
+            let fee_collector = BlockBuilder::<Tokens>::new(block_id, block_id)
+                .with_btype("107feecol".to_string())
+                .fee_collector(fc, None, None, op_name)
+                .build();
 
-        assert_eq!(
-            Nat::from(block_id),
-            add_block(env, ledger_id, &fee_collector)
-                .expect("error adding fee collector block to ICRC-3 test ledger")
-        );
-        wait_until_sync_is_completed(env, index_id, ledger_id);
-        block_id + 1
-    };
+            assert_eq!(
+                Nat::from(block_id),
+                add_block(env, ledger_id, &fee_collector)
+                    .expect("error adding fee collector block to ICRC-3 test ledger")
+            );
+            wait_until_sync_is_completed(env, index_id, ledger_id);
+            block_id + 1
+        };
 
     // Legacy fee collector collects the fees
     block_id = add_mint_block(block_id, Some(feecol_legacy), None);
@@ -1411,7 +1412,8 @@ fn test_fee_collector_107() {
     assert_eq!(2, icrc1_balance_of(env, index_id, feecol_legacy));
 
     // Set 107 fee collector to burn
-    block_id = add_fee_collector_107_block(block_id, None);
+    block_id =
+        add_fee_collector_107_block(block_id, None, Some("107set_fee_collector".to_string()));
 
     // No fees collected
     block_id = add_mint_block(block_id, None, None);
@@ -1425,7 +1427,7 @@ fn test_fee_collector_107() {
     assert_eq!(0, icrc1_balance_of(env, index_id, feecol_107));
 
     // Set 107 fee collector to fee_collector_2
-    block_id = add_fee_collector_107_block(block_id, Some(feecol_107));
+    block_id = add_fee_collector_107_block(block_id, Some(feecol_107), None);
 
     // New fee collector receives the fees
     block_id = add_mint_block(block_id, None, None);
@@ -1444,7 +1446,7 @@ fn test_fee_collector_107() {
     assert_eq!(4, icrc1_balance_of(env, index_id, feecol_107));
 
     // Set 107 fee collector to burn
-    block_id = add_fee_collector_107_block(block_id, None);
+    block_id = add_fee_collector_107_block(block_id, None, Some("107ledger_set".to_string()));
 
     // No fees collected
     add_mint_block(block_id, None, None);
@@ -1491,15 +1493,7 @@ fn test_fee_collector_107_irregular_op() {
     ];
 
     add_custom_block(env, ledger_id, 0, Some("107feecol"), tx_fields);
-    let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
-        .expect_err("unrecognized block with btype '107feecol' but unrecognized tx.op parsed successfully by index");
-    let expected_log_msg = "unknown fields";
-    assert!(
-        index_err_logs.contains(expected_log_msg),
-        "index logs did not contain expected string '{}': {}",
-        expected_log_msg,
-        index_err_logs
-    );
+    wait_until_sync_is_completed(env, index_id, ledger_id);
 }
 
 #[test]
@@ -1520,7 +1514,7 @@ fn test_fee_collector_107_mthd_instead_of_op() {
         .expect_err(
             "unrecognized block with '107feecol' but tx.mthd instead of tx.op parsed successfully by index",
         );
-    let expected_log_msg = "missing field `op`";
+    let expected_log_msg = "unknown fields";
     assert!(
         index_err_logs.contains(expected_log_msg),
         "index logs did not contain expected string '{}': {}",
@@ -1566,7 +1560,7 @@ fn test_block_with_no_btype_and_no_op() {
     add_custom_block(env, ledger_id, 0, None, tx_fields);
     let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
         .expect_err("unrecognized block with no btype and no tx.op parsed successfully by index");
-    let expected_log_msg = "missing field `op`";
+    let expected_log_msg = "No operation specified and/or unknown btype";
     assert!(
         index_err_logs.contains(expected_log_msg),
         "index logs did not contain expected string '{}': {}",
