@@ -212,6 +212,7 @@ impl InstallCodeHelper {
     }
 
     pub fn canister_memory_usage(&self) -> NumBytes {
+        println!("ABC canister_memory_usage");
         self.canister.memory_usage()
     }
 
@@ -273,6 +274,7 @@ impl InstallCodeHelper {
         round: RoundContext,
         round_limits: &mut RoundLimits,
     ) -> DtsInstallCodeResult {
+        println!("ABC InstallCodeHelper::finish()");
         let message_instruction_limit = original.execution_parameters.instruction_limits.message();
         let instructions_left = self.instructions_left();
 
@@ -381,6 +383,7 @@ impl InstallCodeHelper {
                 }
             }
 
+            println!("ABC freeze_threshold_cycles");
             let threshold = round.cycles_account_manager.freeze_threshold_cycles(
                 self.canister.system_state.freeze_threshold,
                 self.canister.memory_allocation(),
@@ -414,6 +417,7 @@ impl InstallCodeHelper {
             NumBytes::new(0),
             self.deallocated_wasm_custom_sections_bytes,
         );
+        println!("ABC install code helper finish");
         if let Err(err) = subnet_available_memory.try_decrement(
             self.allocated_bytes,
             self.allocated_guaranteed_response_message_bytes,
@@ -539,6 +543,7 @@ impl InstallCodeHelper {
 
         self.reduce_instructions_by(instructions_from_compilation);
 
+        println!("ABC replace_execution_state_and_allocations old_memory_usage");
         let old_memory_usage = self.canister.memory_usage();
         let memory_allocation = self.canister.system_state.memory_allocation;
         let old_wasm_custom_sections_memory_used = self
@@ -566,6 +571,7 @@ impl InstallCodeHelper {
 
         self.canister.execution_state = Some(execution_state);
 
+        println!("ABC replace_execution_state_and_allocations new_memory_usage");
         let new_memory_usage = self.canister.memory_usage();
         self.update_allocated_bytes(
             old_memory_usage,
@@ -586,6 +592,7 @@ impl InstallCodeHelper {
         new_wasm_custom_sections_memory_used: NumBytes,
         memory_allocation: MemoryAllocation,
     ) {
+        println!("ABC update_allocated_bytes");
         let old_bytes = memory_allocation.allocated_bytes(old_memory_usage);
         let new_bytes = memory_allocation.allocated_bytes(new_memory_usage);
         if old_bytes <= new_bytes {
@@ -654,6 +661,7 @@ impl InstallCodeHelper {
         // Apply system state changes always.
         // The result will be checked later after we've checked the wasm execution result so that we
         // don't miss logging in case there was an error from Wasm execution.
+        let old_mem = self.canister.memory_usage();
         let result_of_applying_system_state_modifications = system_state_modifications
             .apply_changes(
                 original.time,
@@ -663,6 +671,14 @@ impl InstallCodeHelper {
                 false, // Install cannot happen in composite_query.
                 round.log,
             );
+        let new_mem = self.canister.memory_usage();
+        self.update_allocated_bytes(
+            old_mem,
+            NumBytes::new(0),
+            new_mem,
+            NumBytes::new(0),
+            self.canister.system_state.memory_allocation,
+        );
 
         match output.wasm_result {
             Ok(None) => {}

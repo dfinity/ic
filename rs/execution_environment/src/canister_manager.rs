@@ -1098,6 +1098,7 @@ impl CanisterManager {
         let canister_history_memory_usage = canister.canister_history_memory_usage();
         let canister_wasm_chunk_store_memory_usage = canister.wasm_chunk_store_memory_usage();
         let canister_snapshots_memory_usage = canister.snapshots_memory_usage();
+        println!("ABC get_canister_status");
         let canister_log_memory_usage = canister.log_memory_store_memory_usage();
         let canister_message_memory_usage = canister.message_memory_usage();
         let compute_allocation = canister.scheduler_state.compute_allocation;
@@ -1986,6 +1987,7 @@ impl CanisterManager {
         }
 
         let uninstalled_canister_size = if uninstall_code {
+            println!("ABC take_canister_snapshot when uninstall_code");
             canister.execution_memory_usage()
                 + canister.log_memory_store_memory_usage() // TODO: double-check if this is correct.
                 + canister.wasm_chunk_store_memory_usage()

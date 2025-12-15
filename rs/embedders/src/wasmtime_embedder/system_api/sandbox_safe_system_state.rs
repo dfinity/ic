@@ -527,6 +527,7 @@ impl SystemStateModifications {
         system_state
             .canister_log
             .append_delta_log(&mut self.canister_log);
+        // TODO: try_decrement
         system_state
             .log_memory_store
             .append_delta_log(&mut canister_log_copy);

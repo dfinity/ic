@@ -67,6 +67,7 @@ impl RingBuffer {
 
     /// Returns an existing ring buffer if present.
     pub fn load_checked(page_map: PageMap) -> Option<Self> {
+        //println!("ABC load_checked");
         let io = StructIO::new(page_map);
         if !io.load_header().is_valid() {
             return None;
@@ -82,21 +83,26 @@ impl RingBuffer {
     /// including header, index table and data region.
     pub fn total_allocated_bytes(&self) -> usize {
         let header = self.io.load_header();
-        if !header.is_valid() {
-            return 0;
-        }
-        HEADER_SIZE.get() as usize
-            + header.index_table_pages as usize * PAGE_SIZE
-            + header.data_capacity.get() as usize
+        let result = if !header.is_valid() {
+            0
+        } else {
+            HEADER_SIZE.get() as usize
+                + header.index_table_pages as usize * PAGE_SIZE
+                + header.data_capacity.get() as usize
+        };
+        //println!("ABC total_allocated_bytes: {result}");
+        result
     }
 
     /// Returns the data capacity of the ring buffer.
     pub fn byte_capacity(&self) -> usize {
+        println!("ABC byte_capacity");
         self.io.load_header().data_capacity.get() as usize
     }
 
     /// Returns the data size of the ring buffer.
     pub fn bytes_used(&self) -> usize {
+        println!("ABC bytes_used");
         self.io.load_header().data_size.get() as usize
     }
 
@@ -105,6 +111,7 @@ impl RingBuffer {
     }
 
     pub fn next_idx(&self) -> u64 {
+        println!("ABC next_idx");
         self.io.load_header().next_idx
     }
 
@@ -114,6 +121,7 @@ impl RingBuffer {
     }
 
     pub fn append_log(&mut self, records: Vec<CanisterLogRecord>) {
+        println!("ABC append_log");
         let mut index_table = self.io.load_index_table();
         for r in records {
             let record = LogRecord::from(r);
@@ -166,6 +174,7 @@ impl RingBuffer {
     }
 
     fn pop_front(&mut self) -> Option<CanisterLogRecord> {
+        println!("ABC pop_front");
         let mut h = self.io.load_header();
         let record = self.io.load_record(h.data_head)?;
         let removed_size = MemorySize::new(record.bytes_len() as u64);
@@ -188,6 +197,7 @@ impl RingBuffer {
     /// - With filter: return the most oldest records (head), trimming newer ones
     ///   from the end so total data size ≤ result_max_size.
     pub fn records(&self, maybe_filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
+        println!("ABC records");
         let header = self.io.load_header();
         let index = self.io.load_index_table();
         let size_limit = index.result_max_size().get() as usize;
@@ -268,6 +278,7 @@ impl RingBuffer {
     }
 
     pub fn all_records(&self) -> Vec<CanisterLogRecord> {
+        println!("ABC all_records");
         let header = self.io.load_header();
         let mut records: Vec<CanisterLogRecord> = Vec::new();
         let mut pos = header.data_head;

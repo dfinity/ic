@@ -1645,11 +1645,12 @@ fn subnet_available_memory() {
     let initial_subnet_available_memory = test.subnet_available_memory();
     let mut current_subnet_available_memory = test.subnet_available_memory();
 
+    println!("\nABC step");
     let canister_id = test.create_canister_with_default_cycles();
 
     let mut check_subnet_available_memory =
         |test: &ExecutionTest, memory_usage_increase: bool, msg: &str| {
-            println!("ABC check_subnet_available_memory: {msg}\n");
+            println!("\nABC check_subnet_available_memory: {msg}");
             assert_eq!(
                 test.subnet_available_memory().get_execution_memory()
                     + test.canister_state(canister_id).memory_usage().get() as i64,
@@ -1676,11 +1677,13 @@ fn subnet_available_memory() {
     check_subnet_available_memory(&test, true, "after canister creation");
 
     // memory usage increases after installing the universal canister WASM
+    println!("\nABC step");
     test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     check_subnet_available_memory(&test, true, "after installing code");
 
     // memory usage increases after taking a snapshot
+    println!("\nABC step");
     let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
     let res = test.subnet_message(
         Method::TakeCanisterSnapshot,
@@ -1692,6 +1695,7 @@ fn subnet_available_memory() {
     check_subnet_available_memory(&test, true, "after taking snapshot");
 
     // memory usage increases after upgrading and growing stable memory in post-upgrade
+    println!("\nABC step");
     let grow_payload = wasm().stable_grow(100).build();
     test.upgrade_canister_with_args(
         canister_id,
@@ -1702,9 +1706,11 @@ fn subnet_available_memory() {
     check_subnet_available_memory(&test, true, "after upgrading code");
 
     // memory usage decreases after uninstalling code
+    println!("\nABC step");
     test.uninstall_code(canister_id).unwrap();
     check_subnet_available_memory(&test, false, "after uninstalling code");
     // memory usage increases after reinstalling code and growing stable memory in init
+    println!("\nABC step");
     test.reinstall_canister_with_args(
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
@@ -1716,6 +1722,7 @@ fn subnet_available_memory() {
     // memory usage decreases after loading snapshot since the snapshot was taken with empty stable memory;
     // this way, we also test that `CanisterManager::cycles_and_memory_usage_updates` can handle the case
     // of decreasing memory usage
+    println!("\nABC step");
     let load_canister_snapshot_args = LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
     test.subnet_message(
         Method::LoadCanisterSnapshot,
@@ -1726,6 +1733,7 @@ fn subnet_available_memory() {
 
     // memory usage increases after filling canister history with controllers changes
     // setting the maximum number of controllers every time
+    println!("\nABC step");
     for _ in 0..MAX_CANISTER_HISTORY_CHANGES {
         let controllers = (0..MAX_CONTROLLERS)
             .map(|i| user_test_id(i as u64).get())
@@ -1739,6 +1747,7 @@ fn subnet_available_memory() {
     // canister history is a circular buffer and
     // a change to the maximum number of controllers was just overwriten
     // with a change to a single controller which takes less memory
+    println!("\nABC step");
     test.canister_update_controller(canister_id, vec![test.user_id().get()])
         .unwrap();
     check_subnet_available_memory(&test, false, "after reducing controllers");
@@ -1747,6 +1756,7 @@ fn subnet_available_memory() {
     // canister history is a circular buffer and
     // a change to the maximum number of controllers was just overwriten
     // with a change to upgrade code which takes less memory
+    println!("\nABC step");
     test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     check_subnet_available_memory(&test, false, "after overwriting controllers change");

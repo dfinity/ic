@@ -392,11 +392,13 @@ impl CanisterState {
     /// resources it consumes and can be used to calculate the canister's
     /// idle cycles burn rate and freezing threshold in cycles.
     pub fn memory_usage(&self) -> NumBytes {
-        self.execution_memory_usage()
+        let res = self.execution_memory_usage()
             + self.canister_history_memory_usage()
             + self.wasm_chunk_store_memory_usage()
             + self.log_memory_store_memory_usage()
-            + self.snapshots_memory_usage()
+            + self.snapshots_memory_usage();
+        println!("ABC memory_usage: {res:?}");
+        res
     }
 
     /// Returns the amount of Wasm memory currently used by the canister in bytes.
@@ -464,7 +466,9 @@ impl CanisterState {
 
     /// Returns the memory usage of the log memory store in bytes.
     pub fn log_memory_store_memory_usage(&self) -> NumBytes {
-        NumBytes::new(self.system_state.log_memory_store.total_allocated_bytes() as u64)
+        let res = NumBytes::new(self.system_state.log_memory_store.total_allocated_bytes() as u64);
+        println!("ABC log_memory_store_memory_usage: {res:?}");
+        res
     }
 
     /// Returns the memory usage of the snapshots in bytes.
