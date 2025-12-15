@@ -116,6 +116,10 @@ pub enum CkDogeMinterEventType {
         #[serde(rename = "withdrawal_fee")]
         #[serde(skip_serializing_if = "Option::is_none")]
         withdrawal_fee: Option<WithdrawalFee>,
+        /// The signed transaction bytes. Only for ConsolidateUtxosRequest.
+        #[serde(rename = "signed_tx")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        signed_tx: Option<Vec<u8>>,
     },
 
     /// Indicates that the minter sent out a new transaction to replace an older transaction
@@ -297,6 +301,7 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                 submitted_at,
                 fee_per_vbyte,
                 withdrawal_fee,
+                signed_tx,
             } => Ok(CkDogeMinterEventType::SentDogeTransaction {
                 request_block_indices,
                 txid,
@@ -305,6 +310,7 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                 submitted_at,
                 fee_per_vbyte,
                 withdrawal_fee,
+                signed_tx,
             }),
             CkBtcMinterEventType::ReplacedBtcTransaction {
                 old_txid,
@@ -427,6 +433,7 @@ impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
                 submitted_at,
                 fee_per_vbyte,
                 withdrawal_fee,
+                signed_tx,
             } => CkBtcMinterEventType::SentBtcTransaction {
                 request_block_indices,
                 txid,
@@ -435,6 +442,7 @@ impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
                 submitted_at,
                 fee_per_vbyte,
                 withdrawal_fee,
+                signed_tx,
             },
             CkDogeMinterEventType::ReplacedDogeTransaction {
                 old_txid,
