@@ -1984,8 +1984,8 @@ impl CanisterManager {
 
         let uninstalled_canister_size = if uninstall_code {
             canister.execution_memory_usage()
+                + canister.log_memory_store_memory_usage() // TODO: double-check if this is correct.
                 + canister.wasm_chunk_store_memory_usage()
-                + canister.log_memory_store_memory_usage()
         } else {
             NumBytes::from(0)
         };
