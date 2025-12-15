@@ -11,6 +11,7 @@ pub mod farm;
 pub mod group;
 pub mod ic;
 pub mod ic_gateway_vm;
+pub mod keepalive_task;
 pub mod uvms_logs_stream_task;
 // Re-exported through test_env_api
 mod ic_images;
