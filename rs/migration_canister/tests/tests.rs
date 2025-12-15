@@ -444,7 +444,7 @@ async fn migration_succeeds() {
         sender,
         &MigrateCanisterArgs {
             migrated_canister_id: migrated_canister,
-            replace_canister_id: replaced_canister,
+            replaced_canister_id: replaced_canister,
         },
     )
     .await
@@ -637,7 +637,7 @@ async fn replay_call_after_migration() {
 
     let args = MigrateCanisterArgs {
         migrated_canister_id: migrated_canister,
-        replace_canister_id: replaced_canister,
+        replaced_canister_id: replaced_canister,
     };
     migrate_canister(&pic, sender, &args).await.unwrap();
 
@@ -766,11 +766,11 @@ async fn concurrent_migration_migrated_canister() {
 
     let args1 = MigrateCanisterArgs {
         migrated_canister_id: migrated_canister,
-        replace_canister_id: replaced_canister1,
+        replaced_canister_id: replaced_canister1,
     };
     let args2 = MigrateCanisterArgs {
         migrated_canister_id: migrated_canister,
-        replace_canister_id: replaced_canister2,
+        replaced_canister_id: replaced_canister2,
     };
     concurrent_migration(&pic, sender, args1, args2, migrated_canister).await;
 }
@@ -796,11 +796,11 @@ async fn concurrent_migration_replaced_canister() {
 
     let args1 = MigrateCanisterArgs {
         migrated_canister_id: migrated_canister1,
-        replace_canister_id: replaced_canister,
+        replaced_canister_id: replaced_canister,
     };
     let args2 = MigrateCanisterArgs {
         migrated_canister_id: migrated_canister2,
-        replace_canister_id: replaced_canister,
+        replaced_canister_id: replaced_canister,
     };
     concurrent_migration(&pic, sender, args1, args2, replaced_canister).await;
 }
@@ -823,7 +823,7 @@ where
 
     let args = MigrateCanisterArgs {
         migrated_canister_id: migrated_canister,
-        replace_canister_id: replaced_canister,
+        replaced_canister_id: replaced_canister,
     };
     migrate_canister(pic, sender, &args).await.unwrap();
 
@@ -932,7 +932,7 @@ async fn validation_fails_not_allowlisted() {
         sender,
         &MigrateCanisterArgs {
             migrated_canister_id: migrated_canister,
-            replace_canister_id: replaced_canister,
+            replaced_canister_id: replaced_canister,
         },
     )
     .await
@@ -945,7 +945,7 @@ async fn validation_fails_not_allowlisted() {
         special_caller,
         &MigrateCanisterArgs {
             migrated_canister_id: migrated_canister,
-            replace_canister_id: replaced_canister,
+            replaced_canister_id: replaced_canister,
         },
     )
     .await
@@ -974,7 +974,7 @@ async fn validation_fails_not_found() {
         sender,
         &MigrateCanisterArgs {
             migrated_canister_id: nonexistent_canister,
-            replace_canister_id: replaced_canister,
+            replaced_canister_id: replaced_canister,
         },
     )
     .await
@@ -988,7 +988,7 @@ async fn validation_fails_not_found() {
         sender,
         &MigrateCanisterArgs {
             migrated_canister_id: migrated_canister,
-            replace_canister_id: nonexistent_canister,
+            replaced_canister_id: nonexistent_canister,
         },
     )
     .await
@@ -1014,7 +1014,7 @@ async fn validation_fails_same_canister() {
         sender,
         &MigrateCanisterArgs {
             migrated_canister_id: migrated_canister,
-            replace_canister_id: migrated_canister,
+            replaced_canister_id: migrated_canister,
         },
     )
     .await
@@ -1054,7 +1054,7 @@ async fn validation_fails_same_subnet() {
         sender,
         &MigrateCanisterArgs {
             migrated_canister_id: migrated_canister,
-            replace_canister_id: replaced_canister,
+            replaced_canister_id: replaced_canister,
         },
     )
     .await
@@ -1082,7 +1082,7 @@ async fn validation_fails_caller_not_controller() {
         bad_sender,
         &MigrateCanisterArgs {
             migrated_canister_id: migrated_canister,
-            replace_canister_id: replaced_canister,
+            replaced_canister_id: replaced_canister,
         },
     )
     .await
@@ -1098,7 +1098,7 @@ async fn validation_fails_caller_not_controller() {
         bad_sender,
         &MigrateCanisterArgs {
             migrated_canister_id: migrated_canister,
-            replace_canister_id: replaced_canister,
+            replaced_canister_id: replaced_canister,
         },
     )
     .await
@@ -1130,7 +1130,7 @@ async fn validation_fails_mc_not_migrated_canister_controller() {
         sender,
         &MigrateCanisterArgs {
             migrated_canister_id: migrated_canister,
-            replace_canister_id: replaced_canister,
+            replaced_canister_id: replaced_canister,
         },
     )
     .await
@@ -1162,7 +1162,7 @@ async fn validation_fails_mc_not_replaced_canister_controller() {
         sender,
         &MigrateCanisterArgs {
             migrated_canister_id: migrated_canister,
-            replace_canister_id: replaced_canister,
+            replaced_canister_id: replaced_canister,
         },
     )
     .await
@@ -1194,7 +1194,7 @@ async fn validation_fails_not_stopped() {
             sender,
             &MigrateCanisterArgs {
                 migrated_canister_id: migrated_canister,
-                replace_canister_id: replaced_canister
+                replaced_canister_id: replaced_canister
             }
         )
         .await,
@@ -1214,7 +1214,7 @@ async fn validation_fails_not_stopped() {
             sender,
             &MigrateCanisterArgs {
                 migrated_canister_id: migrated_canister,
-                replace_canister_id: replaced_canister
+                replaced_canister_id: replaced_canister
             }
         )
         .await,
@@ -1251,7 +1251,7 @@ async fn validation_fails_disabled() {
             sender,
             &MigrateCanisterArgs {
                 migrated_canister_id: migrated_canister,
-                replace_canister_id: replaced_canister
+                replaced_canister_id: replaced_canister
             }
         )
         .await,
@@ -1289,7 +1289,7 @@ async fn validation_fails_snapshot() {
             sender,
             &MigrateCanisterArgs {
                 migrated_canister_id: migrated_canister,
-                replace_canister_id: replaced_canister
+                replaced_canister_id: replaced_canister
             }
         )
         .await,
@@ -1320,7 +1320,7 @@ async fn validation_fails_insufficient_cycles() {
             sender,
             &MigrateCanisterArgs {
                 migrated_canister_id: migrated_canister,
-                replace_canister_id: replaced_canister
+                replaced_canister_id: replaced_canister
             }
         )
         .await,
@@ -1344,7 +1344,7 @@ async fn status_correct() {
     let replaced_canister = replaced_canisters[0];
     let args = MigrateCanisterArgs {
         migrated_canister_id: migrated_canister,
-        replace_canister_id: replaced_canister,
+        replaced_canister_id: replaced_canister,
     };
     migrate_canister(&pic, sender, &args).await.unwrap();
 
@@ -1434,7 +1434,7 @@ async fn after_validation_migrated_canister_not_stopped() {
     let replaced_canister = replaced_canisters[0];
     let args = MigrateCanisterArgs {
         migrated_canister_id: migrated_canister,
-        replace_canister_id: replaced_canister,
+        replaced_canister_id: replaced_canister,
     };
     migrate_canister(&pic, sender, &args).await.unwrap();
     // validation succeeded. now we break migration by interfering.
@@ -1466,7 +1466,7 @@ async fn after_validation_replaced_canister_not_stopped() {
     let replaced_canister = replaced_canisters[0];
     let args = MigrateCanisterArgs {
         migrated_canister_id: migrated_canister,
-        replace_canister_id: replaced_canister,
+        replaced_canister_id: replaced_canister,
     };
     migrate_canister(&pic, sender, &args).await.unwrap();
     // validation succeeded. now we break migration by interfering.
@@ -1498,7 +1498,7 @@ async fn after_validation_replaced_canister_has_snapshot() {
     let replaced_canister = replaced_canisters[0];
     let args = MigrateCanisterArgs {
         migrated_canister_id: migrated_canister,
-        replace_canister_id: replaced_canister,
+        replaced_canister_id: replaced_canister,
     };
     migrate_canister(&pic, sender, &args).await.unwrap();
     // validation succeeded. now we break migration by interfering.
@@ -1546,7 +1546,7 @@ async fn after_validation_insufficient_cycles() {
     pic.add_cycles(migrated_canister, 10_000_000_000_000).await;
     let args = MigrateCanisterArgs {
         migrated_canister_id: migrated_canister,
-        replace_canister_id: replaced_canister,
+        replaced_canister_id: replaced_canister,
     };
     migrate_canister(&pic, sender, &args).await.unwrap();
     // ..but then burn some cycles by reinstalling to get under the required amount.
@@ -1584,7 +1584,7 @@ async fn failure_controllers_restored() {
     let replaced_canister = replaced_canisters[0];
     let args = MigrateCanisterArgs {
         migrated_canister_id: migrated_canister,
-        replace_canister_id: replaced_canister,
+        replaced_canister_id: replaced_canister,
     };
     migrate_canister(&pic, sender, &args).await.unwrap();
     // Validation succeeded. Now we break migration by interfering.
@@ -1630,7 +1630,7 @@ async fn success_controllers_restored() {
     let replaced_canister = replaced_canisters[0];
     let args = MigrateCanisterArgs {
         migrated_canister_id: migrated_canister,
-        replace_canister_id: replaced_canister,
+        replaced_canister_id: replaced_canister,
     };
     migrate_canister(&pic, sender, &args).await.unwrap();
     for _ in 0..10 {
@@ -1677,7 +1677,7 @@ async fn parallel_migrations() {
             migrated_canister_controllers[0],
             &MigrateCanisterArgs {
                 migrated_canister_id: migrated_canisters[i],
-                replace_canister_id: replaced_canisters[i],
+                replaced_canister_id: replaced_canisters[i],
             },
         )
         .await
@@ -1689,7 +1689,7 @@ async fn parallel_migrations() {
         migrated_canister_controllers[0],
         &MigrateCanisterArgs {
             migrated_canister_id: migrated_canisters[NUM_MIGRATIONS - 1],
-            replace_canister_id: replaced_canisters[NUM_MIGRATIONS - 1],
+            replaced_canister_id: replaced_canisters[NUM_MIGRATIONS - 1],
         },
     )
     .await;
@@ -1704,7 +1704,7 @@ async fn parallel_migrations() {
             migrated_canister_controllers[0],
             &MigrateCanisterArgs {
                 migrated_canister_id: migrated_canisters[i],
-                replace_canister_id: replaced_canisters[i],
+                replaced_canister_id: replaced_canisters[i],
             },
         )
         .await;
@@ -1738,7 +1738,7 @@ async fn parallel_validations() {
                 "migrate_canister",
                 Encode!(&MigrateCanisterArgs {
                     migrated_canister_id: migrated_canisters[i],
-                    replace_canister_id: replaced_canisters[i],
+                    replaced_canister_id: replaced_canisters[i],
                 })
                 .unwrap(),
             )
