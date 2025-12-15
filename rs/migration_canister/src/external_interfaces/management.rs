@@ -235,7 +235,6 @@ pub async fn rename_canister(
         sender_canister_version: canister_version(),
     };
 
-    // We have to await this call no matter what. Bounded wait is not an option.
     match Call::bounded_wait(replaced_canister_subnet, "rename_canister")
         .with_arg(args)
         .await
