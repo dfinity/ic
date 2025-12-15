@@ -166,6 +166,7 @@ pub fn setup(env: TestEnv) {
     write_sh_lib(&env, neuron_id, &http_gateway_url);
 
     patch_env_local_store(&env);
+    patch_env_root_public_key(&env);
 }
 
 fn setup_recovered_nns(
@@ -964,4 +965,12 @@ fn patch_env_local_store(env: &TestEnv) {
     rm.arg("-rf").arg(env.get_path("tmp_new_local_store"));
     rm.output()
         .expect("Failed to remove temporary new local store");
+}
+
+fn patch_env_root_public_key(env: &TestEnv) {
+    std::fs::copy(
+        env.get_path(PATH_RECOVERED_NNS_PUBLIC_KEY_PEM),
+        env.prep_dir("").unwrap().root_public_key_path(),
+    )
+    .unwrap();
 }
