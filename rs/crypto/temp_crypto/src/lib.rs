@@ -488,14 +488,8 @@ pub mod internal {
     impl<C: CryptoServiceProvider + Send + Sync, R: CryptoComponentRng, T: Signable> BasicSigner<T>
         for TempCryptoComponentGeneric<C, R>
     {
-        fn sign_basic(
-            &self,
-            message: &T,
-            signer: NodeId,
-            registry_version: RegistryVersion,
-        ) -> CryptoResult<BasicSigOf<T>> {
-            self.crypto_component
-                .sign_basic(message, signer, registry_version)
+        fn sign_basic(&self, message: &T) -> CryptoResult<BasicSigOf<T>> {
+            self.crypto_component.sign_basic(message)
         }
     }
 

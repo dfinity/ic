@@ -41,7 +41,6 @@ use ic_bn_lib_common::{
 };
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
-use ic_crypto_utils_basic_sig::conversions::derive_node_id;
 use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, threshold_sig_public_key_to_der};
 use ic_interfaces::crypto::{BasicSigner, KeyManager};
 use ic_interfaces_registry::RegistryClient;
@@ -602,8 +601,6 @@ async fn create_identity(
     })
     .await??;
 
-    let node_id = derive_node_id(&public_key).expect("failed to derive node id");
-
     // Custom Signer
     Ok(Box::new(
         NodeSender::new(
@@ -612,7 +609,7 @@ async fn create_identity(
                 #[allow(clippy::disallowed_methods)]
                 let sig = tokio::task::block_in_place(|| {
                     crypto_component
-                        .sign_basic(msg, node_id, registry_client.get_latest_version())
+                        .sign_basic(msg)
                         .map(|value| value.get().0)
                         .map_err(|err| anyhow!("failed to sign message: {err:?}"))
                 })?;

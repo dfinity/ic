@@ -42,7 +42,7 @@ fn post_upgrade(args: MigrationCanisterInitArgs) {
 
 #[derive(Clone, CandidType, Deserialize)]
 pub struct MigrateCanisterArgs {
-    pub canister_id: Principal,
+    pub migrated_canister_id: Principal,
     pub replace_canister_id: Principal,
 }
 
@@ -50,8 +50,8 @@ impl Display for MigrateCanisterArgs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "MigrateCanisterArgs {{ canister_id: {}, replace_canister_id: {} }}",
-            self.canister_id, self.replace_canister_id
+            "MigrateCanisterArgs {{ migrated_canister_id: {}, replace_canister_id: {} }}",
+            self.migrated_canister_id, self.replace_canister_id
         )
     }
 }
@@ -73,7 +73,7 @@ async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), Option<Valida
     if !caller_allowed(&caller) {
         return Err(Some(ValidationError::MigrationsDisabled(Reserved)));
     }
-    match validate_request(args.canister_id, args.replace_canister_id, caller).await {
+    match validate_request(args.migrated_canister_id, args.replace_canister_id, caller).await {
         Err(e) => {
             println!("Failed to validate request {}: {}", args, e);
             return Err(Some(e));
@@ -102,12 +102,14 @@ pub enum MigrationStatus {
 
 #[query]
 fn migration_status(args: MigrateCanisterArgs) -> Option<MigrationStatus> {
-    if let Some(request_status) = find_request(args.canister_id, args.replace_canister_id) {
+    if let Some(request_status) = find_request(args.migrated_canister_id, args.replace_canister_id)
+    {
         let migration_status = MigrationStatus::InProgress {
             status: request_status.name().to_string(),
         };
         Some(migration_status)
-    } else if let Some(event) = find_last_event(args.canister_id, args.replace_canister_id) {
+    } else if let Some(event) = find_last_event(args.migrated_canister_id, args.replace_canister_id)
+    {
         let migration_status = match event.event {
             crate::EventType::Succeeded { .. } => MigrationStatus::Succeeded { time: event.time },
             crate::EventType::Failed { reason, .. } => MigrationStatus::Failed {
