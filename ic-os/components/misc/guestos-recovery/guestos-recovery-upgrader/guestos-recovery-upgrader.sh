@@ -428,7 +428,7 @@ main() {
     log_message "Writing recovery hash to file"
     RECOVERY_FILE="/run/config/guestos_recovery_hash"
     mkdir -p "$(dirname "$RECOVERY_FILE")"
-    echo "$RECOVERY_HASH_FULL" >"$RECOVERY_FILE"
+    echo "$RECOVERY_HASH_PREFIX" >"$RECOVERY_FILE"
     log_message "Recovery hash written to $RECOVERY_FILE"
 
     log_message "Restarting guestos.service after manual upgrade installation"
