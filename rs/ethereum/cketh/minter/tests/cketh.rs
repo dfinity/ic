@@ -830,7 +830,7 @@ fn should_scrap_one_block_when_at_boundary_with_last_finalized_block() {
 }
 
 #[test]
-fn should_be_unstoppable_while_scraping_blocks_has_open_call_context() {
+fn should_document_current_behavior_of_being_unstoppable_while_scraping_blocks_has_open_call_context() {
     // TODO(DEFI-2566): This test documents the current behavior, where the ckETH minter is
     //  unstoppable while scraping (lots of) logs on a timer. Since log scraping calls are made on
     //  a loop in the callback handler for log scraping responses, the scraping continues until all
