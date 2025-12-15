@@ -17,6 +17,7 @@ while [[ $# -gt 0 ]]; do
         --criterion-home)
             shift
             export CRITERION_HOME="$1"
+            shift
             ;;
         *)
             # passthru

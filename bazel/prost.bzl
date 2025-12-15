@@ -8,7 +8,7 @@ load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 # the prost crate expects PROTOC_INCLUDE to point to a directory containing
 # various .proto files. Creating a directory is not straightforward in Bazel
 # so as a workaround we simply point to the sources.
-PROTOC_INCLUDE = "../protobuf+/src"
+PROTOC_INCLUDE = "external/protobuf~/src"
 
 def generated_files_check(name, srcs, deps, data, manifest_dir):
     rust_test(
