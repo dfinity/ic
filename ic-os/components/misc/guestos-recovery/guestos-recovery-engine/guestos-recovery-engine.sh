@@ -13,7 +13,7 @@ notify_console() {
 }
 
 function read_config_variables() {
-    expected_recovery_hash_prefix=$(get_config_value '.recovery_config.recovery_hash_prefix')
+    expected_recovery_hash_prefix=$(get_config_value '.recovery_config.recovery_hash')
 }
 
 # Completes the recovery process by downloading and applying the recovery artifacts
