@@ -1,6 +1,5 @@
+use super::*;
 use std::io::Read;
-
-pub const LIFELINE_CANISTER_WASM: &[u8] = include_bytes!(env!("LIFELINE_CANISTER_WASM_PATH"));
 
 #[test]
 fn check_that_lifeline_wasm_is_legal() {
