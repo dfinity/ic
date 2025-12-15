@@ -44,13 +44,12 @@ rust_library(
 
 system_test(
     name = "catch_up_loop_prevention_test",
+    guestos = "malicious",
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
         "long_test",
     ],
     test_timeout = "eternal",
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
     runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -64,13 +63,12 @@ system_test(
 
 system_test(
     name = "catch_up_possible_test",
+    guestos = "malicious",
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
         "long_test",
     ],
     test_timeout = "eternal",
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
     runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -125,9 +123,8 @@ rust_library(
 system_test(
     name = "liveness_with_equivocation_test",
     env = UNIVERSAL_CANISTER_ENV,
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
-    uses_guestos_test_update = True,
+    guestos = "malicious",
+    guestos_update = "test",
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -260,11 +257,10 @@ system_test(
         "RECOVERY_STORE_1_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:ic_registry_local_store_1.b64)",
         "RECOVERY_STORE_2_B64_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:ic_registry_local_store_2.b64)",
     },
+    guestos = "recovery_dev",
     tags = [
         "long_test",  # the P90 duration of this test is over 6 minutes in the week starting on 2025-08-25.
     ],
-    uses_guestos_img = False,
-    uses_guestos_recovery_dev_img = True,
     runtime_deps = IMPERSONATE_UPSTREAMS_RUNTIME_DEPS + [
         "//ic-os/guestos/envs/recovery-dev:cup.proto.b64",
         "//ic-os/guestos/envs/recovery-dev:ic_registry_local_store_1.b64",
@@ -286,9 +282,8 @@ system_test(
 system_test(
     name = "replica_determinism_test",
     env = UNIVERSAL_CANISTER_ENV,
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
-    uses_guestos_test_update = True,
+    guestos = "malicious",
+    guestos_update = "test",
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -305,9 +300,8 @@ system_test(
 system_test(
     name = "request_auth_malicious_replica_test",
     env = UNIVERSAL_CANISTER_ENV,
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
-    uses_guestos_test_update = True,
+    guestos = "malicious",
+    guestos_update = "test",
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -331,9 +325,8 @@ system_test(
 system_test(
     name = "safety_test",
     env = UNIVERSAL_CANISTER_ENV,
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
-    uses_guestos_test_update = True,
+    guestos = "malicious",
+    guestos_update = "test",
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.

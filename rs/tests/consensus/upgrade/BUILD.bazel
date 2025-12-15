@@ -34,14 +34,13 @@ system_test_nns(
         "vcpus": 24,
     },
     env = MAINNET_ENV | MESSAGE_CANISTER_ENV,
+    guestos = "mainnet_nns",
+    guestos_update = True,
     tags = [
         "colocate",
         "long_test",
     ],
     test_timeout = "eternal",
-    uses_guestos_img = False,
-    uses_guestos_mainnet_nns_img = True,
-    uses_guestos_update = True,
     runtime_deps =
         MESSAGE_CANISTER_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS,
@@ -64,13 +63,12 @@ system_test_nns(
 system_test_nns(
     name = "upgrade_downgrade_nns_subnet_test",
     env = MAINNET_ENV | MESSAGE_CANISTER_ENV,
+    guestos = "mainnet_nns",
+    guestos_update = True,
     tags = [
         "long_test",
     ],
     test_timeout = "eternal",
-    uses_guestos_img = False,
-    uses_guestos_mainnet_nns_img = True,
-    uses_guestos_update = True,
     runtime_deps =
         MESSAGE_CANISTER_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS,
@@ -108,14 +106,13 @@ system_test_nns(
     name = "upgrade_app_subnet_test",
     env = MAINNET_ENV | MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 2.27% over the month from 2025-02-11 till 2025-03-11.
+    guestos = "mainnet_nns",
+    guestos_update = True,
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
     test_driver_target = ":upgrade_test_bin",
     test_timeout = "eternal",  # the default 900 seconds (15 minutes) is not enough for this test, so we set it to 3600 seconds (1 hour).
-    uses_guestos_img = False,
-    uses_guestos_mainnet_nns_img = True,
-    uses_guestos_update = True,
     runtime_deps =
         MESSAGE_CANISTER_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS,
@@ -125,13 +122,12 @@ system_test_nns(
     name = "downgrade_app_subnet_test",
     env = MAINNET_ENV | MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 2.97% over the month from 2025-02-11 till 2025-03-11.
+    guestos_update = "mainnet_nns",
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
     test_driver_target = ":upgrade_test_bin",
     test_timeout = "eternal",  # the default 900 seconds (15 minutes) is not enough for this test, so we set it to 3600 seconds (1 hour).
-    uses_guestos_img = True,
-    uses_guestos_mainnet_nns_update = True,
     runtime_deps =
         MESSAGE_CANISTER_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS,
@@ -139,11 +135,10 @@ system_test_nns(
 
 system_test_nns(
     name = "upgrade_with_alternative_urls",
+    guestos_update = "test",
     tags = [
         "long_test",
     ],
-    uses_guestos_img = True,
-    uses_guestos_test_update = True,
     runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -159,11 +154,10 @@ system_test_nns(
 
 system_test_nns(
     name = "unassigned_node_upgrade_test",
+    guestos_update = "test",
     tags = [
         "long_test",
     ],
-    uses_guestos_img = True,
-    uses_guestos_test_update = True,
     runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.

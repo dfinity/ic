@@ -49,13 +49,13 @@ rust_library(
 system_test_nns(
     name = "sr_app_same_nodes_test",
     env = MESSAGE_CANISTER_ENV,
+    guestos_update = "test",
     tags = [
         "colocate",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":lib",
@@ -68,13 +68,13 @@ system_test_nns(
     name = "sr_app_same_nodes_enable_chain_keys_test",
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 3.33% over the month from 2025-02-11 till 2025-03-11.
+    guestos_update = "test",
     tags = [
         "colocate",
         "long_test",
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":lib",
@@ -86,13 +86,13 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_same_nodes_with_chain_keys_test",
     env = MESSAGE_CANISTER_ENV,
+    guestos_update = "test",
     tags = [
         "colocate",
         "long_test",
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":lib",
@@ -104,13 +104,13 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_failover_nodes_test",
     env = MESSAGE_CANISTER_ENV,
+    guestos_update = "test",
     tags = [
         "colocate",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":lib",
@@ -123,14 +123,13 @@ system_test_nns(
     name = "sr_app_failover_nodes_enable_chain_keys_test",
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 1.67% over the month from 2025-02-11 till 2025-03-11.
+    guestos_update = True,
     tags = [
         "colocate",
         "long_test",
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    uses_guestos_img = True,
-    uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":lib",
@@ -143,14 +142,13 @@ system_test_nns(
     name = "sr_app_failover_nodes_with_chain_keys_test",
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of 3.33% over the month from 2025-02-11 till 2025-03-11.
+    guestos_update = "test",
     tags = [
         "colocate",
         "long_test",
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    uses_guestos_img = True,
-    uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":lib",
@@ -162,13 +160,13 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_no_upgrade_test",
     env = MESSAGE_CANISTER_ENV,
+    guestos_update = "test",
     tags = [
         "colocate",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":lib",
@@ -182,13 +180,13 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV | {
         "IC_ADMIN_PATH": "$(rootpath //rs/registry/admin:ic-admin)",
     },
+    guestos_update = "test",
     tags = [
         "colocate",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + [
         "//rs/registry/admin:ic-admin",
     ],
@@ -202,14 +200,13 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_no_upgrade_enable_chain_keys_test",
     env = MESSAGE_CANISTER_ENV,
+    guestos_update = "test",
     tags = [
         "colocate",
         "long_test",
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    uses_guestos_img = True,
-    uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":lib",
@@ -222,14 +219,13 @@ system_test_nns(
     name = "sr_app_no_upgrade_with_chain_keys_test",
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 6% over the month from 2025-02-11 till 2025-03-11 (only for //rs/tests/consensus/subnet_recovery:sr_app_no_upgrade_with_chain_keys_test_head_nns_colocate).
+    guestos_update = "test",
     tags = [
         "colocate",
         "long_test",
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    uses_guestos_img = True,
-    uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":lib",
@@ -243,14 +239,13 @@ system_test_nns(
     enable_head_nns_variant = False,  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 2.21% over the month from 2025-02-11 till 2025-03-11.
+    guestos_update = "test",
     tags = [
         "colocate",
         "subnet_recovery",
         "system_test_large",  # only run as part of release-testing since this test requires many resources.
     ],
     test_timeout = "eternal",
-    uses_guestos_img = True,
-    uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":lib",

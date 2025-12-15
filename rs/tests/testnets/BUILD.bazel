@@ -320,11 +320,11 @@ system_test_nns(
 
 system_test_nns(
     name = "nns_recovery",
+    guestos_update = "test",
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    uses_guestos_test_update = True,
     uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = [

@@ -109,10 +109,10 @@ system_test_nns(
     name = "unstuck_subnet_test",
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 2.1% over the month from 2025-02-11 till 2025-03-11.
+    guestos_update = "test",
     tags = [
         "long_test",
     ],
-    uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
