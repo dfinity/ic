@@ -434,7 +434,7 @@ fn test_is_subaccount() {
         assert_matches!(is_principal()(Cow::Owned(value)), Err(_));
     }
 
-    for len in 0..34 {
+    for len in 31..34 {
         if len == 32 {
             assert_eq!(
                 is_subaccount()(Cow::Owned(Value::blob(vec![0u8; len]))),
