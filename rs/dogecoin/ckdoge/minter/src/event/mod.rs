@@ -196,6 +196,11 @@ pub enum CkDogeMinterEventType {
         /// The mint block on the ledger.
         mint_block_index: u64,
     },
+    /// Indicates that the minter consolidates UTXOs with transaction
+    /// fee corresponding to burning ckbtc from the fee subaccount
+    /// at the given ledger index.
+    #[serde(rename = "created_consolidate_utxos_request")]
+    CreatedConsolidateUtxosRequest(ConsolidateUtxosRequest),
 }
 
 /// A pending retrieve DOGE request
@@ -215,6 +220,20 @@ pub struct RetrieveDogeRequest {
     #[serde(rename = "reimbursement_account")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reimbursement_account: Option<Account>,
+}
+
+/// A pending utxo consolidation request
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
+pub struct ConsolidateUtxosRequest {
+    /// The amount to consolidate.
+    pub amount: u64,
+    /// The destination Dogecoin address. It should always be the minter's address.
+    pub address: DogecoinAddress,
+    /// The BURN transaction index on the ledger.
+    /// Serves as a unique request identifier.
+    pub block_index: u64,
+    /// The time at which the minter accepted the request.
+    pub received_at: u64,
 }
 
 impl ic_ckbtc_minter::storage::StorableEvent for CkDogeMinterEvent {
@@ -276,15 +295,7 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
             }) => Ok(CkDogeMinterEventType::AcceptedRetrieveDogeRequest(
                 RetrieveDogeRequest {
                     amount,
-                    address: match address {
-                        BitcoinAddress::P2wpkhV0(_)
-                        | BitcoinAddress::P2wshV0(_)
-                        | BitcoinAddress::P2trV1(_) => {
-                            Err(format!("BUG: unexpected address type {address:?}"))
-                        }
-                        BitcoinAddress::P2pkh(bytes) => Ok(DogecoinAddress::P2pkh(bytes)),
-                        BitcoinAddress::P2sh(bytes) => Ok(DogecoinAddress::P2pkh(bytes)),
-                    }?,
+                    address: bitcoin_to_dogecoin(address)?,
                     block_index,
                     received_at,
                     reimbursement_account,
@@ -374,6 +385,21 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                 };
                 Err(format!("{explanation}: {event:?}"))
             }
+            CkBtcMinterEventType::CreatedConsolidateUtxosRequest(
+                ic_ckbtc_minter::state::ConsolidateUtxosRequest {
+                    amount,
+                    address,
+                    block_index,
+                    received_at,
+                },
+            ) => Ok(CkDogeMinterEventType::CreatedConsolidateUtxosRequest(
+                ConsolidateUtxosRequest {
+                    amount,
+                    address: bitcoin_to_dogecoin(address)?,
+                    block_index,
+                    received_at,
+                },
+            )),
             // Ignore deprecated events for Dogecoin
             #[allow(deprecated)]
             CkBtcMinterEventType::DistributedKytFee { .. }
@@ -413,10 +439,7 @@ impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
                 reimbursement_account,
             }) => CkBtcMinterEventType::AcceptedRetrieveBtcRequest(RetrieveBtcRequest {
                 amount,
-                address: match address {
-                    DogecoinAddress::P2pkh(bytes) => BitcoinAddress::P2pkh(bytes),
-                    DogecoinAddress::P2sh(bytes) => BitcoinAddress::P2sh(bytes),
-                },
+                address: dogecoin_to_bitcoin(address),
                 block_index,
                 received_at,
                 kyt_provider: None,
@@ -490,6 +513,36 @@ impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
                 burn_block_index,
                 mint_block_index,
             },
+            CkDogeMinterEventType::CreatedConsolidateUtxosRequest(ConsolidateUtxosRequest {
+                amount,
+                address,
+                block_index,
+                received_at,
+            }) => CkBtcMinterEventType::CreatedConsolidateUtxosRequest(
+                ic_ckbtc_minter::state::ConsolidateUtxosRequest {
+                    amount,
+                    address: dogecoin_to_bitcoin(address),
+                    block_index,
+                    received_at,
+                },
+            ),
         }
+    }
+}
+
+fn bitcoin_to_dogecoin(address: BitcoinAddress) -> Result<DogecoinAddress, String> {
+    match address {
+        BitcoinAddress::P2wpkhV0(_) | BitcoinAddress::P2wshV0(_) | BitcoinAddress::P2trV1(_) => {
+            Err(format!("BUG: unexpected address type {address:?}"))
+        }
+        BitcoinAddress::P2pkh(bytes) => Ok(DogecoinAddress::P2pkh(bytes)),
+        BitcoinAddress::P2sh(bytes) => Ok(DogecoinAddress::P2pkh(bytes)),
+    }
+}
+
+fn dogecoin_to_bitcoin(address: DogecoinAddress) -> BitcoinAddress {
+    match address {
+        DogecoinAddress::P2pkh(bytes) => BitcoinAddress::P2pkh(bytes),
+        DogecoinAddress::P2sh(bytes) => BitcoinAddress::P2sh(bytes),
     }
 }
