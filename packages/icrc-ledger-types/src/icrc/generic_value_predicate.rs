@@ -473,7 +473,7 @@ fn test_is_account() {
         assert_matches!(is_account()(Cow::Owned(value)), Err(_));
     }
     // empty array
-    assert_matches!(is_account()(Cow::Owned(Value::blob(vec![]))), Err(_));
+    assert_matches!(is_account()(Cow::Owned(Value::Array(vec![]))), Err(_));
     // wrong types
     assert_matches!(
         is_account()(Cow::Owned(Value::Array(vec![
@@ -497,7 +497,7 @@ fn test_is_account() {
         is_account()(Cow::Owned(Value::Array(vec![subaccount.clone()]))),
         Err(_)
     );
-    // 2 subaccount
+    // 2 subaccounts
     assert_matches!(
         is_account()(Cow::Owned(Value::Array(vec![
             principal.clone(),
