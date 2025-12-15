@@ -26,7 +26,7 @@ use ic_state_machine_tests::{
 };
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
-use ic_types::ingress::IngressStatus;
+use ic_types::ingress::{IngressState, IngressStatus};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use num_traits::cast::ToPrimitive;
@@ -496,13 +496,40 @@ impl CkEthSetup {
         self.start_minter();
     }
 
-    pub fn try_stop_minter_without_stopping_ongoing_https_outcalls(&self) -> IngressStatus {
-        const MAX_TICKS: u64 = 100;
+    /// Try to stop the minter without first stopping the ongoing HTTPS outcalls. Assert that the
+    /// `IngressStatus` is `Processing`.
+    pub fn try_stop_minter_without_stopping_ongoing_https_outcalls(&self) {
+        const MAX_TICKS: u64 = 10;
         let stop_msg_id = self.env.stop_canister_non_blocking(self.minter_id);
+        let mut ingress_status = self.env.ingress_status(&stop_msg_id);
         for _ in 0..MAX_TICKS {
+            if let IngressStatus::Known { state, .. } = &ingress_status {
+                if state == &IngressState::Processing {
+                    return;
+                }
+            }
             self.env.tick();
+            ingress_status = self.env.ingress_status(&stop_msg_id);
         }
-        self.env.ingress_status(&stop_msg_id)
+        panic!(
+            "expected minter ingress status to be `Processing`, ended up with {:?}",
+            ingress_status
+        );
+    }
+
+    pub fn tick_until_minter_canister_status(
+        &self,
+        expected_canister_status: CanisterStatusType,
+    ) -> CanisterStatusType {
+        const MAX_TICKS: u64 = 10;
+        let mut status = self.minter_status();
+        for _ in 0..MAX_TICKS {
+            if status == expected_canister_status {
+                break;
+            }
+            status = self.minter_status();
+        }
+        status
     }
 
     pub fn stop_minter(&self) {

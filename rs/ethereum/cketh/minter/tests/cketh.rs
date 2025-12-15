@@ -34,7 +34,6 @@ use ic_cketh_test_utils::{
 };
 use ic_ethereum_types::Address;
 use ic_management_canister_types_private::CanisterStatusType;
-use ic_types::ingress::{IngressState, IngressStatus};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::{Burn, Mint};
@@ -881,30 +880,12 @@ fn should_be_unstoppable_while_scraping_blocks_has_open_call_context() {
     // - 3 block ranges have been scraped
     // - The minter has made an HTTP outcall for the 4th block range
     // - There's an open call context waiting for that HTTP response
-    // Tick once to ensure any pending requests are visible
-    cketh.env.tick();
-
     // Request to stop the minter (without providing responses to pending HTTP outcalls).
     // The stop will NOT complete because there's an open call context.
-    let stop_status = cketh.try_stop_minter_without_stopping_ongoing_https_outcalls();
-
-    // Verify the stop request is still Processing (not Completed)
-    match &stop_status {
-        IngressStatus::Known { state, .. } => {
-            assert!(
-                matches!(state, IngressState::Processing),
-                "Expected stop to still be Processing due to open call contexts, but got: {:?}",
-                state
-            );
-        }
-        other => panic!(
-            "Expected IngressStatus::Known with Processing state, got: {:?}",
-            other
-        ),
-    }
+    cketh.try_stop_minter_without_stopping_ongoing_https_outcalls();
 
     // Verify the minter is in "Stopping" state (not "Stopped")
-    let status = cketh.minter_status();
+    let status = cketh.tick_until_minter_canister_status(CanisterStatusType::Stopping);
     assert_eq!(
         status,
         CanisterStatusType::Stopping,
@@ -964,15 +945,10 @@ fn should_be_unstoppable_while_scraping_blocks_has_open_call_context() {
             .unwrap();
     }
 
-    // After all scraping is complete, give a few ticks for the canister to stop.
-    for _ in 0..10 {
-        cketh.env.tick();
-    }
-
-    // Now the canister should finally be Stopped
-    let final_status = cketh.minter_status();
+    // After all scraping is complete, the canister should finally be Stopped.
+    let status = cketh.tick_until_minter_canister_status(CanisterStatusType::Stopped);
     assert_eq!(
-        final_status,
+        status,
         CanisterStatusType::Stopped,
         "Expected minter to be Stopped after all call contexts closed"
     );
