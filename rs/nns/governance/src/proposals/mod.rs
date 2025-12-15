@@ -1,13 +1,14 @@
 use crate::{
     governance::{Environment, LOG_PREFIX},
     pb::v1::{
-        AddOrRemoveNodeProvider, ApproveGenesisKyc, CreateServiceNervousSystem,
+        ApproveGenesisKyc, BlessAlternativeGuestOsVersion, CreateServiceNervousSystem,
         DeregisterKnownNeuron, FulfillSubnetRentalRequest, GovernanceError, InstallCode,
         KnownNeuron, ManageNeuron, Motion, NetworkEconomics, ProposalData, RewardNodeProvider,
         RewardNodeProviders, SelfDescribingProposalAction, StopOrStartCanister, Topic,
         UpdateCanisterSettings, Vote, governance_error::ErrorType, proposal::Action,
     },
     proposals::{
+        add_or_remove_node_provider::ValidAddOrRemoveNodeProvider,
         execute_nns_function::ValidExecuteNnsFunction,
         self_describing::LocallyDescribableProposalAction,
     },
@@ -18,9 +19,10 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{PROTOCOL_CANISTER_IDS, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use std::{collections::HashMap, sync::Arc};
 
+pub mod add_or_remove_node_provider;
+pub mod bless_alternative_guest_os_version;
 pub mod call_canister;
 pub mod create_service_nervous_system;
-mod decode_candid_args_to_self_describing_value;
 pub mod deregister_known_neuron;
 pub mod execute_nns_function;
 pub mod fulfill_subnet_rental_request;
@@ -30,17 +32,19 @@ pub mod self_describing;
 pub mod stop_or_start_canister;
 pub mod update_canister_settings;
 
+mod decode_candid_args_to_self_describing_value;
+
 /// Represents a valid proposal action that has passed initial validation.
 /// Unlike the protobuf Action enum, this enum only includes non-obsolete actions.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq)]
-pub enum ValidProposalAction {
+pub(crate) enum ValidProposalAction {
     ManageNeuron(Box<ManageNeuron>),
     ManageNetworkEconomics(NetworkEconomics),
     Motion(Motion),
     ExecuteNnsFunction(ValidExecuteNnsFunction),
     ApproveGenesisKyc(ApproveGenesisKyc),
-    AddOrRemoveNodeProvider(AddOrRemoveNodeProvider),
+    AddOrRemoveNodeProvider(ValidAddOrRemoveNodeProvider),
     RewardNodeProvider(RewardNodeProvider),
     RewardNodeProviders(RewardNodeProviders),
     RegisterKnownNeuron(KnownNeuron),
@@ -50,6 +54,7 @@ pub enum ValidProposalAction {
     StopOrStartCanister(StopOrStartCanister),
     UpdateCanisterSettings(UpdateCanisterSettings),
     FulfillSubnetRentalRequest(FulfillSubnetRentalRequest),
+    BlessAlternativeGuestOsVersion(BlessAlternativeGuestOsVersion),
 }
 
 impl TryFrom<Option<Action>> for ValidProposalAction {
@@ -75,9 +80,10 @@ impl TryFrom<Option<Action>> for ValidProposalAction {
             Action::ApproveGenesisKyc(approve_genesis_kyc) => {
                 Ok(ValidProposalAction::ApproveGenesisKyc(approve_genesis_kyc))
             }
-            Action::AddOrRemoveNodeProvider(add_or_remove_node_provider) => Ok(
-                ValidProposalAction::AddOrRemoveNodeProvider(add_or_remove_node_provider),
-            ),
+            Action::AddOrRemoveNodeProvider(add_or_remove_node_provider) => {
+                ValidAddOrRemoveNodeProvider::try_from(add_or_remove_node_provider)
+                    .map(ValidProposalAction::AddOrRemoveNodeProvider)
+            }
             Action::RewardNodeProvider(reward_node_provider) => Ok(
                 ValidProposalAction::RewardNodeProvider(reward_node_provider),
             ),
@@ -103,6 +109,11 @@ impl TryFrom<Option<Action>> for ValidProposalAction {
             Action::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => Ok(
                 ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request),
             ),
+            Action::BlessAlternativeGuestOsVersion(bless_alternative_guest_os_version) => {
+                Ok(ValidProposalAction::BlessAlternativeGuestOsVersion(
+                    bless_alternative_guest_os_version,
+                ))
+            }
 
             // Obsolete actions
             Action::SetDefaultFollowees(_) => Err(GovernanceError::new_with_message(
@@ -146,6 +157,7 @@ impl ValidProposalAction {
                 update_settings.valid_topic()?
             }
             ValidProposalAction::FulfillSubnetRentalRequest(_) => Topic::SubnetRental,
+            ValidProposalAction::BlessAlternativeGuestOsVersion(_) => Topic::NodeAdmin,
         };
         Ok(topic)
     }
@@ -188,6 +200,10 @@ impl ValidProposalAction {
             ValidProposalAction::ApproveGenesisKyc(approve_genesis_kyc) => {
                 Ok(approve_genesis_kyc.to_self_describing_action())
             }
+            ValidProposalAction::AddOrRemoveNodeProvider(add_or_remove_node_provider) => {
+                Ok(add_or_remove_node_provider.to_self_describing_action())
+            }
+
             ValidProposalAction::ExecuteNnsFunction(execute_nns_function) => {
                 execute_nns_function.to_self_describing_action(env).await
             }

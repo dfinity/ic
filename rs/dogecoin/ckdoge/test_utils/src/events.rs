@@ -100,6 +100,7 @@ impl PartialEq for IgnoreTimestamp {
                     submitted_at: _,
                     fee_per_vbyte,
                     withdrawal_fee,
+                    signed_tx,
                 },
                 EventType::SentBtcTransaction {
                     request_block_indices: rhs_request_block_indices,
@@ -109,6 +110,7 @@ impl PartialEq for IgnoreTimestamp {
                     submitted_at: _,
                     fee_per_vbyte: rhs_fee_per_vbyte,
                     withdrawal_fee: rhs_withdrawal_fee,
+                    signed_tx: rhs_signed_tx,
                 },
             ) => {
                 request_block_indices == rhs_request_block_indices
@@ -117,6 +119,7 @@ impl PartialEq for IgnoreTimestamp {
                     && change_output == rhs_change_output
                     && fee_per_vbyte == rhs_fee_per_vbyte
                     && withdrawal_fee == rhs_withdrawal_fee
+                    && signed_tx == rhs_signed_tx
             }
 
             (

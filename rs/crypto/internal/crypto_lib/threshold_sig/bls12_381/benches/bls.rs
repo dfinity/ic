@@ -22,8 +22,8 @@ fn valid_bls_12_381_signature<R: RngCore + CryptoRng>(
     let msg_hash = hash_message_to_g1(&msg);
     let signature = msg_hash * secret_key;
 
-    let signature = CombinedSignatureBytes(signature.serialize());
-    let public_key = PublicKeyBytes(public_key.serialize());
+    let signature = CombinedSignatureBytes(signature.to_affine().serialize());
+    let public_key = PublicKeyBytes(public_key.to_affine().serialize());
 
     (msg, signature, public_key)
 }
