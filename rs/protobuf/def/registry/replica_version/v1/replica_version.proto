@@ -37,8 +37,9 @@ message GuestLaunchMeasurement {
 }
 
 message GuestLaunchMeasurementMetadata {
-  // Kernel command line string used to launch the guest
-  string kernel_cmdline = 1;
+  // Kernel command line string used to launch the guest.
+  // This can be absent, and if present, can hold any value, including the empty string.
+  optional string kernel_cmdline = 1;
 }
 
 // A list of blessed versions of the IC Replica

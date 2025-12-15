@@ -59,9 +59,10 @@ pub struct GuestLaunchMeasurement {
     ::prost::Message,
 )]
 pub struct GuestLaunchMeasurementMetadata {
-    /// Kernel command line string used to launch the guest
-    #[prost(string, tag = "1")]
-    pub kernel_cmdline: ::prost::alloc::string::String,
+    /// Kernel command line string used to launch the guest.
+    /// This can be absent, and if present, can hold any value, including the empty string.
+    #[prost(string, optional, tag = "1")]
+    pub kernel_cmdline: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// A list of blessed versions of the IC Replica
 ///

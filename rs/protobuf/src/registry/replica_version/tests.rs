@@ -5,7 +5,7 @@ fn test_validate_guest_launch_measurement_valid() {
     let measurement = GuestLaunchMeasurement {
         measurement: vec![0u8; 48],
         metadata: Some(GuestLaunchMeasurementMetadata {
-            kernel_cmdline: "console=ttyS0".to_string(),
+            kernel_cmdline: Some("console=ttyS0".to_string()),
         }),
     };
     let result = measurement.validate();
@@ -17,7 +17,7 @@ fn test_validate_guest_launch_measurement_wrong_size() {
     let measurement = GuestLaunchMeasurement {
         measurement: vec![0u8; 32],
         metadata: Some(GuestLaunchMeasurementMetadata {
-            kernel_cmdline: "console=ttyS0".to_string(),
+            kernel_cmdline: Some("console=ttyS0".to_string()),
         }),
     };
     let defects = measurement.validate().unwrap_err();
@@ -44,18 +44,11 @@ fn test_validate_guest_launch_measurement_empty_kernel_cmdline() {
     let measurement = GuestLaunchMeasurement {
         measurement: vec![0u8; 48],
         metadata: Some(GuestLaunchMeasurementMetadata {
-            kernel_cmdline: "".to_string(),
+            kernel_cmdline: Some("".to_string()),
         }),
     };
 
-    let defects = measurement.validate().unwrap_err();
-
-    assert_eq!(defects.len(), 1, "{defects:#?}");
-    assert!(
-        defects[0].contains("kernel") && defects[0].contains("empty"),
-        "Expected error message to contain 'kernel' and 'empty', got: {}",
-        defects[0]
-    );
+    assert_eq!(measurement.validate(), Ok(()));
 }
 
 #[test]
@@ -94,7 +87,7 @@ fn test_validate_guest_launch_measurements_valid() {
         guest_launch_measurements: vec![GuestLaunchMeasurement {
             measurement: vec![0u8; 48],
             metadata: Some(GuestLaunchMeasurementMetadata {
-                kernel_cmdline: "console=ttyS0".to_string(),
+                kernel_cmdline: Some("console=ttyS0".to_string()),
             }),
         }],
     };
@@ -110,14 +103,14 @@ fn test_validate_guest_launch_measurements_multiple_defects() {
             GuestLaunchMeasurement {
                 measurement: vec![0u8; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
-                    kernel_cmdline: "console=ttyS0".to_string(),
+                    kernel_cmdline: Some("console=ttyS0".to_string()),
                 }),
             },
             // Wrong measurement size
             GuestLaunchMeasurement {
                 measurement: vec![0u8; 32],
                 metadata: Some(GuestLaunchMeasurementMetadata {
-                    kernel_cmdline: "console=ttyS0".to_string(),
+                    kernel_cmdline: Some("console=ttyS0".to_string()),
                 }),
             },
             // Missing metadata. This is ok.
@@ -125,20 +118,25 @@ fn test_validate_guest_launch_measurements_multiple_defects() {
                 measurement: vec![0u8; 48],
                 metadata: None,
             },
-            // Empty kernel_cmdline. This is NOT ok, even though metadata is
-            // optional.
+            // Empty kernel_cmdline. This IS ok.
             GuestLaunchMeasurement {
                 measurement: vec![0u8; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
-                    kernel_cmdline: "".to_string(),
+                    kernel_cmdline: Some("".to_string()),
                 }),
+            },
+            // Metadata absent. This is OK.
+            GuestLaunchMeasurement {
+                measurement: vec![0u8; 48],
+                metadata: None,
             },
         ],
     };
 
     let defects = measurements.validate().unwrap_err();
 
-    assert_eq!(defects.len(), 2, "{defects:#?}");
+    // 1 defect expected: bad measurement length.
+    assert_eq!(defects.len(), 1, "{defects:#?}");
 
     assert!(
         defects[0].contains("guest_launch_measurements[1]")
@@ -146,13 +144,5 @@ fn test_validate_guest_launch_measurements_multiple_defects() {
             && defects[0].contains("32"),
         "Expected error message to contain 'guest_launch_measurements[1]', '48', and '32', got: {}",
         defects[0]
-    );
-
-    assert!(
-        defects[1].contains("guest_launch_measurements[3]")
-            && defects[1].contains("kernel_cmdline")
-            && defects[1].contains("empty"),
-        "Expected error message to contain 'guest_launch_measurements[3]', 'kernel_cmdline', and 'empty', got: {}",
-        defects[1]
     );
 }
