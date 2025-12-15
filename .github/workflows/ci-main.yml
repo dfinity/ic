@@ -388,9 +388,8 @@ jobs:
   upload-external-artifacts:
     name: Upload external artifacts
     needs: [bazel-test-arm64, config]
-    environment:
-      name: ${{ needs.config.outputs.release-build == 'true' && 'upload-artifacts' || ''}}
     if: ${{ needs.config.outputs.release-build == 'true' }} # GHA output quirk, 'true' is a string
+    environment: upload-artifacts
     runs-on: *dind-large-setup
     container: *container-setup
     timeout-minutes: 90
