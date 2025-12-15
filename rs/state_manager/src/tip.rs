@@ -1344,6 +1344,26 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .environment_variables
                 .clone()
                 .into(),
+            instructions_executed: canister_state
+                .system_state
+                .canister_metrics
+                .instructions_executed,
+            ingress_messages_executed: canister_state
+                .system_state
+                .canister_metrics
+                .ingress_messages_executed,
+            xnet_messages_executed: canister_state
+                .system_state
+                .canister_metrics
+                .xnet_messages_executed,
+            intranet_messages_executed: canister_state
+                .system_state
+                .canister_metrics
+                .intranet_messages_executed,
+            http_outcalls_executed: canister_state
+                .system_state
+                .canister_metrics
+                .http_outcalls_executed,
         }
         .into(),
     )?;

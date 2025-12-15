@@ -624,6 +624,7 @@ clap = { version = "4.5.20", features = ["derive", "string"] }
 cloudflare = { git = "https://github.com/dfinity/cloudflare-rs.git", rev = "8b011d170d9d61eaad77bb9645371f6219285104", default-features = false }
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
 crossbeam-channel = "0.5.15"
+csv = "^1.1"
 curve25519-dalek = { version = "4.1.3", features = [
     "group",
     "precomputed-tables",

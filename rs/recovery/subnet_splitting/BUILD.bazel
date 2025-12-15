@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 DEPENDENCIES = [
     # Keep sorted.
@@ -10,11 +11,14 @@ DEPENDENCIES = [
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
     "//rs/replay",
+    "//rs/state_layout",
     "//rs/state_manager",
     "//rs/state_tool:state_tool_lib",
     "//rs/types/base_types",
     "//rs/types/types",
+    "@crate_index//:anyhow",
     "@crate_index//:clap",
+    "@crate_index//:csv",
     "@crate_index//:hex",
     "@crate_index//:ic-agent",
     "@crate_index//:serde",
@@ -64,7 +68,32 @@ rust_binary(
 
 rust_test(
     name = "subnet_splitting_tool_test",
-    compile_data = ["test_data/fake_expected_manifests.data"],
+    compile_data = [
+        "test_data/fake_expected_manifests.data",
+    ],
     crate = "subnet_splitting",
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_ic_test(
+    name = "integration_test",
+    data = [
+        "//rs/rust_canisters/proxy_canister:proxy_canister",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
+    ],
+    env = {
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
+    srcs = glob(["tests/**"]),
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":subnet_splitting",
+        "//rs/rust_canisters/proxy_canister:lib",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities/logger",
+        "//rs/test_utilities/types",
+        "//rs/types/management_canister_types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:candid",
+    ],
 )

@@ -1,4 +1,5 @@
 //! Command implementations.
+pub mod canister_metrics;
 pub mod cdiff;
 pub mod chash;
 pub mod convert_ids;

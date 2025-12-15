@@ -1,7 +1,10 @@
+use anyhow::Context;
 use clap::Parser;
 use ic_base_types::SubnetId;
-use ic_recovery::{NeuronArgs, RecoveryArgs, cli, error::RecoveryResult, util};
+use ic_recovery::{NeuronArgs, RecoveryArgs, cli, util};
+use ic_registry_routing_table::CanisterIdRange;
 use ic_subnet_splitting::{
+    post_split_estimations,
     subnet_splitting::{SubnetSplitting, SubnetSplittingArgs},
     utils::canister_id_ranges_to_strings,
     validation::validate_artifacts,
@@ -81,11 +84,30 @@ struct ValidateArgs {
     source_subnet_id: SubnetId,
 }
 
+#[derive(Parser)]
+struct EstimateArgs {
+    /// The canister ID ranges to be moved to the destination subnet.
+    #[clap(long, num_args(1..), required = true)]
+    canister_id_ranges_to_move: Vec<CanisterIdRange>,
+
+    /// Path to a state manifest computed from the state on the source subnet.
+    /// Needed to compute the sizes of canisters.
+    #[clap(long)]
+    state_manifest_path: PathBuf,
+
+    /// Path to a CSV file containing a sample of load metrics on the source subnet.
+    #[clap(long)]
+    load_samples_path: PathBuf,
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Parser)]
 enum Subcommand {
     /// Perform Subnet Splitting
     Split(SplitArgs),
+
+    /// Estimate the states' sizes and loads after splitting the subnet.
+    Estimate(EstimateArgs),
 
     /// Validate artifacts produced during subnet splitting
     Validate(ValidateArgs),
@@ -143,7 +165,7 @@ fn subnet_splitting(
     cli::execute_steps(&logger, recovery_args.skip_prompts, subnet_splitting);
 }
 
-fn do_split(args: SplitArgs, logger: Logger) -> RecoveryResult<()> {
+fn do_split(args: SplitArgs, logger: Logger) -> anyhow::Result<()> {
     let recovery_args = RecoveryArgs {
         dir: args.dir,
         nns_url: args.nns_url,
@@ -167,7 +189,7 @@ fn do_split(args: SplitArgs, logger: Logger) -> RecoveryResult<()> {
     Ok(())
 }
 
-fn do_validate(args: ValidateArgs, logger: Logger) -> RecoveryResult<()> {
+fn do_validate(args: ValidateArgs, logger: Logger) -> anyhow::Result<()> {
     validate_artifacts(
         args.state_tree_path,
         args.nns_public_key_path.as_deref(),
@@ -176,9 +198,31 @@ fn do_validate(args: ValidateArgs, logger: Logger) -> RecoveryResult<()> {
         args.source_subnet_id,
         &logger,
     )
+    .context("Failed to validate the artifacts")
 }
 
-fn main() -> RecoveryResult<()> {
+fn do_estimate(args: EstimateArgs, _logger: Logger) -> anyhow::Result<()> {
+    let (state_size_estimates, load_estimates) = post_split_estimations::estimate(
+        args.canister_id_ranges_to_move,
+        args.state_manifest_path,
+        args.load_samples_path,
+    )
+    .context("Failed to estimate the load")?;
+
+    println!(
+        "States sizes in bytes: {}",
+        state_size_estimates.states_sizes_bytes
+    );
+
+    println!(
+        "Estimated instructions used on both subnet: {}",
+        load_estimates.instructions_used
+    );
+
+    Ok(())
+}
+
+fn main() -> anyhow::Result<()> {
     let args = SubnetSplittingToolArgs::parse();
 
     let logger = util::make_logger();
@@ -186,5 +230,6 @@ fn main() -> RecoveryResult<()> {
     match args.subcommand {
         Subcommand::Split(split_args) => do_split(split_args, logger),
         Subcommand::Validate(validate_args) => do_validate(validate_args, logger),
+        Subcommand::Estimate(estimate_args) => do_estimate(estimate_args, logger),
     }
 }
