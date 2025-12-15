@@ -123,7 +123,7 @@ system_test_nns(
     name = "sr_app_failover_nodes_enable_chain_keys_test",
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 1.67% over the month from 2025-02-11 till 2025-03-11.
-    guestos_update = True,
+    guestos_update = "test",
     tags = [
         "colocate",
         "long_test",
