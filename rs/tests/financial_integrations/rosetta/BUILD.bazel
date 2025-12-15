@@ -46,11 +46,11 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps = [
-            "//:rosetta-cli",
-            "//rs/rosetta-api/icp:ic-rosetta-api",
-            "//rs/rosetta-api/icp:rosetta_image.tar",
-            "//rs/tests:rosetta_workspace",
-        ],
+        "//:rosetta-cli",
+        "//rs/rosetta-api/icp:ic-rosetta-api",
+        "//rs/rosetta-api/icp:rosetta_image.tar",
+        "//rs/tests:rosetta_workspace",
+    ],
     deps = [
         "//rs/ledger_suite/common/ledger_core",
         "//rs/nns/common",

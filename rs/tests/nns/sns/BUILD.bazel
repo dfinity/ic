@@ -98,7 +98,7 @@ system_test(
     ],
     test_timeout = "eternal",
     runtime_deps = NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS+ [
+                   SNS_CANISTER_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
     deps = [
@@ -156,7 +156,7 @@ system_test(
     ],
     test_timeout = "eternal",  # TODO: consider removing this
     runtime_deps = NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS ,
+                   SNS_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nns/sns/lib:sns_system_test_lib",
