@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "MAINNET_ENV", "XNET_TEST_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MAINNET_ENV", "XNET_TEST_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -13,7 +13,7 @@ system_test_nns(
         "system_test_large",
     ],
     test_timeout = "eternal",
-    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
@@ -30,7 +30,7 @@ system_test_nns(
     tags = [
         "system_test_large",
     ],
-    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
@@ -47,7 +47,7 @@ system_test_nns(
     tags = [
         "system_test_large",
     ],
-    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
@@ -65,7 +65,7 @@ system_test_nns(
         "system_test_large",
     ],
     test_timeout = "eternal",
-    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
@@ -80,7 +80,7 @@ system_test(
     },
     uses_guestos_img = False,
     uses_guestos_malicious_img = True,
-    runtime_deps = GRAFANA_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS,
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
@@ -105,9 +105,7 @@ system_test_nns(
     uses_guestos_img = False,
     uses_guestos_mainnet_nns_img = True,
     uses_guestos_update = True,
-    runtime_deps =
-        XNET_TEST_CANISTER_RUNTIME_DEPS +
-        GRAFANA_RUNTIME_DEPS,
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",

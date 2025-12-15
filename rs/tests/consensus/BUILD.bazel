@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "IMPERSONATE_UPSTREAMS_ENV", "IMPERSONATE_UPSTREAMS_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "IMPERSONATE_UPSTREAMS_ENV", "IMPERSONATE_UPSTREAMS_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -51,7 +51,6 @@ system_test(
     test_timeout = "eternal",
     uses_guestos_img = False,
     uses_guestos_malicious_img = True,
-    runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":catch_up_test_common",
@@ -71,7 +70,6 @@ system_test(
     test_timeout = "eternal",
     uses_guestos_img = False,
     uses_guestos_malicious_img = True,
-    runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":catch_up_test_common",
@@ -367,7 +365,7 @@ system_test_nns(
         "manual",
     ],
     test_timeout = "eternal",
-    runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS + [
         "//bazel:version.txt",
         "//rs/tests:jaeger_uvm_config_image",
     ],
