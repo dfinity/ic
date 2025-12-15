@@ -49,6 +49,14 @@ pub struct UpgradeArgs {
     /// the get_utxos cache.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub get_utxos_cache_expiration_seconds: Option<u64>,
+
+    /// The minimum number of available UTXOs required to trigger a conslidation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub utxo_consolidation_threshold: Option<u64>,
+
+    /// The maximum number of input UTXOs allowed in a transaction.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_num_inputs_in_transaction: Option<u64>,
 }
 
 pub fn post_upgrade<R: CanisterRuntime>(upgrade_args: Option<UpgradeArgs>, runtime: &R) {
@@ -76,10 +84,10 @@ pub fn post_upgrade<R: CanisterRuntime>(upgrade_args: Option<UpgradeArgs>, runti
         count_events()
     );
 
-    let eventlog = runtime.event_logger();
+    let event_logger = runtime.event_logger();
 
-    let state = eventlog
-        .replay::<CheckInvariantsImpl>(eventlog.events_iter())
+    let state = event_logger
+        .replay::<CheckInvariantsImpl>(event_logger.events_iter())
         .unwrap_or_else(|e| {
             ic_cdk::trap(format!("[upgrade]: failed to replay the event log: {e:?}"))
         });

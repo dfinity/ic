@@ -26,14 +26,14 @@ use ic_ckbtc_minter::{
     updates::retrieve_btc::BtcAddressCheckStatus,
 };
 pub use ic_ckbtc_minter::{
-    MAX_NUM_INPUTS_IN_TRANSACTION, MIN_RESUBMISSION_DELAY, OutPoint, Page, Txid,
-    UTXOS_COUNT_THRESHOLD, Utxo,
+    MIN_RESUBMISSION_DELAY, OutPoint, Page, Txid, UTXOS_COUNT_THRESHOLD, Utxo,
     address::BitcoinAddress,
     logs::Priority,
     memo::{BurnMemo, MintMemo, encode as memo_encode},
     queries::EstimateFeeArg,
     reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason},
-    state::eventlog::{EventType, GetEventsArg},
+    state::DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
+    state::eventlog::{CkBtcMinterEvent, EventType, GetEventsArg},
     state::{ChangeOutput, RetrieveBtcRequest},
     updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
@@ -48,13 +48,13 @@ pub struct DogeCanisterRuntime {}
 #[async_trait]
 impl CanisterRuntime for DogeCanisterRuntime {
     type Estimator = DogecoinFeeEstimator;
-    type EventLog = CkDogeEventLogger;
+    type EventLogger = CkDogeEventLogger;
 
     fn fee_estimator(&self, state: &CkBtcMinterState) -> DogecoinFeeEstimator {
         DogecoinFeeEstimator::from_state(state)
     }
 
-    fn event_logger(&self) -> Self::EventLog {
+    fn event_logger(&self) -> Self::EventLogger {
         CkDogeEventLogger
     }
 
@@ -128,6 +128,19 @@ impl CanisterRuntime for DogeCanisterRuntime {
         })
         .await
         .map_err(|err| CallError::from_cdk_call_error("dogecoin_send_transaction", err))
+    }
+
+    async fn send_raw_transaction(
+        &self,
+        transaction: Vec<u8>,
+        network: ic_ckbtc_minter::Network,
+    ) -> Result<(), CallError> {
+        dogecoin_canister::dogecoin_send_transaction(&dogecoin_canister::SendTransactionRequest {
+            transaction,
+            network: network.into(),
+        })
+        .await
+        .map_err(|err| CallError::from_cdk_call_error("dogecoin_send_raw_transaction", err))
     }
 
     fn block_time(&self, network: ic_ckbtc_minter::Network) -> Duration {

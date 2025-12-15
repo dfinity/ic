@@ -219,6 +219,7 @@ impl ic_ckbtc_minter::storage::StorableEvent for CkDogeMinterEvent {
         ciborium::ser::into_writer(self, &mut buf).expect("failed to encode a minter event");
         Cow::Owned(buf)
     }
+
     fn from_bytes<'a>(bytes: Cow<'a, [u8]>) -> Self {
         ciborium::de::from_reader(bytes.as_ref()).expect("failed to decode a minter event")
     }

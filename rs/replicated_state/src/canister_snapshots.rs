@@ -121,9 +121,7 @@ impl CanisterSnapshots {
     }
 
     /// Remove snapshot identified by `snapshot_id` from the collection of snapshots.
-    ///
-    /// External callers should call `ReplicatedState::delete_snapshot` instead.
-    pub(crate) fn remove(&mut self, snapshot_id: SnapshotId) -> Option<Arc<CanisterSnapshot>> {
+    pub fn remove(&mut self, snapshot_id: SnapshotId) -> Option<Arc<CanisterSnapshot>> {
         let removed_snapshot = self.snapshots.remove(&snapshot_id);
         match removed_snapshot {
             Some(snapshot) => {
@@ -151,9 +149,7 @@ impl CanisterSnapshots {
 
     /// Remove all snapshots identified by `canister_id` from the collections of snapshots.
     /// Returns the list of deleted snapshots.
-    ///
-    /// External callers should call `ReplicatedState::delete_snapshots` instead.
-    pub(crate) fn delete_snapshots(&mut self, canister_id: CanisterId) -> Vec<SnapshotId> {
+    pub fn delete_snapshots(&mut self, canister_id: CanisterId) -> Vec<SnapshotId> {
         let mut result = Vec::default();
         if let Some(snapshot_ids) = self.snapshot_ids.get(&canister_id).cloned() {
             for snapshot_id in snapshot_ids {

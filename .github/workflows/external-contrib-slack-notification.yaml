@@ -3,11 +3,6 @@ name: External Contributor Slack Notification
 on:
   pull_request_target:
     types: [opened, reopened]
-  workflow_run:
-    types:
-      - in_progress
-    workflows:
-      - CI Kickoff Manual
 
 jobs:
   notify-slack-new-pr:
@@ -21,19 +16,5 @@ jobs:
         with:
           channel-id: eng-idx
           slack-message: "External Contribution: <${{ github.event.pull_request.html_url }}>"
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
-
-  notify-slack-new-workflow-run:
-    name: Notify Slack for new External Contributor Workflow Run
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_run'
-    steps:
-      - name: Post to a Slack channel
-        id: slack
-        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
-        with:
-          channel-id: ${{ secrets.EXT_WORKFLOW_RUN_CHANNEL }} # for security reasons, keep this masked
-          slack-message: "External Contribution Workflow Run Started: <${{ github.event.workflow_run.html_url }}>"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
