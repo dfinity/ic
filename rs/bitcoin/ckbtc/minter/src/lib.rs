@@ -19,6 +19,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
 use crate::fees::{BitcoinFeeEstimator, FeeEstimator};
+use crate::state::eventlog::{CkBtcEventLogger, EventLogger};
 use crate::state::utxos::UtxoSet;
 use crate::state::{CkBtcMinterState, mutate_state, read_state};
 use crate::updates::get_btc_address;
@@ -1584,6 +1585,9 @@ pub trait CanisterRuntime {
     /// Type used to estimate fees.
     type Estimator: FeeEstimator;
 
+    /// Type used for events recording of state changes.
+    type EventLogger: EventLogger;
+
     /// Returns the caller of the current call.
     fn caller(&self) -> Principal {
         ic_cdk::api::msg_caller()
@@ -1630,6 +1634,9 @@ pub trait CanisterRuntime {
 
     /// How to estimate fees.
     fn fee_estimator(&self, state: &CkBtcMinterState) -> Self::Estimator;
+
+    /// How to record and replay events.
+    fn event_logger(&self) -> Self::EventLogger;
 
     /// Retrieves the current transaction fee percentiles.
     async fn get_current_fee_percentiles(
@@ -1687,6 +1694,7 @@ pub struct IcCanisterRuntime {}
 #[async_trait]
 impl CanisterRuntime for IcCanisterRuntime {
     type Estimator = BitcoinFeeEstimator;
+    type EventLogger = CkBtcEventLogger;
 
     fn refresh_fee_percentiles_frequency(&self) -> Duration {
         const ONE_HOUR: Duration = Duration::from_secs(3_600);
@@ -1695,6 +1703,10 @@ impl CanisterRuntime for IcCanisterRuntime {
 
     fn fee_estimator(&self, state: &CkBtcMinterState) -> BitcoinFeeEstimator {
         BitcoinFeeEstimator::from_state(state)
+    }
+
+    fn event_logger(&self) -> Self::EventLogger {
+        CkBtcEventLogger
     }
 
     async fn get_current_fee_percentiles(
