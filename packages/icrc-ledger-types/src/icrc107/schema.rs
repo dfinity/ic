@@ -19,8 +19,8 @@ pub fn validate(block: &Value) -> Result<(), ValuePredicateFailures> {
         is_map(),
         item("op", Optional, is_text()),
         item("fee_collector", Optional, is_account()),
-        item("ts", Required, is_timestamp.clone()),
-        item("caller", Required, is_principal()),
+        item("ts", Optional, is_timestamp.clone()),
+        item("caller", Optional, is_principal()),
     ]);
     let is_parent_hash = and(vec![is_blob(), len(is_equal_to(32))]);
     let is_icrc107_block = and(vec![

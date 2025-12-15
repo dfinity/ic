@@ -7,10 +7,12 @@ use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_error_types::UserError;
 use ic_http_types::{HttpRequest, HttpResponse};
-use ic_icrc1::blocks::encoded_block_to_generic_block;
+use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_block};
 use ic_icrc1::{Block, Operation, Transaction, hash::Hash};
 use ic_icrc1_ledger::FeatureFlags;
-use ic_icrc1_test_utils::{ArgWithCaller, LedgerEndpointArg, valid_transactions_strategy};
+use ic_icrc1_test_utils::{
+    ArgWithCaller, LedgerEndpointArg, icrc3::BlockBuilder, valid_transactions_strategy,
+};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::timestamp::TimeStamp;
@@ -39,6 +41,7 @@ use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig, WasmRe
 use ic_types::Cycles;
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
+use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
 use icrc_ledger_types::icrc1::account::{Account, DEFAULT_SUBACCOUNT, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
@@ -58,6 +61,7 @@ use icrc_ledger_types::icrc21::requests::{
 use icrc_ledger_types::icrc21::responses::{ConsentMessage, FieldsDisplay, Value as Icrc21Value};
 use icrc_ledger_types::icrc103::get_allowances::{Allowances, GetAllowancesArgs};
 use icrc_ledger_types::icrc106::errors::Icrc106Error;
+use icrc_ledger_types::icrc107;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
@@ -1650,6 +1654,52 @@ pub fn block_encoding_agreed_with_the_icrc3_schema<Tokens: TokensType>() {
             let encoded_block = block.encode();
             let generic_block = encoded_block_to_generic_block(&encoded_block);
             if let Err(errors) = icrc3::schema::validate(&generic_block) {
+                panic!("generic_block: {generic_block:?}, errors:\n{errors}");
+            }
+            Ok(())
+        })
+        .unwrap();
+}
+
+pub fn arb_fee_collector_block<Tokens>() -> impl Strategy<Value = ICRC3Value>
+where
+    Tokens: TokensType,
+{
+    (
+        any::<u64>(),
+        any::<u64>(),
+        any::<Option<[u8; 32]>>(),
+        proptest::option::of(arb_account()),
+        proptest::option::of(proptest::collection::vec(any::<u8>(), 28)),
+        any::<Option<u64>>(),
+    )
+        .prop_map(
+            |(block_id, block_ts, parent_hash, fee_collector, caller, tx_ts)| {
+                let caller = caller.map(|mut c| {
+                    c.push(0x00);
+                    Principal::try_from_slice(&c[..]).unwrap()
+                });
+                let builder = BlockBuilder::<Tokens>::new(block_id, block_ts)
+                    .with_btype("107feecol".to_string());
+                let builder = match parent_hash {
+                    Some(parent_hash) => builder.with_parent_hash(parent_hash.to_vec()),
+                    None => builder,
+                };
+                builder.fee_collector(fee_collector, caller, tx_ts).build()
+            },
+        )
+}
+
+pub fn block_encoding_agreed_with_the_icrc107_schema<Tokens: TokensType>() {
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        max_shrink_iters: 0,
+        ..Default::default()
+    });
+    runner
+        .run(&arb_fee_collector_block::<Tokens>(), |block| {
+            let encoded_block = generic_block_to_encoded_block(block.clone().into()).expect("");
+            let generic_block = encoded_block_to_generic_block(&encoded_block);
+            if let Err(errors) = icrc107::schema::validate(&generic_block) {
                 panic!("generic_block: {generic_block:?}, errors:\n{errors}");
             }
             Ok(())
