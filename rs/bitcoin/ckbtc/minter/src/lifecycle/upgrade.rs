@@ -76,10 +76,10 @@ pub fn post_upgrade<R: CanisterRuntime>(upgrade_args: Option<UpgradeArgs>, runti
         count_events()
     );
 
-    let eventlog = runtime.event_logger();
+    let event_logger = runtime.event_logger();
 
-    let state = eventlog
-        .replay::<CheckInvariantsImpl>(eventlog.events_iter())
+    let state = event_logger
+        .replay::<CheckInvariantsImpl>(event_logger.events_iter())
         .unwrap_or_else(|e| {
             ic_cdk::trap(format!("[upgrade]: failed to replay the event log: {e:?}"))
         });
