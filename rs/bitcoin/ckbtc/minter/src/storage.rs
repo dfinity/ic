@@ -269,6 +269,11 @@ mod benches {
         bench_build_unsigned_transaction(1_000_000_000)
     }
 
+    #[bench(raw)]
+    fn build_estimate_retrieve_btc_fee_1_50k_sats() -> canbench_rs::BenchResult {
+        bench_estimate_retrieve_btc_fee(50_000) // minimum withdrawal amount
+    }
+
     fn bench_build_unsigned_transaction(withdrawal_amount: u64) -> canbench_rs::BenchResult {
         rebuild_mainnet_state();
         state::read_state(|s| {
@@ -291,8 +296,36 @@ mod benches {
                 crate::build_unsigned_transaction(
                     &mut s.available_utxos,
                     vec![(dummy_recipient_address, withdrawal_amount)],
-                    dummy_minter_address,
+                    &dummy_minter_address,
+                    s.max_num_inputs_in_transaction,
                     median_fee_millisatoshi_per_vbyte,
+                    &fee_estimator,
+                )
+                .unwrap()
+            });
+        })
+    }
+
+    fn bench_estimate_retrieve_btc_fee(withdrawal_amount: u64) -> canbench_rs::BenchResult {
+        rebuild_mainnet_state();
+        state::read_state(|s| {
+            // The distribution of UTXOs is a key factor in the complexity of building a transaction,
+            // the more UTXOs with small values there are, the more instructions will be required to build a transaction for a large amount
+            // because more UTXOs are needed to cover that amount.
+            // NOTE: Those benchmarks reflect the performance of the minter on **mainnet**.
+            // Changing the number of available of UTXOs is unavoidable when updating the retrieved mainnet events used for testing,
+            // so that fluctuations in performance is acceptable, but large degradation would indicate a regression.
+            assert_eq!(s.available_utxos.len(), 66_212);
+        });
+        let fee_estimator = state::read_state(|s| IC_CANISTER_RUNTIME.fee_estimator(s));
+
+        canbench_rs::bench_fn(|| {
+            state::mutate_state(|s| {
+                crate::estimate_retrieve_btc_fee(
+                    &mut s.available_utxos,
+                    withdrawal_amount,
+                    s.last_median_fee_per_vbyte.unwrap(),
+                    s.max_num_inputs_in_transaction,
                     &fee_estimator,
                 )
                 .unwrap()
