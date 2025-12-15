@@ -503,10 +503,10 @@ impl CkEthSetup {
         let stop_msg_id = self.env.stop_canister_non_blocking(self.minter_id);
         let mut ingress_status = self.env.ingress_status(&stop_msg_id);
         for _ in 0..MAX_TICKS {
-            if let IngressStatus::Known { state, .. } = &ingress_status {
-                if state == &IngressState::Processing {
-                    return;
-                }
+            if let IngressStatus::Known { state, .. } = &ingress_status
+                && state == &IngressState::Processing
+            {
+                return;
             }
             self.env.tick();
             ingress_status = self.env.ingress_status(&stop_msg_id);
