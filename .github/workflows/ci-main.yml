@@ -295,7 +295,7 @@ jobs:
 
       - name: Upload artifacts
         # NOTE: GHA output quirk, 'true' is a string
-        if: ${{ needs.config.outputs.full_macos_build == 'true' && needs.config.outputs.release-build == 'true'}}
+        if: ${{ needs.config.outputs.full_macos_build == 'true' && needs.config.outputs.release-build == 'true' }}
         uses: ./.github/actions/upload-artifacts
         with:
           name: macOS Intel artifacts
