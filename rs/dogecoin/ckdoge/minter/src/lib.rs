@@ -48,13 +48,13 @@ pub struct DogeCanisterRuntime {}
 #[async_trait]
 impl CanisterRuntime for DogeCanisterRuntime {
     type Estimator = DogecoinFeeEstimator;
-    type EventLog = CkDogeEventLogger;
+    type EventLogger = CkDogeEventLogger;
 
     fn fee_estimator(&self, state: &CkBtcMinterState) -> DogecoinFeeEstimator {
         DogecoinFeeEstimator::from_state(state)
     }
 
-    fn event_logger(&self) -> Self::EventLog {
+    fn event_logger(&self) -> Self::EventLogger {
         CkDogeEventLogger
     }
 

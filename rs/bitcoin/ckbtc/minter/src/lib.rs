@@ -1353,7 +1353,7 @@ pub trait CanisterRuntime {
     type Estimator: FeeEstimator;
 
     /// Type used for events recording of state changes.
-    type EventLog: EventLogger;
+    type EventLogger: EventLogger;
 
     /// Returns the caller of the current call.
     fn caller(&self) -> Principal {
@@ -1403,7 +1403,7 @@ pub trait CanisterRuntime {
     fn fee_estimator(&self, state: &CkBtcMinterState) -> Self::Estimator;
 
     /// How to record and replay events.
-    fn event_logger(&self) -> Self::EventLog;
+    fn event_logger(&self) -> Self::EventLogger;
 
     /// Retrieves the current transaction fee percentiles.
     async fn get_current_fee_percentiles(
@@ -1455,7 +1455,7 @@ pub struct IcCanisterRuntime {}
 #[async_trait]
 impl CanisterRuntime for IcCanisterRuntime {
     type Estimator = BitcoinFeeEstimator;
-    type EventLog = CkBtcEventLogger;
+    type EventLogger = CkBtcEventLogger;
 
     fn refresh_fee_percentiles_frequency(&self) -> Duration {
         const ONE_HOUR: Duration = Duration::from_secs(3_600);
@@ -1466,7 +1466,7 @@ impl CanisterRuntime for IcCanisterRuntime {
         BitcoinFeeEstimator::from_state(state)
     }
 
-    fn event_logger(&self) -> Self::EventLog {
+    fn event_logger(&self) -> Self::EventLogger {
         CkBtcEventLogger
     }
 

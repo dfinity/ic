@@ -196,7 +196,7 @@ pub mod mock {
         #[async_trait]
         impl CanisterRuntime for CanisterRuntime {
             type Estimator = BitcoinFeeEstimator;
-            type EventLog = CkBtcEventLogger;
+            type EventLogger = CkBtcEventLogger;
             fn caller(&self) -> Principal;
             fn id(&self) -> Principal;
             fn time(&self) -> u64;
