@@ -3,13 +3,14 @@ use crate::{MAX_TIME_IN_QUEUE, NNS_ROOT_PRINCIPAL};
 use candid::{Decode, Encode, Principal};
 use canlog::LogEntry;
 use ic_ckdoge_minter::{
-    EstimateFeeArg, Event, EventType, Priority, Txid, UpdateBalanceArgs, UpdateBalanceError, Utxo,
+    EstimateFeeArg, EventType, Priority, Txid, UpdateBalanceArgs, UpdateBalanceError, Utxo,
     UtxoStatus,
     candid_api::{
         EstimateWithdrawalFeeError, GetDogeAddressArgs, MinterInfo, RetrieveDogeOk,
         RetrieveDogeStatus, RetrieveDogeStatusRequest, RetrieveDogeWithApprovalArgs,
         RetrieveDogeWithApprovalError, WithdrawalFee,
     },
+    event::CkDogeMinterEvent,
     lifecycle::init::{MinterArg, UpgradeArgs},
 };
 use ic_management_canister_types::{CanisterId, CanisterStatusResult};
@@ -272,7 +273,7 @@ impl MinterCanister {
         MetricsAssert::from_http_query(self)
     }
 
-    pub fn get_all_events(&self) -> Vec<Event> {
+    pub fn get_all_events(&self) -> Vec<CkDogeMinterEvent> {
         const FIRST_BATCH_SIZE: u64 = 100;
         let mut all_events = self.get_events(0, FIRST_BATCH_SIZE);
         loop {
@@ -285,7 +286,7 @@ impl MinterCanister {
         }
     }
 
-    fn get_events(&self, start: u64, length: u64) -> Vec<Event> {
+    fn get_events(&self, start: u64, length: u64) -> Vec<CkDogeMinterEvent> {
         use ic_ckdoge_minter::GetEventsArg;
 
         let call_result = self
@@ -297,7 +298,7 @@ impl MinterCanister {
                 Encode!(&GetEventsArg { start, length }).unwrap(),
             )
             .expect("BUG: failed to call get_events");
-        Decode!(&call_result, Vec<Event>).unwrap()
+        Decode!(&call_result, Vec<CkDogeMinterEvent>).unwrap()
     }
 
     pub fn id(&self) -> CanisterId {

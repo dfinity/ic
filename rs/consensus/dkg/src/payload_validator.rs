@@ -203,6 +203,7 @@ mod tests {
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
     use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
+    use ic_crypto_test_utils_ni_dkg::dummy_dealing;
     use ic_interfaces::{
         consensus_pool::ConsensusPool,
         dkg::ChangeAction,
@@ -224,7 +225,7 @@ mod tests {
             dkg::{DealingContent, Message},
             idkg,
         },
-        crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         time::UNIX_EPOCH,
     };
     use std::{
@@ -521,7 +522,7 @@ mod tests {
         dkg_tag: NiDkgTag,
     ) -> Message {
         let content = DealingContent::new(
-            NiDkgDealing::dummy_dealing_for_tests(0),
+            dummy_dealing(0),
             NiDkgId {
                 start_block_height: Height::from(0),
                 dealer_subnet: subnet_id,

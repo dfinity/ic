@@ -355,7 +355,7 @@ mod create_transcript_with_resharing {
 
     fn malformed_pk_error() -> MalformedPublicKeyError {
         MalformedPublicKeyError {
-            algorithm: AlgorithmId::Placeholder,
+            algorithm: AlgorithmId::Unspecified,
             key_bytes: None,
             internal_error: "some error".to_string(),
         }
