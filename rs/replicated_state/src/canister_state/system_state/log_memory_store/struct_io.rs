@@ -27,6 +27,7 @@ impl StructIO {
 
     pub fn load_header(&self) -> Header {
         if let Some(cached_header) = self.cache_header.get() {
+            println!("ABC load_header [CACHED]");
             return cached_header;
         }
         let (magic, addr) = self.read_raw_bytes::<3>(HEADER_OFFSET);
@@ -53,11 +54,13 @@ impl StructIO {
             next_idx,
             max_timestamp,
         };
+        println!("ABC load_header");
         self.cache_header.set(Some(header));
         header
     }
 
     pub fn save_header(&mut self, header: &Header) {
+        println!("ABC save_header");
         self.cache_header.set(Some(*header));
         let mut addr = HEADER_OFFSET;
         addr = self.write_raw_bytes(addr, &header.magic);

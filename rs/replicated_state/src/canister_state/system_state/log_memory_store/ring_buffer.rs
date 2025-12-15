@@ -47,6 +47,7 @@ pub(super) struct RingBuffer {
 impl RingBuffer {
     /// Creates a new ring buffer with the given data capacity.
     pub fn new(page_map: PageMap, data_capacity: MemorySize) -> Self {
+        println!("ABC RingBuffer::new data_capacity: {:?}", data_capacity);
         assert!(
             data_capacity <= DATA_CAPACITY_MAX,
             "data capacity exceeds maximum"

@@ -83,6 +83,7 @@ impl LogMemoryStore {
 
     /// Clears the canister log records.
     pub fn clear(&mut self, fd_factory: Arc<dyn PageAllocatorFileDescriptor>) {
+        println!("ABC: clear page_map");
         // This creates a new empty page map with invalid ring buffer header.
         self.page_map = PageMap::new(fd_factory);
     }
@@ -125,6 +126,7 @@ impl LogMemoryStore {
     /// for canisters without a Wasm module or after uninstall, preventing
     /// unnecessary log-memory charges.
     pub fn set_log_memory_limit(&mut self, new_log_memory_limit: NumBytes) {
+        println!("ABC set_log_memory_limit: {new_log_memory_limit:?}");
         // Enforce a safe minimum for data capacity.
         let new_log_memory_limit = new_log_memory_limit.get().max(DATA_CAPACITY_MIN as u64);
         self.log_memory_limit = NumBytes::from(new_log_memory_limit);
@@ -143,6 +145,7 @@ impl LogMemoryStore {
                 let mut new =
                     RingBuffer::new(self.page_map.clone(), MemorySize::new(new_log_memory_limit));
                 new.append_log(old.all_records());
+                println!("ABC: set_log_memory_limit save page_map");
                 self.page_map = new.to_page_map();
             }
         }
@@ -188,6 +191,7 @@ impl LogMemoryStore {
             MemorySize::new(self.log_memory_limit.get()),
         ));
         ring_buffer.append_log(records);
+        println!("ABC append_delta_log save page_map");
         self.page_map = ring_buffer.to_page_map();
     }
 
