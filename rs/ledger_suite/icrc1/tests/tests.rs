@@ -253,6 +253,7 @@ mod block_encoding_stability {
                 Some(account),
                 Some(PrincipalId::new_user_test_id(2).0),
                 Some(22334455u64),
+                Some("107set_fee_collector".to_string()),
             );
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
     }
