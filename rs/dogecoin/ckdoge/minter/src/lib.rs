@@ -33,8 +33,7 @@ pub use ic_ckbtc_minter::{
     queries::EstimateFeeArg,
     reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason},
     state::DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
-    state::eventlog::{Event, EventType, GetEventsArg},
-    state::eventlog::{EventType, GetEventsArg},
+    state::eventlog::{CkBtcMinterEvent, EventType, GetEventsArg},
     state::{ChangeOutput, RetrieveBtcRequest},
     updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
