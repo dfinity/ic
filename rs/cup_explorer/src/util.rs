@@ -5,13 +5,13 @@ use ic_types::{PrincipalId, SubnetId};
 use std::str::FromStr;
 use url::Url;
 
-pub(crate) fn https_url(n: &NodeRecord) -> Url {
+pub(crate) fn http_url(n: &NodeRecord) -> Url {
     let c = n.http.as_ref().unwrap();
     // Parse IP address (using IpAddr::parse())
     let ip_addr = c.ip_addr.parse().unwrap();
     Url::parse(
         format!(
-            "https://{}",
+            "http://{}",
             SocketAddr::new(ip_addr, u16::try_from(c.port).unwrap())
         )
         .as_str(),

@@ -22,7 +22,7 @@ use url::Url;
 
 use crate::{
     registry::{RegistryCanisterClient, get_nodes},
-    util::https_url,
+    util::http_url,
 };
 
 pub mod registry;
@@ -79,13 +79,13 @@ pub async fn explore(registry_url: Url, subnet_id: SubnetId, path: Option<PathBu
     let node_records = get_nodes(&registry_canister, subnet_id).await;
     println!("Found {} node(s)", node_records.len());
     for (i, (id, record)) in node_records.iter().enumerate() {
-        println!("  {:2}. {} ({})", i + 1, id, https_url(record));
+        println!("  {:2}. {} ({})", i + 1, id, http_url(record));
     }
 
     println!("\nDetecting the latest CUP...");
 
     let tasks = node_records.into_iter().map(|(node_id, node)| {
-        task::spawn(async move { (node_id, get_cup(&https_url(&node)).await) })
+        task::spawn(async move { (node_id, get_cup(&http_url(&node)).await) })
     });
 
     let mut latest_height = 0;
