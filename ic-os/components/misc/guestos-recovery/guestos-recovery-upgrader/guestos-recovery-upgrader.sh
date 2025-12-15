@@ -3,7 +3,18 @@
 set -e
 
 # Perform a manual GuestOS upgrade from the HostOS
-
+#
+# Supports multiple modes so that the manual recovery TUI can:
+# - ask the user only for version and recovery-hash-prefix, have
+# guestos-recovery-upgrader download artifacts and compute the full hashes,
+# - and then display the calculated full hashes to the user for confirmation.
+#
+# Modes:
+# - mode=prep:   download the upgrade + recovery artifacts into a shared staging directory,
+#               compute full hashes, and write them to ${METADATA_FILE}. No install.
+# - mode=install: install using the already-downloaded artifacts from ${STAGE_DIR} (no downloads).
+# - mode=run:    perform prep and then install in one invocation.
+#
 # Constants for partitions and paths
 GRUB_PARTITION_NUM=2
 BOOT_PARTITION_A=4
