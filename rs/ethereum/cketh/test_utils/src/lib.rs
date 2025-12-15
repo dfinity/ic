@@ -543,11 +543,6 @@ impl CkEthSetup {
             .status()
     }
 
-    pub fn upgrade_minter_with_same_wasm_and_without_upgrade_args(self) -> Self {
-        self.upgrade_minter(UpgradeArg::default());
-        self
-    }
-
     pub fn upgrade_minter_to_add_orchestrator_id(self, orchestrator_id: Principal) -> Self {
         self.upgrade_minter(UpgradeArg {
             ledger_suite_orchestrator_id: Some(orchestrator_id),
