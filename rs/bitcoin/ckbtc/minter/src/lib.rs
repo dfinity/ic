@@ -1352,7 +1352,7 @@ pub trait CanisterRuntime {
     /// Type used to estimate fees.
     type Estimator: FeeEstimator;
 
-    /// Type used for events recording state changes.
+    /// Type used for events recording of state changes.
     type EventLog: EventLogger;
 
     /// Returns the caller of the current call.
