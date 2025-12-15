@@ -143,14 +143,14 @@ impl<'a> QueryContext<'a> {
         cycles_account_manager: Arc<CyclesAccountManager>,
     ) -> Self {
         let network_topology = Arc::new(state.get_ref().metadata.network_topology.clone());
-        let round_limits = RoundLimits {
-            instructions: as_round_instructions(max_query_call_graph_instructions),
+        let round_limits = RoundLimits::new(
+            as_round_instructions(max_query_call_graph_instructions),
             subnet_available_memory,
             subnet_available_callbacks,
             // Ignore compute allocation
-            compute_allocation_used: 0,
+            0,
             subnet_memory_reservation,
-        };
+        );
         Self {
             log,
             hypervisor,

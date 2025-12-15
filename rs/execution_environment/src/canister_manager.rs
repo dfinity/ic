@@ -1,8 +1,7 @@
-use crate::as_round_instructions;
 use crate::execution::install_code::{OriginalContext, validate_controller};
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::execution_environment::{
-    CompilationCostHandling, RoundContext, RoundCounters, RoundLimits,
+    CompilationCostHandling, MessageExecutionInstructions, RoundContext, RoundCounters, RoundLimits,
 };
 use crate::util::MIGRATION_CANISTER_ID;
 use crate::{
@@ -1583,7 +1582,7 @@ impl CanisterManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         resource_saturation: &ResourceSaturation,
-    ) -> Result<UploadChunkResult, CanisterManagerError> {
+    ) -> Result<(UploadChunkResult, MessageExecutionInstructions), CanisterManagerError> {
         // Allow the canister itself to perform this operation.
         if sender != canister.system_state.canister_id.into() {
             validate_controller(canister, &sender)?
@@ -1616,12 +1615,16 @@ impl CanisterManager {
         {
             ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
             ChunkValidationResult::AlreadyExists(hash) => {
-                return Ok(UploadChunkResult {
-                    reply: UploadChunkReply {
-                        hash: hash.to_vec(),
+                let instructions_token = round_limits.charge_message_execution_cost(instructions);
+                return Ok((
+                    UploadChunkResult {
+                        reply: UploadChunkReply {
+                            hash: hash.to_vec(),
+                        },
+                        heap_delta_increase: NumBytes::new(0),
                     },
-                    heap_delta_increase: NumBytes::new(0),
-                });
+                    instructions_token,
+                ));
             }
             ChunkValidationResult::ValidationError(err) => {
                 return Err(CanisterManagerError::WasmChunkStoreError { message: err });
@@ -1667,17 +1670,20 @@ impl CanisterManager {
             canister.scheduler_state.heap_delta_debit += chunk_bytes;
         }
 
-        round_limits.instructions -= as_round_instructions(instructions);
+        let instructions_token = round_limits.charge_message_execution_cost(instructions);
 
         let hash = validated_chunk.hash().to_vec();
         canister
             .system_state
             .wasm_chunk_store
             .insert_chunk(validated_chunk);
-        Ok(UploadChunkResult {
-            reply: UploadChunkReply { hash },
-            heap_delta_increase: chunk_bytes,
-        })
+        Ok((
+            UploadChunkResult {
+                reply: UploadChunkReply { hash },
+                heap_delta_increase: chunk_bytes,
+            },
+            instructions_token,
+        ))
     }
 
     pub(crate) fn clear_chunk_store(
@@ -1935,8 +1941,14 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
         resource_saturation: &ResourceSaturation,
-    ) -> Result<(CanisterSnapshotResponse, Vec<Response>, NumInstructions), CanisterManagerError>
-    {
+    ) -> Result<
+        (
+            CanisterSnapshotResponse,
+            Vec<Response>,
+            MessageExecutionInstructions,
+        ),
+        CanisterManagerError,
+    > {
         let sender = origin.origin();
         let time = state.time();
 
@@ -2034,7 +2046,8 @@ impl CanisterManager {
             round_limits,
             validated_cycles_and_memory_usage,
         );
-        round_limits.instructions -= as_round_instructions(instructions);
+
+        let instructions_token = round_limits.charge_message_execution_cost(instructions);
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             canister.scheduler_state.heap_delta_debit = canister
@@ -2083,7 +2096,7 @@ impl CanisterManager {
                 new_snapshot_size,
             ),
             rejects,
-            instructions,
+            instructions_token,
         ))
     }
 
@@ -2720,7 +2733,7 @@ impl CanisterManager {
         subnet_size: usize,
         round_limits: &mut RoundLimits,
         resource_saturation: &ResourceSaturation,
-    ) -> Result<(SnapshotId, NumInstructions), UserError> {
+    ) -> Result<(SnapshotId, MessageExecutionInstructions), UserError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
         let canister_id = canister.canister_id();
@@ -2828,7 +2841,8 @@ impl CanisterManager {
             round_limits,
             validated_cycles_and_memory_usage,
         );
-        round_limits.instructions -= as_round_instructions(instructions);
+
+        let instructions_token = round_limits.charge_message_execution_cost(instructions);
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             canister.scheduler_state.heap_delta_debit = canister
@@ -2848,7 +2862,7 @@ impl CanisterManager {
             .system_state
             .snapshots_memory_usage
             .saturating_add(&new_snapshot_size);
-        Ok((snapshot_id, instructions))
+        Ok((snapshot_id, instructions_token))
     }
 
     /// Writes `args.chunk` to the wasm module, main/stable memory or inserts `args.chunk` to the wasm chunk store.
@@ -2865,7 +2879,7 @@ impl CanisterManager {
         round_limits: &mut RoundLimits,
         subnet_size: usize,
         resource_saturation: &ResourceSaturation,
-    ) -> Result<NumInstructions, CanisterManagerError> {
+    ) -> Result<MessageExecutionInstructions, CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
         let snapshot_id = args.get_snapshot_id();
@@ -2958,7 +2972,9 @@ impl CanisterManager {
                 {
                     ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
                     ChunkValidationResult::AlreadyExists(_hash) => {
-                        return Ok(NumInstructions::new(0));
+                        return Ok(
+                            round_limits.charge_message_execution_cost(NumInstructions::new(0))
+                        );
                     }
                     ChunkValidationResult::ValidationError(err) => {
                         return Err(CanisterManagerError::WasmChunkStoreError { message: err });
@@ -3008,12 +3024,12 @@ impl CanisterManager {
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             canister.scheduler_state.heap_delta_debit += NumBytes::new(bytes_written);
         }
-        round_limits.instructions -= as_round_instructions(instructions);
+
+        let instructions_token = round_limits.charge_message_execution_cost(instructions);
 
         state.record_snapshot_data_upload(snapshot_id);
 
-        // Return the instructions needed to write the chunk to the destination.
-        Ok(instructions)
+        Ok(instructions_token)
     }
 
     /// Remove the specified snapshot and increase the subnet's available memory.

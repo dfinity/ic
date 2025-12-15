@@ -110,23 +110,23 @@ struct SchedulerRoundLimits {
 
 impl SchedulerRoundLimits {
     fn subnet_round_limits(&self) -> RoundLimits {
-        RoundLimits {
-            instructions: self.subnet_instructions,
-            subnet_available_memory: self.subnet_available_memory,
-            subnet_available_callbacks: self.subnet_available_callbacks,
-            compute_allocation_used: self.compute_allocation_used,
-            subnet_memory_reservation: self.subnet_memory_reservation,
-        }
+        RoundLimits::new(
+            self.subnet_instructions,
+            self.subnet_available_memory,
+            self.subnet_available_callbacks,
+            self.compute_allocation_used,
+            self.subnet_memory_reservation,
+        )
     }
 
     fn canister_round_limits(&self) -> RoundLimits {
-        RoundLimits {
-            instructions: self.instructions,
-            subnet_available_memory: self.subnet_available_memory,
-            subnet_available_callbacks: self.subnet_available_callbacks,
-            compute_allocation_used: self.compute_allocation_used,
-            subnet_memory_reservation: self.subnet_memory_reservation,
-        }
+        RoundLimits::new(
+            self.instructions,
+            self.subnet_available_memory,
+            self.subnet_available_callbacks,
+            self.compute_allocation_used,
+            self.subnet_memory_reservation,
+        )
     }
 
     fn update_subnet_round_limits(&mut self, round_limits: &RoundLimits) {
