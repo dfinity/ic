@@ -177,6 +177,7 @@ pub mod mock {
     use crate::CkBtcMinterState;
     use crate::fees::BitcoinFeeEstimator;
     use crate::management::CallError;
+    use crate::state::eventlog::CkBtcEventLogger;
     use crate::updates::update_balance::UpdateBalanceError;
     use crate::{
         BitcoinAddress, BtcAddressCheckStatus, CanisterRuntime, GetCurrentFeePercentilesRequest,
@@ -198,6 +199,7 @@ pub mod mock {
         #[async_trait]
         impl CanisterRuntime for CanisterRuntime {
             type Estimator = BitcoinFeeEstimator;
+            type EventLogger = CkBtcEventLogger;
             fn caller(&self) -> Principal;
             fn id(&self) -> Principal;
             fn time(&self) -> u64;
@@ -209,6 +211,7 @@ pub mod mock {
             fn derive_minter_address_str(&self, state: &CkBtcMinterState) -> String;
             fn refresh_fee_percentiles_frequency(&self) -> Duration;
             fn fee_estimator(&self, state: &CkBtcMinterState) -> BitcoinFeeEstimator;
+            fn event_logger(&self) -> CkBtcEventLogger;
             async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<u64>, CallError>;
             async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
             async fn check_transaction(&self, btc_checker_principal: Option<Principal>, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;
@@ -222,6 +225,7 @@ pub mod mock {
 }
 
 pub mod arbitrary {
+    use crate::state::eventlog::CkBtcMinterEvent;
     use crate::state::utxos::UtxoSet;
     use crate::{
         WithdrawalFee,
@@ -230,7 +234,7 @@ pub mod arbitrary {
         signature::EncodedSignature,
         state::{
             ChangeOutput, Mode, ReimbursementReason, RetrieveBtcRequest, SuspendedReason,
-            eventlog::{Event, EventType, ReplacedReason},
+            eventlog::{EventType, ReplacedReason},
         },
         tx,
         tx::{SignedInput, TxOut, UnsignedInput},
@@ -452,9 +456,9 @@ pub mod arbitrary {
         })
     }
 
-    pub fn event() -> impl Strategy<Value = Event> {
+    pub fn event() -> impl Strategy<Value = CkBtcMinterEvent> {
         (any::<Option<u64>>(), event_type())
-            .prop_map(|(timestamp, payload)| Event { timestamp, payload })
+            .prop_map(|(timestamp, payload)| CkBtcMinterEvent { timestamp, payload })
     }
 
     // Some event types are deprecated, however we still want to use them in prop tests as we want
