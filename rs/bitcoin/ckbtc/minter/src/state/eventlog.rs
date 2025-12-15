@@ -377,10 +377,10 @@ impl EventLogger for CkBtcEventLogger {
                             .and_modify(|entry| entry.push(req.block_index))
                             .or_insert(vec![req.block_index]);
                     }
-                state.push_back_pending_retrieve_btc_request(req);
+                    state.push_back_pending_retrieve_btc_request(req);
                 }
                 EventType::RemovedRetrieveBtcRequest { block_index } => {
-                let request = state
+                    let request = state
                     .remove_pending_retrieve_btc_request(block_index)
                     .ok_or_else(|| {
                         ReplayLogError::InconsistentLog(format!(
@@ -388,8 +388,8 @@ impl EventLogger for CkBtcEventLogger {
                         ))
                     })?;
 
-                state.push_finalized_request(FinalizedBtcRequest {
-                    request: request.into(),
+                    state.push_finalized_request(FinalizedBtcRequest {
+                        request: request.into(),
                         state: FinalizedStatus::AmountTooLow,
                     })
                 }
@@ -401,42 +401,46 @@ impl EventLogger for CkBtcEventLogger {
                     change_output,
                     submitted_at,
                     withdrawal_fee,
-                signed_tx,
+                    signed_tx,
                 } => {
                     let mut retrieve_btc_requests = BTreeSet::new();
-                let mut consolidate_utxos_request = None;
+                    let mut consolidate_utxos_request = None;
                     for block_index in request_block_indices {
-                    if let Some(request) = state.remove_pending_retrieve_btc_request(block_index) {
-                        retrieve_btc_requests.insert(request);
-                    } else if let Some(request) = state.get_consolidate_utxos_request(block_index) {
-                        consolidate_utxos_request = Some(request.clone());
+                        if let Some(request) =
+                            state.remove_pending_retrieve_btc_request(block_index)
+                        {
+                            retrieve_btc_requests.insert(request);
+                        } else if let Some(request) =
+                            state.get_consolidate_utxos_request(block_index)
+                        {
+                            consolidate_utxos_request = Some(request.clone());
+                        } else {
+                            return Err(ReplayLogError::InconsistentLog(format!(
+                                "Attempted to send a non-pending retrieve_btc request {block_index}"
+                            )));
+                        }
+                    }
+                    let requests = if let Some(request) = consolidate_utxos_request {
+                        assert!(retrieve_btc_requests.is_empty());
+                        SubmittedWithdrawalRequests::ToConsolidate { request }
                     } else {
-                        return Err(ReplayLogError::InconsistentLog(format!(
-                            "Attempted to send a non-pending retrieve_btc request {block_index}"
-                        )));
-                    }
-                    }
-                let requests = if let Some(request) = consolidate_utxos_request {
-                    assert!(retrieve_btc_requests.is_empty());
-                    SubmittedWithdrawalRequests::ToConsolidate { request }
-                } else {
-                    assert!(consolidate_utxos_request.is_none());
-                    SubmittedWithdrawalRequests::ToConfirm {
-                        requests: retrieve_btc_requests,
-                    }
-                };
+                        assert!(consolidate_utxos_request.is_none());
+                        SubmittedWithdrawalRequests::ToConfirm {
+                            requests: retrieve_btc_requests,
+                        }
+                    };
                     for utxo in utxos.iter() {
                         state.available_utxos.remove(utxo);
                     }
                     state.push_submitted_transaction(SubmittedBtcTransaction {
-                    requests,
+                        requests,
                         txid,
                         used_utxos: utxos,
                         fee_per_vbyte,
                         change_output,
                         submitted_at,
                         withdrawal_fee,
-                    signed_tx,
+                        signed_tx,
                     });
                 }
                 EventType::ReplacedBtcTransaction {
@@ -464,9 +468,9 @@ impl EventLogger for CkBtcEventLogger {
                     };
                     let requests = match reason {
                         Some(ReplacedReason::ToCancel { reason }) => match old_requests {
-                        SubmittedWithdrawalRequests::ToConsolidate { .. } => {
-                            panic!("Cannot cancel a consolidation request")
-                        }
+                            SubmittedWithdrawalRequests::ToConsolidate { .. } => {
+                                panic!("Cannot cancel a consolidation request")
+                            }
                             SubmittedWithdrawalRequests::ToCancel { .. } => {
                                 panic!("Cannot cancel a cancelation request")
                             }
@@ -500,7 +504,7 @@ impl EventLogger for CkBtcEventLogger {
                             submitted_at,
                             fee_per_vbyte: Some(fee_per_vbyte),
                             withdrawal_fee,
-                        signed_tx: None,
+                            signed_tx: None,
                         },
                     );
                 }
@@ -614,9 +618,9 @@ impl EventLogger for CkBtcEventLogger {
                 } => {
                     state.reimburse_withdrawal_completed(burn_block_index, mint_block_index);
                 }
-            EventType::CreatedConsolidateUtxosRequest(req) => {
-                state.push_consolidate_utxos_request(req)
-            }
+                EventType::CreatedConsolidateUtxosRequest(req) => {
+                    state.push_consolidate_utxos_request(req)
+                }
             }
         }
 

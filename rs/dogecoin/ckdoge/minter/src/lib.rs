@@ -32,9 +32,9 @@ pub use ic_ckbtc_minter::{
     memo::{BurnMemo, MintMemo, encode as memo_encode},
     queries::EstimateFeeArg,
     reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason},
-    state::eventlog::{EventType, GetEventsArg},
     state::DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
     state::eventlog::{Event, EventType, GetEventsArg},
+    state::eventlog::{EventType, GetEventsArg},
     state::{ChangeOutput, RetrieveBtcRequest},
     updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
