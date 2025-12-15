@@ -14,8 +14,7 @@ use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANI
 use ic_nns_governance_api::{
     ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Topic, Visibility,
     manage_neuron::{
-        self, ClaimOrRefresh, Configure, Follow, IncreaseDissolveDelay, NeuronIdOrSubaccount,
-        SetFollowing,
+        self, ClaimOrRefresh, Configure, IncreaseDissolveDelay, NeuronIdOrSubaccount, SetFollowing,
         claim_or_refresh::{By, MemoAndController},
         configure::{self, Operation},
         set_following::FolloweesForTopic,
