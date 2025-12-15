@@ -1,7 +1,7 @@
 file_share_url: 10.10.101.234
 file_share_dir: /srv/images
 file_share_image_filename: setupos.bmd.img
-inject_image_node_reward_type: type0
+inject_image_node_reward_type: type3.1
 inject_image_ipv6_prefix: 2a00:fb01:400:44
 inject_image_ipv6_gateway: 2a00:fb01:400:44::1
 inject_image_ipv4_address: 212.71.126.49
