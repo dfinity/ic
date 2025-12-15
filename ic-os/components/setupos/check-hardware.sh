@@ -19,7 +19,8 @@ HARDWARE_GENERATION=
 # Hardware Requirements
 ###############################################################################
 
-GEN1_CPU_MODEL="AMD EPYC 7302"
+# Support deploying Gen2 hardware with node_reward_type=type0, which checks Gen1 hardware requirements.
+GEN1_CPU_MODEL="AMD EPYC (7302|7..3)"
 GEN1_CPU_CAPABILITIES=("sev")
 GEN1_CPU_SOCKETS=2
 GEN1_CPU_THREADS=64
@@ -130,7 +131,7 @@ function verify_gen1_cpu() {
         "${GEN1_CPU_CAPABILITIES[@]}"
 
     local num_threads=$(nproc)
-    if [ "${num_threads}" -eq "${GEN1_CPU_THREADS}" ]; then
+    if [ "${num_threads}" -ge "${GEN1_CPU_THREADS}" ]; then
         echo "Number of threads (${num_threads}/${GEN1_CPU_THREADS}) meets system requirements."
     else
         log_and_halt_installation_on_error "1" "Number of threads (${num_threads}/${GEN1_CPU_THREADS}) does NOT meet system requirements."
