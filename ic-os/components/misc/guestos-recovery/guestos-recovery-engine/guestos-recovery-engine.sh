@@ -13,7 +13,7 @@ notify_console() {
 }
 
 function read_config_variables() {
-    expected_recovery_hash=$(get_config_value '.recovery_config.recovery_hash')
+    expected_recovery_hash_prefix=$(get_config_value '.recovery_config.recovery_hash_prefix')
 }
 
 # Completes the recovery process by downloading and applying the recovery artifacts
@@ -65,13 +65,13 @@ perform_recovery() {
 
     read_config_variables
 
-    if [ -z "$expected_recovery_hash" ]; then
+    if [ -z "$expected_recovery_hash_prefix" ]; then
         echo "ERROR: recovery-hash prefix is required"
         notify_console "Manual recovery error: recovery-hash prefix is required"
         return 1
     fi
 
-    echo "Using expected recovery hash prefix: $expected_recovery_hash"
+    echo "Using expected recovery hash prefix: $expected_recovery_hash_prefix"
 
     echo "Downloading recovery artifact..."
     base_urls=(
@@ -81,7 +81,7 @@ perform_recovery() {
 
     download_successful=false
     for base_url in "${base_urls[@]}"; do
-        if download_recovery_artifact "$base_url" "$expected_recovery_hash"; then
+        if download_recovery_artifact "$base_url" "$expected_recovery_hash_prefix"; then
             download_successful=true
             break
         fi
@@ -94,7 +94,7 @@ perform_recovery() {
     fi
 
     echo "Verifying recovery artifact..."
-    if ! verify_file_hash "recovery.tar.zst" "$expected_recovery_hash"; then
+    if ! verify_file_hash "recovery.tar.zst" "$expected_recovery_hash_prefix"; then
         echo "ERROR: Recovery artifact hash verification failed"
         return 1
     fi
