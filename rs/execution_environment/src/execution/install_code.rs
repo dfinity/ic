@@ -243,6 +243,7 @@ impl InstallCodeHelper {
         paused: PausedInstallCodeHelper,
         original: &OriginalContext,
         round: &RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> Result<
         Self,
         (
@@ -255,7 +256,7 @@ impl InstallCodeHelper {
         let paused_instructions_left = paused.instructions_left;
         for state_change in paused.steps.into_iter() {
             helper
-                .replay_step(state_change, original, round)
+                .replay_step(state_change, original, round, round_limits)
                 .map_err(|err| (err, paused_instructions_left, helper.take_canister_log()))?;
         }
         assert_eq!(paused_instructions_left, helper.instructions_left());
@@ -621,6 +622,7 @@ impl InstallCodeHelper {
         output: WasmExecutionOutput,
         original: &OriginalContext,
         round: &RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> (NumInstructions, Result<(), CanisterManagerError>) {
         self.steps.push(InstallCodeStep::HandleWasmExecution {
             canister_state_changes: canister_state_changes.clone(),
@@ -659,6 +661,7 @@ impl InstallCodeHelper {
             .apply_changes(
                 original.time,
                 &mut self.canister.system_state,
+                &mut round_limits.subnet_available_memory,
                 round.network_topology,
                 round.hypervisor.subnet_id(),
                 false, // Install cannot happen in composite_query.
@@ -761,6 +764,7 @@ impl InstallCodeHelper {
         step: InstallCodeStep,
         original: &OriginalContext,
         round: &RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> Result<(), CanisterManagerError> {
         match step {
             InstallCodeStep::ValidateInput => self.validate_input(original),
@@ -802,8 +806,13 @@ impl InstallCodeHelper {
                 canister_state_changes,
                 output,
             } => {
-                let (_, result) =
-                    self.handle_wasm_execution(canister_state_changes, output, original, round);
+                let (_, result) = self.handle_wasm_execution(
+                    canister_state_changes,
+                    output,
+                    original,
+                    round,
+                    round_limits,
+                );
                 result
             }
             InstallCodeStep::ChargeForLargeWasmAssembly { instructions } => {

@@ -232,8 +232,13 @@ fn install_stage_2a_process_start_result(
     round: RoundContext,
     round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
-    let (instructions_consumed, result) =
-        helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
+    let (instructions_consumed, result) = helper.handle_wasm_execution(
+        canister_state_changes,
+        output,
+        &original,
+        &round,
+        round_limits,
+    );
 
     info!(
         round.log,
@@ -346,8 +351,13 @@ fn install_stage_3_process_init_result(
     round: RoundContext,
     round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
-    let (instructions_consumed, result) =
-        helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
+    let (instructions_consumed, result) = helper.handle_wasm_execution(
+        canister_state_changes,
+        output,
+        &original,
+        &round,
+        round_limits,
+    );
     info!(
         round.log,
         "Executing (canister_init) on canister {} consumed {} instructions.  {} instructions are left.",
@@ -395,6 +405,7 @@ impl PausedInstallCodeExecution for PausedInitExecution {
             self.paused_helper,
             &self.original,
             &round,
+            round_limits,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {
@@ -497,6 +508,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
             self.paused_helper,
             &self.original,
             &round,
+            round_limits,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {

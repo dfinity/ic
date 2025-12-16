@@ -1173,7 +1173,9 @@ fn charging_for_message_memory_works() {
             - test.memory_cost(
                 test.canister_state(canister).message_memory_usage().total(),
                 charge_duration,
-            ),
+            )
+            // Canister is also charged for `log_memory_store` usage.
+            - Cycles::new(14),
     );
 }
 

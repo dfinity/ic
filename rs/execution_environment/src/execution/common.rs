@@ -435,6 +435,7 @@ fn try_apply_canister_state_changes(
     system_state_modifications.apply_changes(
         time,
         system_state,
+        subnet_available_memory,
         network_topology,
         subnet_id,
         is_composite_query,

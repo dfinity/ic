@@ -377,8 +377,8 @@ fn output_requests_on_application_subnets_update_subnet_available_memory() {
             .queues()
             .guaranteed_response_memory_reservations()
     );
-    // Subnet available memory should have decreased by `MAX_RESPONSE_COUNT_BYTES`.
-    assert_eq!(available_memory_after_create, subnet_total_memory);
+    // Subnet available memory should have decreased by `MAX_RESPONSE_COUNT_BYTES` and 12288 bytes for log memory.
+    assert_eq!(available_memory_after_create - 12288, subnet_total_memory);
     assert_eq!(
         (ONE_GIB - MAX_RESPONSE_COUNT_BYTES as u64) as i64,
         subnet_message_memory
@@ -2709,7 +2709,7 @@ fn subnet_available_memory_reclaimed_when_execution_fails() {
     assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
     let memory = test.subnet_available_memory();
     assert_eq!(
-        memory.get_execution_memory() + memory_after_create,
+        memory.get_execution_memory() + memory_after_create + 12288,
         ONE_GIB as i64
     );
     assert_eq!(
@@ -2735,7 +2735,9 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
     let result = test.ingress(id, "test_without_trap", vec![]);
     expect_canister_did_not_reply(result);
     // The canister allocates 10 pages in Wasm memory and stable memory.
-    let new_memory_allocated = 20 * WASM_PAGE_SIZE_IN_BYTES as i64;
+    // In addition, the `log_memory_store` allocates 3 pages (12288 bytes) for the
+    // ring buffer indices and header.
+    let new_memory_allocated = 20 * WASM_PAGE_SIZE_IN_BYTES as i64 + 12288;
     let memory = test.subnet_available_memory();
     assert_eq!(
         memory.get_execution_memory() + new_memory_allocated + memory_after_create,

@@ -3,7 +3,9 @@ use ic_config::execution_environment::SUBNET_CALLBACK_SOFT_LIMIT;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_embedders::wasmtime_embedder::system_api::SystemApiImpl;
 use ic_embedders::wasmtime_embedder::system_api::sandbox_safe_system_state::SandboxSafeSystemState;
-use ic_interfaces::execution_environment::{HypervisorResult, MessageMemoryUsage, SystemApi};
+use ic_interfaces::execution_environment::{
+    HypervisorResult, MessageMemoryUsage, SubnetAvailableMemory, SystemApi,
+};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
@@ -288,11 +290,14 @@ fn correct_charging_source_canister_for_a_request() {
     // ExecutionEnvironmentImpl::execute_canister_response()
     // => Mock the response_cycles_refund() invocation from the
     // execute_canister_response()
+    let mut subnet_available_memory =
+        SubnetAvailableMemory::new_for_testing(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2);
     sandbox_safe_system_state
         .system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
+            &mut subnet_available_memory,
             &default_network_topology(),
             subnet_test_id(1),
             false,
@@ -506,10 +511,13 @@ fn call_increases_cycles_consumed_metric() {
     api.ic0_call_perform().unwrap();
 
     let system_state_modifications = api.take_system_state_modifications();
+    let mut subnet_available_memory =
+        SubnetAvailableMemory::new_for_testing(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2);
     system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
+            &mut subnet_available_memory,
             &default_network_topology(),
             subnet_test_id(1),
             false,
@@ -596,11 +604,14 @@ fn test_inter_canister_call(
         )
         .unwrap();
 
+    let mut subnet_available_memory =
+        SubnetAvailableMemory::new_for_testing(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2);
     sandbox_safe_system_state
         .system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
+            &mut subnet_available_memory,
             topo,
             subnet_id,
             false,
