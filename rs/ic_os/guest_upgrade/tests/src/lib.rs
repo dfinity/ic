@@ -144,6 +144,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
                 enable_trusted_execution_environment: true,
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: Default::default(),
+                enable_beta_registration_feature: None,
             },
             guestos_settings: GuestOSSettings::default(),
             guest_vm_type: GuestVMType::Upgrade,

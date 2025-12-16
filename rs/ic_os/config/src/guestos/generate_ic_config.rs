@@ -175,6 +175,11 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
         .map(|mb| serde_json::to_string(mb).unwrap_or_default())
         .unwrap_or_default();
 
+    let enable_beta_registration_feature = guestos_config
+        .icos_settings
+        .enable_beta_registration_feature
+        .unwrap_or_default();
+
     Ok(IcConfigTemplate {
         ipv6_address,
         ipv6_prefix,
@@ -188,6 +193,7 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
         domain_name,
         node_reward_type,
         malicious_behavior: with_default(malicious_behavior, "null"),
+        enable_beta_registration_feature,
     })
 }
 
@@ -393,6 +399,7 @@ mod tests {
                 enable_trusted_execution_environment: false,
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: config_types::ICOSDevSettings::default(),
+                enable_beta_registration_feature: None,
             },
             guestos_settings: GuestOSSettings::default(),
             guest_vm_type: GuestVMType::Default,
