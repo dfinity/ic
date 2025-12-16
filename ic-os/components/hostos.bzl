@@ -31,7 +31,7 @@ component_files = {
     Label("early-boot/initramfs-tools/hostos/amd64-microcode"): "/etc/default/amd64-microcode",
     Label("early-boot/initramfs-tools/hostos/intel-microcode"): "/etc/default/intel-microcode",
     Label("early-boot/initramfs-tools/hostos/modules"): "/etc/initramfs-tools/modules",
-    Label("early-boot/initramfs-tools/hostos/set-machine-id/set-machine-id"): "/etc/initramfs-tools/scripts/init-bottom/set-machine-id/set-machine-id",
+    Label("early-boot/initramfs-tools/hostos/set-machine-id/set-machine-id"): "/etc/initramfs-tools/scripts/init-bottom/set-machine-id",
 
     # misc
     Label("misc/config/config-hostos.sh"): "/opt/ic/bin/config.sh",
