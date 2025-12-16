@@ -37,7 +37,7 @@ use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::CoarseTime;
 use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, Cycles, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
-    MemoryAllocation, NumBytes, NumInstructions, PrincipalId, Time,
+    MemoryAllocation, NumBytes, NumInstructions, NumMessages, PrincipalId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -121,6 +121,11 @@ pub struct CanisterMetrics {
     pub executed: u64,
     pub interrupted_during_execution: u64,
     pub consumed_cycles: NominalCycles,
+    pub instructions_executed: NumInstructions,
+    pub ingress_messages_executed: NumMessages,
+    pub xnet_messages_executed: NumMessages,
+    pub intranet_messages_executed: NumMessages,
+    pub http_outcalls_executed: u64,
     consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
 }
 
@@ -132,6 +137,11 @@ impl CanisterMetrics {
         interrupted_during_execution: u64,
         consumed_cycles: NominalCycles,
         consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+        instructions_executed: NumInstructions,
+        ingress_messages_executed: NumMessages,
+        xnet_messages_executed: NumMessages,
+        intranet_messages_executed: NumMessages,
+        http_outcalls_executed: u64,
     ) -> Self {
         Self {
             scheduled_as_first,
@@ -140,6 +150,11 @@ impl CanisterMetrics {
             interrupted_during_execution,
             consumed_cycles,
             consumed_cycles_by_use_cases,
+            instructions_executed,
+            ingress_messages_executed,
+            xnet_messages_executed,
+            intranet_messages_executed,
+            http_outcalls_executed,
         }
     }
 

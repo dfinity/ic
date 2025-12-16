@@ -73,6 +73,11 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             snapshots_memory_usage: item.snapshots_memory_usage.get(),
             tasks: Some((&item.task_queue).into()),
             environment_variables: item.environment_variables.into_iter().collect(),
+            instructions_executed: item.instructions_executed.get(),
+            ingress_messages_executed: item.ingress_messages_executed.get(),
+            xnet_messages_executed: item.xnet_messages_executed.get(),
+            intranet_messages_executed: item.intranet_messages_executed.get(),
+            http_outcalls_executed: item.http_outcalls_executed,
         }
     }
 }
@@ -209,6 +214,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             snapshots_memory_usage: NumBytes::from(value.snapshots_memory_usage),
             task_queue,
             environment_variables: value.environment_variables.into_iter().collect(),
+            instructions_executed: NumInstructions::from(value.instructions_executed),
+            ingress_messages_executed: NumMessages::from(value.ingress_messages_executed),
+            xnet_messages_executed: NumMessages::from(value.xnet_messages_executed),
+            intranet_messages_executed: NumMessages::from(value.intranet_messages_executed),
+            http_outcalls_executed: value.http_outcalls_executed,
         })
     }
 }

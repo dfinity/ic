@@ -1912,6 +1912,12 @@ impl ExecutionEnvironment {
             state.metadata.subnet_call_context_manager.push_context(
                 SubnetCallContext::CanisterHttpRequest(canister_http_request_context),
             );
+            if let Some(canister_stats) = state.canister_state_mut(&request.sender) {
+                canister_stats
+                    .system_state
+                    .canister_metrics
+                    .http_outcalls_executed += 1;
+            }
             self.metrics.observe_message_with_label(
                 &request.method_name,
                 since.elapsed().as_secs_f64(),
@@ -4397,6 +4403,13 @@ fn get_canister_mut(
     }
 }
 
+pub enum CanisterInputType {
+    Ingress,
+    Xnet,
+    Intranet,
+    Task,
+}
+
 /// The result of `execute_canister()`.
 pub struct ExecuteCanisterResult {
     pub canister: CanisterState,
@@ -4405,6 +4418,7 @@ pub struct ExecuteCanisterResult {
     pub ingress_status: Option<(MessageId, IngressStatus)>,
     // The description of the executed task or message.
     pub description: Option<String>,
+    pub input_type: Option<CanisterInputType>,
 }
 
 /// Executes the given input message or task.
@@ -4423,6 +4437,22 @@ fn execute_canister_input(
     cost_schedule: CanisterCyclesCostSchedule,
 ) -> ExecuteCanisterResult {
     let info = input.to_string();
+    let input_type = match &input {
+        CanisterMessageOrTask::Message(CanisterMessage::Ingress(_)) => CanisterInputType::Ingress,
+        CanisterMessageOrTask::Message(CanisterMessage::Request(request))
+            if network_topology.route(request.sender.get()) == Some(exec_env.own_subnet_id) =>
+        {
+            CanisterInputType::Intranet
+        }
+        CanisterMessageOrTask::Message(CanisterMessage::Request(_)) => CanisterInputType::Xnet,
+        CanisterMessageOrTask::Message(CanisterMessage::Response(resp))
+            if network_topology.route(resp.respondent.get()) == Some(exec_env.own_subnet_id) =>
+        {
+            CanisterInputType::Intranet
+        }
+        CanisterMessageOrTask::Message(CanisterMessage::Response(_)) => CanisterInputType::Xnet,
+        CanisterMessageOrTask::Task(_) => CanisterInputType::Task,
+    };
     let result = exec_env.execute_canister_input(
         canister,
         instruction_limits,
@@ -4442,6 +4472,7 @@ fn execute_canister_input(
         heap_delta,
         ingress_status,
         description: Some(info),
+        input_type: Some(input_type),
     }
 }
 
@@ -4466,6 +4497,7 @@ pub fn execute_canister(
                 heap_delta: NumBytes::from(0),
                 ingress_status: None,
                 description: None,
+                input_type: None,
             };
         }
         NextExecution::StartNew | NextExecution::ContinueLong => {}
@@ -4510,6 +4542,7 @@ pub fn execute_canister(
                     heap_delta,
                     ingress_status,
                     description: Some("paused execution".to_string()),
+                    input_type: Some(CanisterInputType::Task),
                 };
             }
             ExecutionTask::Heartbeat => {

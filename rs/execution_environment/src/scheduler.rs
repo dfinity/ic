@@ -1,8 +1,8 @@
 use crate::{
     canister_manager::{types::AddCanisterChangeToHistory, uninstall_canister},
     execution_environment::{
-        ExecuteCanisterResult, ExecutionEnvironment, RoundInstructions, RoundLimits,
-        as_num_instructions, as_round_instructions, execute_canister,
+        CanisterInputType, ExecuteCanisterResult, ExecutionEnvironment, RoundInstructions,
+        RoundLimits, as_num_instructions, as_round_instructions, execute_canister,
     },
     ic00_permissions::Ic00MethodPermissions,
     metrics::MeasurementScope,
@@ -1807,6 +1807,9 @@ fn execute_canisters_on_thread(
         // - or the instruction limit is reached.
         // - or the canister finishes a long execution
         let mut total_instructions_used = NumInstructions::new(0);
+        let mut ingress_messages_executed = NumMessages::new(0);
+        let mut xnet_messages_executed = NumMessages::new(0);
+        let mut intranet_messages_executed = NumMessages::new(0);
         loop {
             match canister.next_execution() {
                 NextExecution::None | NextExecution::ContinueInstallCode => {
@@ -1837,6 +1840,7 @@ fn execute_canisters_on_thread(
                 heap_delta,
                 ingress_status,
                 description,
+                input_type,
             } = execute_canister(
                 exec_env,
                 canister,
@@ -1865,6 +1869,13 @@ fn execute_canisters_on_thread(
                 NumSlices::from(messages.get()),
                 messages,
             );
+            match input_type {
+                Some(CanisterInputType::Ingress) => ingress_messages_executed.inc_assign(),
+                Some(CanisterInputType::Xnet) => xnet_messages_executed.inc_assign(),
+                Some(CanisterInputType::Intranet) => intranet_messages_executed.inc_assign(),
+                Some(CanisterInputType::Task) => {}
+                None => {}
+            }
             if let Some(instructions_used) = instructions_used {
                 total_instructions_used += instructions_used;
                 total_messages_executed.inc_assign();
@@ -1918,7 +1929,12 @@ fn execute_canisters_on_thread(
             is_first_iteration,
             rank,
         );
-        canister.system_state.canister_metrics.executed += 1;
+        let canister_metrics = &mut canister.system_state.canister_metrics;
+        canister_metrics.executed += 1;
+        canister_metrics.instructions_executed += total_instructions_used;
+        canister_metrics.ingress_messages_executed += ingress_messages_executed;
+        canister_metrics.xnet_messages_executed += xnet_messages_executed;
+        canister_metrics.intranet_messages_executed += intranet_messages_executed;
         canisters.push(canister);
         // Skip per-canister overhead for canisters with not enough cycles.
         if total_instructions_used > 0.into() {
