@@ -84,20 +84,20 @@
     "sha256": "bce508df3db43b47b158c0aab9a7c9a3709a78e055a7ced76d5ff89832f9e778"
   },
   "governance": {
-    "rev": "c9ab58bfd048522d56401b879ddb890626e111e5",
-    "sha256": "ba8493ec7bc2be6360e62c5e9297d7f4c548992d944185cf4e3508fb7b23da4d"
+    "rev": "f093cfcfd53d49bf42f26558ed6cab154f35603d",
+    "sha256": "9264baddc5c3a15bafeb6ccc002aad744ae42ec12550d85a78cec18834e0c717"
   },
   "governance-canister_test": {
-    "rev": "c9ab58bfd048522d56401b879ddb890626e111e5",
-    "sha256": "94d064aaae624d159ece411533965a12794582bb78e089e221597337c1269cf3"
+    "rev": "f093cfcfd53d49bf42f26558ed6cab154f35603d",
+    "sha256": "0aa1946e89440917a7dbd9732737eb99aa2bba436c2556f0f5ea3f882436dddc"
   },
   "index": {
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_test": {
-    "sha256": "51aa14f7d88a389e3d3434cd135967ac9b24ddd61c17a45e21d46006776016b3",
-    "tag": "release-2025-12-05"
+    "sha256": "43c54e016600c4b4d5cc7a4645e79ea45e707c0fe9482db562d9c3a68a139e02",
+    "tag": "release-2025-12-12"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
@@ -108,8 +108,8 @@
     "sha256": "0d9221e28781e8b627c0e0696b16c0301424d4387514ed5fdae4fa74ad4b696b"
   },
   "migration": {
-    "rev": "ccc1ff6c7fd4dec3cadefcaf1eb168ee3892e03f",
-    "sha256": "2bcf1c2c8adba6f7bff5e7abda164f22e0a8f6a07120fbe3596c94234727d04c"
+    "rev": "fe7d1fddfa516596e0bffcca5eeb086d3810cdee",
+    "sha256": "baf5ecae2c260caa3705832a1dc280c31968b5eaf9e300377ca521f8e0e11787"
   },
   "nns_dapp_test": {
     "sha256": "37935da32289fb7f42d5b166b1e858322a7144422eccd9b03c6081da51b878f3",

@@ -3,6 +3,7 @@ mod tests;
 
 pub mod address;
 pub mod candid_api;
+pub mod event;
 pub mod fees;
 pub mod lifecycle;
 pub mod updates;
@@ -12,6 +13,7 @@ pub mod test_fixtures;
 
 use crate::address::DogecoinAddress;
 use crate::dogecoin_canister::MillikoinuPerByte;
+use crate::event::CkDogeEventLogger;
 use crate::fees::DogecoinFeeEstimator;
 use crate::lifecycle::init::Network;
 use async_trait::async_trait;
@@ -31,7 +33,7 @@ pub use ic_ckbtc_minter::{
     queries::EstimateFeeArg,
     reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason},
     state::DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
-    state::eventlog::{Event, EventType, GetEventsArg},
+    state::eventlog::{CkBtcMinterEvent, EventType, GetEventsArg},
     state::{ChangeOutput, RetrieveBtcRequest},
     updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
@@ -46,9 +48,14 @@ pub struct DogeCanisterRuntime {}
 #[async_trait]
 impl CanisterRuntime for DogeCanisterRuntime {
     type Estimator = DogecoinFeeEstimator;
+    type EventLogger = CkDogeEventLogger;
 
     fn fee_estimator(&self, state: &CkBtcMinterState) -> DogecoinFeeEstimator {
         DogecoinFeeEstimator::from_state(state)
+    }
+
+    fn event_logger(&self) -> Self::EventLogger {
+        CkDogeEventLogger
     }
 
     fn refresh_fee_percentiles_frequency(&self) -> Duration {
