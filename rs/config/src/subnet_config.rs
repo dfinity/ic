@@ -24,10 +24,9 @@ const T: u128 = 1_000_000_000_000;
 pub(crate) const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(40 * B);
 
 // The limit on the number of instructions a message is allowed to execute
-// without deterministic time slicing.
+// for a single query or composite query method.
 // Going above the limit results in an `InstructionLimitExceeded` error.
-pub(crate) const MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS: NumInstructions =
-    NumInstructions::new(5 * B);
+pub(crate) const MAX_INSTRUCTIONS_PER_QUERY_MESSAGE: NumInstructions = NumInstructions::new(5 * B);
 
 // The limit on the number of instructions a slice is allowed to executed.
 // If deterministic time slicing is enabled, then going above this limit
@@ -53,15 +52,15 @@ const INSTRUCTION_OVERHEAD_PER_CANISTER: NumInstructions = NumInstructions::new(
 const INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION: NumInstructions =
     NumInstructions::new(12_000);
 
-// If messages are short, then we expect about 2B=(7B - 5B) instructions to run
+// If messages are short, then we expect about 2B=(4B - 2B) instructions to run
 // in a round in about 1 second. Short messages followed by one long message
-// would cause the longest possible round of 7B instructions or 3.5 seconds.
+// would cause the longest possible round of 4B instructions or 2 seconds.
 //
 // In general, the round limit should be close to
 // `message_limit + 2B * (1 / finalization_rate)` which ensures that
 // 1) execution does not slow down finalization.
 // 2) execution does not waste the time available per round.
-const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(7 * B);
+const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(4 * B);
 
 // Limit per `install_code` message. It's bigger than the limit for a regular
 // update call to allow for canisters with bigger state to be upgraded.
@@ -192,8 +191,8 @@ pub struct SchedulerConfig {
     pub max_instructions_per_message: NumInstructions,
 
     /// Maximum amount of instructions a single message execution can consume
-    /// without deterministic time slicing.
-    pub max_instructions_per_message_without_dts: NumInstructions,
+    /// for a single query or composite query method.
+    pub max_instructions_per_query_message: NumInstructions,
 
     /// Maximum amount of instructions a single slice of execution can consume.
     /// This should not exceed `max_instructions_per_round`.
@@ -287,7 +286,7 @@ impl SchedulerConfig {
             heap_delta_initial_reserve: HEAP_DELTA_INITIAL_RESERVE,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
-            max_instructions_per_message_without_dts: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
+            max_instructions_per_query_message: MAX_INSTRUCTIONS_PER_QUERY_MESSAGE,
             max_instructions_per_slice: MAX_INSTRUCTIONS_PER_SLICE,
             instruction_overhead_per_execution: INSTRUCTION_OVERHEAD_PER_EXECUTION,
             instruction_overhead_per_canister: INSTRUCTION_OVERHEAD_PER_CANISTER,
@@ -316,7 +315,7 @@ impl SchedulerConfig {
     }
 
     pub fn system_subnet() -> Self {
-        let max_instructions_per_message_without_dts = NumInstructions::from(50 * B);
+        let max_instructions_per_query_message = NumInstructions::from(50 * B);
         let max_instructions_per_install_code = NumInstructions::from(1_000 * B);
         let max_instructions_per_slice = NumInstructions::from(2 * B);
         let max_instructions_per_install_code_slice = NumInstructions::from(5 * B);
@@ -329,12 +328,11 @@ impl SchedulerConfig {
             heap_delta_initial_reserve: SUBNET_HEAP_DELTA_CAPACITY,
             // Round limit is set to allow on average 2B instructions.
             // See also comment about `MAX_INSTRUCTIONS_PER_ROUND`.
-            max_instructions_per_round: max_instructions_per_message_without_dts
-                .max(max_instructions_per_slice)
+            max_instructions_per_round: max_instructions_per_slice
                 .max(max_instructions_per_install_code_slice)
                 + NumInstructions::from(2 * B),
-            max_instructions_per_message: max_instructions_per_message_without_dts,
-            max_instructions_per_message_without_dts,
+            max_instructions_per_message: max_instructions_per_query_message,
+            max_instructions_per_query_message,
             max_instructions_per_slice,
             instruction_overhead_per_execution: INSTRUCTION_OVERHEAD_PER_EXECUTION,
             instruction_overhead_per_canister: INSTRUCTION_OVERHEAD_PER_CANISTER,

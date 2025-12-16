@@ -250,7 +250,7 @@ fn dts_replicated_query_concurrent_cycles_change_succeeds() {
     //    in the canister balance to cover both burning and 'ingress_induction_cycles_debit'.
     let instruction_limit = 100_000_000;
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit_without_dts(instruction_limit)
+        .with_instruction_limit_per_query_message(instruction_limit)
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(1_000_000)
         .with_manual_execution()
@@ -447,7 +447,7 @@ fn dts_replicated_query_concurrent_cycles_change_fails() {
     //    in the canister balance to cover both burning and 'ingress_induction_cycles_debit'.
     let instruction_limit = 100_000_000;
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit_without_dts(instruction_limit)
+        .with_instruction_limit_per_query_message(instruction_limit)
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(1_000_000)
         .with_manual_execution()

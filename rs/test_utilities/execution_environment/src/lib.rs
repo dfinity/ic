@@ -260,7 +260,7 @@ pub struct ExecutionTest {
     dirty_heap_page_overhead: u64,
     instruction_limits: InstructionLimits,
     install_code_instruction_limits: InstructionLimits,
-    instruction_limit_without_dts: NumInstructions,
+    instruction_limit_per_query_message: NumInstructions,
     initial_canister_cycles: Cycles,
     ingress_memory_capacity: NumBytes,
     registry_settings: RegistryExecutionSettings,
@@ -1177,10 +1177,6 @@ impl ExecutionTest {
             compute_allocation_used,
             subnet_memory_reservation: self.subnet_memory_reservation,
         };
-        let instruction_limits = InstructionLimits::new(
-            self.instruction_limit_without_dts,
-            self.instruction_limit_without_dts,
-        );
         match task {
             CanisterTask::Heartbeat => {
                 canister
@@ -1210,8 +1206,8 @@ impl ExecutionTest {
         let result = execute_canister(
             &self.exec_env,
             canister,
-            instruction_limits,
-            self.instruction_limit_without_dts,
+            self.instruction_limits.clone(),
+            self.instruction_limit_per_query_message,
             Arc::clone(&network_topology),
             self.time,
             &mut round_limits,
@@ -1501,7 +1497,7 @@ impl ExecutionTest {
                     &self.exec_env,
                     canister,
                     self.instruction_limits.clone(),
-                    self.instruction_limit_without_dts,
+                    self.instruction_limit_per_query_message,
                     Arc::clone(&network_topology),
                     self.time,
                     &mut round_limits,
@@ -1598,7 +1594,7 @@ impl ExecutionTest {
                     &self.exec_env,
                     canister,
                     self.instruction_limits.clone(),
-                    self.instruction_limit_without_dts,
+                    self.instruction_limit_per_query_message,
                     Arc::clone(&network_topology),
                     self.time,
                     &mut round_limits,
@@ -2123,10 +2119,10 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_instruction_limit_without_dts(mut self, limit: u64) -> Self {
+    pub fn with_instruction_limit_per_query_message(mut self, limit: u64) -> Self {
         self.subnet_config
             .scheduler_config
-            .max_instructions_per_message_without_dts = NumInstructions::from(limit);
+            .max_instructions_per_query_message = NumInstructions::from(limit);
         self
     }
 
@@ -2681,10 +2677,10 @@ impl ExecutionTestBuilder {
                     .max_instructions_per_install_code_slice,
             ),
             ingress_memory_capacity: self.execution_config.ingress_history_memory_capacity,
-            instruction_limit_without_dts: self
+            instruction_limit_per_query_message: self
                 .subnet_config
                 .scheduler_config
-                .max_instructions_per_message_without_dts,
+                .max_instructions_per_query_message,
             initial_canister_cycles: self.initial_canister_cycles,
             registry_settings: self.registry_settings,
             user_id: user_test_id(1),

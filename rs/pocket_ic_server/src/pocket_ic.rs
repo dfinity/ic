@@ -634,7 +634,7 @@ impl PocketIcSubnets {
             subnet_config.scheduler_config.max_instructions_per_slice = instruction_limit;
             subnet_config
                 .scheduler_config
-                .max_instructions_per_message_without_dts = instruction_limit;
+                .max_instructions_per_query_message = instruction_limit;
             hypervisor_config.max_query_call_graph_instructions = instruction_limit;
         }
         // bound PocketIc resource consumption

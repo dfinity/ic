@@ -14,7 +14,7 @@ fn state_machine_for_test() -> StateMachine {
     subnet_config.scheduler_config.max_instructions_per_message /= instruction_divisor;
     subnet_config
         .scheduler_config
-        .max_instructions_per_message_without_dts /= instruction_divisor;
+        .max_instructions_per_query_message /= instruction_divisor;
     hypervisor_config.max_query_call_graph_instructions /= instruction_divisor;
 
     StateMachineBuilder::new()
