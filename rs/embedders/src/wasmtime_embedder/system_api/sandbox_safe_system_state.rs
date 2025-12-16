@@ -538,15 +538,15 @@ impl SystemStateModifications {
 
         let delta = (memory_usage_after - memory_usage_before).abs() as u64;
         if memory_usage_before < memory_usage_after {
+            subnet_available_memory
+                .try_decrement(NumBytes::from(delta), NumBytes::from(0), NumBytes::from(0))
+                .map_err(|_| HypervisorError::OutOfMemory)?;
+        } else if memory_usage_before != memory_usage_after {
             subnet_available_memory.increment(
                 NumBytes::from(delta),
                 NumBytes::from(0),
                 NumBytes::from(0),
             );
-        } else if memory_usage_before != memory_usage_after {
-            subnet_available_memory
-                .try_decrement(NumBytes::from(delta), NumBytes::from(0), NumBytes::from(0))
-                .map_err(|_| HypervisorError::OutOfMemory)?;
         }
 
         // Bump the canister version after all changes have been applied.

@@ -6,9 +6,9 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::CanisterInstallMode::{Install, Reinstall, Upgrade};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
-    CanisterInfoRequest, CanisterInfoResponse, CreateCanisterArgs, EnvironmentVariable,
-    InstallCodeArgs, MAX_CONTROLLERS, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    UpdateSettingsArgs,
+    CanisterInfoRequest, CanisterInfoResponse, CanisterStatusType, CreateCanisterArgs,
+    EnvironmentVariable, InstallCodeArgs, MAX_CONTROLLERS, Method, Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::MAX_CANISTER_HISTORY_CHANGES;
@@ -1749,4 +1749,20 @@ fn subnet_available_memory() {
     test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     check_subnet_available_memory(&test, false, "after overwriting controllers change");
+
+    // Stop the canister.
+    let _ = test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Stopped
+    );
+
+    // memory usage gets back to initial after deleting canister
+    test.delete_canister(canister_id).unwrap();
+    assert_eq!(
+        test.subnet_available_memory().get_execution_memory(),
+        initial_subnet_available_memory.get_execution_memory(),
+        "after deleting canister"
+    );
 }
