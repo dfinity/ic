@@ -174,11 +174,11 @@ enum Opt {
     #[clap(name = "canister_metrics")]
     CanisterMetrics {
         /// Path to a checkpoint.
-        #[clap(long = "state")]
+        #[clap(long = "checkpoint")]
         path: PathBuf,
 
         /// Output path.
-        #[clap(long = "state")]
+        #[clap(long)]
         output: PathBuf,
 
         /// Type of the subnet.
