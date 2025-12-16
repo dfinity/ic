@@ -59,8 +59,9 @@ pub struct GuestLaunchMeasurement {
     ::prost::Message,
 )]
 pub struct GuestLaunchMeasurementMetadata {
-    /// Kernel command line string used to launch the guest.
-    /// This can be absent, and if present, can hold any value, including the empty string.
+    /// Kernel command line string used to launch the guest. This can be absent,
+    /// and if present, can hold any value, including the empty string, up to 100
+    /// KiB.
     #[prost(string, optional, tag = "1")]
     pub kernel_cmdline: ::core::option::Option<::prost::alloc::string::String>,
 }

@@ -37,8 +37,9 @@ message GuestLaunchMeasurement {
 }
 
 message GuestLaunchMeasurementMetadata {
-  // Kernel command line string used to launch the guest.
-  // This can be absent, and if present, can hold any value, including the empty string.
+  // Kernel command line string used to launch the guest. This can be absent,
+  // and if present, can hold any value, including the empty string, up to 100
+  // KiB.
   optional string kernel_cmdline = 1;
 }
 

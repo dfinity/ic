@@ -114,7 +114,8 @@ impl v1::GuestLaunchMeasurementMetadata {
 
     /// Returns a list of defects (or Ok):
     ///
-    /// - kernel_cmdline can an value, including None, and Some("").
+    /// - kernel_cmdline can any value, including None, and Some(""). The only
+    ///   restriction is that it must not exceed 100 KiB.
     pub fn validate(&self) -> Result<(), Vec<String>> {
         let Self { kernel_cmdline } = self;
 
