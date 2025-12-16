@@ -165,7 +165,7 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 				return err
 			}
 		}
-		command := []string{"bazel", "run", target, "--", "--debug-keepalive"}
+		command := []string{"bazel", "run", target, "--", "--keepalive"}
 		env := os.Environ()
 		cmd.Println(GREEN + "Will try to sync dashboards from k8s branch: " + cfg.k8sBranch)
 		icDashboardsDir, err := sparse_checkout("git@github.com:dfinity-ops/k8s.git", "", []string{"bases/apps/ic-dashboards"}, cfg.k8sBranch)
