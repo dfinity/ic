@@ -97,11 +97,13 @@ execute_command() {
                 fi
 
                 read -r rows cols <<< "$size"
-                # Treat anything smaller than the TUI minimum as unusable
+                # Treat anything smaller than the Manual Recovery TUI minimum as unusable
                 min_rows=15
                 min_cols=10
                 if [ "${rows:-0}" -lt "$min_rows" ] || [ "${cols:-0}" -lt "$min_cols" ]; then
-                    stty rows 36 cols 120
+                    echo "Terminal size (${rows}x${cols}) is too small or invalid, setting to 24x80"
+                    stty rows 24 cols 80
+                    sleep 5 # Give the user a chance to see the message
                 fi
 
                 /opt/ic/bin/hostos_tool manual-recovery
