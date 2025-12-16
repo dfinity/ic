@@ -271,7 +271,7 @@ impl RosettaTestingEnvironmentBuilder {
             .await;
 
         println!(
-            "Installed the Ledger canister ({canister_id}) onto {}",
+            "Installed the Ledger canister ({canister_id}) onto {} test a change",
             pocket_ic.get_subnet(ledger_canister_id).await.unwrap()
         );
 
