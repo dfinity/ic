@@ -15,16 +15,15 @@ use proxy_canister::{RemoteHttpRequest, UnvalidatedCanisterHttpRequestArgs};
 /// 1. `state-tool`, which extracts load metrics and manifest from the replicated state,
 /// 2. TODO(CON-1569): a tool which takes the output of the `state-tool` and proposes a good split,
 /// 3. `subnet-splitting-tool`, which takes the outputs from the above to tools, and returns
-/// estimated loads/sizes after splitting a subnet.
+///    estimated loads/sizes after splitting a subnet.
 fn load_metrics_e2e_test() {
     let dir = ic_test_utilities_tmpdir::tmpdir("testdir");
     let state_machine = set_up(/*canisters_count=*/ 100);
     state_machine.checkpointed_tick();
     state_machine.state_manager.flush_tip_channel();
     let state_layout = state_machine.state_manager.state_layout();
-    let checkpoint_dir = std::fs::read_dir(&state_layout.checkpoints())
+    let checkpoint_dir = std::fs::read_dir(state_layout.checkpoints())
         .unwrap()
-        .into_iter()
         .last()
         .expect("There should be at least one checkpoint")
         .unwrap()
@@ -71,6 +70,7 @@ fn load_metrics_e2e_test() {
         canister_id_ranges,
         manifest_path,
         load_samples_path,
+        /*load_samples_reference_path=*/ None,
     )
     .expect("Should succeed given valid inputs");
 

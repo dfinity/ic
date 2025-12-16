@@ -37,13 +37,14 @@ pub fn get(
 
     let mut output_file = std::fs::File::create(&output_path)
         .map_err(|err| format!("Failed to create the output file: {err}"))?;
-    // Write header
+    // Write the header.
     writeln!(
         output_file,
         "canister_id,instructions_executed,ingress_messages_executed,xnet_messages_executed,intranet_messages_executed,http_outcalls_executed"
     )
     .map_err(|err| format!("Failed to write header: {err}"))?;
 
+    // Write rows.
     for (canister_id, canister_state) in replicated_state.canister_states {
         let CanisterMetrics {
             instructions_executed,
@@ -57,7 +58,7 @@ pub fn get(
             output_file,
             "{canister_id},{instructions_executed},{ingress_messages_executed},{xnet_messages_executed},{intranet_messages_executed},{http_outcalls_executed}"
         )
-        .map_err(|err| format!("Failed to write header: {err}"))?;
+        .map_err(|err| format!("Failed to write row: {err}"))?;
     }
 
     Ok(())
