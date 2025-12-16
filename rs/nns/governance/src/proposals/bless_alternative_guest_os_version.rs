@@ -1,5 +1,4 @@
 use super::*;
-use crate::are_bless_alternative_guest_os_version_proposals_enabled;
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 
 impl BlessAlternativeGuestOsVersion {
@@ -19,12 +18,6 @@ impl BlessAlternativeGuestOsVersion {
     ///    a. Nonempty.
     ///    b. Each element is valid per GuestLaunchMeasurement (singular).
     pub(crate) fn validate(&self) -> Result<(), GovernanceError> {
-        if !are_bless_alternative_guest_os_version_proposals_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "BlessAlternativeGuestOsVersion proposals are not enabled yet.".to_string(),
-            ));
-        }
 
         let mut defects = Vec::new();
 
@@ -42,12 +35,6 @@ impl BlessAlternativeGuestOsVersion {
     }
 
     pub(crate) fn execute(&self) -> Result<(), GovernanceError> {
-        if !are_bless_alternative_guest_os_version_proposals_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "BlessAlternativeGuestOsVersion proposals are not enabled yet.".to_string(),
-            ));
-        }
 
         // Like with Motion proposals, the execution of these proposals is
         // trivial. The reason for trivial execution in this case is that the
