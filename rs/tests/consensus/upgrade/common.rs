@@ -391,9 +391,10 @@ async fn fetch_latest_computed_root_hashes_from_logs(
     logger: &Logger,
     mut log_streams: LogStream,
 ) -> BTreeMap<NodeId, String> {
-    let computed_root_hash_regex =
-        regex_lite::Regex::new(r#"Computed root hash CryptoHash\(0x([a-f0-9]{64})\) of state @(\d*)"#)
-            .unwrap();
+    let computed_root_hash_regex = regex_lite::Regex::new(
+        r#"Computed root hash CryptoHash\(0x([a-f0-9]{64})\) of state @(\d*)"#,
+    )
+    .unwrap();
 
     let mut latest_root_hash_per_node = BTreeMap::new();
     while let Ok((node, entry)) = log_streams
