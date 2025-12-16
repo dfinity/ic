@@ -972,6 +972,12 @@ fn patch_env_local_store(env: &TestEnv) {
     rm.arg("-rf").arg(env.get_path("tmp_new_local_store"));
     rm.output()
         .expect("Failed to remove temporary new local store");
+
+    block_on(
+        env.topology_snapshot()
+            .block_for_newest_mainnet_registry_version(),
+    )
+    .unwrap();
 }
 
 fn patch_env_root_public_key(env: &TestEnv) {
