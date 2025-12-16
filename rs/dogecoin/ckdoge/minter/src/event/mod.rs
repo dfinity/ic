@@ -377,6 +377,7 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
             CkBtcMinterEventType::SuspendedUtxo { reason, .. } => {
                 let explanation = match reason {
                     SuspendedReason::ValueTooSmall => {
+                        // TODO DEFI-2572: handle event when setting a minimum deposit amount.
                         "Unexpected ignored UTXO event since `check_fee` is null for ckDOGE"
                     }
                     SuspendedReason::Quarantined => {
