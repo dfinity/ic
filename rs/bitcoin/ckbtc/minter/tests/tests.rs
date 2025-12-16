@@ -1920,9 +1920,7 @@ fn test_transaction_resubmission_finalize_middle() {
 #[test]
 fn test_transaction_resubmission_after_upgrade() {
     let (ckbtc, block_index, _, tx) = test_transaction_resubmission_finalize_setup();
-    ckbtc
-        .env
-        .advance_time(MIN_RESUBMISSION_DELAY / 2);
+    ckbtc.env.advance_time(MIN_RESUBMISSION_DELAY / 2);
 
     // Upgrade
     let upgrade_args = UpgradeArgs::default();
@@ -1942,9 +1940,7 @@ fn test_transaction_resubmission_after_upgrade() {
     });
 
     // Wait for the transaction resubmission
-    ckbtc
-        .env
-        .advance_time(MIN_RESUBMISSION_DELAY / 2);
+    ckbtc.env.advance_time(MIN_RESUBMISSION_DELAY / 2);
 
     let mempool = ckbtc.tick_until("mempool has a replacement transaction", 10, |ckbtc| {
         let mempool = ckbtc.mempool();
