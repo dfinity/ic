@@ -365,13 +365,20 @@ async fn balance_of(user: Principal) -> Result<u64, RetrieveBtcError> {
 
 async fn burn_ckbtcs(user: Principal, amount: u64, memo: Memo) -> Result<u64, RetrieveBtcError> {
     debug_assert!(memo.0.len() <= crate::CKBTC_LEDGER_MEMO_SIZE as usize);
+    let from_subaccount = compute_subaccount(PrincipalId(user), 0);
+    burn_ckbtcs_from_subaccount(from_subaccount, amount, memo).await
+}
 
+pub async fn burn_ckbtcs_from_subaccount(
+    from_subaccount: Subaccount,
+    amount: u64,
+    memo: Memo,
+) -> Result<u64, RetrieveBtcError> {
     let client = ICRC1Client {
         runtime: CdkRuntime,
         ledger_canister_id: read_state(|s| s.ledger_id.get().into()),
     };
     let minter = ic_cdk::api::canister_self();
-    let from_subaccount = compute_subaccount(PrincipalId(user), 0);
     let result = client
         .transfer(TransferArg {
             from_subaccount: Some(from_subaccount),

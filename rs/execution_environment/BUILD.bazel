@@ -207,8 +207,6 @@ rust_ic_test(
         "UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister_no_heartbeat.wasm.gz)",
         "RUST_TEST_THREADS": "4",
     },
-    # The failure rate of this test jumped to over 10% in the week starting on 2025-11-17 so we marked it as flaky:
-    flaky = True,
     tags = [
         "cpu:4",
         "test_all_platforms_slow",

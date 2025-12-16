@@ -13,6 +13,7 @@ iproute2
 shellcheck
 xxd
 vim
+retry
 
 # Bitcoin core (for bitcoin adapter integration test)
 libtool
