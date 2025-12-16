@@ -1,7 +1,7 @@
 use crate::pb::v1::{
     ApproveGenesisKyc, Motion, SelfDescribingProposalAction, SelfDescribingValue,
     SelfDescribingValueArray, SelfDescribingValueMap,
-    self_describing_value::Value::{self, Array, Map, Text},
+    self_describing_value::Value::{self, Array, Blob, Map, Text},
 };
 
 use ic_base_types::PrincipalId;
@@ -117,6 +117,22 @@ impl From<PrincipalId> for SelfDescribingValue {
     fn from(value: PrincipalId) -> Self {
         SelfDescribingValue {
             value: Some(Text(value.to_string())),
+        }
+    }
+}
+
+impl From<Vec<u8>> for SelfDescribingValue {
+    fn from(value: Vec<u8>) -> Self {
+        SelfDescribingValue {
+            value: Some(Blob(value)),
+        }
+    }
+}
+
+impl From<bool> for SelfDescribingValue {
+    fn from(value: bool) -> Self {
+        SelfDescribingValue {
+            value: Some(to_self_describing_nat(if value { 1u8 } else { 0u8 })),
         }
     }
 }
