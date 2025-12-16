@@ -340,10 +340,11 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
     let canister_history_memory_for_install = size_of::<CanisterChange>();
     let canister_history_memory_per_canister =
         canister_history_memory_for_creation + canister_history_memory_for_install;
+    let canister_log_memory = 3 * 4096; // 3 OS pages.
     // This value might need adjustment if something changes in the canister's
     // wasm that gets installed in the test.
     let total_memory_taken_per_canister_in_bytes =
-        364441 + canister_history_memory_per_canister as i64;
+        364441 + canister_history_memory_per_canister as i64 + canister_log_memory;
 
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000_000)
@@ -382,7 +383,8 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
     assert_eq!(
         test.subnet_available_memory().get_execution_memory()
             + iterations * total_memory_taken_per_canister_in_bytes
-            + canister_history_memory_for_creation as i64,
+            + canister_history_memory_for_creation as i64
+            + canister_log_memory,
         subnet_available_memory_before
     );
 }
