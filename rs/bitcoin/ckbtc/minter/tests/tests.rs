@@ -1918,6 +1918,49 @@ fn test_transaction_resubmission_finalize_middle() {
 }
 
 #[test]
+fn test_transaction_resubmission_after_upgrade() {
+    let (ckbtc, block_index, _, tx) = test_transaction_resubmission_finalize_setup();
+    ckbtc.env.advance_time(MIN_RESUBMISSION_DELAY / 2);
+
+    // Upgrade
+    let upgrade_args = UpgradeArgs::default();
+    let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
+    ckbtc
+        .env
+        .upgrade_canister(
+            ckbtc.minter_id,
+            minter_wasm(),
+            Encode!(&minter_arg).unwrap(),
+        )
+        .expect("Failed to upgrade the minter canister");
+
+    // Upgrade should not trigger resubmission
+    ckbtc.assert_for_n_ticks("no resubmission before the delay", 20, |ckbtc| {
+        ckbtc.mempool().len() == 1
+    });
+
+    // Wait for the transaction resubmission
+    ckbtc.env.advance_time(MIN_RESUBMISSION_DELAY / 2);
+
+    let mempool = ckbtc.tick_until("mempool has a replacement transaction", 10, |ckbtc| {
+        let mempool = ckbtc.mempool();
+        (mempool.len() > 1).then_some(mempool)
+    });
+
+    let new_txid = ckbtc.await_btc_transaction(block_index, 10);
+    let new_tx = mempool
+        .get(&new_txid)
+        .expect("the pool does not contain the new transaction");
+
+    assert_replacement_transaction(&tx, new_tx);
+
+    // Finalize the new transaction
+    ckbtc.finalize_transaction(new_tx);
+    assert_eq!(ckbtc.await_finalization(block_index, 10), new_txid);
+    ckbtc.minter_self_check();
+}
+
+#[test]
 fn test_utxo_consolidation_burn_failure() {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     const MAX_NUM_INPUTS_IN_TRANSACTION: usize = 100;
