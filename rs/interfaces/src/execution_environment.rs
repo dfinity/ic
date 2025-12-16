@@ -450,14 +450,11 @@ impl SubnetAvailableMemory {
         guaranteed_response_message_requested: NumBytes,
         wasm_custom_sections_requested: NumBytes,
     ) -> Result<(), SubnetAvailableMemoryError> {
-        let res = self.check_available_memory(
+        self.check_available_memory(
             execution_requested,
             guaranteed_response_message_requested,
             wasm_custom_sections_requested,
-        );
-        if res.is_err() {
-            return res;
-        }
+        )?;
         self.execution_memory -= execution_requested.get() as i64;
         self.guaranteed_response_message_memory -=
             guaranteed_response_message_requested.get() as i64;
