@@ -17,13 +17,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// This defines timeout on the Bazel level.
-var TESTNET_DEPLOYMENT_TIMEOUT_SEC = 5400
-
-var FARM_BASE_URL = "https://farm.dfinity.systems"
-var FARM_GROUP_KEEPALIVE_TTL_SEC = 90
-var KEEPALIVE_PERIOD = 30 * time.Second
-
 // All output files are saved in this folder, if output-dir is not provided explicitly.
 var DEFAULT_RESULTS_DIR = "ict_testnets"
 
