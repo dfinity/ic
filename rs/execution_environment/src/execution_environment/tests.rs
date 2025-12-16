@@ -339,6 +339,10 @@ fn output_requests_on_application_subnets_respect_subnet_message_memory() {
     assert_eq!(
         available_memory_after_create,
         test.subnet_available_memory().get_execution_memory()
+            + test
+                .canister_state(canister_id)
+                .log_memory_store_memory_usage()
+                .get() as i64,
     );
     assert_eq!(
         13,
