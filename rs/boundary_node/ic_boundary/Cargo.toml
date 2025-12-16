@@ -67,7 +67,7 @@ ratelimit = "0.9.1"
 rate-limits-api = { path = "../rate_limits/api" }
 salt-sharing-api = { path = "../salt_sharing/api" }
 rcgen = { workspace = true }
-regex-lite = { workspace = true }
+regex = { workspace = true }
 reqwest = { workspace = true }
 rustls = { workspace = true }
 rustls-pemfile = "2.1.3"

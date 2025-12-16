@@ -138,7 +138,7 @@ mod test {
     use ic_bn_lib_common::principal;
     use indoc::indoc;
     use rate_limits_api::*;
-    use regex_lite::Regex;
+    use regex::Regex;
 
     use super::*;
 
