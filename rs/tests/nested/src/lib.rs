@@ -38,11 +38,7 @@ pub fn simple_setup(env: TestEnv) {
 pub fn registration(env: TestEnv) {
     let logger = env.logger();
 
-    let initial_topology = block_on(
-        env.topology_snapshot()
-            .block_for_newest_mainnet_registry_version(),
-    )
-    .unwrap();
+    let initial_topology = env.topology_snapshot();
 
     // Keep track of the initial number of unassigned nodes.
     let initial_num_unassigned_nodes = initial_topology.unassigned_nodes().count();
