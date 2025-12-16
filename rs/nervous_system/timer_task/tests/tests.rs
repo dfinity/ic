@@ -12,6 +12,7 @@ fn state_machine_for_test() -> StateMachine {
     let instruction_divisor = 10;
     subnet_config.scheduler_config.max_instructions_per_round /= instruction_divisor;
     subnet_config.scheduler_config.max_instructions_per_message /= instruction_divisor;
+    subnet_config.scheduler_config.max_instructions_per_slice /= instruction_divisor;
     subnet_config
         .scheduler_config
         .max_instructions_per_query_message /= instruction_divisor;

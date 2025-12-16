@@ -319,7 +319,7 @@ impl SchedulerConfig {
         let max_instructions_per_query_message = max_instructions_per_message;
         let max_instructions_per_install_code = NumInstructions::from(1_000 * B);
         let max_instructions_per_slice = NumInstructions::from(2 * B);
-        let max_instructions_per_install_code_slice = NumInstructions::from(5 * B);
+        let max_instructions_per_install_code_slice = NumInstructions::from(2 * B);
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             max_paused_executions: MAX_PAUSED_EXECUTIONS,

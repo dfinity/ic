@@ -5494,7 +5494,7 @@ fn dts_update_and_heartbeat() {
             max_instructions_per_round: NumInstructions::from(300),
             max_instructions_per_message: NumInstructions::from(1000),
             max_instructions_per_query_message: NumInstructions::from(200),
-            max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_slice: NumInstructions::from(200),
             ..SchedulerConfig::application_subnet()
         })
         .build();
