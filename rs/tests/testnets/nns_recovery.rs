@@ -92,12 +92,12 @@ fn setup(env: TestEnv, use_mainnet_state: bool) {
     env.sync_with_prometheus();
 }
 
-fn test(env: TestEnv) {
+fn test(env: TestEnv, use_mainnet_state: bool) {
     let logger = env.logger();
 
     if env.get_all_nested_vms().unwrap().len() > 0 {
         nested::registration(env.clone());
-        replace_nns_with_nested_vms(&env);
+        replace_nns_with_nested_vms(&env, use_mainnet_state);
 
         env.sync_with_prometheus();
     }
@@ -107,7 +107,12 @@ fn test(env: TestEnv) {
         ssh_user_pub_key: ssh_backup_pub_key,
         ..
     } = get_admin_keys_and_generate_backup_keys(&env);
-    grant_backup_access_to_all_nns_nodes(&env, &backup_auth, &ssh_backup_pub_key);
+    grant_backup_access_to_all_nns_nodes(
+        &env,
+        &backup_auth,
+        &ssh_backup_pub_key,
+        use_mainnet_state,
+    );
 
     let is_external = Vec::<HostFeature>::try_read_attribute(&env)
         .map(|features| features.contains(&HostFeature::DMZ))
@@ -220,7 +225,9 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_timeout_per_test(Duration::from_secs(90 * 60))
         .with_setup(move |env| setup(env, use_mainnet_state))
-        .add_test(systest!(test))
+        .add_test(systest!(test; std::env::var("USE_MAINNET_STATE")
+        .map(|v| v == "1" || v.to_lowercase() == "true")
+        .expect("USE_MAINNET_STATE environment variable not set")))
         .execute_from_args()?;
     Ok(())
 }

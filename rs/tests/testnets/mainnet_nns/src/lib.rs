@@ -1,16 +1,10 @@
 use anyhow::Result;
 use ic_base_types::PrincipalId;
-use ic_canister_client::Sender;
-use ic_canister_client_sender::SigKeys;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_system_test_utils::set_sandbox_env_vars;
 use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nervous_system_common::E8;
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance_api::NnsFunction;
-use ic_nns_test_utils::governance::submit_external_update_proposal_allowing_error;
-use ic_nns_test_utils::governance::wait_for_final_state;
-use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
@@ -18,17 +12,12 @@ use ic_system_test_driver::driver::ic::{ImageSizeGiB, InternetComputer, Subnet, 
 use ic_system_test_driver::driver::ic_gateway_vm::{
     HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm,
 };
-use ic_system_test_driver::driver::test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute};
+use ic_system_test_driver::driver::test_env::{HasIcPrepDir, TestEnv};
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::driver::universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms};
-use ic_system_test_driver::nns::{
-    get_governance_canister, submit_update_elected_replica_versions_proposal,
-};
-use ic_system_test_driver::util::{block_on, runtime_from_url};
-use ic_types::{NodeId, ReplicaVersion, SubnetId};
-use registry_canister::mutations::do_add_api_boundary_nodes::AddApiBoundaryNodesPayload;
+use ic_system_test_driver::util::block_on;
+use ic_types::{ReplicaVersion, SubnetId};
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
-use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
 use ssh2::Session;
 use std::fs::{self, File};
@@ -38,6 +27,10 @@ use std::str::FromStr;
 use std::sync::mpsc::{self, Receiver};
 use std::{io::Write, process::Command};
 use url::Url;
+
+use crate::proposals::NEURON_CONTROLLER;
+use crate::proposals::NEURON_SECRET_KEY_PEM;
+use crate::proposals::ProposalWithMainnetState;
 
 // Default path to the mainnet NNS state tarball on the backup pod. Can be overridden through the
 // NNS_STATE_ON_BACKUP_POD environment variable.
@@ -60,34 +53,7 @@ const AUX_NODE_NAME: &str = "aux";
 const ORIGINAL_NNS_ID: &str = "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe";
 const MAINNET_NNS_DAPP_CANISTER_ID: &str = "qoctq-giaaa-aaaaa-aaaea-cai";
 
-// Test neuron secret key and corresponding controller principal
-const NEURON_CONTROLLER: &str = "bc7vk-kulc6-vswcu-ysxhv-lsrxo-vkszu-zxku3-xhzmh-iac7m-lwewm-2ae";
-const NEURON_SECRET_KEY_PEM: &str = "-----BEGIN PRIVATE KEY-----
-MFMCAQEwBQYDK2VwBCIEIKohpVANxO4xElQYXElAOXZHwJSVHERLE8feXSfoKwxX
-oSMDIQBqgs2z86b+S5X9HvsxtE46UZwfDHtebwmSQWSIcKr2ew==
------END PRIVATE KEY-----";
-
-#[derive(Deserialize, Serialize)]
-pub struct RecoveredNnsNodeUrl {
-    recovered_nns_node_url: Url,
-}
-
-impl TestEnvAttribute for RecoveredNnsNodeUrl {
-    fn attribute_name() -> String {
-        String::from("recovered_nns_node_url")
-    }
-}
-
-#[derive(Deserialize, Serialize)]
-pub struct RecoveredNnsDictatorNeuron {
-    recovered_nns_dictator_neuron_id: NeuronId,
-}
-
-impl TestEnvAttribute for RecoveredNnsDictatorNeuron {
-    fn attribute_name() -> String {
-        String::from("recovered_nns_dictator_neuron_id")
-    }
-}
+pub mod proposals;
 
 /// Sets up an IC running mainnet IC-OS nodes running the mainnet NNS
 /// on the latest backup of the state of the mainnet NNS subnet.
@@ -104,6 +70,8 @@ impl TestEnvAttribute for RecoveredNnsDictatorNeuron {
 /// The registry of the test environment (as in env.topology_snapshot()) is also patched to reflect
 /// mainnet state. This means that subsequent calls will see all subnets and nodes of mainnet,
 /// except the root subnet (tdb26), which will contain only the single-node NNS subnet.
+/// Proposals can be made (and will instantly execute) using the relevant functions in
+/// `crate::proposals`.
 pub fn setup(env: TestEnv) {
     // Since we're creating the IC concurrently with fetching the state we use a channel to tell the
     // thread fetching the state when the IC is ready such that it can scp the ic.json5 config file
@@ -216,13 +184,55 @@ fn setup_recovered_nns(
         .unwrap_or_else(|e| panic!("Failed to fetch the mainnet ic-recovery because {e:?}"));
 
     recover_nns_subnet(&env, &nns_node, &recovered_nns_node, &aux_node);
-    test_recovered_nns(&env, neuron_id, &recovered_nns_node);
+    ProposalWithMainnetState::set_dictator_neuron_id(neuron_id);
+
+    test_recovered_nns(&env, &recovered_nns_node);
+
+    info!(
+        env.logger(),
+        "Successfully recovered NNS at {}. Interact with it using {:?}.",
+        nns_node.get_public_url(),
+        neuron_id,
+    );
 
     let dkg_interval = std::env::var("DKG_INTERVAL")
         .ok()
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(DKG_INTERVAL_HEIGHT);
-    propose_to_reduce_dkg_interval(&env, neuron_id, &recovered_nns_node, dkg_interval);
+    let subnet_config = UpdateSubnetPayload {
+        subnet_id: SubnetId::from(PrincipalId::from_str(ORIGINAL_NNS_ID).unwrap()),
+        max_ingress_bytes_per_message: None,
+        max_ingress_messages_per_block: None,
+        max_block_payload_size: None,
+        unit_delay_millis: None,
+        initial_notary_delay_millis: None,
+        dkg_interval_length: Some(dkg_interval),
+        dkg_dealings_per_block: None,
+        start_as_nns: None,
+        subnet_type: None,
+        is_halted: None,
+        halt_at_cup_height: None,
+        features: None,
+        chain_key_config: None,
+        chain_key_signing_enable: None,
+        chain_key_signing_disable: None,
+        max_number_of_canisters: None,
+        ssh_readonly_access: None,
+        ssh_backup_access: None,
+        max_artifact_streams_per_peer: None,
+        max_chunk_wait_ms: None,
+        max_duplicity: None,
+        max_chunk_size: None,
+        receive_check_cache_size: None,
+        pfn_evaluation_period_ms: None,
+        registry_poll_period_ms: None,
+        retransmission_request_ms: None,
+        set_gossip_config_to_default: false,
+    };
+    block_on(ProposalWithMainnetState::update_subnet_record(
+        recovered_nns_node.get_public_url(),
+        subnet_config,
+    ));
 
     let recovered_nns_pub_key = fetch_recovered_nns_public_key_pem(&recovered_nns_node);
 
@@ -239,7 +249,7 @@ fn setup_recovered_nns(
     .unwrap();
 
     let api_bn = env.topology_snapshot().api_boundary_nodes().next().unwrap();
-    patch_api_bn(&env, &recovered_nns_node, neuron_id, &api_bn);
+    patch_api_bn(&env, &recovered_nns_node, &api_bn);
 
     neuron_id
 }
@@ -509,173 +519,18 @@ fn recover_nns_subnet(
         .expect("Recovered NNS node should become healthy.");
 }
 
-fn test_recovered_nns(env: &TestEnv, neuron_id: NeuronId, nns_node: &IcNodeSnapshot) {
-    let logger: slog::Logger = env.logger();
+fn test_recovered_nns(env: &TestEnv, nns_node: &IcNodeSnapshot) {
+    let logger = env.logger();
     info!(logger, "Testing recovered NNS ...");
-    let sig_keys = SigKeys::from_pem(NEURON_SECRET_KEY_PEM).expect("Failed to parse secret key");
-    let proposal_sender = Sender::SigKeys(sig_keys);
-    bless_replica_version(
-        &env,
-        neuron_id,
-        proposal_sender,
+
+    block_on(ProposalWithMainnetState::bless_replica_version(
         &nns_node,
         &ReplicaVersion::try_from("1111111111111111111111111111111111111111").unwrap(),
+        &logger,
         "2222222222222222222222222222222222222222222222222222222222222222".to_string(),
-        vec![],
         None,
-    );
-    let recovered_nns_node_url = nns_node.get_public_url();
-    RecoveredNnsNodeUrl {
-        recovered_nns_node_url: recovered_nns_node_url.clone(),
-    }
-    .write_attribute(&env);
-    RecoveredNnsDictatorNeuron {
-        recovered_nns_dictator_neuron_id: neuron_id,
-    }
-    .write_attribute(&env);
-    info!(
-        logger,
-        "Successfully recovered NNS at {}. Interact with it using {:?}.",
-        recovered_nns_node_url,
-        neuron_id,
-    );
-}
-
-fn bless_replica_version(
-    env: &TestEnv,
-    neuron_id: NeuronId,
-    proposal_sender: Sender,
-    nns_node: &IcNodeSnapshot,
-    replica_version: &ReplicaVersion,
-    sha256: String,
-    upgrade_urls: Vec<String>,
-    guest_launch_measurements: Option<GuestLaunchMeasurements>,
-) {
-    info!(
-        env.logger(),
-        "Begin Bless replica version {}", replica_version
-    );
-
-    let logger = env.logger();
-    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    let governance_canister = get_governance_canister(&nns_runtime);
-
-    let proposal_id = {
-        let logger = logger.clone();
-        let replica_version = replica_version.clone();
-        block_on(async move {
-            let proposal_id = submit_update_elected_replica_versions_proposal(
-                &governance_canister,
-                proposal_sender,
-                neuron_id,
-                Some(&replica_version),
-                Some(sha256),
-                upgrade_urls,
-                guest_launch_measurements,
-                vec![],
-            )
-            .await;
-
-            info!(
-                logger,
-                "Proposal {:?} to bless replica version {:?} has been submitted",
-                proposal_id.to_string(),
-                replica_version,
-            );
-
-            wait_for_final_state(&governance_canister, proposal_id).await;
-            proposal_id
-        })
-    };
-
-    info!(
-        logger,
-        "SUCCESS! Proposal {:?} to bless replica version {:?} has been executed successfully using neuron {:?}",
-        proposal_id.to_string(),
-        replica_version,
-        neuron_id,
-    );
-}
-
-fn propose_to_reduce_dkg_interval(
-    env: &TestEnv,
-    neuron_id: NeuronId,
-    nns_node: &IcNodeSnapshot,
-    dkg_interval: u64,
-) {
-    info!(
-        env.logger(),
-        "Submitting proposal to reduce DKG interval to {} ...", dkg_interval
-    );
-
-    let logger = env.logger();
-    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    let governance_canister = get_governance_canister(&nns_runtime);
-    let sig_keys = SigKeys::from_pem(NEURON_SECRET_KEY_PEM).expect("Failed to parse secret key");
-    let proposal_sender = Sender::SigKeys(sig_keys);
-
-    let proposal_id = {
-        let logger = logger.clone();
-        block_on(async move {
-            let proposal_id = submit_external_update_proposal_allowing_error(
-                &governance_canister,
-                proposal_sender,
-                neuron_id,
-                NnsFunction::UpdateConfigOfSubnet,
-                UpdateSubnetPayload {
-                    subnet_id: SubnetId::from(PrincipalId::from_str(ORIGINAL_NNS_ID).unwrap()),
-                    max_ingress_bytes_per_message: None,
-                    max_ingress_messages_per_block: None,
-                    max_block_payload_size: None,
-                    unit_delay_millis: None,
-                    initial_notary_delay_millis: None,
-                    dkg_interval_length: Some(dkg_interval),
-                    dkg_dealings_per_block: None,
-                    start_as_nns: None,
-                    subnet_type: None,
-                    is_halted: None,
-                    halt_at_cup_height: None,
-                    features: None,
-                    chain_key_config: None,
-                    chain_key_signing_enable: None,
-                    chain_key_signing_disable: None,
-                    max_number_of_canisters: None,
-                    ssh_readonly_access: None,
-                    ssh_backup_access: None,
-                    max_artifact_streams_per_peer: None,
-                    max_chunk_wait_ms: None,
-                    max_duplicity: None,
-                    max_chunk_size: None,
-                    receive_check_cache_size: None,
-                    pfn_evaluation_period_ms: None,
-                    registry_poll_period_ms: None,
-                    retransmission_request_ms: None,
-                    set_gossip_config_to_default: false,
-                },
-                format!("Reduce DKG interval of the NNS subnet to {}", dkg_interval),
-                "".to_string(),
-            )
-            .await
-            .expect("Failed to submit proposal to reduce DKG interval");
-
-            info!(
-                logger,
-                "Proposal {:?} to reduce DKG interval to {} has been submitted",
-                proposal_id.to_string(),
-                dkg_interval,
-            );
-
-            wait_for_final_state(&governance_canister, proposal_id).await;
-            proposal_id
-        })
-    };
-
-    info!(
-        logger,
-        "Proposal {:?} to reduce DKG interval to {} has been executed",
-        proposal_id.to_string(),
-        dkg_interval,
-    );
+        vec![],
+    ));
 }
 
 fn fetch_recovered_nns_public_key_pem(recovered_nns_node: &IcNodeSnapshot) -> Vec<u8> {
@@ -697,12 +552,7 @@ fn fetch_recovered_nns_public_key_pem(recovered_nns_node: &IcNodeSnapshot) -> Ve
     pem
 }
 
-fn patch_api_bn(
-    env: &TestEnv,
-    recovered_nns_node: &IcNodeSnapshot,
-    neuron_id: NeuronId,
-    api_bn: &IcNodeSnapshot,
-) {
+fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcNodeSnapshot) {
     let logger = env.logger();
     let recovered_nns_node_ipv6 = recovered_nns_node.get_ip_addr();
 
@@ -733,15 +583,12 @@ fn patch_api_bn(
     )
     .expect("Could not patch NNS public key of API BN");
 
-    propose_to_turn_into_api_bn(
-        &env,
-        neuron_id,
-        Sender::SigKeys(
-            SigKeys::from_pem(NEURON_SECRET_KEY_PEM).expect("Failed to parse secret key"),
-        ),
+    block_on(ProposalWithMainnetState::add_api_boundary_nodes(
         &recovered_nns_node,
-        api_bn.node_id,
-    );
+        &env.logger(),
+        vec![api_bn.node_id],
+        get_mainnet_nns_revision().unwrap().to_string(),
+    ));
 
     // Regenerate IC config and start ic-replica
     api_bn
@@ -824,60 +671,6 @@ fn patch_config_nns_public_key(
             "#
         ),
     )
-}
-
-fn propose_to_turn_into_api_bn(
-    env: &TestEnv,
-    neuron_id: NeuronId,
-    proposal_sender: Sender,
-    nns_node: &IcNodeSnapshot,
-    target_node: NodeId,
-) {
-    info!(
-        env.logger(),
-        "Submitting proposal to turn node {:?} into an API BN...", target_node
-    );
-
-    let logger = env.logger();
-    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    let governance_canister = get_governance_canister(&nns_runtime);
-
-    let proposal_id = {
-        let logger = logger.clone();
-        block_on(async move {
-            let proposal_id = submit_external_update_proposal_allowing_error(
-                &governance_canister,
-                proposal_sender,
-                neuron_id,
-                NnsFunction::AddApiBoundaryNodes,
-                AddApiBoundaryNodesPayload {
-                    node_ids: vec![target_node],
-                    version: get_mainnet_nns_revision().unwrap().to_string(),
-                },
-                format!("Adding node with ID {} as API Boundary Node", target_node),
-                "".to_string(),
-            )
-            .await
-            .expect("Failed to submit proposal to turn node into API BN");
-
-            info!(
-                logger,
-                "Proposal {:?} to turn node {:?} into an API BN has been submitted",
-                proposal_id.to_string(),
-                target_node
-            );
-
-            wait_for_final_state(&governance_canister, proposal_id).await;
-            proposal_id
-        })
-    };
-
-    info!(
-        logger,
-        "Proposal {:?} to turn node {:?} into an API BN has been executed",
-        proposal_id,
-        target_node
-    );
 }
 
 fn setup_ic(env: TestEnv) {

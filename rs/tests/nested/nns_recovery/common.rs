@@ -37,7 +37,9 @@ use ic_system_test_driver::{
     retry_with_msg_async,
     util::block_on,
 };
-use ic_testnet_mainnet_nns::setup as setup_with_mainnet_state;
+use ic_testnet_mainnet_nns::{
+    proposals::ProposalWithMainnetState, setup as setup_with_mainnet_state,
+};
 use ic_types::ReplicaVersion;
 use manual_guestos_recovery::recovery_utils::build_recovery_upgrader_command;
 use nested::util::setup_ic_infrastructure;
@@ -76,6 +78,7 @@ pub struct SetupConfig {
 
 #[derive(Debug)]
 pub struct TestConfig {
+    pub use_mainnet_state: bool,
     pub local_recovery: bool,
     pub break_dfinity_owned_node: bool,
     pub add_and_bless_upgrade_version: bool,
@@ -87,7 +90,7 @@ fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
     (1..=num_hosts).map(|i| format!("host-{i}")).collect()
 }
 
-pub fn replace_nns_with_nested_vms(env: &TestEnv) {
+pub fn replace_nns_with_nested_vms(env: &TestEnv, use_mainnet_state: bool) {
     let logger = env.logger();
 
     info!(logger, "Adding all nested VMs to the NNS subnet...");
@@ -115,12 +118,21 @@ pub fn replace_nns_with_nested_vms(env: &TestEnv) {
         new_node_ids.len() > 0,
         "No nested VMs found to add to the NNS subnet"
     );
-    block_on(change_subnet_membership(
+    let fn_change_subnet_membership = |a, b, c, d| {
+        if use_mainnet_state {
+            block_on(ProposalWithMainnetState::change_subnet_membership(
+                a, b, c, d,
+            ))
+        } else {
+            block_on(change_subnet_membership(a, b, c, d))
+        }
+    };
+    fn_change_subnet_membership(
         original_node.get_public_url(),
         nns_subnet.subnet_id,
         &new_node_ids,
         &[original_node.node_id],
-    ))
+    )
     .expect("Failed to change subnet membership");
 
     info!(
@@ -162,6 +174,7 @@ pub fn grant_backup_access_to_all_nns_nodes(
     env: &TestEnv,
     backup_auth: &AuthMean,
     ssh_backup_pub_key: &str,
+    use_mainnet_state: bool,
 ) {
     let logger = env.logger();
     let topology = env.topology_snapshot();
@@ -174,7 +187,14 @@ pub fn grant_backup_access_to_all_nns_nodes(
         None,
         Some(vec![ssh_backup_pub_key.to_string()]),
     );
-    block_on(update_subnet_record(nns_node.get_public_url(), payload));
+    let fn_update_subnet_record = |a, b| {
+        if use_mainnet_state {
+            block_on(ProposalWithMainnetState::update_subnet_record(a, b))
+        } else {
+            block_on(update_subnet_record(a, b))
+        }
+    };
+    fn_update_subnet_record(nns_node.get_public_url(), payload);
 
     for node in nns_subnet.nodes() {
         info!(
@@ -232,8 +252,13 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     } = get_admin_keys_and_generate_backup_keys(&env);
 
     nested::registration(env.clone());
-    replace_nns_with_nested_vms(&env);
-    grant_backup_access_to_all_nns_nodes(&env, &backup_auth, &ssh_backup_pub_key);
+    replace_nns_with_nested_vms(&env, cfg.use_mainnet_state);
+    grant_backup_access_to_all_nns_nodes(
+        &env,
+        &backup_auth,
+        &ssh_backup_pub_key,
+        cfg.use_mainnet_state,
+    );
 
     let current_version = get_guestos_img_version();
     info!(logger, "Current GuestOS version: {:?}", current_version);
@@ -268,14 +293,23 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let guest_launch_measurements = get_guestos_launch_measurements();
     if !cfg.add_and_bless_upgrade_version {
         // If ic-recovery does not add/bless the new version to the registry, then we must bless it now.
-        block_on(bless_replica_version(
+        let fn_bless_replica_version = |a, b, c, d, e, f| {
+            if cfg.use_mainnet_state {
+                block_on(ProposalWithMainnetState::bless_replica_version(
+                    a, b, c, d, e, f,
+                ))
+            } else {
+                block_on(bless_replica_version(a, b, c, d, e, f))
+            }
+        };
+        fn_bless_replica_version(
             &nns_node,
             &upgrade_version,
             &logger,
             upgrade_image_hash.clone(),
             Some(guest_launch_measurements),
             vec![upgrade_image_url.to_string()],
-        ));
+        );
     }
 
     let recovery_dir = get_dependency_path("rs/tests");
