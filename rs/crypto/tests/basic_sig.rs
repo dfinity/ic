@@ -34,7 +34,7 @@ fn should_sign_and_verify() {
     let msg = SignableMock::new(b"message".to_vec());
     let registry_version = crypto.registry_client().get_latest_version();
 
-    let sign_result = crypto.sign_basic(&msg, crypto.get_node_id(), registry_version);
+    let sign_result = crypto.sign_basic(&msg);
     assert_matches!(sign_result, Ok(_));
 
     let sig = sign_result.unwrap();
@@ -52,7 +52,7 @@ fn should_fail_signing_with_secret_key_not_found_if_secret_key_not_found_in_key_
         .return_once(|_msg| Err(CspBasicSignatureError::SecretKeyNotFound(dummy_key_id())));
     let crypto = crypto_component_with_vault(vault, registry_panicking_on_usage());
 
-    let result = crypto.sign_basic(&SignableMock::new(b"message".to_vec()), NODE_1, REG_V2);
+    let result = crypto.sign_basic(&SignableMock::new(b"message".to_vec()));
 
     assert_matches!(result, Err(CryptoError::SecretKeyNotFound { .. }));
 }
@@ -65,7 +65,7 @@ fn should_fail_signing_with_public_key_not_found_if_public_key_not_found_in_key_
         .return_once(|_msg| Err(CspBasicSignatureError::PublicKeyNotFound));
     let crypto = crypto_component_with_vault(vault, registry_panicking_on_usage());
 
-    let result = crypto.sign_basic(&SignableMock::new(b"message".to_vec()), NODE_1, REG_V2);
+    let result = crypto.sign_basic(&SignableMock::new(b"message".to_vec()));
 
     assert_matches!(result, Err(CryptoError::InternalError { .. }));
 }
@@ -80,7 +80,7 @@ fn should_fail_signing_with_malformed_public_key_if_public_key_is_malformed() {
     });
     let crypto = crypto_component_with_vault(vault, registry_panicking_on_usage());
 
-    let result = crypto.sign_basic(&SignableMock::new(b"message".to_vec()), NODE_1, REG_V2);
+    let result = crypto.sign_basic(&SignableMock::new(b"message".to_vec()));
 
     assert_matches!(result, Err(CryptoError::InternalError { .. }));
 }
@@ -95,7 +95,7 @@ fn should_fail_signing_with_wrong_secret_key_type_if_secret_key_type_is_wrong() 
     });
     let crypto = crypto_component_with_vault(vault, registry_panicking_on_usage());
 
-    let result = crypto.sign_basic(&SignableMock::new(b"message".to_vec()), NODE_1, REG_V2);
+    let result = crypto.sign_basic(&SignableMock::new(b"message".to_vec()));
 
     assert_matches!(result, Err(CryptoError::InvalidArgument { .. }));
 }
@@ -110,7 +110,7 @@ fn should_fail_signing_with_transient_internal_error_if_vault_returns_transient_
     });
     let crypto = crypto_component_with_vault(vault, registry_panicking_on_usage());
 
-    let result = crypto.sign_basic(&SignableMock::new(b"message".to_vec()), NODE_1, REG_V2);
+    let result = crypto.sign_basic(&SignableMock::new(b"message".to_vec()));
 
     assert_matches!(result, Err(CryptoError::TransientInternalError { .. }));
 }
@@ -143,7 +143,7 @@ fn should_fail_verifying_for_wrong_message() {
     let registry_version = crypto.registry_client().get_latest_version();
 
     let msg = SignableMock::new(b"message".to_vec());
-    let sig = crypto.sign_basic(&msg, NODE_1, registry_version).unwrap();
+    let sig = crypto.sign_basic(&msg).unwrap();
 
     let wrong_msg = SignableMock::new(b"wrong message".to_vec());
     assert_matches!(
@@ -170,9 +170,7 @@ fn should_fail_verifying_for_wrong_node_id() {
     registry.reload();
     let msg = SignableMock::new(b"test message".to_vec());
 
-    let signature = crypto_1
-        .sign_basic(&msg, crypto_1.get_node_id(), registry.get_latest_version())
-        .unwrap();
+    let signature = crypto_1.sign_basic(&msg).unwrap();
 
     assert_matches!(
         crypto_2.verify_basic_sig(

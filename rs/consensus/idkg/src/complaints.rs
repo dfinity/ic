@@ -2346,12 +2346,7 @@ mod tests {
         }
 
         impl<C: BasicSigner<T>, T: Signable> BasicSigner<T> for CryptoWrapperFailingBasicSigning<C> {
-            fn sign_basic(
-                &self,
-                _message: &T,
-                _signer: NodeId,
-                _registry_version: RegistryVersion,
-            ) -> CryptoResult<BasicSigOf<T>> {
+            fn sign_basic(&self, _message: &T) -> CryptoResult<BasicSigOf<T>> {
                 Err(self.sign_basic_error.clone())
             }
         }
