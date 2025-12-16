@@ -536,8 +536,12 @@ impl SystemStateModifications {
             .append_delta_log(&mut canister_log_copy);
         let memory_usage_after = system_state.log_memory_store.total_allocated_bytes();
 
+        println!("ABC memory_usage before: {}", memory_usage_before);
+        println!("ABC memory_usage after: {}", memory_usage_after);
+
         if memory_usage_after > memory_usage_before {
             let delta = memory_usage_after - memory_usage_before;
+            println!("ABC try_decrement by {}", delta);
             subnet_available_memory
                 .try_decrement(
                     NumBytes::from(delta as u64),
@@ -547,6 +551,7 @@ impl SystemStateModifications {
                 .map_err(|_| HypervisorError::OutOfMemory)?;
         } else {
             let delta = memory_usage_before - memory_usage_after;
+            println!("ABC increment by {}", delta);
             subnet_available_memory.increment(
                 NumBytes::from(delta as u64),
                 NumBytes::from(0),

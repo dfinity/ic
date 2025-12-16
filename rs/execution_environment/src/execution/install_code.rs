@@ -656,7 +656,6 @@ impl InstallCodeHelper {
         // Apply system state changes always.
         // The result will be checked later after we've checked the wasm execution result so that we
         // don't miss logging in case there was an error from Wasm execution.
-        let old_mem = self.canister.memory_usage();
         let result_of_applying_system_state_modifications = system_state_modifications
             .apply_changes(
                 original.time,
@@ -667,14 +666,6 @@ impl InstallCodeHelper {
                 false, // Install cannot happen in composite_query.
                 round.log,
             );
-        let new_mem = self.canister.memory_usage();
-        self.update_allocated_bytes(
-            old_mem,
-            NumBytes::new(0),
-            new_mem,
-            NumBytes::new(0),
-            self.canister.system_state.memory_allocation,
-        );
 
         match output.wasm_result {
             Ok(None) => {}
