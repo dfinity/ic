@@ -189,6 +189,7 @@ mod event {
 
         /// Indicates that the given KYT provider received owed fees.
         #[serde(rename = "distributed_kyt_fee")]
+        #[deprecated]
         DistributedKytFee {
             /// The beneficiary.
             #[serde(rename = "kyt_provider")]
