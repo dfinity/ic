@@ -246,7 +246,6 @@ system_test_nns(
     flaky = True,  # flakiness rate of over 3% over the month from 2025-02-11 till 2025-03-11 only for the //rs/tests/execution:btc_get_balance_test_head_nns variant.
     tags = [
         "colocate",
-        "long_test",  # the P90 duration was over 7 minutes for the week starting on 2025-08-25.
     ],
     runtime_deps =
         UNIVERSAL_CANISTER_RUNTIME_DEPS +
