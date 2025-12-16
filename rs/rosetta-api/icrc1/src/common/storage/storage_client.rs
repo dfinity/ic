@@ -4,7 +4,7 @@ use anyhow::{Result, bail};
 use candid::Nat;
 use ic_base_types::CanisterId;
 use icrc_ledger_types::icrc1::account::Account;
-use rosetta_core::metrics::RosettaMetrics;
+use rosetta_core::metrics::{AccessType, DatabaseOperation, DbOperationMetrics, RosettaMetrics};
 use rusqlite::{Connection, OpenFlags};
 use serde_bytes::ByteBuf;
 use std::cmp::Ordering;
@@ -204,25 +204,49 @@ impl StorageClient {
 
     // Gets a block with a certain index. Returns `None` if no block exists in the database with that index. Returns an error if multiple blocks with that index exist.
     pub fn get_block_at_idx(&self, block_idx: u64) -> anyhow::Result<Option<RosettaBlock>> {
+        let mut metrics_guard = DbOperationMetrics::start(
+            self.get_metrics(),
+            AccessType::Read,
+            DatabaseOperation::GetBlockAtIdx,
+        );
         let open_connection = self.storage_connection.lock().unwrap();
+        metrics_guard.lock_acquired();
         storage_operations::get_block_at_idx(&open_connection, block_idx)
     }
 
     // Gets a block with a certain hash. Returns `None` if no block exists in the database with that hash. Returns an error if multiple blocks with that hash exist.
     pub fn get_block_by_hash(&self, hash: ByteBuf) -> anyhow::Result<Option<RosettaBlock>> {
+        let mut metrics_guard = DbOperationMetrics::start(
+            self.get_metrics(),
+            AccessType::Read,
+            DatabaseOperation::GetBlockByHash,
+        );
         let open_connection = self.storage_connection.lock().unwrap();
+        metrics_guard.lock_acquired();
         storage_operations::get_block_by_hash(&open_connection, hash)
     }
 
     // Gets the block with the highest block index. Returns `None` if no block exists in the database.
     pub fn get_block_with_highest_block_idx(&self) -> anyhow::Result<Option<RosettaBlock>> {
+        let mut metrics_guard = DbOperationMetrics::start(
+            self.get_metrics(),
+            AccessType::Read,
+            DatabaseOperation::GetBlockWithHighestBlockIdx,
+        );
         let open_connection = self.storage_connection.lock().unwrap();
+        metrics_guard.lock_acquired();
         storage_operations::get_block_with_highest_block_idx(&open_connection)
     }
 
     // Gets the block with the lowest block index. Returns `None` if no block exists in the database.
     pub fn get_block_with_lowest_block_idx(&self) -> anyhow::Result<Option<RosettaBlock>> {
+        let mut metrics_guard = DbOperationMetrics::start(
+            self.get_metrics(),
+            AccessType::Read,
+            DatabaseOperation::GetBlockWithLowestBlockIdx,
+        );
         let open_connection = self.storage_connection.lock().unwrap();
+        metrics_guard.lock_acquired();
         storage_operations::get_block_with_lowest_block_idx(&open_connection)
     }
 
@@ -234,7 +258,13 @@ impl StorageClient {
         start_index: u64,
         end_index: u64,
     ) -> anyhow::Result<Vec<RosettaBlock>> {
+        let mut metrics_guard = DbOperationMetrics::start(
+            self.get_metrics(),
+            AccessType::Read,
+            DatabaseOperation::GetBlocksByIndexRange,
+        );
         let open_connection = self.storage_connection.lock().unwrap();
+        metrics_guard.lock_acquired();
         storage_operations::get_blocks_by_index_range(&open_connection, start_index, end_index)
     }
 
@@ -242,12 +272,24 @@ impl StorageClient {
     /// Gaps are defined as a range of blocks with indices [a+1,b-1] where the Blocks Block(a) and Block(b) exist in the database but the blocks with indices in the range (a,b) do not.
     /// Exp.: If there exists exactly one gap between the indices [a+1,b-1], then this function will return a vector with a single entry that contains the tuple of blocks [(Block(a),Block(b))].
     pub fn get_blockchain_gaps(&self) -> anyhow::Result<Vec<(RosettaBlock, RosettaBlock)>> {
+        let mut metrics_guard = DbOperationMetrics::start(
+            self.get_metrics(),
+            AccessType::Read,
+            DatabaseOperation::GetBlockchainGaps,
+        );
         let open_connection = self.storage_connection.lock().unwrap();
+        metrics_guard.lock_acquired();
         storage_operations::get_blockchain_gaps(&open_connection)
     }
 
     pub fn get_highest_block_idx(&self) -> Result<Option<u64>> {
+        let mut metrics_guard = DbOperationMetrics::start(
+            self.get_metrics(),
+            AccessType::Read,
+            DatabaseOperation::GetHighestBlockIdx,
+        );
         let open_connection = self.storage_connection.lock().unwrap();
+        metrics_guard.lock_acquired();
         storage_operations::get_highest_block_idx_in_blocks_table(&open_connection)
     }
 
@@ -272,7 +314,13 @@ impl StorageClient {
     where
         P: rusqlite::Params,
     {
+        let mut metrics_guard = DbOperationMetrics::start(
+            self.get_metrics(),
+            AccessType::Read,
+            DatabaseOperation::GetBlocksByCustomQuery,
+        );
         let open_connection = self.storage_connection.lock().unwrap();
+        metrics_guard.lock_acquired();
         storage_operations::get_blocks_by_custom_query(&open_connection, sql_query, params)
     }
 
@@ -280,7 +328,13 @@ impl StorageClient {
         &self,
         hash: ByteBuf,
     ) -> anyhow::Result<Vec<RosettaBlock>> {
+        let mut metrics_guard = DbOperationMetrics::start(
+            self.get_metrics(),
+            AccessType::Read,
+            DatabaseOperation::GetBlocksByTransactionHash,
+        );
         let open_connection = self.storage_connection.lock().unwrap();
+        metrics_guard.lock_acquired();
         storage_operations::get_blocks_by_transaction_hash(&open_connection, hash)
     }
 
@@ -295,17 +349,35 @@ impl StorageClient {
     }
 
     pub fn read_metadata(&self) -> anyhow::Result<Vec<MetadataEntry>> {
+        let mut metrics_guard = DbOperationMetrics::start(
+            self.get_metrics(),
+            AccessType::Read,
+            DatabaseOperation::GetMetadata,
+        );
         let open_connection = self.storage_connection.lock().unwrap();
+        metrics_guard.lock_acquired();
         storage_operations::get_metadata(&open_connection)
     }
 
     pub fn write_metadata(&self, metadata: Vec<MetadataEntry>) -> anyhow::Result<()> {
+        let mut metrics_guard = DbOperationMetrics::start(
+            self.get_metrics(),
+            AccessType::Write,
+            DatabaseOperation::WriteMetadata,
+        );
         let mut open_connection = self.storage_connection.lock().unwrap();
+        metrics_guard.lock_acquired();
         storage_operations::store_metadata(&mut open_connection, metadata)
     }
 
     pub fn reset_blocks_counter(&self) -> Result<()> {
+        let mut metrics_guard = DbOperationMetrics::start(
+            self.get_metrics(),
+            AccessType::Write,
+            DatabaseOperation::ResetBlocksCounter,
+        );
         let open_connection = self.storage_connection.lock().unwrap();
+        metrics_guard.lock_acquired();
         storage_operations::reset_blocks_counter(&open_connection)
     }
 
@@ -317,7 +389,13 @@ impl StorageClient {
     // Populates the blocks and transactions table by the Rosettablocks provided
     // This function does NOT populate the account_balance table.
     pub fn store_blocks(&self, blocks: Vec<RosettaBlock>) -> anyhow::Result<()> {
+        let mut metrics_guard = DbOperationMetrics::start(
+            self.get_metrics(),
+            AccessType::Write,
+            DatabaseOperation::StoreBlocks,
+        );
         let mut open_connection = self.storage_connection.lock().unwrap();
+        metrics_guard.lock_acquired();
         storage_operations::store_blocks(&mut open_connection, blocks)
     }
 
@@ -327,7 +405,13 @@ impl StorageClient {
         if self.does_blockchain_have_gaps()? {
             bail!("Tried to update account balances but there exist gaps in the database.",);
         }
+        let mut metrics_guard = DbOperationMetrics::start(
+            self.get_metrics(),
+            AccessType::Write,
+            DatabaseOperation::UpdateAccountBalances,
+        );
         let mut open_connection = self.storage_connection.lock().unwrap();
+        metrics_guard.lock_acquired();
         storage_operations::update_account_balances(
             &mut open_connection,
             self.flush_cache_and_shrink_memory,
@@ -338,7 +422,13 @@ impl StorageClient {
     /// Retrieves the highest block index in the account balance table.
     /// Returns None if the account balance table is empty.
     pub fn get_highest_block_idx_in_account_balance_table(&self) -> Result<Option<u64>> {
+        let mut metrics_guard = DbOperationMetrics::start(
+            self.get_metrics(),
+            AccessType::Read,
+            DatabaseOperation::GetHighestBlockIdxInAccountBalanceTable,
+        );
         let open_connection = self.storage_connection.lock().unwrap();
+        metrics_guard.lock_acquired();
         storage_operations::get_highest_block_idx_in_account_balance_table(&open_connection)
     }
 
@@ -349,14 +439,26 @@ impl StorageClient {
         account: &Account,
         block_idx: u64,
     ) -> anyhow::Result<Option<Nat>> {
+        let mut metrics_guard = DbOperationMetrics::start(
+            self.get_metrics(),
+            AccessType::Read,
+            DatabaseOperation::GetAccountBalanceAtBlockIdx,
+        );
         let open_connection = self.storage_connection.lock().unwrap();
+        metrics_guard.lock_acquired();
         storage_operations::get_account_balance_at_block_idx(&open_connection, account, block_idx)
     }
 
     // Retrieves the account balance at the heighest block height in the database
     // Returns None if the account does not exist in the database
     pub fn get_account_balance(&self, account: &Account) -> anyhow::Result<Option<Nat>> {
+        let mut metrics_guard = DbOperationMetrics::start(
+            self.get_metrics(),
+            AccessType::Read,
+            DatabaseOperation::GetAccountBalance,
+        );
         let open_connection = self.storage_connection.lock().unwrap();
+        metrics_guard.lock_acquired();
         storage_operations::get_account_balance_at_highest_block_idx(&open_connection, account)
     }
 
@@ -366,7 +468,13 @@ impl StorageClient {
         principal: &ic_base_types::PrincipalId,
         block_idx: u64,
     ) -> anyhow::Result<Nat> {
+        let mut metrics_guard = DbOperationMetrics::start(
+            self.get_metrics(),
+            AccessType::Read,
+            DatabaseOperation::GetAggregatedBalanceForPrincipalAtBlockIdx,
+        );
         let open_connection = self.storage_connection.lock().unwrap();
+        metrics_guard.lock_acquired();
         storage_operations::get_aggregated_balance_for_principal_at_block_idx(
             &open_connection,
             principal,
@@ -375,7 +483,13 @@ impl StorageClient {
     }
 
     pub fn get_block_count(&self) -> anyhow::Result<u64> {
+        let mut metrics_guard = DbOperationMetrics::start(
+            self.get_metrics(),
+            AccessType::Read,
+            DatabaseOperation::GetBlockCount,
+        );
         let open_connection = self.storage_connection.lock().unwrap();
+        metrics_guard.lock_acquired();
         storage_operations::get_block_count(&open_connection)
     }
 
@@ -389,7 +503,13 @@ impl StorageClient {
     ///
     /// Returns `Ok(())` if the repair was successful, or an error if the repair failed.
     pub fn repair_fee_collector_balances(&self) -> anyhow::Result<()> {
+        let mut metrics_guard = DbOperationMetrics::start(
+            self.get_metrics(),
+            AccessType::Write,
+            DatabaseOperation::RepairFeeCollectorBalances,
+        );
         let mut open_connection = self.storage_connection.lock().unwrap();
+        metrics_guard.lock_acquired();
         storage_operations::repair_fee_collector_balances(
             &mut open_connection,
             self.balance_sync_batch_size,

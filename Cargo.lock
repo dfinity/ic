@@ -21732,6 +21732,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "serde_with 1.14.0",
+ "strum_macros 0.26.4",
  "tokio",
  "tower 0.5.2",
  "tower-http",

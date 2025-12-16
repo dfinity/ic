@@ -15,12 +15,17 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Mutex;
 use std::task::{Context, Poll};
+use std::time::Duration;
+use strum_macros::IntoStaticStr;
 use tower::{Layer, Service};
 
 use lazy_static::lazy_static;
+use tracing::log::warn;
 
 lazy_static! {
     static ref ENDPOINTS_METRICS: RosettaEndpointsMetrics = RosettaEndpointsMetrics::new();
+
+    static ref DATABASE_METRICS: RosettaDatabaseMetrics = RosettaDatabaseMetrics::new();
 
     static ref VERIFIED_HEIGHT: IntGaugeVec = register_int_gauge_vec!(
         "rosetta_verified_block_height",
@@ -105,6 +110,136 @@ impl RosettaEndpointsMetrics {
     }
 }
 
+struct RosettaDatabaseMetrics {
+    pub db_connection_lock_acquisition_duration: HistogramVec,
+    pub db_operation_duration: HistogramVec,
+}
+
+impl RosettaDatabaseMetrics {
+    pub fn new() -> Self {
+        Self {
+            db_connection_lock_acquisition_duration: register_histogram_vec!(
+                "rosetta_db_connection_lock_acquisition_duration_seconds",
+                "Database lock acquisition duration in seconds",
+                &["token_display_name", "access_type", "operation"],
+                vec![0.1, 1.0, 10.0, 100.0],
+            )
+            .unwrap(),
+            db_operation_duration: register_histogram_vec!(
+                "rosetta_db_operation_duration_seconds",
+                "Database operation duration in seconds",
+                &["token_display_name", "access_type", "operation"],
+                vec![0.1, 1.0, 10.0, 100.0],
+            )
+            .unwrap(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, IntoStaticStr)]
+#[strum(serialize_all = "lowercase")]
+pub enum AccessType {
+    Read,
+    Write,
+}
+
+#[derive(Clone, Copy, IntoStaticStr)]
+#[strum(serialize_all = "snake_case")]
+pub enum DatabaseOperation {
+    GetAccountBalance,
+    GetAccountBalanceAtBlockIdx,
+    GetAggregatedBalanceForPrincipalAtBlockIdx,
+    GetBlockAtIdx,
+    GetBlockByHash,
+    GetBlockchainGaps,
+    GetBlockCount,
+    GetBlocksByCustomQuery,
+    GetBlocksByIndexRange,
+    GetBlocksByTransactionHash,
+    GetBlockWithHighestBlockIdx,
+    GetBlockWithLowestBlockIdx,
+    GetHighestBlockIdx,
+    GetHighestBlockIdxInAccountBalanceTable,
+    GetMetadata,
+    RepairFeeCollectorBalances,
+    ResetBlocksCounter,
+    StoreBlocks,
+    UpdateAccountBalances,
+    WriteMetadata,
+}
+
+const DURATION_WARN_LOG_THRESHOLD: Duration = Duration::from_secs(10);
+
+pub struct DbOperationMetrics {
+    metrics: RosettaMetrics,
+    access_type: AccessType,
+    operation: DatabaseOperation,
+    phase_start: std::time::Instant,
+    operation_started: bool,
+}
+
+impl DbOperationMetrics {
+    /// Starts measuring lock acquisition time.
+    ///
+    /// Call this before acquiring the database lock. The timer starts immediately.
+    pub fn start(
+        metrics: RosettaMetrics,
+        access_type: AccessType,
+        operation: DatabaseOperation,
+    ) -> Self {
+        Self {
+            metrics,
+            access_type,
+            operation,
+            phase_start: std::time::Instant::now(),
+            operation_started: false,
+        }
+    }
+
+    /// Records the lock acquisition duration and starts measuring the operation.
+    ///
+    /// Call this immediately after acquiring the database lock.
+    pub fn lock_acquired(&mut self) {
+        let lock_duration = self.phase_start.elapsed();
+        if lock_duration > DURATION_WARN_LOG_THRESHOLD {
+            let operation: &str = self.operation.into();
+            let access_type: &str = self.access_type.into();
+            warn!(
+                "Long database lock acquisition: {} for {} took {:?}",
+                operation, access_type, lock_duration
+            );
+        }
+        self.metrics.observe_lock_acquisition_duration(
+            self.access_type,
+            self.operation,
+            lock_duration.as_secs_f64(),
+        );
+        self.phase_start = std::time::Instant::now();
+        self.operation_started = true;
+    }
+}
+
+impl Drop for DbOperationMetrics {
+    fn drop(&mut self) {
+        if self.operation_started {
+            let operation_duration = self.phase_start.elapsed();
+            if operation_duration > DURATION_WARN_LOG_THRESHOLD {
+                let operation: &str = self.operation.into();
+                let access_type: &str = self.access_type.into();
+                warn!(
+                    "Long database operation: {} for {} took {:?}",
+                    operation, access_type, operation_duration
+                );
+            }
+            self.metrics.observe_db_operation_duration(
+                self.access_type,
+                self.operation,
+                operation_duration.as_secs_f64(),
+            );
+        }
+    }
+}
+
 /// Metrics accessor for the Rosetta endpoints.
 /// This format is consistent across both Axum and Actix middleware implementations.
 #[derive(Clone, Debug)]
@@ -167,6 +302,40 @@ impl RosettaMetrics {
         let labels = &[self.token_display_name.as_str(), endpoint, method, status];
         ENDPOINTS_METRICS
             .request_duration
+            .with_label_values(labels)
+            .observe(duration);
+    }
+
+    pub fn observe_lock_acquisition_duration(
+        &self,
+        access_type: AccessType,
+        operation: DatabaseOperation,
+        duration: f64,
+    ) {
+        let labels = &[
+            self.token_display_name.as_str(),
+            access_type.into(),
+            operation.into(),
+        ];
+        DATABASE_METRICS
+            .db_connection_lock_acquisition_duration
+            .with_label_values(labels)
+            .observe(duration);
+    }
+
+    pub fn observe_db_operation_duration(
+        &self,
+        access_type: AccessType,
+        operation: DatabaseOperation,
+        duration: f64,
+    ) {
+        let labels = &[
+            self.token_display_name.as_str(),
+            access_type.into(),
+            operation.into(),
+        ];
+        DATABASE_METRICS
+            .db_operation_duration
             .with_label_values(labels)
             .observe(duration);
     }

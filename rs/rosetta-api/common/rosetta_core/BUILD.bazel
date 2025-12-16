@@ -33,6 +33,7 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
 ]
 
 ALIASES = {
