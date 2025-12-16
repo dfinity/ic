@@ -441,7 +441,12 @@ where
                 .get();
             match scenario_params.memory_usage_change {
                 MemoryUsageChange::Increase => {
-                    assert!(current_memory_usage > current_memory_allocation)
+                    assert!(
+                        current_memory_usage > current_memory_allocation,
+                        "current_memory_usage: {}, current_memory_allocation: {}",
+                        current_memory_usage,
+                        current_memory_allocation
+                    )
                 }
                 MemoryUsageChange::None => match scenario_params.scenario {
                     Scenario::IncreaseMemoryAllocation => {
@@ -463,7 +468,12 @@ where
                     }
                 },
                 MemoryUsageChange::Decrease => {
-                    assert!(current_memory_usage < current_memory_allocation)
+                    assert!(
+                        current_memory_usage < current_memory_allocation,
+                        "current_memory_usage: {}, current_memory_allocation: {}",
+                        current_memory_usage,
+                        current_memory_allocation
+                    )
                 }
             }
         }
@@ -1013,7 +1023,7 @@ fn test_memory_suite_take_snapshot_and_uninstall_code() {
     };
     let params = ScenarioParams {
         scenario: Scenario::OtherManagement,
-        memory_usage_change: MemoryUsageChange::None,
+        memory_usage_change: MemoryUsageChange::Decrease,
         setup,
         op,
     };
