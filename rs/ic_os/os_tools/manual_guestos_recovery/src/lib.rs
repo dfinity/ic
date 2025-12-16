@@ -311,15 +311,38 @@ impl Default for AppState {
 // Terminal Management
 // ============================================================================
 
+/// Best-effort cleanup of raw mode and alternate screen when we don't have a Terminal object yet.
+/// This is used during setup failures before Terminal::new() succeeds to avoid leaving the user with a blank screen
+fn restore_terminal_basic() {
+    let _ = disable_raw_mode();
+    let mut stdout = io::stdout();
+    let _ = execute!(stdout, LeaveAlternateScreen);
+}
+
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
     enable_raw_mode().context("Failed to enable raw mode")?;
 
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")?;
+    if let Err(e) =
+        execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")
+    {
+        restore_terminal_basic();
+        return Err(e);
+    }
 
     let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend).context("Failed to create terminal")?;
-    terminal.clear().context("Failed to clear terminal")?;
+    let mut terminal = match Terminal::new(backend).context("Failed to create terminal") {
+        Ok(t) => t,
+        Err(e) => {
+            restore_terminal_basic();
+            return Err(e);
+        }
+    };
+
+    if let Err(e) = terminal.clear().context("Failed to clear terminal") {
+        let _ = teardown_terminal(&mut terminal);
+        return Err(e);
+    }
 
     Ok(terminal)
 }
@@ -433,7 +456,13 @@ impl GuestOSRecoveryApp {
             anyhow::bail!("This tool requires an interactive terminal.");
         }
 
-        let terminal = setup_terminal()?;
+        let terminal = match setup_terminal() {
+            Ok(t) => t,
+            Err(e) => {
+                println!("\nERROR: Manual Recovery TUI failed to start.\n{e:#}\n");
+                return Err(e);
+            }
+        };
         let mut terminal_guard = TerminalGuard::new(terminal);
 
         execute!(terminal_guard.get_mut().backend_mut(), EnableMouseCapture)
