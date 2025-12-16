@@ -18,7 +18,6 @@ impl BlessAlternativeGuestOsVersion {
     ///    a. Nonempty.
     ///    b. Each element is valid per GuestLaunchMeasurement (singular).
     pub(crate) fn validate(&self) -> Result<(), GovernanceError> {
-
         let mut defects = Vec::new();
 
         defects.extend(validate_chip_ids(&self.chip_ids));
@@ -35,7 +34,6 @@ impl BlessAlternativeGuestOsVersion {
     }
 
     pub(crate) fn execute(&self) -> Result<(), GovernanceError> {
-
         // Like with Motion proposals, the execution of these proposals is
         // trivial. The reason for trivial execution in this case is that the
         // way this is actually effected is by a node operator manually running

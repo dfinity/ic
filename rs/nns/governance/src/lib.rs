@@ -284,8 +284,6 @@ pub fn temporarily_disable_self_describing_proposal_actions() -> Temporary {
     Temporary::new(&ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS, false)
 }
 
-
-
 pub fn decoder_config() -> DecoderConfig {
     let mut config = DecoderConfig::new();
     config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
