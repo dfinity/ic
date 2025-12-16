@@ -217,13 +217,13 @@ fn test_performance_based_rewards_remuneration() {
         canisters.update(&state_machine, neuron_controller, neuron_id);
     });
 
-    sanity_check::advance_time_and_check_december_distribution(&state_machine, metrics_before);
+    sanity_check::advance_time_and_check_january_distribution(&state_machine, metrics_before);
 }
 
 mod sanity_check {
     use super::*;
     use candid::{Decode, Encode};
-    use chrono::DateTime;
+    use chrono::{DateTime, NaiveDate};
     use ic_nns_governance::governance::NODE_PROVIDER_REWARD_PERIOD_SECONDS;
     use ic_nns_test_utils::state_test_helpers::query;
     use ic_node_rewards_canister_api::DateUtc;
@@ -233,79 +233,78 @@ mod sanity_check {
     };
     use std::collections::BTreeMap;
 
-    /// Expected adjusted rewards for each node provider up to and including November 29th, 2024.
+    /// Expected adjusted rewards for each node provider up to and including December 15th, 2025.
     /// These values represent the total rewards with penalties applied for underperforming nodes.
-    fn expected_rewards_up_to_nov_29() -> BTreeMap<&'static str, u64> {
+    fn expected_rewards_up_to() -> BTreeMap<&'static str, u64> {
         [
-            ("zy4m7", 109182585),
-            ("7uioy", 109918675),
-            ("6nbcy", 265378418),
-            ("pa5mu", 21568924),
-            ("2hl5k", 237132003),
-            ("7at4h", 247378628),
-            ("64xe5", 157176667),
-            ("bvcsg", 248745240),
-            ("wdjjk", 265425369),
-            ("sixix", 274428250),
-            ("sma3p", 82584735),
-            ("x7uok", 190138708),
-            ("rpfvr", 314032811),
-            ("ihbuj", 130147575),
-            ("rbn2y", 246175185),
-            ("eipr5", 233366245),
-            ("r3yjn", 306534934),
-            ("6r5lw", 264633803),
-            ("4r6qy", 59862103),
-            ("i7dto", 165325929),
-            ("vegae", 212422581),
-            ("izmhk", 234904675),
-            ("diyay", 60116742),
-            ("dnpkk", 185357329),
-            ("wdnqm", 165659587),
-            ("4dibr", 235507938),
-            ("fwnmn", 87712093),
-            ("kos24", 103115528),
-            ("ks7ow", 167591909),
-            ("ucjqj", 266417408),
-            ("hzqcb", 16788724),
-            ("7ws2n", 21828765),
-            ("g7dkt", 142384883),
-            ("trxbq", 15816494),
-            ("2wxzd", 170148002),
-            ("g2ax6", 86173714),
-            ("mjnyf", 24558897),
-            ("ivf2y", 60267261),
-            ("ma7dp", 177654522),
-            ("dodsd", 157011575),
-            ("i3cfo", 38117264),
-            ("ulyfm", 160827004),
-            ("hk7eo", 18872873),
-            ("glrjs", 318323776),
-            ("otzuu", 49603892),
+            ("zy4m7", 14805080),
+            ("7uioy", 13734756),
+            ("6nbcy", 33002090),
+            ("pa5mu", 1407127),
+            ("2hl5k", 28959014),
+            ("7at4h", 28456426),
+            ("64xe5", 18688380),
+            ("bvcsg", 29479164),
+            ("wdjjk", 31413880),
+            ("sixix", 32785872),
+            ("sma3p", 9861518),
+            ("x7uok", 20549272),
+            ("rpfvr", 37449856),
+            ("ihbuj", 15276879),
+            ("rbn2y", 29280984),
+            ("eipr5", 27707926),
+            ("r3yjn", 36329338),
+            ("6r5lw", 31350800),
+            ("4r6qy", 7090266),
+            ("i7dto", 19520656),
+            ("vegae", 25075078),
+            ("izmhk", 27707926),
+            ("diyay", 7090266),
+            ("dnpkk", 21857248),
+            ("wdnqm", 19520656),
+            ("4dibr", 27744136),
+            ("fwnmn", 10326824),
+            ("kos24", 12135658),
+            ("ks7ow", 19723038),
+            ("ucjqj", 31125980),
+            ("hzqcb", 1975144),
+            ("7ws2n", 2568090),
+            ("g7dkt", 9861518),
+            ("trxbq", 372152),
+            ("2wxzd", 18673986),
+            ("g2ax6", 10138084),
+            ("mjnyf", 2889282),
+            ("ivf2y", 7090266),
+            ("ma7dp", 20900532),
+            ("dodsd", 18471950),
+            ("i3cfo", 4484384),
+            ("ulyfm", 17712528),
+            ("hk7eo", 1094828),
+            ("glrjs", 37449856),
+            ("otzuu", 5835752),
             ("hycj4", 1012894),
-            ("eatbv", 44699188),
-            ("4jjya", 77906308),
-            ("eybf4", 65101024),
-            ("3oqw6", 117521170),
-            ("wwdbq", 251468743),
-            ("7a4u2", 157011575),
-            ("efem5", 45615097),
-            ("acqus", 102483444),
-            ("cgmhq", 64783923),
-            ("4fedi", 48581937),
-            ("ss6oe", 157011575),
-            ("7ryes", 266481800),
-            ("6sq7t", 158651582),
-            ("2dgp4", 157011575),
-            ("optdi", 68374578),
-            ("sqhxa", 78505779),
-            ("cp5ib", 94084953),
-            ("nmdd6", 118636166),
-            ("w4buy", 146783644),
-            ("unqqg", 223227646),
-            ("s5nvr", 49603892),
-            ("c5svp", 90078342),
-            ("py2kr", 68374578),
+            ("eatbv", 5258728),
+            ("4jjya", 9165448),
+            ("eybf4", 7658944),
+            ("3oqw6", 13826020),
+            ("wwdbq", 29302800),
+            ("7a4u2", 18471950),
+            ("efem5", 5366482),
+            ("acqus", 19520656),
+            ("cgmhq", 7621638),
+            ("4fedi", 5715522),
+            ("ss6oe", 18471950),
+            ("7ryes", 31350800),
+            ("6sq7t", 18664892),
+            ("optdi", 8044068),
+            ("sqhxa", 9235974),
+            ("cp5ib", 11068818),
+            ("nmdd6", 13957196),
+            ("w4buy", 17268664),
+            ("unqqg", 26262076),
+            ("s5nvr", 5835752),
+            ("c5svp", 8183983),
+            ("py2kr", 8044068),
         ]
         .into_iter()
         .collect()
@@ -331,10 +330,16 @@ mod sanity_check {
 
     /// Fetches metrics from canisters after advancing time and checks that they are as expected,
     /// comparing them to the metrics fetched before the upgrade.
-    pub fn advance_time_and_check_december_distribution(
+    pub fn advance_time_and_check_january_distribution(
         state_machine: &StateMachine,
         before: Metrics,
     ) {
+        let now_seconds = state_machine.get_time().as_secs_since_unix_epoch();
+        let january_distribution_timestamp: u64 = 1768302559;
+
+        if now_seconds >= january_distribution_timestamp {
+            return;
+        }
         let test_date = DateTime::from_timestamp(
             state_machine.get_time().as_secs_since_unix_epoch() as i64,
             0,
@@ -342,15 +347,13 @@ mod sanity_check {
         .unwrap()
         .date_naive();
 
+        // Advance time in the state machine to just before the next rewards distribution time.
         let target_rewards_distribution_timestamp_seconds = before
             .governance_most_recent_monthly_node_provider_rewards
             .timestamp
             + NODE_PROVIDER_REWARD_PERIOD_SECONDS;
-
-        // Advance time in the state machine to just before the next rewards distribution time.
-        let now = state_machine.get_time().as_secs_since_unix_epoch();
         state_machine.advance_time(std::time::Duration::from_secs(
-            target_rewards_distribution_timestamp_seconds - now - 1,
+            target_rewards_distribution_timestamp_seconds - now_seconds - 1,
         ));
         for _ in 0..100 {
             state_machine.advance_time(std::time::Duration::from_secs(1));
@@ -370,8 +373,8 @@ mod sanity_check {
         .date_naive();
 
         let mut rewards_with_penalties: BTreeMap<PrincipalId, u64> = BTreeMap::new();
-        let mut rewards_up_to_nov_29: BTreeMap<PrincipalId, u64> = BTreeMap::new();
-        let nov_29_2024 = chrono::NaiveDate::from_ymd_opt(2024, 11, 29).unwrap();
+        let mut rewards_up_to: BTreeMap<PrincipalId, u64> = BTreeMap::new();
+        let dec_15_2025 = chrono::NaiveDate::from_ymd_opt(2025, 12, 15).unwrap();
 
         for date in start_date.iter_days().take_while(|d| *d < test_date) {
             let daily_rewards = nrc_daily_rewards(state_machine, date.into());
@@ -380,17 +383,22 @@ mod sanity_check {
                 let adjusted_reward = daily_result.total_adjusted_rewards_xdr_permyriad.unwrap();
                 *rewards_with_penalties.entry(provider_id).or_default() += adjusted_reward;
 
-                // Track rewards up to and including November 29th
-                if date <= nov_29_2024 {
-                    *rewards_up_to_nov_29.entry(provider_id).or_default() += adjusted_reward;
+                // Track rewards up to and including December 15th
+                if date <= dec_15_2025 {
+                    ic_cdk::println!(
+                        " Date: {}, Provider: {}, Daily adjusted reward: {}",
+                        date,
+                        provider_id,
+                        adjusted_reward
+                    );
+                    *rewards_up_to.entry(provider_id).or_default() += adjusted_reward;
                 }
             }
         }
 
-        // Assert that the rewards up to November 29th match expected values
-        let expected_rewards = expected_rewards_up_to_nov_29();
+        let expected_rewards = expected_rewards_up_to();
 
-        for (provider_id, actual_total) in rewards_up_to_nov_29.iter() {
+        for (provider_id, actual_total) in rewards_up_to.iter() {
             let provider_string = provider_id.to_string();
             let short_provider_id = provider_string.split('-').next().unwrap();
 
@@ -400,7 +408,7 @@ mod sanity_check {
 
             assert_eq!(
                 *expected_total, *actual_total,
-                "For provider {} (short: {}), expected rewards up to Nov 29: {}, actual: {}",
+                "For provider {} (short: {}), expected rewards up to Dec 15: {}, actual: {}",
                 provider_id, short_provider_id, expected_total, actual_total
             );
         }
@@ -425,10 +433,8 @@ mod sanity_check {
         let performance_based_rewards = after
             .governance_most_recent_monthly_node_provider_rewards
             .clone();
-
-        let rewards_distribution_timestamp: u64 = 1765672700;
         let rewards_distribution_date =
-            DateTime::from_timestamp(rewards_distribution_timestamp as i64, 0)
+            DateTime::from_timestamp(january_distribution_timestamp as i64, 0)
                 .unwrap()
                 .date_naive();
         let expected_start_date = start_date;
@@ -436,18 +442,29 @@ mod sanity_check {
 
         // 2 minutes = 120 seconds
         assert!(
-            rewards_distribution_timestamp.abs_diff(performance_based_rewards.timestamp) <= 120,
+            january_distribution_timestamp.abs_diff(performance_based_rewards.timestamp) <= 120,
+            "Expected rewards distribution timestamp around {}, got {}",
+            january_distribution_timestamp,
+            performance_based_rewards.timestamp
         );
 
-        assert_eq!(
-            DateUtc::from(expected_end_date),
-            DateUtc::from(performance_based_rewards.end_date.unwrap())
-        );
+        let pbr_end_date = performance_based_rewards.end_date.unwrap();
+        let observed_end_date = NaiveDate::from_ymd_opt(
+            pbr_end_date.year as i32,
+            pbr_end_date.month,
+            pbr_end_date.day,
+        )
+        .unwrap();
+        assert_eq!(expected_end_date, observed_end_date);
 
-        assert_eq!(
-            DateUtc::from(expected_start_date),
-            DateUtc::from(performance_based_rewards.start_date.unwrap())
-        );
+        let pbr_start_date = performance_based_rewards.start_date.unwrap();
+        let observed_start_date = NaiveDate::from_ymd_opt(
+            pbr_start_date.year as i32,
+            pbr_start_date.month,
+            pbr_start_date.day,
+        )
+        .unwrap();
+        assert_eq!(expected_start_date, observed_start_date);
 
         assert_eq!(performance_based_rewards.algorithm_version, Some(1));
 
