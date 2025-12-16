@@ -78,8 +78,8 @@ system_test(
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
-    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     guestos = "malicious",
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
