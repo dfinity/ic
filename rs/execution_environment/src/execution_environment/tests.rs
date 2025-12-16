@@ -303,7 +303,12 @@ fn output_requests_on_system_subnet_ignore_memory_limits() {
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
 
-    assert_eq!(test.subnet_available_memory().get_execution_memory(), 0);
+    assert_eq!(
+        test.subnet_available_memory().get_execution_memory(),
+        test.canister_state(canister_id)
+            .log_memory_store_memory_usage()
+            .get() as i64
+    );
     assert_eq!(
         test.subnet_available_memory()
             .get_guaranteed_response_message_memory(),
