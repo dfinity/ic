@@ -232,6 +232,7 @@ where
                     submitted_at: _,
                     fee_per_vbyte: _,
                     withdrawal_fee,
+                    signed_tx: _,
                 } => (
                     request_block_indices,
                     change_output.expect("BUG: missing change output").value,
