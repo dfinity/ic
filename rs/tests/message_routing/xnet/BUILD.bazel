@@ -78,8 +78,7 @@ system_test(
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
+    guestos = "malicious",
     runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
@@ -99,12 +98,11 @@ system_test_nns(
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     } | MAINNET_ENV,
+    guestos = "mainnet_nns",
+    guestos_update = True,
     tags = [
         "long_test",
     ],
-    uses_guestos_img = False,
-    uses_guestos_mainnet_nns_img = True,
-    uses_guestos_update = True,
     runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
