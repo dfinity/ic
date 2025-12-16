@@ -1,18 +1,18 @@
-name: Security Checks
+name: Bazel Dependency Submission
 
 on:
-  pull_request_target:
+  push:
+    branches:
+      - 'master'
 
 permissions:
   contents: write
 
 jobs:
-  dependency-review:
+  bazel-dependency-submission:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: "${{ github.event.pull_request.merge_commit_sha }}"
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -25,13 +25,8 @@ jobs:
         env:
           SHELL_WRAPPER: "/usr/bin/time"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_PR_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
           export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
           cd ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_rust_gh_submission_job.py
-      - name: Dependency Review
-        uses: actions/dependency-review-action@v4
-        with:
-          fail-on-severity: moderate
