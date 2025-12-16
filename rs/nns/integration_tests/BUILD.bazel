@@ -107,6 +107,21 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     ],
 })
 
+DEPENDENCIES_PBR = BASE_DEPENDENCIES + [
+    # Keep sorted.
+    "//rs/nns/governance:governance--pbr_feature",
+    "//rs/nns/handlers/root/impl:root--test_feature",
+    "//rs/sns/init:init--test_feature",
+] + select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": [
+        "//rs/nns/gtc:gtc",
+    ],
+    "//conditions:default": [
+        "//rs/nns/test_utils:test_utils--test_feature",
+        "//rs/nns/gtc:gtc--test_feature",
+    ],
+})
+
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:async-trait",
@@ -154,6 +169,7 @@ DEV_DATA = [
     "//rs/migration_canister:migration-canister",
     "//rs/nns/cmc:cycles-minting-canister",
     "//rs/nns/governance:governance-canister",
+    "//rs/nns/governance:governance-canister-pbr",
     "//rs/nns/governance:governance-canister-test",
     "//rs/nns/gtc:genesis-token-canister",
     "//rs/nns/handlers/lifeline/impl:lifeline_canister",
@@ -179,6 +195,7 @@ DEV_ENV = {
     "CYCLES_LEDGER_WASM_PATH": "$(rootpath @cycles-ledger.wasm.gz//file)",
     "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
     "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
+    "GOVERNANCE_CANISTER_TEST_PBR_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-pbr)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
     "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
     "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
@@ -260,6 +277,7 @@ rust_ic_test_suite_with_extra_srcs(
             # mostly due to long running times.
             "src/canister_playground.rs",
             "src/upgrade_canisters_with_golden_nns_state.rs",
+            "src/node_provider_remuneration_oneoff_pbr_with_golden_nns_state.rs",
         ],
     ),
     aliases = ALIASES,
@@ -361,4 +379,25 @@ rust_ic_test(
         "requires-network",  # Because mainnet state is downloaded (and used).
     ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_ic_test(
+    name = "node_provider_remuneration_oneoff_pbr_with_golden_nns_state",
+    # This uses on the order of 10 GB of disk space.
+    # Therefore, size = "large" is not large enough.
+    size = "enormous",
+    srcs = [
+        "src/node_provider_remuneration_oneoff_pbr_with_golden_nns_state.rs",
+    ],
+    aliases = ALIASES,
+    crate_root = "src/node_provider_remuneration_oneoff_pbr_with_golden_nns_state.rs",
+    data = DEV_DATA,
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
+        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
+        "requires-network",  # Because mainnet state is downloaded (and used).
+    ],
+    deps = DEPENDENCIES_PBR + DEV_DEPENDENCIES,
 )

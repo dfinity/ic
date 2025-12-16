@@ -195,6 +195,19 @@ rust_library(
 )
 
 rust_library(
+    name = "governance--pbr_feature",
+    srcs = LIB_SRCS,
+    aliases = ALIASES,
+    crate_features = ["performance-based-rewards"],
+    crate_name = "ic_nns_governance",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES + [
+        ":build_script",
+    ],
+)
+
+rust_library(
     name = "governance--test_feature",
     srcs = LIB_SRCS,
     aliases = ALIASES,
@@ -279,6 +292,20 @@ rust_canister(
     visibility = ["//visibility:public"],
     deps = [
         ":governance--canbench_feature",
+    ],
+)
+
+rust_canister(
+    name = "governance-canister-pbr",
+    srcs = ["canister/canister.rs"],
+    aliases = ALIASES,
+    compile_data = ["canister/governance.did"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":canister/governance.did",
+    visibility = ["//visibility:public"],
+    deps = DEPENDENCIES + [
+        ":build_script",
+        ":governance--pbr_feature",
     ],
 )
 
