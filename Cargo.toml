@@ -790,6 +790,7 @@ ratatui = "0.29"
 rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"
+regex-lite = "0.1.8"
 serde_regex = "1.1.0"
 rexpect = "0.6"
 reqwest = { version = "0.12.24", default-features = false, features = [
