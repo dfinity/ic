@@ -400,13 +400,17 @@ fn output_best_effort_requests_on_application_subnets_update_subnet_available_me
         .with_manual_execution()
         .build();
     let canister_id = test.canister_from_wat(CALL_BEST_EFFORT_WAT).unwrap();
-    let initia_available_memory = test.subnet_available_memory().get_execution_memory();
+    let initial_available_memory = test.subnet_available_memory().get_execution_memory();
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
     let subnet_total_memory = test.subnet_available_memory().get_execution_memory();
     let subnet_message_memory = test
         .subnet_available_memory()
         .get_guaranteed_response_message_memory();
+    let log_memory_usage = test
+        .canister_state(canister_id)
+        .log_memory_store_memory_usage()
+        .get() as i64;
     let system_state = &mut test.canister_state_mut(canister_id).system_state;
     // There should be no response memory reservation in the queues.
     assert_eq!(
@@ -417,8 +421,12 @@ fn output_best_effort_requests_on_application_subnets_update_subnet_available_me
     );
     // But there should be one response slot reservation.
     assert_eq!(1, system_state.queues().input_queues_reserved_slots());
-    // Subnet available memory and message memory should be unchanged.
-    assert_eq!(initia_available_memory, subnet_total_memory);
+    // Subnet available memory only changes due to log memory usage.
+    assert_eq!(
+        initial_available_memory,
+        subnet_total_memory + log_memory_usage
+    );
+    // Message memory should be unchanged.
     assert_eq!(ONE_GIB as i64, subnet_message_memory);
     assert_correct_request(system_state, canister_id);
 }
