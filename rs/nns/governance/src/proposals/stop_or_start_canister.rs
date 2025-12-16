@@ -304,6 +304,8 @@ mod tests {
 
     #[test]
     fn test_stop_or_start_canister_to_self_describing_stop() {
+        use SelfDescribingValue::*;
+
         let stop_or_start_canister = StopOrStartCanister {
             canister_id: Some(CYCLES_MINTING_CANISTER_ID.get()),
             action: Some(CanisterAction::Stop as i32),
@@ -315,14 +317,16 @@ mod tests {
         assert_eq!(
             value,
             SelfDescribingValue::Map(hashmap! {
-                "canister_id".to_string() => SelfDescribingValue::Text(CYCLES_MINTING_CANISTER_ID.get().to_string()),
-                "action".to_string() => SelfDescribingValue::Text("Stop".to_string()),
+                "canister_id".to_string() => Text(CYCLES_MINTING_CANISTER_ID.get().to_string()),
+                "action".to_string() => Text("Stop".to_string()),
             })
         );
     }
 
     #[test]
     fn test_stop_or_start_canister_to_self_describing_start() {
+        use SelfDescribingValue::*;
+
         let stop_or_start_canister = StopOrStartCanister {
             canister_id: Some(CYCLES_MINTING_CANISTER_ID.get()),
             action: Some(CanisterAction::Start as i32),
@@ -334,8 +338,8 @@ mod tests {
         assert_eq!(
             value,
             SelfDescribingValue::Map(hashmap! {
-                "canister_id".to_string() => SelfDescribingValue::Text(CYCLES_MINTING_CANISTER_ID.get().to_string()),
-                "action".to_string() => SelfDescribingValue::Text("Start".to_string()),
+                "canister_id".to_string() => Text(CYCLES_MINTING_CANISTER_ID.get().to_string()),
+                "action".to_string() => Text("Start".to_string()),
             })
         );
     }

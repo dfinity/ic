@@ -453,6 +453,8 @@ mod tests {
 
     #[test]
     fn test_install_code_to_self_describing() {
+        use SelfDescribingValue::*;
+
         let wasm_hash = Sha256::hash(&[1, 2, 3]).to_vec();
         let arg_hash = Sha256::hash(&[4, 5, 6]).to_vec();
 
@@ -472,17 +474,19 @@ mod tests {
         assert_eq!(
             value,
             SelfDescribingValue::Map(hashmap! {
-                "canister_id".to_string() => SelfDescribingValue::Text(REGISTRY_CANISTER_ID.get().to_string()),
-                "install_mode".to_string() => SelfDescribingValue::Text("Upgrade".to_string()),
-                "wasm_module_hash".to_string() => SelfDescribingValue::Blob(wasm_hash),
-                "arg_hash".to_string() => SelfDescribingValue::Blob(arg_hash),
-                "skip_stopping_before_installing".to_string() => SelfDescribingValue::Nat(candid::Nat::from(1u8)),
+                "canister_id".to_string() => Text(REGISTRY_CANISTER_ID.get().to_string()),
+                "install_mode".to_string() => Text("Upgrade".to_string()),
+                "wasm_module_hash".to_string() => Blob(wasm_hash),
+                "arg_hash".to_string() => Blob(arg_hash),
+                "skip_stopping_before_installing".to_string() => Nat(candid::Nat::from(1_u8)),
             })
         );
     }
 
     #[test]
     fn test_install_code_to_self_describing_install_mode() {
+        use SelfDescribingValue::*;
+
         let install_code = InstallCode {
             canister_id: Some(REGISTRY_CANISTER_ID.get()),
             wasm_module: Some(vec![1, 2, 3]),
@@ -496,19 +500,15 @@ mod tests {
         let action = install_code.to_self_describing_action();
         let value = SelfDescribingValue::from(action.value.unwrap());
 
-        // Check that install_mode is "Install"
-        match value {
-            SelfDescribingValue::Map(map) => {
-                assert_eq!(
-                    map.get("install_mode"),
-                    Some(&SelfDescribingValue::Text("Install".to_string()))
-                );
-                assert_eq!(
-                    map.get("skip_stopping_before_installing"),
-                    Some(&SelfDescribingValue::Nat(candid::Nat::from(0u8)))
-                );
-            }
-            _ => panic!("Expected Map value"),
-        }
+        assert_eq!(
+            value,
+            Map(hashmap! {
+                "canister_id".to_string() => Text(REGISTRY_CANISTER_ID.get().to_string()),
+                "install_mode".to_string() => Text("Install".to_string()),
+                "wasm_module_hash".to_string() => Blob(Sha256::hash(&[1, 2, 3]).to_vec()),
+                "arg_hash".to_string() => Blob(Sha256::hash(&[]).to_vec()),
+                "skip_stopping_before_installing".to_string() => Nat(candid::Nat::from(0_u8)),
+            })
+        );
     }
 }

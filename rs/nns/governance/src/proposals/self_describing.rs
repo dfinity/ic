@@ -132,7 +132,7 @@ impl From<Vec<u8>> for SelfDescribingValue {
 impl From<bool> for SelfDescribingValue {
     fn from(value: bool) -> Self {
         SelfDescribingValue {
-            value: Some(to_self_describing_nat(if value { 1u8 } else { 0u8 })),
+            value: Some(to_self_describing_nat(if value { 1_u8 } else { 0_u8 })),
         }
     }
 }

@@ -162,9 +162,10 @@ impl From<CanisterSettings> for SelfDescribingValue {
             wasm_memory_threshold,
         } = settings;
 
-        // The indirection of `controllers.controllers` was due to prost not generating
-        // `Option<Vec<T>>` for repeated fields, so there is no reason to keep this indirection when
-        // presenting the value to the user.
+        // Flatten the nested `controllers` field. More specifically, get rid of the intermediate
+        // `message Controllers { repeated T controllers = 1}` message and replace it with its inner
+        // `controllers` field. The `Controllers` message is only used to work around the fact that
+        // Protocol Buffers cannot generate `Option<Vec<T>>``.
         let controllers = controllers.map(|controllers| controllers.controllers);
 
         let log_visibility = log_visibility.map(SelfDescribingProstEnum::<LogVisibility>::new);
@@ -399,6 +400,8 @@ mod tests {
 
     #[test]
     fn test_update_canister_settings_to_self_describing() {
+        use SelfDescribingValue::*;
+
         let update_canister_settings = UpdateCanisterSettings {
             canister_id: Some(SNS_WASM_CANISTER_ID.get()),
             settings: Some(CanisterSettings {
@@ -420,20 +423,20 @@ mod tests {
         assert_eq!(
             value,
             SelfDescribingValue::Map(hashmap! {
-                "canister_id".to_string() => SelfDescribingValue::Text(SNS_WASM_CANISTER_ID.get().to_string()),
-                "settings".to_string() => SelfDescribingValue::Map(hashmap! {
-                    "controllers".to_string() => SelfDescribingValue::Array(vec![
-                        SelfDescribingValue::Array(vec![
-                            SelfDescribingValue::Text(ROOT_CANISTER_ID.get().to_string()),
-                            SelfDescribingValue::Text(LEDGER_CANISTER_ID.get().to_string()),
-                        ]),
+                "canister_id".to_string() => Text(SNS_WASM_CANISTER_ID.get().to_string()),
+                "settings".to_string() => Map(hashmap! {
+                    "controllers".to_string() => Array(vec![
+                            Array(vec![
+                                Text(ROOT_CANISTER_ID.get().to_string()),
+                                Text(LEDGER_CANISTER_ID.get().to_string()),
+                            ]),
                     ]),
-                    "memory_allocation".to_string() => SelfDescribingValue::Array(vec![SelfDescribingValue::Nat(candid::Nat::from(1u64 << 32))]),
-                    "wasm_memory_limit".to_string() => SelfDescribingValue::Array(vec![SelfDescribingValue::Nat(candid::Nat::from(1u64 << 31))]),
-                    "wasm_memory_threshold".to_string() => SelfDescribingValue::Array(vec![SelfDescribingValue::Nat(candid::Nat::from(1u64 << 30))]),
-                    "compute_allocation".to_string() => SelfDescribingValue::Array(vec![SelfDescribingValue::Nat(candid::Nat::from(10u64))]),
-                    "freezing_threshold".to_string() => SelfDescribingValue::Array(vec![SelfDescribingValue::Nat(candid::Nat::from(100u64))]),
-                    "log_visibility".to_string() => SelfDescribingValue::Array(vec![SelfDescribingValue::Text("Public".to_string())]),
+                    "memory_allocation".to_string() => Array(vec![Nat(candid::Nat::from(1_u64 << 32))]),
+                    "wasm_memory_limit".to_string() => Array(vec![Nat(candid::Nat::from(1_u64 << 31))]),
+                    "wasm_memory_threshold".to_string() => Array(vec![Nat(candid::Nat::from(1_u64 << 30))]),
+                    "compute_allocation".to_string() => Array(vec![Nat(candid::Nat::from(10_u64))]),
+                    "freezing_threshold".to_string() => Array(vec![Nat(candid::Nat::from(100_u64))]),
+                    "log_visibility".to_string() => Array(vec![Text("Public".to_string())]),
                 }),
             })
         );
@@ -441,6 +444,8 @@ mod tests {
 
     #[test]
     fn test_update_canister_settings_to_self_describing_minimal() {
+        use SelfDescribingValue::*;
+
         let update_canister_settings = UpdateCanisterSettings {
             canister_id: Some(LEDGER_CANISTER_ID.get()),
             settings: Some(CanisterSettings {
@@ -455,15 +460,15 @@ mod tests {
         assert_eq!(
             value,
             SelfDescribingValue::Map(hashmap! {
-                "canister_id".to_string() => SelfDescribingValue::Text(LEDGER_CANISTER_ID.get().to_string()),
-                "settings".to_string() => SelfDescribingValue::Map(hashmap! {
-                    "controllers".to_string() => SelfDescribingValue::Array(vec![]),
-                    "memory_allocation".to_string() => SelfDescribingValue::Array(vec![SelfDescribingValue::Nat(candid::Nat::from(1u64 << 30))]),
-                    "compute_allocation".to_string() => SelfDescribingValue::Array(vec![]),
-                    "freezing_threshold".to_string() => SelfDescribingValue::Array(vec![]),
-                    "wasm_memory_limit".to_string() => SelfDescribingValue::Array(vec![]),
-                    "wasm_memory_threshold".to_string() => SelfDescribingValue::Array(vec![]),
-                    "log_visibility".to_string() => SelfDescribingValue::Array(vec![]),
+                "canister_id".to_string() => Text(LEDGER_CANISTER_ID.get().to_string()),
+                "settings".to_string() => Map(hashmap! {
+                    "controllers".to_string() => Array(vec![]),
+                    "memory_allocation".to_string() => Array(vec![Nat(candid::Nat::from(1_u64 << 30))]),
+                    "compute_allocation".to_string() => Array(vec![]),
+                    "freezing_threshold".to_string() => Array(vec![]),
+                    "wasm_memory_limit".to_string() => Array(vec![]),
+                    "wasm_memory_threshold".to_string() => Array(vec![]),
+                    "log_visibility".to_string() => Array(vec![]),
                 }),
             })
         );
