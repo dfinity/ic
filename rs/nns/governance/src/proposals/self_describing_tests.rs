@@ -26,7 +26,7 @@ fn test_prost_enum_to_self_describing() {
         (100_i32, "UNKNOWN_TOPIC_100"),
     ];
     for (value, expected) in test_cases {
-        let prost_enum = SelfDescribingProstEnum::<Topic>::new(value, "Topic");
+        let prost_enum = SelfDescribingProstEnum::<Topic>::new(value);
         assert_eq!(
             SelfDescribingValue::from(SelfDescribingValuePb::from(prost_enum)),
             SelfDescribingValue::Text(expected.to_string())

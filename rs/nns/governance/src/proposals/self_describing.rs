@@ -149,7 +149,6 @@ where
 
 pub(crate) struct SelfDescribingProstEnum<E> {
     value: i32,
-    enum_name: &'static str,
     prost_type: PhantomData<E>,
 }
 
@@ -157,10 +156,9 @@ impl<E> SelfDescribingProstEnum<E>
 where
     E: TryFrom<i32>,
 {
-    pub fn new(value: i32, enum_name: &'static str) -> Self {
+    pub fn new(value: i32) -> Self {
         Self {
             value,
-            enum_name,
             prost_type: PhantomData,
         }
     }
@@ -171,18 +169,27 @@ where
     E: TryFrom<i32> + std::fmt::Debug,
 {
     fn from(prost_enum: SelfDescribingProstEnum<E>) -> Self {
-        let SelfDescribingProstEnum {
-            value, enum_name, ..
-        } = prost_enum;
+        let SelfDescribingProstEnum { value, .. } = prost_enum;
         let value = match E::try_from(value) {
             Ok(value) => format!("{value:?}"),
             Err(_) => {
-                println!("Unknown value for enum {enum_name}: {value}");
-                format!("UNKNOWN_{}_{}", enum_name.to_ascii_uppercase(), value)
+                let enum_type_name = enum_type_name::<E>();
+                println!("Unknown value for enum {enum_type_name}: {value}");
+                format!("UNKNOWN_{}_{}", enum_type_name.to_ascii_uppercase(), value)
             }
         };
         SelfDescribingValue::from(value)
     }
+}
+
+fn enum_type_name<E>() -> &'static str
+where
+    E: TryFrom<i32>,
+{
+    std::any::type_name::<E>()
+        .split("::")
+        .last()
+        .unwrap_or("???")
 }
 
 /// A trait for types that can be converted to a SelfDescribingValue as an unsigned integer. This is

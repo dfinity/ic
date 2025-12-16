@@ -202,7 +202,7 @@ impl From<KnownNeuronData> for SelfDescribingValue {
 
         let committed_topics: Vec<_> = committed_topics
             .into_iter()
-            .map(|topic| SelfDescribingProstEnum::<Topic>::new(topic, "Topic"))
+            .map(SelfDescribingProstEnum::<Topic>::new)
             .collect();
 
         ValueBuilder::new()
