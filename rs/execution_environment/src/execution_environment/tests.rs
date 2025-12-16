@@ -770,20 +770,20 @@ fn get_running_canister_status_from_another_canister() {
     let result = test.ingress(controller, "update", get_canister_status);
     let reply = get_reply(result);
     let csr = CanisterStatusResultV2::decode(&reply).unwrap();
+    let canister_state = test.canister_state(canister);
     assert_eq!(csr.status(), CanisterStatusType::Running);
     assert_eq!(csr.controllers(), vec![controller.get()]);
     assert_eq!(
         Cycles::new(csr.cycles()),
-        test.canister_state(canister).system_state.balance()
+        canister_state.system_state.balance()
     );
     assert_eq!(csr.freezing_threshold(), 2_592_000);
     assert_eq!(csr.memory_allocation(), 0);
     assert_eq!(
         csr.memory_size(),
         test.execution_state(canister).memory_usage()
-            + test
-                .canister_state(canister)
-                .canister_history_memory_usage()
+            + canister_state.canister_history_memory_usage()
+            + canister_state.log_memory_store_memory_usage()
     );
     assert_eq!(
         Cycles::new(csr.idle_cycles_burned_per_day()),
