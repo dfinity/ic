@@ -28,5 +28,4 @@ jobs:
         run: |
           set -euo pipefail
           export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
-          cd ci/src/dependencies/
-          $SHELL_WRAPPER python3 job/bazel_rust_gh_submission_job.py
+          $SHELL_WRAPPER python3 ci/src/dependencies/job/bazel_rust_gh_submission_job.py
