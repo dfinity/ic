@@ -9660,6 +9660,7 @@ name = "ic-error-types"
 version = "0.2.0"
 dependencies = [
  "ic-heap-bytes",
+ "regex-lite",
  "serde",
  "strum 0.26.3",
  "strum_macros 0.26.4",
@@ -9758,7 +9759,7 @@ dependencies = [
  "prometheus 0.13.4",
  "proptest",
  "rand 0.8.5",
- "regex",
+ "regex-lite",
  "rstest",
  "scoped_threadpool",
  "serde",
