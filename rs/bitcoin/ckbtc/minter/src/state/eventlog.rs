@@ -222,6 +222,7 @@ mod event {
 
         /// Indicates a reimbursement.
         #[serde(rename = "schedule_deposit_reimbursement")]
+        #[deprecated]
         ScheduleDepositReimbursement {
             /// The beneficiary.
             account: Account,
