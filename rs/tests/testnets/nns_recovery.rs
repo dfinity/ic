@@ -52,6 +52,7 @@ use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::driver::test_setup::GroupSetup;
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
+use ic_testnet_mainnet_nns::proposals::ProposalWithMainnetState;
 use slog::{info, warn};
 use std::time::Duration;
 
@@ -93,6 +94,10 @@ fn setup(env: TestEnv, use_mainnet_state: bool) {
 }
 
 fn test(env: TestEnv, use_mainnet_state: bool) {
+    if use_mainnet_state {
+        ProposalWithMainnetState::read_dictator_neuron_id_from_env(&env);
+    }
+
     let logger = env.logger();
 
     if env.get_all_nested_vms().unwrap().len() > 0 {

@@ -232,6 +232,10 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
 }
 
 pub fn test(env: TestEnv, cfg: TestConfig) {
+    if cfg.use_mainnet_state {
+        ProposalWithMainnetState::read_dictator_neuron_id_from_env(&env);
+    }
+
     let logger = env.logger();
 
     let recovery_img_path = get_dependency_path_from_env("RECOVERY_GUESTOS_IMG_PATH");

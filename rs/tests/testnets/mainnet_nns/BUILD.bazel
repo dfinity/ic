@@ -33,6 +33,7 @@ rust_library(
         "@crate_index//:ic-agent",
         "@crate_index//:nix",
         "@crate_index//:once_cell",
+        "@crate_index//:serde",
         "@crate_index//:slog",
         "@crate_index//:ssh2",
         "@crate_index//:url",

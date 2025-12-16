@@ -11,7 +11,10 @@ use ic_nns_test_utils::governance::{
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_system_test_driver::{
-    driver::test_env_api::{HasPublicApiUrl, IcNodeSnapshot},
+    driver::{
+        test_env::{TestEnv, TestEnvAttribute},
+        test_env_api::{HasPublicApiUrl, IcNodeSnapshot},
+    },
     nns::{get_governance_canister, submit_update_elected_replica_versions_proposal},
     util::runtime_from_url,
 };
@@ -22,6 +25,7 @@ use registry_canister::mutations::{
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
     do_update_subnet::UpdateSubnetPayload,
 };
+use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
 use url::Url;
 
@@ -35,6 +39,17 @@ oSMDIQBqgs2z86b+S5X9HvsxtE46UZwfDHtebwmSQWSIcKr2ew==
 
 static RECOVERED_NNS_DICTATOR_NEURON_ID: OnceCell<NeuronId> = OnceCell::new();
 
+#[derive(Deserialize, Serialize)]
+pub struct RecoveredNnsDictatorNeuron {
+    recovered_nns_dictator_neuron_id: NeuronId,
+}
+
+impl TestEnvAttribute for RecoveredNnsDictatorNeuron {
+    fn attribute_name() -> String {
+        String::from("recovered_nns_dictator_neuron_id")
+    }
+}
+
 pub struct ProposalWithMainnetState {
     neuron_id: NeuronId,
     proposal_sender: Sender,
@@ -43,7 +58,7 @@ pub struct ProposalWithMainnetState {
 impl ProposalWithMainnetState {
     fn new() -> Self {
         let neuron_id = *RECOVERED_NNS_DICTATOR_NEURON_ID.get().expect(
-            "'set_dictator_neuron_id' must be called before using ProposalWithMainnetState",
+            "'read_dictator_neuron_id_from_env' must be called before using ProposalWithMainnetState",
         );
         let sig_keys =
             SigKeys::from_pem(NEURON_SECRET_KEY_PEM).expect("Failed to parse secret key");
@@ -55,10 +70,21 @@ impl ProposalWithMainnetState {
         }
     }
 
-    pub fn set_dictator_neuron_id(neuron_id: NeuronId) {
+    pub fn write_dictator_neuron_id_to_env(env: &TestEnv, neuron_id: NeuronId) {
+        RecoveredNnsDictatorNeuron {
+            recovered_nns_dictator_neuron_id: neuron_id,
+        }
+        .write_attribute(&env);
+    }
+
+    pub fn read_dictator_neuron_id_from_env(env: &TestEnv) {
+        let neuron_id = RecoveredNnsDictatorNeuron::try_read_attribute(env)
+            .expect("'write_dictator_neuron_id_to_env' must be called before reading")
+            .recovered_nns_dictator_neuron_id;
+
         RECOVERED_NNS_DICTATOR_NEURON_ID
             .set(neuron_id)
-            .expect("Dictator neuron ID can only be set once");
+            .expect("'read_dictator_neuron_id_from_env' can only be called once");
     }
 
     // Code duplicate of //rs/tests/consensus/utils/src/upgrade.rs:bless_replica_version adapted to

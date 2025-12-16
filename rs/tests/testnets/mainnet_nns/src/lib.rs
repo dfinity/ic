@@ -184,7 +184,7 @@ fn setup_recovered_nns(
         .unwrap_or_else(|e| panic!("Failed to fetch the mainnet ic-recovery because {e:?}"));
 
     recover_nns_subnet(&env, &nns_node, &recovered_nns_node, &aux_node);
-    ProposalWithMainnetState::set_dictator_neuron_id(neuron_id);
+    ProposalWithMainnetState::write_dictator_neuron_id_to_env(&env, neuron_id);
 
     test_recovered_nns(&env, &recovered_nns_node);
 

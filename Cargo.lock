@@ -15215,6 +15215,7 @@ dependencies = [
  "nix 0.24.3",
  "once_cell",
  "registry-canister",
+ "serde",
  "slog",
  "ssh2",
  "url",
