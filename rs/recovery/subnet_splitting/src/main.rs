@@ -226,6 +226,16 @@ fn do_estimate(args: EstimateArgs, _logger: Logger) -> anyhow::Result<()> {
         load_estimates.instructions_used
     );
 
+    println!(
+        "Estimated ingress load on both subnet: {}",
+        load_estimates.ingress_messages_executed
+    );
+
+    println!(
+        "Estimated number of http outcalls made on both subnet: {}",
+        load_estimates.http_outcalls_executed
+    );
+
     Ok(())
 }
 
