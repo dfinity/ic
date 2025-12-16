@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::address::DogecoinAddress;
 use candid::Deserialize;
 use ic_ckbtc_minter::address::BitcoinAddress;
@@ -285,22 +288,32 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                 to_account,
                 utxos,
             }),
-            CkBtcMinterEventType::AcceptedRetrieveBtcRequest(RetrieveBtcRequest {
-                amount,
-                address,
-                block_index,
-                received_at,
-                reimbursement_account,
-                kyt_provider: _,
-            }) => Ok(CkDogeMinterEventType::AcceptedRetrieveDogeRequest(
-                RetrieveDogeRequest {
-                    amount,
-                    address: bitcoin_to_dogecoin(address)?,
-                    block_index,
-                    received_at,
-                    reimbursement_account,
-                },
-            )),
+            CkBtcMinterEventType::AcceptedRetrieveBtcRequest(request) => {
+                match &request.kyt_provider {
+                    None => {
+                        let RetrieveBtcRequest {
+                            amount,
+                            address,
+                            block_index,
+                            received_at,
+                            reimbursement_account,
+                            kyt_provider: _,
+                        } = request;
+                        Ok(CkDogeMinterEventType::AcceptedRetrieveDogeRequest(
+                            RetrieveDogeRequest {
+                                amount,
+                                address: bitcoin_to_dogecoin(address)?,
+                                block_index,
+                                received_at,
+                                reimbursement_account,
+                            },
+                        ))
+                    }
+                    Some(provider) => Err(format!(
+                        "BUG: Unexpected KYT provider {provider} for {request:?}"
+                    )),
+                }
+            }
             CkBtcMinterEventType::RemovedRetrieveBtcRequest { block_index } => {
                 Ok(CkDogeMinterEventType::RemovedRetrieveDogeRequest { block_index })
             }

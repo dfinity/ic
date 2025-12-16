@@ -1,3 +1,6 @@
+// #[cfg(test)]
+// mod tests;
+//
 use crate::fees::DogecoinFeeEstimator;
 use crate::lifecycle::init::Network;
 
