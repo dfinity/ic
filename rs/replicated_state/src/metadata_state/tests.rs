@@ -491,9 +491,7 @@ fn system_metadata_split() {
     metadata_a.after_split(is_canister_on_subnet_a, &mut subnet_queues);
 
     // Expect same metadata, but with pruned ingress history and no split marker.
-    expected
-        .ingress_history
-        .prune_after_split(is_receiver_on_subnet_a);
+    expected.ingress_history.split(is_receiver_on_subnet_a);
     expected.split_from = None;
     assert_eq!(expected, metadata_a);
 
@@ -517,9 +515,7 @@ fn system_metadata_split() {
 
     // Expect pruned ingress history and no split marker.
     expected.split_from = None;
-    expected
-        .ingress_history
-        .prune_after_split(is_canister_on_subnet_b);
+    expected.ingress_history.split(is_canister_on_subnet_b);
     assert_eq!(expected, metadata_b);
 }
 
@@ -686,7 +682,7 @@ fn system_metadata_online_split() {
     let mut expected = system_metadata.clone();
     expected
         .ingress_history
-        .prune_after_split(|canister_id| canister_id != CANISTER_2);
+        .split(|canister_id| canister_id != CANISTER_2);
     // expected.split_from = Some(SUBNET_A);
     expected.split_from = None;
 
@@ -722,7 +718,7 @@ fn system_metadata_online_split() {
     // Ingress history should only contain the message to `CANISTER_2`.
     expected
         .ingress_history
-        .prune_after_split(|canister_id| canister_id == CANISTER_2);
+        .split(|canister_id| canister_id == CANISTER_2);
     // No streams.
     expected.streams = Default::default();
     // No canister allocation ranges. Will be initialized in the next round.
@@ -1573,7 +1569,7 @@ fn ingress_history_split() {
     let is_local_canister = |_: CanisterId| true;
     let expected = ingress_history.clone();
 
-    ingress_history.prune_after_split(is_local_canister);
+    ingress_history.split(is_local_canister);
 
     // All messages should be retained.
     assert_eq!(expected, ingress_history);
@@ -1595,7 +1591,7 @@ fn ingress_history_split() {
         |_| {},
     );
 
-    ingress_history.prune_after_split(is_local_canister);
+    ingress_history.split(is_local_canister);
     assert_eq!(expected, ingress_history);
 }
 
