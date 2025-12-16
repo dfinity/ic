@@ -8,7 +8,7 @@ load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
 load("//bazel:mainnet-icos-images.bzl", "icos_dev_image_download_url", "icos_image_download_url")
-load("//rs/tests:common.bzl", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
     run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
@@ -413,10 +413,7 @@ def system_test(
         deps = ["//rs/tests:vector_with_log_fetcher_image"]
 
         for dep in runtime_deps:
-            if dep not in UNIVERSAL_VM_RUNTIME_DEPS:
-                deps.append(dep)
-
-        deps = deps + UNIVERSAL_VM_RUNTIME_DEPS
+            deps.append(dep)
 
     # Expand _env_deps
     env |= {
@@ -456,11 +453,6 @@ def system_test(
         env.update({"COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT": "1"})
 
     visibility = kwargs.get("visibility", ["//visibility:public"])
-
-    # Add missing UVM deps if logs are disabled
-    for dep in UNIVERSAL_VM_RUNTIME_DEPS:
-        if dep not in deps:
-            deps.append(dep)
 
     run_system_test(
         name = test_name + "_colocate",

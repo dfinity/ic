@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
-load("//rs/tests:common.bzl", "MAINNET_ENV", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MAINNET_ENV", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -71,7 +71,6 @@ system_test_nns(
     test_driver_target = ":backup_manager_test_bin",
     test_timeout = "eternal",  # this test often times out with the default 15 minute timeout so we allow more time
     runtime_deps =
-        UNIVERSAL_VM_RUNTIME_DEPS +
         BACKUP_RUNTIME_DEPS + ["//bazel:version.txt"],
 )
 
@@ -88,6 +87,5 @@ system_test_nns(
     test_driver_target = ":backup_manager_test_bin",
     test_timeout = "eternal",  # this test often times out with the default 15 minute timeout so we allow more time
     runtime_deps =
-        UNIVERSAL_VM_RUNTIME_DEPS +
         BACKUP_RUNTIME_DEPS + ["//bazel:version.txt"],
 )

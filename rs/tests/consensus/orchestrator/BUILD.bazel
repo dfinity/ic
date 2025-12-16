@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "MAINNET_ENV", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MAINNET_ENV", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -48,7 +48,6 @@ system_test_nns(
 
 system_test_nns(
     name = "node_registration_with_max_rewardable_nodes_test",
-    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/consensus:node_registration_test_common",
@@ -60,7 +59,6 @@ system_test_nns(
 
 system_test_nns(
     name = "node_registration_with_node_allowance_test",
-    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/consensus:node_registration_test_common",
@@ -113,7 +111,7 @@ system_test_nns(
     tags = [
         "long_test",
     ],
-    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
