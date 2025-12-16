@@ -315,7 +315,8 @@ impl SchedulerConfig {
     }
 
     pub fn system_subnet() -> Self {
-        let max_instructions_per_query_message = NumInstructions::from(50 * B);
+        let max_instructions_per_message = NumInstructions::from(50 * B);
+        let max_instructions_per_query_message = max_instructions_per_message;
         let max_instructions_per_install_code = NumInstructions::from(1_000 * B);
         let max_instructions_per_slice = NumInstructions::from(2 * B);
         let max_instructions_per_install_code_slice = NumInstructions::from(5 * B);
@@ -331,7 +332,7 @@ impl SchedulerConfig {
             max_instructions_per_round: max_instructions_per_slice
                 .max(max_instructions_per_install_code_slice)
                 + NumInstructions::from(2 * B),
-            max_instructions_per_message: max_instructions_per_query_message,
+            max_instructions_per_message,
             max_instructions_per_query_message,
             max_instructions_per_slice,
             instruction_overhead_per_execution: INSTRUCTION_OVERHEAD_PER_EXECUTION,
