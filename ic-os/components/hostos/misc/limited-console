@@ -92,14 +92,14 @@ execute_command() {
                 # Fix for serial/remote consoles where window size may be missing or tiny
                 if ! size=$(stty size 2>/dev/null); then
                     echo "Error: could not determine terminal size. The manual-recovery TUI requires a TTY."
-                    echo "Please see /"Manual Recovery Fallback/" in the Manual Node Recovery Guide further direction."
+                    echo "Please see \"Manual Recovery Fallback\" in the Manual Node Recovery Guide for further direction."
                     exit 1
                 fi
 
                 read -r rows cols <<< "$size"
                 # Treat anything smaller than the TUI minimum as unusable
                 min_rows=15
-                min_cols=60
+                min_cols=10
                 if [ "${rows:-0}" -lt "$min_rows" ] || [ "${cols:-0}" -lt "$min_cols" ]; then
                     stty rows 36 cols 120
                 fi
