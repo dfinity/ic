@@ -28,9 +28,10 @@ const TIME_STEP: Duration = Duration::from_nanos(111_111);
 // Setting the instruction limit per round equal to the instruction limit per slice
 // means that the actual instruction limit used by the scheduler is 1
 // and thus only a single slice is executed in a round.
+// The instruction limit per message must cover 5 slices.
 const B: u64 = 1_000_000_000;
 const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(5 * B);
-const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(20 * B);
+const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(25 * B);
 const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(5 * B);
 
 const CANISTER_INIT_CYCLES: Cycles = Cycles::new(301_000_000_000_u128);
