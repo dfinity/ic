@@ -363,7 +363,8 @@ impl ConsensusImpl {
             Err(err) => {
                 error!(
                     self.log,
-                    "Could not retrieve whether the subnet is halted from the registry: {:?} add test comment", err
+                    "Could not retrieve whether the subnet is halted from the registry: {:?} add test comment",
+                    err
                 );
                 false
             }
