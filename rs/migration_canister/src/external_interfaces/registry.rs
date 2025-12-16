@@ -80,12 +80,12 @@ struct MigrateCanisterResponse {
 }
 
 pub async fn migrate_canister(
-    source: Principal,
-    target_subnet: Principal,
+    migrated_canister: Principal,
+    replaced_canister_subnet: Principal,
 ) -> ProcessingResult<u64, Infallible> {
     let args = MigrateCanistersArgs {
-        canister_ids: vec![source],
-        target_subnet_id: target_subnet,
+        canister_ids: vec![migrated_canister],
+        target_subnet_id: replaced_canister_subnet,
     };
 
     match Call::bounded_wait(
@@ -96,7 +96,10 @@ pub async fn migrate_canister(
     .await
     {
         Err(e) => {
-            println!("Call `migrate_canisters` for {} failed: {:?}", source, e);
+            println!(
+                "Call `migrate_canisters` for {} failed: {:?}",
+                migrated_canister, e
+            );
             ProcessingResult::NoProgress
         }
         Ok(response) => match response.candid::<MigrateCanisterResponse>() {
@@ -106,7 +109,7 @@ pub async fn migrate_canister(
             Err(e) => {
                 println!(
                     "Decoding `migrate_canisters` for {} failed: {:?}",
-                    source, e
+                    migrated_canister, e
                 );
                 ProcessingResult::NoProgress
             }

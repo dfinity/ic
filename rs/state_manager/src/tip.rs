@@ -107,12 +107,13 @@ pub(crate) enum TipRequest {
             >,
         >,
     },
-    /// Filter canisters in tip. Remove ones not present in the set.
+    /// Filter canisters and snapshots in tip. Remove ones not present in the sets.
     ///
     /// State: `tip_folder_state.has_filtered_canisters = true`
     FilterTipCanisters {
         height: Height,
-        ids: BTreeSet<CanisterId>,
+        canister_ids: BTreeSet<CanisterId>,
+        snapshot_ids: BTreeSet<SnapshotId>,
     },
     /// Flush PageMaps's unflushed delta on disc.
     ///
@@ -192,16 +193,30 @@ pub(crate) fn spawn_tip_thread(
             .spawn(move || {
                 while let Ok(req) = tip_receiver.recv() {
                     match req {
-                        TipRequest::FilterTipCanisters { height, ids } => {
+                        TipRequest::FilterTipCanisters {
+                            height,
+                            canister_ids,
+                            snapshot_ids,
+                        } => {
                             let _timer = request_timer(&metrics, "filter_tip_canisters");
                             debug_assert!(!tip_state.tip_folder_state.has_filtered_canisters);
                             tip_state.tip_folder_state.has_filtered_canisters = true;
                             tip_handler
-                                .filter_tip_canisters(height, &ids)
+                                .filter_tip_canisters(height, &canister_ids)
                                 .unwrap_or_else(|err| {
                                     fatal!(
                                         log,
                                         "Failed to filter tip canisters for height @{}: {}",
+                                        height,
+                                        err
+                                    )
+                                });
+                            tip_handler
+                                .filter_tip_snapshots(height, &snapshot_ids)
+                                .unwrap_or_else(|err| {
+                                    fatal!(
+                                        log,
+                                        "Failed to filter tip snapshots for height @{}: {}",
                                         height,
                                         err
                                     )
@@ -699,7 +714,7 @@ fn switch_to_checkpoint(
 }
 
 /// Update the tip directory files with the most recent checkpoint operations.
-/// `operations` is an ordered list of all created/restores/deleted snapshots and renamed canisters since the last flush.
+/// `operations` is an ordered list of all created/restored snapshots and renamed canisters since the last flush.
 fn flush_unflushed_checkpoint_ops(
     log: &ReplicaLogger,
     tip_handler: &mut TipHandler,
@@ -709,12 +724,6 @@ fn flush_unflushed_checkpoint_ops(
     // This loop is not parallelized as there are combinations such as creating then restoring from a snapshot within the same flush.
     for op in operations {
         match op {
-            UnflushedCheckpointOp::DeleteSnapshot(snapshot_id) => {
-                tip_handler
-                    .tip(height)?
-                    .snapshot(&snapshot_id)?
-                    .delete_dir()?;
-            }
             UnflushedCheckpointOp::TakeSnapshot(canister_id, snapshot_id) => {
                 backup(log, &tip_handler.tip(height)?, canister_id, snapshot_id)?;
             }
@@ -724,8 +733,6 @@ fn flush_unflushed_checkpoint_ops(
             UnflushedCheckpointOp::RenameCanister(src, dst) => {
                 tip_handler.move_canister_directory(height, src, dst)?;
             }
-            UnflushedCheckpointOp::UploadSnapshotData(..)
-            | UnflushedCheckpointOp::UploadSnapshotMetadata(..) => {}
         }
     }
 
@@ -1471,11 +1478,7 @@ fn handle_compute_manifest_request(
         elapsed
     );
 
-    let state_size_bytes: i64 = manifest
-        .file_table
-        .iter()
-        .map(|f| f.size_bytes as i64)
-        .sum();
+    let state_size_bytes = manifest.state_size_bytes() as i64;
 
     metrics.state_size.set(state_size_bytes);
     metrics
