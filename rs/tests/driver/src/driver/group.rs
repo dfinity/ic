@@ -59,10 +59,16 @@ pub struct CliArgs {
     pub action: SystemTestsSubcommand,
 
     #[clap(
-        long = "debug-keepalive",
+        long = "keepalive",
         help = "If set, system under test is kept alive until bazel timeout or user interrupt."
     )]
-    pub debug_keepalive: bool,
+    pub keepalive: bool,
+
+    #[clap(
+        long = "no-farm-keepalive",
+        help = "If set, no TTL extension requests for the group (testnet) are sent to Farm. Only used in the colocated test-driver."
+    )]
+    pub no_farm_keepalive: bool,
 
     #[clap(
         long = "no-delete-farm-group",
@@ -81,12 +87,6 @@ pub struct CliArgs {
         help = "If set, no summary/report events are produced by the test-driver."
     )]
     pub no_summary_report: bool,
-
-    #[clap(
-        long = "no-farm-keepalive",
-        help = "If set, Farm group is not kept alive."
-    )]
-    pub no_farm_keepalive: bool,
 
     #[clap(
         long = "include-tests",
@@ -668,8 +668,8 @@ impl SystemTestGroup {
             )
         });
 
-        // normal case: no debugkeepalive, overall timeout is active
-        if !group_ctx.debug_keepalive {
+        // normal case: no keepalive, overall timeout is active
+        if !group_ctx.keepalive {
             let keepalive_plan = compose(
                 Some(keepalive_task),
                 EvalOrder::Sequential,
@@ -792,7 +792,7 @@ impl SystemTestGroup {
             args.group_dir.path.clone(),
             args.subproc_id(),
             args.filter_tests,
-            args.debug_keepalive,
+            args.keepalive,
             args.no_farm_keepalive || args.no_group_ttl,
             args.group_base_name,
             !args.no_logs,
@@ -890,7 +890,7 @@ impl SystemTestGroup {
                     test_name: group_ctx.group_base_name.clone(),
                 };
                 info!(group_ctx.log(), "Generated task_scheduler");
-                task_scheduler.execute(args.debug_keepalive);
+                task_scheduler.execute(args.keepalive);
                 info!(group_ctx.log(), "Task scheduler has terminated.");
 
                 // debug!(group_ctx.log(), "===== Debug Summary =====");
