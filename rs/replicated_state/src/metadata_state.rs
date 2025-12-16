@@ -685,7 +685,7 @@ impl SystemMetadata {
         assert!(expected_compiled_wasms.is_empty());
 
         // Prune the ingress history.
-        ingress_history.prune_after_split(|canister_id: CanisterId| {
+        ingress_history.split(|canister_id: CanisterId| {
             // An actual local canister.
             is_local_canister(canister_id)
                 // Or this is subnet A' and message is addressed to the management canister.
@@ -798,7 +798,7 @@ impl SystemMetadata {
 
             // Prune the ingress history, retaining only messages addressed to local
             // canisters or the management canister; and messages in terminal states.
-            ingress_history.prune_after_split(|canister_id: CanisterId| {
+            ingress_history.split(|canister_id: CanisterId| {
                 is_local_canister(canister_id) || canister_id == IC_00
             });
 
@@ -823,7 +823,7 @@ impl SystemMetadata {
 
             // Prune the ingress history, retaining only messages addressed to local
             // canisters and messages in terminal states.
-            ingress_history.prune_after_split(is_local_canister);
+            ingress_history.split(is_local_canister);
 
             // No streams.
             streams = Default::default();
@@ -1537,12 +1537,12 @@ impl IngressHistoryState {
         statuses.values().map(|status| status.payload_bytes()).sum()
     }
 
-    /// Prunes the ingress history (as part of subnet splitting phase 2), retaining:
+    /// Prunes the ingress history as part of subnet splitting, retaining:
     ///
     ///  * all terminal states (since they are immutable and will get pruned); and
     ///  * all non-terminal states for ingress messages addressed to local receivers
     ///    (canisters or subnet; as determined by the provided predicate).
-    fn prune_after_split<F>(&mut self, is_local_receiver: F)
+    fn split<F>(&mut self, is_local_receiver: F)
     where
         F: Fn(CanisterId) -> bool,
     {
