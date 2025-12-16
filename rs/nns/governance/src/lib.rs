@@ -212,6 +212,10 @@ thread_local! {
 
     static ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS: Cell<bool>
         = const { Cell::new(cfg!(feature = "test")) };
+
+    // This covers both taking and loading canister snapshots.
+    static ENABLE_CANISTER_SNAPSHOT_PROPOSALS: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
 }
 
 thread_local! {
@@ -299,6 +303,20 @@ pub fn temporarily_enable_bless_alternative_guest_os_version_proposals() -> Temp
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_bless_alternative_guest_os_version_proposals() -> Temporary {
     Temporary::new(&ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS, false)
+}
+
+pub fn are_canister_snapshot_proposals_enabled() -> bool {
+    ENABLE_CANISTER_SNAPSHOT_PROPOSALS.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_canister_snapshot_proposals() -> Temporary {
+    Temporary::new(&ENABLE_CANISTER_SNAPSHOT_PROPOSALS, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_canister_snapshot_proposals() -> Temporary {
+    Temporary::new(&ENABLE_CANISTER_SNAPSHOT_PROPOSALS, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {
