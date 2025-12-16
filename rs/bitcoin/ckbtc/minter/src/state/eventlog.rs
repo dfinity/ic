@@ -235,6 +235,7 @@ mod event {
 
         /// Indicates that a reimbursement has been executed.
         #[serde(rename = "reimbursed_failed_deposit")]
+        #[deprecated]
         ReimbursedFailedDeposit {
             /// The burn block on the ledger.
             burn_block_index: u64,
