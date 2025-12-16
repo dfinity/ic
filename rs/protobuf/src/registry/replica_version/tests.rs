@@ -146,3 +146,33 @@ fn test_validate_guest_launch_measurements_multiple_defects() {
         defects[0]
     );
 }
+
+#[test]
+fn test_validate_guest_launch_measurement_metadata_kernel_cmdline_too_long() {
+    let len = GuestLaunchMeasurementMetadata::MAX_KERNEL_CMDLINE_LEN + 1;
+    let measurement = GuestLaunchMeasurement {
+        measurement: vec![0u8; 48],
+        metadata: Some(GuestLaunchMeasurementMetadata {
+            kernel_cmdline: Some("a".repeat(len)),
+        }),
+    };
+    let defects = measurement.validate().unwrap_err();
+    assert_eq!(defects.len(), 1, "{defects:#?}");
+    assert!(
+        defects[0].contains("kernel_cmdline is too long"),
+        "Expected error message to contain 'kernel_cmdline is too long', got: {}",
+        defects[0]
+    );
+}
+
+#[test]
+fn test_validate_guest_launch_measurement_metadata_kernel_cmdline_limit() {
+    let len = GuestLaunchMeasurementMetadata::MAX_KERNEL_CMDLINE_LEN;
+    let measurement = GuestLaunchMeasurement {
+        measurement: vec![0u8; 48],
+        metadata: Some(GuestLaunchMeasurementMetadata {
+            kernel_cmdline: Some("a".repeat(len)),
+        }),
+    };
+    assert_eq!(measurement.validate(), Ok(()));
+}

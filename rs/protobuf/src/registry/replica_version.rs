@@ -110,16 +110,34 @@ impl v1::GuestLaunchMeasurement {
 }
 
 impl v1::GuestLaunchMeasurementMetadata {
+    const MAX_KERNEL_CMDLINE_LEN: usize = 100 * 1024;
+
     /// Returns a list of defects (or Ok):
     ///
     /// - kernel_cmdline can an value, including None, and Some("").
     pub fn validate(&self) -> Result<(), Vec<String>> {
-        let Self {
-            // Any value, including None, an Some("") is allowed.
-            kernel_cmdline: _,
-        } = self;
+        let Self { kernel_cmdline } = self;
 
-        Ok(())
+        let mut defects = vec![];
+
+        // kernel_cmdline must not be too long.
+        let len = kernel_cmdline
+            .as_ref()
+            .map(|kernel_cmdline| kernel_cmdline.len())
+            .unwrap_or(0);
+        if len > Self::MAX_KERNEL_CMDLINE_LEN {
+            defects.push(format!(
+                "kernel_cmdline is too long. Was {} KiB, but it is allowed to be at most {} KiB.",
+                len as f64 / 1024.0,
+                Self::MAX_KERNEL_CMDLINE_LEN as f64 / 1024.0,
+            ))
+        }
+
+        if defects.is_empty() {
+            Ok(())
+        } else {
+            Err(defects)
+        }
     }
 }
 
