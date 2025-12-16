@@ -539,7 +539,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
     let err = test.install_canister(canister2, wasm).unwrap_err();
     err.assert_contains(
         ErrorCode::SubnetOversubscribed,
-        "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet.",
+        "Canister requested 10.01 MiB of memory but only 10.00 MiB are available in the subnet.",
     );
     assert_eq!(
         test.canister_state(canister2).system_state.balance(),

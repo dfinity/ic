@@ -15,7 +15,6 @@ pub(super) struct StructIO {
 
 impl StructIO {
     pub fn new(page_map: PageMap) -> Self {
-        //println!("ABC StructIO::new() empty cache");
         Self {
             buffer: Buffer::new(page_map),
             cache_header: Cell::new(None),
@@ -28,7 +27,6 @@ impl StructIO {
 
     pub fn load_header(&self) -> Header {
         if let Some(cached_header) = self.cache_header.get() {
-            //println!("ABC load_header [CACHED]");
             return cached_header;
         }
         let (magic, addr) = self.read_raw_bytes::<3>(HEADER_OFFSET);
@@ -55,13 +53,11 @@ impl StructIO {
             next_idx,
             max_timestamp,
         };
-        //println!("ABC load_header");
         self.cache_header.set(Some(header));
         header
     }
 
     pub fn save_header(&mut self, header: &Header) {
-        //println!("ABC save_header");
         self.cache_header.set(Some(*header));
         let mut addr = HEADER_OFFSET;
         addr = self.write_raw_bytes(addr, &header.magic);
@@ -78,7 +74,6 @@ impl StructIO {
     }
 
     pub fn load_index_table(&self) -> IndexTable {
-        //println!("ABC load_index_table");
         let h = self.load_header();
         let pos = h.data_head;
         let front = self
@@ -109,7 +104,6 @@ impl StructIO {
     /// IMPORTANT: the caller must ensure that the header
     /// is created and up-to-date.
     pub fn save_index_table(&mut self, index: &IndexTable) {
-        //println!("ABC save_index_table");
         // Save entries.
         let mut addr = INDEX_TABLE_OFFSET;
         for entry in index.raw_entries() {
@@ -157,7 +151,6 @@ impl StructIO {
     }
 
     pub fn load_record_without_content(&self, position: MemoryPosition) -> Option<LogRecord> {
-        println!("ABC load_record_without_content");
         let h = self.load_header();
         if !h.is_alive(position) {
             return None;
@@ -173,7 +166,6 @@ impl StructIO {
     }
 
     pub fn load_record(&self, position: MemoryPosition) -> Option<LogRecord> {
-        println!("ABC load_record");
         let h = self.load_header();
         if !h.is_alive(position) {
             return None;
@@ -191,7 +183,6 @@ impl StructIO {
     }
 
     pub fn save_record(&mut self, position: MemoryPosition, record: &LogRecord) {
-        println!("ABC save_record");
         let h = self.load_header();
         let (offset, capacity) = (h.data_offset, h.data_capacity);
         let position = self.write_wrapped_u64(position, record.idx, offset, capacity);

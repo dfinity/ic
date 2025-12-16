@@ -83,7 +83,6 @@ impl LogMemoryStore {
 
     /// Clears the canister log records.
     pub fn clear(&mut self, fd_factory: Arc<dyn PageAllocatorFileDescriptor>) {
-        println!("ABC: clear page_map");
         // This creates a new empty page map with invalid ring buffer header.
         self.page_map = PageMap::new(fd_factory);
     }
@@ -96,17 +95,13 @@ impl LogMemoryStore {
     /// Returns the total allocated bytes for the ring buffer
     /// including header, index table and data region.
     pub fn total_allocated_bytes(&self) -> usize {
-        let result = self
-            .load_ring_buffer()
+        self.load_ring_buffer()
             .map(|rb| rb.total_allocated_bytes())
-            .unwrap_or(0);
-        //println!("ABC mod total_allocated_bytes: {result}");
-        result
+            .unwrap_or(0)
     }
 
     /// Returns the data capacity of the ring buffer.
     pub fn byte_capacity(&self) -> usize {
-        println!("ABC mod byte_capacity");
         self.load_ring_buffer()
             .map(|rb| rb.byte_capacity())
             .unwrap_or(0)
@@ -114,7 +109,6 @@ impl LogMemoryStore {
 
     /// Returns the data size of the ring buffer.
     pub fn bytes_used(&self) -> usize {
-        println!("ABC mod bytes_used");
         self.load_ring_buffer()
             .map(|rb| rb.bytes_used())
             .unwrap_or(0)
@@ -131,7 +125,6 @@ impl LogMemoryStore {
     /// for canisters without a Wasm module or after uninstall, preventing
     /// unnecessary log-memory charges.
     pub fn set_log_memory_limit(&mut self, new_log_memory_limit: NumBytes) {
-        println!("ABC mod set_log_memory_limit: {new_log_memory_limit:?}");
         // Enforce a safe minimum for data capacity.
         let new_log_memory_limit = new_log_memory_limit.get().max(DATA_CAPACITY_MIN as u64);
         self.log_memory_limit = NumBytes::from(new_log_memory_limit);
@@ -150,7 +143,6 @@ impl LogMemoryStore {
                 let mut new =
                     RingBuffer::new(self.page_map.clone(), MemorySize::new(new_log_memory_limit));
                 new.append_log(old.all_records());
-                println!("ABC: set_log_memory_limit save page_map");
                 self.page_map = new.to_page_map();
             }
         }
@@ -158,12 +150,10 @@ impl LogMemoryStore {
 
     /// Returns the next log record `idx`.
     pub fn next_idx(&self) -> u64 {
-        println!("ABC mod next_idx");
         self.load_ring_buffer().map(|rb| rb.next_idx()).unwrap_or(0)
     }
 
     pub fn is_empty(&self) -> bool {
-        println!("ABC mod is_empty");
         self.load_ring_buffer()
             .map(|rb| rb.is_empty())
             .unwrap_or(true)
@@ -171,7 +161,6 @@ impl LogMemoryStore {
 
     /// Returns the canister log records, optionally filtered.
     pub fn records(&self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
-        println!("ABC mod records");
         self.load_ring_buffer()
             .map(|rb| rb.records(filter))
             .unwrap_or_default()
@@ -179,7 +168,6 @@ impl LogMemoryStore {
 
     /// Returns all canister log records.
     pub fn all_records(&self) -> Vec<CanisterLogRecord> {
-        println!("ABC mod all_records");
         self.load_ring_buffer()
             .map(|rb| rb.all_records())
             .unwrap_or_default()
@@ -188,7 +176,6 @@ impl LogMemoryStore {
     /// Appends a delta log to the ring buffer.
     /// If the ring buffer does not exist, it is created with the current log memory limit.
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
-        println!("ABC mod append_delta_log save page_map");
         // Record the size of the appended delta log for metrics.
         self.push_delta_log_size(delta_log.bytes_used());
         let records: Vec<CanisterLogRecord> = delta_log

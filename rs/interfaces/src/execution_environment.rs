@@ -456,10 +456,8 @@ impl SubnetAvailableMemory {
             wasm_custom_sections_requested,
         );
         if res.is_err() {
-            println!("ABC try_decrement: {execution_requested:?} ERROR");
             return res;
         }
-        println!("ABC try_decrement: {execution_requested:?} OK");
         self.execution_memory -= execution_requested.get() as i64;
         self.guaranteed_response_message_memory -=
             guaranteed_response_message_requested.get() as i64;

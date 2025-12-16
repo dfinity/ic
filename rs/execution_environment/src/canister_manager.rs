@@ -530,7 +530,6 @@ impl CanisterManager {
         settings: &ValidatedCanisterSettings,
         canister: &mut CanisterState,
     ) {
-        println!("ABC do_update_settings");
         // Note: At this point, the settings are validated.
         if let Some(controllers) = settings.controllers() {
             canister.system_state.controllers.clear();
@@ -592,7 +591,6 @@ impl CanisterManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Result<(), CanisterManagerError> {
-        println!("ABC update_settings");
         let sender = origin.origin();
 
         validate_controller(canister, &sender)?;
@@ -1098,7 +1096,6 @@ impl CanisterManager {
         let canister_history_memory_usage = canister.canister_history_memory_usage();
         let canister_wasm_chunk_store_memory_usage = canister.wasm_chunk_store_memory_usage();
         let canister_snapshots_memory_usage = canister.snapshots_memory_usage();
-        println!("ABC get_canister_status");
         let canister_log_memory_usage = canister.log_memory_store_memory_usage();
         let canister_message_memory_usage = canister.message_memory_usage();
         let compute_allocation = canister.scheduler_state.compute_allocation;
@@ -1413,7 +1410,6 @@ impl CanisterManager {
         specified_id: Option<PrincipalId>,
         canister_creation_error: &IntCounter,
     ) -> Result<CanisterId, CanisterManagerError> {
-        println!("ABC create_canister_helper");
         let sender = origin.origin();
 
         // A value of 0 is equivalent to setting no limit.
@@ -1987,7 +1983,6 @@ impl CanisterManager {
         }
 
         let uninstalled_canister_size = if uninstall_code {
-            println!("ABC take_canister_snapshot when uninstall_code");
             canister.execution_memory_usage()
                 + canister.log_memory_store_memory_usage() // TODO: double-check if this is correct.
                 + canister.wasm_chunk_store_memory_usage()
