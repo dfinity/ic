@@ -32,7 +32,7 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 rate-limits-api = { path = "../../boundary_node/rate_limits/api" }
 salt-sharing-api = { path = "../../boundary_node/salt_sharing/api" }
-regex = { workspace = true }
+regex-lite = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 slog = { workspace = true }
 tokio = { workspace = true }

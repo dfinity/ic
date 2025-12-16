@@ -10,7 +10,7 @@ DEPENDENCIES = [
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
-    "@crate_index//:regex",
+    "@crate_index//:regex-lite",
 ]
 
 MACRO_DEPENDENCIES = [

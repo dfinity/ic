@@ -5,7 +5,7 @@ edition.workspace = true
 
 [dependencies]
 ic-sys = { path = "../../sys" }
-regex = { workspace = true }
+regex-lite = { workspace = true }
 strum = { workspace = true }
 thiserror = { workspace = true }
 

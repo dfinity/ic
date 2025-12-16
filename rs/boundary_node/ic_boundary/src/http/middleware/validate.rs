@@ -11,7 +11,7 @@ use http::header::HeaderValue;
 use ic_bn_lib::http::headers::*;
 use ic_types::{CanisterId, PrincipalId, SubnetId};
 use lazy_static::lazy_static;
-use regex::Regex;
+use regex_lite::Regex;
 
 use crate::{
     errors::{ApiError, ErrorCause},

@@ -278,7 +278,7 @@ pub fn get_page_allocator_rss(pid: u32) -> std::io::Result<u64> {
 }
 
 lazy_static! {
-    static ref MEMORY_KIB_PARSE_RE: regex::Regex = regex::Regex::new(r"([0-9]+)[ \t]+kB").unwrap();
+    static ref MEMORY_KIB_PARSE_RE: regex_lite::Regex = regex_lite::Regex::new(r"([0-9]+)[ \t]+kB").unwrap();
 }
 
 // From the given key/value map, extracts the named field. The value must be

@@ -8,7 +8,7 @@ use config::setupos::deployment_json::{VmResources, get_deployment_settings};
 use config_types::*;
 use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
-use regex::Regex;
+use regex_lite::Regex;
 use std::path::{Path, PathBuf};
 use url::Url;
 

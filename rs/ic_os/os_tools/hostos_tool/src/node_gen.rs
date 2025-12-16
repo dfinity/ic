@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, anyhow};
-use regex::Regex;
+use regex_lite::Regex;
 use std::fmt;
 use std::fs;
 

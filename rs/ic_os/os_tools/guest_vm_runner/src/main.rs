@@ -739,7 +739,7 @@ mod tests {
     use ic_device::mount::testing::ExtractingFilesystemMounter;
     use ic_sev::host::testing::mock_host_sev_certificate_provider;
     use nix::sys::signal::SIGTERM;
-    use regex::Regex;
+    use regex_lite::Regex;
     use std::fs::File;
     use std::path::PathBuf;
     use std::sync::LazyLock;

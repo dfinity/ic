@@ -7,7 +7,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/proto",
     "@crate_index//:humantime",
     "@crate_index//:lazy_static",
-    "@crate_index//:regex",
+    "@crate_index//:regex-lite",
     "@crate_index//:serde",
 ]
 

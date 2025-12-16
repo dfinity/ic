@@ -19,5 +19,5 @@ assert_matches = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 predicates = { workspace = true }
 rand = { workspace = true }
-regex = { workspace = true }
+regex-lite = { workspace = true }
 tempfile = { workspace = true }

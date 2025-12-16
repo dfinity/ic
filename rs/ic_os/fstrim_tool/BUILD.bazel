@@ -17,7 +17,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:predicates",
     "@crate_index//:rand",
-    "@crate_index//:regex",
+    "@crate_index//:regex-lite",
     "@crate_index//:tempfile",
 ]
 

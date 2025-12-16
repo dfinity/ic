@@ -1,6 +1,6 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
-use regex::Regex;
+use regex_lite::Regex;
 use std::fs::read_to_string;
 use tempfile::tempdir;
 

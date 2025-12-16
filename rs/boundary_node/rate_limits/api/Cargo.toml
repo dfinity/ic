@@ -11,7 +11,7 @@ candid = { workspace = true }
 humantime = { workspace = true }
 ic-bn-lib = { workspace = true }
 ipnet = { workspace = true }
-regex = { workspace = true }
+regex-lite = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }

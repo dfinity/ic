@@ -10,7 +10,7 @@ documentation.workspace = true
 humantime = { workspace = true }
 ic-nervous-system-proto = { path = "../proto" }
 lazy_static = { workspace = true }
-regex = { workspace = true }
+regex-lite = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]

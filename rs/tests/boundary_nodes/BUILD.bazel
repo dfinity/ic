@@ -122,7 +122,7 @@ system_test_nns(
         "@crate_index//:k256",
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",
-        "@crate_index//:regex",
+        "@crate_index//:regex-lite",
         "@crate_index//:slog",
         "@crate_index//:tokio",
         "@crate_index//:wat",

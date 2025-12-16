@@ -16,7 +16,7 @@ candid = { workspace = true }
 ic-http-types = { version = "0.1.0", path = "../ic-http-types" }
 ic-management-canister-types = { workspace = true, optional = true }
 pocket-ic = { version = "11.0.0", path = "../../packages/pocket-ic", optional = true }
-regex = "1.11.0"
+regex-lite = { workspace = true }
 
 [features]
 pocket_ic = [

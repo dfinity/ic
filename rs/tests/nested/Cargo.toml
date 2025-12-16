@@ -22,7 +22,7 @@ ic-types = { path = "../../types/types" }
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
 prost = { workspace = true }
 reqwest = { workspace = true }
-regex = { workspace = true }
+regex-lite = { workspace = true }
 slog = { workspace = true }
 
 [lib]

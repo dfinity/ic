@@ -6,7 +6,7 @@ use std::{
 use candid::Principal;
 use humantime::{format_duration, parse_duration};
 use ipnet::IpNet;
-use regex::Regex;
+use regex_lite::Regex;
 use serde::{
     Deserialize, Serialize,
     de::{self, Deserializer, Error},
