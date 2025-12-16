@@ -683,7 +683,7 @@ ic-cdk = "0.19.0"
 ic-cdk-timers = "1.0.0"
 ic-certificate-verification = "3"
 ic-certification = "3"
-ic-doge-interface = { git = "https://github.com/dfinity/dogecoin-canister", rev = "74e6dc9a10ba64d2dbad013282c26d74cd49863f" }
+ic-doge-interface = { git = "https://github.com/dfinity/dogecoin-canister", rev = "a5f89792a002b060e3f0174f1a87da9764f855f8" }
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "92ee522a4514584ccf6de487ba40d92063effd9a", default-features = false }
 ic-http-certification = "3.0.3"
 ic-http-gateway = { git = "https://github.com/dfinity/http-gateway", rev = "c17ad1b378df3a85441ce2c6853ec61b6f83f730" }
