@@ -78,6 +78,8 @@ component_files = {
     Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
     Label("monitoring/grub-version/grub-version.sh"): "/opt/ic/bin/grub-version.sh",
     Label("monitoring/grub-version/grub-version.service"): "/etc/systemd/system/grub-version.service",
+    Label("monitoring/hostos/export-guestos-serial-logs.sh"): "/opt/ic/bin/export-guestos-serial-logs.sh",
+    Label("monitoring/hostos/export-guestos-serial-logs.service"): "/etc/systemd/system/export-guestos-serial-logs.service",
 
     # networking
     Label("networking/generate-network-config/generate-network-config-hostos.service"): "/etc/systemd/system/generate-network-config.service",
