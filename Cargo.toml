@@ -849,6 +849,7 @@ strum_macros = "0.26.4"
 subtle = "2.6.1"
 syn = { version = "2.0.110", features = ["fold", "full"] }
 sys-mount = "3.0"
+sysinfo = "0.37"
 systemd = "0.10"
 tar = "0.4.39"
 tempfile = "3.20"
