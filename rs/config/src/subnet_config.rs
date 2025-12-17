@@ -615,3 +615,21 @@ impl SubnetConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        B, MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE, MAX_INSTRUCTIONS_PER_ROUND,
+        MAX_INSTRUCTIONS_PER_SLICE,
+    };
+    use ic_types::NumInstructions;
+
+    #[test]
+    fn max_instructions_per_round() {
+        assert_eq!(
+            MAX_INSTRUCTIONS_PER_ROUND,
+            MAX_INSTRUCTIONS_PER_SLICE.max(MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE)
+                + NumInstructions::from(2 * B)
+        );
+    }
+}
