@@ -36,6 +36,21 @@ jobs:
           apt-get -y upgrade
           apt-get -y install curl sudo git podman
 
+          # Create a passwordless sudo rule for the current user (usually root in containers, but safe to include)
+          # Required because the repro check uses it.
+          echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/nopasswd
+          chmod 0440 /etc/sudoers.d/nopasswd
+
+      - name: Create ext4 workspace for rootless podman
+        run: |
+          dd if=/dev/zero of=/home/ubuntu/workspace.img bs=1G count=110
+          mkdfs.ext4 /home/ubuntu/workspace.img
+          mkdir -p /home/ubuntu/.cache/repro-check
+
+          mount -o loop /home/ubuntu/workspace.img /home/ubuntu/.cache/repro-check
+
+          chown -R ubuntu:ubuntu /home/ubuntu/.cache/repro-check
+
       - name: Repro check for ${{ inputs.github_sha }}
         shell: bash
         run: |
