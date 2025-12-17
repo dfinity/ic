@@ -263,7 +263,7 @@ async fn deploy_busy_canister(agent: &Agent, effective_canister_id: PrincipalId,
         .expect("Failed to set up a busy canister.");
 }
 
-pub async fn rejoin_test_many_canisters(
+pub async fn rejoin_test_long_rounds(
     env: TestEnv,
     num_canisters: usize,
     dkg_interval: u64,

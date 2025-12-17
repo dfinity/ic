@@ -32,7 +32,7 @@ use ic_system_test_driver::driver::test_env_api::{
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{block_on, get_app_subnet_and_node};
 use ic_types::Height;
-use rejoin_test_lib::rejoin_test_many_canisters;
+use rejoin_test_lib::rejoin_test_long_rounds;
 use std::time::Duration;
 
 const PER_TASK_TIMEOUT: Duration = Duration::from_secs(3600);
@@ -127,7 +127,7 @@ async fn test_async(env: TestEnv, config: Config) {
     let mut nodes = app_subnet.nodes();
     let rejoin_node = nodes.next().unwrap();
     let agent_node = nodes.next().unwrap();
-    rejoin_test_many_canisters(
+    rejoin_test_long_rounds(
         env,
         config.num_canisters,
         DKG_INTERVAL,
