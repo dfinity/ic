@@ -97,6 +97,10 @@ impl ProposalWithMainnetState {
             recovered_nns_dictator_neuron_id: neuron_id,
         }
         .write_attribute(&env);
+
+        RECOVERED_NNS_DICTATOR_NEURON_ID
+            .set(neuron_id)
+            .expect("'write_dictator_neuron_id_to_env' can only be called once");
     }
 
     /// Initializes the static variable holding the dictator neuron ID by reading it from the test
