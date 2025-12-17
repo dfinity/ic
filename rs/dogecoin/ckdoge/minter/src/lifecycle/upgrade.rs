@@ -62,6 +62,7 @@ impl From<UpgradeArgs> for CkbtcMinterUpgradeArgs {
     }
 }
 
+#[allow(deprecated)]
 impl From<CkbtcMinterUpgradeArgs> for UpgradeArgs {
     fn from(
         CkbtcMinterUpgradeArgs {
@@ -70,11 +71,9 @@ impl From<CkbtcMinterUpgradeArgs> for UpgradeArgs {
             max_time_in_queue_nanos,
             mode,
             check_fee: _,
-            #[allow(deprecated)]
-                kyt_fee: _,
+            kyt_fee: _,
             btc_checker_principal: _,
-            #[allow(deprecated)]
-                kyt_principal: _,
+            kyt_principal: _,
             get_utxos_cache_expiration_seconds,
             utxo_consolidation_threshold,
             max_num_inputs_in_transaction,

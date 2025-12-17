@@ -122,6 +122,7 @@ impl From<InitArgs> for CkbtcMinterInitArgs {
     }
 }
 
+#[allow(deprecated)]
 impl From<CkbtcMinterInitArgs> for InitArgs {
     fn from(
         CkbtcMinterInitArgs {
@@ -133,11 +134,9 @@ impl From<CkbtcMinterInitArgs> for InitArgs {
             min_confirmations,
             mode,
             check_fee: _,
-            #[allow(deprecated)]
-                kyt_fee: _,
+            kyt_fee: _,
             btc_checker_principal: _,
-            #[allow(deprecated)]
-                kyt_principal: _,
+            kyt_principal: _,
             get_utxos_cache_expiration_seconds,
             utxo_consolidation_threshold,
             max_num_inputs_in_transaction,
