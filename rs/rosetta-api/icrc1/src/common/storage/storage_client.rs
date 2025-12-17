@@ -163,7 +163,7 @@ impl StorageClient {
                 tracing::info!("Using balance sync batch size {}", balance_sync_batch_size);
 
                 // Create tables
-                super::schema::create_tables(conn)?;
+                to_rusqlite_result(super::schema::create_tables(conn))?;
 
                 Ok(())
             })
