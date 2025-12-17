@@ -8,7 +8,7 @@ use ic_system_test_driver::{
     retry_with_msg,
     util::block_on,
 };
-use slog::{info, warn};
+use slog::info;
 
 pub mod util;
 use util::{NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT, setup_ic_infrastructure};
@@ -45,10 +45,6 @@ pub fn registration(env: TestEnv) {
 
     let nested_vms = env.get_all_nested_vms().unwrap();
     let n = nested_vms.len();
-    if n == 0 {
-        warn!(logger, "No nested VMs found to register.");
-        return;
-    }
 
     for node in nested_vms {
         let node_name = &node.vm_name();

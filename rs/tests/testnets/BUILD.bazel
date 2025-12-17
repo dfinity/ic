@@ -326,7 +326,6 @@ rust_binary(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nested",
         "//rs/tests/nested/nns_recovery:common",
-        "//rs/tests/testnets/mainnet_nns:lib",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
     ],

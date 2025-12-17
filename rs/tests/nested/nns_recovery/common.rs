@@ -90,7 +90,7 @@ fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
     (1..=num_hosts).map(|i| format!("host-{i}")).collect()
 }
 
-pub fn replace_nns_with_nested_vms(env: &TestEnv, use_mainnet_state: bool) {
+fn replace_nns_with_nested_vms(env: &TestEnv, use_mainnet_state: bool) {
     let logger = env.logger();
 
     info!(logger, "Adding all nested VMs to the NNS subnet...");
@@ -170,7 +170,7 @@ pub fn replace_nns_with_nested_vms(env: &TestEnv, use_mainnet_state: bool) {
 // Mirror production setup by granting backup access to all NNS nodes to a specific SSH key.
 // This is necessary as part of the `DownloadCertifications` step of the recovery to determine
 // the latest certified height of the subnet.
-pub fn grant_backup_access_to_all_nns_nodes(
+fn grant_backup_access_to_all_nns_nodes(
     env: &TestEnv,
     backup_auth: &AuthMean,
     ssh_backup_pub_key: &str,
@@ -225,10 +225,27 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
         setup_ic_infrastructure(&env, Some(cfg.dkg_interval), /*is_fast=*/ false);
     }
 
-    let host_vm_names = get_host_vm_names(cfg.subnet_size);
-    NestedNodes::new_with_resources(&host_vm_names, NNS_RECOVERY_VM_RESOURCES)
-        .setup_and_start(&env)
-        .unwrap();
+    if cfg.subnet_size > 0 {
+        let host_vm_names = get_host_vm_names(cfg.subnet_size);
+        NestedNodes::new_with_resources(&host_vm_names, NNS_RECOVERY_VM_RESOURCES)
+            .setup_and_start(&env)
+            .unwrap();
+
+        nested::registration(env.clone());
+        replace_nns_with_nested_vms(&env, cfg.use_mainnet_state);
+    }
+
+    let AdminAndUserKeys {
+        user_auth: backup_auth,
+        ssh_user_pub_key: ssh_backup_pub_key,
+        ..
+    } = get_admin_keys_and_generate_backup_keys(&env);
+    grant_backup_access_to_all_nns_nodes(
+        &env,
+        &backup_auth,
+        &ssh_backup_pub_key,
+        cfg.use_mainnet_state,
+    );
 }
 
 pub fn test(env: TestEnv, cfg: TestConfig) {
@@ -250,19 +267,8 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         ssh_admin_priv_key_path,
         admin_auth,
         ssh_user_priv_key_path: ssh_backup_priv_key_path,
-        user_auth: backup_auth,
-        ssh_user_pub_key: ssh_backup_pub_key,
         ..
     } = get_admin_keys_and_generate_backup_keys(&env);
-
-    nested::registration(env.clone());
-    replace_nns_with_nested_vms(&env, cfg.use_mainnet_state);
-    grant_backup_access_to_all_nns_nodes(
-        &env,
-        &backup_auth,
-        &ssh_backup_pub_key,
-        cfg.use_mainnet_state,
-    );
 
     let current_version = get_guestos_img_version();
     info!(logger, "Current GuestOS version: {:?}", current_version);

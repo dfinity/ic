@@ -37,13 +37,10 @@
 
 use anyhow::Result;
 use ic_consensus_system_test_subnet_recovery::utils::{
-    AdminAndUserKeys, break_nodes, get_admin_keys_and_generate_backup_keys,
-    node_with_highest_certification_share_height,
+    break_nodes, node_with_highest_certification_share_height,
 };
 use ic_limits::DKG_INTERVAL_HEIGHT;
-use ic_nested_nns_recovery_common::{
-    SetupConfig, grant_backup_access_to_all_nns_nodes, replace_nns_with_nested_vms,
-};
+use ic_nested_nns_recovery_common::SetupConfig;
 use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources};
 use ic_system_test_driver::driver::nested::HasNestedVms;
@@ -52,7 +49,6 @@ use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::driver::test_setup::GroupSetup;
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
-use ic_testnet_mainnet_nns::proposals::ProposalWithMainnetState;
 use slog::{info, warn};
 use std::time::Duration;
 
@@ -93,31 +89,8 @@ fn setup(env: TestEnv, use_mainnet_state: bool) {
     env.sync_with_prometheus();
 }
 
-fn test(env: TestEnv, use_mainnet_state: bool) {
-    if use_mainnet_state {
-        ProposalWithMainnetState::read_dictator_neuron_id_from_env(&env);
-    }
-
+fn test(env: TestEnv) {
     let logger = env.logger();
-
-    if env.get_all_nested_vms().unwrap().len() > 0 {
-        nested::registration(env.clone());
-        replace_nns_with_nested_vms(&env, use_mainnet_state);
-
-        env.sync_with_prometheus();
-    }
-
-    let AdminAndUserKeys {
-        user_auth: backup_auth,
-        ssh_user_pub_key: ssh_backup_pub_key,
-        ..
-    } = get_admin_keys_and_generate_backup_keys(&env);
-    grant_backup_access_to_all_nns_nodes(
-        &env,
-        &backup_auth,
-        &ssh_backup_pub_key,
-        use_mainnet_state,
-    );
 
     let is_external = Vec::<HostFeature>::try_read_attribute(&env)
         .map(|features| features.contains(&HostFeature::DMZ))
@@ -222,17 +195,15 @@ fn maybe_break_at_height(env: TestEnv) {
     info!(logger, "The subnet should now be broken.");
 }
 
-fn use_mainnet_state() -> bool {
-    std::env::var("USE_MAINNET_STATE")
-        .map(|v| v == "1" || v.to_lowercase() == "true")
-        .expect("USE_MAINNET_STATE environment variable not set")
-}
-
 fn main() -> Result<()> {
+    let use_mainnet_state = std::env::var("USE_MAINNET_STATE")
+        .map(|v| v == "1" || v.to_lowercase() == "true")
+        .expect("USE_MAINNET_STATE environment variable not set");
+
     SystemTestGroup::new()
         .with_timeout_per_test(Duration::from_secs(90 * 60))
-        .with_setup(move |env| setup(env, use_mainnet_state()))
-        .add_test(systest!(test; use_mainnet_state()))
+        .with_setup(move |env| setup(env, use_mainnet_state))
+        .add_test(systest!(test))
         .execute_from_args()?;
     Ok(())
 }
