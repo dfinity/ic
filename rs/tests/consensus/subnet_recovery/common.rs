@@ -481,8 +481,9 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         .then_some(get_guestos_update_img_version());
     std::fs::write(
         env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH),
-        serde_json::to_string(get_guestos_launch_measurements()).unwrap(),
-    );
+        serde_json::to_string(&get_guestos_launch_measurements()).unwrap(),
+    )
+    .expect("Could not write guest launch measurements to file");
 
     let recovery_dir = get_dependency_path("rs/tests");
     let binaries_dir = recovery_dir.join("recovery/binaries");

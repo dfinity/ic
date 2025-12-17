@@ -471,12 +471,13 @@ pub mod local {
                 logger.clone(),
                 session,
                 measurements_path.as_ref(),
-                GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH,
+                &PathBuf::from(GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH),
                 0o400,
             );
         }
-        let upgrade_image_launch_measurements_path =
-            upgrade_image_launch_measurements_path.map(|p| p.display());
+        let upgrade_image_launch_measurements_path = upgrade_image_launch_measurements_path
+            .clone()
+            .map(|p| p.display().to_string());
         let upgrade_image_launch_measurements_path_cli =
             opt_cli_arg!(upgrade_image_launch_measurements_path);
         let replacement_nodes_cli = opt_vec_cli_arg!(replacement_nodes);
