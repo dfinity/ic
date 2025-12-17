@@ -154,7 +154,6 @@ DEV_DATA = [
     "//rs/migration_canister:migration-canister",
     "//rs/nns/cmc:cycles-minting-canister",
     "//rs/nns/governance:governance-canister",
-    "//rs/nns/governance:governance-canister-pbr",
     "//rs/nns/governance:governance-canister-test",
     "//rs/nns/gtc:genesis-token-canister",
     "//rs/nns/handlers/lifeline/impl:lifeline_canister",
@@ -180,7 +179,6 @@ DEV_ENV = {
     "CYCLES_LEDGER_WASM_PATH": "$(rootpath @cycles-ledger.wasm.gz//file)",
     "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
     "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
-    "GOVERNANCE_CANISTER_TEST_PBR_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-pbr)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
     "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
     "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
@@ -384,19 +382,5 @@ rust_ic_test(
         "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
         "requires-network",  # Because mainnet state is downloaded (and used).
     ],
-    deps = BASE_DEPENDENCIES +
-           DEV_DEPENDENCIES + [
-        # Keep sorted.
-        "//rs/nns/governance:governance--pbr_feature",
-        "//rs/nns/handlers/root/impl:root--test_feature",
-        "//rs/sns/init:init--test_feature",
-    ] + select({
-        "@rules_rust//rust/platform:wasm32-unknown-unknown": [
-            "//rs/nns/gtc",
-        ],
-        "//conditions:default": [
-            "//rs/nns/gtc:gtc--test_feature",
-            "//rs/nns/test_utils:test_utils--test_feature",
-        ],
-    }),
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
