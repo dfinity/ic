@@ -22,7 +22,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tempfile::NamedTempFile;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Command;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
@@ -42,9 +41,6 @@ const DEFAULT_METRICS_FILE_PATH: &str =
     "/run/node_exporter/collector_textfile/hostos_guestos_service.prom";
 const UPGRADE_METRICS_FILE_PATH: &str =
     "/run/node_exporter/collector_textfile/hostos_guestos_upgrade_service.prom";
-
-const DEFAULT_GUESTOS_SERVICE_NAME: &str = "guestos.service";
-const UPGRADE_GUESTOS_SERVICE_NAME: &str = "upgrade-guestos.service";
 
 const CONSOLE_TTY1_PATH: &str = "/dev/tty1";
 const CONSOLE_TTY_SERIAL_PATH: &str = "/dev/ttyS0";
@@ -537,56 +533,21 @@ impl GuestVmService {
         #[cfg(not(test))]
         sleep(Duration::from_secs(10)).await;
 
-        self.write_to_console_and_stdout("ERROR: Failed to start GuestOS virtual machine.");
+        let serial_logs_id = match self.guest_vm_type {
+            GuestVMType::Default => "guestos-serial",
+            GuestVMType::Upgrade => "upgrade-guestos-serial",
+        };
+
+        self.write_to_console_and_stdout(
+            "ERROR: Failed to start GuestOS virtual machine. \
+            Please use the host console for troubleshooting.",
+        );
+        self.write_to_console_and_stdout(&format!(
+            "Guest serial logs can be retrieved from journald under id {serial_logs_id}"
+        ));
         // Write debug repr because it includes the cause.
         self.write_to_console(&format!("{e:?}"));
-        self.write_to_console("#################################################");
-        self.write_to_console(&format!(
-            "###      LOGGING {} LOGS...      ###",
-            self.systemd_service_name().to_uppercase()
-        ));
-        self.write_to_console("#################################################");
-
-        let _ignore = self.display_systemd_logs().await;
-
-        self.write_to_console("#################################################");
-        self.write_to_console("###          TROUBLESHOOTING INFO...          ###");
-        self.write_to_console("#################################################");
-        self.write_to_console(&format!(
-            "Host IPv6 address: {}",
-            self.get_host_ipv6_address()
-        ));
-
-        // Check for and display serial logs if they exist
-        self.display_serial_logs().await;
-
-        self.write_to_console_and_stdout(&format!(
-            "Exiting so that systemd can restart {}",
-            self.systemd_service_name()
-        ));
-    }
-
-    /// Captures and displays journalctl logs for the guestos service
-    async fn display_systemd_logs(&self) -> Result<()> {
-        let journalctl_output = Command::new("journalctl")
-            .args(["-u", self.systemd_service_name()])
-            .output()
-            .await
-            .context("Failed to run journalctl")?;
-
-        let logs = String::from_utf8_lossy(&journalctl_output.stdout);
-        for line in logs.lines() {
-            self.write_to_console(line);
-        }
-
-        Ok(())
-    }
-
-    fn systemd_service_name(&self) -> &str {
-        match self.guest_vm_type {
-            GuestVMType::Default => DEFAULT_GUESTOS_SERVICE_NAME,
-            GuestVMType::Upgrade => UPGRADE_GUESTOS_SERVICE_NAME,
-        }
+        eprintln!("Exiting so that systemd can restart");
     }
 
     fn metrics_path(guest_vm_type: GuestVMType) -> &'static Path {
@@ -604,7 +565,6 @@ impl GuestVmService {
             }
             Ok(Ok(false)) => {
                 self.write_to_console_and_stdout("GuestOS boot failed");
-                self.display_serial_logs().await;
             }
             Ok(Err(err)) => {
                 self.write_to_console_and_stdout(&format!(
@@ -613,7 +573,6 @@ impl GuestVmService {
             }
             Err(_) => {
                 self.write_to_console_and_stdout("GuestOS boot timed out");
-                self.display_serial_logs().await;
             }
         }
     }
@@ -650,36 +609,6 @@ impl GuestVmService {
             if fail.find(&line).is_some() {
                 return Ok(false);
             }
-        }
-    }
-
-    /// Displays serial logs from the console log file if it exists
-    async fn display_serial_logs(&self) {
-        let serial_log_path = &self.vm_serial_log_path;
-        if serial_log_path.exists() {
-            self.write_to_console_and_stdout("#################################################");
-            self.write_to_console_and_stdout("###  LOGGING GUESTOS CONSOLE LOGS, IF ANY...  ###");
-            self.write_to_console_and_stdout("#################################################");
-
-            let tail_output = Command::new("tail")
-                .args(["-n", "100", serial_log_path.to_str().unwrap()])
-                .output()
-                .await;
-
-            match tail_output {
-                Ok(tail_output) => {
-                    for line in String::from_utf8_lossy(&tail_output.stdout).lines() {
-                        self.write_to_console_and_stdout(&format!("[GUESTOS] {line}"));
-                    }
-                }
-                Err(err) => {
-                    self.write_to_console_and_stdout(&format!(
-                        "Failed to tail Guest serial log. {err}"
-                    ));
-                }
-            }
-        } else {
-            self.write_to_console_and_stdout("No console log file found.");
         }
     }
 
@@ -1013,11 +942,7 @@ mod tests {
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: Default::default(),
             },
-            #[allow(deprecated)]
             hostos_settings: HostOSSettings {
-                vm_memory: 16,
-                vm_cpu: "qemu".to_string(),
-                vm_nr_of_vcpus: 56,
                 verbose: false,
                 hostos_dev_settings: HostOSDevSettings {
                     vm_memory: 16,
@@ -1113,8 +1038,7 @@ mod tests {
 
         service.assert_metrics_contains("hostos_guestos_service_start 0");
         service.assert_vm_not_exists();
-        service
-            .assert_console_contains(&["Failed to create domain", "2001:db8::6800:d8ff:fecb:f597"]);
+        service.assert_console_contains(&["Failed to create domain"]);
     }
 
     #[tokio::test]
@@ -1184,7 +1108,7 @@ mod tests {
         )
         .unwrap();
         service
-            .wait_for_console_contains(&["GuestOS boot failed", "foo bar"])
+            .wait_for_console_contains(&["GuestOS boot failed"])
             .await;
     }
 
@@ -1197,7 +1121,7 @@ mod tests {
         writeln!(fixture.guest_serial_log, "foo bar").unwrap();
         sleep(Duration::from_millis(500)).await;
         service
-            .wait_for_console_contains(&["GuestOS boot timed out", "foo bar"])
+            .wait_for_console_contains(&["GuestOS boot timed out"])
             .await;
     }
 }

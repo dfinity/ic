@@ -1714,14 +1714,14 @@ test_point_operation!(serialization_round_trip, [g1, g2], {
     let rng = &mut reproducible_rng();
 
     for _ in 1..30 {
-        let orig = Projective::hash(b"serialization-round-trip-test", &rng.r#gen::<[u8; 32]>());
+        let orig = Affine::hash(b"serialization-round-trip-test", &rng.r#gen::<[u8; 32]>());
         let bits = orig.serialize();
 
-        let d = Projective::deserialize(&bits).expect("Invalid serialization");
+        let d = Affine::deserialize(&bits).expect("Invalid serialization");
         assert_eq!(orig, d);
         assert_eq!(d.serialize(), bits);
 
-        let du = Projective::deserialize_unchecked(&bits).expect("Invalid serialization");
+        let du = Affine::deserialize_unchecked(&bits).expect("Invalid serialization");
         assert_eq!(orig, du);
         assert_eq!(du.serialize(), bits);
     }

@@ -345,6 +345,7 @@ mod withdrawal_reimbursement {
             change_output: None,
             fee_per_vbyte: None,
             withdrawal_fee: None,
+            signed_tx: None,
         };
         state.push_submitted_transaction(dummy_tx.clone());
 

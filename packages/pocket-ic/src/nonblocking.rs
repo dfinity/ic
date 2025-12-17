@@ -7,14 +7,14 @@ use crate::common::rest::{
     RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult,
     RawCanisterSnapshotDownload, RawCanisterSnapshotId, RawCanisterSnapshotUpload, RawCycles,
     RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
-    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime,
-    RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
+    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTickConfigs, RawTime,
+    RawVerifyCanisterSigArg, SubnetId, Topology,
 };
 #[cfg(windows)]
 use crate::wsl_path;
 use crate::{
-    IngressStatusResult, PocketIcBuilder, PocketIcState, RejectResponse, StartServerParams, Time,
-    copy_dir, start_server,
+    IngressStatusResult, PocketIcBuilder, PocketIcState, RejectResponse, StartServerParams,
+    TickConfigs, Time, copy_dir, start_server,
 };
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
@@ -373,7 +373,8 @@ impl PocketIc {
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn tick_with_configs(&self, configs: TickConfigs) {
         let endpoint = "update/tick";
-        self.post::<(), _>(endpoint, configs).await;
+        self.post::<(), RawTickConfigs>(endpoint, configs.into())
+            .await;
     }
 
     /// Configures the IC to make progress automatically,
