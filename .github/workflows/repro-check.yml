@@ -27,7 +27,7 @@ jobs:
     container:
       image: ubuntu:24.04
       options: >-
-        -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
+        -e NODE_NAME --privileged --cgroupns host
     steps:
       - name: Setup podman
         shell: bash
