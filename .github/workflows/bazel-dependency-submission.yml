@@ -3,7 +3,7 @@ name: Bazel Dependency Submission
 on:
   push:
     branches:
-      - 'master'
+      - 'tmu/dep-gh-submission2-qa'
 
 permissions:
   contents: write
