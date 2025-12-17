@@ -13,7 +13,10 @@ use candid::{Encode, Principal};
 use ic_bitcoin_canister_mock::{OutPoint, Utxo};
 use ic_ckdoge_minter::{
     Txid, get_dogecoin_canister_id,
-    lifecycle::init::{InitArgs, MinterArg, Mode, Network},
+    lifecycle::{
+        MinterArg,
+        init::{InitArgs, Mode, Network},
+    },
 };
 use ic_icrc1_ledger::ArchiveOptions;
 use ic_management_canister_types::{CanisterId, CanisterSettings};

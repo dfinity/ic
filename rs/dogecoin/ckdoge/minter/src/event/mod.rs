@@ -56,7 +56,7 @@ pub enum CkDogeMinterEventType {
 
     /// Indicates the minter upgrade with specified arguments.
     #[serde(rename = "upgrade")]
-    Upgrade(crate::lifecycle::init::UpgradeArgs),
+    Upgrade(crate::lifecycle::upgrade::UpgradeArgs),
 
     /// Indicates that the minter received new UTXOs to the specified account.
     /// The minter emits this event _after_ it minted ckDOGE.
@@ -301,7 +301,7 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                     )),
                 }?;
                 Ok(CkDogeMinterEventType::Upgrade(
-                    crate::lifecycle::init::UpgradeArgs::from(args),
+                    crate::lifecycle::upgrade::UpgradeArgs::from(args),
                 ))
             }
             CkBtcMinterEventType::ReceivedUtxos {

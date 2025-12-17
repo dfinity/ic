@@ -13,7 +13,7 @@ use ic_ckdoge_minter::{
         RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError, WithdrawalFee,
     },
     event::CkDogeMinterEvent,
-    lifecycle::init::MinterArg,
+    lifecycle::MinterArg,
     updates,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
