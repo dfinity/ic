@@ -1323,8 +1323,12 @@ impl Scheduler for SchedulerImpl {
             //
             // We want the total number executed instructions to not exceed `R`,
             // which gives us: `X - (1 - S) <= R` or `X <= R - S + 1`.
+            let max_instructions_per_slice = std::cmp::max(
+                self.config.max_instructions_per_slice,
+                self.config.max_instructions_per_install_code_slice,
+            );
             let round_instructions = as_round_instructions(self.config.max_instructions_per_round)
-                - as_round_instructions(self.config.max_instructions_per_slice)
+                - as_round_instructions(max_instructions_per_slice)
                 + RoundInstructions::from(1);
 
             SchedulerRoundLimits {

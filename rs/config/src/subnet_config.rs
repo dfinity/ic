@@ -57,9 +57,12 @@ const INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION: NumInstructions =
 // would cause the longest possible round of 4B instructions or 2 seconds.
 //
 // In general, the round limit should be close to
-// `message_limit + 2B * (1 / finalization_rate)` which ensures that
+// `slice_limit + 2B * (1 / finalization_rate)` which ensures that
 // 1) execution does not slow down finalization.
 // 2) execution does not waste the time available per round.
+//
+// Hence, we set it to `MAX_INSTRUCTIONS_PER_SLICE.max(MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE) + NumInstructions::from(2 * B)`,
+// but have to hard-code it due to `const` requirements.
 const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(4 * B);
 
 // Limit per `install_code` message. It's bigger than the limit for a regular
@@ -319,7 +322,7 @@ impl SchedulerConfig {
         let max_instructions_per_query_message = max_instructions_per_message;
         let max_instructions_per_install_code = NumInstructions::from(1_000 * B);
         let max_instructions_per_slice = NumInstructions::from(2 * B);
-        let max_instructions_per_install_code_slice = NumInstructions::from(2 * B);
+        let max_instructions_per_install_code_slice = NumInstructions::from(5 * B);
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             max_paused_executions: MAX_PAUSED_EXECUTIONS,
