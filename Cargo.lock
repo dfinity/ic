@@ -6622,6 +6622,7 @@ dependencies = [
  "ic-config",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-crypto-returning-ok",
+ "ic-crypto-test-utils-ni-dkg",
  "ic-interfaces",
  "ic-limits",
  "ic-logger",
@@ -7653,6 +7654,7 @@ dependencies = [
  "ic-cdk",
  "ic-config",
  "ic-crypto-sha2",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-dummy-getrandom-for-wasm",
  "ic-http-types",
  "ic-icrc1",
@@ -7679,6 +7681,7 @@ dependencies = [
  "num-traits",
  "pocket-ic",
  "proptest",
+ "rand 0.8.5",
  "ripemd",
  "scopeguard",
  "serde",
@@ -7697,6 +7700,7 @@ dependencies = [
  "bs58 0.5.1",
  "candid",
  "candid_parser",
+ "ciborium",
  "hex",
  "ic-cdk",
  "ic-ckbtc-minter",
@@ -9531,7 +9535,7 @@ dependencies = [
 [[package]]
 name = "ic-doge-interface"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/dogecoin-canister?rev=74e6dc9a10ba64d2dbad013282c26d74cd49863f#74e6dc9a10ba64d2dbad013282c26d74cd49863f"
+source = "git+https://github.com/dfinity/dogecoin-canister?rev=a5f89792a002b060e3f0174f1a87da9764f855f8#a5f89792a002b060e3f0174f1a87da9764f855f8"
 dependencies = [
  "candid",
  "datasize",
@@ -9656,6 +9660,7 @@ name = "ic-error-types"
 version = "0.2.0"
 dependencies = [
  "ic-heap-bytes",
+ "regex-lite",
  "serde",
  "strum 0.26.3",
  "strum_macros 0.26.4",
@@ -9754,7 +9759,7 @@ dependencies = [
  "prometheus 0.13.4",
  "proptest",
  "rand 0.8.5",
- "regex",
+ "regex-lite",
  "rstest",
  "scoped_threadpool",
  "serde",
@@ -19162,6 +19167,7 @@ dependencies = [
  "ic-crypto-test-utils-tls",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-dashboard",
  "ic-ed25519 0.5.0",
  "ic-http-endpoints-async-utils",

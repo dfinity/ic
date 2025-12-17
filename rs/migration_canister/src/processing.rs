@@ -80,8 +80,8 @@ pub async fn process_accepted(
         return ProcessingResult::NoProgress;
     };
 
-    // Set controller of source
-    let res = set_exclusive_controller(request.source)
+    // Set controller of migrated canister
+    let res = set_exclusive_controller(request.migrated_canister)
         .await
         .map_success(|_| RequestState::ControllersChanged {
             request: request.clone(),
@@ -95,8 +95,8 @@ pub async fn process_accepted(
         return res;
     }
 
-    // Set controller of target
-    set_exclusive_controller(request.target)
+    // Set controller of replaced canister
+    set_exclusive_controller(request.replaced_canister)
         .await
         .map_success(|_| RequestState::ControllersChanged {
             request: request.clone(),
@@ -117,67 +117,71 @@ pub async fn process_controllers_changed(
     };
 
     // These checks are repeated because the canisters may have changed since validation:
-    let ProcessingResult::Success(source_status) = canister_status(request.source).await else {
+    let ProcessingResult::Success(migrated_canister_status) =
+        canister_status(request.migrated_canister).await
+    else {
         return ProcessingResult::NoProgress;
     };
-    if source_status.status != CanisterStatusType::Stopped {
+    if migrated_canister_status.status != CanisterStatusType::Stopped {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
             recovery_state: RecoveryState::new(),
-            reason: "Source is not stopped.".to_string(),
+            reason: "Migrated canister is not stopped.".to_string(),
         });
     }
-    if !source_status.ready_for_migration {
+    if !migrated_canister_status.ready_for_migration {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
             recovery_state: RecoveryState::new(),
-            reason: "Source is not ready for migration.".to_string(),
+            reason: "Migrated canister is not ready for migration.".to_string(),
         });
     }
-    let canister_version = source_status.version;
+    let canister_version = migrated_canister_status.version;
     if canister_version > u64::MAX / 2 {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
             recovery_state: RecoveryState::new(),
-            reason: "Source version is too large.".to_string(),
+            reason: "Migrated canister version is too large.".to_string(),
         });
     }
 
-    let ProcessingResult::Success(target_status) = canister_status(request.target).await else {
+    let ProcessingResult::Success(replaced_canister_status) =
+        canister_status(request.replaced_canister).await
+    else {
         return ProcessingResult::NoProgress;
     };
-    if target_status.status != CanisterStatusType::Stopped {
+    if replaced_canister_status.status != CanisterStatusType::Stopped {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
             recovery_state: RecoveryState::new(),
-            reason: "Target is not stopped.".to_string(),
+            reason: "Replaced canister is not stopped.".to_string(),
         });
     }
-    match assert_no_snapshots(request.target).await {
+    match assert_no_snapshots(request.replaced_canister).await {
         ProcessingResult::Success(_) => {}
         ProcessingResult::NoProgress => return ProcessingResult::NoProgress,
         ProcessingResult::FatalFailure(_) => {
             return ProcessingResult::FatalFailure(RequestState::Failed {
                 request,
                 recovery_state: RecoveryState::new(),
-                reason: "Target has snapshots.".to_string(),
+                reason: "Replaced canister has snapshots.".to_string(),
             });
         }
     }
 
-    if source_status.cycles < CYCLES_COST_PER_MIGRATION {
+    if migrated_canister_status.cycles < CYCLES_COST_PER_MIGRATION {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
             recovery_state: RecoveryState::new(),
             reason: format!(
-                "Source does not have sufficient cycles: {} < {}.",
-                source_status.cycles, CYCLES_COST_PER_MIGRATION
+                "Migrated canister does not have sufficient cycles: {} < {}.",
+                migrated_canister_status.cycles, CYCLES_COST_PER_MIGRATION
             ),
         });
     }
 
-    // Determine history length of source
-    get_canister_info(request.source)
+    // Determine history length of migrated canister
+    get_canister_info(request.migrated_canister)
         .await
         .map_success(|canister_info_result| RequestState::StoppedAndReady {
             request: request.clone(),
@@ -188,7 +192,7 @@ pub async fn process_controllers_changed(
         .map_failure(|()| RequestState::Failed {
             request,
             recovery_state: RecoveryState::new(),
-            reason: "Source has been deleted".to_string(),
+            reason: "Migrated canister has been deleted".to_string(),
         })
 }
 
@@ -209,15 +213,15 @@ pub async fn process_stopped(
         return ProcessingResult::NoProgress;
     };
     rename_canister(
-        request.source,
+        request.migrated_canister,
         canister_version,
-        request.target,
-        request.target_subnet,
+        request.replaced_canister,
+        request.replaced_canister_subnet,
         canister_history_total_num,
         request.caller,
     )
     .await
-    .map_success(|_| RequestState::RenamedTarget {
+    .map_success(|_| RequestState::RenamedReplacedCanister {
         request,
         stopped_since,
     })
@@ -227,16 +231,16 @@ pub async fn process_stopped(
 pub async fn process_renamed(
     request: RequestState,
 ) -> ProcessingResult<RequestState, RequestState> {
-    let RequestState::RenamedTarget {
+    let RequestState::RenamedReplacedCanister {
         request,
         stopped_since,
     } = request
     else {
-        println!("Error: list_by RenamedTarget returned bad variant");
+        println!("Error: list_by RenamedReplacedCanister returned bad variant");
         return ProcessingResult::NoProgress;
     };
 
-    migrate_canister(request.source, request.target_subnet)
+    migrate_canister(request.migrated_canister, request.replaced_canister_subnet)
         .await
         .map_success(|registry_version| RequestState::UpdatedRoutingTable {
             request,
@@ -259,17 +263,19 @@ pub async fn process_updated(
         return ProcessingResult::NoProgress;
     };
     // call both subnets
-    let ProcessingResult::Success(source_subnet_version) =
-        get_registry_version(request.source_subnet).await
+    let ProcessingResult::Success(migrated_canister_subnet_version) =
+        get_registry_version(request.migrated_canister_subnet).await
     else {
         return ProcessingResult::NoProgress;
     };
-    let ProcessingResult::Success(target_subnet_version) =
-        get_registry_version(request.target_subnet).await
+    let ProcessingResult::Success(replaced_canister_subnet_version) =
+        get_registry_version(request.replaced_canister_subnet).await
     else {
         return ProcessingResult::NoProgress;
     };
-    if source_subnet_version < registry_version || target_subnet_version < registry_version {
+    if migrated_canister_subnet_version < registry_version
+        || replaced_canister_subnet_version < registry_version
+    {
         return ProcessingResult::NoProgress;
     }
     ProcessingResult::Success(RequestState::RoutingTableChangeAccepted {
@@ -290,25 +296,25 @@ pub async fn process_routing_table(
         return ProcessingResult::NoProgress;
     };
     let ProcessingResult::Success(()) =
-        delete_canister(request.source, request.source_subnet).await
+        delete_canister(request.migrated_canister, request.migrated_canister_subnet).await
     else {
         return ProcessingResult::NoProgress;
     };
-    ProcessingResult::Success(RequestState::SourceDeleted {
+    ProcessingResult::Success(RequestState::MigratedCanisterDeleted {
         request,
         stopped_since,
     })
 }
 
-pub async fn process_source_deleted(
+pub async fn process_migrated_canister_deleted(
     request: RequestState,
 ) -> ProcessingResult<RequestState, RequestState> {
-    let RequestState::SourceDeleted {
+    let RequestState::MigratedCanisterDeleted {
         request,
         stopped_since,
     } = request
     else {
-        println!("Error: list_by SourceDeleted returned bad variant");
+        println!("Error: list_by MigratedCanisterDeleted returned bad variant");
         return ProcessingResult::NoProgress;
     };
     // The protocol ensures the following:
@@ -316,8 +322,8 @@ pub async fn process_source_deleted(
     // is never more than `MAX_INGRESS_TTL + PERMITTED_DRIFT_AT_VALIDATOR` into the future
     // w.r.t. the subnet time that executed the ingress message.
     // Hence, we must wait for at least `MAX_INGRESS_TTL + PERMITTED_DRIFT_AT_VALIDATOR`
-    // and also additionally account for a clock drift between the source and target subnet
-    // that we bound by 30 seconds.
+    // and also additionally account for a clock drift between the migrated canister
+    // and replaced canister subnet that we bound by 30 seconds.
     let max_subnet_clock_drift_nanos = 30 * 1_000_000_000;
     if time().saturating_sub(stopped_since)
         < MAX_INGRESS_TTL.as_nanos() as u64
@@ -326,18 +332,18 @@ pub async fn process_source_deleted(
     {
         return ProcessingResult::NoProgress;
     }
-    // restore controllers of target
+    // restore controllers
     let controllers = request
-        .source_original_controllers
+        .migrated_canister_original_controllers
         .iter()
         .filter(|x| **x != canister_self())
         .cloned()
         .collect::<Vec<Principal>>();
     let ProcessingResult::Success(()) =
-        // The migration canister is the exclusive controller of `request.source`
+        // The migration canister is the exclusive controller of `request.migrated_canister`
         // and thus the following call cannot fail because of the caller
         // not being a controller.
-        set_controllers(request.source, controllers, request.target_subnet).await
+        set_controllers(request.migrated_canister, controllers, request.replaced_canister_subnet).await
     else {
         return ProcessingResult::NoProgress;
     };
@@ -385,16 +391,16 @@ async fn process_failed(request: RequestState) -> RecoveryResult {
         return RecoveryResult::Unreachable;
     };
 
-    recovery_state.restore_source_controllers = controller_recovery(
-        recovery_state.restore_source_controllers,
-        request.source,
-        request.source_original_controllers.clone(),
+    recovery_state.restore_migrated_canister_controllers = controller_recovery(
+        recovery_state.restore_migrated_canister_controllers,
+        request.migrated_canister,
+        request.migrated_canister_original_controllers.clone(),
     )
     .await;
-    recovery_state.restore_target_controllers = controller_recovery(
-        recovery_state.restore_target_controllers,
-        request.target,
-        request.target_original_controllers.clone(),
+    recovery_state.restore_replaced_canister_controllers = controller_recovery(
+        recovery_state.restore_replaced_canister_controllers,
+        request.replaced_canister,
+        request.replaced_canister_original_controllers.clone(),
     )
     .await;
 

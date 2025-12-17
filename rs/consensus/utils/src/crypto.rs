@@ -53,9 +53,9 @@ impl<Message: Signable, C: BasicSigner<Message> + BasicSigVerifier<Message>>
         &self,
         message: &Hashed<CryptoHashOf<Message>, Message>,
         signer: NodeId,
-        selector: RegistryVersion,
+        _selector: RegistryVersion,
     ) -> CryptoResult<BasicSignature<Message>> {
-        self.sign_basic(message.as_ref(), signer, selector)
+        self.sign_basic(message.as_ref())
             .map(|signature| BasicSignature { signature, signer })
     }
     fn verify(
@@ -79,9 +79,9 @@ impl<Message: Signable, C: BasicSigner<Message> + BasicSigVerifier<Message>>
         &self,
         message: &Message,
         signer: NodeId,
-        selector: RegistryVersion,
+        _selector: RegistryVersion,
     ) -> CryptoResult<BasicSignature<Message>> {
-        self.sign_basic(message, signer, selector)
+        self.sign_basic(message)
             .map(|signature| BasicSignature { signature, signer })
     }
 
@@ -111,9 +111,9 @@ where
         &self,
         message: &Message,
         signer: NodeId,
-        selector: RegistryVersion,
+        _selector: RegistryVersion,
     ) -> CryptoResult<BasicSignature<CryptoHashOf<Message>>> {
-        self.sign_basic(&ic_types::crypto::crypto_hash(message), signer, selector)
+        self.sign_basic(&ic_types::crypto::crypto_hash(message))
             .map(|signature| BasicSignature { signature, signer })
     }
 
