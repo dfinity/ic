@@ -356,11 +356,8 @@ fn make_new_pre_signatures_if_needed_helper(
         .key_configs
         .iter()
         .find(|key_config| &key_config.key_id == key_id.inner())
-        .map(|key_config| {
-            key_config
-                .pre_signatures_to_create_in_advance
-                .unwrap_or_default() as usize
-        })
+        .and_then(|key_config| key_config.pre_signatures_to_create_in_advance)
+        .map(|u32| u32 as usize)
     else {
         return new_pre_signatures;
     };
@@ -596,11 +593,7 @@ pub(super) fn make_new_pre_signatures_by_priority(
         };
         let max_stash_size = chain_key_config
             .key_config(key_id.inner())
-            .map(|config| {
-                config
-                    .pre_signatures_to_create_in_advance
-                    .unwrap_or_default()
-            })
+            .and_then(|config| config.pre_signatures_to_create_in_advance)
             .unwrap_or_default();
         priority_queue.push(PrioritizedStash {
             count: *total_pre_signatures.get(key_id).unwrap_or(&0),

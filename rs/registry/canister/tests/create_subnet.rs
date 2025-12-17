@@ -264,11 +264,9 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
         subnet_record.chain_key_config = Some(ChainKeyConfigPb {
             key_configs: vec![KeyConfigPb {
                 key_id: Some(MasterPublicKeyIdPb::from(&key_id)),
-                pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
-                    Some(100)
-                } else {
-                    None
-                },
+                pre_signatures_to_create_in_advance: key_id
+                    .requires_pre_signatures()
+                    .then_some(100),
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }],
             signature_request_timeout_ns: None,
