@@ -10,12 +10,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 )
+
+var FARM_BASE_URL = "https://farm.dfinity.systems"
 
 // All output files are saved in this folder, if output-dir is not provided explicitly.
 var DEFAULT_RESULTS_DIR = "ict_testnets"
@@ -165,7 +166,7 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 				return err
 			}
 		}
-		command := []string{"bazel", "run", target, "--", "--keepalive"}
+		command := []string{"bazel", "run", target, "--"}
 		env := os.Environ()
 		cmd.Println(GREEN + "Will try to sync dashboards from k8s branch: " + cfg.k8sBranch)
 		icDashboardsDir, err := sparse_checkout("git@github.com:dfinity-ops/k8s.git", "", []string{"bases/apps/ic-dashboards"}, cfg.k8sBranch)
@@ -184,7 +185,9 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 			command = append(command, "--set-required-host-features="+cfg.requiredHostFeatures)
 		}
 		if cfg.noTTL {
-			command = append(command, "--no-group-ttl")
+			command = append(command, "--no-group-ttl", "--no-delete-farm-group")
+		} else {
+			command = append(command, "--keepalive")
 		}
 		// If the user provided a special config path we add it as an environment variable
 		if config != "" {
@@ -218,7 +221,7 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 			return err
 		}
 		// Process life logs output of the test-driver.
-		_, err = ProcessLogs(stdoutPipe, cmd, outputFilepath, cfg)
+		err = ProcessLogs(stdoutPipe, cmd, outputFilepath, cfg)
 		if err != nil {
 			return err
 		}
@@ -252,10 +255,10 @@ func NewTestnetCreateCmd() *cobra.Command {
 	return cmd
 }
 
-func ProcessLogs(reader io.ReadCloser, cmd *cobra.Command, outputFiles *OutputFilepath, cfg *TestnetConfig) (string, error) {
+func ProcessLogs(reader io.ReadCloser, cmd *cobra.Command, outputFiles *OutputFilepath, cfg *TestnetConfig) error {
 	fullLogFile, err := os.Create(outputFiles.logPath)
 	if err != nil {
-		return "", fmt.Errorf("creating log file %s failed with err: %v", outputFiles.logPath, err)
+		return fmt.Errorf("creating log file %s failed with err: %v", outputFiles.logPath, err)
 	}
 	defer fullLogFile.Close()
 	scanner := bufio.NewScanner(reader)
@@ -263,7 +266,6 @@ func ProcessLogs(reader io.ReadCloser, cmd *cobra.Command, outputFiles *OutputFi
 	buf := make([]byte, MAX_TOKEN_CAPACITY)
 	scanner.Buffer(buf, MAX_TOKEN_CAPACITY)
 	var summary Summary
-	var group string
 	for scanner.Scan() {
 		line := scanner.Text()
 		if cfg.verbose {
@@ -272,13 +274,13 @@ func ProcessLogs(reader io.ReadCloser, cmd *cobra.Command, outputFiles *OutputFi
 		fullLogFile.WriteString(line + "\n")
 		event, err := TryExtractEvent(line)
 		if err != nil {
-			return "", fmt.Errorf("couldn't extract an event from test-driver log, err: %v", err)
+			return fmt.Errorf("couldn't extract an event from test-driver log, err: %v", err)
 		}
 		if event.EventName == JSON_REPORT_CREATED_EVENT {
 			// This event signifies the end of the testnet deployment.
 			err = HasDeploymentSucceeded(event.Body)
 			if err != nil {
-				return "", fmt.Errorf("testnet deployment failed: %v", err)
+				return fmt.Errorf("testnet deployment failed: %v", err)
 			}
 			var buffer bytes.Buffer
 			encoder := json.NewEncoder(&buffer)
@@ -287,21 +289,28 @@ func ProcessLogs(reader io.ReadCloser, cmd *cobra.Command, outputFiles *OutputFi
 			encoder.SetIndent("", "  ")
 			err = encoder.Encode(summary)
 			if err != nil {
-				return "", fmt.Errorf("marshalling summary failed with err: %v", err)
+				return fmt.Errorf("marshalling summary failed with err: %v", err)
 			} else {
 				prettyJson := buffer.String()
 				// Only this line goes to stdout, so that the command output can be piped to jq.
 				cmd.Println(string(prettyJson))
 			}
-			group, err = ExtractFarmGroup(&summary)
+			group, err := ExtractFarmGroup(&summary)
 			if err != nil {
-				return "", err
+				return err
+			}
+			if cfg.noTTL {
+				farmBaseUrl := FARM_BASE_URL
+				if len(cfg.farmBaseUrl) > 0 {
+					farmBaseUrl = cfg.farmBaseUrl
+				}
+				cmd.PrintErrf("%sWARNING Testnet will NOT expire! To prevent resource exhaustion make sure to delete the testnet manually when no longer used using:\ncurl -X DELETE '%s/group/%s'%s\n", YELLOW, farmBaseUrl, group, NC)
 			}
 		} else {
 			summary.add_event(&event)
 		}
 	}
-	return group, nil
+	return nil
 }
 
 func DeleteTestnet(farmBaseUrl string, group string) error {
@@ -380,55 +389,4 @@ func ExtractFarmGroup(summary *Summary) (string, error) {
 		return val.(string), nil
 	}
 	return "", fmt.Errorf("couldn't extract infra group from %s", INFRA_GROUP_NAME_CREATED_EVENT)
-}
-
-func GetTestnetExpiration(farmBaseUrl string, group string) (string, error) {
-	url := farmBaseUrl + "/group/" + group
-	request, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return "", err
-	}
-	client := http.Client{}
-	response, err := client.Do(request)
-	if err != nil {
-		return "", err
-	}
-	defer response.Body.Close()
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		return "", err
-	}
-	if response.StatusCode != 200 {
-		return "", fmt.Errorf("failed to get group via %s, status_code=%d, body={%s}", url, response.StatusCode, string(body))
-	}
-	serializedMap := make(map[string]interface{})
-	err = json.Unmarshal(body, &serializedMap)
-	if err != nil {
-		return "", err
-	}
-	expiration := fmt.Sprintf("%v", serializedMap["expiresAt"])
-	return expiration, nil
-}
-
-func SetTestnetLifetime(farmBaseUrl string, group string, lifetimeSec int) error {
-	// Farm uses ttl (time-to-live) in seconds.
-	ttl := strconv.Itoa(lifetimeSec)
-	url := farmBaseUrl + "/group/" + group + "/ttl/" + ttl
-	request, err := http.NewRequest("PUT", url, nil)
-	if err != nil {
-		return err
-	}
-	client := http.Client{}
-	response, err := client.Do(request)
-	if err != nil {
-		return err
-	}
-	body, err := io.ReadAll((response.Body))
-	if err != nil {
-		return err
-	}
-	if response.StatusCode != 200 {
-		return fmt.Errorf("failed to set group lifetime (ttl) via %s, status_code=%d, body={%s}", url, response.StatusCode, string(body))
-	}
-	return nil
 }
