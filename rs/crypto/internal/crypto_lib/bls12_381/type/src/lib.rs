@@ -236,10 +236,12 @@ impl Scalar {
     ///
     /// Uses the same mechanism as RFC 9380's hash_to_field except
     /// targeting the scalar group.
-    pub fn hash(domain_sep: &[u8], input: &[u8]) -> Self {
+    pub fn hash(domain_sep: &'static str, input: &[u8]) -> Self {
         let mut s = [ic_bls12_381::Scalar::zero()];
         <ic_bls12_381::Scalar as HashToField>::hash_to_field::<ExpandMsgXmd<sha2::Sha256>>(
-            input, domain_sep, &mut s,
+            input,
+            domain_sep.as_bytes(),
+            &mut s,
         );
         Self::new(s[0])
     }
@@ -1147,7 +1149,7 @@ macro_rules! define_affine_and_projective_types {
             /// # Arguments
             /// * `domain_sep` - some protocol specific domain separator
             /// * `input` - the input which will be hashed
-            pub fn hash(domain_sep: &[u8], input: &[u8]) -> Self {
+            pub fn hash(domain_sep: &'static str, input: &[u8]) -> Self {
                 $projective::hash(domain_sep, input).into()
             }
 
@@ -1160,7 +1162,7 @@ macro_rules! define_affine_and_projective_types {
             /// # Arguments
             /// * `domain_sep` - some protocol specific domain separator
             /// * `input` - the input which will be hashed
-            pub fn hash_with_precomputation(domain_sep: &[u8], input: &[u8]) -> Self {
+            pub fn hash_with_precomputation(domain_sep: &'static str, input: &[u8]) -> Self {
                 let mut pt = Self::hash(domain_sep, input);
                 pt.precompute();
                 pt
@@ -1411,10 +1413,10 @@ macro_rules! define_affine_and_projective_types {
             /// # Arguments
             /// * `domain_sep` - some protocol specific domain separator
             /// * `input` - the input which will be hashed
-            pub fn hash(domain_sep: &[u8], input: &[u8]) -> Self {
+            pub fn hash(domain_sep: &'static str, input: &[u8]) -> Self {
                 let pt =
                     <ic_bls12_381::$projective as HashToCurve<ExpandMsgXmd<sha2::Sha256>>>::hash_to_curve(
-                        input, domain_sep,
+                        input, domain_sep.as_bytes(),
                     );
                 Self::new(pt)
             }
@@ -2171,7 +2173,7 @@ impl_debug_using_serialize_for!(G1Projective);
 impl G1Affine {
     /// See draft-irtf-cfrg-bls-signature-05 §4.2.2 for details on BLS augmented signatures
     pub fn augmented_hash(pk: &G2Affine, data: &[u8]) -> Self {
-        let domain_sep = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_AUG_";
+        let domain_sep = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_AUG_";
 
         let mut signature_input = vec![];
         signature_input.extend_from_slice(&pk.serialize());
