@@ -273,12 +273,37 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
     type Error = String;
     fn try_from(event: CkBtcMinterEventType) -> Result<Self, Self::Error> {
         match event {
-            CkBtcMinterEventType::Init(args) => Ok(CkDogeMinterEventType::Init(
-                crate::lifecycle::init::InitArgs::from(args),
-            )),
-            CkBtcMinterEventType::Upgrade(args) => Ok(CkDogeMinterEventType::Upgrade(
-                crate::lifecycle::init::UpgradeArgs::from(args),
-            )),
+            CkBtcMinterEventType::Init(args) => {
+                match (args.check_fee, args.btc_checker_principal) {
+                    (Some(0), None) => Ok(()),
+                    _ => Err(format!("BUG: unexpected checker for ckDOGE {args:?}")),
+                }?;
+                #[allow(deprecated)]
+                match (args.kyt_fee, args.kyt_principal) {
+                    (None, None) => Ok(()),
+                    _ => Err(format!("BUG: unexpected KYT for ckDOGE {args:?}")),
+                }?;
+                Ok(CkDogeMinterEventType::Init(
+                    crate::lifecycle::init::InitArgs::from(args),
+                ))
+            }
+            CkBtcMinterEventType::Upgrade(args) => {
+                #[allow(deprecated)]
+                match (
+                    args.check_fee,
+                    args.kyt_fee,
+                    args.btc_checker_principal,
+                    args.kyt_principal,
+                ) {
+                    (None, None, None, None) => Ok(()),
+                    _ => Err(format!(
+                        "BUG: unexpected checker or KYT for ckDOGE {args:?}"
+                    )),
+                }?;
+                Ok(CkDogeMinterEventType::Upgrade(
+                    crate::lifecycle::init::UpgradeArgs::from(args),
+                ))
+            }
             CkBtcMinterEventType::ReceivedUtxos {
                 mint_txid,
                 to_account,
@@ -550,7 +575,7 @@ fn bitcoin_to_dogecoin(address: BitcoinAddress) -> Result<DogecoinAddress, Strin
             Err(format!("BUG: unexpected address type {address:?}"))
         }
         BitcoinAddress::P2pkh(bytes) => Ok(DogecoinAddress::P2pkh(bytes)),
-        BitcoinAddress::P2sh(bytes) => Ok(DogecoinAddress::P2pkh(bytes)),
+        BitcoinAddress::P2sh(bytes) => Ok(DogecoinAddress::P2sh(bytes)),
     }
 }
 
