@@ -6255,7 +6255,7 @@ fn subnet_split_cleans_in_progress_raw_rand_requests() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_message_without_dts: NumInstructions::new(1),
+            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::from(1),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
