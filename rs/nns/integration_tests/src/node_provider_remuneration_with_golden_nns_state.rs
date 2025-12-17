@@ -231,9 +231,9 @@ mod sanity_check {
     use lazy_static::lazy_static;
     use std::collections::BTreeMap;
 
-    /// Expected adjusted rewards for each node provider up to and including December 15th, 2025.
-    /// These values represent the total rewards with penalties applied for underperforming nodes.
     lazy_static! {
+        /// Expected adjusted rewards for each node provider up to and including December 15th, 2025.
+        /// These values represent the total rewards with penalties applied for underperforming nodes.
         pub static ref EXPECTED_REWARDS_UP_TO_15_DEC: BTreeMap<String, u64> = {
             BTreeMap::from([
                 ("trxbq", 372152),
