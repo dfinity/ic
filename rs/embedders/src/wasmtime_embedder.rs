@@ -29,9 +29,7 @@ use ic_types::{
     methods::{FuncRef, WasmMethod},
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
-use memory_tracker::{
-    DirtyPageTracking, MemoryLimits, SigsegvMemoryTracker,
-};
+use memory_tracker::{DirtyPageTracking, MemoryLimits, SigsegvMemoryTracker};
 use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
@@ -558,11 +556,7 @@ impl WasmtimeEmbedder {
             }
         }
 
-        let memory_trackers = sigsegv_memory_tracker(
-            memories,
-            &mut store,
-            self.log.clone(),
-        );
+        let memory_trackers = sigsegv_memory_tracker(memories, &mut store, self.log.clone());
 
         let signal_stack = WasmtimeSignalStack::new();
         let mut main_memory_type = WasmMemoryType::Wasm32;
