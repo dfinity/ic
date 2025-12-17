@@ -1319,7 +1319,7 @@ impl Scheduler for SchedulerImpl {
             // The round will stop as soon as the counter reaches zero.
             // We can compute the initial value `X` of the counter based on:
             // - `R = max_instructions_per_round`,
-            // - `S = max_instructions_per_slice`.
+            // - `S = max(max_instructions_per_slice, max_instructions_per_install_code_slice)`.
             // In the worst case, we start a new Wasm execution when then counter
             // reaches 1 and the execution uses the maximum `S` instructions. After
             // the execution the counter will be set to `1 - S`.
