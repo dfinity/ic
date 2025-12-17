@@ -212,7 +212,7 @@ where
             // - canister logging changes memory by 3 OS-pages of 4 KiB (12 KiB)
             let memory_allocation_crossed_offset = 6 * KIB;
             match scenario_params.memory_usage_change {
-                // Uploading a chunk only increases the memory usage.
+                // Uploading a chunk increases the memory usage.
                 MemoryUsageChange::Increase => {
                     memory_usage_after_setup.get() + memory_allocation_crossed_offset
                 }
