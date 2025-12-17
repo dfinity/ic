@@ -45,11 +45,11 @@ jobs:
         run: |
           dd if=/dev/zero of=/home/ubuntu/workspace.img bs=1G count=110
           mkfs.ext4 /home/ubuntu/workspace.img
-          mkdir -p /home/ubuntu/.cache
+          mkdir -p /home/ubuntu/
 
-          mount -o loop /home/ubuntu/workspace.img /home/ubuntu/.cache
+          mount -o loop /home/ubuntu/workspace.img /home/ubuntu/
 
-          chown -R ubuntu:ubuntu /home/ubuntu/.cache
+          chown -R ubuntu:ubuntu /home/ubuntu/
 
       - name: Create ext4 workspace for rootless podman for ict_testnets dir in tmp
         run: |
