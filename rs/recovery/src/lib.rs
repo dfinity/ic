@@ -675,6 +675,7 @@ impl Recovery {
         upgrade_version: &ReplicaVersion,
         upgrade_url: Url,
         sha256: String,
+        guest_launch_measurements_path: &Path,
     ) -> RecoveryResult<impl Step + use<>> {
         Ok(AdminStep {
             logger: self.logger.clone(),
@@ -683,7 +684,8 @@ impl Recovery {
                 .get_propose_to_update_elected_replica_versions_command(
                     upgrade_version,
                     &upgrade_url,
-                    sha256,
+                    &sha256,
+                    guest_launch_measurements_path,
                 ),
         })
     }

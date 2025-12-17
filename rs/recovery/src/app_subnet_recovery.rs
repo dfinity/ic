@@ -1,9 +1,9 @@
 use crate::{
     DataLocation, NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step,
     cli::{
-        consent_given, print_height_info, read_optional, read_optional_data_location,
-        read_optional_node_ids, read_optional_subnet_id, read_optional_version,
-        wait_for_confirmation,
+        consent_given, print_height_info, read_existing_path, read_optional,
+        read_optional_data_location, read_optional_node_ids, read_optional_subnet_id,
+        read_optional_version, wait_for_confirmation,
     },
     error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
@@ -127,6 +127,10 @@ pub struct AppSubnetRecoveryArgs {
     /// SHA256 hash of the upgrade image
     #[clap(long)]
     pub upgrade_image_hash: Option<String>,
+
+    /// Path to the file containing the guest launch measurements for the upgrade image
+    #[clap(long)]
+    pub upgrade_image_launch_measurements_path: Option<PathBuf>,
 
     #[clap(long, num_args(1..), value_parser=crate::util::node_id_from_str)]
     /// Replace the members of the given subnet with these nodes
@@ -307,6 +311,18 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     self.params.upgrade_version =
                         read_optional_version(&self.logger, "Upgrade version: ");
                 }
+
+                if let Some(upgrade_version) = &self.params.upgrade_version
+                    && self.params.upgrade_image_launch_measurements_path.is_none()
+                {
+                    self.params.upgrade_image_launch_measurements_path = Some(read_existing_path(
+                        &self.logger,
+                        &format!(
+                            "Enter path to guest launch measurements file for version {}: ",
+                            upgrade_version,
+                        ),
+                    ));
+                }
             }
 
             StepType::ProposeCup => {
@@ -447,7 +463,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             }
 
             StepType::BlessVersion => {
-                if let Some(upgrade_version) = &self.params.upgrade_version {
+                if let (Some(upgrade_version), Some(guest_launch_measurements_path)) = (
+                    &self.params.upgrade_version,
+                    &self.params.upgrade_image_launch_measurements_path,
+                ) {
                     let params = self.params.clone();
                     let (url, hash) = params
                         .upgrade_image_url
@@ -456,9 +475,12 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                         .ok_or(RecoveryError::UnexpectedError(
                             "couldn't retrieve the upgrade image params".into(),
                         ))?;
-                    let step = self
-                        .recovery
-                        .elect_replica_version(upgrade_version, url, hash)?;
+                    let step = self.recovery.elect_replica_version(
+                        upgrade_version,
+                        url,
+                        hash,
+                        guest_launch_measurements_path,
+                    )?;
                     Ok(Box::new(step))
                 } else {
                     Err(RecoveryError::StepSkipped)

@@ -257,6 +257,9 @@ pub mod local {
 
     // Remote path where SSH keys will be uploaded
     const ADMIN_HOME: &str = "/var/lib/admin";
+    // Remote path where guest launch measurements will be uploaded
+    const GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH: &str =
+        "/var/lib/ic/recovery/guest_launch_measurements.json";
     // Remote path where recovery output will be stored in case of a NNS recovery on same nodes
     pub const NNS_RECOVERY_OUTPUT_DIR_REMOTE_PATH: &str = "/var/lib/ic/data/recovery/output";
 
@@ -443,6 +446,7 @@ pub mod local {
             upgrade_version,
             upgrade_image_url,
             upgrade_image_hash,
+            upgrade_image_launch_measurements_path,
             replacement_nodes,
             replay_until_height,
             readonly_pub_key,
@@ -462,6 +466,19 @@ pub mod local {
         let upgrade_version_cli = opt_cli_arg!(upgrade_version);
         let upgrade_image_url_cli = opt_cli_arg!(upgrade_image_url);
         let upgrade_image_hash_cli = opt_cli_arg!(upgrade_image_hash);
+        if let Some(measurements_path) = &upgrade_image_launch_measurements_path {
+            scp_send_to(
+                logger.clone(),
+                session,
+                measurements_path.as_ref(),
+                GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH,
+                0o400,
+            );
+        }
+        let upgrade_image_launch_measurements_path =
+            upgrade_image_launch_measurements_path.map(|p| p.display());
+        let upgrade_image_launch_measurements_path_cli =
+            opt_cli_arg!(upgrade_image_launch_measurements_path);
         let replacement_nodes_cli = opt_vec_cli_arg!(replacement_nodes);
         let replay_until_height_cli = opt_cli_arg!(replay_until_height);
         let readonly_pub_key_cli = opt_cli_arg!(readonly_pub_key);
@@ -491,6 +508,7 @@ pub mod local {
             {upgrade_version_cli} \
             {upgrade_image_url_cli} \
             {upgrade_image_hash_cli} \
+            {upgrade_image_launch_measurements_path_cli} \
             {replacement_nodes_cli} \
             {replay_until_height_cli} \
             {readonly_pub_key_cli} \
