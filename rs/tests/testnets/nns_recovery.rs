@@ -222,17 +222,17 @@ fn maybe_break_at_height(env: TestEnv) {
     info!(logger, "The subnet should now be broken.");
 }
 
-fn main() -> Result<()> {
-    let use_mainnet_state = std::env::var("USE_MAINNET_STATE")
+fn use_mainnet_state() -> bool {
+    std::env::var("USE_MAINNET_STATE")
         .map(|v| v == "1" || v.to_lowercase() == "true")
-        .expect("USE_MAINNET_STATE environment variable not set");
+        .expect("USE_MAINNET_STATE environment variable not set")
+}
 
+fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_timeout_per_test(Duration::from_secs(90 * 60))
-        .with_setup(move |env| setup(env, use_mainnet_state))
-        .add_test(systest!(test; std::env::var("USE_MAINNET_STATE")
-        .map(|v| v == "1" || v.to_lowercase() == "true")
-        .expect("USE_MAINNET_STATE environment variable not set")))
+        .with_setup(move |env| setup(env, use_mainnet_state()))
+        .add_test(systest!(test; use_mainnet_state()))
         .execute_from_args()?;
     Ok(())
 }
