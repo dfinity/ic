@@ -4,16 +4,13 @@ use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, NODE_REWARDS_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance_api::{
-    MonthlyNodeProviderRewards, NetworkEconomics, Vote, VotingPowerEconomics,
-};
+use ic_nns_governance_api::{MonthlyNodeProviderRewards, Vote};
 use ic_nns_test_utils::state_test_helpers::{
-    get_canister_status, manage_network_economics, nns_cast_vote, nns_create_super_powerful_neuron,
+    get_canister_status, nns_cast_vote, nns_create_super_powerful_neuron,
     nns_propose_upgrade_nns_canister, wait_for_canister_upgrade_to_succeed,
 };
 use ic_nns_test_utils::state_test_helpers::{
-    nns_get_most_recent_monthly_node_provider_rewards, nns_wait_for_proposal_execution,
-    scrape_metrics,
+    nns_get_most_recent_monthly_node_provider_rewards, scrape_metrics,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
 use ic_state_machine_tests::StateMachine;
@@ -231,83 +228,91 @@ mod sanity_check {
         DailyResults, GetNodeProvidersRewardsCalculationRequest,
         GetNodeProvidersRewardsCalculationResponse,
     };
+    use lazy_static::lazy_static;
     use std::collections::BTreeMap;
 
     /// Expected adjusted rewards for each node provider up to and including December 15th, 2025.
     /// These values represent the total rewards with penalties applied for underperforming nodes.
-    fn expected_rewards_up_to() -> BTreeMap<&'static str, u64> {
-        [
-            ("zy4m7", 14805080),
-            ("7uioy", 13734756),
-            ("6nbcy", 33002090),
-            ("pa5mu", 1407127),
-            ("2hl5k", 28959014),
-            ("7at4h", 28456426),
-            ("64xe5", 18688380),
-            ("bvcsg", 29479164),
-            ("wdjjk", 31413880),
-            ("sixix", 32785872),
-            ("sma3p", 9861518),
-            ("x7uok", 20549272),
-            ("rpfvr", 37449856),
-            ("ihbuj", 15276879),
-            ("rbn2y", 29280984),
-            ("eipr5", 27707926),
-            ("r3yjn", 36329338),
-            ("6r5lw", 31350800),
-            ("4r6qy", 7090266),
-            ("i7dto", 19520656),
-            ("vegae", 25075078),
-            ("izmhk", 27707926),
-            ("diyay", 7090266),
-            ("dnpkk", 21857248),
-            ("wdnqm", 19520656),
-            ("4dibr", 27744136),
-            ("fwnmn", 10326824),
-            ("kos24", 12135658),
-            ("ks7ow", 19723038),
-            ("ucjqj", 31125980),
-            ("hzqcb", 1975144),
-            ("7ws2n", 2568090),
-            ("g7dkt", 9861518),
-            ("trxbq", 372152),
-            ("2wxzd", 18673986),
-            ("g2ax6", 10138084),
-            ("mjnyf", 2889282),
-            ("ivf2y", 7090266),
-            ("ma7dp", 20900532),
-            ("dodsd", 18471950),
-            ("i3cfo", 4484384),
-            ("ulyfm", 17712528),
-            ("hk7eo", 1094828),
-            ("glrjs", 37449856),
-            ("otzuu", 5835752),
-            ("hycj4", 1012894),
-            ("eatbv", 5258728),
-            ("4jjya", 9165448),
-            ("eybf4", 7658944),
-            ("3oqw6", 13826020),
-            ("wwdbq", 29302800),
-            ("7a4u2", 18471950),
-            ("efem5", 5366482),
-            ("acqus", 19520656),
-            ("cgmhq", 7621638),
-            ("4fedi", 5715522),
-            ("ss6oe", 18471950),
-            ("7ryes", 31350800),
-            ("6sq7t", 18664892),
-            ("optdi", 8044068),
-            ("sqhxa", 9235974),
-            ("cp5ib", 11068818),
-            ("nmdd6", 13957196),
-            ("w4buy", 17268664),
-            ("unqqg", 26262076),
-            ("s5nvr", 5835752),
-            ("c5svp", 8183983),
-            ("py2kr", 8044068),
-        ]
-        .into_iter()
-        .collect()
+    lazy_static! {
+        pub static ref EXPECTED_REWARDS_UP_TO_15_DEC: BTreeMap<String, u64> = {
+            BTreeMap::from([
+                ("trxbq", 372152),
+                ("hk7eo", 1094828),
+                ("pa5mu", 1407127),
+                ("c5svp", 8183983),
+                ("x7uok", 20549272),
+                ("2wxzd", 18673986),
+                ("ulyfm", 17712528),
+                ("7at4h", 28456426),
+                ("7uioy", 13734756),
+                ("6nbcy", 33002090),
+                ("bvcsg", 29479164),
+                ("64xe5", 18688380),
+                ("ihbuj", 15276879),
+                ("wwdbq", 29302800),
+                ("ucjqj", 31125980),
+                ("hzqcb", 1975144),
+                ("4dibr", 27744136),
+                ("7ws2n", 2568090),
+                ("g7dkt", 9861518),
+                ("eipr5", 27707926),
+                ("g2ax6", 10138084),
+                ("mjnyf", 2889282),
+                ("g4gfo", 1012894),
+                ("ivf2y", 7090266),
+                ("ma7dp", 20900532),
+                ("dodsd", 18471950),
+                ("i3cfo", 4484384),
+                ("glrjs", 37449856),
+                ("otzuu", 5835752),
+                ("r3yjn", 36329338),
+                ("wdjjk", 31413880),
+                ("hycj4", 1012894),
+                ("4r6qy", 7090266),
+                ("rpfvr", 37449856),
+                ("wdnqm", 19520656),
+                ("eatbv", 5258728),
+                ("4jjya", 9165448),
+                ("eybf4", 7658944),
+                ("vegae", 25075078),
+                ("2hl5k", 28959014),
+                ("3oqw6", 13826020),
+                ("diyay", 7090266),
+                ("7a4u2", 18471950),
+                ("efem5", 5366482),
+                ("acqus", 19520656),
+                ("cgmhq", 7621638),
+                ("mf6om", 1012894),
+                ("4fedi", 5715522),
+                ("ss6oe", 18471950),
+                ("rbn2y", 29280984),
+                ("7ryes", 31350800),
+                ("sma3p", 9861518),
+                ("6sq7t", 18664892),
+                ("zy4m7", 14805080),
+                ("ks7ow", 19723038),
+                ("sixix", 32785872),
+                ("2dgp4", 18471950),
+                ("fwnmn", 10326824),
+                ("optdi", 8044068),
+                ("sqhxa", 9235974),
+                ("i7dto", 19520656),
+                ("cp5ib", 11068818),
+                ("nmdd6", 13957196),
+                ("w4buy", 17268664),
+                ("unqqg", 26262076),
+                ("dnpkk", 21857248),
+                ("kos24", 12135658),
+                ("6r5lw", 31350800),
+                ("s5nvr", 5835752),
+                ("izmhk", 27707926),
+                ("py2kr", 8044068),
+                ("mme7u", 8044068),
+            ])
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect()
+        };
     }
 
     /// Metrics fetched from canisters either before or after testing.
@@ -340,18 +345,18 @@ mod sanity_check {
         if now_seconds >= january_distribution_timestamp {
             return;
         }
-        let test_date = DateTime::from_timestamp(
-            state_machine.get_time().as_secs_since_unix_epoch() as i64,
-            0,
-        )
-        .unwrap()
-        .date_naive();
+
+        let december_distribution_timestamp: u64 = before
+            .governance_most_recent_monthly_node_provider_rewards
+            .timestamp;
+
+        let start_date = DateTime::from_timestamp(december_distribution_timestamp as i64, 0)
+            .unwrap()
+            .date_naive();
 
         // Advance time in the state machine to just before the next rewards distribution time.
-        let target_rewards_distribution_timestamp_seconds = before
-            .governance_most_recent_monthly_node_provider_rewards
-            .timestamp
-            + NODE_PROVIDER_REWARD_PERIOD_SECONDS;
+        let target_rewards_distribution_timestamp_seconds =
+            december_distribution_timestamp + NODE_PROVIDER_REWARD_PERIOD_SECONDS;
         state_machine.advance_time(std::time::Duration::from_secs(
             target_rewards_distribution_timestamp_seconds - now_seconds - 1,
         ));
@@ -359,74 +364,6 @@ mod sanity_check {
             state_machine.advance_time(std::time::Duration::from_secs(1));
             state_machine.tick();
         }
-
-        // Now we assess how many rewards with penalties have been calculated up to yesterday.
-        // Up to test_date in the state machine, node-rewards-canister already hold the real
-        // failure rates for each node, so we can just sum up the daily rewards with penalties
-        let start_date = DateTime::from_timestamp(
-            before
-                .governance_most_recent_monthly_node_provider_rewards
-                .timestamp as i64,
-            0,
-        )
-        .unwrap()
-        .date_naive();
-
-        let mut rewards_with_penalties: BTreeMap<PrincipalId, u64> = BTreeMap::new();
-        let mut rewards_up_to: BTreeMap<PrincipalId, u64> = BTreeMap::new();
-        let dec_15_2025 = chrono::NaiveDate::from_ymd_opt(2025, 12, 15).unwrap();
-
-        for date in start_date.iter_days().take_while(|d| *d < test_date) {
-            let daily_rewards = nrc_daily_rewards(state_machine, date.into());
-
-            for (provider_id, daily_result) in daily_rewards.provider_results {
-                let adjusted_reward = daily_result.total_adjusted_rewards_xdr_permyriad.unwrap();
-                *rewards_with_penalties.entry(provider_id).or_default() += adjusted_reward;
-
-                // Track rewards up to and including December 15th
-                if date <= dec_15_2025 {
-                    ic_cdk::println!(
-                        " Date: {}, Provider: {}, Daily adjusted reward: {}",
-                        date,
-                        provider_id,
-                        adjusted_reward
-                    );
-                    *rewards_up_to.entry(provider_id).or_default() += adjusted_reward;
-                }
-            }
-        }
-
-        let expected_rewards = expected_rewards_up_to();
-
-        for (provider_id, actual_total) in rewards_up_to.iter() {
-            let provider_string = provider_id.to_string();
-            let short_provider_id = provider_string.split('-').next().unwrap();
-
-            let expected_total = expected_rewards.get(short_provider_id).unwrap_or_else(|| {
-                panic!("No expected rewards for provider {}", short_provider_id)
-            });
-
-            assert_eq!(
-                *expected_total, *actual_total,
-                "For provider {} (short: {}), expected rewards up to Dec 15: {}, actual: {}",
-                provider_id, short_provider_id, expected_total, actual_total
-            );
-        }
-
-        // For each day missing from now up to the next distribution time, we get the daily rewards
-        // without penalties. Given the canister is assigning to each node failure rate = 0% these
-        // rewards should be equal to the base rewards provided by the node-rewards-canister on the last day.
-        let rewards_no_penalties: BTreeMap<PrincipalId, u64> =
-            nrc_daily_rewards(state_machine, test_date.into())
-                .provider_results
-                .into_iter()
-                .map(|(provider_id, daily_result)| {
-                    (
-                        provider_id,
-                        daily_result.total_adjusted_rewards_xdr_permyriad.unwrap(),
-                    )
-                })
-                .collect();
 
         let after = fetch_metrics(state_machine);
 
@@ -437,10 +374,7 @@ mod sanity_check {
             DateTime::from_timestamp(january_distribution_timestamp as i64, 0)
                 .unwrap()
                 .date_naive();
-        let expected_start_date = start_date;
-        let expected_end_date = rewards_distribution_date.pred_opt().unwrap();
 
-        // 2 minutes = 120 seconds
         assert!(
             january_distribution_timestamp.abs_diff(performance_based_rewards.timestamp) <= 120,
             "Expected rewards distribution timestamp around {}, got {}",
@@ -455,6 +389,7 @@ mod sanity_check {
             pbr_end_date.day,
         )
         .unwrap();
+        let expected_end_date = rewards_distribution_date.pred_opt().unwrap();
         assert_eq!(expected_end_date, observed_end_date);
 
         let pbr_start_date = performance_based_rewards.start_date.unwrap();
@@ -464,11 +399,41 @@ mod sanity_check {
             pbr_start_date.day,
         )
         .unwrap();
-        assert_eq!(expected_start_date, observed_start_date);
+        assert_eq!(start_date, observed_start_date);
 
         assert_eq!(performance_based_rewards.algorithm_version, Some(1));
 
-        let days_with_no_penalties = (expected_end_date - test_date).num_days() as u64 + 1;
+        // Fetch daily rewards for each day in the period and sum them up per provider checking
+        // rewards up to Dec 15th, 2025 against expected values.
+        let dec_15_2025 = chrono::NaiveDate::from_ymd_opt(2025, 12, 15).unwrap();
+
+        let mut daily_rewards_observed: BTreeMap<PrincipalId, u64> = BTreeMap::new();
+        let mut rewards_up_to_dec_15_2025: BTreeMap<String, u64> = BTreeMap::new();
+        for date in start_date
+            .iter_days()
+            .take_while(|d| *d <= observed_end_date)
+        {
+            let daily_rewards = nrc_daily_rewards(state_machine, date.into());
+
+            for (provider_id, daily_result) in daily_rewards.provider_results {
+                let adjusted_reward = daily_result.total_adjusted_rewards_xdr_permyriad.unwrap();
+                *daily_rewards_observed.entry(provider_id).or_default() += adjusted_reward;
+
+                // Track rewards up to and including December 15th
+                if date <= dec_15_2025 {
+                    let provider_string = provider_id.to_string().clone();
+                    let short_provider_id = provider_string.split('-').next().unwrap().to_string();
+
+                    *rewards_up_to_dec_15_2025
+                        .entry(short_provider_id)
+                        .or_default() += adjusted_reward;
+                }
+            }
+        }
+        assert_eq!(
+            *EXPECTED_REWARDS_UP_TO_15_DEC, rewards_up_to_dec_15_2025,
+            "Observed rewards up to and including December 15th, 2025 do not match expected values."
+        );
 
         let xdr_permyriad_per_icp = performance_based_rewards
             .xdr_conversion_rate
@@ -491,28 +456,12 @@ mod sanity_check {
             })
             .collect::<BTreeMap<PrincipalId, u64>>();
 
-        let upper_bound_rewards_per_provider = rewards_with_penalties
-            .into_iter()
-            .map(|(provider, rewards_with_penalties)| {
-                let rewards_total = rewards_with_penalties
-                    + rewards_no_penalties.get(&provider).unwrap() * days_with_no_penalties;
-                (provider, rewards_total)
-            })
-            .collect::<BTreeMap<PrincipalId, u64>>();
-
-        for (provider_id, _) in upper_bound_rewards_per_provider.iter() {
-            assert!(
-                xdr_permyriad_distributed.contains_key(provider_id),
-                "Provider {provider_id:?} is missing from the distributed rewards.",
-            );
-        }
-
         // Calculate expected XDR permyriad by simulating the same conversion that governance does:
         // 1. Convert total XDR permyriad to e8s (with truncation)
         // 2. Convert back to XDR permyriad (with truncation)
         // This accounts for precision loss in the conversion process.
         let expected_xdr_permyriad_per_provider: BTreeMap<PrincipalId, u64> =
-            upper_bound_rewards_per_provider
+            daily_rewards_observed
                 .into_iter()
                 .map(|(provider_id, total_xdr_permyriad)| {
                     // Simulate governance.rs conversion: XDR → e8s → XDR
@@ -526,17 +475,10 @@ mod sanity_check {
                 })
                 .collect();
 
-        for (provider_id, total_xdr_distributed) in xdr_permyriad_distributed {
-            let expected_total_xdr_permyriad = *expected_xdr_permyriad_per_provider
-                .get(&provider_id)
-                .unwrap_or(&0);
-
-            assert_eq!(
-                expected_total_xdr_permyriad, total_xdr_distributed,
-                "For provider {provider_id:?}, expected total XDR permyriad distributed: {expected_total_xdr_permyriad}, actual: {total_xdr_distributed}"
-            );
-        }
-
+        assert_eq!(
+            expected_xdr_permyriad_per_provider, xdr_permyriad_distributed,
+            "Distributed rewards do not match expected rewards calculated from daily results."
+        );
         MetricsBeforeAndAfter { before, after }.check_all();
     }
 
