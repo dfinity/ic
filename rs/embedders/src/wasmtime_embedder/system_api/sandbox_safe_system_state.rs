@@ -536,7 +536,7 @@ impl SystemStateModifications {
             .append_delta_log(&mut canister_log_copy);
         let memory_usage_after = system_state.log_memory_store.total_allocated_bytes() as i64;
 
-        let delta = (memory_usage_after - memory_usage_before).abs() as u64;
+        let delta = (memory_usage_after - memory_usage_before).unsigned_abs();
         if memory_usage_before < memory_usage_after {
             subnet_available_memory
                 .try_decrement(NumBytes::from(delta), NumBytes::from(0), NumBytes::from(0))
