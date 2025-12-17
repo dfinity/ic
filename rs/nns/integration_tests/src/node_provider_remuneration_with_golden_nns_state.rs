@@ -35,8 +35,7 @@ impl NnsCanisterUpgradePBREnabled {
     fn new(nns_canister_name: &str) -> Self {
         #[rustfmt::skip]
         let (canister_id, environment_variable_name) = match nns_canister_name {
-            // Using test canister for Governance because PBR is enabled there.
-            "governance"     => (GOVERNANCE_CANISTER_ID, "GOVERNANCE_CANISTER_TEST_PBR_WASM_PATH"),
+            "governance"     => (GOVERNANCE_CANISTER_ID, "GOVERNANCE_CANISTER_WASM_PATH"),
 
             // Using test canister for Node Rewards because state-machine does not support
             // multiple subnets yet, and Node Rewards PBR depends on multiple subnets to daily
