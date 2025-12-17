@@ -598,9 +598,9 @@ async fn fetch_blocks_interval(
                 // (without holding lock across await points)
                 let is_trusted = {
                     let trusted_archive_canisters = archive_canister_ids.lock().await;
-                    trusted_archive_canisters
-                        .iter()
-                        .any(|archive_info| archive_info.canister_id == archive_query.callback.canister_id)
+                    trusted_archive_canisters.iter().any(|archive_info| {
+                        archive_info.canister_id == archive_query.callback.canister_id
+                    })
                 };
 
                 if !is_trusted {
@@ -611,10 +611,9 @@ async fn fetch_blocks_interval(
                     let mut trusted_archive_canisters = archive_canister_ids.lock().await;
                     *trusted_archive_canisters = new_archive_infos;
 
-                    if !trusted_archive_canisters
-                        .iter()
-                        .any(|archive_info| archive_info.canister_id == archive_query.callback.canister_id)
-                    {
+                    if !trusted_archive_canisters.iter().any(|archive_info| {
+                        archive_info.canister_id == archive_query.callback.canister_id
+                    }) {
                         bail!(
                             "Archive canister id {} is not in the list of trusted canister ids",
                             archive_query.callback.canister_id

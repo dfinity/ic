@@ -200,11 +200,9 @@ pub async fn account_balance(
     symbol: String,
 ) -> Result<AccountBalanceResponse, Error> {
     let rosetta_block = match partial_block_identifier {
-        Some(block_id) => {
-            get_rosetta_block_from_partial_block_identifier(block_id, storage_client)
-                .await
-                .map_err(|err| Error::invalid_block_identifier(&err))?
-        }
+        Some(block_id) => get_rosetta_block_from_partial_block_identifier(block_id, storage_client)
+            .await
+            .map_err(|err| Error::invalid_block_identifier(&err))?,
         None => storage_client
             .get_block_with_highest_block_idx()
             .await
@@ -245,11 +243,9 @@ pub async fn account_balance_with_metadata(
     symbol: String,
 ) -> Result<AccountBalanceResponse, Error> {
     let rosetta_block = match partial_block_identifier {
-        Some(block_id) => {
-            get_rosetta_block_from_partial_block_identifier(block_id, storage_client)
-                .await
-                .map_err(|err| Error::invalid_block_identifier(&err))?
-        }
+        Some(block_id) => get_rosetta_block_from_partial_block_identifier(block_id, storage_client)
+            .await
+            .map_err(|err| Error::invalid_block_identifier(&err))?,
         None => storage_client
             .get_block_with_highest_block_idx()
             .await
@@ -1008,11 +1004,11 @@ mod test {
                             )
                             .await
                             .unwrap();
-                        assert_eq!(
-                            result.total_count,
-                            maximum_number_returnable_transactions as i64
-                        );
-                        assert_eq!(result.transactions.len() as i64, result.total_count);
+                            assert_eq!(
+                                result.total_count,
+                                maximum_number_returnable_transactions as i64
+                            );
+                            assert_eq!(result.transactions.len() as i64, result.total_count);
 
                             // We traverse through all the blocks and check if the transactions are returned correctly if the transaction identifier is provided
                             for rosetta_block in rosetta_blocks.iter() {
@@ -1027,34 +1023,40 @@ mod test {
                                 .await
                                 .unwrap();
 
-                            let num_of_transactions_with_hash = rosetta_blocks
-                                .iter()
-                                .filter(|block| {
-                                    (*block).clone().get_transaction_hash()
-                                        == rosetta_block.clone().get_transaction_hash()
-                                })
-                                .count();
+                                let num_of_transactions_with_hash = rosetta_blocks
+                                    .iter()
+                                    .filter(|block| {
+                                        (*block).clone().get_transaction_hash()
+                                            == rosetta_block.clone().get_transaction_hash()
+                                    })
+                                    .count();
 
-                            // The total count should be the number of transactions with the same transaction identifier
-                            assert_eq!(result.total_count, num_of_transactions_with_hash as i64);
-                            // If we provide a transaction identifier the service should return the transactions that match the transaction identifier
-                            let mut expected_transaction =
-                                icrc1_rosetta_block_to_rosetta_core_transaction(
-                                    rosetta_block.clone(),
-                                    Currency {
-                                        symbol: "ICP".to_string(),
-                                        decimals: 8,
-                                        metadata: None,
-                                    },
-                                )
-                                .unwrap();
-                            expected_transaction.operations.iter_mut().for_each(|op| {
-                                op.status = Some(STATUS_COMPLETED.to_string());
-                            });
-                            assert_eq!(result.transactions[0].transaction, expected_transaction);
-                            // If the transaction identifier is provided the next offset should be None
-                            assert_eq!(result.next_offset, None);
-                        }
+                                // The total count should be the number of transactions with the same transaction identifier
+                                assert_eq!(
+                                    result.total_count,
+                                    num_of_transactions_with_hash as i64
+                                );
+                                // If we provide a transaction identifier the service should return the transactions that match the transaction identifier
+                                let mut expected_transaction =
+                                    icrc1_rosetta_block_to_rosetta_core_transaction(
+                                        rosetta_block.clone(),
+                                        Currency {
+                                            symbol: "ICP".to_string(),
+                                            decimals: 8,
+                                            metadata: None,
+                                        },
+                                    )
+                                    .unwrap();
+                                expected_transaction.operations.iter_mut().for_each(|op| {
+                                    op.status = Some(STATUS_COMPLETED.to_string());
+                                });
+                                assert_eq!(
+                                    result.transactions[0].transaction,
+                                    expected_transaction
+                                );
+                                // If the transaction identifier is provided the next offset should be None
+                                assert_eq!(result.next_offset, None);
+                            }
 
                             search_transactions_request = SearchTransactionsRequest {
                                 ..Default::default()
@@ -1071,20 +1073,20 @@ mod test {
                             )
                             .await
                             .unwrap();
-                        assert_eq!(
-                            result.transactions.len(),
-                            maximum_number_returnable_transactions
-                        );
+                            assert_eq!(
+                                result.transactions.len(),
+                                maximum_number_returnable_transactions
+                            );
 
-                        // The transactiosn should be returned in descending order of block index
-                        assert_eq!(
-                            result.transactions.first().unwrap().block_identifier,
-                            rosetta_blocks
-                                .last()
-                                .unwrap()
-                                .clone()
-                                .get_block_identifier()
-                        );
+                            // The transactiosn should be returned in descending order of block index
+                            assert_eq!(
+                                result.transactions.first().unwrap().block_identifier,
+                                rosetta_blocks
+                                    .last()
+                                    .unwrap()
+                                    .clone()
+                                    .get_block_identifier()
+                            );
 
                             // If we set the limit to something below the maximum number of blocks we should only receive that number of blocks
                             search_transactions_request.max_block = None;
@@ -1097,18 +1099,18 @@ mod test {
                             )
                             .await
                             .unwrap();
-                        assert_eq!(result.transactions.len(), 1);
+                            assert_eq!(result.transactions.len(), 1);
 
-                        // The expected offset is the index of the highest block fetched minus the limit
-                        let expected_offset = 1;
-                        assert_eq!(
-                            result.next_offset,
-                            if rosetta_blocks.len() > 1 {
-                                Some(expected_offset)
-                            } else {
-                                None
-                            }
-                        );
+                            // The expected offset is the index of the highest block fetched minus the limit
+                            let expected_offset = 1;
+                            assert_eq!(
+                                result.next_offset,
+                                if rosetta_blocks.len() > 1 {
+                                    Some(expected_offset)
+                                } else {
+                                    None
+                                }
+                            );
 
                             search_transactions_request.limit = None;
 
@@ -1124,15 +1126,15 @@ mod test {
                             )
                             .await
                             .unwrap();
-                        assert_eq!(
-                            result.transactions.len(),
-                            if rosetta_blocks.len() == 1 {
-                                1
-                            } else {
-                                rosetta_blocks.len().saturating_sub(1)
-                            }
-                            .min(MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST as usize)
-                        );
+                            assert_eq!(
+                                result.transactions.len(),
+                                if rosetta_blocks.len() == 1 {
+                                    1
+                                } else {
+                                    rosetta_blocks.len().saturating_sub(1)
+                                }
+                                .min(MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST as usize)
+                            );
 
                             search_transactions_request.offset = None;
                             search_transactions_request.max_block = Some(10);
@@ -1487,7 +1489,8 @@ mod test {
                         let query_block_response: QueryBlockRangeResponse =
                             response.result.try_into().unwrap();
                         // If the blocks measured from the highest block index asked for are not in the database the service should return an empty array of blocks
-                        if rosetta_blocks.len() >= MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST as usize {
+                        if rosetta_blocks.len() >= MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST as usize
+                        {
                             assert_eq!(query_block_response.blocks.len(), 0);
                             assert!(!response.idempotent);
                         }
@@ -1532,8 +1535,10 @@ mod test {
                         let querried_blocks = response.blocks;
                         assert_eq!(
                             querried_blocks.len(),
-                            std::cmp::min(number_of_blocks, MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST)
-                                as usize
+                            std::cmp::min(
+                                number_of_blocks,
+                                MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST
+                            ) as usize
                         );
                         if !querried_blocks.is_empty() {
                             assert_eq!(
