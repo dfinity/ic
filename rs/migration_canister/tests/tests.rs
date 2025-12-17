@@ -5,6 +5,7 @@ use ic_management_canister_types::{CanisterLogRecord, CanisterSettings};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, Payload as _,
 };
+use ic_nervous_system_common_test_utils::get_gauge;
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::Call;
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
@@ -14,6 +15,7 @@ use pocket_ic::{
     common::rest::{IcpFeatures, IcpFeaturesConfig},
     nonblocking::PocketIc,
 };
+use prometheus_parse::Scrape;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
@@ -26,8 +28,8 @@ pub const MIGRATION_CANISTER_ID: CanisterId = CanisterId::from_u64(17);
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 struct MigrateCanisterArgs {
-    pub canister_id: Principal,
-    pub replace_canister_id: Principal,
+    pub migrated_canister_id: Principal,
+    pub replaced_canister_id: Principal,
 }
 
 #[derive(CandidType, Deserialize, Default)]
@@ -45,11 +47,11 @@ pub enum ValidationError {
     SameSubnet(Reserved),
     CallerNotController { canister: Principal },
     NotController { canister: Principal },
-    SourceNotStopped(Reserved),
-    SourceNotReady(Reserved),
-    TargetNotStopped(Reserved),
-    TargetHasSnapshots(Reserved),
-    SourceInsufficientCycles(Reserved),
+    MigratedCanisterNotStopped(Reserved),
+    MigratedCanisterNotReady(Reserved),
+    ReplacedCanisterNotStopped(Reserved),
+    ReplacedCanisterHasSnapshots(Reserved),
+    MigratedCanisterInsufficientCycles(Reserved),
     CallFailed { reason: String },
 }
 
@@ -65,20 +67,20 @@ enum MigrationStatus {
 
 pub struct Setup {
     pub pic: PocketIc,
-    pub sources: Vec<Principal>,
-    pub targets: Vec<Principal>,
-    pub source_controllers: Vec<Principal>,
-    pub target_controllers: Vec<Principal>,
-    pub source_subnet: Principal,
-    pub target_subnet: Principal,
+    pub migrated_canisters: Vec<Principal>,
+    pub replaced_canisters: Vec<Principal>,
+    pub migrated_canister_controllers: Vec<Principal>,
+    pub replaced_canister_controllers: Vec<Principal>,
+    pub migrated_canister_subnet: Principal,
+    pub replaced_canister_subnet: Principal,
     /// Controller of the NNS canisters including MC
     pub system_controller: Principal,
 }
 
 pub struct Settings {
     pub num_migrations: u64,
-    pub mc_controls_source: bool,
-    pub mc_controls_target: bool,
+    pub mc_controls_migrated_canister: bool,
+    pub mc_controls_replaced_canister: bool,
     pub enough_cycles: bool,
     pub allowlist: Option<Vec<Principal>>,
 }
@@ -87,8 +89,8 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             num_migrations: 1,
-            mc_controls_source: true,
-            mc_controls_target: true,
+            mc_controls_migrated_canister: true,
+            mc_controls_replaced_canister: true,
             enough_cycles: true,
             allowlist: None,
         }
@@ -99,8 +101,8 @@ impl Default for Settings {
 async fn setup(
     Settings {
         num_migrations,
-        mc_controls_source,
-        mc_controls_target,
+        mc_controls_migrated_canister,
+        mc_controls_replaced_canister,
         enough_cycles,
         allowlist,
     }: Settings,
@@ -120,8 +122,8 @@ async fn setup(
     let c2 = Principal::self_authenticating(vec![2]);
     let c3 = Principal::self_authenticating(vec![3]);
     // Setup a unique controller each, and a shared one.
-    let source_controllers = vec![c1, c2];
-    let target_controllers = vec![c1, c3];
+    let migrated_canister_controllers = vec![c1, c2];
+    let replaced_canister_controllers = vec![c1, c3];
 
     // install fresh version of registry canister:
     let registry_wasm = Project::cargo_bin_maybe_from_env("registry-canister", &[]);
@@ -158,72 +160,76 @@ async fn setup(
     .await;
 
     let subnets = pic.topology().await.get_app_subnets();
-    let source_subnet = subnets[0];
-    let target_subnet = subnets[1];
+    let migrated_canister_subnet = subnets[0];
+    let replaced_canister_subnet = subnets[1];
 
-    let mut sources = vec![];
-    let mut targets = vec![];
+    let mut migrated_canisters = vec![];
+    let mut replaced_canisters = vec![];
     for _ in 0..num_migrations {
-        // source canister
-        let mut new_controllers = source_controllers.clone();
-        if mc_controls_source {
+        // migrated canister
+        let mut new_controllers = migrated_canister_controllers.clone();
+        if mc_controls_migrated_canister {
             new_controllers.push(MIGRATION_CANISTER_ID.into());
         }
         if let Some(ref allowlist) = allowlist {
             new_controllers.extend(allowlist.clone());
         }
-        let source = pic
+        let migrated_canister = pic
             .create_canister_on_subnet(
                 Some(c1),
                 Some(CanisterSettings {
                     controllers: Some(new_controllers),
                     ..Default::default()
                 }),
-                source_subnet,
+                migrated_canister_subnet,
             )
             .await;
         if enough_cycles {
-            pic.add_cycles(source, u128::MAX / 2).await;
+            pic.add_cycles(migrated_canister, u128::MAX / 2).await;
         } else {
-            pic.add_cycles(source, 2_000_000).await;
+            pic.add_cycles(migrated_canister, 2_000_000).await;
         }
-        pic.stop_canister(source, Some(c1)).await.unwrap();
-        sources.push(source);
+        pic.stop_canister(migrated_canister, Some(c1))
+            .await
+            .unwrap();
+        migrated_canisters.push(migrated_canister);
 
-        // target canister
-        let mut new_controllers = target_controllers.clone();
-        if mc_controls_target {
+        // replaced canister
+        let mut new_controllers = replaced_canister_controllers.clone();
+        if mc_controls_replaced_canister {
             new_controllers.push(MIGRATION_CANISTER_ID.into());
         }
         if let Some(ref allowlist) = allowlist {
             new_controllers.extend(allowlist.clone());
         }
-        let target = pic
+        let replaced_canister = pic
             .create_canister_on_subnet(
                 Some(c1),
                 Some(CanisterSettings {
                     controllers: Some(new_controllers),
                     ..Default::default()
                 }),
-                target_subnet,
+                replaced_canister_subnet,
             )
             .await;
         if enough_cycles {
-            pic.add_cycles(target, u128::MAX / 2).await;
+            pic.add_cycles(replaced_canister, u128::MAX / 2).await;
         } else {
-            pic.add_cycles(target, 2_000_000).await;
+            pic.add_cycles(replaced_canister, 2_000_000).await;
         }
-        pic.stop_canister(target, Some(c1)).await.unwrap();
-        targets.push(target)
+        pic.stop_canister(replaced_canister, Some(c1))
+            .await
+            .unwrap();
+        replaced_canisters.push(replaced_canister)
     }
     Setup {
         pic,
-        sources,
-        targets,
-        source_controllers,
-        target_controllers,
-        source_subnet,
-        target_subnet,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
+        replaced_canister_controllers,
+        migrated_canister_subnet,
+        replaced_canister_subnet,
         system_controller,
     }
 }
@@ -262,6 +268,36 @@ async fn get_status(
         .await
         .unwrap();
     Decode!(&res, Option<MigrationStatus>).unwrap()
+}
+
+async fn fetch_metrics(pic: &PocketIc) -> Scrape {
+    let http_request = ic_http_types::HttpRequest {
+        method: "GET".to_string(),
+        url: "/metrics".to_string(),
+        headers: vec![],
+        body: serde_bytes::ByteBuf::default(),
+    };
+
+    let res = pic
+        .query_call(
+            MIGRATION_CANISTER_ID.into(),
+            Principal::anonymous(),
+            "http_request",
+            Encode!(&http_request).unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let response = Decode!(&res, ic_http_types::HttpResponse).unwrap();
+
+    let iterator = String::from_utf8(response.body.into_vec())
+        .unwrap()
+        .lines()
+        .map(|s| Ok(s.to_owned()))
+        .collect::<Vec<_>>()
+        .into_iter();
+
+    prometheus_parse::Scrape::parse(iterator).unwrap()
 }
 
 /// Advances time by a second and executes enough ticks that the state machine
@@ -347,16 +383,16 @@ async fn canister_info(
 async fn migration_succeeds() {
     let Setup {
         pic,
-        sources,
-        targets,
-        source_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
         system_controller,
-        target_subnet,
+        replaced_canister_subnet,
         ..
     } = setup(Settings::default()).await;
-    let sender = source_controllers[0];
-    let source = sources[0];
-    let target = targets[0];
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
 
     // We deploy a universal canister acting as a proxy canister
     // for retrieving canister history.
@@ -370,36 +406,36 @@ async fn migration_succeeds() {
     )
     .await;
 
-    // We deploy the universal canister WASM to the "target" canister
-    // so that we can call it via the "source" canister ID
+    // We deploy the universal canister WASM to the "replaced" canister
+    // so that we can call it via the "migrated" canister ID
     // after renaming.
-    pic.add_cycles(target, 1_000_000_000_000).await;
+    pic.add_cycles(replaced_canister, 1_000_000_000_000).await;
     pic.install_canister(
-        target,
+        replaced_canister,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
         Some(sender),
     )
     .await;
 
-    // There is 1 entry in the canister history of the "source" canister before migrating:
+    // There is 1 entry in the canister history of the "migrated" canister before migrating:
     // creation.
-    let source_info = canister_info(&pic, proxy_canister, source).await;
-    assert_eq!(source_info.total_num_changes(), 1);
+    let migrated_canister_info = canister_info(&pic, proxy_canister, migrated_canister).await;
+    assert_eq!(migrated_canister_info.total_num_changes(), 1);
     assert!(matches!(
-        source_info.changes()[0].details(),
+        migrated_canister_info.changes()[0].details(),
         CanisterChangeDetails::CanisterCreation(_)
     ));
-    // There are 2 entries in the canister history of the "target" canister before migrating:
+    // There are 2 entries in the canister history of the "replaced" canister before migrating:
     // creation and installation.
-    let target_info = canister_info(&pic, proxy_canister, target).await;
-    assert_eq!(target_info.total_num_changes(), 2);
+    let replaced_canister_info = canister_info(&pic, proxy_canister, replaced_canister).await;
+    assert_eq!(replaced_canister_info.total_num_changes(), 2);
     assert!(matches!(
-        target_info.changes()[0].details(),
+        replaced_canister_info.changes()[0].details(),
         CanisterChangeDetails::CanisterCreation(_)
     ));
     assert!(matches!(
-        target_info.changes()[1].details(),
+        replaced_canister_info.changes()[1].details(),
         CanisterChangeDetails::CanisterCodeDeployment(_)
     ));
 
@@ -407,8 +443,8 @@ async fn migration_succeeds() {
         &pic,
         sender,
         &MigrateCanisterArgs {
-            canister_id: source,
-            replace_canister_id: target,
+            migrated_canister_id: migrated_canister,
+            replaced_canister_id: replaced_canister,
         },
     )
     .await
@@ -436,32 +472,34 @@ async fn migration_succeeds() {
         "Exiting `controllers_changed` with 1 successful",
         "Entering `stopped` with 1 pending",
         "Exiting `stopped` with 1 successful",
-        "Entering `renamed_target` with 1 pending",
-        "Exiting `renamed_target` with 1 successful",
+        "Entering `renamed_replaced_canister` with 1 pending",
+        "Exiting `renamed_replaced_canister` with 1 successful",
         "Entering `updated_routing_table` with 1 pending",
         "Exiting `updated_routing_table` with 1 successful",
         "Entering `routing_table_change_accepted` with 1 pending",
         "Exiting `routing_table_change_accepted` with 1 successful",
-        "Entering `source_deleted` with 1 pending",
-        "Exiting `source_deleted` with 1 successful",
+        "Entering `migrated_canister_deleted` with 1 pending",
+        "Exiting `migrated_canister_deleted` with 1 successful",
     ]));
 
-    let source_new_subnet = pic.get_subnet(source).await.unwrap();
-    assert_eq!(source_new_subnet, target_subnet);
-    pic.start_canister(source, Some(sender)).await.unwrap();
-    pic.update_call(source, sender, "update", wasm().reply().build())
+    let migrated_canister_new_subnet = pic.get_subnet(migrated_canister).await.unwrap();
+    assert_eq!(migrated_canister_new_subnet, replaced_canister_subnet);
+    pic.start_canister(migrated_canister, Some(sender))
+        .await
+        .unwrap();
+    pic.update_call(migrated_canister, sender, "update", wasm().reply().build())
         .await
         .unwrap();
 
-    // We check the canister history of the "source" canister after renaming.
-    let source_info = canister_info(&pic, proxy_canister, source).await;
-    // There are 4 changes of the "source" canister after renaming:
+    // We check the canister history of the "migrated" canister after renaming.
+    let migrated_canister_info = canister_info(&pic, proxy_canister, migrated_canister).await;
+    // There are 4 changes of the "migrated" canister after renaming:
     // creation, controllers change, renaming, and controllers change.
-    assert_eq!(source_info.total_num_changes(), 4);
-    // There are 5 entries in the canister history of the "source" canister after renaming:
-    // creation, installation, controllers change of the "target" canister before renaming,
+    assert_eq!(migrated_canister_info.total_num_changes(), 4);
+    // There are 5 entries in the canister history of the "migrated" canister after renaming:
+    // creation, installation, controllers change of the "replaced" canister before renaming,
     // then renaming, and controllers change.
-    let canister_history = source_info.changes();
+    let canister_history = migrated_canister_info.changes();
     assert_eq!(canister_history.len(), 5);
     assert!(matches!(
         canister_history[0].details(),
@@ -487,13 +525,13 @@ async fn migration_succeeds() {
     let rename_details = canister_history[canister_history.len() - 2].details();
     match rename_details {
         CanisterChangeDetails::CanisterRename(rename_record) => {
-            assert_eq!(rename_record.canister_id(), PrincipalId(target));
-            // There were 3 entries in the canister history of the "target" canister before renaming:
+            assert_eq!(rename_record.canister_id(), PrincipalId(replaced_canister));
+            // There were 3 entries in the canister history of the "replaced" canister before renaming:
             // creation, installation, and controllers change.
             assert_eq!(rename_record.total_num_changes(), 3);
             let rename_to = rename_record.rename_to();
-            assert_eq!(rename_to.canister_id(), PrincipalId(source));
-            // There were 2 entries in the canister history of the "source" canister before renaming:
+            assert_eq!(rename_to.canister_id(), PrincipalId(migrated_canister));
+            // There were 2 entries in the canister history of the "migrated" canister before renaming:
             // creation and controllers change.
             assert_eq!(rename_to.total_num_changes(), 2);
             assert_eq!(rename_record.requested_by(), PrincipalId(sender));
@@ -547,20 +585,28 @@ async fn call_request(
 async fn replay_call_after_migration() {
     let Setup {
         pic,
-        sources,
-        targets,
-        source_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
         ..
     } = setup(Settings::default()).await;
-    let sender = source_controllers[0];
-    let source = sources[0];
-    let target = targets[0];
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
+
+    assert_eq!(
+        get_gauge(
+            &fetch_metrics(&pic).await,
+            "migration_canister_num_successes_in_past_24_h"
+        ),
+        0.0
+    );
 
     // We deploy the universal canister WASM
-    // to both the "source" and "target" canisters
-    // so that we can call the "source" canister ID
+    // to both the "migrated" and "replaced" canisters
+    // so that we can call the "migrated" canister ID
     // both before and after renaming.
-    for canister_id in [source, target] {
+    for canister_id in [migrated_canister, replaced_canister] {
         pic.add_cycles(canister_id, 1_000_000_000_000).await;
         pic.install_canister(
             canister_id,
@@ -571,23 +617,27 @@ async fn replay_call_after_migration() {
         .await;
     }
 
-    // We restart the "source" canister for a moment so that
+    // We restart the "migrated" canister for a moment so that
     // we can send an update call to it.
-    pic.start_canister(source, Some(sender)).await.unwrap();
+    pic.start_canister(migrated_canister, Some(sender))
+        .await
+        .unwrap();
 
     // We manually submit an update call so that
     // we can replay the exact same HTTP request later.
     let ingress_expiry = pic.get_time().await.as_nanos_since_unix_epoch() + 330_000_000_000;
-    let (resp, _) = call_request(&pic, ingress_expiry, source).await;
+    let (resp, _) = call_request(&pic, ingress_expiry, migrated_canister).await;
     assert_eq!(resp.status(), reqwest::StatusCode::ACCEPTED);
 
-    // We stop the "source" canister again so that
+    // We stop the "migrated" canister again so that
     // we can kick off canister migration.
-    pic.stop_canister(source, Some(sender)).await.unwrap();
+    pic.stop_canister(migrated_canister, Some(sender))
+        .await
+        .unwrap();
 
     let args = MigrateCanisterArgs {
-        canister_id: source,
-        replace_canister_id: target,
+        migrated_canister_id: migrated_canister,
+        replaced_canister_id: replaced_canister,
     };
     migrate_canister(&pic, sender, &args).await.unwrap();
 
@@ -602,14 +652,48 @@ async fn replay_call_after_migration() {
         pic.tick().await;
     }
 
-    // We restart the "source" canister right away.
-    pic.start_canister(source, Some(sender)).await.unwrap();
+    assert_eq!(
+        get_gauge(
+            &fetch_metrics(&pic).await,
+            "migration_canister_num_successes_in_past_24_h"
+        ),
+        1.0
+    );
+
+    // We restart the "migrated" canister right away.
+    pic.start_canister(migrated_canister, Some(sender))
+        .await
+        .unwrap();
 
     // Replaying the update call from before should fail.
-    let (resp, _) = call_request(&pic, ingress_expiry, source).await;
+    let (resp, _) = call_request(&pic, ingress_expiry, migrated_canister).await;
     assert_eq!(resp.status(), reqwest::StatusCode::BAD_REQUEST);
     let message = String::from_utf8(resp.bytes().await.unwrap().to_vec()).unwrap();
     assert!(message.contains("Invalid request expiry"));
+    assert_eq!(
+        get_gauge(
+            &fetch_metrics(&pic).await,
+            "migration_canister_num_successes_in_past_24_h"
+        ),
+        1.0
+    );
+}
+
+#[tokio::test]
+async fn metrics() {
+    let Setup { pic, .. } = setup(Settings::default()).await;
+
+    let metrics = fetch_metrics(&pic).await;
+
+    assert_eq!(
+        get_gauge(&metrics, "migration_canister_num_successes_in_past_24_h"),
+        0.0
+    );
+
+    assert_eq!(
+        get_gauge(&metrics, "migration_canister_migrations_enabled"),
+        1.0
+    );
 }
 
 async fn concurrent_migration(
@@ -662,63 +746,167 @@ async fn concurrent_migration(
 }
 
 #[tokio::test]
-async fn concurrent_migration_source() {
+async fn concurrent_migration_migrated_canister() {
     const NUM_MIGRATIONS: usize = 2;
     let Setup {
         pic,
-        sources,
-        targets,
-        source_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
         ..
     } = setup(Settings {
         num_migrations: NUM_MIGRATIONS as u64,
         ..Settings::default()
     })
     .await;
-    let sender = source_controllers[0];
-    let source = sources[0];
-    let target1 = targets[0];
-    let target2 = targets[1];
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister1 = replaced_canisters[0];
+    let replaced_canister2 = replaced_canisters[1];
 
     let args1 = MigrateCanisterArgs {
-        canister_id: source,
-        replace_canister_id: target1,
+        migrated_canister_id: migrated_canister,
+        replaced_canister_id: replaced_canister1,
     };
     let args2 = MigrateCanisterArgs {
-        canister_id: source,
-        replace_canister_id: target2,
+        migrated_canister_id: migrated_canister,
+        replaced_canister_id: replaced_canister2,
     };
-    concurrent_migration(&pic, sender, args1, args2, source).await;
+    concurrent_migration(&pic, sender, args1, args2, migrated_canister).await;
 }
 
 #[tokio::test]
-async fn concurrent_migration_target() {
+async fn concurrent_migration_replaced_canister() {
     const NUM_MIGRATIONS: usize = 2;
     let Setup {
         pic,
-        sources,
-        targets,
-        source_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
         ..
     } = setup(Settings {
         num_migrations: NUM_MIGRATIONS as u64,
         ..Settings::default()
     })
     .await;
-    let sender = source_controllers[0];
-    let source1 = sources[0];
-    let source2 = sources[1];
-    let target = targets[0];
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister1 = migrated_canisters[0];
+    let migrated_canister2 = migrated_canisters[1];
+    let replaced_canister = replaced_canisters[0];
 
     let args1 = MigrateCanisterArgs {
-        canister_id: source1,
-        replace_canister_id: target,
+        migrated_canister_id: migrated_canister1,
+        replaced_canister_id: replaced_canister,
     };
     let args2 = MigrateCanisterArgs {
-        canister_id: source2,
-        replace_canister_id: target,
+        migrated_canister_id: migrated_canister2,
+        replaced_canister_id: replaced_canister,
     };
-    concurrent_migration(&pic, sender, args1, args2, target).await;
+    concurrent_migration(&pic, sender, args1, args2, replaced_canister).await;
+}
+
+async fn canister_changed_before_migration<F, Fut>(setup: &Setup, race: F)
+where
+    F: Fn() -> Fut,
+    Fut: Future<Output = Principal>,
+{
+    let Setup {
+        pic,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
+        ..
+    } = setup;
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
+
+    let args = MigrateCanisterArgs {
+        migrated_canister_id: migrated_canister,
+        replaced_canister_id: replaced_canister,
+    };
+    migrate_canister(pic, sender, &args).await.unwrap();
+
+    // Change the canister (migrated or replaced) right away after requesting its migration;
+    // in particular, before the (accepted) request is processed in a timer.
+    let canister = race().await;
+    assert!(canister == migrated_canister || canister == replaced_canister);
+
+    for _ in 0..10 {
+        // Advance time so that timers are triggered.
+        pic.advance_time(Duration::from_secs(1)).await;
+        pic.tick().await;
+    }
+
+    let status = get_status(pic, sender, &args).await;
+    assert!(matches!(
+        status.unwrap(),
+        MigrationStatus::Failed {reason, ..} if reason.contains(&format!("Failed to set the migration canister as the exclusive controller of canister {}", canister))
+    ));
+}
+
+#[tokio::test]
+async fn migrated_canister_controllers_changed_before_migration() {
+    let setup = setup(Settings::default()).await;
+
+    let pic = &setup.pic;
+    let sender = setup.migrated_canister_controllers[0];
+    let migrated_canister = setup.migrated_canisters[0];
+    let race = || async {
+        pic.set_controllers(migrated_canister, Some(sender), vec![sender])
+            .await
+            .unwrap();
+        migrated_canister
+    };
+    canister_changed_before_migration(&setup, race).await;
+}
+
+#[tokio::test]
+async fn migrated_canister_deleted_before_migration() {
+    let setup = setup(Settings::default()).await;
+
+    let pic = &setup.pic;
+    let sender = setup.migrated_canister_controllers[0];
+    let migrated_canister = setup.migrated_canisters[0];
+    let race = || async {
+        pic.delete_canister(migrated_canister, Some(sender))
+            .await
+            .unwrap();
+        migrated_canister
+    };
+    canister_changed_before_migration(&setup, race).await;
+}
+
+#[tokio::test]
+async fn replaced_canister_controllers_changed_before_migration() {
+    let setup = setup(Settings::default()).await;
+
+    let pic = &setup.pic;
+    let sender = setup.migrated_canister_controllers[0];
+    let replaced_canister = setup.replaced_canisters[0];
+    let race = || async {
+        pic.set_controllers(replaced_canister, Some(sender), vec![sender])
+            .await
+            .unwrap();
+        replaced_canister
+    };
+    canister_changed_before_migration(&setup, race).await;
+}
+
+#[tokio::test]
+async fn replaced_canister_deleted_before_migration() {
+    let setup = setup(Settings::default()).await;
+
+    let pic = &setup.pic;
+    let sender = setup.migrated_canister_controllers[0];
+    let replaced_canister = setup.replaced_canisters[0];
+    let race = || async {
+        pic.delete_canister(replaced_canister, Some(sender))
+            .await
+            .unwrap();
+        replaced_canister
+    };
+    canister_changed_before_migration(&setup, race).await;
 }
 
 #[tokio::test]
@@ -726,25 +914,25 @@ async fn validation_fails_not_allowlisted() {
     let special_caller = Principal::self_authenticating(vec![42]);
     let Setup {
         pic,
-        sources,
-        targets,
-        source_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
         ..
     } = setup(Settings {
         allowlist: Some(vec![special_caller]),
         ..Settings::default()
     })
     .await;
-    let sender = source_controllers[0];
-    let source = sources[0];
-    let target = targets[0];
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
 
     let Err(ValidationError::MigrationsDisabled(Reserved)) = migrate_canister(
         &pic,
         sender,
         &MigrateCanisterArgs {
-            canister_id: source,
-            replace_canister_id: target,
+            migrated_canister_id: migrated_canister,
+            replaced_canister_id: replaced_canister,
         },
     )
     .await
@@ -756,8 +944,8 @@ async fn validation_fails_not_allowlisted() {
         &pic,
         special_caller,
         &MigrateCanisterArgs {
-            canister_id: source,
-            replace_canister_id: target,
+            migrated_canister_id: migrated_canister,
+            replaced_canister_id: replaced_canister,
         },
     )
     .await
@@ -771,42 +959,42 @@ async fn validation_fails_not_allowlisted() {
 async fn validation_fails_not_found() {
     let Setup {
         pic,
-        sources,
-        targets,
-        source_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
         ..
     } = setup(Settings::default()).await;
-    let sender = source_controllers[0];
-    let source = sources[0];
-    let target = targets[0];
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
     let nonexistent_canister = Principal::from_text("222ay-6aaaa-aaaah-alvrq-cai").unwrap();
 
     let err = migrate_canister(
         &pic,
         sender,
         &MigrateCanisterArgs {
-            canister_id: nonexistent_canister,
-            replace_canister_id: target,
+            migrated_canister_id: nonexistent_canister,
+            replaced_canister_id: replaced_canister,
         },
     )
     .await
     .unwrap_err();
     assert!(
-        matches!(err, ValidationError::CallFailed { reason } if reason.contains(&format!("Call to management canister (`canister_status`) failed. Ensure that the canister {} is the expected source and try again later.", nonexistent_canister)))
+        matches!(err, ValidationError::CanisterNotFound {canister} if canister == nonexistent_canister)
     );
 
     let err = migrate_canister(
         &pic,
         sender,
         &MigrateCanisterArgs {
-            canister_id: source,
-            replace_canister_id: nonexistent_canister,
+            migrated_canister_id: migrated_canister,
+            replaced_canister_id: nonexistent_canister,
         },
     )
     .await
     .unwrap_err();
     assert!(
-        matches!(err, ValidationError::CallFailed { reason } if reason.contains(&format!("Call to management canister (`canister_status`) failed. Ensure that the canister {} is the expected target and try again later.", nonexistent_canister)))
+        matches!(err, ValidationError::CanisterNotFound {canister} if canister == nonexistent_canister)
     );
 }
 
@@ -814,19 +1002,19 @@ async fn validation_fails_not_found() {
 async fn validation_fails_same_canister() {
     let Setup {
         pic,
-        sources,
-        source_controllers,
+        migrated_canisters,
+        migrated_canister_controllers,
         ..
     } = setup(Settings::default()).await;
-    let sender = source_controllers[0];
-    let source = sources[0];
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
 
     let Err(ValidationError::SameSubnet(Reserved)) = migrate_canister(
         &pic,
         sender,
         &MigrateCanisterArgs {
-            canister_id: source,
-            replace_canister_id: source,
+            migrated_canister_id: migrated_canister,
+            replaced_canister_id: migrated_canister,
         },
     )
     .await
@@ -839,25 +1027,25 @@ async fn validation_fails_same_canister() {
 async fn validation_fails_same_subnet() {
     let Setup {
         pic,
-        sources,
-        source_subnet,
-        source_controllers,
+        migrated_canisters,
+        migrated_canister_subnet,
+        migrated_canister_controllers,
         ..
     } = setup(Settings::default()).await;
-    let sender = source_controllers[0];
-    let source = sources[0];
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
 
-    // Create a target canister on the same subnet.
-    let mut new_controllers = source_controllers.clone();
+    // Create a replaced canister on the same subnet.
+    let mut new_controllers = migrated_canister_controllers.clone();
     new_controllers.push(MIGRATION_CANISTER_ID.into());
-    let target = pic
+    let replaced_canister = pic
         .create_canister_on_subnet(
             Some(sender),
             Some(CanisterSettings {
                 controllers: Some(new_controllers),
                 ..Default::default()
             }),
-            source_subnet,
+            migrated_canister_subnet,
         )
         .await;
 
@@ -865,8 +1053,8 @@ async fn validation_fails_same_subnet() {
         &pic,
         sender,
         &MigrateCanisterArgs {
-            canister_id: source,
-            replace_canister_id: target,
+            migrated_canister_id: migrated_canister,
+            replaced_canister_id: replaced_canister,
         },
     )
     .await
@@ -879,154 +1067,158 @@ async fn validation_fails_same_subnet() {
 async fn validation_fails_caller_not_controller() {
     let Setup {
         pic,
-        sources,
-        targets,
-        source_controllers,
-        target_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
+        replaced_canister_controllers,
         ..
     } = setup(Settings::default()).await;
-    // sender not controller of source
-    let bad_sender = target_controllers[1];
-    let source = sources[0];
-    let target = targets[0];
+    // sender not controller of migrated canister
+    let bad_sender = replaced_canister_controllers[1];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
     let Err(ValidationError::CallerNotController { canister }) = migrate_canister(
         &pic,
         bad_sender,
         &MigrateCanisterArgs {
-            canister_id: source,
-            replace_canister_id: target,
+            migrated_canister_id: migrated_canister,
+            replaced_canister_id: replaced_canister,
         },
     )
     .await
     else {
         panic!()
     };
-    assert_eq!(canister, source);
+    assert_eq!(canister, migrated_canister);
 
-    // sender not controller of target
-    let bad_sender = source_controllers[1];
+    // sender not controller of replaced canister
+    let bad_sender = migrated_canister_controllers[1];
     let Err(ValidationError::CallerNotController { canister }) = migrate_canister(
         &pic,
         bad_sender,
         &MigrateCanisterArgs {
-            canister_id: source,
-            replace_canister_id: target,
+            migrated_canister_id: migrated_canister,
+            replaced_canister_id: replaced_canister,
         },
     )
     .await
     else {
         panic!()
     };
-    assert_eq!(canister, target);
+    assert_eq!(canister, replaced_canister);
 }
 
 #[tokio::test]
-async fn validation_fails_mc_not_source_controller() {
+async fn validation_fails_mc_not_migrated_canister_controller() {
     let Setup {
         pic,
-        sources,
-        targets,
-        source_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
         ..
     } = setup(Settings {
-        mc_controls_source: false,
+        mc_controls_migrated_canister: false,
         ..Default::default()
     })
     .await;
-    // MC not controller of source
-    let sender = source_controllers[0];
-    let source = sources[0];
-    let target = targets[0];
+    // MC not controller of migrated canister
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
     let Err(ValidationError::NotController { canister }) = migrate_canister(
         &pic,
         sender,
         &MigrateCanisterArgs {
-            canister_id: source,
-            replace_canister_id: target,
+            migrated_canister_id: migrated_canister,
+            replaced_canister_id: replaced_canister,
         },
     )
     .await
     else {
         panic!()
     };
-    assert_eq!(canister, source);
+    assert_eq!(canister, migrated_canister);
 }
 
 #[tokio::test]
-async fn validation_fails_mc_not_target_controller() {
+async fn validation_fails_mc_not_replaced_canister_controller() {
     let Setup {
         pic,
-        sources,
-        targets,
-        source_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
         ..
     } = setup(Settings {
-        mc_controls_target: false,
+        mc_controls_replaced_canister: false,
         ..Default::default()
     })
     .await;
-    // MC not controller of target
-    let sender = source_controllers[0];
-    let source = sources[0];
-    let target = targets[0];
+    // MC not controller of replaced canister
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
     let Err(ValidationError::NotController { canister }) = migrate_canister(
         &pic,
         sender,
         &MigrateCanisterArgs {
-            canister_id: source,
-            replace_canister_id: target,
+            migrated_canister_id: migrated_canister,
+            replaced_canister_id: replaced_canister,
         },
     )
     .await
     else {
         panic!()
     };
-    assert_eq!(canister, target);
+    assert_eq!(canister, replaced_canister);
 }
 
 #[tokio::test]
 async fn validation_fails_not_stopped() {
     let Setup {
         pic,
-        sources,
-        targets,
-        source_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
         ..
     } = setup(Settings::default()).await;
-    let sender = source_controllers[0];
-    let source = sources[0];
-    let target = targets[0];
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
 
-    // source
-    pic.start_canister(source, Some(sender)).await.unwrap();
+    pic.start_canister(migrated_canister, Some(sender))
+        .await
+        .unwrap();
     assert!(matches!(
         migrate_canister(
             &pic,
             sender,
             &MigrateCanisterArgs {
-                canister_id: source,
-                replace_canister_id: target
+                migrated_canister_id: migrated_canister,
+                replaced_canister_id: replaced_canister
             }
         )
         .await,
-        Err(ValidationError::SourceNotStopped(Reserved))
+        Err(ValidationError::MigratedCanisterNotStopped(Reserved))
     ));
 
-    pic.stop_canister(source, Some(sender)).await.unwrap();
+    pic.stop_canister(migrated_canister, Some(sender))
+        .await
+        .unwrap();
 
-    // target
-    pic.start_canister(target, Some(sender)).await.unwrap();
+    pic.start_canister(replaced_canister, Some(sender))
+        .await
+        .unwrap();
     assert!(matches!(
         migrate_canister(
             &pic,
             sender,
             &MigrateCanisterArgs {
-                canister_id: source,
-                replace_canister_id: target
+                migrated_canister_id: migrated_canister,
+                replaced_canister_id: replaced_canister
             }
         )
         .await,
-        Err(ValidationError::TargetNotStopped(Reserved))
+        Err(ValidationError::ReplacedCanisterNotStopped(Reserved))
     ));
 }
 
@@ -1034,15 +1226,15 @@ async fn validation_fails_not_stopped() {
 async fn validation_fails_disabled() {
     let Setup {
         pic,
-        sources,
-        targets,
-        source_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
         system_controller,
         ..
     } = setup(Settings::default()).await;
-    let sender = source_controllers[0];
-    let source = sources[0];
-    let target = targets[0];
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
     // disable canister API
     pic.update_call(
         MIGRATION_CANISTER_ID.into(),
@@ -1058,8 +1250,8 @@ async fn validation_fails_disabled() {
             &pic,
             sender,
             &MigrateCanisterArgs {
-                canister_id: source,
-                replace_canister_id: target
+                migrated_canister_id: migrated_canister,
+                replaced_canister_id: replaced_canister
             }
         )
         .await,
@@ -1071,24 +1263,24 @@ async fn validation_fails_disabled() {
 async fn validation_fails_snapshot() {
     let Setup {
         pic,
-        sources,
-        targets,
-        target_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        replaced_canister_controllers,
         ..
     } = setup(Settings::default()).await;
-    let sender = target_controllers[0];
-    let source = sources[0];
-    let target = targets[0];
+    let sender = replaced_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
     // install a minimal Wasm module
     pic.install_canister(
-        target,
+        replaced_canister,
         b"\x00\x61\x73\x6d\x01\x00\x00\x00".to_vec(),
         vec![],
         Some(sender),
     )
     .await;
     let _ = pic
-        .take_canister_snapshot(target, Some(sender), None)
+        .take_canister_snapshot(replaced_canister, Some(sender), None)
         .await
         .unwrap();
     assert!(matches!(
@@ -1096,12 +1288,12 @@ async fn validation_fails_snapshot() {
             &pic,
             sender,
             &MigrateCanisterArgs {
-                canister_id: source,
-                replace_canister_id: target
+                migrated_canister_id: migrated_canister,
+                replaced_canister_id: replaced_canister
             }
         )
         .await,
-        Err(ValidationError::TargetHasSnapshots(Reserved))
+        Err(ValidationError::ReplacedCanisterHasSnapshots(Reserved))
     ));
 }
 
@@ -1109,30 +1301,32 @@ async fn validation_fails_snapshot() {
 async fn validation_fails_insufficient_cycles() {
     let Setup {
         pic,
-        sources,
-        targets,
-        source_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
         ..
     } = setup(Settings {
         enough_cycles: false,
         ..Default::default()
     })
     .await;
-    let sender = source_controllers[0];
-    let source = sources[0];
-    let target = targets[0];
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
 
     assert!(matches!(
         migrate_canister(
             &pic,
             sender,
             &MigrateCanisterArgs {
-                canister_id: source,
-                replace_canister_id: target
+                migrated_canister_id: migrated_canister,
+                replaced_canister_id: replaced_canister
             }
         )
         .await,
-        Err(ValidationError::SourceInsufficientCycles(Reserved))
+        Err(ValidationError::MigratedCanisterInsufficientCycles(
+            Reserved
+        ))
     ));
 }
 
@@ -1140,17 +1334,17 @@ async fn validation_fails_insufficient_cycles() {
 async fn status_correct() {
     let Setup {
         pic,
-        sources,
-        targets,
-        source_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
         ..
     } = setup(Settings::default()).await;
-    let sender = source_controllers[0];
-    let source = sources[0];
-    let target = targets[0];
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
     let args = MigrateCanisterArgs {
-        canister_id: source,
-        replace_canister_id: target,
+        migrated_canister_id: migrated_canister,
+        replaced_canister_id: replaced_canister,
     };
     migrate_canister(&pic, sender, &args).await.unwrap();
 
@@ -1185,7 +1379,7 @@ async fn status_correct() {
     assert_eq!(
         status.unwrap(),
         MigrationStatus::InProgress {
-            status: "RenamedTarget".to_string()
+            status: "RenamedReplacedCanister".to_string()
         }
     );
 
@@ -1212,7 +1406,7 @@ async fn status_correct() {
     assert_eq!(
         status.unwrap(),
         MigrationStatus::InProgress {
-            status: "SourceDeleted".to_string()
+            status: "MigratedCanisterDeleted".to_string()
         }
     );
     pic.advance_time(Duration::from_secs(360)).await;
@@ -1227,24 +1421,27 @@ async fn status_correct() {
 }
 
 #[tokio::test]
-async fn after_validation_source_not_stopped() {
+async fn after_validation_migrated_canister_not_stopped() {
     let Setup {
         pic,
-        sources,
-        targets,
-        source_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
         ..
     } = setup(Settings::default()).await;
-    let sender = source_controllers[0];
-    let source = sources[0];
-    let target = targets[0];
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
     let args = MigrateCanisterArgs {
-        canister_id: source,
-        replace_canister_id: target,
+        migrated_canister_id: migrated_canister,
+        replaced_canister_id: replaced_canister,
     };
     migrate_canister(&pic, sender, &args).await.unwrap();
     // validation succeeded. now we break migration by interfering.
-    pic.start_canister(source, Some(sender)).await.unwrap();
+    pic.start_canister(migrated_canister, Some(sender))
+        .await
+        .unwrap();
+    advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
@@ -1252,28 +1449,31 @@ async fn after_validation_source_not_stopped() {
     let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
         panic!()
     };
-    assert_eq!(reason, &"Source is not stopped.".to_string());
+    assert_eq!(reason, &"Migrated canister is not stopped.".to_string());
 }
 
 #[tokio::test]
-async fn after_validation_target_not_stopped() {
+async fn after_validation_replaced_canister_not_stopped() {
     let Setup {
         pic,
-        sources,
-        targets,
-        source_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
         ..
     } = setup(Settings::default()).await;
-    let sender = source_controllers[0];
-    let source = sources[0];
-    let target = targets[0];
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
     let args = MigrateCanisterArgs {
-        canister_id: source,
-        replace_canister_id: target,
+        migrated_canister_id: migrated_canister,
+        replaced_canister_id: replaced_canister,
     };
     migrate_canister(&pic, sender, &args).await.unwrap();
     // validation succeeded. now we break migration by interfering.
-    pic.start_canister(target, Some(sender)).await.unwrap();
+    pic.start_canister(replaced_canister, Some(sender))
+        .await
+        .unwrap();
+    advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
@@ -1281,40 +1481,41 @@ async fn after_validation_target_not_stopped() {
     let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
         panic!()
     };
-    assert_eq!(reason, &"Target is not stopped.".to_string());
+    assert_eq!(reason, &"Replaced canister is not stopped.".to_string());
 }
 
 #[tokio::test]
-async fn after_validation_target_has_snapshot() {
+async fn after_validation_replaced_canister_has_snapshot() {
     let Setup {
         pic,
-        sources,
-        targets,
-        target_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        replaced_canister_controllers,
         ..
     } = setup(Settings::default()).await;
-    let sender = target_controllers[0];
-    let source = sources[0];
-    let target = targets[0];
+    let sender = replaced_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
     let args = MigrateCanisterArgs {
-        canister_id: source,
-        replace_canister_id: target,
+        migrated_canister_id: migrated_canister,
+        replaced_canister_id: replaced_canister,
     };
     migrate_canister(&pic, sender, &args).await.unwrap();
     // validation succeeded. now we break migration by interfering.
     // install a minimal Wasm module
     pic.install_canister(
-        target,
+        replaced_canister,
         b"\x00\x61\x73\x6d\x01\x00\x00\x00".to_vec(),
         vec![],
         Some(sender),
     )
     .await;
     let _ = pic
-        .take_canister_snapshot(target, Some(sender), None)
+        .take_canister_snapshot(replaced_canister, Some(sender), None)
         .await
         .unwrap();
 
+    advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
@@ -1322,35 +1523,35 @@ async fn after_validation_target_has_snapshot() {
     let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
         panic!()
     };
-    assert_eq!(reason, &"Target has snapshots.".to_string());
+    assert_eq!(reason, &"Replaced canister has snapshots.".to_string());
 }
 
 #[tokio::test]
 async fn after_validation_insufficient_cycles() {
     let Setup {
         pic,
-        sources,
-        targets,
-        target_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        replaced_canister_controllers,
         ..
     } = setup(Settings {
         enough_cycles: false,
         ..Default::default()
     })
     .await;
-    let sender = target_controllers[0];
-    let source = sources[0];
-    let target = targets[0];
+    let sender = replaced_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
     // Top up just enough to pass validation..
-    pic.add_cycles(source, 10_000_000_000_000).await;
+    pic.add_cycles(migrated_canister, 10_000_000_000_000).await;
     let args = MigrateCanisterArgs {
-        canister_id: source,
-        replace_canister_id: target,
+        migrated_canister_id: migrated_canister,
+        replaced_canister_id: replaced_canister,
     };
     migrate_canister(&pic, sender, &args).await.unwrap();
     // ..but then burn some cycles by reinstalling to get under the required amount.
     pic.reinstall_canister(
-        source,
+        migrated_canister,
         b"\x00\x61\x73\x6d\x01\x00\x00\x00".to_vec(),
         vec![],
         Some(sender),
@@ -1360,33 +1561,37 @@ async fn after_validation_insufficient_cycles() {
     advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
+    advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     let MigrationStatus::Failed { ref reason, .. } = status.unwrap() else {
         panic!()
     };
-    assert!(reason.contains("Source does not have sufficient cycles"));
+    assert!(reason.contains("Migrated canister does not have sufficient cycles"));
 }
 
 #[tokio::test]
 async fn failure_controllers_restored() {
     let Setup {
         pic,
-        sources,
-        targets,
-        mut source_controllers,
-        mut target_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        mut migrated_canister_controllers,
+        mut replaced_canister_controllers,
         ..
     } = setup(Settings::default()).await;
-    let sender = source_controllers[0];
-    let source = sources[0];
-    let target = targets[0];
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
     let args = MigrateCanisterArgs {
-        canister_id: source,
-        replace_canister_id: target,
+        migrated_canister_id: migrated_canister,
+        replaced_canister_id: replaced_canister,
     };
     migrate_canister(&pic, sender, &args).await.unwrap();
     // Validation succeeded. Now we break migration by interfering.
-    pic.start_canister(source, Some(sender)).await.unwrap();
+    pic.start_canister(migrated_canister, Some(sender))
+        .await
+        .unwrap();
+    advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
     advance(&pic).await;
@@ -1394,32 +1599,38 @@ async fn failure_controllers_restored() {
     let MigrationStatus::Failed { .. } = status.unwrap() else {
         panic!()
     };
-    let mut source_controllers_after = pic.get_controllers(source).await;
-    let mut target_controllers_after = pic.get_controllers(target).await;
-    source_controllers_after.sort();
-    target_controllers_after.sort();
-    source_controllers.sort();
-    target_controllers.sort();
+    let mut migrated_canister_controllers_after = pic.get_controllers(migrated_canister).await;
+    let mut replaced_canister_controllers_after = pic.get_controllers(replaced_canister).await;
+    migrated_canister_controllers_after.sort();
+    replaced_canister_controllers_after.sort();
+    migrated_canister_controllers.sort();
+    replaced_canister_controllers.sort();
     // On failure, the MC should remain controller such that user can retry.
-    assert_eq!(source_controllers, source_controllers_after);
-    assert_eq!(target_controllers, target_controllers_after);
+    assert_eq!(
+        migrated_canister_controllers,
+        migrated_canister_controllers_after
+    );
+    assert_eq!(
+        replaced_canister_controllers,
+        replaced_canister_controllers_after
+    );
 }
 
 #[tokio::test]
 async fn success_controllers_restored() {
     let Setup {
         pic,
-        sources,
-        targets,
-        mut source_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        mut migrated_canister_controllers,
         ..
     } = setup(Settings::default()).await;
-    let sender = source_controllers[0];
-    let source = sources[0];
-    let target = targets[0];
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
     let args = MigrateCanisterArgs {
-        canister_id: source,
-        replace_canister_id: target,
+        migrated_canister_id: migrated_canister,
+        replaced_canister_id: replaced_canister,
     };
     migrate_canister(&pic, sender, &args).await.unwrap();
     for _ in 0..10 {
@@ -1433,12 +1644,15 @@ async fn success_controllers_restored() {
     let MigrationStatus::Succeeded { .. } = status.as_ref().unwrap() else {
         panic!("status: {:?}", status.unwrap());
     };
-    let mut source_controllers_after = pic.get_controllers(source).await;
-    source_controllers_after.sort();
+    let mut migrated_canister_controllers_after = pic.get_controllers(migrated_canister).await;
+    migrated_canister_controllers_after.sort();
     // On success, the MC should have removed itself from the controllers.
-    source_controllers.retain(|x| x != &MIGRATION_CANISTER_ID.get().0);
-    source_controllers.sort();
-    assert_eq!(source_controllers, source_controllers_after);
+    migrated_canister_controllers.retain(|x| x != &MIGRATION_CANISTER_ID.get().0);
+    migrated_canister_controllers.sort();
+    assert_eq!(
+        migrated_canister_controllers,
+        migrated_canister_controllers_after
+    );
 }
 
 // parallel processing
@@ -1447,9 +1661,9 @@ async fn parallel_migrations() {
     const NUM_MIGRATIONS: usize = 51;
     let Setup {
         pic,
-        sources,
-        targets,
-        source_controllers,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
         ..
     } = setup(Settings {
         num_migrations: NUM_MIGRATIONS as u64,
@@ -1460,10 +1674,10 @@ async fn parallel_migrations() {
     for i in 0..NUM_MIGRATIONS - 1 {
         migrate_canister(
             &pic,
-            source_controllers[0],
+            migrated_canister_controllers[0],
             &MigrateCanisterArgs {
-                canister_id: sources[i],
-                replace_canister_id: targets[i],
+                migrated_canister_id: migrated_canisters[i],
+                replaced_canister_id: replaced_canisters[i],
             },
         )
         .await
@@ -1472,10 +1686,10 @@ async fn parallel_migrations() {
     // The last one should fail due to rate limit
     let err = migrate_canister(
         &pic,
-        source_controllers[0],
+        migrated_canister_controllers[0],
         &MigrateCanisterArgs {
-            canister_id: sources[NUM_MIGRATIONS - 1],
-            replace_canister_id: targets[NUM_MIGRATIONS - 1],
+            migrated_canister_id: migrated_canisters[NUM_MIGRATIONS - 1],
+            replaced_canister_id: replaced_canisters[NUM_MIGRATIONS - 1],
         },
     )
     .await;
@@ -1487,17 +1701,17 @@ async fn parallel_migrations() {
     for i in 0..NUM_MIGRATIONS - 1 {
         let status = get_status(
             &pic,
-            source_controllers[0],
+            migrated_canister_controllers[0],
             &MigrateCanisterArgs {
-                canister_id: sources[i],
-                replace_canister_id: targets[i],
+                migrated_canister_id: migrated_canisters[i],
+                replaced_canister_id: replaced_canisters[i],
             },
         )
         .await;
         let MigrationStatus::InProgress { ref status } = status.unwrap() else {
             panic!()
         };
-        assert_eq!(status, "SourceDeleted");
+        assert_eq!(status, "MigratedCanisterDeleted");
     }
 }
 
@@ -1506,8 +1720,8 @@ async fn parallel_validations() {
     const NUM_MIGRATIONS: usize = 260;
     let Setup {
         pic,
-        sources,
-        targets,
+        migrated_canisters,
+        replaced_canisters,
         ..
     } = setup(Settings {
         num_migrations: NUM_MIGRATIONS as u64,
@@ -1523,8 +1737,8 @@ async fn parallel_validations() {
                 Principal::anonymous(),
                 "migrate_canister",
                 Encode!(&MigrateCanisterArgs {
-                    canister_id: sources[i],
-                    replace_canister_id: targets[i],
+                    migrated_canister_id: migrated_canisters[i],
+                    replaced_canister_id: replaced_canisters[i],
                 })
                 .unwrap(),
             )

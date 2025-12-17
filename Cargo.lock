@@ -1138,6 +1138,7 @@ dependencies = [
  "rand 0.8.5",
  "rexpect",
  "ssh2",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -6621,6 +6622,7 @@ dependencies = [
  "ic-config",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-crypto-returning-ok",
+ "ic-crypto-test-utils-ni-dkg",
  "ic-interfaces",
  "ic-limits",
  "ic-logger",
@@ -6880,11 +6882,9 @@ dependencies = [
  "dashmap",
  "derive-new",
  "ethnum",
- "futures",
  "futures-util",
  "hex",
  "http 1.3.1",
- "http-body 1.0.1",
  "humantime",
  "ic-agent 0.40.1",
  "ic-base-types",
@@ -6903,11 +6903,12 @@ dependencies = [
  "ic-limits",
  "ic-logger",
  "ic-protobuf",
+ "ic-registry-client",
  "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",
+ "ic-registry-local-store",
  "ic-registry-proto-data-provider",
- "ic-registry-replicator",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-types",
@@ -6922,21 +6923,16 @@ dependencies = [
  "rand 0.8.5",
  "rate-limits-api",
  "ratelimit",
- "rcgen 0.13.2",
  "regex",
  "reqwest 0.12.24",
  "rustls 0.23.27",
- "rustls-pemfile 2.2.0",
  "salt-sharing-api",
  "serde",
- "serde_bytes",
  "serde_cbor",
  "serde_json",
- "serde_regex",
  "serde_yaml",
  "sha3",
  "simple_moving_average",
- "slog",
  "strum 0.26.3",
  "tempfile",
  "thiserror 2.0.17",
@@ -6950,7 +6946,6 @@ dependencies = [
  "tower_governor 0.7.0",
  "tracing",
  "tracing-serde 0.1.3",
- "tracing-slog",
  "tracing-subscriber",
  "url",
  "x509-parser 0.16.0",
@@ -7650,6 +7645,7 @@ dependencies = [
  "ic-cdk",
  "ic-config",
  "ic-crypto-sha2",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-dummy-getrandom-for-wasm",
  "ic-http-types",
  "ic-icrc1",
@@ -7676,6 +7672,7 @@ dependencies = [
  "num-traits",
  "pocket-ic",
  "proptest",
+ "rand 0.8.5",
  "ripemd",
  "scopeguard",
  "serde",
@@ -7694,6 +7691,7 @@ dependencies = [
  "bs58 0.5.1",
  "candid",
  "candid_parser",
+ "ciborium",
  "hex",
  "ic-cdk",
  "ic-ckbtc-minter",
@@ -8009,6 +8007,7 @@ dependencies = [
  "ic-consensus-mocks",
  "ic-consensus-utils",
  "ic-crypto",
+ "ic-crypto-interfaces-sig-verification",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-crypto-returning-ok",
@@ -9527,7 +9526,7 @@ dependencies = [
 [[package]]
 name = "ic-doge-interface"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/dogecoin-canister?rev=74e6dc9a10ba64d2dbad013282c26d74cd49863f#74e6dc9a10ba64d2dbad013282c26d74cd49863f"
+source = "git+https://github.com/dfinity/dogecoin-canister?rev=a5f89792a002b060e3f0174f1a87da9764f855f8#a5f89792a002b060e3f0174f1a87da9764f855f8"
 dependencies = [
  "candid",
  "datasize",
@@ -9652,6 +9651,7 @@ name = "ic-error-types"
 version = "0.2.0"
 dependencies = [
  "ic-heap-bytes",
+ "regex-lite",
  "serde",
  "strum 0.26.3",
  "strum_macros 0.26.4",
@@ -9750,7 +9750,7 @@ dependencies = [
  "prometheus 0.13.4",
  "proptest",
  "rand 0.8.5",
- "regex",
+ "regex-lite",
  "rstest",
  "scoped_threadpool",
  "serde",
@@ -11312,25 +11312,34 @@ dependencies = [
 name = "ic-migration-canister"
 version = "0.9.0"
 dependencies = [
+ "async-trait",
  "candid",
  "candid_parser",
  "canister-test",
+ "dfn_http_metrics",
  "futures",
  "ic-base-types",
  "ic-cdk",
  "ic-cdk-timers",
+ "ic-http-types",
  "ic-limits",
  "ic-management-canister-types 0.5.0",
  "ic-management-canister-types-private",
+ "ic-metrics-encoder",
+ "ic-nervous-system-common-test-utils",
+ "ic-nns-constants",
  "ic-nns-test-utils",
  "ic-stable-structures 0.7.0",
  "ic-transport-types 0.40.1",
  "ic-universal-canister",
  "itertools 0.12.1",
  "pocket-ic",
+ "prometheus-parse",
+ "rand 0.8.5",
  "registry-canister",
  "reqwest 0.12.24",
  "serde",
+ "serde_bytes",
  "serde_cbor",
  "strum 0.26.3",
  "strum_macros 0.26.4",
@@ -12754,6 +12763,7 @@ version = "0.9.0"
 dependencies = [
  "bincode",
  "candid",
+ "comparable",
  "erased-serde",
  "hex",
  "ic-error-types 0.2.0",
@@ -15347,6 +15357,7 @@ dependencies = [
  "ic-crypto-internal-types",
  "ic-crypto-sha2",
  "ic-crypto-test-utils-canister-threshold-sigs",
+ "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash",
  "ic-error-types 0.2.0",
@@ -18031,6 +18042,7 @@ name = "messaging-test-utils"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "ic-limits",
  "ic-types",
  "messaging-test",
  "proptest",
@@ -19115,6 +19127,7 @@ dependencies = [
  "ic-crypto-test-utils-tls",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-dashboard",
  "ic-ed25519 0.5.0",
  "ic-http-endpoints-async-utils",
@@ -24828,17 +24841,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "704b1aeb7be0d0a84fc9828cae51dab5970fee5088f83d1dd7ee6f6246fc6ff1"
 dependencies = [
  "serde",
- "tracing-core",
-]
-
-[[package]]
-name = "tracing-slog"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ffd12d2d54fb99df994fde4e3320959e32208420bfe375a664c5d8cd894a23b"
-dependencies = [
- "once_cell",
- "slog",
  "tracing-core",
 ]
 
