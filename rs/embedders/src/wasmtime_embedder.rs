@@ -632,7 +632,7 @@ impl WasmtimeEmbedder {
                     current_memory_size_in_pages: current_size,
                     page_map: memory_info.memory.page_map.clone(),
                     dirty_page_tracking: memory_info.dirty_page_tracking,
-                    memory_limits: memory_limits.clone(),
+                    memory_limits: *memory_limits,
                 },
             );
 
