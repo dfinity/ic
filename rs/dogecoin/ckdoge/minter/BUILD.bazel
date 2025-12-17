@@ -50,6 +50,7 @@ rust_test(
     ],
     deps = [
         # Keep sorted.
+        "//rs/types/base_types",
         "@crate_index//:assert_matches",
         "@crate_index//:proptest",
         "@crate_index//:serde_json",

@@ -7693,6 +7693,7 @@ dependencies = [
  "candid_parser",
  "ciborium",
  "hex",
+ "ic-base-types",
  "ic-cdk",
  "ic-ckbtc-minter",
  "ic-ckdoge-minter-test-utils",
