@@ -65,7 +65,7 @@ fn test(env: TestEnv) {
 #[derive(Clone, Debug, CandidType)]
 struct MigrateCanisterArgs {
     pub migrated_canister_id: Principal,
-    pub replace_canister_id: Principal,
+    pub replaced_canister_id: Principal,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
@@ -78,11 +78,11 @@ pub enum ValidationError {
     SameSubnet(Reserved),
     CallerNotController { canister: Principal },
     NotController { canister: Principal },
-    MigratedNotStopped(Reserved),
-    MigratedNotReady(Reserved),
-    ReplacedNotStopped(Reserved),
-    ReplacedHasSnapshots(Reserved),
-    MigratedInsufficientCycles(Reserved),
+    MigratedCanisterNotStopped(Reserved),
+    MigratedCanisterNotReady(Reserved),
+    ReplacedCanisterNotStopped(Reserved),
+    ReplacedCanisterHasSnapshots(Reserved),
+    MigratedCanisterInsufficientCycles(Reserved),
     CallFailed { reason: String },
 }
 
@@ -380,12 +380,12 @@ async fn test_async(env: TestEnv) {
 
     let args = Encode!(&MigrateCanisterArgs {
         migrated_canister_id: migrated_canister.canister_id(),
-        replace_canister_id: replaced_canister.canister_id(),
+        replaced_canister_id: replaced_canister.canister_id(),
     })
     .unwrap();
     let args2 = Encode!(&MigrateCanisterArgs {
         migrated_canister_id: migrated_canister2.canister_id(),
-        replace_canister_id: replaced_canister2.canister_id(),
+        replaced_canister_id: replaced_canister2.canister_id(),
     })
     .unwrap();
 
