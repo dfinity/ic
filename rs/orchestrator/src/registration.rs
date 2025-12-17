@@ -15,7 +15,9 @@ use ic_config::{
     metrics::{Config as MetricsConfig, Exporter},
     transport::TransportConfig,
 };
-use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key_from_pem_file, threshold_sig_public_key_to_der};
+use ic_crypto_utils_threshold_sig_der::{
+    parse_threshold_sig_key_from_pem_file, threshold_sig_public_key_to_der,
+};
 use ic_interfaces::crypto::{CheckKeysWithRegistryError, IDkgKeyRotationResult};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, info, warn};
