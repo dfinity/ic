@@ -2443,6 +2443,16 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_deterministic_memory_tracker_enabled(mut self, enabled: bool) -> Self {
+        let feature_flags = &mut self.execution_config.embedders_config.feature_flags;
+        if enabled {
+            feature_flags.deterministic_memory_tracker = FlagStatus::Enabled;
+        } else {
+            feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
+        }
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
