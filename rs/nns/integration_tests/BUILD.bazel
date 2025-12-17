@@ -386,17 +386,17 @@ rust_ic_test(
     ],
     deps = BASE_DEPENDENCIES +
            DEV_DEPENDENCIES + [
-              # Keep sorted.
-              "//rs/nns/governance:governance--pbr_feature",
-              "//rs/nns/handlers/root/impl:root--test_feature",
-              "//rs/sns/init:init--test_feature",
-          ] + select({
-              "@rules_rust//rust/platform:wasm32-unknown-unknown": [
-                  "//rs/nns/gtc:gtc",
-              ],
-              "//conditions:default": [
-                  "//rs/nns/test_utils:test_utils--test_feature",
-                  "//rs/nns/gtc:gtc--test_feature",
-              ],
-          }),
+        # Keep sorted.
+        "//rs/nns/governance:governance--pbr_feature",
+        "//rs/nns/handlers/root/impl:root--test_feature",
+        "//rs/sns/init:init--test_feature",
+    ] + select({
+        "@rules_rust//rust/platform:wasm32-unknown-unknown": [
+            "//rs/nns/gtc",
+        ],
+        "//conditions:default": [
+            "//rs/nns/gtc:gtc--test_feature",
+            "//rs/nns/test_utils:test_utils--test_feature",
+        ],
+    }),
 )
