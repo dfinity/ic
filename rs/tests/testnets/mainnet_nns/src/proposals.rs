@@ -29,6 +29,20 @@ use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
 use url::Url;
 
+/*
+* This modules duplicates some often-used functions that normally submit proposals with a test
+* neuron (like `TEST_NEURON_1_ID`), but instead uses a different neuron ID, which is stored in the
+* test environment. If you run the `setup` function that sets up a testnet with NNS mainnet state,
+* a neuron will be created that controls all stake. To make a proposal using that neuron, it is
+* sufficient to call `ProposalWithMainnetState::[name_of_the_proposal]` instead of
+* `[name_of_the_proposal]`.
+*
+* IMPORTANT: Before making any proposal with this module, you MUST call
+* `ProposalWithMainnetState::read_dictator_neuron_id_from_env(&env)` once in your `test` function
+* (not in `setup`, as those functions run in different processes). This is necessary, so that the
+* neuron ID is initialized from the test environment and used in subsequent proposals.
+*/
+
 // Test neuron secret key and corresponding controller principal
 pub(crate) const NEURON_CONTROLLER: &str =
     "bc7vk-kulc6-vswcu-ysxhv-lsrxo-vkszu-zxku3-xhzmh-iac7m-lwewm-2ae";
@@ -56,6 +70,11 @@ pub struct ProposalWithMainnetState {
 }
 
 impl ProposalWithMainnetState {
+    /// Initializes a ProposalWithMainnetState instance reading the neuron ID from the static
+    /// variable, which must have been initialized before via `read_dictator_neuron_id_from_env`.
+    ///
+    /// This function is not intended to be called externally (thus it is not `pub`), but only called
+    /// at the beginning of each proposal function below.
     fn new() -> Self {
         let neuron_id = *RECOVERED_NNS_DICTATOR_NEURON_ID.get().expect(
             "'read_dictator_neuron_id_from_env' must be called before using ProposalWithMainnetState",
@@ -70,6 +89,9 @@ impl ProposalWithMainnetState {
         }
     }
 
+    /// Writes the given dictator neuron ID to the test environment, so that it can be read later on
+    /// potentially by a different process. Currently used in the `setup` function that creates a
+    /// testnet with NNS mainnet state.
     pub fn write_dictator_neuron_id_to_env(env: &TestEnv, neuron_id: NeuronId) {
         RecoveredNnsDictatorNeuron {
             recovered_nns_dictator_neuron_id: neuron_id,
@@ -77,6 +99,9 @@ impl ProposalWithMainnetState {
         .write_attribute(&env);
     }
 
+    /// Initializes the static variable holding the dictator neuron ID by reading it from the test
+    /// environment. This function MUST be called once before using any of the proposal functions
+    /// below.
     pub fn read_dictator_neuron_id_from_env(env: &TestEnv) {
         let neuron_id = RecoveredNnsDictatorNeuron::try_read_attribute(env)
             .expect("'write_dictator_neuron_id_to_env' must be called before reading")
@@ -87,8 +112,7 @@ impl ProposalWithMainnetState {
             .expect("'read_dictator_neuron_id_from_env' can only be called once");
     }
 
-    // Code duplicate of //rs/tests/consensus/utils/src/upgrade.rs:bless_replica_version adapted to
-    // use the dictator neuron
+    /// Code duplicate of rs/tests/consensus/utils/src/upgrade.rs:bless_replica_version
     pub async fn bless_replica_version(
         nns_node: &IcNodeSnapshot,
         target_version: &ReplicaVersion,
@@ -131,8 +155,7 @@ impl ProposalWithMainnetState {
         info!(logger, "Updated: {:?}", blessed_versions);
     }
 
-    // Code duplicate of //rs/tests/consensus/utils/src/ssh_access.rs:update_subnet_record adapted
-    // to use the dictator neuron
+    /// Code duplicate of rs/tests/consensus/utils/src/ssh_access.rs:update_subnet_record
     pub async fn update_subnet_record(nns_url: Url, payload: UpdateSubnetPayload) {
         let self_ = Self::new();
 
@@ -187,8 +210,7 @@ impl ProposalWithMainnetState {
         );
     }
 
-    // Code duplicate of //rs/tests/driver/src/nns.rs:change_subnet_membership adapted to use the
-    // dictator neuron
+    /// Code duplicate of rs/tests/driver/src/nns.rs:change_subnet_membership
     pub async fn change_subnet_membership(
         url: Url,
         subnet_id: SubnetId,
