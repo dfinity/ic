@@ -32,9 +32,9 @@ jobs:
     runs-on: &dind-small-setup
       labels: dind-small
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:86c24b5b717519527920d3b720906f91723514d63acddcbaeb27ecf4144aeb37
+      image: ghcr.io/dfinity/ic-build@sha256:f5cb4f3813d09becd303fc14036568eecb7cdf3ffc65098e5a42c15d3ce77cee
       options: >-
-         -e NODE_NAME
+         -e NODE_NAME --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -53,54 +53,27 @@ jobs:
               --test_tag_filters="didc"
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
-  insta-tests:
-    name: Quick Feedback Tests
+# Runs linters and formatters on code to automatically fix issues
+  autofix:
+    name: Autofix
     runs-on: *dind-small-setup
     container: *container-setup
     timeout-minutes: 30
     steps:
-      - &checkout
-        name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.commit-sha }}
-      - name: Run insta-tests
-        uses: ./.github/actions/bazel
-        with:
-          run: bazel test //:insta_tests
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-
-  buildifier:
-    name: Buildifier
-    runs-on: *dind-small-setup
-    container: *container-setup
-    timeout-minutes: 30
-    steps:
-      - name: Filter Relevant Files
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        id: filter
-        with:
-          ref: ${{ inputs.commit-sha }}
-          filters: |
-            buildifier:
-              - '**/*.bazel'
-              - '**/*.bzl'
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
-        if: steps.filter.outputs.buildifier == 'true'
         id: app-token
         with:
           app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
           private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
-      - name: Checkout
+      - &checkout-with-token
+        name: Checkout
         uses: actions/checkout@v4
-        if: steps.filter.outputs.buildifier == 'true'
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || inputs.commit-sha }}
           token: ${{ steps.app-token.outputs.token }}
-      - name: Run Buildifier
-        id: buildifier
-        if: steps.filter.outputs.buildifier == 'true'
+      - name: Run Linter
+        id: linter
         uses: ./.github/actions/bazel
         with:
           run: |
@@ -109,6 +82,10 @@ jobs:
             EXIT_STATUS=0
 
             bazel run :buildifier
+            bazel run :shfmt-format
+            bazel run :ruff-format
+            bazel run :rustfmt
+            bazel run :gazelle
 
             git add --all
             git status
@@ -116,7 +93,7 @@ jobs:
                 # There are some changes staged
                 git config --global user.email "infra+github-automation@dfinity.org"
                 git config --global user.name "IDX GitHub Automation"
-                git commit -m "Automatically ran: bazel run :buildifier"
+                git commit -m "Automatically fixing code for linting and formatting issues"
                 git push
 
                 # Because the buildifier made changes, fail the PR
@@ -132,7 +109,11 @@ jobs:
     container: *container-setup
     timeout-minutes: 90
     steps:
-      - *checkout
+      - &checkout
+        name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit-sha }}
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
@@ -163,11 +144,7 @@ jobs:
         with:
           app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
           private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || inputs.commit-sha }}
-          token: ${{ steps.app-token.outputs.token }}
+      - *checkout-with-token
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
@@ -200,11 +177,7 @@ jobs:
         with:
           app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
           private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || inputs.commit-sha }}
-          token: ${{ steps.app-token.outputs.token }}
+      - *checkout-with-token
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter

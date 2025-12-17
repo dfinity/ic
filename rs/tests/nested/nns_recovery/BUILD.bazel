@@ -45,9 +45,9 @@ system_test_nns(
     name = "nr_broken_dfinity_node",
     env = ENV,
     flaky = True,
+    guestos_update = "test",
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_guestos_test_update = True,
     uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS + [
         "//rs/tests:recovery/binaries",
@@ -65,11 +65,11 @@ system_test_nns(
     enable_head_nns_variant = False,
     env = ENV,
     flaky = True,
+    guestos_update = "test",
     tags = [
         "system_test_large",
     ],
     test_timeout = "eternal",
-    uses_guestos_test_update = True,
     uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS + [
         "//rs/tests:recovery/binaries",
@@ -86,9 +86,9 @@ system_test_nns(
     name = "nr_local",
     env = ENV,
     flaky = True,
+    guestos_update = "test",
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_guestos_test_update = True,
     uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
@@ -103,9 +103,9 @@ system_test_nns(
     name = "nr_no_bless_fix_like_np",
     env = ENV,
     flaky = True,
+    guestos_update = "test",
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_guestos_test_update = True,
     uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS + [
         "//rs/tests:recovery/binaries",
@@ -122,9 +122,9 @@ system_test_nns(
     name = "nr_seq_np_actions",
     env = ENV,
     flaky = True,
+    guestos_update = "test",
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_guestos_test_update = True,
     uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS + [
         "//rs/tests:recovery/binaries",
