@@ -9,6 +9,9 @@ use crate::prefetching::PrefetchingMemoryTracker;
 
 pub mod prefetching;
 
+#[cfg(test)]
+mod tests;
+
 /// Specifies whether the currently running message execution needs to know
 /// which pages were dirtied or not. Dirty page tracking comes with a large
 /// performance overhead.

@@ -17,7 +17,7 @@ thread_local! {
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub enum TaskType {
-    ProcessLogic(bool),
+    ProcessLogic,
     RefreshFeePercentiles,
     ConsolidateUtxos,
 }
@@ -133,11 +133,11 @@ pub fn global_timer() -> u64 {
 
 pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
     match task.task_type {
-        TaskType::ProcessLogic(force_resubmit_stuck_transactions) => {
+        TaskType::ProcessLogic => {
             const INTERVAL_PROCESSING: Duration = Duration::from_secs(5);
 
             let _enqueue_followup_guard = guard((), |_| {
-                schedule_after(INTERVAL_PROCESSING, TaskType::ProcessLogic(false), &runtime)
+                schedule_after(INTERVAL_PROCESSING, TaskType::ProcessLogic, &runtime)
             });
 
             let _guard = match crate::guard::TimerLogicGuard::new() {
@@ -146,7 +146,7 @@ pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
             };
 
             submit_pending_requests(&runtime).await;
-            finalize_requests(&runtime, force_resubmit_stuck_transactions).await;
+            finalize_requests(&runtime).await;
             reimburse_withdrawals(&runtime).await;
         }
         TaskType::RefreshFeePercentiles => {
