@@ -9,6 +9,7 @@ use ic_sys::{PAGE_SIZE, PageBytes};
 use ic_types::{Height, NumBytes, NumOsPages};
 use libc::c_void;
 use nix::sys::mman::{MapFlags, ProtFlags, mmap};
+use rstest::rstest;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
@@ -16,7 +17,9 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use crate::{
-    AccessKind, DirtyPageTracking, MemoryLimits, MemoryTracker,
+    AccessKind, DirtyPageTracking, MemoryLimits, MemoryTracker, MissingPageHandlerKind,
+    conversions::OS_PAGES_IN_WASM_PAGE,
+    deterministic::DeterministicMemoryTracker,
     prefetching::{PrefetchingMemoryTracker, prefetching_signal_handler_available},
 };
 
@@ -30,6 +33,7 @@ fn setup(
     memory_pages: usize,
     page_delta: Vec<PageIndex>,
     dirty_page_tracking: DirtyPageTracking,
+    missing_page_handler_kind: MissingPageHandlerKind,
 ) -> (Box<dyn MemoryTracker>, PageMap, *mut c_void, Vec<u8>) {
     let mut vec = vec![0_u8; memory_pages * PAGE_SIZE];
     let tmpfile = tempfile::Builder::new().prefix("test").tempfile().unwrap();
@@ -71,22 +75,44 @@ fn setup(
         .unwrap()
     };
 
-    let tracker = Box::new(
-        PrefetchingMemoryTracker::new(
-            memory,
-            NumBytes::new((memory_pages * PAGE_SIZE) as u64),
-            no_op_logger(),
-            dirty_page_tracking,
-            page_map.clone(),
-            MemoryLimits {
-                max_memory_size: NumBytes::new((memory_pages * PAGE_SIZE) as u64),
-                max_accessed_pages: NumOsPages::new(memory_pages as u64),
-                max_dirty_pages: NumOsPages::new(memory_pages as u64),
-            },
-        )
-        .unwrap(),
-    );
-    (tracker, page_map, memory, vec)
+    match missing_page_handler_kind {
+        MissingPageHandlerKind::Deterministic => {
+            let tracker = Box::new(
+                DeterministicMemoryTracker::new(
+                    memory,
+                    NumBytes::new((memory_pages * PAGE_SIZE) as u64),
+                    no_op_logger(),
+                    dirty_page_tracking,
+                    page_map.clone(),
+                    MemoryLimits {
+                        max_memory_size: NumBytes::new((memory_pages * PAGE_SIZE) as u64),
+                        max_accessed_pages: NumOsPages::new(memory_pages as u64),
+                        max_dirty_pages: NumOsPages::new(memory_pages as u64),
+                    },
+                )
+                .unwrap(),
+            );
+            return (tracker, page_map, memory, vec);
+        }
+        _ => {
+            let tracker = Box::new(
+                PrefetchingMemoryTracker::new(
+                    memory,
+                    NumBytes::new((memory_pages * PAGE_SIZE) as u64),
+                    no_op_logger(),
+                    dirty_page_tracking,
+                    page_map.clone(),
+                    MemoryLimits {
+                        max_memory_size: NumBytes::new((memory_pages * PAGE_SIZE) as u64),
+                        max_accessed_pages: NumOsPages::new(memory_pages as u64),
+                        max_dirty_pages: NumOsPages::new(memory_pages as u64),
+                    },
+                )
+                .unwrap(),
+            );
+            return (tracker, page_map, memory, vec);
+        }
+    }
 }
 
 fn with_setup<F>(
@@ -94,6 +120,7 @@ fn with_setup<F>(
     memory_pages: usize,
     page_delta: Vec<PageIndex>,
     dirty_page_tracking: DirtyPageTracking,
+    missing_page_handler_kind: MissingPageHandlerKind,
     f: F,
 ) where
     F: FnOnce(Box<dyn MemoryTracker>, PageMap),
@@ -103,6 +130,7 @@ fn with_setup<F>(
         memory_pages,
         page_delta,
         dirty_page_tracking,
+        missing_page_handler_kind,
     );
     f(tracker, page_map);
 }
@@ -120,6 +148,7 @@ fn prefetch_for_read_checkpoint_forward() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Track,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&*tracker, PageIndex::new(5), AccessKind::Read);
@@ -141,6 +170,7 @@ fn prefetch_for_read_checkpoint_backward() {
         100,
         (0..5).chain(25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Track,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&*tracker, PageIndex::new(20), AccessKind::Read);
@@ -163,6 +193,7 @@ fn prefetch_for_read_zeros_forward() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Track,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&*tracker, PageIndex::new(80), AccessKind::Read);
@@ -185,6 +216,7 @@ fn prefetch_for_read_zeros_backward() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Track,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&*tracker, PageIndex::new(95), AccessKind::Read);
@@ -207,6 +239,7 @@ fn prefetch_for_read_page_delta_single_page() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Track,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&*tracker, PageIndex::new(50), AccessKind::Read);
@@ -222,6 +255,7 @@ fn prefetch_for_read_page_delta_different_pages() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Track,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&*tracker, PageIndex::new(20), AccessKind::Read);
@@ -249,6 +283,7 @@ fn prefetch_for_read_page_delta_contiguous_forward() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Track,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&*tracker, PageIndex::new(26), AccessKind::Read);
@@ -281,6 +316,7 @@ fn prefetch_for_read_page_delta_contiguous_backward() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Track,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&*tracker, PageIndex::new(50), AccessKind::Read);
@@ -313,6 +349,7 @@ fn prefetch_for_write_checkpoint_ignore_dirty() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Ignore,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&*tracker, PageIndex::new(5), AccessKind::Write);
@@ -334,6 +371,7 @@ fn prefetch_for_write_zeros_ignore_dirty() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Ignore,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&*tracker, PageIndex::new(80), AccessKind::Write);
@@ -355,6 +393,7 @@ fn prefetch_for_write_page_delta_single_page_ignore_dirty() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Ignore,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&*tracker, PageIndex::new(50), AccessKind::Write);
@@ -377,6 +416,7 @@ fn prefetch_for_write_page_delta_different_pages_ignore_dirty() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Ignore,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&*tracker, PageIndex::new(50), AccessKind::Write);
@@ -394,6 +434,7 @@ fn prefetch_for_write_page_delta_contiguous_ignore_dirty() {
         100,
         (25..95).map(PageIndex::new).collect(),
         DirtyPageTracking::Ignore,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&*tracker, PageIndex::new(50), AccessKind::Write);
@@ -429,6 +470,7 @@ fn prefetch_for_write_checkpoint() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Track,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&*tracker, PageIndex::new(5), AccessKind::Write);
@@ -451,6 +493,7 @@ fn prefetch_for_write_zeros() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Track,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&*tracker, PageIndex::new(80), AccessKind::Write);
@@ -473,6 +516,7 @@ fn prefetch_for_write_page_delta_single_page() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Track,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&*tracker, PageIndex::new(50), AccessKind::Write);
@@ -495,6 +539,7 @@ fn prefetch_for_write_page_delta_different_pages() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Track,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&*tracker, PageIndex::new(50), AccessKind::Write);
@@ -519,6 +564,7 @@ fn prefetch_for_write_page_delta_contiguous() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Track,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&*tracker, PageIndex::new(50), AccessKind::Write);
@@ -557,6 +603,7 @@ fn prefetch_for_write_after_read_stop_at_dirty_forward() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Track,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             // Access pages 51..=55.
             sigsegv(&*tracker, PageIndex::new(51), AccessKind::Read);
@@ -586,6 +633,7 @@ fn prefetch_for_write_after_read_stop_at_dirty_backward() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Track,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             // Access pages 51..=55.
             sigsegv(&*tracker, PageIndex::new(51), AccessKind::Read);
@@ -615,6 +663,7 @@ fn prefetch_for_write_after_read_stop_at_unaccessed_forward() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Track,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             // Access page 55 t prevent prefetching after this page.
             sigsegv(&*tracker, PageIndex::new(55), AccessKind::Read);
@@ -645,6 +694,7 @@ fn prefetch_for_write_after_read_stop_at_unaccessed_backward() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Track,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             // Access pages 51..=55.
             sigsegv(&*tracker, PageIndex::new(51), AccessKind::Read);
@@ -673,6 +723,7 @@ fn prefetch_for_write_with_other_dirty_pages_forward() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Track,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&*tracker, PageIndex::new(55), AccessKind::Read);
@@ -706,6 +757,7 @@ fn prefetch_for_write_with_other_dirty_pages_backward() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Track,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&*tracker, PageIndex::new(50), AccessKind::Read);
@@ -739,6 +791,7 @@ fn prefetch_for_write_after_read_unordered() {
         100,
         (25..75).map(PageIndex::new).collect(),
         DirtyPageTracking::Track,
+        MissingPageHandlerKind::New,
         |tracker, _| {
             // The following access pattern doesn't allow for any prefetching beyond the bare minimum.
             assert_eq!(tracker.num_accessed_pages(), 0);
@@ -786,6 +839,7 @@ mod random_ops {
         memory_pages: usize,
         page_delta: Vec<PageIndex>,
         dirty_page_tracking: DirtyPageTracking,
+        missing_page_handler_kind: MissingPageHandlerKind,
         memory_operations: F,
         final_tracker_checks: G,
     ) where
@@ -797,6 +851,7 @@ mod random_ops {
             memory_pages,
             page_delta,
             dirty_page_tracking,
+            missing_page_handler_kind,
         );
         let mut handler = unsafe { RegisteredHandler::new(tracker) };
         let memory =
@@ -940,12 +995,16 @@ mod random_ops {
         prop_oneof![arb_read(mem_length), arb_write(mem_length)]
     }
 
-    fn run_random_ops_result_tracking(ops: Vec<Op>) {
+    fn run_random_ops_result_tracking(
+        ops: Vec<Op>,
+        missing_page_handler_kind: MissingPageHandlerKind,
+    ) {
         with_registered_handler_setup(
             50,
             PAGE_COUNT,
             (25..75).map(PageIndex::new).collect(),
             DirtyPageTracking::Track,
+            missing_page_handler_kind,
             |memory, mut vec_memory| {
                 for op in ops {
                     match op {
@@ -967,12 +1026,16 @@ mod random_ops {
         )
     }
 
-    fn run_random_ops_result_ignoring(ops: Vec<Op>) {
+    fn run_random_ops_result_ignoring(
+        ops: Vec<Op>,
+        missing_page_handler_kind: MissingPageHandlerKind,
+    ) {
         with_registered_handler_setup(
             50,
             PAGE_COUNT,
             (25..75).map(PageIndex::new).collect(),
             DirtyPageTracking::Ignore,
+            missing_page_handler_kind,
             |memory, mut vec_memory| {
                 for op in ops {
                     match op {
@@ -994,7 +1057,10 @@ mod random_ops {
         )
     }
 
-    fn run_random_ops_accessed_tracking(ops: Vec<Op>) {
+    fn run_random_ops_accessed_tracking(
+        ops: Vec<Op>,
+        missing_page_handler_kind: MissingPageHandlerKind,
+    ) {
         let accessed = Rc::new(RefCell::new(BTreeSet::new()));
         let dirty = Rc::new(RefCell::new(BTreeSet::new()));
         let accessed_clone = accessed.clone();
@@ -1004,6 +1070,7 @@ mod random_ops {
             PAGE_COUNT,
             (25..75).map(PageIndex::new).collect(),
             DirtyPageTracking::Track,
+            missing_page_handler_kind,
             |memory, mut vec_memory| {
                 let copy = vec_memory.clone();
                 for op in ops {
@@ -1055,7 +1122,10 @@ mod random_ops {
         )
     }
 
-    fn run_random_ops_accessed_ignoring(ops: Vec<Op>) {
+    fn run_random_ops_accessed_ignoring(
+        ops: Vec<Op>,
+        missing_page_handler_kind: MissingPageHandlerKind,
+    ) {
         let accessed = Rc::new(RefCell::new(BTreeSet::new()));
         let accessed_clone = accessed.clone();
         with_registered_handler_setup(
@@ -1063,6 +1133,7 @@ mod random_ops {
             PAGE_COUNT,
             (25..75).map(PageIndex::new).collect(),
             DirtyPageTracking::Track,
+            missing_page_handler_kind,
             |memory, mut vec_memory| {
                 for op in ops {
                     match op {
@@ -1180,16 +1251,19 @@ fn deterministic_memory_tracker_correctly_count_access_and_dirty_pages(
         return;
     }
 
-    with_deterministic_setup(
+    with_setup(
         50,
         128,
         (25..75).map(PageIndex::new).collect(),
         dirty_page_tracking,
+        MissingPageHandlerKind::Deterministic,
         |tracker, _| {
+            use crate::conversions::OS_PAGES_IN_WASM_PAGE;
+
             assert_eq!(tracker.num_accessed_pages(), 0);
 
             // First access.
-            sigsegv(&tracker, PageIndex::new(page_index), first_access_kind);
+            sigsegv(&*tracker, PageIndex::new(page_index), first_access_kind);
             assert_eq!(tracker.num_accessed_pages(), OS_PAGES_IN_WASM_PAGE);
             if first_access_kind == AccessKind::Write
                 && dirty_page_tracking == DirtyPageTracking::Track
@@ -1203,7 +1277,7 @@ fn deterministic_memory_tracker_correctly_count_access_and_dirty_pages(
 
             // Second access.
             sigsegv(
-                &tracker,
+                &*tracker,
                 PageIndex::new(page_index + second_access_offset as u64),
                 second_access_kind,
             );
