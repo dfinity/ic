@@ -311,8 +311,8 @@ impl Default for AppState {
 // Terminal Management
 // ============================================================================
 
-/// Best-effort cleanup of raw mode and alternate screen when we don't have a Terminal object yet.
-/// This is used during setup failures before Terminal::new() succeeds to avoid leaving the user with a blank screen
+/// Best-effort cleanup of terminal state when setup fails before TerminalGuard exists.
+/// This avoids leaving the console stuck in raw mode or the alternate screen.
 fn restore_terminal_basic() {
     let _ = disable_raw_mode();
     let mut stdout = io::stdout();
