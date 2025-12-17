@@ -285,10 +285,12 @@ fn ingress_can_reject() {
 
 #[test]
 fn output_requests_on_system_subnet_ignore_memory_limits() {
+    let log_memory_usage = 3 * 4096;
     let canister_memory: u64 = 1 << 30;
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
-        .with_subnet_execution_memory(canister_memory)
+        // subnet memory capacity is exactly equal to canister memory allocation + log memory usage
+        .with_subnet_execution_memory(canister_memory + log_memory_usage)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(13)
         .with_resource_saturation_scaling(1)
@@ -303,12 +305,7 @@ fn output_requests_on_system_subnet_ignore_memory_limits() {
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
 
-    assert_eq!(
-        test.subnet_available_memory().get_execution_memory(),
-        test.canister_state(canister_id)
-            .log_memory_store_memory_usage()
-            .get() as i64
-    );
+    assert_eq!(test.subnet_available_memory().get_execution_memory(), 0);
     assert_eq!(
         test.subnet_available_memory()
             .get_guaranteed_response_message_memory(),
