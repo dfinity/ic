@@ -89,6 +89,7 @@ struct LoadSample {
     xnet_messages_executed: u64,
     intranet_messages_executed: u64,
     http_outcalls_executed: u64,
+    tasks_executed: u64,
 }
 
 impl std::ops::SubAssign for LoadSample {
@@ -104,6 +105,7 @@ impl std::ops::SubAssign for LoadSample {
             intranet_messages_executed: self.intranet_messages_executed
                 - other.intranet_messages_executed,
             http_outcalls_executed: self.http_outcalls_executed - other.http_outcalls_executed,
+            tasks_executed: self.tasks_executed - other.tasks_executed,
         };
     }
 }
@@ -130,6 +132,7 @@ pub struct LoadEstimates {
     pub xnet_messages_executed: Estimates,
     pub intranet_messages_executed: Estimates,
     pub http_outcalls_executed: Estimates,
+    pub tasks_executed: Estimates,
 }
 
 fn estimate_loads(
@@ -147,6 +150,7 @@ fn estimate_loads(
             load_estimates.intranet_messages_executed.destination +=
                 load_sample.intranet_messages_executed;
             load_estimates.http_outcalls_executed.destination += load_sample.http_outcalls_executed;
+            load_estimates.tasks_executed.destination += load_sample.tasks_executed;
         } else {
             load_estimates.instructions_used.source += load_sample.instructions_executed;
             load_estimates.ingress_messages_executed.source +=
@@ -155,6 +159,7 @@ fn estimate_loads(
             load_estimates.intranet_messages_executed.source +=
                 load_sample.intranet_messages_executed;
             load_estimates.http_outcalls_executed.source += load_sample.http_outcalls_executed;
+            load_estimates.tasks_executed.source += load_sample.tasks_executed;
         }
     }
 

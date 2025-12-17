@@ -189,6 +189,7 @@ pub struct CanisterStateBits {
     pub xnet_messages_executed: NumMessages,
     pub intranet_messages_executed: NumMessages,
     pub http_outcalls_executed: u64,
+    pub tasks_executed: u64,
     pub canister_history: CanisterHistory,
     pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
     pub total_query_stats: TotalQueryStats,

@@ -875,6 +875,7 @@ pub fn load_canister_state(
         canister_state_bits.xnet_messages_executed,
         canister_state_bits.intranet_messages_executed,
         canister_state_bits.http_outcalls_executed,
+        canister_state_bits.tasks_executed,
     );
 
     let starting_time = Instant::now();

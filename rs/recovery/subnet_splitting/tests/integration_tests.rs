@@ -65,6 +65,7 @@ fn load_metrics_e2e_test() {
             xnet_messages_executed,
             intranet_messages_executed,
             http_outcalls_executed,
+            tasks_executed,
         },
     ) = ic_subnet_splitting::post_split_estimations::estimate(
         canister_id_ranges,
@@ -77,8 +78,8 @@ fn load_metrics_e2e_test() {
     assert_eq!(
         states_sizes_bytes,
         Estimates {
-            source: 44847850,
-            destination: 46085253,
+            source: 44848036,
+            destination: 46085457,
         }
     );
     assert_eq!(
@@ -114,6 +115,13 @@ fn load_metrics_e2e_test() {
         Estimates {
             source: 50,
             destination: 50,
+        }
+    );
+    assert_eq!(
+        tasks_executed,
+        Estimates {
+            source: 32352,
+            destination: 32997,
         }
     );
 }

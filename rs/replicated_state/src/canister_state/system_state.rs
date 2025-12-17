@@ -126,6 +126,7 @@ pub struct CanisterMetrics {
     pub xnet_messages_executed: NumMessages,
     pub intranet_messages_executed: NumMessages,
     pub http_outcalls_executed: u64,
+    pub tasks_executed: u64,
     consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
 }
 
@@ -142,6 +143,7 @@ impl CanisterMetrics {
         xnet_messages_executed: NumMessages,
         intranet_messages_executed: NumMessages,
         http_outcalls_executed: u64,
+        tasks_executed: u64,
     ) -> Self {
         Self {
             scheduled_as_first,
@@ -155,6 +157,7 @@ impl CanisterMetrics {
             xnet_messages_executed,
             intranet_messages_executed,
             http_outcalls_executed,
+            tasks_executed,
         }
     }
 

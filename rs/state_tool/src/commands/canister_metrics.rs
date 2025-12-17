@@ -40,7 +40,7 @@ pub fn get(
     // Write the header.
     writeln!(
         output_file,
-        "canister_id,instructions_executed,ingress_messages_executed,xnet_messages_executed,intranet_messages_executed,http_outcalls_executed"
+        "canister_id,instructions_executed,ingress_messages_executed,xnet_messages_executed,intranet_messages_executed,http_outcalls_executed,tasks_executed"
     )
     .map_err(|err| format!("Failed to write header: {err}"))?;
 
@@ -52,11 +52,12 @@ pub fn get(
             xnet_messages_executed,
             intranet_messages_executed,
             http_outcalls_executed,
+            tasks_executed,
             ..
         } = canister_state.system_state.canister_metrics;
         writeln!(
             output_file,
-            "{canister_id},{instructions_executed},{ingress_messages_executed},{xnet_messages_executed},{intranet_messages_executed},{http_outcalls_executed}"
+            "{canister_id},{instructions_executed},{ingress_messages_executed},{xnet_messages_executed},{intranet_messages_executed},{http_outcalls_executed},{tasks_executed}"
         )
         .map_err(|err| format!("Failed to write row: {err}"))?;
     }

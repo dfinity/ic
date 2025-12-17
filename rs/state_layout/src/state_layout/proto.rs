@@ -78,6 +78,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             xnet_messages_executed: item.xnet_messages_executed.get(),
             intranet_messages_executed: item.intranet_messages_executed.get(),
             http_outcalls_executed: item.http_outcalls_executed,
+            tasks_executed: item.tasks_executed,
         }
     }
 }
@@ -219,6 +220,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             xnet_messages_executed: NumMessages::from(value.xnet_messages_executed),
             intranet_messages_executed: NumMessages::from(value.intranet_messages_executed),
             http_outcalls_executed: value.http_outcalls_executed,
+            tasks_executed: value.tasks_executed,
         })
     }
 }
