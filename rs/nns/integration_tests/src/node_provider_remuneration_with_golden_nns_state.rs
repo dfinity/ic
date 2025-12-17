@@ -340,7 +340,7 @@ mod sanity_check {
         before: Metrics,
     ) {
         let now_seconds = state_machine.get_time().as_secs_since_unix_epoch();
-        let january_distribution_timestamp: u64 = 1768302559;
+        let january_distribution_timestamp: u64 = 1768302559; // Tue Jan 13 2026 11:09:19 UTC
 
         if now_seconds >= january_distribution_timestamp {
             return;
