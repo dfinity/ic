@@ -17,7 +17,7 @@ use std::sync::Mutex;
 
 use crate::{
     AccessKind, DirtyPageTracking, MemoryLimits, MemoryTracker,
-    prefetching::{PageBitmap, PrefetchingMemoryTracker, prefetching_signal_handler_available},
+    prefetching::{PrefetchingMemoryTracker, prefetching_signal_handler_available},
 };
 
 /// Sets up the PrefetchingMemoryTracker to track accesses to a region of memory. Returns:
@@ -86,7 +86,7 @@ fn setup(
         )
         .unwrap(),
     );
-    (tracker, page_map, memory, vec);
+    (tracker, page_map, memory, vec)
 }
 
 fn with_setup<F>(
@@ -786,7 +786,6 @@ mod random_ops {
         memory_pages: usize,
         page_delta: Vec<PageIndex>,
         dirty_page_tracking: DirtyPageTracking,
-        handler_kind: MissingPageHandlerKind,
         memory_operations: F,
         final_tracker_checks: G,
     ) where
@@ -947,7 +946,6 @@ mod random_ops {
             PAGE_COUNT,
             (25..75).map(PageIndex::new).collect(),
             DirtyPageTracking::Track,
-            handler_kind,
             |memory, mut vec_memory| {
                 for op in ops {
                     match op {
@@ -975,7 +973,6 @@ mod random_ops {
             PAGE_COUNT,
             (25..75).map(PageIndex::new).collect(),
             DirtyPageTracking::Ignore,
-            handler_kind,
             |memory, mut vec_memory| {
                 for op in ops {
                     match op {
@@ -1007,7 +1004,6 @@ mod random_ops {
             PAGE_COUNT,
             (25..75).map(PageIndex::new).collect(),
             DirtyPageTracking::Track,
-            handler_kind,
             |memory, mut vec_memory| {
                 let copy = vec_memory.clone();
                 for op in ops {
@@ -1067,7 +1063,6 @@ mod random_ops {
             PAGE_COUNT,
             (25..75).map(PageIndex::new).collect(),
             DirtyPageTracking::Track,
-            handler_kind,
             |memory, mut vec_memory| {
                 for op in ops {
                     match op {

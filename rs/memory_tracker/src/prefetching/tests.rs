@@ -1,4 +1,7 @@
-use crate::{NumOsPages, PageBitmap, PageIndex};
+use ic_sys::PageIndex;
+use ic_types::NumOsPages;
+
+use crate::PageBitmap;
 
 #[test]
 fn page_bitmap_restrict_to_unaccessed_forward() {
