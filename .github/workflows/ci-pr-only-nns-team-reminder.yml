@@ -1,7 +1,7 @@
 name: Governance Unreleased Changelog Reminder
 
 on:
-  pull_request:
+  pull_request_target:
     types:
       - review_requested
 
@@ -17,6 +17,8 @@ jobs:
   mainJob:
     runs-on: ubuntu-latest
     steps:
+      # IMPORTANT: we use `pull_request_target` so this can run on external PRs and access secrets
+      # However this means that no checkout step can be introduced, as that would expose a security vulnerability.
       - uses: actions/github-script@v6
         id: mainStep
         # If the PR requires governance-team to approve, GitHub will force governance-team to
