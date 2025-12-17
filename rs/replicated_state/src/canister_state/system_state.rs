@@ -1340,6 +1340,9 @@ impl SystemState {
     /// another subnet.
     pub fn drop_in_progress_management_calls_after_split(&mut self) {
         // Remove aborted install code task.
+        //
+        // Note that this cannot be a paused install code task, because we abort all
+        // paused tasks before triggering the split.
         self.task_queue.remove_aborted_install_code_task();
 
         // Roll back `Stopping` canister states to `Running` and drop all their stop

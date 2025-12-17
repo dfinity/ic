@@ -6882,11 +6882,9 @@ dependencies = [
  "dashmap",
  "derive-new",
  "ethnum",
- "futures",
  "futures-util",
  "hex",
  "http 1.3.1",
- "http-body 1.0.1",
  "humantime",
  "ic-agent 0.40.1",
  "ic-base-types",
@@ -6911,7 +6909,6 @@ dependencies = [
  "ic-registry-keys",
  "ic-registry-local-store",
  "ic-registry-proto-data-provider",
- "ic-registry-replicator",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-types",
@@ -6926,21 +6923,16 @@ dependencies = [
  "rand 0.8.5",
  "rate-limits-api",
  "ratelimit",
- "rcgen 0.13.2",
  "regex",
  "reqwest 0.12.24",
  "rustls 0.23.27",
- "rustls-pemfile 2.2.0",
  "salt-sharing-api",
  "serde",
- "serde_bytes",
  "serde_cbor",
  "serde_json",
- "serde_regex",
  "serde_yaml",
  "sha3",
  "simple_moving_average",
- "slog",
  "strum 0.26.3",
  "tempfile",
  "thiserror 2.0.17",
@@ -6954,7 +6946,6 @@ dependencies = [
  "tower_governor 0.7.0",
  "tracing",
  "tracing-serde 0.1.3",
- "tracing-slog",
  "tracing-subscriber",
  "url",
  "x509-parser 0.16.0",
@@ -9535,7 +9526,7 @@ dependencies = [
 [[package]]
 name = "ic-doge-interface"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/dogecoin-canister?rev=74e6dc9a10ba64d2dbad013282c26d74cd49863f#74e6dc9a10ba64d2dbad013282c26d74cd49863f"
+source = "git+https://github.com/dfinity/dogecoin-canister?rev=a5f89792a002b060e3f0174f1a87da9764f855f8#a5f89792a002b060e3f0174f1a87da9764f855f8"
 dependencies = [
  "candid",
  "datasize",
@@ -9660,6 +9651,7 @@ name = "ic-error-types"
 version = "0.2.0"
 dependencies = [
  "ic-heap-bytes",
+ "regex-lite",
  "serde",
  "strum 0.26.3",
  "strum_macros 0.26.4",
@@ -9758,7 +9750,7 @@ dependencies = [
  "prometheus 0.13.4",
  "proptest",
  "rand 0.8.5",
- "regex",
+ "regex-lite",
  "rstest",
  "scoped_threadpool",
  "serde",
@@ -16102,6 +16094,7 @@ dependencies = [
  "loopdev-3",
  "nix 0.24.3",
  "partition_tools",
+ "rand 0.8.5",
  "sys-mount",
  "tempfile",
  "tokio",
@@ -24837,17 +24830,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "704b1aeb7be0d0a84fc9828cae51dab5970fee5088f83d1dd7ee6f6246fc6ff1"
 dependencies = [
  "serde",
- "tracing-core",
-]
-
-[[package]]
-name = "tracing-slog"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ffd12d2d54fb99df994fde4e3320959e32208420bfe375a664c5d8cd894a23b"
-dependencies = [
- "once_cell",
- "slog",
  "tracing-core",
 ]
 
