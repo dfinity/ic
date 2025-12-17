@@ -41,9 +41,7 @@ use ic_bn_lib_common::{
 };
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
-use ic_crypto_utils_threshold_sig_der::{
-    parse_threshold_sig_key_from_pem_file, threshold_sig_public_key_to_der,
-};
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_interfaces::crypto::{BasicSigner, KeyManager};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
@@ -283,13 +281,6 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
             let der_encoded_root_key = threshold_sig_public_key_to_der(root_key)
                 .context("failed to convert root NNS key to DER")?;
 
-            agent.set_root_key(der_encoded_root_key);
-        } else if let Some(v) = &cli.registry.registry_nns_pub_key_pem {
-            // Set the root key if it was provided
-            let root_key = parse_threshold_sig_key_from_pem_file(v)
-                .context("failed to parse NNS public key")?;
-            let der_encoded_root_key = threshold_sig_public_key_to_der(root_key)
-                .context("failed to convert NNS key to DER")?;
             agent.set_root_key(der_encoded_root_key);
         }
 
@@ -670,33 +661,7 @@ async fn setup_registry(
     );
     tasks.add("check_runner", Arc::new(check_runner));
 
-    if cli.registry.registry_disable_replicator {
-        return Ok(());
-    }
-
-    // Notice no-op logger
-    let logger = ic_logger::new_replica_logger(
-        slog::Logger::root(tracing_slog::TracingSlogDrain, slog::o!()),
-        &ic_config::logger::Config::default(),
-    );
-
-    let nns_pub_key = cli.registry.registry_nns_pub_key_pem.as_ref().map(|path| {
-        parse_threshold_sig_key_from_pem_file(path).expect("failed to parse NNS public key")
-    });
-
-    let replicator = RegistryReplicator::new(
-        logger,
-        local_store_path,
-        cli.registry.registry_nns_poll_interval,
-        cli.registry.registry_nns_urls.clone(),
-        nns_pub_key,
-    )
-    .await;
-
-    let replicator_runner = RegistryReplicatorRunner::new(replicator);
-    tasks.add("registry_replicator", Arc::new(replicator_runner));
-
-    Ok(())
+    Ok(registry_client)
 }
 
 fn setup_tls_resolver_stub(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Error> {
