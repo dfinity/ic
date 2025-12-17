@@ -616,9 +616,9 @@ impl BlockProposalAssembler {
         let mut reconstructed_block_proposal_proto =
             stripped_block_proposal.pruned_block_proposal_proto;
 
-        if let Some(mut block) = reconstructed_block_proposal_proto.value.as_mut() {
-            ingress_assembler.try_reconstruct_block(&mut block)?;
-            idkg_assembler.try_reconstruct_block(&mut block)?;
+        if let Some(block) = reconstructed_block_proposal_proto.value.as_mut() {
+            ingress_assembler.try_reconstruct_block(block)?;
+            idkg_assembler.try_reconstruct_block(block)?;
         }
 
         reconstructed_block_proposal_proto
