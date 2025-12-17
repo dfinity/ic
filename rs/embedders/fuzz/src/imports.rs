@@ -11,8 +11,9 @@ use ic_embedders::{
         system_api::{ApiType, DefaultOutOfInstructionsHandler, SystemApiImpl},
     },
 };
+use ic_interfaces::execution_environment::MessageMemoryUsage;
 use ic_logger::replica_logger::no_op_logger;
-use ic_replicated_state::{Memory, MessageMemoryUsage, NumWasmPages};
+use ic_replicated_state::{Memory, NumWasmPages};
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{NumBytes, time::UNIX_EPOCH};
 use std::collections::{BTreeMap, HashMap};

@@ -25,10 +25,41 @@ BASE_URLS=(
 
 source /opt/ic/bin/grub.sh
 
-# Helper function to extract a value from /proc/cmdline
-get_cmdline_var() {
-    local var="$1"
-    grep -oP "${var}=[^ ]*" /proc/cmdline | head -n1 | cut -d= -f2-
+# Parse command line arguments in the format key=value
+parse_args() {
+    for arg in "$@"; do
+        case "$arg" in
+            version=*)
+                VERSION="${arg#*=}"
+                ;;
+            version-hash=*)
+                VERSION_HASH="${arg#*=}"
+                ;;
+            recovery-hash=*)
+                RECOVERY_HASH="${arg#*=}"
+                ;;
+        esac
+    done
+}
+
+# Helper function to log messages to logger and stdout
+log_message() {
+    local message="$1"
+    # Write to system logger
+    logger -t guestos-recovery-upgrader "$message" 2>/dev/null || true
+    # Write to stdout so the TUI can capture it
+    echo "$message"
+}
+
+print_success_banner() {
+    local green="\033[32m"
+    local bold="\033[1m"
+    local reset="\033[0m"
+    echo
+    echo -e "${green}${bold}========================================================"${reset}
+    echo -e "${green}${bold}SUCCESS: Recovery completed successfully!${reset}"
+    echo -e "${green}${bold}========================================================"${reset}
+    echo
 }
 
 verify_hash() {
@@ -36,15 +67,15 @@ verify_hash() {
     local expected_hash="$2"
     local artifact_name="$3"
 
-    echo "Verifying ${artifact_name} hash..."
+    log_message "Verifying ${artifact_name} hash..."
     local actual_hash=$(sha256sum "$file_path" | cut -d' ' -f1)
     if [ "$actual_hash" != "$expected_hash" ]; then
-        echo "ERROR: ${artifact_name} hash verification failed"
-        echo "Expected hash: $expected_hash"
-        echo "Got hash: $actual_hash"
+        log_message "ERROR: ${artifact_name} hash verification failed"
+        log_message "Expected hash: $expected_hash"
+        log_message "Got hash: $actual_hash"
         return 1
     fi
-    echo "${artifact_name} hash verification successful"
+    log_message "${artifact_name} hash verification successful"
     return 0
 }
 
@@ -56,21 +87,21 @@ download_file() {
     local download_successful=false
     for base_url in "${BASE_URLS[@]}"; do
         local url="${base_url}${url_path}"
-        echo "Attempting to download ${artifact_name} from $url..."
+        log_message "Attempting to download ${artifact_name} from $url..."
 
         if curl --proto '=https' --location --proto-redir '=https' --tlsv1.2 --silent --show-error --fail -o "$output_file" "$url"; then
-            echo "Download from $base_url completed successfully"
+            log_message "Download from $base_url completed successfully"
             download_successful=true
             break
         else
-            echo "WARNING: Failed to download from $base_url"
+            log_message "WARNING: Failed to download from $base_url"
             # Remove partial download file if it exists
             rm -f "$output_file"
         fi
     done
 
     if [ "$download_successful" = false ]; then
-        echo "ERROR: Failed to download ${artifact_name} from all available URLs"
+        log_message "ERROR: Failed to download ${artifact_name} from all available URLs"
         return 1
     fi
     return 0
@@ -82,20 +113,20 @@ retry_operation() {
     shift 2
     local operation_args=("$@")
 
-    echo "Starting ${operation_name} with retry logic (max attempts: $MAX_ATTEMPTS, delay: ${RETRY_DELAY}s)..."
+    log_message "Starting ${operation_name} with retry logic (max attempts: $MAX_ATTEMPTS, delay: ${RETRY_DELAY}s)..."
 
     local attempt=1
     while [ $attempt -le $MAX_ATTEMPTS ]; do
-        echo "=== ${operation_name} attempt $attempt/$MAX_ATTEMPTS ==="
+        log_message "=== ${operation_name} attempt $attempt/$MAX_ATTEMPTS ==="
 
         if "$operation_function" "${operation_args[@]}"; then
-            echo "✓ ${operation_name} completed successfully on attempt $attempt"
+            log_message "✓ ${operation_name} completed successfully on attempt $attempt"
             return 0
         else
-            echo "✗ ${operation_name} failed on attempt $attempt"
+            log_message "✗ ${operation_name} failed on attempt $attempt"
 
             if [ $attempt -lt $MAX_ATTEMPTS ]; then
-                echo "Waiting ${RETRY_DELAY} seconds before retry..."
+                log_message "Waiting ${RETRY_DELAY} seconds before retry..."
                 sleep $RETRY_DELAY
             fi
         fi
@@ -103,7 +134,7 @@ retry_operation() {
         ((attempt++))
     done
 
-    echo "ERROR: Failed to complete ${operation_name} after $MAX_ATTEMPTS attempts"
+    log_message "ERROR: Failed to complete ${operation_name} after $MAX_ATTEMPTS attempts"
     return 1
 }
 
@@ -120,26 +151,26 @@ get_upgrade_target_partitions() {
 }
 
 prepare_guestos_upgrade() {
-    echo "Starting guestos upgrade preparation"
+    log_message "Starting guestos upgrade preparation"
     lodev="$(losetup -Pf --show ${GUESTOS_DEVICE})"
-    echo "Set up loop device: $lodev"
+    log_message "Set up loop device: $lodev"
 
     workdir="$(mktemp -d)"
     grubdir="${workdir}/grub"
     mkdir "${grubdir}"
-    echo "Created temporary directories in $workdir"
+    log_message "Created temporary directories in $workdir"
 
     mount -o rw,sync "${lodev}p${GRUB_PARTITION_NUM}" "${grubdir}"
-    echo "Mounted grub partition at ${grubdir}"
+    log_message "Mounted grub partition at ${grubdir}"
 
     boot_alternative="$(grep -oP '^boot_alternative=\K[a-zA-Z]+' "${grubdir}/grubenv")"
-    echo "Current boot alternative: $boot_alternative"
+    log_message "Current boot alternative: $boot_alternative"
 
     # Get upgrade partition targets
     read -r boot_target root_target var_target < <(get_upgrade_target_partitions "$lodev" "$boot_alternative")
-    echo "Target boot partition: $boot_target"
-    echo "Target root partition: $root_target"
-    echo "Target var partition: $var_target"
+    log_message "Target boot partition: $boot_target"
+    log_message "Target root partition: $root_target"
+    log_message "Target var partition: $var_target"
 }
 
 download_and_verify_upgrade() {
@@ -163,56 +194,56 @@ download_and_verify_upgrade() {
 
 extract_upgrade() {
     local tmpdir="$1"
-    echo "Extracting upgrade file..."
+    log_message "Extracting upgrade file..."
     zstd -d "$tmpdir/upgrade.tar.zst" -o "$tmpdir/upgrade.tar"
     tar -xf "$tmpdir/upgrade.tar" -C "$tmpdir"
-    echo "Extraction completed"
+    log_message "Extraction completed"
 }
 
 install_upgrade() {
     local tmpdir="$1"
-    echo "Installing upgrade..."
+    log_message "Installing upgrade..."
 
-    echo "=== Recovery Upgrader Mode ==="
-    echo "Grubenv file: ${grubdir}/grubenv"
-    echo "Boot device: ${boot_target}"
-    echo "Root device: ${root_target}"
-    echo "Var device: ${var_target}"
-    echo "Boot image: $tmpdir/boot.img"
-    echo "Root image: $tmpdir/root.img"
+    log_message "=== Recovery Upgrader Mode ==="
+    log_message "Grubenv file: ${grubdir}/grubenv"
+    log_message "Boot device: ${boot_target}"
+    log_message "Root device: ${root_target}"
+    log_message "Var device: ${var_target}"
+    log_message "Boot image: $tmpdir/boot.img"
+    log_message "Root image: $tmpdir/root.img"
 
-    echo "Reading grubenv configuration..."
+    log_message "Reading grubenv configuration..."
     read_grubenv "${grubdir}/grubenv"
-    echo "Current boot alternative: ${boot_alternative}"
-    echo "Current boot cycle: ${boot_cycle}"
+    log_message "Current boot alternative: ${boot_alternative}"
+    log_message "Current boot cycle: ${boot_cycle}"
 
-    echo "Writing boot image to ${boot_target}..."
+    log_message "Writing boot image to ${boot_target}..."
     dd if="$tmpdir/boot.img" of="${boot_target}" bs=1M status=progress
-    echo "Boot image written successfully"
+    log_message "Boot image written successfully"
 
-    echo "Writing root image to ${root_target}..."
+    log_message "Writing root image to ${root_target}..."
     dd if="$tmpdir/root.img" of="${root_target}" bs=1M status=progress
-    echo "Root image written successfully"
+    log_message "Root image written successfully"
 
-    echo "Wiping var partition header on ${var_target}..."
+    log_message "Wiping var partition header on ${var_target}..."
     dd if=/dev/zero of="${var_target}" bs=1M count=16 status=progress
-    echo "Var partition header wiped successfully"
+    log_message "Var partition header wiped successfully"
 
-    echo "Updating grubenv to prepare for next boot..."
+    log_message "Updating grubenv to prepare for next boot..."
     if [[ "${boot_target}" == *"p7" ]]; then
         boot_alternative="B"
     elif [[ "${boot_target}" == *"p4" ]]; then
         boot_alternative="A"
     else
-        echo "ERROR: Invalid boot device partition number"
+        log_message "ERROR: Invalid boot device partition number"
         exit 1
     fi
     boot_cycle=first_boot
-    echo "Setting boot_alternative to ${boot_alternative} and boot_cycle to ${boot_cycle}"
+    log_message "Setting boot_alternative to ${boot_alternative} and boot_cycle to ${boot_cycle}"
     write_grubenv "${grubdir}/grubenv" "$boot_alternative" "$boot_cycle"
-    echo "Grubenv updated successfully"
+    log_message "Grubenv updated successfully"
 
-    echo "Upgrade installation complete"
+    log_message "Upgrade installation complete"
 }
 
 download_and_verify_recovery() {
@@ -234,41 +265,44 @@ download_and_verify_recovery() {
 }
 
 guestos_upgrade_cleanup() {
-    echo "Starting cleanup"
+    log_message "Starting cleanup"
     if [ -n "${grubdir}" ] && mountpoint -q "${grubdir}"; then
         umount "${grubdir}"
-        echo "Unmounted ${grubdir}"
+        log_message "Unmounted ${grubdir}"
     fi
     if [ -n "${lodev}" ]; then
         losetup -d "${lodev}"
-        echo "Detached loop device ${lodev}"
+        log_message "Detached loop device ${lodev}"
     fi
     if [ -n "${workdir}" ] && [ -d "${workdir}" ]; then
         rm -rf "${workdir}"
-        echo "Removed temporary directory ${workdir}"
+        log_message "Removed temporary directory ${workdir}"
     fi
 }
 
 main() {
-    echo "Starting GuestOS Recovery Upgrader"
+    log_message "Starting GuestOS Recovery Upgrader"
 
-    VERSION="$(get_cmdline_var version)"
-    VERSION_HASH="$(get_cmdline_var version-hash)"
-    RECOVERY_HASH="$(get_cmdline_var recovery-hash)"
+    VERSION=""
+    VERSION_HASH=""
+    RECOVERY_HASH=""
+    parse_args "$@"
 
-    if [ -z "$VERSION" ] || [ -z "$VERSION_HASH" ]; then
-        echo "ERROR: version and version-hash parameters are required"
-        echo "Usage: version=<commit-hash> version-hash=<sha256> [recovery-hash=<sha256>]"
+    log_message "Parsed VERSION='$VERSION' VERSION_HASH='$VERSION_HASH' RECOVERY_HASH='$RECOVERY_HASH'"
+
+    if [ -z "$VERSION" ] || [ -z "$VERSION_HASH" ] || [ -z "$RECOVERY_HASH" ]; then
+        log_message "ERROR: version, version-hash, and recovery-hash parameters are required"
+        log_message "Usage: version=<commit-hash> version-hash=<sha256> recovery-hash=<sha256>"
+        # Sleep 15 seconds then repeat error message to ensure visibility after console initialization wipe
+        sleep 15
+        log_message "ERROR: version, version-hash, and recovery-hash parameters are required"
+        log_message "Usage: version=<commit-hash> version-hash=<sha256> recovery-hash=<sha256>"
         exit 1
     fi
 
-    echo "Version: $VERSION"
-    echo "Version hash: $VERSION_HASH"
-    if [ -n "$RECOVERY_HASH" ]; then
-        echo "Recovery hash: $RECOVERY_HASH"
-    else
-        echo "Recovery hash not provided (optional)"
-    fi
+    log_message "Version: $VERSION"
+    log_message "Version hash: $VERSION_HASH"
+    log_message "Recovery hash: $RECOVERY_HASH"
 
     TMPDIR=$(mktemp -d)
     trap 'guestos_upgrade_cleanup; rm -rf "$TMPDIR"' EXIT
@@ -279,20 +313,34 @@ main() {
         exit 1
     fi
 
-    if [ -n "$RECOVERY_HASH" ]; then
-        if ! retry_operation "recovery artifact download and verification" download_and_verify_recovery "$RECOVERY_HASH" "$TMPDIR"; then
-            exit 1
-        fi
-    else
-        echo "Skipping recovery artifact download and verification (recovery-hash not provided)"
+    if ! retry_operation "recovery artifact download and verification" download_and_verify_recovery "$RECOVERY_HASH" "$TMPDIR"; then
+        exit 1
     fi
 
     extract_upgrade "$TMPDIR"
+
+    log_message "Stopping guestos.service for manual upgrade"
+    systemctl stop guestos.service
+    log_message "GuestOS service stopped"
+
     install_upgrade "$TMPDIR"
 
-    echo "Recovery Upgrader completed successfully"
+    log_message "Recovery Upgrader completed successfully"
 
-    echo "Launching GuestOS on the new version..."
+    log_message "Launching GuestOS on the new version..."
+
+    log_message "Writing recovery hash to file"
+    RECOVERY_FILE="/run/config/guestos_recovery_hash"
+    mkdir -p "$(dirname "$RECOVERY_FILE")"
+    echo "$RECOVERY_HASH" >"$RECOVERY_FILE"
+    log_message "Recovery hash written to $RECOVERY_FILE"
+
+    log_message "Restarting guestos.service after manual upgrade installation"
+    systemctl start guestos.service
+    log_message "GuestOS service restarted successfully"
+
+    # Log success banner in so that it is visible in manual recovery fallback method
+    print_success_banner
 }
 
-main
+main "$@"

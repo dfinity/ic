@@ -1,12 +1,10 @@
-#![allow(deprecated)]
 use crate::KeyRange;
 use crate::chrono_utils::{first_unix_timestamp_nanoseconds, last_unix_timestamp_nanoseconds};
 use crate::pb::v1::{SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue};
 use async_trait::async_trait;
-use candid::Principal;
 use chrono::{DateTime, NaiveDate};
 use ic_base_types::{NodeId, SubnetId};
-use ic_cdk::api::call::CallResult;
+use ic_cdk::call::CallResult;
 use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
 use ic_stable_structures::StableBTreeMap;
 use itertools::Itertools;
@@ -20,7 +18,7 @@ pub type RetryCount = u64;
 pub trait ManagementCanisterClient {
     async fn node_metrics_history(
         &self,
-        args: NodeMetricsHistoryArgs,
+        args: &NodeMetricsHistoryArgs,
     ) -> CallResult<Vec<NodeMetricsHistoryRecord>>;
 }
 
@@ -33,16 +31,9 @@ impl ManagementCanisterClient for ICCanisterClient {
     /// in the 'contract' to fetch daily node metrics.
     async fn node_metrics_history(
         &self,
-        args: NodeMetricsHistoryArgs,
+        args: &NodeMetricsHistoryArgs,
     ) -> CallResult<Vec<NodeMetricsHistoryRecord>> {
-        ic_cdk::api::call::call_with_payment128::<_, (Vec<NodeMetricsHistoryRecord>,)>(
-            Principal::management_canister(),
-            "node_metrics_history",
-            (args,),
-            0_u128,
-        )
-        .await
-        .map(|(response,)| response)
+        ic_cdk::management_canister::node_metrics_history(args).await
     }
 }
 
@@ -53,7 +44,6 @@ where
     pub(crate) client: Box<dyn ManagementCanisterClient>,
     pub(crate) subnets_metrics:
         RefCell<StableBTreeMap<SubnetMetricsKey, SubnetMetricsValue, Memory>>,
-    pub(crate) subnets_to_retry: RefCell<StableBTreeMap<SubnetIdKey, RetryCount, Memory>>,
     pub(crate) last_timestamp_per_subnet: RefCell<StableBTreeMap<SubnetIdKey, UnixTsNanos, Memory>>,
 }
 
@@ -61,42 +51,25 @@ impl<Memory> MetricsManager<Memory>
 where
     Memory: ic_stable_structures::Memory + 'static,
 {
-    pub async fn retry_failed_subnets(&self) {
-        let subnets_to_retry: Vec<SubnetId> = self
-            .subnets_to_retry
-            .borrow()
-            .keys()
-            .map(|key| key.into())
-            .collect();
-
-        if !subnets_to_retry.is_empty() {
-            ic_cdk::println!("Retrying metrics for subnets: {:?}", subnets_to_retry);
-            self.update_subnets_metrics(subnets_to_retry).await;
-        }
-    }
-
     /// Fetches subnets metrics for the specified subnets from their last stored timestamp.
     async fn fetch_subnets_metrics(
         &self,
-        last_timestamp_per_subnet: &BTreeMap<SubnetId, Option<UnixTsNanos>>,
+        last_timestamp_per_subnet: &BTreeMap<SubnetId, UnixTsNanos>,
     ) -> BTreeMap<SubnetId, CallResult<Vec<NodeMetricsHistoryRecord>>> {
         let mut subnets_history = Vec::new();
+        ic_cdk::println!(
+            "Updating node metrics for {} subnets",
+            last_timestamp_per_subnet.keys().count()
+        );
 
         for (subnet_id, last_stored_ts) in last_timestamp_per_subnet {
-            let refresh_ts = last_stored_ts.unwrap_or_default();
-            ic_cdk::println!(
-                "Updating node metrics for subnet {}: Refreshing metrics from timestamp {}",
-                subnet_id,
-                refresh_ts
-            );
-
             let args = NodeMetricsHistoryArgs {
                 subnet_id: subnet_id.get().0,
-                start_at_timestamp_nanos: refresh_ts,
+                start_at_timestamp_nanos: *last_stored_ts,
             };
 
             subnets_history
-                .push(async move { (*subnet_id, self.client.node_metrics_history(args).await) });
+                .push(async move { (*subnet_id, self.client.node_metrics_history(&args).await) });
         }
 
         futures::future::join_all(subnets_history)
@@ -105,20 +78,33 @@ where
             .collect()
     }
 
+    fn last_timestamp_per_subnet(&self, subnets: Vec<SubnetId>) -> BTreeMap<SubnetId, UnixTsNanos> {
+        subnets
+            .into_iter()
+            .map(|subnet| {
+                let last_timestamp = self
+                    .last_timestamp_per_subnet
+                    .borrow()
+                    .get(&subnet.into())
+                    .unwrap_or_default();
+
+                (subnet, last_timestamp)
+            })
+            .collect()
+    }
+
     /// Updates the stored subnets metrics from remote management canisters.
     ///
     /// This function fetches the nodes metrics for the given subnets from the management canisters
     /// updating the local metrics with the fetched metrics.
-    pub async fn update_subnets_metrics(&self, subnets: Vec<SubnetId>) {
-        let last_timestamp_per_subnet: BTreeMap<SubnetId, _> = subnets
-            .into_iter()
-            .map(|subnet| {
-                let last_timestamp = self.last_timestamp_per_subnet.borrow().get(&subnet.into());
-
-                (subnet, last_timestamp)
-            })
-            .collect();
-
+    /// If all subnets metrics are fetched successfully, it returns the last date
+    /// for which metrics were updated.
+    pub async fn update_subnets_metrics(
+        &self,
+        subnets: Vec<SubnetId>,
+    ) -> Result<NaiveDate, String> {
+        let mut success = true;
+        let last_timestamp_per_subnet = self.last_timestamp_per_subnet(subnets.clone());
         let subnets_metrics = self.fetch_subnets_metrics(&last_timestamp_per_subnet).await;
         for (subnet_id, call_result) in subnets_metrics {
             match call_result {
@@ -153,30 +139,38 @@ where
                                 },
                             );
                         }
-                    }
 
-                    self.subnets_to_retry.borrow_mut().remove(&subnet_id.into());
+                        let date =
+                            DateTime::from_timestamp_nanos(last_timestamp as i64).date_naive();
+                        ic_cdk::println!(
+                            "Successfully updated subnet {} metrics for date: {}",
+                            subnet_id,
+                            date
+                        );
+                    }
                 }
-                Err((_, e)) => {
+                Err(e) => {
+                    success = false;
                     ic_cdk::println!(
                         "Error fetching metrics for subnet {}: ERROR: {}",
                         subnet_id,
                         e
                     );
-
-                    // The call failed, will retry fetching metrics for this subnet.
-                    let mut retry_count = self
-                        .subnets_to_retry
-                        .borrow()
-                        .get(&subnet_id.into())
-                        .unwrap_or_default();
-                    retry_count += 1;
-
-                    self.subnets_to_retry
-                        .borrow_mut()
-                        .insert(subnet_id.into(), retry_count);
                 }
             }
+        }
+
+        if success {
+            let max_ts_update = self
+                .last_timestamp_per_subnet(subnets)
+                .into_values()
+                .max()
+                .unwrap_or_default();
+            let last_day_update = DateTime::from_timestamp_nanos(max_ts_update as i64).date_naive();
+
+            Ok(last_day_update)
+        } else {
+            Err("Failed to update metrics".to_string())
         }
     }
 
@@ -190,7 +184,7 @@ where
     ) -> BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>> {
         let mut metrics_by_subnet = BTreeMap::new();
         let first_key = SubnetMetricsKey {
-            timestamp_nanos: first_unix_timestamp_nanoseconds(&date.pred()),
+            timestamp_nanos: first_unix_timestamp_nanoseconds(&date.pred_opt().unwrap()),
             ..SubnetMetricsKey::min_key()
         };
         let last_key = SubnetMetricsKey {
@@ -256,6 +250,109 @@ where
         }
 
         metrics_by_subnet
+    }
+}
+
+#[cfg(feature = "test")]
+pub mod management_canister_client_test {
+    use crate::chrono_utils::last_unix_timestamp_nanoseconds;
+    use crate::metrics::ManagementCanisterClient;
+    use crate::storage::RegistryStoreStableMemoryBorrower;
+    use async_trait::async_trait;
+    use candid::Principal;
+    use chrono::DateTime;
+    use ic_base_types::SubnetId;
+    use ic_cdk::call::CallResult;
+    use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
+    use ic_nervous_system_canisters::registry::RegistryCanister;
+    use ic_registry_canister_client::StableCanisterRegistryClient;
+    use std::sync::Arc;
+
+    thread_local! {
+        static REGISTRY_STORE_TEST: Arc<StableCanisterRegistryClient<RegistryStoreStableMemoryBorrower>> = {
+            let store = StableCanisterRegistryClient::<RegistryStoreStableMemoryBorrower>::new(
+                Arc::new(RegistryCanister::new()));
+            Arc::new(store)
+        };
+    }
+
+    /// Used to interact with remote Management canisters.
+    pub struct ICCanisterClient;
+
+    #[async_trait]
+    impl ManagementCanisterClient for ICCanisterClient {
+        async fn node_metrics_history(
+            &self,
+            args: &NodeMetricsHistoryArgs,
+        ) -> CallResult<Vec<NodeMetricsHistoryRecord>> {
+            use crate::canister::current_time;
+            use crate::registry_querier::RegistryQuerier;
+            use ic_base_types::PrincipalId;
+            use ic_management_canister_types::NodeMetrics;
+            use ic_protobuf::registry::subnet::v1::SubnetRecord;
+            use ic_registry_canister_client::CanisterRegistryClient;
+            use ic_registry_keys::make_subnet_record_key;
+            use prost::Message;
+
+            ic_cdk::println!(
+                "Running test implementation of node_metrics_history call to management canister...\
+             This will assign 1 block proposed and 0 failures to all nodes assigned to the subnet \
+             provided in args everyday!"
+            );
+
+            let registry_store = REGISTRY_STORE_TEST.with(|store| store.clone());
+            let registry_querier = RegistryQuerier::new(registry_store.clone());
+
+            let subnet_target = SubnetId::from(PrincipalId::from(args.subnet_id));
+            let subnet_record_key = make_subnet_record_key(subnet_target);
+
+            let mut node_metrics_history = vec![];
+
+            let start_date =
+                DateTime::from_timestamp_nanos(args.start_at_timestamp_nanos as i64).date_naive();
+            let end_date =
+                DateTime::from_timestamp_nanos(current_time().as_nanos_since_unix_epoch() as i64)
+                    .date_naive();
+
+            for date in start_date.iter_days().take_while(|d| *d < end_date) {
+                let target_timestamp_nanos = last_unix_timestamp_nanoseconds(&date);
+                let mut date_result = NodeMetricsHistoryRecord {
+                    timestamp_nanos: target_timestamp_nanos,
+                    node_metrics: vec![],
+                };
+
+                let version = match registry_querier
+                    .version_for_timestamp_nanoseconds(target_timestamp_nanos)
+                {
+                    Some(version) => version,
+                    None => continue,
+                };
+
+                let subnet_record = match registry_store
+                    .get_value(subnet_record_key.as_str(), version)
+                    .expect("Failed to get SubnetRecord")
+                    .map(|v| {
+                        SubnetRecord::decode(v.as_slice()).expect("Failed to decode SubnetRecord")
+                    }) {
+                    Some(subnet_record) => subnet_record,
+                    None => continue,
+                };
+
+                for node in subnet_record.membership {
+                    let node_id = Principal::try_from(node).unwrap();
+
+                    date_result.node_metrics.push(NodeMetrics {
+                        node_id,
+                        num_blocks_proposed_total: 1,
+                        num_block_failures_total: 0,
+                    });
+                }
+
+                node_metrics_history.push(date_result);
+            }
+
+            Ok(node_metrics_history)
+        }
     }
 }
 

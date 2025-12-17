@@ -57,6 +57,7 @@ struct TestConfig {
     /// Custom data to use in attestation (None for default)
     /// Allows testing invalid attestation data
     custom_data_override: Option<[u8; 64]>,
+    can_open_disk: bool,
 }
 
 impl Default for TestConfig {
@@ -68,6 +69,7 @@ impl Default for TestConfig {
             custom_data_override: None,
             client_chip_id: DEFAULT_CHIP_ID,
             server_chip_id: DEFAULT_CHIP_ID,
+            can_open_disk: false,
         }
     }
 }
@@ -88,6 +90,8 @@ struct DiskEncryptionKeyExchangeTestFixture {
     client_sev_firmware: MockSevGuestFirmwareBuilder,
     /// Port for the server to listen on
     server_port: u16,
+    /// True to assume that the disk can already be opened without key exchange
+    can_open_disk: bool,
 }
 
 impl DiskEncryptionKeyExchangeTestFixture {
@@ -135,8 +139,6 @@ impl DiskEncryptionKeyExchangeTestFixture {
                 node_reward_type: None,
                 mgmt_mac: Default::default(),
                 deployment_environment: DeploymentEnvironment::Mainnet,
-                logging: Default::default(),
-                use_nns_public_key: false,
                 nns_urls: vec![],
                 use_node_operator_private_key: false,
                 enable_trusted_execution_environment: true,
@@ -182,6 +184,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
             client_guestos_config,
             previous_key,
             server_port,
+            can_open_disk: config.can_open_disk,
         }
     }
 
@@ -241,11 +244,13 @@ impl DiskEncryptionKeyExchangeTestFixture {
     }
 
     fn create_client_agent(&self) -> DiskEncryptionKeyExchangeClientAgent {
+        let can_open_disk = self.can_open_disk;
         DiskEncryptionKeyExchangeClientAgent::new(
             self.client_guestos_config.clone(),
             SevRootCertificateVerification::TestOnlySkipVerification,
             Box::new(self.client_sev_firmware.clone()),
             self.registry_client.clone(),
+            Box::new(move |_, _, _| Ok(can_open_disk)),
             self.previous_key.path().to_path_buf(),
             self.server_port,
         )
@@ -429,4 +434,21 @@ async fn test_different_chip_id() {
             .await,
         "InvalidChipId",
     );
+}
+
+#[tokio::test]
+async fn test_can_open_disk() {
+    let config = TestConfig {
+        can_open_disk: true,
+        // If the client can open the disk, the client should not care about the server's
+        // measurement since it won't even call the server.
+        server_measurement: UNREGISTERED_MEASUREMENT,
+        ..Default::default()
+    };
+
+    let fixture = DiskEncryptionKeyExchangeTestFixture::new(config);
+    let (server_result, client_result) = fixture.run_key_exchange_test().await;
+
+    server_result.expect("Key exchange should succeed");
+    client_result.expect("Key exchange should succeed");
 }

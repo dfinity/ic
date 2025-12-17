@@ -2,7 +2,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use arc_swap::ArcSwapOption;
 use futures_util::future::ready;
-use ic_bn_lib::http::client::CloneableDnsResolver;
+use ic_bn_lib_common::traits::dns::CloneableDnsResolver;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 
 use crate::snapshot::RegistrySnapshot;
@@ -13,20 +13,21 @@ const UNUSED_PORT: u16 = 0;
 #[error("{0}")]
 pub struct DnsError(String);
 
+/// DNS resolver for Reqwest that maps Node IDs to IP addresses.
+/// The information is obtained from the Registry.
 #[derive(Clone, Debug)]
 pub struct DnsResolver {
     snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
 }
 
 impl DnsResolver {
+    /// Create new DnsResolver
     pub fn new(snapshot: Arc<ArcSwapOption<RegistrySnapshot>>) -> Self {
         Self { snapshot }
     }
 }
 impl CloneableDnsResolver for DnsResolver {}
 
-// Implement resolver based on the routing table
-// It's used by reqwest to resolve node IDs to an IP address
 impl Resolve for DnsResolver {
     fn resolve(&self, name: Name) -> Resolving {
         // Load a routing table if we have one

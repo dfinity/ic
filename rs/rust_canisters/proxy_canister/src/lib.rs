@@ -39,6 +39,7 @@ pub struct UnvalidatedCanisterHttpRequestArgs {
     pub method: HttpMethod,
     pub transform: Option<TransformContext>,
     pub is_replicated: Option<bool>,
+    pub pricing_version: Option<u32>,
 }
 impl Payload<'_> for UnvalidatedCanisterHttpRequestArgs {}
 
@@ -53,7 +54,8 @@ impl From<UnvalidatedCanisterHttpRequestArgs>
             body: args.body,
             method: args.method,
             transform: args.transform,
-            is_replicated: None,
+            is_replicated: args.is_replicated,
+            pricing_version: args.pricing_version,
         }
     }
 }

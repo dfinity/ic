@@ -10,10 +10,12 @@ version.workspace = true
 anyhow = { workspace = true }
 candid = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-limits = { path = "../../limits" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
 ic-xrc-types = "1.0.0"
+ic_consensus_system_test_subnet_recovery = { path = "../consensus/subnet_recovery" }
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
 ic_nested_nns_recovery_common = { path = "../nested/nns_recovery" }
 nested = { path = "../nested" }

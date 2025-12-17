@@ -3,7 +3,26 @@
 //! This library uses a [Leaky Bucket Algorithm](https://en.wikipedia.org/wiki/Leaky_bucket) to
 //! enforce rate limites, which allows for a configurable amount of spikiness around the average
 //! limit desired.
+//!
+//! A reserve-commit pattern is used so that any failure would not affect the rate limit (otherwise
+//! a DoS would be possible by deliberately triggering operations that would fail).
+//!
+//! Example:
+//!
+//! ```
+//! let reservation = get_rate_limiter().try_reserve(now, key, requested_capacity)?;
+//! do_something()?; // if this fails, the reservation is dropped without affecting the rate limit
+//! get_rate_limiter().commit(now, reservation).expect("Failed to commit reservation"); // Or handle the error by logging. It should not fail unless there the resevation is invalid.
+//! ```
+//!
+//! This pattern is also safe to use in an asynchronous context - if the reservation happens at the
+//! first message of the async call, then the entire async call is protected by the rate limiting.
+//! Although, in those cases, the user should consider whether the reservation should be committed
+//! if the async call fails, depending on whether the rate limiting is trying to protect against the
+//! inter-canister call (in which case, the reservation should be committed) or the some other
+//! mutations inside the canister (in which case, the reservation should not be committed).
 use ic_stable_structures::{StableBTreeMap, Storable};
+use std::fmt::{Display, Formatter};
 use std::{
     collections::BTreeMap,
     fmt::Debug,
@@ -23,7 +42,7 @@ pub trait CapacityUsageRecordStorage<K> {
     /// Get usage record for a key
     fn get(&self, key: &K) -> Option<CapacityUsageRecord>;
 
-    /// Insert or update usage record for a key  
+    /// Insert or update usage record for a key
     fn upsert(&mut self, key: K, record: CapacityUsageRecord);
 
     fn remove(&mut self, key: &K) -> Option<CapacityUsageRecord>;
@@ -179,12 +198,39 @@ pub struct RateLimiterConfig {
     pub max_reservations: u64,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum RateLimiterError {
     NotEnoughCapacity,
     InvalidArguments(String),
     MaxReservationsReached,
     ReservationNotFound,
+}
+
+impl Display for RateLimiterError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let message = match self {
+            RateLimiterError::NotEnoughCapacity => "Rate Limit Capacity exceeded. \
+                    Please wait and try again later."
+                .to_string(),
+            RateLimiterError::InvalidArguments(e) => format!("Rate Limit Invalid Arguments: {e}"),
+            RateLimiterError::MaxReservationsReached => {
+                "Maximum Open Rate Limit Reservations Reached.".to_string()
+            }
+            RateLimiterError::ReservationNotFound => {
+                "Ratelimiter has no record of the reservation \
+                passed to commit, so could not commit reservation."
+                    .to_string()
+            }
+        };
+
+        f.write_str(message.as_str())
+    }
+}
+
+impl From<RateLimiterError> for String {
+    fn from(value: RateLimiterError) -> Self {
+        format!("{value}")
+    }
 }
 
 impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S> {
@@ -197,6 +243,14 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
         }
     }
 
+    /// Tries to reserve capacity for a given key and requested capacity. Returns a Reservation
+    /// object if successful, or an error if the capacity is not available. The reservation object
+    /// needs to be committed (i.e. call `commit()` with it) to actually consume the capacity. If
+    /// the reservation is not committed, then when the reservation is dropped, the capacity is not
+    /// consumed and the reservation is removed from the rate limiter, so it does not affect the
+    /// rate limit. Note that while the reservation object exists, the capacity is effectively
+    /// consumed, so that the subsequent `commit()` should succeed (unless somehow the reservation
+    /// is not created by the same rate limiter, in which case, the commit will fail).
     pub fn try_reserve(
         &mut self,
         now: SystemTime,
@@ -222,19 +276,10 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
             return Err(RateLimiterError::MaxReservationsReached);
         }
 
-        // Get all reservations for this key to calculate current usage
-        let reserved_capacity: u64 = reservations
-            .range((key.clone(), 0)..(key.clone(), u64::MAX))
-            .map(|(_, data)| data.capacity)
-            .sum();
-
         // Drop this borrow so we can borrow mutably to get usage
         drop(reservations);
 
-        let committed_capacity =
-            self.with_capacity_usage_record(key.clone(), now, |usage| usage.capacity_used);
-
-        if reserved_capacity + committed_capacity + requested_capacity <= self.config.max_capacity {
+        if requested_capacity <= self.get_available_capacity(key.clone(), now) {
             let mut reservations = self.reservations.lock().unwrap();
             // Only allocate global index on successful reservation
             let index = self.next_index;
@@ -258,6 +303,8 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
         }
     }
 
+    /// Commits a reservation, consuming the capacity. Returns an error if the reservation is not
+    /// found or is invalid (i.e. not created by the same rate limiter).
     pub fn commit(
         &mut self,
         now: SystemTime,
@@ -282,6 +329,24 @@ impl<K: Ord + Clone + Debug, S: CapacityUsageRecordStorage<K>> RateLimiter<K, S>
         });
 
         Ok(())
+    }
+
+    pub fn get_available_capacity(&mut self, key: K, now: SystemTime) -> u64 {
+        let committed_capacity =
+            self.with_capacity_usage_record(key.clone(), now, |usage| usage.capacity_used);
+
+        let reservations = self.reservations.lock().unwrap();
+
+        // Get all reservations for this key to calculate current usage
+        let reserved_capacity: u64 = reservations
+            .range((key.clone(), 0)..=(key.clone(), u64::MAX))
+            .map(|(_, data)| data.capacity)
+            .sum();
+
+        self.config
+            .max_capacity
+            .saturating_sub(reserved_capacity)
+            .saturating_sub(committed_capacity)
     }
 
     // Internal helper to correctly deal with memory usage.

@@ -31,7 +31,7 @@ use ic_types::crypto::{
     AlgorithmId, BasicSig, BasicSigOf, ExtendedDerivationPath, KeyPurpose, Signed,
 };
 use ic_types::signature::{BasicSignature, BasicSignatureBatch};
-use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
+use ic_types::{Height, NodeId, NumberOfNodes, PrincipalId, Randomness, RegistryVersion, SubnetId};
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
 use std::collections::{BTreeMap, BTreeSet};
@@ -124,13 +124,13 @@ pub fn swap_two_dealings_in_transcript(
         .content
         .into_builder()
         .with_dealer_id(dealer_a.id())
-        .build_with_signature(params, dealer_a, dealer_a.id());
+        .build_with_signature(dealer_a, dealer_a.id());
 
     let dealing_ab = dealing_a
         .content
         .into_builder()
         .with_dealer_id(dealer_b.id())
-        .build_with_signature(params, dealer_b, dealer_b.id());
+        .build_with_signature(dealer_b, dealer_b.id());
 
     let dealing_ab_signed = env
         .nodes
@@ -174,7 +174,7 @@ pub fn copy_dealing_in_transcript(
         .content
         .into_builder()
         .with_dealer_id(dealer_to.id())
-        .build_with_signature(params, dealer_to, dealer_to.id());
+        .build_with_signature(dealer_to, dealer_to.id());
 
     let dealing_to_signed = env
         .nodes
@@ -431,14 +431,8 @@ pub mod node {
     }
 
     impl<T: Signable> BasicSigner<T> for Node {
-        fn sign_basic(
-            &self,
-            message: &T,
-            signer: NodeId,
-            registry_version: RegistryVersion,
-        ) -> CryptoResult<BasicSigOf<T>> {
-            self.crypto_component
-                .sign_basic(message, signer, registry_version)
+        fn sign_basic(&self, message: &T) -> CryptoResult<BasicSigOf<T>> {
+            self.crypto_component.sign_basic(message)
         }
     }
 
@@ -896,7 +890,7 @@ pub mod node {
                 let mut signatures_map = BTreeMap::new();
                 for signer in self.filter_by_receivers(&params) {
                     let signature = signer
-                        .sign_basic(&signed_dealing, signer.id(), params.registry_version())
+                        .sign_basic(&signed_dealing)
                         .expect("failed to generate basic-signature");
                     signatures_map.insert(signer.id(), signature);
                 }
@@ -1393,9 +1387,9 @@ pub fn set_of_nodes(ids: &[u64]) -> BTreeSet<NodeId> {
     }
     nodes
 }
-
+// Random registry version decreased by a margin that allows for increasing it again sufficiently during tests.
 fn random_registry_version<R: RngCore + CryptoRng>(rng: &mut R) -> RegistryVersion {
-    RegistryVersion::new(rng.gen_range(1..u32::MAX) as u64)
+    RegistryVersion::new(rng.gen_range(1..u64::MAX - 10_000))
 }
 
 pub fn random_transcript_id<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
@@ -1884,7 +1878,7 @@ pub fn corrupt_signed_idkg_dealing<R: CryptoRng + RngCore, T: BasicSigner<IDkgDe
     Ok(idkg_dealing
         .into_builder()
         .corrupt_internal_dealing_raw_by_changing_ciphertexts(&[node_index], rng)
-        .build_with_signature(transcript_params, basic_signer, signer_id))
+        .build_with_signature(basic_signer, signer_id))
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -1904,18 +1898,18 @@ pub fn generate_tecdsa_protocol_inputs<R: RngCore + CryptoRng>(
     derivation_path: &ExtendedDerivationPath,
     algorithm_id: AlgorithmId,
     rng: &mut R,
-) -> ThresholdEcdsaSigInputs {
+) -> ThresholdEcdsaSigInputsOwned {
     let quadruple =
         generate_ecdsa_presig_quadruple(env, dealers, receivers, algorithm_id, key_transcript, rng);
 
-    ThresholdEcdsaSigInputs::new(
-        derivation_path,
-        message_hash,
-        nonce,
+    ThresholdEcdsaSigInputsOwned::new(
+        derivation_path.caller,
+        derivation_path.derivation_path.clone(),
+        message_hash.to_vec(),
+        nonce.get(),
         quadruple,
         key_transcript.clone(),
     )
-    .expect("failed to create signature inputs")
 }
 
 pub fn run_tecdsa_protocol<R: RngCore + CryptoRng + Sync + Send>(
@@ -1965,7 +1959,7 @@ pub fn generate_tschnorr_protocol_inputs<R: RngCore + CryptoRng>(
     derivation_path: &ExtendedDerivationPath,
     alg: AlgorithmId,
     rng: &mut R,
-) -> ThresholdSchnorrSigInputs {
+) -> ThresholdSchnorrSigInputsOwned {
     let blinder_unmasked_params = setup_unmasked_random_params(env, alg, dealers, receivers, rng);
     let blinder_unmasked_transcript = env
         .nodes
@@ -1974,15 +1968,15 @@ pub fn generate_tschnorr_protocol_inputs<R: RngCore + CryptoRng>(
     let presig = SchnorrPreSignatureTranscript::new(blinder_unmasked_transcript)
         .expect("failed to create Schnorr pre-signature transcript");
 
-    ThresholdSchnorrSigInputs::new(
-        derivation_path,
-        message,
-        taproot_tree_root,
-        nonce,
+    ThresholdSchnorrSigInputsOwned::new(
+        derivation_path.caller,
+        derivation_path.derivation_path.clone(),
+        message.to_vec(),
+        taproot_tree_root.map(Vec::from),
+        nonce.get(),
         presig,
         key_transcript.clone(),
     )
-    .expect("failed to create signature inputs")
 }
 
 pub fn run_tschnorr_protocol<R: RngCore + CryptoRng + Sync + Send>(
@@ -2368,13 +2362,12 @@ impl SignedIDkgDealingBuilder {
 
     pub fn build_with_signature<T: BasicSigner<IDkgDealing>>(
         mut self,
-        params: &IDkgTranscriptParams,
         basic_signer: &T,
         signer_id: NodeId,
     ) -> SignedIDkgDealing {
         self.signature = BasicSignature {
             signature: basic_signer
-                .sign_basic(&self.content, signer_id, params.registry_version())
+                .sign_basic(&self.content)
                 .expect("Failed to sign a dealing"),
             signer: signer_id,
         };
@@ -2433,24 +2426,105 @@ impl IntoBuilder for SignedIDkgDealing {
     }
 }
 
+/// An owned variant of `ThresholdEcdsaSigInputs` for testing.
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub struct ThresholdEcdsaSigInputsOwned {
+    pub caller: PrincipalId,
+    pub derivation_path: Vec<Vec<u8>>,
+    pub hashed_message: Vec<u8>,
+    pub nonce: [u8; 32],
+    pub presig_quadruple: EcdsaPreSignatureQuadruple,
+    pub key_transcript: IDkgTranscript,
+}
+
+impl ThresholdEcdsaSigInputsOwned {
+    pub fn new(
+        caller: PrincipalId,
+        derivation_path: Vec<Vec<u8>>,
+        hashed_message: Vec<u8>,
+        nonce: [u8; 32],
+        presig_quadruple: EcdsaPreSignatureQuadruple,
+        key_transcript: IDkgTranscript,
+    ) -> Self {
+        Self {
+            caller,
+            derivation_path,
+            hashed_message,
+            nonce,
+            presig_quadruple,
+            key_transcript,
+        }
+    }
+
+    pub fn as_ref<'a>(&'a self) -> ThresholdEcdsaSigInputs<'a> {
+        ThresholdEcdsaSigInputs::new(
+            &self.caller,
+            &self.derivation_path,
+            &self.hashed_message,
+            &self.nonce,
+            &self.presig_quadruple,
+            &self.key_transcript,
+        )
+        .expect("invalid threshold ECDSA sig inputs")
+    }
+
+    pub fn receivers(&self) -> &IDkgReceivers {
+        &self.key_transcript.receivers
+    }
+
+    pub fn key_transcript(&self) -> &IDkgTranscript {
+        &self.key_transcript
+    }
+
+    pub fn presig_quadruple(&self) -> &EcdsaPreSignatureQuadruple {
+        &self.presig_quadruple
+    }
+
+    pub fn reconstruction_threshold(&self) -> NumberOfNodes {
+        self.key_transcript.reconstruction_threshold()
+    }
+}
+
+impl AsRef<IDkgReceivers> for ThresholdEcdsaSigInputsOwned {
+    fn as_ref(&self) -> &IDkgReceivers {
+        self.receivers()
+    }
+}
+
+impl IntoBuilder for ThresholdEcdsaSigInputsOwned {
+    type BuilderType = ThresholdEcdsaSigInputsBuilder;
+
+    fn into_builder(self) -> Self::BuilderType {
+        ThresholdEcdsaSigInputsBuilder {
+            caller: self.caller,
+            derivation_path: self.derivation_path,
+            hashed_message: self.hashed_message,
+            nonce: self.nonce,
+            presig_quadruple: self.presig_quadruple,
+            key_transcript: self.key_transcript,
+        }
+    }
+}
+
 pub struct ThresholdEcdsaSigInputsBuilder {
-    derivation_path: ExtendedDerivationPath,
+    caller: PrincipalId,
+    derivation_path: Vec<Vec<u8>>,
     hashed_message: Vec<u8>,
-    nonce: Randomness,
+    nonce: [u8; 32],
     presig_quadruple: EcdsaPreSignatureQuadruple,
     key_transcript: IDkgTranscript,
 }
 
 impl ThresholdEcdsaSigInputsBuilder {
-    pub fn build(self) -> ThresholdEcdsaSigInputs {
-        ThresholdEcdsaSigInputs::new(
-            &self.derivation_path,
-            &self.hashed_message,
-            self.nonce,
-            self.presig_quadruple,
-            self.key_transcript,
-        )
-        .expect("invalid threshold ECDSA sig inputs")
+    pub fn build(self) -> ThresholdEcdsaSigInputsOwned {
+        ThresholdEcdsaSigInputsOwned {
+            caller: self.caller,
+            derivation_path: self.derivation_path,
+            hashed_message: self.hashed_message,
+            nonce: self.nonce,
+            presig_quadruple: self.presig_quadruple,
+            key_transcript: self.key_transcript,
+        }
     }
 
     pub fn corrupt_hashed_message(mut self) -> Self {
@@ -2464,12 +2538,13 @@ impl ThresholdEcdsaSigInputsBuilder {
     }
 }
 
-impl IntoBuilder for ThresholdEcdsaSigInputs {
+impl IntoBuilder for ThresholdEcdsaSigInputs<'_> {
     type BuilderType = ThresholdEcdsaSigInputsBuilder;
 
     fn into_builder(self) -> Self::BuilderType {
         ThresholdEcdsaSigInputsBuilder {
-            derivation_path: self.derivation_path().clone(),
+            caller: *self.caller(),
+            derivation_path: self.derivation_path().to_vec(),
             hashed_message: Vec::from(self.hashed_message()),
             nonce: *self.nonce(),
             presig_quadruple: self.presig_quadruple().clone(),
@@ -2478,26 +2553,96 @@ impl IntoBuilder for ThresholdEcdsaSigInputs {
     }
 }
 
+/// An owned variant of `ThresholdSchnorrSigInputs` for testing.
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub struct ThresholdSchnorrSigInputsOwned {
+    pub caller: PrincipalId,
+    pub derivation_path: Vec<Vec<u8>>,
+    pub message: Vec<u8>,
+    pub taproot_tree_root: Option<Vec<u8>>,
+    pub nonce: [u8; 32],
+    pub presig_transcript: SchnorrPreSignatureTranscript,
+    pub key_transcript: IDkgTranscript,
+}
+
+impl ThresholdSchnorrSigInputsOwned {
+    pub fn new(
+        caller: PrincipalId,
+        derivation_path: Vec<Vec<u8>>,
+        message: Vec<u8>,
+        taproot_tree_root: Option<Vec<u8>>,
+        nonce: [u8; 32],
+        presig_transcript: SchnorrPreSignatureTranscript,
+        key_transcript: IDkgTranscript,
+    ) -> Self {
+        Self {
+            caller,
+            derivation_path,
+            message,
+            taproot_tree_root,
+            nonce,
+            presig_transcript,
+            key_transcript,
+        }
+    }
+
+    pub fn as_ref<'a>(&'a self) -> ThresholdSchnorrSigInputs<'a> {
+        ThresholdSchnorrSigInputs::new(
+            &self.caller,
+            &self.derivation_path,
+            &self.message,
+            self.taproot_tree_root.as_deref(),
+            &self.nonce,
+            &self.presig_transcript,
+            &self.key_transcript,
+        )
+        .expect("invalid threshold Schnorr sig inputs")
+    }
+
+    pub fn receivers(&self) -> &IDkgReceivers {
+        &self.key_transcript.receivers
+    }
+
+    pub fn key_transcript(&self) -> &IDkgTranscript {
+        &self.key_transcript
+    }
+
+    pub fn presig_transcript(&self) -> &SchnorrPreSignatureTranscript {
+        &self.presig_transcript
+    }
+
+    pub fn reconstruction_threshold(&self) -> NumberOfNodes {
+        self.key_transcript.reconstruction_threshold()
+    }
+}
+
+impl AsRef<IDkgReceivers> for ThresholdSchnorrSigInputsOwned {
+    fn as_ref(&self) -> &IDkgReceivers {
+        self.receivers()
+    }
+}
+
 pub struct ThresholdSchnorrSigInputsBuilder {
-    derivation_path: ExtendedDerivationPath,
+    caller: PrincipalId,
+    derivation_path: Vec<Vec<u8>>,
     message: Vec<u8>,
     taproot_tree_root: Option<Vec<u8>>,
-    nonce: Randomness,
+    nonce: [u8; 32],
     presig_transcript: SchnorrPreSignatureTranscript,
     key_transcript: IDkgTranscript,
 }
 
 impl ThresholdSchnorrSigInputsBuilder {
-    pub fn build(self) -> ThresholdSchnorrSigInputs {
-        ThresholdSchnorrSigInputs::new(
-            &self.derivation_path,
-            &self.message,
-            self.taproot_tree_root.as_deref(),
-            self.nonce,
-            self.presig_transcript,
-            self.key_transcript,
-        )
-        .expect("invalid threshold Schnorr sig inputs")
+    pub fn build(self) -> ThresholdSchnorrSigInputsOwned {
+        ThresholdSchnorrSigInputsOwned {
+            caller: self.caller,
+            derivation_path: self.derivation_path,
+            message: self.message,
+            taproot_tree_root: self.taproot_tree_root,
+            nonce: self.nonce,
+            presig_transcript: self.presig_transcript,
+            key_transcript: self.key_transcript,
+        }
     }
 
     pub fn corrupt_message(mut self) -> Self {
@@ -2511,17 +2656,34 @@ impl ThresholdSchnorrSigInputsBuilder {
     }
 }
 
-impl IntoBuilder for ThresholdSchnorrSigInputs {
+impl IntoBuilder for ThresholdSchnorrSigInputs<'_> {
     type BuilderType = ThresholdSchnorrSigInputsBuilder;
 
     fn into_builder(self) -> Self::BuilderType {
         ThresholdSchnorrSigInputsBuilder {
-            derivation_path: self.derivation_path().clone(),
+            caller: *self.caller(),
+            derivation_path: self.derivation_path().to_vec(),
             message: Vec::from(self.message()),
             taproot_tree_root: self.taproot_tree_root().map(Vec::from),
             nonce: *self.nonce(),
             presig_transcript: self.presig_transcript().clone(),
             key_transcript: self.key_transcript().clone(),
+        }
+    }
+}
+
+impl IntoBuilder for ThresholdSchnorrSigInputsOwned {
+    type BuilderType = ThresholdSchnorrSigInputsBuilder;
+
+    fn into_builder(self) -> Self::BuilderType {
+        ThresholdSchnorrSigInputsBuilder {
+            caller: self.caller,
+            derivation_path: self.derivation_path,
+            message: self.message,
+            taproot_tree_root: self.taproot_tree_root,
+            nonce: self.nonce,
+            presig_transcript: self.presig_transcript,
+            key_transcript: self.key_transcript,
         }
     }
 }
@@ -2560,7 +2722,7 @@ impl IDkgTranscriptBuilder {
     }
 
     pub fn corrupt_algorithm_id(mut self) -> Self {
-        self.algorithm_id = AlgorithmId::Placeholder;
+        self.algorithm_id = AlgorithmId::Unspecified;
         self
     }
 
@@ -2897,12 +3059,11 @@ pub fn generate_initial_dealings<R: RngCore + CryptoRng>(
 
 pub mod ecdsa {
     use super::{
-        CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
-        generate_tecdsa_protocol_inputs,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants, ThresholdEcdsaSigInputsOwned,
+        generate_key_transcript, generate_tecdsa_protocol_inputs,
     };
     use ic_types::PrincipalId;
     use ic_types::Randomness;
-    use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaSigInputs;
     use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
     use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
     use rand::distributions::uniform::SampleRange;
@@ -2914,7 +3075,7 @@ pub mod ecdsa {
         rng: &mut R,
     ) -> (
         CanisterThresholdSigTestEnvironment,
-        ThresholdEcdsaSigInputs,
+        ThresholdEcdsaSigInputsOwned,
         IDkgDealers,
         IDkgReceivers,
     )
@@ -2951,12 +3112,11 @@ pub mod ecdsa {
 
 pub mod schnorr {
     use super::{
-        CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
-        generate_tschnorr_protocol_inputs,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants, ThresholdSchnorrSigInputsOwned,
+        generate_key_transcript, generate_tschnorr_protocol_inputs,
     };
     use ic_types::PrincipalId;
     use ic_types::Randomness;
-    use ic_types::crypto::canister_threshold_sig::ThresholdSchnorrSigInputs;
     use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
     use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
     use rand::distributions::uniform::SampleRange;
@@ -2968,7 +3128,7 @@ pub mod schnorr {
         rng: &mut R,
     ) -> (
         CanisterThresholdSigTestEnvironment,
-        ThresholdSchnorrSigInputs,
+        ThresholdSchnorrSigInputsOwned,
         IDkgDealers,
         IDkgReceivers,
     )

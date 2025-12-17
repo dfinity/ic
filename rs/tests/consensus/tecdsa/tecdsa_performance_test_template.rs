@@ -11,7 +11,7 @@
 // You can setup this test by executing the following commands:
 //
 //   $ ci/container/container-run.sh
-//   $ ict test tecdsa_performance_test_colocate --keepalive -- --test_tmpdir=./performance --test_env DOWNLOAD_P8S_DATA=1
+//   $ ict test tecdsa_performance_test_colocate --keepalive -- --test_tmpdir=./performance --test_env DOWNLOAD_P8S_DATA=1 --test_env NODES_COUNT=40
 //
 // The --test_tmpdir=./performance will store the test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
@@ -91,7 +91,6 @@ use std::time::Duration;
 use tokio::runtime::{Builder, Runtime};
 
 // Environment parameters
-const NODES_COUNT: usize = 25;
 const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 const TESTING_PERIOD: Duration = Duration::from_secs(900); // testing time under load
@@ -108,10 +107,10 @@ const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
     .with_bandwidth(BANDWIDTH_MBITS);
 
 // Signature parameters
-const PRE_SIGNATURES_TO_CREATE: u32 = 30;
-const MAX_QUEUE_SIZE: u32 = 10;
+const PRE_SIGNATURES_TO_CREATE: u32 = 40;
+const MAX_QUEUE_SIZE: u32 = 30;
 const CANISTER_COUNT: usize = 4;
-const SIGNATURE_REQUESTS_PER_SECOND: f64 = 4.5;
+const SIGNATURE_REQUESTS_PER_SECOND: f64 = 9.0;
 
 const SMALL_MSG_SIZE_BYTES: usize = 32;
 #[allow(dead_code)]
@@ -166,6 +165,19 @@ fn make_key_ids() -> Vec<MasterPublicKeyId> {
 }
 
 pub fn setup(env: TestEnv) {
+    let nodes_count: usize = std::env::var("NODES_COUNT")
+        .or(std::env::var("DEFAULT_NODES_COUNT"))
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .expect(
+            "Failed to parse NODES_COUNT or DEFAULT_NODES_COUNT environment variable as an usize!",
+        );
+
+    info!(
+        env.logger(),
+        "Deploying a testnet with a {nodes_count}-node application subnet ...",
+    );
+
     let key_ids = make_key_ids();
     info!(env.logger(), "Running the test with key ids: {:?}", key_ids);
 
@@ -208,7 +220,7 @@ pub fn setup(env: TestEnv) {
                     idkg_key_rotation_period_ms: None,
                     max_parallel_pre_signature_transcripts_in_creation: None,
                 })
-                .add_nodes(NODES_COUNT),
+                .add_nodes(nodes_count),
         )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");

@@ -85,11 +85,16 @@ pub(crate) struct PageMapToFlush {
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum TipRequest {
     /// Create checkpoint from the current tip for the given height.
+    ///
     /// Sends the created checkpoint and the ReplicatedState switched to the
     /// checkpoint or error into the sender.
-    /// Serializes protos to the newly created checkpoint after sending to `sender`
-    /// State: latest_checkpoint_state = tip_folder_state
-    ///        tip_folder_state = default
+    /// Serializes protos to the newly created checkpoint after sending to `sender`.
+    ///
+    /// State:
+    /// ```text
+    ///     latest_checkpoint_state = tip_folder_state
+    ///     tip_folder_state = default
+    /// ```
     TipToCheckpointAndSwitch {
         height: Height,
         state: ReplicatedState,
@@ -102,14 +107,17 @@ pub(crate) enum TipRequest {
             >,
         >,
     },
-    /// Filter canisters in tip. Remove ones not present in the set.
-    /// State: tip_folder_state.has_filtered_canisters = true
+    /// Filter canisters and snapshots in tip. Remove ones not present in the sets.
+    ///
+    /// State: `tip_folder_state.has_filtered_canisters = true`
     FilterTipCanisters {
         height: Height,
-        ids: BTreeSet<CanisterId>,
+        canister_ids: BTreeSet<CanisterId>,
+        snapshot_ids: BTreeSet<SnapshotId>,
     },
     /// Flush PageMaps's unflushed delta on disc.
-    /// State: tip_folder_state.has_pagemaps = Some(height)
+    ///
+    /// State: `tip_folder_state.has_pagemaps = Some(height)`
     FlushPageMapDelta {
         height: Height,
         pagemaps: Vec<PageMapToFlush>,
@@ -117,13 +125,15 @@ pub(crate) enum TipRequest {
     },
     /// Reset tip folder to the checkpoint with given height.
     /// Merge overlays in tip folder if necessary.
-    /// State: tip_folder_state = latest_checkpoint_state
+    ///
+    /// State: `tip_folder_state = latest_checkpoint_state`
     ResetTipAndMerge {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
         pagemaptypes: Vec<PageMapType>,
     },
     /// Compute manifest, store result into states and persist metadata as result.
-    /// State: latest_checkpoint_state.has_manifest = true
+    ///
+    /// State: `latest_checkpoint_state.has_manifest = true`
     ComputeManifest {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
         base_manifest_info: Option<crate::manifest::BaseManifestInfo>,
@@ -132,7 +142,8 @@ pub(crate) enum TipRequest {
     },
     /// Validate the checkpointed state is valid and identical to the execution state.
     /// Crash if diverges.
-    /// State: latest_checkpoint_state.verified = true
+    ///
+    /// State: `latest_checkpoint_state.verified = true`
     ValidateReplicatedStateAndFinalize {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
         reference_state: Arc<ReplicatedState>,
@@ -140,7 +151,8 @@ pub(crate) enum TipRequest {
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     },
     /// Wait for the message to be executed and notify back via sender.
-    /// State: *
+    ///
+    /// State: `*`
     Wait { sender: Sender<()> },
 }
 
@@ -181,16 +193,30 @@ pub(crate) fn spawn_tip_thread(
             .spawn(move || {
                 while let Ok(req) = tip_receiver.recv() {
                     match req {
-                        TipRequest::FilterTipCanisters { height, ids } => {
+                        TipRequest::FilterTipCanisters {
+                            height,
+                            canister_ids,
+                            snapshot_ids,
+                        } => {
                             let _timer = request_timer(&metrics, "filter_tip_canisters");
                             debug_assert!(!tip_state.tip_folder_state.has_filtered_canisters);
                             tip_state.tip_folder_state.has_filtered_canisters = true;
                             tip_handler
-                                .filter_tip_canisters(height, &ids)
+                                .filter_tip_canisters(height, &canister_ids)
                                 .unwrap_or_else(|err| {
                                     fatal!(
                                         log,
                                         "Failed to filter tip canisters for height @{}: {}",
+                                        height,
+                                        err
+                                    )
+                                });
+                            tip_handler
+                                .filter_tip_snapshots(height, &snapshot_ids)
+                                .unwrap_or_else(|err| {
+                                    fatal!(
+                                        log,
+                                        "Failed to filter tip snapshots for height @{}: {}",
                                         height,
                                         err
                                     )
@@ -688,7 +714,7 @@ fn switch_to_checkpoint(
 }
 
 /// Update the tip directory files with the most recent checkpoint operations.
-/// `operations` is an ordered list of all created/restores/deleted snapshots and renamed canisters since the last flush.
+/// `operations` is an ordered list of all created/restored snapshots and renamed canisters since the last flush.
 fn flush_unflushed_checkpoint_ops(
     log: &ReplicaLogger,
     tip_handler: &mut TipHandler,
@@ -698,12 +724,6 @@ fn flush_unflushed_checkpoint_ops(
     // This loop is not parallelized as there are combinations such as creating then restoring from a snapshot within the same flush.
     for op in operations {
         match op {
-            UnflushedCheckpointOp::DeleteSnapshot(snapshot_id) => {
-                tip_handler
-                    .tip(height)?
-                    .snapshot(&snapshot_id)?
-                    .delete_dir()?;
-            }
             UnflushedCheckpointOp::TakeSnapshot(canister_id, snapshot_id) => {
                 backup(log, &tip_handler.tip(height)?, canister_id, snapshot_id)?;
             }
@@ -713,8 +733,6 @@ fn flush_unflushed_checkpoint_ops(
             UnflushedCheckpointOp::RenameCanister(src, dst) => {
                 tip_handler.move_canister_directory(height, src, dst)?;
             }
-            UnflushedCheckpointOp::UploadSnapshotData(..)
-            | UnflushedCheckpointOp::UploadSnapshotMetadata(..) => {}
         }
     }
 
@@ -1076,6 +1094,10 @@ fn serialize_protos_to_checkpoint_readwrite(
     checkpoint_readwrite
         .subnet_queues()
         .serialize((state.subnet_queues()).into())?;
+
+    checkpoint_readwrite
+        .refunds()
+        .serialize((state.refunds()).into())?;
 
     checkpoint_readwrite.stats().serialize(Stats {
         query_stats: state.query_stats().as_query_stats(),
@@ -1456,11 +1478,7 @@ fn handle_compute_manifest_request(
         elapsed
     );
 
-    let state_size_bytes: i64 = manifest
-        .file_table
-        .iter()
-        .map(|f| f.size_bytes as i64)
-        .sum();
+    let state_size_bytes = manifest.state_size_bytes() as i64;
 
     metrics.state_size.set(state_size_bytes);
     metrics
@@ -1484,6 +1502,9 @@ fn handle_compute_manifest_request(
         ..bundled_manifest
     };
 
+    // Removing or changing the log below could make upgrade system tests fail, as they check for
+    // their existence before a reboot. Information about the computed root hash in logs is useful
+    // in certain recovery scenarios and should be kept.
     info!(
         log,
         "Computed root hash {:?} of state @{}",

@@ -35,6 +35,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, get_dependency_path,
+            get_dependency_path_from_env,
         },
     },
     util::block_on,
@@ -436,7 +437,7 @@ fn rosetta_api_bin_path() -> PathBuf {
 }
 
 fn rosetta_cli_bin_path() -> String {
-    get_dependency_path("external/rosetta-cli/rosetta-cli")
+    get_dependency_path_from_env("ROSETTA_CLI_PATH")
         .into_os_string()
         .into_string()
         .unwrap()

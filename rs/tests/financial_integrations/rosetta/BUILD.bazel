@@ -1,18 +1,20 @@
-load("//rs/tests:common.bzl", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test_nns(
     name = "rosetta_test",
+    env = {
+        "ROSETTA_CLI_PATH": "$(rootpath //:rosetta-cli)",
+    },
     tags = [
         "colocate",
         "long_test",  # the P90 duration was over 7 minutes in the week starting on 2025-08-21
     ],
     runtime_deps = [
+        "//:rosetta-cli",
         "//rs/rosetta-api/icp:ic-rosetta-api",
         "//rs/tests:rosetta_workspace",
-        "@rosetta-cli//:rosetta-cli",
     ],
     deps = [
         "//rs/canister_client",
@@ -37,17 +39,18 @@ system_test_nns(
 
 system_test_nns(
     name = "rosetta_neuron_follow_test",
+    env = {
+        "ROSETTA_CLI_PATH": "$(rootpath //:rosetta-cli)",
+    },
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    runtime_deps =
-        UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api/icp:ic-rosetta-api",
-            "//rs/rosetta-api/icp:rosetta_image.tar",
-            "//rs/tests:rosetta_workspace",
-            "@rosetta-cli//:rosetta-cli",
-        ],
+    runtime_deps = [
+        "//:rosetta-cli",
+        "//rs/rosetta-api/icp:ic-rosetta-api",
+        "//rs/rosetta-api/icp:rosetta_image.tar",
+        "//rs/tests:rosetta_workspace",
+    ],
     deps = [
         "//rs/ledger_suite/common/ledger_core",
         "//rs/nns/common",

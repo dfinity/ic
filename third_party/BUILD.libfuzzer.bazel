@@ -1,0 +1,18 @@
+# Build libfuzzer to ensure compatibility with our toolchain, and so that it can
+# be optionally linked by the fuzzers.
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+cc_library(
+    name = "fuzzer",
+    srcs = glob(["*.cpp"]),
+    hdrs = glob(["*.h"]),
+    additional_compiler_inputs = glob(["*.def"]),
+    cxxopts = [
+        "-g",
+        "-O2",
+        "-fno-omit-frame-pointer",
+        "-std=c++17",
+    ],
+    linkstatic = True,
+    visibility = ["//visibility:public"],
+)

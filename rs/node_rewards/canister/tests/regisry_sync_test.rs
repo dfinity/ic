@@ -6,7 +6,6 @@ use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType};
 use ic_registry_keys::make_subnet_record_key;
 use ic_types::{PrincipalId, SubnetId};
 use pocket_ic::PocketIcBuilder;
-use std::time::Duration;
 
 #[tokio::test]
 async fn test_registry_value_syncing() {
@@ -30,8 +29,6 @@ async fn test_registry_value_syncing() {
 
     // This is the value from invariant_compliant_mutation
     let test_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(999));
-    // We don't use agents here because this method is test-only, so we won't
-    // support it beyond this one test.
     let response = pocket_ic
         .query_call(
             canister_id,
@@ -42,26 +39,7 @@ async fn test_registry_value_syncing() {
         .await
         .unwrap();
 
-    let decoded = Decode!(&response, Result<Option<Vec<u8>>, String>).unwrap();
-    assert_eq!(decoded, Ok(None));
-
-    // Advance time and tick so the sync will run
-    for _ in 0..10 {
-        pocket_ic.advance_time(Duration::from_secs(60 * 60)).await;
-        pocket_ic.tick().await;
-    }
-
-    let response = pocket_ic
-        .query_call(
-            canister_id,
-            PrincipalId::new_anonymous().0,
-            "get_registry_value",
-            Encode!(&make_subnet_record_key(test_subnet_id)).unwrap(),
-        )
-        .await
-        .unwrap();
-
-    // Now we are asserting that there is something in this recod
+    // Now we are asserting that there is something in this record
     let decoded = Decode!(&response, Result<Option<Vec<u8>>, String>).unwrap();
     let unwrapped = decoded.unwrap().unwrap();
     // Assert that this Registry value is actually a valid sequence of bits

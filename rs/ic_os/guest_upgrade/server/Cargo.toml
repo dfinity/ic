@@ -5,6 +5,7 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 attestation = { path = "../../attestation" }
+config = { path = "../../config" }
 config_types = { path = "../../config_types" }
 der = { workspace = true }
 guest_upgrade_shared = { path = "../shared" }

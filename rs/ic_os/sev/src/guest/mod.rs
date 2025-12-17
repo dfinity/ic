@@ -1,36 +1,27 @@
+#[cfg(target_os = "linux")]
+use anyhow::{Context, Result, anyhow};
+
 pub mod firmware;
 pub mod key_deriver;
 pub mod testing;
 
 /// Checks if SEV is active in the Guest Virtual Machine
 #[cfg(target_os = "linux")]
-pub fn is_sev_active() -> anyhow::Result<bool> {
-    use anyhow::Context;
-    use raw_cpuid::CpuId;
-    use std::fs::File;
-    use std::os::unix::fs::FileExt;
-    use std::path::Path;
-
-    // See https://docs.kernel.org/6.2/x86/amd-memory-encryption.html
-    const MSR_AMD64_SEV: u64 = 0xc0010131;
-
-    if Path::new("/dev/sev-guest").exists() {
-        return Ok(true);
+pub fn is_sev_active() -> Result<bool> {
+    // We read the environment variable set by systemd instead of alternatives:
+    // - /dev/sev-guest: This device may not be available early in the boot process even when SEV is
+    // active.
+    // - cpuid: The call goes through the Host. If we invoked cpuid on every check, a malicious
+    // host could intercept the call and return different values thereby making some processes
+    // believe that the SEV is active and others believe it is not.
+    match std::env::var("SEV_ACTIVE")
+        .context("Could not read SEV_ACTIVE environment variable")?
+        .as_ref()
+    {
+        "1" => Ok(true),
+        "0" => Ok(false),
+        other => Err(anyhow!(
+            "SEV_ACTIVE was expected to be 0 or 1 but was: '{other}'"
+        )),
     }
-
-    let Some(memory_encryption_info) = CpuId::new().get_memory_encryption_info() else {
-        // If the CPU does not report memory encryption info, SEV cannot be active.
-        return Ok(false);
-    };
-    if !memory_encryption_info.has_sev() {
-        // If the CPU does not support SEV, it cannot be active.
-        return Ok(false);
-    }
-
-    let msr = File::open("/dev/cpu/0/msr").context("Failed to open /dev/cpu/0/msr")?;
-    // MSR reads must be multiplies of 8 bytes, see msr_read in the kernel
-    let mut bytes = [0u8; 8];
-    msr.read_at(&mut bytes, MSR_AMD64_SEV)
-        .context("Failed to read from /dev/cpu/0/msr")?;
-    Ok((bytes[0] & 1) != 0)
 }

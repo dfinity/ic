@@ -348,13 +348,16 @@ impl Neuron {
             MAX_DISSOLVE_DELAY_SECONDS,
         ) as u128;
         // 'd_stake' is the stake with bonus for dissolve delay.
-        let d_stake = stake + ((stake * d) / (MAX_DISSOLVE_DELAY_SECONDS as u128));
+        let d_stake =
+            stake.saturating_add((stake.saturating_mul(d)) / (MAX_DISSOLVE_DELAY_SECONDS as u128));
         // Sanity check.
         assert!(d_stake <= 2 * stake);
         // The voting power is also a function of the age of the
         // neuron, giving a bonus of up to 25% at the four year mark.
         let a = std::cmp::min(self.age_seconds(now_seconds), MAX_NEURON_AGE_FOR_AGE_BONUS) as u128;
-        let ad_stake = d_stake + ((d_stake * a) / (4 * MAX_NEURON_AGE_FOR_AGE_BONUS as u128));
+        let ad_stake = d_stake.saturating_add(
+            (d_stake.saturating_mul(a)) / (4 * MAX_NEURON_AGE_FOR_AGE_BONUS as u128),
+        );
         // Final stake 'ad_stake' is at most 5/4 of the 'd_stake'.
         assert!(ad_stake <= (5 * d_stake) / 4);
         // The final voting power is the stake adjusted by both age
@@ -412,16 +415,16 @@ impl Neuron {
             for f in followees.iter() {
                 if let Some(f_vote) = ballots.get(&f.id) {
                     if f_vote.vote == (Vote::Yes as i32) {
-                        yes += 1;
+                        yes = yes.saturating_add(1);
                     } else if f_vote.vote == (Vote::No as i32) {
-                        no += 1;
+                        no = no.saturating_add(1);
                     }
                 }
             }
-            if 2 * yes > followees.len() {
+            if yes.saturating_mul(2_usize) > followees.len() {
                 return Vote::Yes;
             }
-            if 2 * no >= followees.len() {
+            if no.saturating_mul(2_usize) >= followees.len() {
                 return Vote::No;
             }
         }
@@ -458,8 +461,10 @@ impl Neuron {
     ) -> u64 {
         let is_fresh = self.voting_power_refreshed_timestamp_seconds
             >= now_seconds
-                - voting_power_economics.get_start_reducing_voting_power_after_seconds()
-                - voting_power_economics.get_clear_following_after_seconds();
+                .saturating_sub(
+                    voting_power_economics.get_start_reducing_voting_power_after_seconds(),
+                )
+                .saturating_sub(voting_power_economics.get_clear_following_after_seconds());
         if is_fresh {
             return 0;
         }
@@ -765,7 +770,7 @@ impl Neuron {
                         "The dissolve delay must be set to a future time.",
                     ));
                 }
-                let desired_dd = d.dissolve_timestamp_seconds - now_seconds;
+                let desired_dd = d.dissolve_timestamp_seconds.saturating_sub(now_seconds);
                 let current_dd = self.dissolve_delay_seconds(now_seconds);
 
                 if current_dd > desired_dd {
@@ -775,7 +780,7 @@ impl Neuron {
                     ));
                 }
 
-                let dd_diff = desired_dd - current_dd;
+                let dd_diff = desired_dd.saturating_sub(current_dd);
                 if dd_diff == 0 {
                     return Err(GovernanceError::new_with_message(
                         ErrorType::InvalidCommand,
@@ -863,6 +868,7 @@ impl Neuron {
         };
 
         NeuronInfo {
+            id: Some(self.id()),
             retrieved_at_timestamp_seconds: now_seconds,
             state: self.state(now_seconds) as i32,
             age_seconds: self.age_seconds(now_seconds),
@@ -1030,7 +1036,9 @@ impl Neuron {
     }
 
     pub fn is_funded(&self) -> bool {
-        let amount_e8s = self.stake_e8s() + self.maturity_e8s_equivalent;
+        let amount_e8s = self
+            .stake_e8s()
+            .saturating_add(self.maturity_e8s_equivalent);
         amount_e8s > 0
     }
 

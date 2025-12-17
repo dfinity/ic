@@ -9,6 +9,7 @@ version.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 bincode = { workspace = true }
+candid = { workspace = true }
 clap = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }
@@ -28,7 +29,6 @@ ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-utils-lru-cache = { path = "../utils/lru_cache" }
-ic-wasm-transform = { path = "../wasm_transform" }
 ic-wasm-types = { path = "../types/wasm_types" }
 itertools = { workspace = true }
 libc = { workspace = true }
@@ -47,14 +47,15 @@ slog-term = { workspace = true }
 tempfile = { workspace = true }
 wasm-encoder = { workspace = true }
 wasmparser = { workspace = true }
-wasmtime = { version = "35.0.0", default-features = false, features = [
+wasmtime = { version = "39.0.1", default-features = false, features = [
     'cranelift',
     'gc',
     'gc-null',
     'parallel-compilation',
     'runtime',
 ] }
-wasmtime-environ = "35.0.0"
+wasmtime-environ = "39.0.1"
+wirm = { workspace = true }
 
 # Wasmtime depends on 0.4.2 but specifies 0.4.1 in the toml file.
 # Enforce 0.4.2 using a dummy dependency until the upstream issue
@@ -64,7 +65,6 @@ mach2 = "0.4.2"
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-candid = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { workspace = true }
 embedders_bench = { path = "benches/embedders_bench" }

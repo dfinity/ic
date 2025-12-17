@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs/tests:__subpackages__"])
@@ -70,12 +70,10 @@ system_test_nns(
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps =
-        MESSAGE_CANISTER_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
+        MESSAGE_CANISTER_RUNTIME_DEPS + [
             # Keep sorted.
             "//rs/bitcoin/checker:btc_checker_canister",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
@@ -101,8 +99,7 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps =
-        MESSAGE_CANISTER_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
+        MESSAGE_CANISTER_RUNTIME_DEPS + [
             # Keep sorted.
             "//rs/bitcoin/checker:btc_checker_canister",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
@@ -128,8 +125,7 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps =
-        MESSAGE_CANISTER_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
+        MESSAGE_CANISTER_RUNTIME_DEPS + [
             # Keep sorted.
             "//rs/bitcoin/checker:btc_checker_canister",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
@@ -155,8 +151,7 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps =
-        MESSAGE_CANISTER_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
+        MESSAGE_CANISTER_RUNTIME_DEPS + [
             # Keep sorted.
             "//rs/bitcoin/checker:btc_checker_canister",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
@@ -182,8 +177,7 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps =
-        MESSAGE_CANISTER_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
+        MESSAGE_CANISTER_RUNTIME_DEPS + [
             # Keep sorted.
             "//rs/bitcoin/checker:btc_checker_canister",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
@@ -209,8 +203,7 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps =
-        MESSAGE_CANISTER_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
+        MESSAGE_CANISTER_RUNTIME_DEPS + [
             # Keep sorted.
             "//rs/bitcoin/checker:btc_checker_canister",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
@@ -235,8 +228,7 @@ system_test_nns(
         ],
         test_name = adapter + "_adapter_basics_test",
         runtime_deps =
-            MESSAGE_CANISTER_RUNTIME_DEPS +
-            UNIVERSAL_VM_RUNTIME_DEPS + [
+            MESSAGE_CANISTER_RUNTIME_DEPS + [
                 # Keep sorted.
                 "//rs/tests:ckbtc_uvm_config_image",
                 "//rs/universal_canister/impl:universal_canister.wasm.gz",

@@ -39,13 +39,6 @@ struct Operation {
     value: Option<u8>,
 }
 
-/// The result of `read` and `read_write` operations. Represents the sum
-/// of all 8 byte words in the given memory region.
-#[derive(Deserialize, Serialize)]
-struct Sum {
-    value: u64,
-}
-
 thread_local! {
     /// A random number generator used to perform writes/reads to/from
     /// memory at random offsets.

@@ -11,7 +11,7 @@
 // You can setup this test by executing the following commands:
 //
 //   $ ci/container/container-run.sh
-//   $ ict test consensus_performance_colocate --keepalive -- --test_tmpdir=./performance
+//   $ ict test consensus_performance_colocate --keepalive -- --test_tmpdir=./performance --test_env DOWNLOAD_P8S_DATA=1
 //
 // The --test_tmpdir=./performance will store the test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
@@ -35,6 +35,20 @@
 //     IC Progress Clock at http://grafana.performance--1681227226065.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now
 //   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:169:0]
 //     Grafana at http://grafana.performance--1681227226065.testnet.farm.dfinity.systems
+//
+// To inspect the metrics after the test has finished, exit the dev container
+// and run a local p8s and Grafana on the downloaded p8s data directory using:
+//
+//   $ rs/tests/run-p8s.sh --grafana-dashboards-dir ~/k8s/bases/apps/ic-dashboards performance/_tmp/*/setup/colocated_test/tests/test/universal_vms/prometheus/prometheus-data-dir.tar.zst
+//
+// Note this this script requires Nix so make sure it's installed (https://nixos.org/download/).
+// The script also requires a local clone of https://github.com/dfinity-ops/k8s containing the Grafana dashboards.
+//
+// Then, on your laptop, forward the Grafana port 3000 to your devenv:
+//
+//   $ ssh devenv -L 3000:localhost:3000 -N
+//
+// and load http://localhost:3000/ in your browser to inspect the dashboards.
 //
 // To access the NNS or II dapps look for the following log lines:
 //
@@ -192,6 +206,24 @@ fn test_large_messages(env: TestEnv) {
     test(env, 950_000, 4.0)
 }
 
+fn teardown(env: TestEnv) {
+    let should_download_prometheus_data =
+        std::env::var("DOWNLOAD_P8S_DATA").is_ok_and(|v| v == "true" || v == "1");
+    if should_download_prometheus_data {
+        env.download_prometheus_data_dir_if_exists();
+        env.emit_report(String::from(
+            "Downloaded prometheus data to 'prometheus-data-dir.tar.zst' in the test output \
+            directory. You can now use `rs/tests/run-p8s.sh` script to play with the metrics",
+        ));
+    } else {
+        env.emit_report(String::from(
+            "Not downloading the prometheus data. \
+            If you want to download it on the next test run, \
+            please pass `--test_env DOWNLOAD_P8S_DATA=1` as an argument to the `ict` command",
+        ));
+    }
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         // Since we setup VMs in sequence it takes more than the default timeout
@@ -202,6 +234,7 @@ fn main() -> Result<()> {
         .add_test(systest!(test_small_messages))
         .add_test(systest!(test_few_large_messages))
         .add_test(systest!(test_large_messages))
+        .with_teardown(teardown)
         .execute_from_args()?;
     Ok(())
 }

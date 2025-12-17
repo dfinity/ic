@@ -10,6 +10,7 @@ mod confidentiality_formatting;
 mod disclose;
 #[allow(dead_code)]
 mod getter;
+#[allow(dead_code)]
 mod logs;
 #[allow(dead_code)]
 mod metrics;

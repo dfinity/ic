@@ -6,7 +6,6 @@ use anyhow::Result;
 use grub::{BootAlternative, BootCycle, GrubEnv, WithDefault};
 use ic_device::mount::{FileSystem, MountOptions, PartitionProvider};
 use std::fs::File;
-use std::process::Command;
 use tempfile::NamedTempFile;
 use uuid::Uuid;
 
@@ -79,27 +78,10 @@ pub async fn prepare_direct_boot(
                 file_system: GRUB_PARTITION_FS,
             },
         )
-        .await
         .context("Could not mount grub partition")?;
 
     let grubenv_path = grub_partition.mount_point().join("grubenv");
-    let grubenv_res = File::open(&grubenv_path).context("Could not open grubenv");
-    let Ok(grubenv_file) = grubenv_res else {
-        // If grubenv is not found, add a list of files from the grub partition
-        // to the error context.
-        let ls_output = Command::new("ls")
-            .arg("-lah")
-            .arg(grub_partition.mount_point())
-            .output()
-            .context("Failed to list grubenv_path")?;
-
-        return Err(grubenv_res
-            .context(format!(
-                "grub partition files: {{{}}}",
-                String::from_utf8_lossy(&ls_output.stdout)
-            ))
-            .unwrap_err());
-    };
+    let grubenv_file = File::open(&grubenv_path).context("Could not open grubenv")?;
 
     let mut grubenv = GrubEnv::read_from(grubenv_file)?;
 
@@ -130,7 +112,6 @@ pub async fn prepare_direct_boot(
                 file_system: BOOT_PARTITION_FS,
             },
         )
-        .await
         .with_context(|| format!("Could not mount boot partition {boot_alternative}"))?;
 
     let boot_args_path = boot_partition.mount_point().join("boot_args");
@@ -611,7 +592,6 @@ mod tests {
                 .expect_err("prepare_direct_boot should fail")
         );
         assert!(debug_error.contains("Could not open grubenv"));
-        assert!(debug_error.contains("grub partition files"));
     }
 
     #[tokio::test]

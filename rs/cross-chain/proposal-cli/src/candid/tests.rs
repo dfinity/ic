@@ -45,6 +45,7 @@ fn should_parse_constructor_parameters() {
             || canister == TargetCanister::SolRpc
             || canister == TargetCanister::Bitcoin
             || canister == TargetCanister::BtcWatchdog
+            || canister == TargetCanister::Dogecoin
         {
             continue;
         }

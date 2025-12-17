@@ -20,6 +20,7 @@ type canister_settings = record {
     freezing_threshold : opt nat;
     reserved_cycles_limit : opt nat;
     log_visibility : opt log_visibility;
+    log_memory_limit : opt nat;
     wasm_memory_limit : opt nat;
     wasm_memory_threshold : opt nat;
     environment_variables : opt vec environment_variable;
@@ -33,6 +34,7 @@ type definite_canister_settings = record {
     freezing_threshold : nat;
     reserved_cycles_limit : nat;
     log_visibility : log_visibility;
+    log_memory_limit : nat;
     wasm_memory_limit : nat;
     wasm_memory_threshold: nat;
     environment_variables : vec environment_variable;
@@ -84,6 +86,7 @@ type change_details = variant {
             version : nat64;
             total_num_changes : nat64;
         };
+        requested_by : principal;
     };
 };
 
@@ -348,6 +351,7 @@ type http_request_args = record {
         context : blob;
     };
     is_replicated : opt bool;
+    pricing_version: opt nat32;
 };
 
 type ecdsa_public_key_args = record {
@@ -470,6 +474,8 @@ type snapshot = record {
 type take_canister_snapshot_args = record {
   canister_id : canister_id;
   replace_snapshot : opt snapshot_id;
+  uninstall_code : opt bool;
+  sender_canister_version : opt nat64;
 };
 
 type take_canister_snapshot_result = snapshot;
@@ -626,6 +632,7 @@ type rename_canister_args = record {
      version : nat64;
      total_num_changes : nat64;
    };
+   requested_by : principal;
    sender_canister_version : nat64;
 };
 

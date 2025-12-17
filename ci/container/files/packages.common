@@ -13,6 +13,7 @@ iproute2
 shellcheck
 xxd
 vim
+retry
 
 # Bitcoin core (for bitcoin adapter integration test)
 libtool
@@ -45,11 +46,6 @@ protobuf-compiler
 llvm
 liblmdb-dev
 liblzma-dev
-
-# Haskell
-libtinfo-dev
-libffi-dev
-libgmp-dev
 
 # IC-OS
 fdisk

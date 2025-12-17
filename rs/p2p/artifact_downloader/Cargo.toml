@@ -31,8 +31,11 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+assert_matches = { workspace = true }
+criterion = { workspace = true }
 futures = { workspace = true }
 http-body-util = { workspace = true }
+ic-crypto-test-utils-canister-threshold-sigs = { path = "../../crypto/test_utils/canister_threshold_sigs" }
 ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-consensus = { path = "../../test_utilities/consensus" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }

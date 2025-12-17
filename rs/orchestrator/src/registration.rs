@@ -15,7 +15,8 @@ use ic_config::{
     metrics::{Config as MetricsConfig, Exporter},
     transport::TransportConfig,
 };
-use ic_interfaces::crypto::IDkgKeyRotationResult;
+use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, threshold_sig_public_key_to_der};
+use ic_interfaces::crypto::{CheckKeysWithRegistryError, IDkgKeyRotationResult};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
@@ -30,6 +31,7 @@ use ic_sys::utility_command::UtilityCommand;
 use ic_types::{NodeId, RegistryVersion, SubnetId, crypto::KeyPurpose, messages::MessageId};
 use idna::domain_to_ascii_strict;
 use prost::Message;
+use qrcode::{QrCode, render::unicode};
 use rand::prelude::*;
 use std::{
     net::IpAddr,
@@ -66,6 +68,7 @@ pub(crate) struct NodeRegistration {
     key_handler: Arc<dyn NodeRegistrationCrypto>,
     local_store: Arc<dyn LocalStore>,
     signer: Box<dyn Signer>,
+    display_qr_code: bool,
 }
 
 impl NodeRegistration {
@@ -116,6 +119,12 @@ impl NodeRegistration {
             key_handler,
             local_store,
             signer,
+            // Eventually, this value will be deduced from the `registration` config.
+            //
+            // After the More secure key management for node operators feature is
+            // fully complete and tested, this will be the default, and will be
+            // removed.
+            display_qr_code: cfg!(test),
         }
     }
 
@@ -125,16 +134,7 @@ impl NodeRegistration {
     /// If the node has not been registered, retries registering the node using
     /// one of the nns nodes in `nns_node_list`.
     pub(crate) async fn register_node(&mut self) {
-        let latest_version = self.registry_client.get_latest_version();
-        let key_handler = self.key_handler.clone();
-        if let Err(e) = tokio::task::spawn_blocking(move || {
-            key_handler.check_keys_with_registry(latest_version)
-        })
-        .await
-        .unwrap()
-        {
-            warn!(self.log, "Node keys are not setup: {:?}", e);
-            UtilityCommand::notify_host(format!("Node keys are not setup: {e:?}").as_str(), 1);
+        if self.check_node_registered().await.is_err() {
             self.retry_register_node().await;
         }
         // postcondition: node keys are registered
@@ -144,50 +144,49 @@ impl NodeRegistration {
     async fn retry_register_node(&mut self) {
         let add_node_payload = self.assemble_add_node_message().await;
 
-        while !self.is_node_registered().await {
-            let message = "Node registration not complete. Trying to register it".to_string();
-            warn!(self.log, "{}", message);
-            UtilityCommand::notify_host(&message, 1);
-            match self.signer.get() {
-                Ok(signer) => {
-                    let nns_url = self
-                        .get_random_nns_url_from_config()
-                        .expect("no NNS urls available");
-                    let agent = Agent::builder()
-                        .with_url(nns_url)
-                        .with_identity(signer)
-                        .build()
-                        .expect("Failed to create IC agent");
-                    let add_node_encoded = Encode!(&add_node_payload)
-                        .expect("Could not encode payload for the registration request");
+        // Will contain information needed for the node operator
+        // to approve the add node payload for onboarding.
+        let node_information_for_onboarding = format!(
+            "node-id: {}\nQR code:\n{}",
+            self.node_id,
+            encode_as_qrcode(self.node_id)
+        );
 
-                    if let Err(e) = agent
-                        .update(&Principal::from(REGISTRY_CANISTER_ID), "add_node")
-                        .with_arg(add_node_encoded)
-                        .call_and_wait()
-                        .await
-                    {
-                        let message = format!(
-                            "Node {} registration request failed with error: {}\nUsed payload: {:?}",
-                            self.node_id, e, add_node_payload
-                        );
-                        warn!(self.log, "{}", message);
-                        UtilityCommand::notify_host(&message, 1);
-                    };
-                }
-                Err(e) => {
-                    warn!(self.log, "Failed to create the message signer: {}", e);
-                    UtilityCommand::notify_host(
-                        format!(
-                            "node-id {}: Failed to create the message signer: {}",
-                            self.node_id, e
-                        )
-                        .as_str(),
-                        1,
-                    );
-                }
+        // Any changes to the registry are replicated after some delay, so we sleep between attempts
+        // for that amount of time.
+        let sleep_duration = Duration::from_millis(
+            self.node_config
+                .nns_registry_replicator
+                .poll_delay_duration_ms,
+        );
+        while let Err(e) = self.check_node_registered().await {
+            info!(
+                self.log,
+                "Node registration not complete: {e:?}. Trying to register it."
+            );
+            UtilityCommand::notify_host(
+                format!(
+                    "node-id {}: Node registration not complete. Trying to register it.",
+                    self.node_id
+                )
+                .as_str(),
+                1,
+            );
+
+            if self.display_qr_code {
+                info!(self.log, "{}", node_information_for_onboarding);
+                UtilityCommand::notify_host(&node_information_for_onboarding, 1);
+            }
+
+            if let Err(error_message) = self.do_register_node(&add_node_payload).await {
+                warn!(self.log, "{}", error_message);
+                UtilityCommand::notify_host(
+                    format!("node-id {}: {}", self.node_id, error_message).as_str(),
+                    1,
+                );
             };
-            tokio::time::sleep(Duration::from_secs(5)).await;
+
+            tokio::time::sleep(sleep_duration).await;
         }
 
         UtilityCommand::notify_host(
@@ -198,6 +197,53 @@ impl NodeRegistration {
             .as_str(),
             10,
         );
+    }
+
+    async fn do_register_node(&mut self, add_node_payload: &AddNodePayload) -> Result<(), String> {
+        let signer = self
+            .signer
+            .get()
+            .map_err(|e| format!("Failed to create the message signer: {}", e))?;
+
+        let nns_url = self
+            .get_random_nns_url_from_config()
+            .ok_or("Failed to get random NNS URL from config")?;
+
+        let agent = Agent::builder()
+            .with_url(nns_url)
+            .with_identity(signer)
+            .build()
+            .map_err(|e| format!("Failed to create IC agent: {}", e))?;
+
+        if let Some(nns_pub_key) = self.get_nns_pub_key_der_from_config() {
+            agent.set_root_key(nns_pub_key);
+        } else {
+            // If we cannot determine the NNS public key, we log a warning but still proceed. The
+            // agent will use the mainnet public key hardcoded in the agent library.
+            let message = "Failed to get NNS public key from config";
+            warn!(self.log, "{}", message);
+            UtilityCommand::notify_host(
+                format!("node-id {}: {}", self.node_id, message).as_str(),
+                1,
+            );
+        }
+
+        let add_node_encoded = Encode!(add_node_payload)
+            .expect("Could not encode payload for the registration request");
+
+        agent
+            .update(&Principal::from(REGISTRY_CANISTER_ID), "add_node")
+            .with_arg(add_node_encoded)
+            .call_and_wait()
+            .await
+            .map_err(|e| {
+                format!(
+                    "Node {} registration request failed with error: {}\nUsed payload: {:?}",
+                    self.node_id, e, add_node_payload
+                )
+            })?;
+
+        Ok(())
     }
 
     async fn assemble_add_node_message(&self) -> AddNodePayload {
@@ -258,13 +304,10 @@ impl NodeRegistration {
         let registry_version = self.registry_client.get_latest_version();
         // If there is no Chain key config or no key_ids, threshold signing is disabled.
         // Delta is the key rotation period of a single node, if it is None, key rotation is disabled.
-        let delta = match self.get_key_rotation_period(registry_version, subnet_id) {
-            Some(delta) => delta,
-            None => {
-                self.metrics
-                    .observe_key_rotation_status(KeyRotationStatus::Disabled);
-                return;
-            }
+        let Some(delta) = self.get_key_rotation_period(registry_version, subnet_id) else {
+            self.metrics
+                .observe_key_rotation_status(KeyRotationStatus::Disabled);
+            return;
         };
 
         let key_handler = self.key_handler.clone();
@@ -303,8 +346,7 @@ impl NodeRegistration {
         .unwrap()
         {
             Ok(IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(rotation_outcome)) => {
-                self.register_key(registry_version, PublicKey::from(rotation_outcome))
-                    .await
+                self.register_key(PublicKey::from(rotation_outcome)).await
             }
             Ok(IDkgKeyRotationResult::LatestRotationTooRecent) => {}
             Err(e) => {
@@ -315,10 +357,10 @@ impl NodeRegistration {
         }
     }
 
-    async fn register_key(&self, registry_version: RegistryVersion, idkg_pk: PublicKey) {
+    async fn register_key(&self, idkg_pk: PublicKey) {
         self.metrics
             .observe_key_rotation_status(KeyRotationStatus::Registering);
-        match self.try_to_register_key(registry_version, idkg_pk).await {
+        match self.try_to_register_key(idkg_pk).await {
             Ok(()) => {
                 self.metrics
                     .observe_key_rotation_status(KeyRotationStatus::Registered);
@@ -395,20 +437,14 @@ impl NodeRegistration {
         is_time_to_rotate_in_subnet(delta, subnet_size, node_key_timestamps)
     }
 
-    async fn try_to_register_key(
-        &self,
-        registry_version: RegistryVersion,
-        idkg_pk: PublicKey,
-    ) -> Result<(), String> {
+    async fn try_to_register_key(&self, idkg_pk: PublicKey) -> Result<(), String> {
         info!(self.log, "Trying to register rotated idkg key...");
 
-        let node_id = self.node_id;
-        let nns_url = match self
-            .get_random_nns_url()
+        let Some(nns_url) = self
+            .get_random_nns_url_from_registry()
             .or_else(|| self.get_random_nns_url_from_config())
-        {
-            Some(url) => url,
-            None => return Err("Failed to get random NNS URL.".into()),
+        else {
+            return Err("Failed to get random NNS URL.".into());
         };
         let key_handler = self.key_handler.clone();
         let node_pub_key_opt = tokio::task::spawn_blocking(move || {
@@ -437,7 +473,7 @@ impl NodeRegistration {
             #[allow(clippy::disallowed_methods)]
             tokio::task::block_in_place(|| {
                 key_handler
-                    .sign_basic(msg, node_id, registry_version)
+                    .sign_basic(msg)
                     .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
                     .map(|value| value.get().0)
             })
@@ -449,6 +485,18 @@ impl NodeRegistration {
             .with_identity(signer)
             .build()
             .map_err(|e| format!("Failed to create IC agent: {e}"))?;
+
+        if let Some(nns_pub_key) = self
+            .get_nns_pub_key_der_from_registry()
+            .or_else(|| self.get_nns_pub_key_der_from_config())
+        {
+            agent.set_root_key(nns_pub_key);
+        } else {
+            // If we cannot determine the NNS public key, we log a warning but still proceed. The
+            // agent will use the mainnet public key hardcoded in the agent library.
+            warn!(self.log, "Failed to get NNS public key");
+        }
+
         let update_node_payload = UpdateNodeDirectlyPayload {
             idkg_dealing_encryption_pk: Some(protobuf_to_vec(idkg_pk)),
         };
@@ -491,7 +539,7 @@ impl NodeRegistration {
     }
 
     // Returns one random NNS url from registry.
-    fn get_random_nns_url(&self) -> Option<Url> {
+    fn get_random_nns_url_from_registry(&self) -> Option<Url> {
         let version = self.registry_client.get_latest_version();
         let root_subnet_id = match self.registry_client.get_root_subnet_id(version) {
             Ok(Some(id)) => id,
@@ -527,22 +575,69 @@ impl NodeRegistration {
         urls.pop()
     }
 
-    async fn is_node_registered(&self) -> bool {
-        let latest_version = self.registry_client.get_latest_version();
-        let key_handler = self.key_handler.clone();
-        match tokio::task::spawn_blocking(move || {
-            key_handler.check_keys_with_registry(latest_version)
-        })
-        .await
-        .unwrap()
-        {
-            Ok(_) => true,
+    fn get_nns_pub_key_der_from_config(&self) -> Option<Vec<u8>> {
+        let Some(path) = self.node_config.registration.nns_pub_key_pem.as_ref() else {
+            warn!(self.log, "NNS public key path not set in the config");
+            return None;
+        };
+
+        let pub_key = match parse_threshold_sig_key(path) {
+            Ok(pub_key) => pub_key,
             Err(e) => {
-                warn!(self.log, "Node keys are not setup: {:?}", e);
-                UtilityCommand::notify_host(format!("Node keys are not setup: {e:?}").as_str(), 1);
-                false
+                warn!(self.log, "Failed to parse NNS public key: {:?}", e);
+                return None;
+            }
+        };
+
+        match threshold_sig_public_key_to_der(pub_key) {
+            Ok(der) => Some(der),
+            Err(e) => {
+                warn!(self.log, "Failed to convert NNS public key to DER: {:?}", e);
+                None
             }
         }
+    }
+
+    fn get_nns_pub_key_der_from_registry(&self) -> Option<Vec<u8>> {
+        let version = self.registry_client.get_latest_version();
+        let root_subnet_id = match self.registry_client.get_root_subnet_id(version) {
+            Ok(Some(id)) => id,
+            err => {
+                warn!(self.log, "Failed to get root subnet id: {:?}", err);
+                return None;
+            }
+        };
+
+        let pub_key = match self
+            .registry_client
+            .get_threshold_signing_public_key_for_subnet(root_subnet_id, version)
+        {
+            Ok(Some(pub_key)) => pub_key,
+            Ok(None) => {
+                warn!(self.log, "NNS public key not set in the registry");
+                return None;
+            }
+            Err(e) => {
+                warn!(self.log, "Error when retrieving NNS public key: {:?}", e);
+                return None;
+            }
+        };
+
+        match threshold_sig_public_key_to_der(pub_key) {
+            Ok(der) => Some(der),
+            Err(e) => {
+                warn!(self.log, "Failed to convert NNS public key to DER: {:?}", e);
+                None
+            }
+        }
+    }
+
+    async fn check_node_registered(&self) -> Result<(), CheckKeysWithRegistryError> {
+        let latest_version = self.registry_client.get_latest_version();
+        let key_handler = self.key_handler.clone();
+        tokio::task::spawn_blocking(move || key_handler.check_keys_with_registry(latest_version))
+            .await
+            .unwrap()
     }
 }
 
@@ -691,11 +786,60 @@ fn protobuf_to_vec<M: Message>(entry: M) -> Vec<u8> {
     buf
 }
 
+fn encode_as_qrcode(node_id: NodeId) -> String {
+    QrCode::new(node_id.to_string())
+        .map(|code| code.render::<unicode::Dense1x2>().build())
+        .unwrap_or_else(|e| format!("Failed to encode the Node ID as a QR Code: {e}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use ic_sys::utility_command::UtilityCommand;
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_types::PrincipalId;
+
+    #[test]
+    fn encoding_node_ids_works() {
+        let test_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
+
+        let encoded = encode_as_qrcode(test_node_id);
+
+        let expected = r"
+    █▀▀▀▀▀█ ▀▄█▄ ██▄▀ ▄▄  █▀▀▀▀▀█
+    █ ███ █ ▄▄ █▄ ▀  ▀    █ ███ █
+    █ ▀▀▀ █ █▄  █   ▄▀▀▄  █ ▀▀▀ █
+    ▀▀▀▀▀▀▀ █▄█ ▀▄▀▄█▄█ ▀ ▀▀▀▀▀▀▀
+    █▄▄ █ ▀██ ▄▄██▄ ▄▀▀▀▀▀████▄▄█
+    ▄▄▄██▄▀  ▀▄▄█ ▄ ▀▄  ▀▀█ ▄▄▀▀▀
+    ▀ ▄ ▄ ▀▄▀▄▀██▀▀▀▀▀▄▀▀▀▄ ▄▄ ▀█
+    ▄██▄▄█▀▀██▄ ▄█▀█▄█▄ ▀▀█▄ ▀ ▄▀
+    ▄█ ▄ ▀▀▀   ▄▀█▄ ▄█▄▀▀▀▄▄▄▀  █
+      █▀▄▄▀█ █▄█▀ ▄ ▀█▄ █▀█▄ █  ▀
+    ▀▀  ▀ ▀ ▄▀ ▄█▀▀▀▀▄█▄█▀▀▀█▀ ▄▄
+    █▀▀▀▀▀█ ▀█ █▄█▀█▄ ▀▀█ ▀ █▄ ▀▀
+    █ ███ █ ▀▄▀▄▄█▄ ▄ ▄▀██▀▀▀▄▄▄▀
+    █ ▀▀▀ █  █ ▄█▀  ▀█▄ ▄█▄▄▄█ ██
+    ▀▀▀▀▀▀▀ ▀▀ ▀ ▀▀▀▀ ▀ ▀▀  ▀▀ ▀
+"
+        .to_string();
+
+        let normalize = |s: &str| -> String {
+            s.lines()
+                .map(|line| line.trim().to_string())
+                .filter(|line| !line.is_empty())
+                .map(|line| format!("{line}\n"))
+                .collect()
+        };
+
+        assert_eq!(
+            normalize(&expected),
+            normalize(&encoded),
+            "Expected something like:\n{}\nBut got something like:\n{}",
+            normalize(&expected),
+            normalize(&encoded)
+        );
+    }
 
     #[test]
     fn default_http_config_endpoint_succeeds() {
@@ -830,8 +974,6 @@ mod tests {
                 fn sign_basic(
                     &self,
                     message: &MessageId,
-                    signer: NodeId,
-                    registry_version: RegistryVersion,
                 ) -> CryptoResult<BasicSigOf<MessageId>>;
             }
 

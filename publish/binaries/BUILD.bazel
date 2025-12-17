@@ -1,11 +1,11 @@
 load("@os_info//:defs.bzl", "os_info")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//bazel:defs.bzl", "gzip_compress")
 load("//publish:defs.bzl", "artifact_bundle", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
 ALL_BINARIES = {
-    "canary-proxy": "//rs/boundary_node/canary_proxy:canary-proxy",
     "canister_sandbox": "//rs/canister_sandbox",
     "compiler_sandbox": "//rs/canister_sandbox:compiler_sandbox",
     "ic-btc-adapter": "//rs/bitcoin/adapter:ic-btc-adapter",
@@ -15,7 +15,6 @@ ALL_BINARIES = {
     "ic-admin": "//rs/registry/admin:ic-admin",
     "ic-backup": "//rs/backup:ic-backup",
     "ic-boundary": "//rs/boundary_node/ic_boundary:ic-boundary",
-    "ic-boundary-tls": "//rs/boundary_node/ic_boundary:ic-boundary-tls",
     "ic-https-outcalls-adapter": "//rs/https_outcalls/adapter:ic-outcalls-adapter-with-http",
     "ic-https-outcalls-adapter-https-only": "//rs/https_outcalls/adapter:ic-https-outcalls-adapter",
     "ic-consensus-pool-util": "//rs/artifact_pool:ic-consensus-pool-util",
@@ -33,7 +32,6 @@ ALL_BINARIES = {
     "sns": "//rs/sns/cli:sns",
     "sns-audit": "//rs/sns/audit:sns-audit",
     "state-tool": "//rs/state_tool:state-tool",
-    "systemd-journal-gatewayd-shim": "//rs/boundary_node/systemd_journal_gatewayd_shim:systemd-journal-gatewayd-shim",
     "pocket-ic": "//rs/pocket_ic_server:pocket-ic-server",
     "types-test": "//rs/types/types:types_test",
     "replicated-state-test": "//rs/replicated_state:replicated_state_test_binary",
@@ -45,7 +43,6 @@ TESTONLY_BINARIES = [
     "e2e-test-driver",
     "ic-admin",
     "ic-boundary",
-    "ic-boundary-tls",
     "ic-https-outcalls-adapter",
     "ic-nns-init",
     "ic-prep",
@@ -60,6 +57,12 @@ TESTONLY_BINARIES = [
 NO_STRIP_BINARIES = [
     "canister_sandbox",
     "replica",
+]
+
+# The name of binaries we have no reason to release
+# on macOS Darwin
+NO_DARWIN_BINARIES = [
+    "orchestrator",
 ]
 
 TEST_BINARIES = [
@@ -111,7 +114,10 @@ TEST_BINARIES = [
 
 filegroup(
     name = "binaries",
-    srcs = [name + ".gz" for name in ALL_BINARIES],
+    srcs = select({
+        "@platforms//os:linux": [name + ".gz" for name in ALL_BINARIES],
+        "@platforms//os:osx": [name + ".gz" for name in ALL_BINARIES if name not in NO_DARWIN_BINARIES],
+    }),
 )
 
 artifact_bundle(

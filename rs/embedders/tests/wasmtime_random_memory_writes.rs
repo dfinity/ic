@@ -1,6 +1,6 @@
 use ic_config::{
     embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
-    flag_status::FlagStatus, subnet_config::SchedulerConfig,
+    subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
@@ -11,10 +11,12 @@ use ic_embedders::{
         SystemApiImpl, sandbox_safe_system_state::SandboxSafeSystemState,
     },
 };
-use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
+};
 use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages};
+use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_execution_environment::bytes_and_logging_cost;
@@ -98,11 +100,7 @@ fn test_api_for_update(
         canister_current_memory_usage,
         canister_current_message_memory_usage,
         ExecutionParameters {
-            instruction_limits: InstructionLimits::new(
-                FlagStatus::Disabled,
-                instruction_limit,
-                instruction_limit,
-            ),
+            instruction_limits: InstructionLimits::new(instruction_limit, instruction_limit),
             wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
             canister_guaranteed_callback_quota: HypervisorConfig::default()
@@ -714,9 +712,9 @@ mod tests {
 
             // (call $trap (i32.const 0) (i32.const 2147483648)) ;; equivalent to 2 ^ 31
             let expected_instructions = 1 // Function is 1 instruction.
-                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
+                + instruction_to_cost(&wirm::wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
                 + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::TRAP.get()
-                + 2 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 }, WasmMemoryType::Wasm32);
+                + 2 * instruction_to_cost(&wirm::wasmparser::Operator::I32Const { value: 1 }, WasmMemoryType::Wasm32);
             assert_eq!(
                 instructions_executed.get(),
                 expected_instructions
@@ -781,12 +779,12 @@ mod tests {
         // (drop (call $ic0_stable_grow (i32.const 1)))
         // (call $ic0_stable64_read (i64.const 0) (i64.const 0) (i64.const {STABLE_OP_BYTES}))
         fn setup_instruction_overhead() -> u64 {
-            instruction_to_cost(&wasmparser::Operator::Drop, WasmMemoryType::Wasm32)
-                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
+            instruction_to_cost(&wirm::wasmparser::Operator::Drop, WasmMemoryType::Wasm32)
+                + instruction_to_cost(&wirm::wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
                 + ic_embedders::wasmtime_embedder::system_api_complexity::overhead_native::STABLE_GROW.get()
-                + instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 }, WasmMemoryType::Wasm32)
-                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
-                + 3 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 }, WasmMemoryType::Wasm32)
+                + instruction_to_cost(&wirm::wasmparser::Operator::I32Const { value: 1 }, WasmMemoryType::Wasm32)
+                + instruction_to_cost(&wirm::wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
+                + 3 * instruction_to_cost(&wirm::wasmparser::Operator::I32Const { value: 1 }, WasmMemoryType::Wasm32)
                 + 1 // Function is 1 instruction.
         }
 

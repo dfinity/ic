@@ -128,7 +128,11 @@ const LABEL_FETCH: &str = "fetch";
 const LABEL_HARDLINK_FILES: &str = "hardlink_files";
 const LABEL_COPY_CHUNKS: &str = "copy_chunks";
 const LABEL_PREALLOCATE: &str = "preallocate";
+const LABEL_PREALLOCATE_DIRECTORIES: &str = "preallocate_directories";
+const LABEL_PREALLOCATE_FILES: &str = "preallocate_files";
 const LABEL_STATE_SYNC_MAKE_CHECKPOINT: &str = "state_sync_make_checkpoint";
+const LABEL_LOAD_AND_VALIDATE_CHECKPOINT: &str = "load_and_validate_checkpoint";
+const LABEL_ON_SYNCED_CHECKPOINT: &str = "on_synced_checkpoint";
 const LABEL_FETCH_META_MANIFEST_CHUNK: &str = "fetch_meta_manifest_chunk";
 const LABEL_FETCH_MANIFEST_CHUNK: &str = "fetch_manifest_chunk";
 const LABEL_FETCH_STATE_CHUNK: &str = "fetch_state_chunk";
@@ -190,6 +194,7 @@ pub struct StateSyncMetrics {
     remaining: IntGauge,
     corrupted_chunks_critical: IntCounter,
     corrupted_chunks: IntCounterVec,
+    add_chunk_duration: HistogramVec,
 }
 
 #[derive(Clone)]
@@ -640,7 +645,7 @@ impl StateSyncMetrics {
 
         let step_duration = metrics_registry.histogram_vec(
             "state_sync_step_duration_seconds",
-            "Duration of state sync sub-steps in seconds indexed by step ('hardlink_files', 'copy_chunks', 'fetch', 'state_sync_make_checkpoint')",
+            "Duration of state sync sub-steps in seconds indexed by step ('hardlink_files', 'copy_chunks', 'fetch', 'state_sync_make_checkpoint', 'preallocate_directories', 'preallocate_files', 'load_and_validate_checkpoint', 'on_synced_checkpoint')",
             // 0.1s, 0.2s, 0.5s, 1s, 2s, 5s, …, 1000s, 2000s, 5000s
             decimal_buckets(-1, 3),
             &["step"],
@@ -652,6 +657,10 @@ impl StateSyncMetrics {
             LABEL_COPY_CHUNKS,
             LABEL_FETCH,
             LABEL_STATE_SYNC_MAKE_CHECKPOINT,
+            LABEL_PREALLOCATE_DIRECTORIES,
+            LABEL_PREALLOCATE_FILES,
+            LABEL_LOAD_AND_VALIDATE_CHECKPOINT,
+            LABEL_ON_SYNCED_CHECKPOINT,
         ] {
             step_duration.with_label_values(&[*step]);
         }
@@ -676,6 +685,32 @@ impl StateSyncMetrics {
             corrupted_chunks.with_label_values(&[*source]);
         }
 
+        let add_chunk_duration = metrics_registry.histogram_vec(
+            "state_sync_add_chunk_duration_seconds",
+            "Duration of add_chunk calls indexed by state before, state after, and success status.",
+            // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, …, 100s, 200s, 500s
+            decimal_buckets(-4, 2),
+            &["state_before", "state_after", "status"],
+        );
+
+        // Preallocate important state transitions
+        let transitions_to_preallocate = &[
+            // Successful transitions
+            ("blank", "prep", "ok"),
+            ("prep", "loading", "ok"),
+            ("loading", "complete", "ok"),
+            ("prep", "complete", "ok"),
+            ("prep", "prep", "ok"),
+            ("loading", "loading", "ok"),
+            ("blank", "blank", "err"),
+            ("prep", "prep", "err"),
+            ("loading", "loading", "err"),
+        ];
+
+        for (state_before, state_after, success) in transitions_to_preallocate {
+            add_chunk_duration.with_label_values(&[state_before, state_after, success]);
+        }
+
         Self {
             size,
             duration,
@@ -683,6 +718,7 @@ impl StateSyncMetrics {
             remaining,
             corrupted_chunks_critical,
             corrupted_chunks,
+            add_chunk_duration,
         }
     }
 }
@@ -867,6 +903,8 @@ pub struct StateManagerImpl {
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     malicious_flags: MaliciousFlags,
     latest_height_update_time: Arc<Mutex<Instant>>,
+    /// The height at which this StateManager was started. Set once during initialization and never modified.
+    started_height: Height,
 }
 
 #[cfg(debug_assertions)]
@@ -875,7 +913,7 @@ impl Drop for StateManagerImpl {
         // Make sure the tip thread didn't panic. Otherwise we may be blind to it in tests.
         // If the tip thread panics after the latest communication with tip_channel the test returns
         // success.
-        self.flush_tip_channel();
+        self.flush_all();
     }
 }
 
@@ -1214,6 +1252,12 @@ impl StateManagerImpl {
         flush_tip_channel(&self.tip_channel)
     }
 
+    /// Finish all asynchronous operations.
+    pub fn flush_all(&self) {
+        self.flush_tip_channel();
+        self.state_layout().flush_checkpoint_removal_channel();
+    }
+
     /// Height for the initial default state.
     const INITIAL_STATE_HEIGHT: Height = Height::new(0);
 
@@ -1228,6 +1272,12 @@ impl StateManagerImpl {
         malicious_flags: MaliciousFlags,
     ) -> Self {
         let metrics = StateManagerMetrics::new(metrics_registry, log.clone());
+
+        let _timer = metrics
+            .api_call_duration
+            .with_label_values(&["new"])
+            .start_timer();
+
         info!(
             log,
             "Using path '{}' to manage local state",
@@ -1431,6 +1481,7 @@ impl StateManagerImpl {
                 ReplicatedState::new(own_subnet_id, own_subnet_type),
             ),
         };
+        let started_height = Height::new(latest_state_height.load(Ordering::Relaxed));
 
         let snapshots: VecDeque<Snapshot> = std::iter::once(initial_snapshot)
             .chain(
@@ -1454,6 +1505,13 @@ impl StateManagerImpl {
 
         metrics.min_resident_height.set(last_snapshot_height);
         metrics.max_resident_height.set(last_snapshot_height);
+        metrics.state_size.set(
+            states_metadata
+                .values()
+                .last()
+                .and_then(|metadata| metadata.manifest())
+                .map_or(0, |manifest| manifest.state_size_bytes() as i64),
+        );
 
         let states = Arc::new(parking_lot::RwLock::new(SharedState {
             certifications_metadata,
@@ -1521,6 +1579,7 @@ impl StateManagerImpl {
             fd_factory,
             malicious_flags,
             latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
+            started_height,
         }
     }
 
@@ -1535,6 +1594,11 @@ impl StateManagerImpl {
     /// StateManager.
     pub fn state_layout(&self) -> &StateLayout {
         &self.state_layout
+    }
+
+    /// Returns the height at which this StateManager was started.
+    pub fn started_height(&self) -> Height {
+        self.started_height
     }
 
     /// Populate `num_page_maps_by_load_status` in the metrics with their actual
@@ -1777,11 +1841,15 @@ impl StateManagerImpl {
 
         for (checkpoint_layout, state) in states {
             let height = checkpoint_layout.height();
-            certifications_metadata.insert(
+            let certification = Self::compute_certification_metadata(metrics, log, &state)
+                .unwrap_or_else(|err| fatal!(log, "Failed to compute hash tree: {:?}", err));
+            info!(
+                log,
+                "Certification hash for height {} at startup: {:?}",
                 height,
-                Self::compute_certification_metadata(metrics, log, &state)
-                    .unwrap_or_else(|err| fatal!(log, "Failed to compute hash tree: {:?}", err)),
+                certification.certified_state_hash
             );
+            certifications_metadata.insert(height, certification);
 
             let metadata = metadatas.remove(&height);
 
@@ -1965,11 +2033,7 @@ impl StateManagerImpl {
             );
         }
 
-        let state_size_bytes: i64 = manifest
-            .file_table
-            .iter()
-            .map(|f| f.size_bytes as i64)
-            .sum();
+        let state_size_bytes = manifest.state_size_bytes() as i64;
 
         if !is_state_metadata_present {
             // Normal case: we don't have the state metadata yet.
@@ -3108,6 +3172,15 @@ impl StateManager for StateManagerImpl {
             Self::compute_certification_metadata(&self.metrics, &self.log, &state)
                 .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
 
+        if scope == CertificationScope::Full {
+            info!(
+                self.log,
+                "Certification hash for height {}: {:?}",
+                height,
+                certification_metadata.certified_state_hash
+            );
+        }
+
         // This step is expensive, so we do it before the write lock for `states`.
         let next_tip = {
             let _timer = self
@@ -3336,6 +3409,12 @@ impl StateReader for StateManagerImpl {
                     Arc::new(initial_state(self.own_subnet_id, self.own_subnet_type).take()),
                 )
             })
+    }
+
+    fn get_latest_certified_state(&self) -> Option<Labeled<Arc<Self::State>>> {
+        let reader = self.certified_state_reader()?;
+
+        Some(Labeled::new(reader.get_height(), reader.state))
     }
 
     fn get_state_at(&self, height: Height) -> StateManagerResult<Labeled<Arc<Self::State>>> {
@@ -3829,6 +3908,21 @@ impl PageAllocatorFileDescriptorImpl {
 
 pub mod testing {
     use super::*;
+
+    /// Trait for test-only functionality on StateSync
+    pub trait StateSyncTesting {
+        /// Force validation to be enabled for testing purposes
+        fn set_test_force_validate(&mut self);
+    }
+
+    impl StateSyncTesting for crate::state_sync::StateSync {
+        fn set_test_force_validate(&mut self) {
+            #[cfg(debug_assertions)]
+            {
+                self.test_force_validate = true;
+            }
+        }
+    }
 
     pub trait StateManagerTesting {
         /// Testing only: Purges the `manifest` at `height` in `states.states_metadata`.

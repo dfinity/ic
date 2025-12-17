@@ -8,10 +8,11 @@ mod hash;
 pub use hash::CryptoHashDomain;
 pub use hash::CryptoHashable;
 pub use hash::CryptoHashableTestDummy;
-pub use hash::DOMAIN_IC_REQUEST;
 pub use hash::crypto_hash;
 
 mod sign;
+
+pub use sign::DOMAIN_IC_REQUEST;
 
 use ic_management_canister_types_private::EcdsaCurve;
 use ic_management_canister_types_private::MasterPublicKeyId;
@@ -163,7 +164,7 @@ impl FromStr for KeyPurpose {
 #[allow(non_camel_case_types)]
 #[strum(serialize_all = "snake_case")]
 pub enum AlgorithmId {
-    Placeholder = 0,
+    Unspecified = 0,
     MultiBls12_381 = 1,
     ThresBls12_381 = 2,
     SchnorrSecp256k1 = 3,
@@ -262,7 +263,7 @@ impl From<i32> for AlgorithmId {
             18 => AlgorithmId::ThresholdSchnorrBip340,
             19 => AlgorithmId::ThresholdEd25519,
             20 => AlgorithmId::VetKD,
-            _ => AlgorithmId::Placeholder,
+            _ => AlgorithmId::Unspecified,
         }
     }
 }

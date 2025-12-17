@@ -224,8 +224,16 @@ type Transaction = record {
   kind : text;
   mint : opt Mint;
   approve : opt Approve;
+  fee_collector : opt FeeCollector;
   timestamp : Timestamp;
   transfer : opt Transfer
+};
+
+type FeeCollector = record {
+  caller : opt principal;
+  fee_collector : opt Account;
+  ts : opt nat64;
+  op : opt text
 };
 
 type Burn = record {
@@ -233,14 +241,16 @@ type Burn = record {
   memo : opt blob;
   created_at_time : opt Timestamp;
   amount : nat;
-  spender : opt Account
+  spender : opt Account;
+  fee : opt nat
 };
 
 type Mint = record {
   to : Account;
   memo : opt blob;
   created_at_time : opt Timestamp;
-  amount : nat
+  amount : nat;
+  fee : opt nat
 };
 
 type Transfer = record {

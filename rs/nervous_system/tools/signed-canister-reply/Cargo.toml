@@ -1,0 +1,29 @@
+[package]
+name = "ic-nervous-system-tools-signed-canister-reply"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[[bin]]
+name = "signed-canister-reply"
+path = "src/main.rs"
+
+[dependencies]
+base64           = { workspace = true }
+clap             = { workspace = true }
+ic-agent         = { workspace = true }
+ic-certification = { workspace = true }
+serde            = { workspace = true }
+serde_cbor       = { workspace = true }
+tokio            = { workspace = true }
+
+[dev-dependencies]
+canister-test = { path = "../../../rust_canisters/canister_test" }
+pocket-ic     = { path = "../../../../packages/pocket-ic" }
+
+candid      = { workspace = true }
+hex         = { workspace = true }
+lazy_static = { workspace = true }
+tempfile    = { workspace = true }

@@ -4,7 +4,9 @@ use common::test_helpers::install_registry_canister_with_payload_builder;
 use ic_base_types::PrincipalId;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::swap_node_in_subnet_directly;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::{
+    get_value, swap_node_in_subnet_directly,
+};
 use ic_nns_test_utils::registry::{
     create_subnet_threshold_signing_pubkey_and_cup_mutations,
     invariant_compliant_mutation_as_atomic_req,
@@ -24,25 +26,25 @@ use prost::Message;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::{
-        do_swap_node_in_subnet_directly::{SwapError, SwapNodeInSubnetDirectlyPayload},
+        do_swap_node_in_subnet_directly::{
+            NODE_SWAPS_NODE_OPERATOR_CAPACITY_INTERVAL, NODE_SWAPS_SUBNET_CAPACITY_INTERVAL,
+            SwapError, SwapNodeInSubnetDirectlyPayload,
+        },
         node_management::{
             common::make_add_node_registry_mutations, do_add_node::connection_endpoint_from_string,
         },
     },
 };
 
-use crate::common::test_helpers::install_registry_canister;
 mod common;
 
-// This test ensures that we are not enabling this feature on any network until it
-// is fully implemented.
-//
-// TODO(DRE-551): adapt the logic of the test to not fail if the feature is enabled.
 #[tokio::test]
 async fn ensure_feature_is_turned_off() {
     let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
 
-    install_registry_canister(&pocket_ic).await;
+    let builder = RegistryCanisterInitPayloadBuilder::new();
+
+    install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
 
     let response = swap_node_in_subnet_directly(
         &pocket_ic,
@@ -61,7 +63,7 @@ async fn ensure_feature_is_turned_off() {
 }
 struct NodeInformation {
     subnet_id: Option<SubnetId>,
-    operator: PrincipalId,
+    node_operator: PrincipalId,
 }
 
 fn get_mutations_and_node_ids(
@@ -86,7 +88,7 @@ fn get_mutations_and_node_ids(
         mutations.extend(make_add_node_registry_mutations(
             valid_keys.node_id(),
             NodeRecord {
-                node_operator_id: node.operator.to_vec(),
+                node_operator_id: node.node_operator.to_vec(),
                 xnet: Some(connection_endpoint_from_string(&format!(
                     "192.168.{ind}.1:1234"
                 ))),
@@ -139,18 +141,18 @@ async fn caller_not_whitelisted() {
     let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
 
     let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-    let operator_id = PrincipalId::new_user_test_id(1);
+    let node_operator_id = PrincipalId::new_user_test_id(1);
 
     let (mutations, nodes) = get_mutations_and_node_ids(&[
         // Old node id
         NodeInformation {
             subnet_id: Some(subnet_id),
-            operator: operator_id,
+            node_operator: node_operator_id,
         },
         // New node id
         NodeInformation {
             subnet_id: None,
-            operator: operator_id,
+            node_operator: node_operator_id,
         },
     ]);
 
@@ -164,6 +166,9 @@ async fn caller_not_whitelisted() {
     });
     builder.enable_swapping_feature_globally();
     builder.enable_swapping_feature_for_subnet(subnet_id);
+    // In order to avoid the feature being enabled for all node
+    // operators there needs to be some other caller whitelisted.
+    builder.whitelist_swapping_feature_caller(PrincipalId::new_user_test_id(999));
 
     install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
 
@@ -173,12 +178,12 @@ async fn caller_not_whitelisted() {
             new_node_id: Some(new_node_id.get()),
             old_node_id: Some(old_node_id.get()),
         },
-        operator_id,
+        node_operator_id,
     )
     .await;
 
     let expected_err = SwapError::FeatureDisabledForCaller {
-        caller: operator_id,
+        caller: node_operator_id,
     };
     assert!(
         response
@@ -193,18 +198,18 @@ async fn subnet_not_whitelisted() {
     let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
 
     let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-    let operator_id = PrincipalId::new_user_test_id(1);
+    let node_operator_id = PrincipalId::new_user_test_id(1);
 
     let (mutations, nodes) = get_mutations_and_node_ids(&[
         // Old node id
         NodeInformation {
             subnet_id: Some(subnet_id),
-            operator: operator_id,
+            node_operator: node_operator_id,
         },
         // New node id
         NodeInformation {
             subnet_id: None,
-            operator: operator_id,
+            node_operator: node_operator_id,
         },
     ]);
 
@@ -218,7 +223,11 @@ async fn subnet_not_whitelisted() {
     });
 
     builder.enable_swapping_feature_globally();
-    builder.whitelist_swapping_feature_caller(operator_id);
+    builder.whitelist_swapping_feature_caller(node_operator_id);
+    // There needs to be at least one subnet specified as whitelisted
+    // to actually check the subnet whitelisting, otherwise they will
+    // all be deemed as whitelisted.
+    builder.enable_swapping_feature_for_subnet(SubnetId::new(PrincipalId::new_subnet_test_id(999)));
 
     install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
 
@@ -228,7 +237,7 @@ async fn subnet_not_whitelisted() {
             new_node_id: Some(new_node_id.get()),
             old_node_id: Some(old_node_id.get()),
         },
-        operator_id,
+        node_operator_id,
     )
     .await;
 
@@ -246,19 +255,19 @@ async fn subnet_rate_limited() {
     let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
 
     let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-    let operator_id = PrincipalId::new_user_test_id(1);
+    let node_operator_id = PrincipalId::new_user_test_id(1);
     let different_sender = PrincipalId::new_user_test_id(5);
 
     let (mutations, nodes) = get_mutations_and_node_ids(&[
         // Old node id
         NodeInformation {
             subnet_id: Some(subnet_id),
-            operator: operator_id,
+            node_operator: node_operator_id,
         },
         // New node id
         NodeInformation {
             subnet_id: None,
-            operator: operator_id,
+            node_operator: node_operator_id,
         },
     ]);
 
@@ -272,7 +281,7 @@ async fn subnet_rate_limited() {
     });
 
     builder.enable_swapping_feature_globally();
-    builder.whitelist_swapping_feature_caller(operator_id);
+    builder.whitelist_swapping_feature_caller(node_operator_id);
     builder.whitelist_swapping_feature_caller(different_sender);
     builder.enable_swapping_feature_for_subnet(subnet_id);
 
@@ -284,20 +293,22 @@ async fn subnet_rate_limited() {
             new_node_id: Some(new_node_id.get()),
             old_node_id: Some(old_node_id.get()),
         },
-        operator_id,
+        node_operator_id,
     )
     .await;
 
     assert!(response.is_ok(), "Expected ok but got {response:?}");
 
-    // Make a call again which should fail because of rate limiting
+    // Make a call again which should fail because of rate limiting.
+    // Now old and new nodes are swapped in the payload because they
+    // were swaped in the previous call to the canister.
     let response = swap_node_in_subnet_directly(
         &pocket_ic,
         SwapNodeInSubnetDirectlyPayload {
-            new_node_id: Some(new_node_id.get()),
-            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(old_node_id.get()),
+            old_node_id: Some(new_node_id.get()),
         },
-        operator_id,
+        node_operator_id,
     )
     .await;
 
@@ -314,8 +325,8 @@ async fn subnet_rate_limited() {
     let response = swap_node_in_subnet_directly(
         &pocket_ic,
         SwapNodeInSubnetDirectlyPayload {
-            new_node_id: Some(new_node_id.get()),
-            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(old_node_id.get()),
+            old_node_id: Some(new_node_id.get()),
         },
         different_sender,
     )
@@ -334,18 +345,18 @@ async fn subnet_rate_limit_passed() {
     let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
 
     let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-    let operator_id = PrincipalId::new_user_test_id(1);
+    let node_operator_id = PrincipalId::new_user_test_id(1);
 
     let (mutations, nodes) = get_mutations_and_node_ids(&[
         // Old node id
         NodeInformation {
             subnet_id: Some(subnet_id),
-            operator: operator_id,
+            node_operator: node_operator_id,
         },
         // New node id
         NodeInformation {
             subnet_id: None,
-            operator: operator_id,
+            node_operator: node_operator_id,
         },
     ]);
 
@@ -359,7 +370,7 @@ async fn subnet_rate_limit_passed() {
     });
 
     builder.enable_swapping_feature_globally();
-    builder.whitelist_swapping_feature_caller(operator_id);
+    builder.whitelist_swapping_feature_caller(node_operator_id);
     builder.enable_swapping_feature_for_subnet(subnet_id);
 
     install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
@@ -370,20 +381,23 @@ async fn subnet_rate_limit_passed() {
             new_node_id: Some(new_node_id.get()),
             old_node_id: Some(old_node_id.get()),
         },
-        operator_id,
+        node_operator_id,
     )
     .await;
 
     assert!(response.is_ok(), "Expected ok but got {response:?}");
+    let time_after_successful_call = pocket_ic.get_time().await;
 
-    // Make a call again which should fail because of rate limiting
+    // Make a call again which should fail because of rate limiting.
+    // Old and new nodes are now changed because they were swapped
+    // in a previous call.
     let response = swap_node_in_subnet_directly(
         &pocket_ic,
         SwapNodeInSubnetDirectlyPayload {
-            new_node_id: Some(new_node_id.get()),
-            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(old_node_id.get()),
+            old_node_id: Some(new_node_id.get()),
         },
-        operator_id,
+        node_operator_id,
     )
     .await;
 
@@ -396,25 +410,28 @@ async fn subnet_rate_limit_passed() {
         "Expected error {expected_err:?} but got response: {response:?}"
     );
 
-    // Advance the time for 3 hours because the subnet is rate limited
-    let current_time = pocket_ic.get_time().await;
+    // Advance the time for 1 hour more than the subnet rate limit
     pocket_ic
-        .set_time(current_time + Duration::from_secs(3 * 60 * 60))
+        .set_time(
+            time_after_successful_call
+                + NODE_SWAPS_SUBNET_CAPACITY_INTERVAL
+                + Duration::from_secs(60 * 60),
+        )
         .await;
 
     let response = swap_node_in_subnet_directly(
         &pocket_ic,
         SwapNodeInSubnetDirectlyPayload {
-            new_node_id: Some(new_node_id.get()),
-            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(old_node_id.get()),
+            old_node_id: Some(new_node_id.get()),
         },
-        operator_id,
+        node_operator_id,
     )
     .await;
 
-    let expected_err = SwapError::ProviderRateLimitedOnSubnet {
+    let expected_err = SwapError::OperatorRateLimitedOnSubnet {
         subnet_id,
-        caller: operator_id,
+        caller: node_operator_id,
     };
 
     assert!(
@@ -424,19 +441,22 @@ async fn subnet_rate_limit_passed() {
         "Expected error {expected_err:?} but got response: {response:?}"
     );
 
-    // Advance the time for another 10 hours because the same caller is making a call
-    let current_time = pocket_ic.get_time().await;
+    // Advance the time for 1 hour more than the node operator rate limit
     pocket_ic
-        .set_time(current_time + Duration::from_secs(10 * 60 * 60))
+        .set_time(
+            time_after_successful_call
+                + NODE_SWAPS_NODE_OPERATOR_CAPACITY_INTERVAL
+                + Duration::from_secs(20 * 60 * 60),
+        )
         .await;
 
     let response = swap_node_in_subnet_directly(
         &pocket_ic,
         SwapNodeInSubnetDirectlyPayload {
-            new_node_id: Some(new_node_id.get()),
-            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(old_node_id.get()),
+            old_node_id: Some(new_node_id.get()),
         },
-        operator_id,
+        node_operator_id,
     )
     .await;
 
@@ -448,18 +468,18 @@ async fn e2e_valid_swap() {
     let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
 
     let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-    let operator_id = PrincipalId::new_user_test_id(1);
+    let node_operator_id = PrincipalId::new_user_test_id(1);
 
     let (mutations, nodes) = get_mutations_and_node_ids(&[
         // Old node id
         NodeInformation {
             subnet_id: Some(subnet_id),
-            operator: operator_id,
+            node_operator: node_operator_id,
         },
         // New node id
         NodeInformation {
             subnet_id: None,
-            operator: operator_id,
+            node_operator: node_operator_id,
         },
     ]);
 
@@ -473,7 +493,7 @@ async fn e2e_valid_swap() {
     });
 
     builder.enable_swapping_feature_globally();
-    builder.whitelist_swapping_feature_caller(operator_id);
+    builder.whitelist_swapping_feature_caller(node_operator_id);
     builder.enable_swapping_feature_for_subnet(subnet_id);
 
     install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
@@ -484,9 +504,29 @@ async fn e2e_valid_swap() {
             new_node_id: Some(new_node_id.get()),
             old_node_id: Some(old_node_id.get()),
         },
-        operator_id,
+        node_operator_id,
     )
     .await;
 
-    assert!(response.is_ok(), "Expected ok but got {response:?}")
+    assert!(response.is_ok(), "Expected ok but got {response:?}");
+
+    let response = get_value(&pocket_ic, make_subnet_record_key(subnet_id), None)
+        .await
+        .unwrap();
+
+    let content = match response.content.unwrap() {
+        ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content::Value(items) => items,
+        ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content::LargeValueChunkKeys(_) => panic!("Didn't expect large value chunk keys"),
+    };
+
+    let subnet_record = SubnetRecord::decode(content.as_slice()).unwrap();
+
+    let members: Vec<_> = subnet_record
+        .membership
+        .into_iter()
+        .map(|n| NodeId::new(PrincipalId::try_from(n).unwrap()))
+        .collect();
+
+    assert!(members.contains(&new_node_id));
+    assert!(!members.contains(&old_node_id));
 }

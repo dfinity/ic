@@ -8,9 +8,12 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+ic_consensus_system_test_subnet_recovery = { path = "../../consensus/subnet_recovery" }
 ic_consensus_system_test_utils = { path = "../../consensus/utils" }
+manual_guestos_recovery = { path = "../../../ic_os/os_tools/manual_guestos_recovery" }
 ic-recovery = { path = "../../../recovery" }
 ic-system-test-driver = { path = "../../driver" }
+ic-types = { path = "../../../types/types" }
 nested = { path = "../../nested" }
 rand = { workspace = true }
 sha2 = { workspace = true }
@@ -34,5 +37,9 @@ name = "ic-systest-nested-nns-recovery-local"
 path = "nr_local.rs"
 
 [[bin]]
-name = "ic-systest-nested-nns-recovery-no-bless"
-path = "nr_no_bless.rs"
+name = "ic-systest-nested-nns-recovery-no-bless-fix-like-np"
+path = "nr_no_bless_fix_like_np.rs"
+
+[[bin]]
+name = "ic-systest-nested-nns-recovery-sequential-np-actions"
+path = "nr_seq_np_actions.rs"

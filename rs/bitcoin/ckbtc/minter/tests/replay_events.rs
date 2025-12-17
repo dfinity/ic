@@ -7,38 +7,36 @@
 
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
-use ic_btc_interface::{OutPoint, Utxo};
-use ic_ckbtc_minter::address::BitcoinAddress;
-use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
 use ic_ckbtc_minter::state::CkBtcMinterState;
-use ic_ckbtc_minter::state::eventlog::{Event, EventType, replay};
-use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
-use ic_ckbtc_minter::{
-    BuildTxError, ECDSAPublicKey, MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY, Network,
-    build_unsigned_transaction_from_inputs, process_maybe_finalized_transactions,
-    resubmit_transactions, state, tx,
+use ic_ckbtc_minter::state::eventlog::{
+    CkBtcEventLogger, CkBtcMinterEvent, EventLogger, EventType,
 };
-use icrc_ledger_types::icrc1::account::Account;
-use maplit::btreeset;
-use std::cell::RefCell;
+use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
+use ic_ckbtc_minter::{ECDSAPublicKey, Network};
 use std::cmp::Reverse;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::{Arc, LazyLock, RwLock};
+use std::sync::LazyLock;
 
 pub mod mock {
+    use crate::CkBtcMinterState;
     use async_trait::async_trait;
     use candid::Principal;
     use ic_btc_checker::CheckTransactionResponse;
     use ic_btc_interface::Utxo;
     use ic_ckbtc_minter::address::BitcoinAddress;
+    use ic_ckbtc_minter::fees::BitcoinFeeEstimator;
     use ic_ckbtc_minter::management::CallError;
     use ic_ckbtc_minter::updates::retrieve_btc::BtcAddressCheckStatus;
     use ic_ckbtc_minter::updates::update_balance::UpdateBalanceError;
-    use ic_ckbtc_minter::{CanisterRuntime, GetUtxosRequest, GetUtxosResponse, Network, tx};
+    use ic_ckbtc_minter::{
+        CanisterRuntime, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
+        Network, state::eventlog::CkBtcEventLogger, tx,
+    };
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
     use mockall::mock;
+    use std::time::Duration;
 
     mock! {
         #[derive(Debug)]
@@ -46,27 +44,31 @@ pub mod mock {
 
         #[async_trait]
         impl CanisterRuntime for CanisterRuntime {
+            type Estimator = BitcoinFeeEstimator;
+            type EventLogger = CkBtcEventLogger;
             fn caller(&self) -> Principal;
             fn id(&self) -> Principal;
             fn time(&self) -> u64;
             fn global_timer_set(&self, timestamp: u64);
             fn parse_address(&self, address: &str, network: Network) -> Result<BitcoinAddress, String>;
-            async fn bitcoin_get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
-            async fn check_transaction(&self, btc_checker_principal: Principal, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;
+            fn block_time(&self, network: Network) -> Duration;
+            fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String;
+            fn derive_minter_address(&self, state: &CkBtcMinterState) -> BitcoinAddress;
+            fn derive_minter_address_str(&self, state: &CkBtcMinterState) -> String;
+            fn refresh_fee_percentiles_frequency(&self) -> Duration;
+            fn event_logger(&self) -> CkBtcEventLogger;
+            fn fee_estimator(&self, state: &CkBtcMinterState) -> BitcoinFeeEstimator;
+            async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<u64>, CallError>;
+            async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
+            async fn check_transaction(&self, btc_checker_principal: Option<Principal>, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;
             async fn mint_ckbtc(&self, amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError>;
             async fn sign_with_ecdsa(&self, key_name: String, derivation_path: Vec<Vec<u8>>, message_hash: [u8; 32]) -> Result<Vec<u8>, CallError>;
             async fn send_transaction(&self, transaction: &tx::SignedTransaction, network: Network) -> Result<(), CallError>;
+            async fn send_raw_transaction(&self, transaction: Vec<u8>, network: Network) -> Result<(), CallError>;
             async fn check_address( &self, btc_checker_principal: Option<Principal>, address: String, ) -> Result<BtcAddressCheckStatus, CallError>;
         }
     }
 }
-
-const FAKE_SEC1_SIG: [u8; 64] = [
-    0x8A, 0x2F, 0x47, 0x1B, 0x9C, 0xF4, 0x31, 0x6E, 0xA3, 0x55, 0x17, 0xD1, 0x4A, 0xF2, 0x66, 0xCD,
-    0x9B, 0x7E, 0xC2, 0x6D, 0x48, 0x1C, 0x3E, 0xA7, 0xFA, 0x1D, 0x22, 0x4B, 0x8E, 0x5F, 0x72, 0x81,
-    0x6E, 0x19, 0xC4, 0xF8, 0x92, 0x57, 0x01, 0x3A, 0x5C, 0xAA, 0xDE, 0x12, 0x8B, 0x64, 0x9E, 0xC1,
-    0x7D, 0xF5, 0x93, 0x54, 0x21, 0x0E, 0x8A, 0xC6, 0x3B, 0x1D, 0x4A, 0x2C, 0x77, 0x98, 0xF0, 0xEB,
-];
 
 pub fn mock_ecdsa_public_key() -> ECDSAPublicKey {
     const PUBLIC_KEY: [u8; 33] = [
@@ -85,7 +87,8 @@ pub fn mock_ecdsa_public_key() -> ECDSAPublicKey {
 
 static MAINNET_EVENTS: LazyLock<GetEventsResult> = LazyLock::new(|| Mainnet.deserialize());
 static MAINNET_STATE: LazyLock<CkBtcMinterState> = LazyLock::new(|| {
-    replay::<SkipCheckInvariantsImpl>(MAINNET_EVENTS.events.iter().cloned())
+    CkBtcEventLogger
+        .replay::<SkipCheckInvariantsImpl>(MAINNET_EVENTS.events.iter().cloned())
         .expect("Failed to replay events")
 });
 static TESTNET_EVENTS: LazyLock<GetEventsResult> = LazyLock::new(|| Testnet.deserialize());
@@ -100,7 +103,7 @@ async fn should_replay_events_for_mainnet() {
         .expect("Failed to check invariants");
 
     assert_eq!(state.btc_network, Network::Mainnet);
-    assert_eq!(state.get_total_btc_managed(), 43_366_185_379);
+    assert_eq!(state.get_total_btc_managed(), 40_431_602_885);
 }
 
 #[tokio::test]
@@ -127,242 +130,10 @@ async fn should_have_not_many_transactions_with_many_used_utxos() {
         ))
     );
 
-    assert_eq!(
-        iter.next(),
-        Some((
-            Reverse(725),
-            vec!["201e83d0f5b35bd658b4dc87a70936d8d750532da46f5a635d403246d41cc032".to_string()]
-        ))
-    );
-}
-
-#[tokio::test]
-async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30() {
-    Mainnet.retrieve_and_store_events_if_env().await;
-
-    let mut state = MAINNET_STATE.clone();
-
-    assert_eq!(state.btc_network, Network::Mainnet);
-    assert_eq!(state.get_total_btc_managed(), 43_366_185_379);
-
-    let txid = "87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30";
-
-    let stuck_tx = {
-        let txs: Vec<_> = state
-            .stuck_transactions
-            .iter()
-            .filter(|tx| tx.txid.to_string() == txid)
-            .collect();
-        assert_eq!(txs.len(), 1);
-        txs[0].clone()
-    };
-
-    assert_eq!(stuck_tx.submitted_at, 1_755_022_419_795_766_424);
-    assert_eq!(stuck_tx.requests.len(), 43);
-    assert_eq!(
-        stuck_tx.requests.iter().map(|req| req.amount).sum::<u64>(),
-        3_316_317_017_u64 //33 BTC!
-    );
-    assert_eq!(stuck_tx.used_utxos.len(), 1_799);
-    assert_eq!(stuck_tx.fee_per_vbyte, Some(7_486));
-
-    let principals: BTreeSet<_> = stuck_tx
-        .requests
-        .iter()
-        .map(|req| req.reimbursement_account.unwrap())
-        .map(|account| account.owner)
-        .collect();
-    assert_eq!(
-        principals,
-        btreeset! {Principal::from_text("ztwhb-qiaaa-aaaaj-azw7a-cai").unwrap()}
-    );
-
-    assert_eq!(state.replacement_txid.len(), 1);
-    let resubmitted_txid = *state.replacement_txid.get(&stuck_tx.txid).unwrap();
-    let resubmitted_tx = {
-        let txs: Vec<_> = state
-            .submitted_transactions
-            .iter()
-            .filter(|tx| tx.txid == resubmitted_txid)
-            .collect();
-        assert_eq!(txs.len(), 1);
-        txs[0].clone()
-    };
-    assert_eq!(
-        resubmitted_tx.txid.to_string(),
-        "5ae2d26e623113e416a59892b4268d641ebc45be2954c5953136948a256da847"
-    );
-    assert_eq!(resubmitted_tx.submitted_at, 1_755_116_484_667_101_556);
-
-    assert_eq!(stuck_tx.used_utxos, resubmitted_tx.used_utxos);
-    assert_eq!(
-        stuck_tx.fee_per_vbyte.unwrap() + MIN_RELAY_FEE_PER_VBYTE,
-        resubmitted_tx.fee_per_vbyte.unwrap()
-    );
-    assert_eq!(stuck_tx.requests, resubmitted_tx.requests);
-
-    let outputs = resubmitted_tx
-        .requests
-        .iter()
-        .map(|req| (req.address.clone(), req.amount))
-        .collect();
-    let input_utxos = &resubmitted_tx.used_utxos;
-    let main_address = BitcoinAddress::parse(
-        "bc1q0jrxz4jh59t5qsu7l0y59kpfdmgjcq60wlee3h",
-        Network::Mainnet,
-    )
-    .unwrap();
-    let tx_fee_per_vbyte = resubmitted_tx.fee_per_vbyte.unwrap();
-    let build_tx_error = build_unsigned_transaction_from_inputs(
-        input_utxos,
-        outputs,
-        main_address.clone(),
-        tx_fee_per_vbyte,
-    )
-    .unwrap_err();
-
-    assert_eq!(
-        build_tx_error,
-        BuildTxError::InvalidTransaction(InvalidTransactionError::TooManyInputs {
-            num_inputs: 1799,
-            max_num_inputs: 1000
-        })
-    );
-
-    // Check if a cancellation tx will be sent
-    let min_amount = 50_000;
-    let mut transactions = BTreeMap::new();
-    transactions.insert(resubmitted_txid, resubmitted_tx.clone());
-    let replaced = RefCell::new(vec![]);
-    let transactions_sent: Arc<RwLock<Vec<tx::SignedTransaction>>> = Arc::new(RwLock::new(vec![]));
-    let mut now = resubmitted_tx.submitted_at + MIN_RESUBMISSION_DELAY.as_nanos() as u64;
-    let mut runtime = mock::MockCanisterRuntime::new();
-    runtime.expect_time().return_const(now);
-    runtime
-        .expect_sign_with_ecdsa()
-        .return_const(Ok(FAKE_SEC1_SIG.to_vec()));
-    let sent_clone = transactions_sent.clone();
-    runtime.expect_send_transaction().returning(move |tx, _| {
-        let mut arr = sent_clone.write().unwrap();
-        arr.push(tx.clone());
-        Ok(())
-    });
-    resubmit_transactions(
-        "mock_key",
-        10,
-        main_address,
-        mock_ecdsa_public_key(),
-        Network::Mainnet,
-        min_amount,
-        transactions,
-        |_| {
-            Some(Account {
-                owner: Principal::anonymous(),
-                subaccount: None,
-            })
-        },
-        |old_txid, new_tx, reason| replaced.borrow_mut().push((old_txid, new_tx, reason)),
-        &runtime,
-    )
-    .await;
-    let replaced = replaced.borrow();
-    assert_eq!(replaced.len(), 1);
-    assert_eq!(replaced[0].0, resubmitted_txid);
-    let cancellation_tx = replaced[0].1.clone();
-    let replaced_reason = replaced[0].2.clone();
-    let cancellation_txid = cancellation_tx.txid;
-    assert_eq!(cancellation_tx.used_utxos.len(), 1);
-    let used_utxo = cancellation_tx.used_utxos[0].clone();
-    let sent = transactions_sent.read().unwrap();
-    assert_eq!(sent.len(), 1);
-    let signed_tx = sent[0].clone();
-    assert_eq!(signed_tx.inputs.len(), 1);
-    assert_eq!(&used_utxo.outpoint, &signed_tx.inputs[0].previous_output);
-
-    // Trigger the replacement in state
-    state::audit::replace_transaction(
-        &mut state,
-        resubmitted_txid,
-        cancellation_tx.clone(),
-        replaced_reason,
-        &runtime,
-    );
+    let (second_biggest_num_utxos, tx_ids) = iter.next().unwrap();
     assert!(
-        !state
-            .submitted_transactions
-            .iter()
-            .any(|tx| tx.txid == resubmitted_txid)
-    );
-    assert!(
-        state
-            .submitted_transactions
-            .iter()
-            .any(|tx| tx.txid == cancellation_txid)
-    );
-    assert!(
-        state
-            .stuck_transactions
-            .iter()
-            .any(|tx| tx.txid == resubmitted_txid)
-    );
-
-    // Check if transaction is canceled once cancellation tx is finalized.
-    now += MIN_RESUBMISSION_DELAY.as_nanos() as u64;
-    let main_account = Account {
-        owner: Principal::from_text("mqygn-kiaaa-aaaar-qaadq-cai").unwrap(),
-        subaccount: None,
-    };
-    let mut runtime = mock::MockCanisterRuntime::new();
-    runtime.expect_time().return_const(now);
-    let mut maybe_finalized_transactions = vec![(cancellation_txid, cancellation_tx)]
-        .into_iter()
-        .collect::<BTreeMap<_, _>>();
-    let mock_height = 910109u32;
-    let new_utxos = signed_tx
-        .outputs
-        .iter()
-        .enumerate()
-        .map(|(i, out)| Utxo {
-            outpoint: OutPoint {
-                txid: cancellation_txid,
-                vout: i as u32,
-            },
-            value: out.value,
-            height: mock_height,
-        })
-        .collect::<Vec<_>>();
-    process_maybe_finalized_transactions(
-        &mut state,
-        &mut maybe_finalized_transactions,
-        new_utxos,
-        main_account,
-        &runtime,
-    );
-    assert!(
-        !state
-            .stuck_transactions
-            .iter()
-            .any(|tx| tx.txid == stuck_tx.txid)
-    );
-    assert!(
-        !state
-            .stuck_transactions
-            .iter()
-            .any(|tx| tx.txid == resubmitted_txid)
-    );
-    assert!(
-        !state
-            .submitted_transactions
-            .iter()
-            .any(|tx| tx.txid == cancellation_txid)
-    );
-    assert!(maybe_finalized_transactions.is_empty());
-    assert!(!state.available_utxos.contains(&used_utxo));
-    assert!(
-        resubmitted_tx
-            .used_utxos
-            .iter()
-            .all(|utxo| utxo == &used_utxo || state.available_utxos.contains(utxo))
+        second_biggest_num_utxos.0 <= 1_000,
+        "Expected exactly one non-standard transaction, while all other transactions {tx_ids:?} must use at most 1_000 UTXOs"
     );
 }
 
@@ -370,7 +141,8 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
 async fn should_replay_events_for_testnet() {
     Testnet.retrieve_and_store_events_if_env().await;
 
-    let state = replay::<SkipCheckInvariantsImpl>(TESTNET_EVENTS.events.iter().cloned())
+    let state = CkBtcEventLogger
+        .replay::<SkipCheckInvariantsImpl>(TESTNET_EVENTS.events.iter().cloned())
         .expect("Failed to replay events");
     state
         .check_invariants()
@@ -389,7 +161,8 @@ async fn should_replay_events_for_testnet() {
 fn should_replay_events_and_check_invariants() {
     fn test(events: &GetEventsResult) {
         println!("Replaying {} events", events.total_event_count);
-        let _state = replay::<CheckInvariantsImpl>(events.events.iter().cloned())
+        let _state = CkBtcEventLogger
+            .replay::<CheckInvariantsImpl>(events.events.iter().cloned())
             .expect("Failed to replay events");
     }
     test(&MAINNET_EVENTS);
@@ -442,7 +215,7 @@ trait GetEventsFile {
         minter_id: &Principal,
         start: u64,
         length: u64,
-    ) -> Vec<Event> {
+    ) -> Vec<CkBtcMinterEvent> {
         use candid::{Decode, Encode};
         use ic_ckbtc_minter::state::eventlog::GetEventsArg;
 
@@ -454,7 +227,7 @@ trait GetEventsFile {
             .call_and_wait()
             .await
             .expect("Failed to call get_events");
-        Decode!(&raw_result, Vec<Event>).unwrap()
+        Decode!(&raw_result, Vec<CkBtcMinterEvent>).unwrap()
     }
 
     async fn retrieve_and_store_events(&self) {
@@ -552,7 +325,7 @@ impl GetEventsFile for Testnet {
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct GetEventsResult {
-    pub events: Vec<Event>,
+    pub events: Vec<CkBtcMinterEvent>,
     pub total_event_count: u64,
 }
 
