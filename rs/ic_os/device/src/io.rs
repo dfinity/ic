@@ -2,7 +2,8 @@ use std::io;
 #[cfg(not(test))]
 use std::time::Duration;
 
-const RETRY_MAX_ATTEMPTS: i32 = 100;
+// TODO: Make this configurable
+const RETRY_MAX_ATTEMPTS: i32 = 10;
 
 /// Retries a function, returning its result if it succeeds, or retrying if it fails with
 /// the specified error.
