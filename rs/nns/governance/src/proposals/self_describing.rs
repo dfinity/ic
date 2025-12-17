@@ -75,25 +75,29 @@ impl ValueBuilder {
         self
     }
 
+    /// Adds a field with an empty array value. This is useful for fields that don't have a meaningful
+    /// payload (e.g., StartDissolving, StopDissolving).
+    pub fn add_empty_field(self, key: impl ToString) -> Self {
+        self.add_field(key, SelfDescribingValue::EMPTY)
+    }
+
     /// Given an `value: Option<T>`, if `value` is `Some(inner)`, add the `inner` to the builder. If
     /// `value` is `None`, add an empty array to the builder. This is useful for cases where a field
     /// is designed to be required, while we want to still add an empty field to the builder in case
     /// of a bug.
     pub fn add_field_with_empty_as_fallback(
-        mut self,
+        self,
         key: impl ToString,
         value: Option<impl Into<SelfDescribingValue>>,
     ) -> Self {
         if let Some(value) = value {
             self.add_field(key, value)
         } else {
-            self.fields.insert(
-                key.to_string(),
-                SelfDescribingValue {
-                    value: Some(Array(SelfDescribingValueArray { values: vec![] })),
-                },
+            println!(
+                "A field {} is added with an empty value while we think it should be impossible",
+                key.to_string()
             );
-            self
+            self.add_empty_field(key)
         }
     }
 
@@ -109,6 +113,14 @@ impl From<String> for SelfDescribingValue {
     fn from(value: String) -> Self {
         SelfDescribingValue {
             value: Some(Text(value)),
+        }
+    }
+}
+
+impl From<&str> for SelfDescribingValue {
+    fn from(value: &str) -> Self {
+        SelfDescribingValue {
+            value: Some(Text(value.to_string())),
         }
     }
 }
@@ -162,7 +174,6 @@ where
         }
     }
 }
-
 pub(crate) struct SelfDescribingProstEnum<E> {
     value: i32,
     prost_type: PhantomData<E>,
@@ -208,6 +219,16 @@ where
         .unwrap_or("???")
 }
 
+impl SelfDescribingValue {
+    pub const EMPTY: Self = Self {
+        value: Some(Array(SelfDescribingValueArray { values: vec![] })),
+    };
+
+    pub fn singleton(key: impl ToString, value: impl Into<SelfDescribingValue>) -> Self {
+        ValueBuilder::new().add_field(key, value).build()
+    }
+}
+
 /// A trait for types that can be converted to a SelfDescribingValue as an unsigned integer. This is
 /// used because we can't do `impl<T: Into<candid::Nat>> From<T> for SelfDescribingValue` because of
 /// potential conflicts.
@@ -226,6 +247,7 @@ where
 
 // Types we want to be able to convert to a SelfDescribingValue as an unsigned integer.
 impl ToSelfDescribingNat for u64 {}
+impl ToSelfDescribingNat for u32 {}
 
 pub(crate) fn to_self_describing_nat<N>(n: N) -> Value
 where
