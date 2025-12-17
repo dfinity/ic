@@ -421,10 +421,9 @@ impl GuestOSRecoveryApp {
         Self::default()
     }
 
-    fn redraw(&self, terminal_guard: &mut TerminalGuard) -> Result<()> {
+    fn redraw(&self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
         if let Some(state) = &self.state {
-            let _ = terminal_guard
-                .get_mut()
+            terminal
                 .draw(|f: &mut Frame| ui::render(f, state))
                 .map_err(|e| {
                     anyhow::anyhow!(
@@ -460,7 +459,7 @@ impl GuestOSRecoveryApp {
                 break;
             }
 
-            self.redraw(&mut terminal_guard)?;
+            self.redraw(terminal_guard.get_mut())?;
 
             // Event polling
             if ratatui::crossterm::event::poll(Duration::from_millis(PROCESS_POLL_INTERVAL_MS))? {
