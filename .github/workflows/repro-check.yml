@@ -44,7 +44,7 @@ jobs:
       - name: Create ext4 workspace for rootless podman
         run: |
           dd if=/dev/zero of=/home/ubuntu/workspace.img bs=1G count=110
-          mkdfs.ext4 /home/ubuntu/workspace.img
+          mkfs.ext4 /home/ubuntu/workspace.img
           mkdir -p /home/ubuntu/.cache/repro-check
 
           mount -o loop /home/ubuntu/workspace.img /home/ubuntu/.cache/repro-check
