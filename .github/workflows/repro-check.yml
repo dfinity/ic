@@ -57,7 +57,7 @@ jobs:
           mkfs.ext4 /home/ubuntu/tmp.img
           mkdir -p /tmp/ict_testnets
 
-          mount -o loop /home/ubunut/tmp.img /tmp/ict_testnets
+          mount -o loop /home/ubuntu/tmp.img /tmp/ict_testnets
           chown -R ubuntu:ubuntu /tmp/ict_testnets
 
       - name: Repro check for ${{ inputs.github_sha }}
