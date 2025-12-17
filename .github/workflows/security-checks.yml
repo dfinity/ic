@@ -13,12 +13,12 @@ jobs:
       - name: Checkout base
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
           path: "base"
       - name: Checkout PR
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.base.sha }}
           path: "pr"
           sparse-checkout: |
             Cargo.Bazel.toml.lock
