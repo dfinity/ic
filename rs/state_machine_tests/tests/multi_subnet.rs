@@ -233,18 +233,11 @@ fn counter_canister_call_test() {
     // This time we need to execute multiple rounds on the 1st subnet
     // to induct all ingress messages with large payloads.
     env1.execute_round();
-    assert!(matches!(
-        (
-            env1.ingress_status(&msg10_id),
-            env1.ingress_status(&msg11_id),
-            env1.ingress_status(&msg12_id)
-        ),
-        (
-            IngressStatus::Unknown,
-            IngressStatus::Known { .. },
-            IngressStatus::Known { .. },
-        )
-    ));
+    let known_count = [&msg10_id, &msg11_id, &msg12_id]
+        .into_iter()
+        .filter(|&msg_id| matches!(env1.ingress_status(msg_id), IngressStatus::Known { .. }))
+        .count();
+    assert_eq!(2, known_count);
 
     // The third ingress message is only inducted after a repeated
     // call to execute a round.

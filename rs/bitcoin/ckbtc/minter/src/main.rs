@@ -5,9 +5,9 @@ use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
 use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
-use ic_ckbtc_minter::state::eventlog::Event;
+use ic_ckbtc_minter::state::eventlog::CkBtcMinterEvent;
 use ic_ckbtc_minter::state::{
-    BtcRetrievalStatusV2, RetrieveBtcStatus, RetrieveBtcStatusV2, read_state,
+    BtcRetrievalStatusV2, RetrieveBtcStatus, RetrieveBtcStatusV2, mutate_state, read_state,
 };
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
 use ic_ckbtc_minter::updates::retrieve_btc::{
@@ -45,8 +45,9 @@ fn init(args: MinterArg) {
 }
 
 fn setup_tasks() {
-    schedule_now(TaskType::ProcessLogic(true), &IC_CANISTER_RUNTIME);
+    schedule_now(TaskType::ProcessLogic, &IC_CANISTER_RUNTIME);
     schedule_now(TaskType::RefreshFeePercentiles, &IC_CANISTER_RUNTIME);
+    schedule_now(TaskType::ConsolidateUtxos, &IC_CANISTER_RUNTIME);
 }
 
 #[cfg(feature = "self_check")]
@@ -60,14 +61,20 @@ fn ok_or_die(result: Result<(), String>) {
 /// Checks that ckBTC minter state internally consistent.
 #[cfg(feature = "self_check")]
 fn check_invariants() -> Result<(), String> {
-    use ic_ckbtc_minter::state::{eventlog::replay, invariants::CheckInvariantsImpl};
+    use ic_ckbtc_minter::state::{
+        eventlog::{CkBtcEventLogger, EventLogger},
+        invariants::CheckInvariantsImpl,
+    };
+
+    let events_logger = CkBtcEventLogger;
 
     read_state(|s| {
         s.check_invariants()?;
 
-        let events: Vec<_> = storage::events().collect();
-        let recovered_state = replay::<CheckInvariantsImpl>(events.clone().into_iter())
-            .unwrap_or_else(|e| panic!("failed to replay log {events:?}: {e:?}"));
+        let events: Vec<_> = events_logger.events_iter().collect();
+        let recovered_state = events_logger
+            .replay::<CheckInvariantsImpl>(events.clone().into_iter())
+            .unwrap_or_else(|e| panic!("failed to replay log ({e:?}): {events:?}"));
 
         recovered_state.check_invariants()?;
 
@@ -196,7 +203,7 @@ async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusRes
 
 #[cfg(feature = "self_check")]
 #[update]
-async fn upload_events(events: Vec<Event>) {
+async fn upload_events(events: Vec<CkBtcMinterEvent>) {
     for event in events {
         storage::record_event(event.payload, &IC_CANISTER_RUNTIME);
     }
@@ -204,14 +211,17 @@ async fn upload_events(events: Vec<Event>) {
 
 #[query]
 fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
-    match read_state(|s| {
+    // This is a **query** endpoint, so mutating the state is not an issue
+    // (even when called in replicated mode) since any change will be discarded.
+    match mutate_state(|s| {
         let fee_estimator = IC_CANISTER_RUNTIME.fee_estimator(s);
         let withdrawal_amount = arg.amount.unwrap_or(s.fee_based_retrieve_btc_min_amount);
         ic_ckbtc_minter::estimate_retrieve_btc_fee(
-            &s.available_utxos,
+            &mut s.available_utxos,
             withdrawal_amount,
             s.last_median_fee_per_vbyte
                 .expect("Bitcoin current fee percentiles not retrieved yet."),
+            s.max_num_inputs_in_transaction,
             &fee_estimator,
         )
     }) {
@@ -255,7 +265,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 }
 
 #[query]
-fn get_events(args: GetEventsArg) -> Vec<Event> {
+fn get_events(args: GetEventsArg) -> Vec<CkBtcMinterEvent> {
     const MAX_EVENTS_PER_QUERY: usize = 2000;
 
     storage::events()

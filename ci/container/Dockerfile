@@ -10,7 +10,7 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
 
-RUN apt -yqq install --no-install-recommends podman containernetworking-plugins buildah zip fuse-overlayfs xtail
+RUN apt -yqq install --no-install-recommends podman containernetworking-plugins buildah zip xtail
 
 # install afl & gsutils deps for bazel-fuzzers
 RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
@@ -123,7 +123,7 @@ RUN mkdir -p /afl && \
 # Pre-populate the Bazel installation for root
 # (note: this is only used for bash completion; the actual bazel version comes from bazelisk)
 COPY .bazelversion /tmp/bazel/
-RUN cd /tmp/bazel && touch WORKSPACE  && bazel version
+RUN cd /tmp/bazel && bazel version
 
 COPY ./ci/container/files/generate-bazel-completion.sh /tmp/
 RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-completion.sh && \

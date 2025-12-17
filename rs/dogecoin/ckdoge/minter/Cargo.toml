@@ -15,6 +15,7 @@ async-trait = { workspace = true }
 bs58 = "0.5.0"
 candid = { workspace = true }
 candid_parser = { workspace = true }
+ciborium = { workspace = true }
 hex = { workspace = true }
 ic-cdk = { workspace = true }
 ic-ckbtc-minter = { path = "../../../bitcoin/ckbtc/minter" }
@@ -27,6 +28,7 @@ sha2 = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 ic-ckdoge-minter-test-utils = { path = "../test_utils" }
+ic-management-canister-types = { workspace = true }
 pocket-ic = { path = "../../../../packages/pocket-ic" }
 proptest = { workspace = true }
 serde_json = { workspace = true }

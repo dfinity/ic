@@ -1,5 +1,7 @@
 use candid::{CandidType, Deserialize, Principal};
-use ic_ckbtc_minter::lifecycle::init::InitArgs as CkbtcMinterInitArgs;
+use ic_ckbtc_minter::lifecycle::{
+    init::InitArgs as CkbtcMinterInitArgs, upgrade::UpgradeArgs as CkbtcMinterUpgradeArgs,
+};
 use serde::Serialize;
 
 pub use ic_ckbtc_minter::state::Mode;
@@ -7,7 +9,7 @@ pub use ic_ckbtc_minter::state::Mode;
 #[derive(CandidType, serde::Deserialize)]
 pub enum MinterArg {
     Init(InitArgs),
-    // TODO XC-495 post-upgrade
+    Upgrade(Option<UpgradeArgs>),
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -39,6 +41,32 @@ pub struct InitArgs {
     pub mode: Mode,
 
     /// The expiration duration in seconds) for cached entries in
+    /// the get_utxos cache.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub get_utxos_cache_expiration_seconds: Option<u64>,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
+pub struct UpgradeArgs {
+    /// Minimum amount of doge that can be retrieved.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retrieve_doge_min_amount: Option<u64>,
+
+    /// Specifies the minimum number of confirmations on the Dogecoin network
+    /// required for the minter to accept a transaction.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_confirmations: Option<u32>,
+
+    /// Maximum time in nanoseconds that a transaction should spend in the queue
+    /// before being sent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_time_in_queue_nanos: Option<u64>,
+
+    /// The mode in which the minter is running.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<Mode>,
+
+    /// The expiration duration (in seconds) for cached entries in
     /// the get_utxos cache.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub get_utxos_cache_expiration_seconds: Option<u64>,
@@ -101,6 +129,56 @@ impl From<InitArgs> for CkbtcMinterInitArgs {
             btc_checker_principal: None,
             #[allow(deprecated)]
             kyt_principal: None,
+            get_utxos_cache_expiration_seconds: args.get_utxos_cache_expiration_seconds,
+            utxo_consolidation_threshold: None,
+            max_num_inputs_in_transaction: None,
+        }
+    }
+}
+
+impl From<CkbtcMinterInitArgs> for InitArgs {
+    fn from(args: CkbtcMinterInitArgs) -> Self {
+        InitArgs {
+            doge_network: Network::from(args.btc_network),
+            ecdsa_key_name: args.ecdsa_key_name,
+            retrieve_doge_min_amount: args.retrieve_btc_min_amount,
+            ledger_id: args.ledger_id.into(),
+            max_time_in_queue_nanos: args.max_time_in_queue_nanos,
+            min_confirmations: args.min_confirmations,
+            mode: args.mode,
+            get_utxos_cache_expiration_seconds: args.get_utxos_cache_expiration_seconds,
+        }
+    }
+}
+
+impl From<UpgradeArgs> for CkbtcMinterUpgradeArgs {
+    fn from(
+        UpgradeArgs {
+            retrieve_doge_min_amount,
+            min_confirmations,
+            max_time_in_queue_nanos,
+            mode,
+            get_utxos_cache_expiration_seconds,
+        }: UpgradeArgs,
+    ) -> Self {
+        CkbtcMinterUpgradeArgs {
+            retrieve_btc_min_amount: retrieve_doge_min_amount,
+            min_confirmations,
+            max_time_in_queue_nanos,
+            mode,
+            get_utxos_cache_expiration_seconds,
+            ..CkbtcMinterUpgradeArgs::default()
+        }
+    }
+}
+
+impl From<CkbtcMinterUpgradeArgs> for UpgradeArgs {
+    fn from(args: CkbtcMinterUpgradeArgs) -> Self {
+        UpgradeArgs {
+            retrieve_doge_min_amount: args.retrieve_btc_min_amount,
+            min_confirmations: args.min_confirmations,
+            max_time_in_queue_nanos: args.max_time_in_queue_nanos,
+            mode: args.mode,
             get_utxos_cache_expiration_seconds: args.get_utxos_cache_expiration_seconds,
         }
     }

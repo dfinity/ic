@@ -149,13 +149,18 @@ commit_and_reboot() {
     echo "Committing HostOS upgrade..."
     /opt/ic/bin/manageboot.sh hostos upgrade-commit --no-reboot
 
-    echo "Preparing kexec reboot..."
-    kexec -l "$TARGET_BOOT_PARTITION_MOUNT/vmlinuz" \
-        --initrd="$TARGET_BOOT_PARTITION_MOUNT/initrd.img" \
-        --command-line="$boot_args"
+    if command -v kexec >/dev/null 2>&1; then
+        echo "Preparing kexec reboot..."
+        kexec -l "$TARGET_BOOT_PARTITION_MOUNT/vmlinuz" \
+            --initrd="$TARGET_BOOT_PARTITION_MOUNT/initrd.img" \
+            --command-line="$boot_args"
 
-    echo "Scheduling reboot via kexec..."
-    nohup bash -c 'sleep 2; systemctl start kexec.target' >/dev/null 2>&1 &
+        echo "Scheduling reboot via kexec..."
+        nohup bash -c 'sleep 2; systemctl start kexec.target' >/dev/null 2>&1 &
+    else
+        echo "kexec not available, performing regular reboot..."
+        nohup bash -c 'sleep 2; reboot' >/dev/null 2>&1 &
+    fi
 }
 
 SETUPOS_CONFIG_IMG_SRC=""

@@ -139,13 +139,7 @@ QUALIFYING_SNS_CANISTER_RUNTIME_DEPS, QUALIFYING_SNS_CANISTER_ENV = canister_run
     qualifying_canisters = QUALIFYING_SNS_CANISTERS,
 )
 
-UNIVERSAL_VM_RUNTIME_DEPS = [
-    "//rs/tests:create-universal-vm-config-image.sh",
-]
-
-GRAFANA_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS
-
-IC_GATEWAY_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [
+IC_GATEWAY_RUNTIME_DEPS = [
     "//rs/tests:ic_gateway_uvm_config_image",
 ]
 
@@ -183,7 +177,7 @@ SIGNER_CANISTER_ENV = {
     "SIGNER_CANISTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/signer:signer.wasm.gz)",
 }
 
-IMPERSONATE_UPSTREAMS_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [
+IMPERSONATE_UPSTREAMS_RUNTIME_DEPS = [
     "//rs/tests:impersonate_upstreams_uvm_config_image",
 ]
 

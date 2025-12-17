@@ -506,7 +506,6 @@ pub enum HostFeature {
     DC(String),
     Host(String),
     AmdSevSnp,
-    SnsLoadTest,
     Performance,
     IoPerformance,
     Dell,
@@ -531,7 +530,6 @@ impl Serialize for HostFeature {
                 serializer.serialize_str(&host_feature)
             }
             HostFeature::AmdSevSnp => serializer.serialize_str(AMD_SEV_SNP),
-            HostFeature::SnsLoadTest => serializer.serialize_str(SNS_LOAD_TEST),
             HostFeature::Performance => serializer.serialize_str(PERFORMANCE),
             HostFeature::IoPerformance => serializer.serialize_str(IO_PERFORMANCE),
             HostFeature::Dell => serializer.serialize_str(DLL),
@@ -542,7 +540,6 @@ impl Serialize for HostFeature {
 }
 
 const AMD_SEV_SNP: &str = "AMD-SEV-SNP";
-const SNS_LOAD_TEST: &str = "SNS-load-test";
 const PERFORMANCE: &str = "performance";
 const IO_PERFORMANCE: &str = "io-performance";
 const DLL: &str = "dll";
@@ -560,7 +557,6 @@ impl<'de> Deserialize<'de> for HostFeature {
             Some(("host", host)) => Ok(HostFeature::Host(host.to_owned())),
             _ => match input.as_str() {
                 AMD_SEV_SNP => Ok(HostFeature::AmdSevSnp),
-                SNS_LOAD_TEST => Ok(HostFeature::SnsLoadTest),
                 PERFORMANCE => Ok(HostFeature::Performance),
                 IO_PERFORMANCE => Ok(HostFeature::IoPerformance),
                 DLL => Ok(HostFeature::Dell),
@@ -572,10 +568,11 @@ impl<'de> Deserialize<'de> for HostFeature {
                         "dc=<dc-name>",
                         "host=<host-name>",
                         AMD_SEV_SNP,
-                        SNS_LOAD_TEST,
                         PERFORMANCE,
+                        IO_PERFORMANCE,
                         DLL,
                         SPM,
+                        DMZ,
                     ],
                 )),
             },
