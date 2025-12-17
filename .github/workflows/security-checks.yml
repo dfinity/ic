@@ -13,6 +13,7 @@ jobs:
       - name: Checkout base
         uses: actions/checkout@v6
         with:
+          ref: ${{ github.event.pull_request.base.sha }}
           path: "base"
       - name: Checkout PR
         uses: actions/checkout@v6
@@ -36,7 +37,7 @@ jobs:
         env:
           SHELL_WRAPPER: "/usr/bin/time"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_PR_DIR: $GITHUB_WORKSPACE/pr
+          GITHUB_PR_DIR: ${{ github.workspace }}/pr
           GITHUB_PR_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
