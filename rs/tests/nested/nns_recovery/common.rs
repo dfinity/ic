@@ -28,7 +28,7 @@ use ic_recovery::{
 use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
-        ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResources},
+        ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources},
         nested::{HasNestedVms, NestedNodes, NestedVm},
         test_env::TestEnv,
         test_env_api::*,
@@ -52,6 +52,12 @@ pub const NNS_RECOVERY_VM_RESOURCES: VmResources = VmResources {
     vcpus: Some(NrOfVCPUs::new(8)),
     memory_kibibytes: Some(AmountOfMemoryKiB::new(25165824)), // 24GiB
     boot_image_minimal_size_gibibytes: None,
+};
+
+pub const NNS_RECOVERY_WITH_MAINNET_STATE_VM_RESOURCES: VmResources = VmResources {
+    vcpus: Some(NrOfVCPUs::new(8)),
+    memory_kibibytes: Some(AmountOfMemoryKiB::new(25165824)), // 24GiB
+    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(64)), // 64GiB
 };
 
 /// 4 nodes is the minimum subnet size that satisfies 3f+1 for f=1
@@ -227,9 +233,16 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
 
     if cfg.subnet_size > 0 {
         let host_vm_names = get_host_vm_names(cfg.subnet_size);
-        NestedNodes::new_with_resources(&host_vm_names, NNS_RECOVERY_VM_RESOURCES)
-            .setup_and_start(&env)
-            .unwrap();
+        NestedNodes::new_with_resources(
+            &host_vm_names,
+            if cfg.use_mainnet_state {
+                NNS_RECOVERY_WITH_MAINNET_STATE_VM_RESOURCES
+            } else {
+                NNS_RECOVERY_VM_RESOURCES
+            },
+        )
+        .setup_and_start(&env)
+        .unwrap();
 
         nested::registration(env.clone());
         replace_nns_with_nested_vms(&env, cfg.use_mainnet_state);
