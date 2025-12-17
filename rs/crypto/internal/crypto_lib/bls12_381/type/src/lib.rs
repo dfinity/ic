@@ -1655,7 +1655,7 @@ macro_rules! declare_mul2_table_impl {
                     let w2 = Window::extract(&s2, i);
                     let window = $tbl_typ::col(w1 as usize) + $tbl_typ::row(w2 as usize);
 
-                    // This is the only difference from the constant time version:
+                    // Variable time lookup
                     if window > 0 {
                         accum += &self.0[window - 1];
                     }
@@ -1698,6 +1698,12 @@ macro_rules! declare_compute_mul2_table_inline {
 
         We build up the table incrementally using additions and doubling, to
         avoid the cost of full scalar mul.
+
+        The 0:0 entry is omitted because it is the identity element and not needed.
+
+        This complicates the indexing in the loop below, but simplifies and
+        optimizes the online multiplication step as it is not necessary to read
+        the identity element out of the table in the constant-time table lookup.
          */
         let mut tbl: Vec<$projective> = Vec::with_capacity(TABLE_SIZE);
 
