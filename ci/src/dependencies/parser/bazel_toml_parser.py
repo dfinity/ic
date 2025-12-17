@@ -1,9 +1,11 @@
+import os.path
+
 import toml
 from integration.github.github_dependency_submission import GHSubDependency, GHSubManifest
 
 
-def parse_bazel_toml_to_gh_manifest(filename: str) -> GHSubManifest:
-    with open(filename, "r") as f:
+def parse_bazel_toml_to_gh_manifest(basedir: str, filepath: str) -> GHSubManifest:
+    with open(os.path.join(basedir, filepath), "r") as f:
         tree = toml.load(f)
 
         # direct dependencies in toml files might be either specified by '<name>' or '<name> <version>', e.g.,
@@ -25,7 +27,7 @@ def parse_bazel_toml_to_gh_manifest(filename: str) -> GHSubManifest:
             version_by_name[name].append(version)
 
             if name_version in name_and_version_by_name_version:
-                raise RuntimeError(f"Found multiple occurrences of '{name} {version}' in {filename}")
+                raise RuntimeError(f"Found multiple occurrences of '{name} {version}' in {filepath}")
             name_and_version_by_name_version[name_version] = (name, version)
 
         # second we resolve all packages and their dependencies using the prepared lookup maps
@@ -43,8 +45,8 @@ def parse_bazel_toml_to_gh_manifest(filename: str) -> GHSubManifest:
                     dep_name = dep
                     dep_version = version_by_name[dep][0]
                 else:
-                    raise RuntimeError(f"Referenced dependency '{dep}' not found in {filename}")
+                    raise RuntimeError(f"Referenced dependency '{dep}' not found in {filepath}")
                 dep_ids.append(f"pkg:cargo/{dep_name}@{dep_version}")
             resolved.append(GHSubDependency(package_url, dep_ids))
 
-        return GHSubManifest(filename, filename, resolved)
+        return GHSubManifest(filepath, filepath, resolved)

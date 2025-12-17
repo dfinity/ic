@@ -70,7 +70,7 @@ class GithubApi:
             return False
 
     @staticmethod
-    def submit_dependencies(toml_lock_filenames: typing.List[str]) -> None:
+    def submit_dependencies(toml_lock_filenames: typing.List[(str, str)]) -> None:
         def get_sha():
             if "GITHUB_PR_SHA" in os.environ:
                 return os.environ["GITHUB_PR_SHA"]
@@ -86,8 +86,8 @@ class GithubApi:
         job = GHSubJob(os.environ["GITHUB_RUN_ID"], f'{os.environ['GITHUB_WORKFLOW']} / {os.environ['GITHUB_JOB']}')
 
         manifests = []
-        for filename in toml_lock_filenames:
-            manifests.append(parse_bazel_toml_to_gh_manifest(filename))
+        for basedir, filepath in toml_lock_filenames:
+            manifests.append(parse_bazel_toml_to_gh_manifest(basedir, filepath))
 
         req = GHSubRequest(0, job, get_sha(), os.environ["GITHUB_REF"], detector, manifests)
 

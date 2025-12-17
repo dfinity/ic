@@ -13,10 +13,10 @@ from bazel_toml_parser import parse_bazel_toml_to_gh_manifest
     ],
 )
 def test_happy_cases(filename):
-    os.chdir(os.path.dirname(__file__))
-    res = parse_bazel_toml_to_gh_manifest(filename)
+    basedir = os.path.dirname(__file__)
+    res = parse_bazel_toml_to_gh_manifest(basedir, filename)
 
-    expected = json.loads(open(f"{filename}.json", "r").read())
+    expected = json.loads(open(os.path.join(basedir, f"{filename}.json"), "r").read())
     assert res.to_json() == expected
 
 
@@ -29,8 +29,7 @@ def test_happy_cases(filename):
 )
 def test_error_cases(filename, expected_error):
     try:
-        os.chdir(os.path.dirname(__file__))
-        parse_bazel_toml_to_gh_manifest(filename)
+        parse_bazel_toml_to_gh_manifest(os.path.dirname(__file__), filename)
         assert False
     except RuntimeError as e:
         assert expected_error in str(e)
