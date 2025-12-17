@@ -51,11 +51,9 @@ use ic_protobuf::registry::crypto::v1::{AlgorithmId, PublicKey};
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{crypto::CryptoRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
-use ic_registry_replicator::RegistryReplicator;
 use ic_types::messages::MessageId;
 use nix::unistd::{Pid, getpgid, setpgid};
 use rustls::{client::danger::ServerCertVerifier, server::ResolvesServerCert};
-use std::path::Path;
 use tokio::{
     select,
     signal::unix::SignalKind,
@@ -71,7 +69,6 @@ use crate::{
     cli::{self, Cli},
     dns::DnsResolver,
     errors::ErrorCause,
-    firewall::{FirewallGenerator, SystemdReloader},
     http::{
         PATH_CALL_V2, PATH_CALL_V3, PATH_CALL_V4, PATH_HEALTH, PATH_QUERY_V2, PATH_QUERY_V3,
         PATH_READ_STATE_V2, PATH_READ_STATE_V3, PATH_STATUS, PATH_SUBNET_READ_STATE_V2,
@@ -95,16 +92,12 @@ use crate::{
     rate_limiting::{RateLimit, generic},
     routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
     salt_fetcher::AnonymizationSaltFetcher,
-    snapshot::{
-        RegistryReplicatorRunner, RegistrySnapshot, SnapshotPersister, Snapshotter,
-        generate_stub_snapshot, generate_stub_subnet,
-    },
+    snapshot::{RegistrySnapshot, Snapshotter, generate_stub_snapshot, generate_stub_subnet},
     tls_verify::TlsVerifier,
 };
 
 pub const SERVICE_NAME: &str = "ic_boundary";
 pub const AUTHOR_NAME: &str = "Boundary Node Team <boundary-nodes@dfinity.org>";
-const SYSTEMCTL_BIN: &str = "/usr/bin/systemctl";
 
 pub const SECOND: Duration = Duration::from_secs(1);
 
@@ -128,27 +121,13 @@ pub fn decoder_config() -> DecoderConfig {
 pub async fn main(mut cli: Cli) -> Result<(), Error> {
     if cli.http_client.http_client_timeout_connect > cli.health.health_check_timeout {
         cli.health.health_check_timeout = cli.http_client.http_client_timeout_connect;
+
         warn!(
-            "Health check timeout should be longer than HTTP client connect timeout, capping it to client timeout"
+            "`--health-check-timeout` should be longer than `--http-client-timeout-connect`, increasing it to client timeout"
         );
     }
 
-    if !(cli.registry.registry_local_store_path.is_none()
-        ^ cli.registry.registry_stub_replica.is_empty())
-    {
-        bail!(
-            "Local store path and Stub Replica are mutually exclusive and at least one of them must be specified"
-        );
-    }
-
-    if cli.listen.listen_http_port.is_none()
-        && cli.listen.listen_http_unix_socket.is_none()
-        && cli.listen.listen_https_port.is_none()
-    {
-        bail!(
-            "at least one of --listen-http-port / --listen-https-port / --listen-http-unix-socket must be specified"
-        );
-    }
+    warn!("Starting {SERVICE_NAME}");
 
     // Make sure ic-boundary is the leader of its own process group
     // Needed for correct execution of API BNs
@@ -167,26 +146,24 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     // Metrics
     let metrics_registry = Registry::new_custom(Some(SERVICE_NAME.into()), None)?;
 
-    warn!(
-        msg = format!("Starting {SERVICE_NAME}"),
-        metrics_addr = cli.obs.obs_metrics_addr.to_string().as_str(),
-    );
-
     let mut tasks = TaskManager::new();
 
     let routing_table = Arc::new(ArcSwapOption::empty());
     let registry_snapshot = Arc::new(ArcSwapOption::empty());
 
-    // DNS
+    // Setup Registry-based DNS resolver
     let dns_resolver = DnsResolver::new(registry_snapshot.clone());
 
     // TLS client
+
+    // Pick a TLS certificate verifier - Registry-based or a No-op one
     let tls_verifier: Arc<dyn ServerCertVerifier> = if cli.misc.skip_replica_tls_verification {
         Arc::new(NoopServerCertVerifier::default())
     } else {
         Arc::new(TlsVerifier::new(registry_snapshot.clone()))
     };
 
+    // We talk only TLS1.3 to the replicas
     let mut tls_config_client =
         rustls::ClientConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
             .dangerous() // Nothing really dangerous here
@@ -206,6 +183,8 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         4096 * cli.network.network_http_client_count as usize,
     );
 
+    // HTTP clients
+
     let mut http_client_opts: ClientOptions = (&cli.http_client).into();
     http_client_opts.user_agent = SERVICE_NAME.into();
     http_client_opts.tls_config = Some(tls_config_client);
@@ -216,16 +195,24 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
             .context("unable to create HTTP client for checks")?;
     let http_client_check = Arc::new(http_client_check);
 
-    // HTTP client for normal requests
-    let http_client = Arc::new(
-        bnhttp::ReqwestClientLeastLoaded::new(
-            http_client_opts,
-            Some(dns_resolver.clone()),
-            cli.network.network_http_client_count as usize,
-            Some(&metrics_registry),
-        )
-        .context("unable to create HTTP client")?,
-    );
+    // HTTP client for normal requests.
+    // Pick normal or LeastLoaded one depending on if we need >1 client
+    let http_client = if cli.network.network_http_client_count > 1 {
+        Arc::new(
+            bnhttp::ReqwestClientLeastLoaded::new(
+                http_client_opts,
+                Some(dns_resolver.clone()),
+                cli.network.network_http_client_count as usize,
+                Some(&metrics_registry),
+            )
+            .context("unable to create HTTP client")?,
+        ) as Arc<dyn Client>
+    } else {
+        Arc::new(
+            bnhttp::ReqwestClient::new(http_client_opts, Some(dns_resolver.clone()))
+                .context("unable to create HTTP client")?,
+        ) as Arc<dyn Client>
+    };
 
     // Setup registry-related stuff
     let persister = Persister::new(routing_table.clone());
@@ -234,33 +221,24 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     let (channel_snapshot_send, channel_snapshot_recv) = tokio::sync::watch::channel(None);
 
     // Registry Client
-    let registry_client = if let Some(local_store_path) = &cli.registry.registry_local_store_path {
-        // Store
-        let local_store = Arc::new(LocalStoreImpl::new(local_store_path.clone()));
-
-        // Client
-        let registry_client = Arc::new(RegistryClientImpl::new(local_store.clone(), None));
-        registry_client
-            .fetch_and_start_polling()
-            .context("failed to start registry client")?;
+    let registry_client = if cli.registry.registry_local_store_path.is_some() {
+        let persister = WithMetricsPersist(persister, MetricParamsPersist::new(&metrics_registry));
 
         // Snapshotting
-        setup_registry(
-            &cli,
-            local_store_path,
-            registry_client.clone(),
-            registry_snapshot.clone(),
-            WithMetricsPersist(persister, MetricParamsPersist::new(&metrics_registry)),
-            http_client_check,
-            &metrics_registry,
-            channel_snapshot_send,
-            channel_snapshot_recv.clone(),
-            &mut tasks,
+        Some(
+            setup_registry(
+                &cli,
+                registry_snapshot.clone(),
+                persister,
+                http_client_check,
+                &metrics_registry,
+                channel_snapshot_send,
+                channel_snapshot_recv.clone(),
+                &mut tasks,
+            )
+            .await
+            .context("unable to init Registry")?,
         )
-        .await
-        .context("unable to init Registry")?;
-
-        Some(registry_client as Arc<dyn RegistryClient>)
     } else {
         // Prepare a stub routing table and snapshot if there's no local store specified
         let subnet = generate_stub_subnet(cli.registry.registry_stub_replica.clone());
@@ -322,7 +300,9 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
 
     // Caching
     let cache_state = if cli.cache.cache_size.is_some() {
-        Some(Arc::new(CacheState::new(&cli.cache, &metrics_registry)?))
+        Some(Arc::new(
+            CacheState::new(&cli.cache, &metrics_registry).context("unable to setup cache")?,
+        ))
     } else {
         None
     };
@@ -341,6 +321,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         poll_interval: cli.rate_limiting.rate_limit_generic_poll_interval,
         autoscale: cli.rate_limiting.rate_limit_generic_autoscale,
     };
+
     let generic_limiter = if let Some(v) = &cli.rate_limiting.rate_limit_generic_file {
         Some(Arc::new(generic::GenericLimiter::new_from_file(
             v.clone(),
@@ -360,6 +341,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     } else {
         None
     };
+
     if let Some(v) = &generic_limiter {
         tasks.add("generic_limiter", v.clone());
     }
@@ -379,7 +361,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     // Prepare Axum Router
     let router = setup_router(
         bouncer,
-        generic_limiter.clone(),
+        generic_limiter,
         &cli,
         &metrics_registry,
         cache_state.clone(),
@@ -503,6 +485,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     // Start the tasks
     tasks.start();
 
+    warn!("Started, waiting for shutdown signal");
     // Wait for Ctrl-C or SIGTERM
     let mut sigterm = tokio::signal::unix::signal(SignalKind::terminate()).unwrap();
     select! {
@@ -645,8 +628,6 @@ async fn create_agent(
 /// Sets up registry-related stuff
 async fn setup_registry(
     cli: &Cli,
-    local_store_path: &Path,
-    registry_client: Arc<dyn RegistryClient>,
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     persister: WithMetricsPersist<Persister>,
     http_client_check: Arc<dyn Client>,
@@ -654,36 +635,29 @@ async fn setup_registry(
     channel_snapshot_send: watch::Sender<Option<Arc<RegistrySnapshot>>>,
     channel_snapshot_recv: watch::Receiver<Option<Arc<RegistrySnapshot>>>,
     tasks: &mut TaskManager,
-) -> Result<(), Error> {
+) -> Result<Arc<dyn RegistryClient>, Error> {
+    let local_store = Arc::new(LocalStoreImpl::new(
+        cli.registry.registry_local_store_path.clone().unwrap(),
+    ));
+
+    let registry_client = Arc::new(RegistryClientImpl::new(local_store, None));
+    registry_client
+        .fetch_and_start_polling()
+        .context("failed to start registry client")?;
+
     // Snapshots
     let snapshotter = WithMetricsSnapshot(
-        {
-            let mut snapshotter = Snapshotter::new(
-                registry_snapshot.clone(),
-                channel_snapshot_send,
-                registry_client.clone(),
-                cli.registry.registry_min_version_age,
-            );
-
-            if let Some(v) = &cli.nftables.nftables_system_replicas_path {
-                let fw_reloader = SystemdReloader::new(SYSTEMCTL_BIN.into(), "nftables", "reload");
-
-                let fw_generator = FirewallGenerator::new(
-                    v.clone(),
-                    cli.nftables.nftables_system_replicas_var.clone(),
-                );
-
-                let persister = SnapshotPersister::new(fw_generator, fw_reloader);
-                snapshotter.set_persister(persister);
-            }
-
-            snapshotter
-        },
+        Snapshotter::new(
+            registry_snapshot.clone(),
+            channel_snapshot_send,
+            registry_client.clone(),
+            cli.registry.registry_min_version_age,
+        ),
         MetricParamsSnapshot::new(metrics_registry),
     );
     tasks.add_interval("snapshotter", Arc::new(snapshotter), 5 * SECOND);
 
-    // Checks
+    // Start the health checking
     let checker = Checker::new(http_client_check, cli.health.health_check_timeout);
     let checker = WithMetricsCheck(checker, MetricParamsCheck::new(metrics_registry));
     let check_runner = CheckRunner::new(
@@ -782,7 +756,7 @@ fn setup_tls_resolver_acme(
 }
 
 /// Try to load the static resolver first, then ACME one.
-/// This is needed for integration tests where we cannot easily separate test/prod environments
+/// This is needed for the integration tests where we cannot easily separate test/prod environments.
 fn setup_tls_resolver(
     cli: &cli::Tls,
     tasks: &mut TaskManager,
@@ -1165,11 +1139,19 @@ mod test {
         loop {
             let req = client.get("https://127.0.0.1:5001/health").build().unwrap();
             let res = client.execute(req).await;
-            if let Ok(v) = res
-                && v.status() == StatusCode::NO_CONTENT
-            {
-                return;
-            }
+            match res {
+                Ok(v) => {
+                    if v.status() == StatusCode::NO_CONTENT {
+                        return;
+                    }
+
+                    println!("Status code incorrect: {}", v.status());
+                }
+
+                Err(e) => {
+                    println!("Error: {e:#}");
+                }
+            };
 
             if start.elapsed() > Duration::from_secs(120) {
                 break;
