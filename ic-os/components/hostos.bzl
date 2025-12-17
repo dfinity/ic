@@ -31,7 +31,7 @@ component_files = {
     Label("early-boot/initramfs-tools/hostos/amd64-microcode"): "/etc/default/amd64-microcode",
     Label("early-boot/initramfs-tools/hostos/intel-microcode"): "/etc/default/intel-microcode",
     Label("early-boot/initramfs-tools/hostos/modules"): "/etc/initramfs-tools/modules",
-    Label("early-boot/initramfs-tools/hostos/set-machine-id/set-machine-id"): "/etc/initramfs-tools/scripts/init-bottom/set-machine-id/set-machine-id",
+    Label("early-boot/initramfs-tools/hostos/set-machine-id/set-machine-id"): "/etc/initramfs-tools/scripts/init-bottom/set-machine-id",
 
     # misc
     Label("misc/config/config-hostos.sh"): "/opt/ic/bin/config.sh",
@@ -78,6 +78,8 @@ component_files = {
     Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
     Label("monitoring/grub-version/grub-version.sh"): "/opt/ic/bin/grub-version.sh",
     Label("monitoring/grub-version/grub-version.service"): "/etc/systemd/system/grub-version.service",
+    Label("monitoring/hostos/export-guestos-serial-logs.sh"): "/opt/ic/bin/export-guestos-serial-logs.sh",
+    Label("monitoring/hostos/export-guestos-serial-logs.service"): "/etc/systemd/system/export-guestos-serial-logs.service",
 
     # networking
     Label("networking/generate-network-config/generate-network-config-hostos.service"): "/etc/systemd/system/generate-network-config.service",
