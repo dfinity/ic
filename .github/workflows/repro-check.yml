@@ -45,11 +45,11 @@ jobs:
         run: |
           dd if=/dev/zero of=/home/ubuntu/workspace.img bs=1G count=110
           mkfs.ext4 /home/ubuntu/workspace.img
-          mkdir -p /home/ubuntu/.cache/repro-check
+          mkdir -p /home/ubuntu/.cache
 
-          mount -o loop /home/ubuntu/workspace.img /home/ubuntu/.cache/repro-check
+          mount -o loop /home/ubuntu/workspace.img /home/ubuntu/.cache
 
-          chown -R ubuntu:ubuntu /home/ubuntu/.cache/repro-check
+          chown -R ubuntu:ubuntu /home/ubuntu/.cache
 
       - name: Repro check for ${{ inputs.github_sha }}
         shell: bash
