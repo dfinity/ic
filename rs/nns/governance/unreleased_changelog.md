@@ -8,7 +8,10 @@ on the process that this file is part of, see
 
 ## Added
 
-* Enabled performance based rewards
+* Enabled performance-based node provider rewards. See the motion proposal
+  [NNS Proposal 135054](https://dashboard.internetcomputer.org/proposal/135054)
+  for details about how the performance-based algorithm works. More details can also be found in the forum post
+  [Performance Based Node Rewards](https://forum.dfinity.org/t/performance-based-node-rewards/35208)
 
 ## Changed
 
