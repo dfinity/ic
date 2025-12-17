@@ -117,6 +117,8 @@ impl Setup {
                 min_confirmations: Some(MIN_CONFIRMATIONS),
                 mode: Mode::GeneralAvailability,
                 get_utxos_cache_expiration_seconds: Some(Duration::from_secs(60).as_secs()),
+                utxo_consolidation_threshold: Some(10_000),
+                max_num_inputs_in_transaction: Some(500),
             });
             env.install_canister(
                 minter,
