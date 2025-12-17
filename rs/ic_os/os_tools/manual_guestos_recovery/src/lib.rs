@@ -2,6 +2,7 @@ pub mod recovery_utils;
 mod ui;
 
 use anyhow::{Context, Result};
+use ratatui::crossterm::cursor;
 use ratatui::crossterm::event::{
     DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers,
 };
@@ -311,47 +312,32 @@ impl Default for AppState {
 // Terminal Management
 // ============================================================================
 
-/// Best-effort cleanup of terminal state when setup fails before TerminalGuard exists.
-/// This avoids leaving the console stuck in raw mode or the alternate screen.
-fn restore_terminal_basic() {
+/// Best-effort cleanup of terminal state. This avoids leaving the console stuck
+/// in raw mode or the alternate screen.
+fn restore_terminal() {
     let _ = disable_raw_mode();
     let mut stdout = io::stdout();
-    let _ = execute!(stdout, LeaveAlternateScreen);
+    let _ = execute!(stdout, LeaveAlternateScreen, cursor::Show);
 }
 
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
-    enable_raw_mode().context("Failed to enable raw mode")?;
+    let result = (|| {
+        enable_raw_mode().context("Failed to enable raw mode")?;
+        let mut stdout = io::stdout();
+        execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")?;
 
-    let mut stdout = io::stdout();
-    if let Err(e) =
-        execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")
-    {
-        restore_terminal_basic();
-        return Err(e);
+        let backend = CrosstermBackend::new(stdout);
+        let mut terminal = Terminal::new(backend).context("Failed to create terminal")?;
+        terminal.clear().context("Failed to clear terminal")?;
+
+        Ok(terminal)
+    })();
+
+    if result.is_err() {
+        restore_terminal();
     }
 
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = match Terminal::new(backend).context("Failed to create terminal") {
-        Ok(t) => t,
-        Err(e) => {
-            restore_terminal_basic();
-            return Err(e);
-        }
-    };
-
-    if let Err(e) = terminal.clear().context("Failed to clear terminal") {
-        let _ = teardown_terminal(&mut terminal);
-        return Err(e);
-    }
-
-    Ok(terminal)
-}
-
-fn teardown_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
-    disable_raw_mode().context("Failed to disable raw mode")?;
-    let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
-    terminal.show_cursor().context("Failed to show cursor")?;
-    Ok(())
+    result
 }
 
 /// Prints a prominent success message to stderr (outside the TUI).
@@ -404,8 +390,8 @@ impl TerminalGuard {
 
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
-        if let Some(ref mut terminal) = self.terminal {
-            let _ = teardown_terminal(terminal);
+        if self.terminal.is_some() {
+            restore_terminal();
         }
     }
 }
