@@ -591,7 +591,7 @@ impl SystemState {
             canister_log,
             log_memory_store: LogMemoryStore::from_checkpoint(
                 log_memory_store_data,
-                log_memory_limit,
+                log_memory_limit.get() as usize,
             ),
             wasm_memory_limit,
             next_snapshot_id,
