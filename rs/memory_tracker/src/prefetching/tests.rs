@@ -1,7 +1,7 @@
-use ic_replicated_state::PageIndex;
+use ic_sys::PageIndex;
 use ic_types::NumOsPages;
 
-use crate::prefetching::PageBitmap;
+use crate::PageBitmap;
 
 #[test]
 fn page_bitmap_restrict_to_unaccessed_forward() {
