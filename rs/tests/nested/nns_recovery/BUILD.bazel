@@ -36,7 +36,6 @@ rust_library(
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:rand",
-        "@crate_index//:sha2",
         "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
