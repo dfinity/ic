@@ -70,7 +70,7 @@ class GithubApi:
             return False
 
     @staticmethod
-    def submit_dependencies(toml_lock_filenames: typing.List[(str, str)]) -> None:
+    def submit_dependencies(toml_lock_filenames: typing.List[typing.Tuple[str, str]]) -> None:
         def get_sha():
             if "GITHUB_PR_SHA" in os.environ:
                 return os.environ["GITHUB_PR_SHA"]
