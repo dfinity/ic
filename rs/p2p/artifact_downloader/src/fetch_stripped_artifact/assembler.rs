@@ -370,11 +370,10 @@ pub(crate) enum AssemblyError {
 /// and tries to reconstruct the block from it.
 trait PayloadAssembler {
     type ArtifactId;
-    type MissingArtifactId;
     type ArtifactMessage;
 
     /// Returns an iterator over stripped artifacts that are still missing.
-    fn missing_artifacts(&self) -> impl Iterator<Item = Self::MissingArtifactId>;
+    fn missing_artifacts(&self) -> impl Iterator<Item = StrippedMessageId>;
 
     /// Tries to insert a missing artifact into this payload assembler.
     fn try_insert(
@@ -394,18 +393,15 @@ struct IngressPayloadAssembler {
 
 impl PayloadAssembler for IngressPayloadAssembler {
     type ArtifactId = SignedIngressId;
-    type MissingArtifactId = SignedIngressId;
     type ArtifactMessage = SignedIngress;
 
-    fn missing_artifacts(&self) -> impl Iterator<Item = SignedIngressId> {
+    fn missing_artifacts(&self) -> impl Iterator<Item = StrippedMessageId> {
         self.ingress_messages
             .iter()
             .filter_map(|(id, maybe_ingress)| {
-                if maybe_ingress.is_none() {
-                    Some(id.clone())
-                } else {
-                    None
-                }
+                maybe_ingress
+                    .is_none()
+                    .then(|| StrippedMessageId::Ingress(id.clone()))
             })
     }
 
@@ -453,18 +449,15 @@ struct IDkgDealingsAssembler {
 
 impl PayloadAssembler for IDkgDealingsAssembler {
     type ArtifactId = IDkgArtifactId;
-    type MissingArtifactId = (NodeIndex, IDkgArtifactId);
     type ArtifactMessage = SignedIDkgDealing;
 
-    fn missing_artifacts(&self) -> impl Iterator<Item = (NodeIndex, IDkgArtifactId)> {
+    fn missing_artifacts(&self) -> impl Iterator<Item = StrippedMessageId> {
         self.signed_dealings
             .iter()
             .filter_map(|((node_index, dealing_id), maybe_dealing)| {
-                if maybe_dealing.is_none() {
-                    Some((*node_index, dealing_id.clone()))
-                } else {
-                    None
-                }
+                maybe_dealing
+                    .is_none()
+                    .then(|| StrippedMessageId::IDkgDealing(dealing_id.clone(), *node_index))
             })
     }
 
@@ -575,15 +568,8 @@ impl BlockProposalAssembler {
 
     /// Returns the list of messages which have been stripped from the block.
     pub(crate) fn missing_stripped_messages(&self) -> Vec<StrippedMessageId> {
-        let ingress = self
-            .ingress_assembler
-            .missing_artifacts()
-            .map(StrippedMessageId::Ingress);
-
-        let idkg_dealings = self
-            .idkg_assembler
-            .missing_artifacts()
-            .map(|(node_index, dealing_id)| StrippedMessageId::IDkgDealing(dealing_id, node_index));
+        let ingress = self.ingress_assembler.missing_artifacts();
+        let idkg_dealings = self.idkg_assembler.missing_artifacts();
 
         ingress.chain(idkg_dealings).collect()
     }
