@@ -13,4 +13,4 @@ if __name__ == "__main__":
         basedir = os.environ["GITHUB_PR_DIR"]
     else:
         basedir = os.environ["GITHUB_WORKSPACE"]
-    GithubApi.submit_dependencies([basedir, LOCKFILE])
+    GithubApi.submit_dependencies([(basedir, LOCKFILE)])
