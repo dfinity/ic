@@ -356,14 +356,12 @@ system_test_nns(
         "IC_RECOVERY_PATH": "$(rootpath //rs/recovery:ic-recovery)",
         "IC_REPLAY_PATH": "$(rootpath //rs/replay:ic-replay)",
     },
+    guestos = "mainnet_nns_dev",  # necessary for configuring NNS public key
     tags = [
         "dynamic_testnet",
         "manual",
     ],
     test_driver_target = ":nns_recovery_testnet_bin",
-    uses_guestos_img = False,
-    uses_guestos_mainnet_nns_img = True,
-    uses_guestos_test_update = True,
     uses_setupos_mainnet_latest_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS + [
         "//rs/tests:recovery/binaries",
@@ -381,12 +379,11 @@ system_test_nns(
         "IC_RECOVERY_PATH": "$(rootpath //rs/recovery:ic-recovery)",
         "IC_REPLAY_PATH": "$(rootpath //rs/replay:ic-replay)",
     },
+    guestos = "mainnet_nns",
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    uses_guestos_img = False,
-    uses_guestos_mainnet_nns_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS + [
         "//rs/tests:recovery/binaries",
         # TODO (CON-1624): Remove those dependencies once changes reached mainnet NNS

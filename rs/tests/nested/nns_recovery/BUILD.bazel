@@ -71,7 +71,7 @@ system_test_nns(
         "IC_REPLAY_PATH": "$(rootpath //rs/replay:ic-replay)",
     },
     flaky = True,
-    guestos = "mainnet_nns",
+    guestos = "mainnet_nns_dev",  # necessary for configuring NNS public key
     guestos_update = "test",
     tags = [
         "system_test_large",
