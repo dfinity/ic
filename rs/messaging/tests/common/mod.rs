@@ -237,6 +237,7 @@ impl TestSubnetConfig {
                     max_instructions_per_round: self.max_instructions_per_round.into(),
                     max_instructions_per_query_message: self.max_instructions_per_round.into(),
                     max_instructions_per_slice: self.max_instructions_per_round.into(),
+                    max_instructions_per_install_code_slice: self.max_instructions_per_round.into(),
                     ..SchedulerConfig::application_subnet()
                 },
                 cycles_account_manager_config: CyclesAccountManagerConfig::application_subnet(),
