@@ -369,33 +369,6 @@ fn print_success_summary(message: &str) {
     let _ = handle.flush();
 }
 
-/// Guard struct to ensure terminal cleanup on panic
-struct TerminalGuard {
-    terminal: Option<Terminal<CrosstermBackend<io::Stdout>>>,
-}
-
-impl TerminalGuard {
-    fn new(terminal: Terminal<CrosstermBackend<io::Stdout>>) -> Self {
-        Self {
-            terminal: Some(terminal),
-        }
-    }
-
-    fn get_mut(&mut self) -> &mut Terminal<CrosstermBackend<io::Stdout>> {
-        self.terminal
-            .as_mut()
-            .expect("TerminalGuard: terminal was already taken.")
-    }
-}
-
-impl Drop for TerminalGuard {
-    fn drop(&mut self) {
-        if self.terminal.is_some() {
-            restore_terminal();
-        }
-    }
-}
-
 // ============================================================================
 // Application Logic
 // ============================================================================
@@ -448,9 +421,10 @@ impl GuestOSRecoveryApp {
                 return Err(e);
             }
         };
-        let mut terminal_guard = TerminalGuard::new(terminal);
+        // Wrap terminal in a guard that ensures cleanup on drop
+        let mut terminal = scopeguard::guard(terminal, |_| restore_terminal());
 
-        execute!(terminal_guard.get_mut().backend_mut(), EnableMouseCapture)
+        execute!(terminal.backend_mut(), EnableMouseCapture)
             .context("Failed to enable mouse capture")?;
 
         // Main Loop
@@ -459,7 +433,7 @@ impl GuestOSRecoveryApp {
                 break;
             }
 
-            self.redraw(terminal_guard.get_mut())?;
+            self.redraw(&mut terminal)?;
 
             // Event polling
             if ratatui::crossterm::event::poll(Duration::from_millis(PROCESS_POLL_INTERVAL_MS))? {
@@ -472,11 +446,11 @@ impl GuestOSRecoveryApp {
             self.tick()?;
         }
 
-        execute!(terminal_guard.get_mut().backend_mut(), DisableMouseCapture)
+        execute!(terminal.backend_mut(), DisableMouseCapture)
             .context("Failed to disable mouse capture")?;
 
         // Drop guard to cleanup terminal before printing any final messages
-        drop(terminal_guard);
+        drop(terminal);
 
         // If we finished successfully, print the message after cleanup
         if let Some(Ok(())) = self.result {
