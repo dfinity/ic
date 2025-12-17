@@ -206,25 +206,31 @@ where
     let memory_allocation = match run_params.memory_allocation {
         MemoryAllocation::BestEffort => 0,
         MemoryAllocation::Small => 1,
-        MemoryAllocation::CrossedDuringTest => match scenario_params.memory_usage_change {
-            // Uploading a chunk only increases the memory usage by 1MiB
-            // and thus we cannot have a larger offset in general.
-            MemoryUsageChange::Increase => memory_usage_after_setup.get() + 512 * KIB,
-            MemoryUsageChange::None => match scenario_params.scenario {
-                Scenario::IncreaseMemoryAllocation => {
-                    assert!(memory_usage_after_setup.get() >= GIB);
-                    memory_usage_after_setup.get() - GIB
+        MemoryAllocation::CrossedDuringTest => {
+            // Things to consider when chosing offset:
+            // - chunk store changes memory usage by 1MiB at most
+            // - canister logging changes memory by 3 OS-pages of 4 KiB (12 KiB)
+            let memory_allocation_crossed_offset = 6 * KIB;
+            match scenario_params.memory_usage_change {
+                // Uploading a chunk only increases the memory usage.
+                MemoryUsageChange::Increase => {
+                    memory_usage_after_setup.get() + memory_allocation_crossed_offset
                 }
-                Scenario::DecreaseMemoryAllocation => memory_usage_after_setup.get() + GIB,
-                _ => memory_usage_after_setup.get(),
-            },
-            MemoryUsageChange::Decrease => {
-                // Clearing the chunk store decreases the memory usage by 1MiB
-                // and thus we cannot have a larger offset in general.
-                assert!(memory_usage_after_setup.get() >= 512 * KIB);
-                memory_usage_after_setup.get() - 512 * KIB
+                MemoryUsageChange::None => match scenario_params.scenario {
+                    Scenario::IncreaseMemoryAllocation => {
+                        assert!(memory_usage_after_setup.get() >= GIB);
+                        memory_usage_after_setup.get() - GIB
+                    }
+                    Scenario::DecreaseMemoryAllocation => memory_usage_after_setup.get() + GIB,
+                    _ => memory_usage_after_setup.get(),
+                },
+                MemoryUsageChange::Decrease => {
+                    // Clearing the chunk store decreases the memory usage.
+                    assert!(memory_usage_after_setup.get() >= memory_allocation_crossed_offset);
+                    memory_usage_after_setup.get() - memory_allocation_crossed_offset
+                }
             }
-        },
+        }
         MemoryAllocation::Large => 80 * GIB,
     };
     let settings = CanisterSettingsArgsBuilder::new()
