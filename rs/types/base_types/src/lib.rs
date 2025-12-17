@@ -185,7 +185,7 @@ pub enum SnapshotIdError {
 impl fmt::Display for SnapshotIdError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidLength(err) => write!(f, "Invalid length of SnapshotId: {err}"),
+            Self::InvalidLength(err) => write!(f, "Invalid length of SnapshotId: {err} test a change",),
             Self::InvalidFormat(err) => write!(f, "Invalid format of SnapshotId: {err}",),
         }
     }
