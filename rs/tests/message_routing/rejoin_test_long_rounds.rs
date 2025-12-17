@@ -1,6 +1,6 @@
 /* tag::catalog[]
 
-Title:: Nodes can rejoin a subnet with many canisters
+Title:: Nodes can rejoin a subnet with long DSM rounds
 
 Runbook::
 . setup the testnet of 3f + 1 nodes with f = 4 (like on mainnet)
