@@ -605,8 +605,6 @@ async fn create_identity(
     })
     .await??;
 
-    let node_id = derive_node_id(&public_key).expect("failed to derive node id");
-
     // Custom Signer
     Ok(Box::new(
         NodeSender::new(
@@ -615,7 +613,7 @@ async fn create_identity(
                 #[allow(clippy::disallowed_methods)]
                 let sig = tokio::task::block_in_place(|| {
                     crypto_component
-                        .sign_basic(msg, node_id, registry_client.get_latest_version())
+                        .sign_basic(msg)
                         .map(|value| value.get().0)
                         .map_err(|err| anyhow!("failed to sign message: {err:?}"))
                 })?;

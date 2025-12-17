@@ -85,7 +85,7 @@ mod stability_tests {
         let bytes = b"The quick brown fox jumps over the lazy dog";
         let tests = vec![
             ParameterizedTest {
-                input: (AlgorithmId::Placeholder, bytes),
+                input: (AlgorithmId::Unspecified, bytes),
                 expected: "ffa2bc682bd09b967beeb044e28d2ed70c0ebae08992b345d7e86a4430e86d2a",
             },
             ParameterizedTest {
