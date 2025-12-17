@@ -71,7 +71,7 @@ fn main() -> io::Result<()> {
     // systemd control group in the future). Thus we do not declare
     // this process as a session leader.
     if let Err(err) = setpgid(Pid::from_raw(0), Pid::from_raw(0)) {
-        eprintln!("Failed to setup a new process group for replica. Test a change");
+        eprintln!("Failed to setup a new process group for replica.");
         // This is a generic exit error. At this point sandboxing is
         // not turned on so we can do a simple exit with cleanup.
         return Err(io::Error::other(err));
