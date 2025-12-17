@@ -293,6 +293,7 @@ pub mod ckbtc {
         })
     }
 
+    #[allow(deprecated)]
     pub(crate) fn distributed_kyt_fee() -> impl Strategy<Value = EventType> {
         prop_struct!(EventType::DistributedKytFee {
             kyt_provider: principal(),
@@ -313,6 +314,7 @@ pub mod ckbtc {
         })
     }
 
+    #[allow(deprecated)]
     pub(crate) fn schedule_deposit_reimbursement() -> impl Strategy<Value = EventType> {
         prop_struct!(EventType::ScheduleDepositReimbursement {
             account: account(),
@@ -322,6 +324,7 @@ pub mod ckbtc {
         })
     }
 
+    #[allow(deprecated)]
     pub(crate) fn reimbursed_failed_deposit() -> impl Strategy<Value = EventType> {
         prop_struct!(EventType::ReimbursedFailedDeposit {
             burn_block_index: any::<u64>(),

@@ -26,12 +26,15 @@ mod arbitrary {
             #[allow(deprecated)]
             EventType::IgnoredUtxo { .. } => ckbtc::ignored_utxo().boxed(),
             EventType::SuspendedUtxo { .. } => ckbtc::suspended_utxo().boxed(),
+            #[allow(deprecated)]
             EventType::DistributedKytFee { .. } => ckbtc::distributed_kyt_fee().boxed(),
             #[allow(deprecated)]
             EventType::RetrieveBtcKytFailed { .. } => ckbtc::retrieve_btc_kyt_failed().boxed(),
+            #[allow(deprecated)]
             EventType::ScheduleDepositReimbursement { .. } => {
                 ckbtc::schedule_deposit_reimbursement().boxed()
             }
+            #[allow(deprecated)]
             EventType::ReimbursedFailedDeposit { .. } => ckbtc::reimbursed_failed_deposit().boxed(),
             EventType::CheckedUtxoMintUnknown { .. } => ckbtc::checked_utxo_mint_unknown().boxed(),
             EventType::ScheduleWithdrawalReimbursement { .. } => {
