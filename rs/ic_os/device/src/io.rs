@@ -22,7 +22,10 @@ pub fn retry_if_io_error<T>(
                         return Err(e);
                     }
                     #[cfg(not(test))]
-                    std::thread::sleep(Duration::from_millis((100 * attempts) as u64));
+                    {
+                        let jitter = rand::random::<i32>() % 200;
+                        std::thread::sleep(Duration::from_millis((100 * attempts + jitter) as u64));
+                    }
                 } else {
                     return Err(e);
                 }
