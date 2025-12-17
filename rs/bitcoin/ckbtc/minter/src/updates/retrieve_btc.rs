@@ -236,7 +236,7 @@ pub async fn retrieve_btc<R: CanisterRuntime>(
         read_state(|s| s.retrieve_btc_status(block_index))
     );
 
-    schedule_now(TaskType::ProcessLogic(false), &IC_CANISTER_RUNTIME);
+    schedule_now(TaskType::ProcessLogic, &IC_CANISTER_RUNTIME);
 
     Ok(RetrieveBtcOk { block_index })
 }
@@ -330,14 +330,14 @@ pub async fn retrieve_btc_with_approval<R: CanisterRuntime>(
         }),
     };
 
-    mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request, &IC_CANISTER_RUNTIME));
+    mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request, runtime));
 
     assert_eq!(
         crate::state::RetrieveBtcStatus::Pending,
         read_state(|s| s.retrieve_btc_status(block_index))
     );
 
-    schedule_now(TaskType::ProcessLogic(false), runtime);
+    schedule_now(TaskType::ProcessLogic, runtime);
 
     Ok(RetrieveBtcOk { block_index })
 }
