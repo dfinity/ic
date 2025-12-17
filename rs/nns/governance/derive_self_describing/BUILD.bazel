@@ -1,0 +1,19 @@
+load("@rules_rust//rust:defs.bzl", "rust_proc_macro")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:proc-macro2",
+    "@crate_index//:quote",
+    "@crate_index//:syn",
+]
+
+rust_proc_macro(
+    name = "derive_self_describing",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_nns_governance_derive_self_describing",
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
