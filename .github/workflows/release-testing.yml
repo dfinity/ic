@@ -61,6 +61,42 @@ jobs:
     with:
       commit-sha: ${{ github.sha }}
 
+  nns-recovery-mainnet-state:
+    name: Bazel Test NNS Recovery with Mainnet State
+    runs-on: *dind-large-setup
+    container: *container-setup
+    timeout-minutes: 180
+    environment: Nightly Tests
+    steps:
+      - *checkout
+      - name: Set up backup pod access
+        run: |
+          # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
+          if [ -z "${SSH_AUTH_SOCK:-}" ]; then
+            eval "$(ssh-agent -s)"
+            ssh-add - <<'EOF'
+          ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
+          EOF
+            echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          fi
+
+          rm -rf ~/.ssh
+          mkdir -p ~/.ssh
+          chmod 0700 ~/.ssh
+          echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
+      - name: Run NNS Recovery Test with Mainnet State
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            bazel test \
+              --config=lint \
+              --config=flaky_retry \
+              --config=stamped \
+              //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state \
+              --test_env=SSH_AUTH_SOCK \
+              --keep_going --test_timeout=10800
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
   dependency-scan-release-cut:
     name: Dependency Scan for Release
     runs-on: *dind-large-setup

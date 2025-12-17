@@ -62,6 +62,16 @@ system_test_nns(
     ],
 )
 
+# To run this test,
+#
+#     bazel \
+#         test \
+#         --test_env=SSH_AUTH_SOCK \
+#         //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state
+#
+# The only unusual thing in this command is `--test_env=SSH_AUTH_SOCK`. That causes the
+# SSH_AUTH_SOCK environment variable to be "forwarded" from your shell to the sandbox where the test
+# is run. This authorizes the test to download the test data.
 system_test_nns(
     name = "nr_large_with_mainnet_state",
     enable_head_nns_variant = False,
@@ -74,7 +84,9 @@ system_test_nns(
     guestos = "mainnet_nns_dev",  # necessary for configuring NNS public key
     guestos_update = "test",
     tags = [
-        "system_test_large",
+        "manual", # to prevent the job to be ran twice.
+        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
+        "requires-network",  # Because mainnet state is downloaded (and used).
     ],
     test_timeout = "eternal",
     uses_setupos_mainnet_latest_img = True,
