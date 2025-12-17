@@ -212,8 +212,8 @@ where
             // - canister logging changes memory by 3 OS-pages of 4 KiB (12 KiB)
             let memory_allocation_crossed_offset = 6 * KIB;
             match scenario_params.memory_usage_change {
-                // Uploading a chunk increases the memory usage.
                 MemoryUsageChange::Increase => {
+                    // What increases memory usage: chunk upload, installing code (canister logs).
                     memory_usage_after_setup.get() + memory_allocation_crossed_offset
                 }
                 MemoryUsageChange::None => match scenario_params.scenario {
@@ -225,7 +225,7 @@ where
                     _ => memory_usage_after_setup.get(),
                 },
                 MemoryUsageChange::Decrease => {
-                    // Clearing the chunk store decreases the memory usage.
+                    // What decreases memory usage: clearning chunk store, uninstalling/deleting canister (canister logs).
                     assert!(memory_usage_after_setup.get() >= memory_allocation_crossed_offset);
                     memory_usage_after_setup.get() - memory_allocation_crossed_offset
                 }
