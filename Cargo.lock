@@ -17791,6 +17791,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "ratatui",
+ "scopeguard",
  "shell-escape",
  "tui-textarea",
 ]
