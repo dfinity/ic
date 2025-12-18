@@ -1,3 +1,4 @@
+use crate::WASM_PAGE_SIZE;
 use crate::wasmtime_embedder::host_memory::MemoryPageSize;
 
 use ic_types::NumBytes;
@@ -6,8 +7,6 @@ use memory_tracker::{SigsegvMemoryTracker, signal_access_kind_and_address};
 use std::convert::TryFrom;
 use std::sync::MutexGuard;
 use std::sync::{Arc, Mutex, atomic::Ordering};
-
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 /// Helper function to create a memory tracking SIGSEGV handler function.
 pub(crate) fn sigsegv_memory_tracker_handler(
