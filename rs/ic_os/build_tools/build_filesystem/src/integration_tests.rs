@@ -729,3 +729,31 @@ fn test_invalid_partition_size() {
         .tar_content(simple_tar())
         .build();
 }
+
+#[test]
+fn test_no_input_tar_with_extra_files() {
+    for output_type in all_types() {
+        println!("Testing output type: {:?}", output_type);
+        let temp_dir = TempDir::new().unwrap();
+        let extra_file1 = temp_dir.path().join("extra1.txt");
+        let extra_file2 = temp_dir.path().join("extra2.txt");
+        fs::write(&extra_file1, "first extra file").unwrap();
+        fs::write(&extra_file2, "second extra file").unwrap();
+
+        let image = ImageFixture::builder(output_type)
+            .partition_size_if_not_tar("4M")
+            .extra_file(&format!("{}:/extra1.txt:0644", extra_file1.display()))
+            .extra_file(&format!("{}:/extra2.txt:0755", extra_file2.display()))
+            .build();
+
+        let mounted = image.mount();
+        mounted.assert_file_content("extra1.txt", "first extra file");
+        mounted.assert_file_content("extra2.txt", "second extra file");
+
+        // Fat does not support permissions
+        if output_type != OutputType::Fat32 && output_type != OutputType::Vfat {
+            mounted.assert_permissions("extra1.txt", 0o644);
+            mounted.assert_permissions("extra2.txt", 0o755);
+        }
+    }
+}

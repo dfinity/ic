@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use tar::{Archive, Header};
 
 pub fn process_filesystem(
-    input_tar_path: &PathBuf,
+    input_tar_path: Option<&Path>,
     output_builder: &mut dyn FilesystemBuilder,
     subdir: Option<&Path>,
     strip_paths: &RegexSet,
@@ -22,6 +22,33 @@ pub fn process_filesystem(
         add_lost_found(output_builder, &path_converter, selinux_file_contexts)?;
     }
 
+    if let Some(input_tar_path) = input_tar_path {
+        process_input_tar(
+            input_tar_path,
+            output_builder,
+            &path_converter,
+            selinux_file_contexts,
+            strip_paths,
+        )?;
+    }
+
+    process_extra_files(
+        extra_files,
+        output_builder,
+        &path_converter,
+        selinux_file_contexts,
+    )?;
+
+    Ok(())
+}
+
+fn process_input_tar(
+    input_tar_path: &Path,
+    output_builder: &mut dyn FilesystemBuilder,
+    path_converter: &PathConverter,
+    selinux_file_contexts: &Option<FileContexts>,
+    strip_paths: &RegexSet,
+) -> Result<()> {
     let mut input_tar = Archive::new(std::io::BufReader::new(
         File::open(input_tar_path)
             .with_context(|| format!("Failed to open input file {:?}", input_tar_path))?,
@@ -60,6 +87,15 @@ pub fn process_filesystem(
         }
     }
 
+    Ok(())
+}
+
+fn process_extra_files(
+    extra_files: &[(PathBuf, String, u32)],
+    output_builder: &mut dyn FilesystemBuilder,
+    path_converter: &PathConverter,
+    selinux_file_contexts: &Option<FileContexts>,
+) -> Result<()> {
     for (source, target, mode) in extra_files {
         let metadata = std::fs::metadata(source)
             .with_context(|| format!("Failed to read metadata for {:?}", source))?;
@@ -78,7 +114,6 @@ pub fn process_filesystem(
             selinux_file_contexts,
         )?;
     }
-
     Ok(())
 }
 

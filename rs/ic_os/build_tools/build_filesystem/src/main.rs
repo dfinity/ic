@@ -210,16 +210,14 @@ pub(crate) fn build_filesystem(args: Args) -> Result<()> {
         }
     };
 
-    if let Some(input) = &args.input {
-        processor::process_filesystem(
-            input,
-            output_builder.as_mut(),
-            args.subdir.as_deref(),
-            &strip_paths,
-            &extra_files,
-            &file_contexts,
-        )?;
-    }
+    processor::process_filesystem(
+        args.input.as_deref(),
+        output_builder.as_mut(),
+        args.subdir.as_deref(),
+        &strip_paths,
+        &extra_files,
+        &file_contexts,
+    )?;
 
     output_builder.finish()?;
 
