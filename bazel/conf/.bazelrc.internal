@@ -9,6 +9,7 @@ build:bes --remote_build_event_upload=minimal
 # DFINITY internal remote cache setup
 build --remote_cache=bazel-remote.idx.dfinity.network
 build --remote_max_connections=50 # default 100
+build --remote_timeout=90s # default 60s
 build --experimental_remote_cache_async
 build --experimental_remote_cache_compression # If enabled, compress/decompress cache blobs with zstd.
 # TODO: re-enable after fixing the error like this:
