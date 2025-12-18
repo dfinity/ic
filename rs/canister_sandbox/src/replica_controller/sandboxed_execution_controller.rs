@@ -25,6 +25,7 @@ use ic_metrics::buckets::{decimal_buckets_with_zero, exponential_buckets};
 use ic_replicated_state::canister_state::execution_state::{
     SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary, WasmExecutionMode,
 };
+use ic_replicated_state::canister_state::system_state::log_memory_store::LogMemoryStore;
 use ic_replicated_state::{
     EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap, ReplicatedState,
     page_map::allocated_pages_count,
@@ -1071,6 +1072,7 @@ impl WasmExecutor for SandboxedExecutionController {
         let next_wasm_memory_id = MemoryId::new();
 
         let stable_memory_page_map = PageMap::new(Arc::clone(&self.fd_factory));
+        let log_memory_store = LogMemoryStore::new(Arc::clone(&self.fd_factory));
 
         let (memory_modifications, exported_globals, serialized_module, compilation_result) =
             match compilation_cache.get(&wasm_binary.binary) {
@@ -1238,6 +1240,7 @@ impl WasmExecutor for SandboxedExecutionController {
             exports: ExportedFunctions::new(initial_state_data.exported_functions),
             wasm_memory,
             stable_memory,
+            log_memory_store,
             exported_globals,
             metadata: initial_state_data.wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
