@@ -398,11 +398,8 @@ impl PayloadAssembler for IngressPayloadAssembler {
     fn missing_artifacts(&self) -> impl Iterator<Item = StrippedMessageId> {
         self.ingress_messages
             .iter()
-            .filter_map(|(id, maybe_ingress)| {
-                maybe_ingress
-                    .is_none()
-                    .then(|| StrippedMessageId::Ingress(id.clone()))
-            })
+            .filter(|(_, maybe_ingress)| maybe_ingress.is_none())
+            .map(|(id, _)| StrippedMessageId::Ingress(id.clone()))
     }
 
     fn try_insert(
@@ -454,10 +451,9 @@ impl PayloadAssembler for IDkgDealingsAssembler {
     fn missing_artifacts(&self) -> impl Iterator<Item = StrippedMessageId> {
         self.signed_dealings
             .iter()
-            .filter_map(|((node_index, dealing_id), maybe_dealing)| {
-                maybe_dealing
-                    .is_none()
-                    .then(|| StrippedMessageId::IDkgDealing(dealing_id.clone(), *node_index))
+            .filter(|(_, maybe_dealing)| maybe_dealing.is_none())
+            .map(|((node_index, dealing_id), _)| {
+                StrippedMessageId::IDkgDealing(dealing_id.clone(), *node_index)
             })
     }
 
