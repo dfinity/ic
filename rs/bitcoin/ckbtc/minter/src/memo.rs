@@ -4,7 +4,7 @@ use minicbor::Encoder;
 use minicbor::{Decode, Encode};
 
 #[cfg(test)]
-pub(crate) mod tests;
+mod tests;
 
 /// Encodes minter memo as a binary blob.
 pub fn encode<T: minicbor::Encode<()>>(t: &T) -> Vec<u8> {

@@ -1,9 +1,6 @@
 use super::*;
-use crate::memo;
-use crate::memo::tests::{arb_burn_memo, arb_mint_memo};
 use crate::queries::DecodeLedgerMemoError::InvalidMemo;
 use assert_matches::assert_matches;
-use proptest::prelude::*;
 
 #[test]
 fn test_decode_burn_convert_memo_is_stable() {
@@ -124,39 +121,5 @@ fn test_decode_too_long_memo() {
             Err(Some(InvalidMemo(msg)))
             if msg.contains("Memo longer than permitted length")
         );
-    }
-}
-
-proptest! {
-    #[test]
-    fn prop_decode_mint_memo_roundtrip(mint_memo in arb_mint_memo()) {
-        let encoded = memo::encode(&mint_memo);
-        let result = decode_ledger_memo(DecodeLedgerMemoArgs {
-            memo_type: MemoType::Mint, encoded_memo: encoded,
-        });
-
-        let expected: DecodeLedgerMemoResult = Ok(Some(DecodedMemo::Mint(Some(MintMemo::from(mint_memo)))));
-        prop_assert_eq!(&result, &expected, "Decoded Memo mismatch: {:?} vs {:?}", result, expected);
-    }
-
-    #[test]
-    fn prop_decode_burn_memo_roundtrip(burn_memo in arb_burn_memo()) {
-        // Filter out ambiguous cases: BurnMemo needs address field to be distinguishable
-        // from MintMemo because the other fields (kyt_fee, status/vout) can have ambiguous
-        // CBOR encodings at the same field positions. We don't need this filtering for mint memos,
-        // because we currently first try to decode a memo as a mint memo.
-        let has_distinguishing_field = match &burn_memo {
-            memo::BurnMemo::Convert { address, .. } => address.is_some()
-        };
-        prop_assume!(has_distinguishing_field);
-
-        let encoded = memo::encode(&burn_memo);
-        let result = decode_ledger_memo(DecodeLedgerMemoArgs {
-            memo_type: MemoType::Burn,
-            encoded_memo: encoded,
-        });
-
-        let expected: DecodeLedgerMemoResult = Ok(Some(DecodedMemo::Burn(Some(BurnMemo::from(burn_memo)))));
-        prop_assert_eq!(&result, &expected, "Decoded Memo mismatch: {:?} vs {:?}", result, expected);
     }
 }

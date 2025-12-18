@@ -1,11 +1,15 @@
 use crate::memo::{BurnMemo, MintMemo, Status};
 use crate::state::LedgerBurnIndex;
+use crate::test_fixtures::arbitrary::{
+    burn_memo, mint_convert_memo, mint_kyt_fail_memo, mint_kyt_memo, mint_memo,
+    mint_reimburse_withdrawal_memo,
+};
 use icrc_ledger_types::icrc1::transfer::Memo;
 use proptest::prelude::*;
 
 proptest! {
     #[test]
-    fn mint_memo_round_trip(mint_memo in arb_mint_memo()) {
+    fn mint_memo_round_trip(mint_memo in mint_memo()) {
         let mut buf = vec![];
         minicbor::encode(&mint_memo, &mut buf).expect("encoding should succeed");
 
@@ -15,7 +19,7 @@ proptest! {
     }
 
     #[test]
-    fn burn_memo_round_trip(burn_memo in arb_burn_memo()) {
+    fn burn_memo_round_trip(burn_memo in burn_memo()) {
         let mut buf = vec![];
         minicbor::encode(&burn_memo, &mut buf).expect("encoding should succeed");
 
@@ -25,7 +29,7 @@ proptest! {
     }
 
     #[test]
-    fn should_be_less_than_80_bytes(mint_memo in arb_mint_memo(), burn_memo in arb_burn_memo()) {
+    fn should_be_less_than_80_bytes(mint_memo in mint_memo(), burn_memo in burn_memo()) {
         let encoded_mint_memo = crate::memo::encode(&mint_memo);
         let memo = Memo::from(encoded_mint_memo);
         prop_assert!(memo.0.len() <= 80, "encoded mint memo is too large: {:?}", memo);
@@ -92,88 +96,6 @@ fn encode_burn_memo_is_stable() {
     );
 }
 
-pub(crate) fn arb_mint_memo() -> impl Strategy<Value = MintMemo<'static>> {
-    prop_oneof![
-        arb_mint_convert_memo(),
-        arb_mint_kyt_memo(),
-        arb_mint_kyt_fail_memo(),
-        arb_mint_reimburse_withdrawal_memo()
-    ]
-}
-
-pub(crate) fn arb_mint_convert_memo() -> impl Strategy<Value = MintMemo<'static>> {
-    (
-        proptest::option::of(proptest::collection::vec(any::<u8>(), 32)),
-        proptest::option::of(any::<u32>()),
-        proptest::option::of(any::<u64>()),
-    )
-        .prop_map(|(txid, vout, kyt_fee)| {
-            MintMemo::Convert {
-                txid: txid.as_ref().map(|v| {
-                    // For property testing, we leak memory intentionally to get 'static lifetime
-                    // This is acceptable in tests as they are short-lived
-                    let leaked: &'static [u8] = Box::leak(v.clone().into_boxed_slice());
-                    leaked
-                }),
-                vout,
-                kyt_fee,
-            }
-        })
-}
-
-pub(crate) fn arb_mint_kyt_memo() -> impl Strategy<Value = MintMemo<'static>> {
-    Just(MintMemo::Kyt)
-}
-
-pub(crate) fn arb_mint_kyt_fail_memo() -> impl Strategy<Value = MintMemo<'static>> {
-    (
-        proptest::option::of(any::<u64>()),
-        proptest::option::of(arb_status()),
-        proptest::option::of(any::<u64>()),
-    )
-        .prop_map(
-            |(kyt_fee, status, associated_burn_index)| MintMemo::KytFail {
-                kyt_fee,
-                status,
-                associated_burn_index,
-            },
-        )
-}
-
-pub(crate) fn arb_mint_reimburse_withdrawal_memo() -> impl Strategy<Value = MintMemo<'static>> {
-    any::<u64>().prop_map(|withdrawal_id| MintMemo::ReimburseWithdrawal {
-        withdrawal_id: LedgerBurnIndex::from(withdrawal_id),
-    })
-}
-
-pub(crate) fn arb_burn_memo() -> impl Strategy<Value = BurnMemo<'static>> {
-    (
-        proptest::option::of("[a-z0-9]{20,62}"),
-        proptest::option::of(any::<u64>()),
-        proptest::option::of(arb_status()),
-    )
-        .prop_map(|(address, kyt_fee, status)| {
-            BurnMemo::Convert {
-                address: address.as_ref().map(|s| {
-                    // For property testing, we leak memory intentionally to get 'static lifetime
-                    // This is acceptable in tests as they are short-lived
-                    let leaked: &'static str = Box::leak(s.clone().into_boxed_str());
-                    leaked
-                }),
-                kyt_fee,
-                status,
-            }
-        })
-}
-
-pub(crate) fn arb_status() -> impl Strategy<Value = Status> {
-    prop_oneof![
-        Just(Status::Accepted),
-        Just(Status::Rejected),
-        Just(Status::CallFailed),
-    ]
-}
-
 #[test]
 fn should_have_a_strategy_for_each_mint_memo_variant() {
     let memo_to_match = MintMemo::Convert {
@@ -182,10 +104,10 @@ fn should_have_a_strategy_for_each_mint_memo_variant() {
         kyt_fee: None,
     };
     let _ = match memo_to_match {
-        MintMemo::Convert { .. } => arb_mint_convert_memo().boxed(),
-        MintMemo::Kyt => arb_mint_kyt_memo().boxed(),
-        MintMemo::KytFail { .. } => arb_mint_kyt_fail_memo().boxed(),
-        MintMemo::ReimburseWithdrawal { .. } => arb_mint_reimburse_withdrawal_memo().boxed(),
+        MintMemo::Convert { .. } => mint_convert_memo().boxed(),
+        MintMemo::Kyt => mint_kyt_memo().boxed(),
+        MintMemo::KytFail { .. } => mint_kyt_fail_memo().boxed(),
+        MintMemo::ReimburseWithdrawal { .. } => mint_reimburse_withdrawal_memo().boxed(),
     };
 }
 
@@ -198,6 +120,6 @@ fn should_have_a_strategy_for_each_burn_memo_variant() {
     };
 
     let _ = match memo_to_match {
-        BurnMemo::Convert { .. } => arb_burn_memo().boxed(),
+        BurnMemo::Convert { .. } => burn_memo().boxed(),
     };
 }
