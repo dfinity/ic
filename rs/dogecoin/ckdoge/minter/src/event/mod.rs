@@ -2,9 +2,10 @@
 mod tests;
 
 use crate::address::DogecoinAddress;
+use crate::candid_api::WithdrawalFee;
 use candid::Deserialize;
 use ic_ckbtc_minter::address::BitcoinAddress;
-use ic_ckbtc_minter::queries::WithdrawalFee;
+use ic_ckbtc_minter::queries::WithdrawalFee as CkBtcWithdrawalFee;
 use ic_ckbtc_minter::state::eventlog::{
     CkBtcMinterEvent, EventLogger, EventType as CkBtcMinterEventType, ReplacedReason,
     ReplayLogError,
@@ -358,7 +359,7 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                 change_output,
                 submitted_at,
                 fee_per_vbyte,
-                withdrawal_fee,
+                withdrawal_fee: withdrawal_fee.map(ckbtc_withdrawal_fee_to_ckdoge),
                 signed_tx,
             }),
             CkBtcMinterEventType::ReplacedBtcTransaction {
@@ -376,7 +377,7 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                 change_output,
                 submitted_at,
                 fee_per_vbyte,
-                withdrawal_fee,
+                withdrawal_fee: withdrawal_fee.map(ckbtc_withdrawal_fee_to_ckdoge),
                 reason,
                 new_utxos,
             }),
@@ -503,7 +504,7 @@ impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
                 change_output,
                 submitted_at,
                 fee_per_vbyte,
-                withdrawal_fee,
+                withdrawal_fee: withdrawal_fee.map(ckdoge_withdrawal_fee_to_ckbtc),
                 signed_tx,
             },
             CkDogeMinterEventType::ReplacedDogeTransaction {
@@ -521,7 +522,7 @@ impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
                 change_output,
                 submitted_at,
                 fee_per_vbyte,
-                withdrawal_fee,
+                withdrawal_fee: withdrawal_fee.map(ckdoge_withdrawal_fee_to_ckbtc),
                 reason,
                 new_utxos,
             },
@@ -566,6 +567,30 @@ impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
                 },
             ),
         }
+    }
+}
+
+fn ckbtc_withdrawal_fee_to_ckdoge(
+    CkBtcWithdrawalFee {
+        minter_fee,
+        bitcoin_fee,
+    }: CkBtcWithdrawalFee,
+) -> WithdrawalFee {
+    WithdrawalFee {
+        dogecoin_fee: bitcoin_fee,
+        minter_fee,
+    }
+}
+
+fn ckdoge_withdrawal_fee_to_ckbtc(
+    WithdrawalFee {
+        minter_fee,
+        dogecoin_fee,
+    }: WithdrawalFee,
+) -> CkBtcWithdrawalFee {
+    CkBtcWithdrawalFee {
+        minter_fee,
+        bitcoin_fee: dogecoin_fee,
     }
 }
 
