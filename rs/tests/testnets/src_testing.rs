@@ -6,10 +6,10 @@
 //   one ic-gateway and a p8s (with grafana) VM.
 // All replica nodes use the default resources.
 //
-// You can setup this testnet with a lifetime of 180 mins by executing the following commands:
+// You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/tools/docker-run
-//   $ ict testnet create src_testing --lifetime-mins=180 --output-dir=./src_testing -- --test_tmpdir=./src_testing
+//   $ ict testnet create src_testing --output-dir=./src_testing -- --test_tmpdir=./src_testing
 //
 // The --output-dir=./src_testing will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./src_testing will store the remaining test output in the specified directory.
