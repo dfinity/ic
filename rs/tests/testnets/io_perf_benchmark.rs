@@ -12,7 +12,7 @@
 // You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/container/container-run.sh
-//   $ ict testnet create io_perf_benchmark --verbose --output-dir=./test_tmpdir -- --test_tmpdir=./test_tmpdir --test_env=SSH_AUTH_SOCK --test_env NUM_PERF_HOSTS=1
+//   $ NUM_PERF_HOSTS=1 ict testnet create io_perf_benchmark --verbose --output-dir=./test_tmpdir -- --test_tmpdir=./test_tmpdir
 //
 // Note: The `./test_tmpdir` directory is included in `.gitignore`.
 //

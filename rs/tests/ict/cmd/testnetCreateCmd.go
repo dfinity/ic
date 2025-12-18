@@ -166,7 +166,13 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 				return err
 			}
 		}
-		command := []string{"bazel", "run", target, "--"}
+		command := []string{"bazel", "run", target}
+
+		// Append all bazel args following the --, i.e. "ict testnet create target -- --verbose_explanations --test_tmpdir=test_tmpdier ..."
+		command = append(command, args[1:]...)
+
+		command = append(command, "--")
+
 		env := os.Environ()
 		cmd.Println(GREEN + "Will try to sync dashboards from k8s branch: " + cfg.k8sBranch)
 		icDashboardsDir, err := sparse_checkout("git@github.com:dfinity-ops/k8s.git", "", []string{"bases/apps/ic-dashboards"}, cfg.k8sBranch)
@@ -193,9 +199,7 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 		if config != "" {
 			env = append(env, fmt.Sprintf("IC_CONFIG='%s'", config))
 		}
-		// Append all bazel args following the --, i.e. "ict test target -- --verbose_explanations --test_timeout=20 ..."
-		// Note: arguments provided by the user might override the ones above, i.e. test_timeout, cache_test_results, etc.
-		command = append(command, args[1:]...)
+
 		// Print Bazel command for debugging puroposes.
 		cmd.PrintErrln(CYAN + "Raw Bazel command to be invoked: \n$ " + strings.Join(command, " ") + NC)
 		if cfg.isDryRun {
