@@ -1,10 +1,16 @@
 use crate::{
     neuron_store::NeuronStore,
-    pb::v1::{GovernanceError, KnownNeuron, governance_error::ErrorType},
+    pb::v1::{
+        GovernanceError, KnownNeuron, KnownNeuronData, SelfDescribingValue, Topic,
+        governance_error::ErrorType,
+    },
+    proposals::self_describing::{
+        LocallyDescribableProposalAction, SelfDescribingProstEnum, ValueBuilder,
+    },
 };
-use std::collections::HashSet;
 
 use ic_nervous_system_common_validation::validate_url;
+use std::collections::HashSet;
 
 /// Maximum size in bytes for a neuron's name, in KnownNeuronData.
 pub const KNOWN_NEURON_NAME_MAX_LEN: usize = 200;
@@ -169,6 +175,42 @@ impl KnownNeuron {
         })?;
 
         Ok(())
+    }
+}
+
+impl LocallyDescribableProposalAction for KnownNeuron {
+    const TYPE_NAME: &'static str = "Register Known Neuron";
+    const TYPE_DESCRIPTION: &'static str = "Registers a neuron as a known neuron. This allows the \
+        neuron to be looked up by name and displayed more prominently in the NNS UI.";
+
+    fn to_self_describing_value(&self) -> SelfDescribingValue {
+        ValueBuilder::new()
+            .add_field_with_empty_as_fallback("neuron_id", self.id.map(|id| id.id))
+            .add_field_with_empty_as_fallback("known_neuron_data", self.known_neuron_data.clone())
+            .build()
+    }
+}
+
+impl From<KnownNeuronData> for SelfDescribingValue {
+    fn from(data: KnownNeuronData) -> Self {
+        let KnownNeuronData {
+            name,
+            description,
+            links,
+            committed_topics,
+        } = data;
+
+        let committed_topics: Vec<_> = committed_topics
+            .into_iter()
+            .map(SelfDescribingProstEnum::<Topic>::new)
+            .collect();
+
+        ValueBuilder::new()
+            .add_field("name", name)
+            .add_field("description", description)
+            .add_field("links", links)
+            .add_field("committed_topics", committed_topics)
+            .build()
     }
 }
 

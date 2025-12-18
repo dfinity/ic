@@ -18,7 +18,7 @@ use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::logs::Priority;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
 use ic_ckbtc_minter::reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason};
-use ic_ckbtc_minter::state::eventlog::{Event, EventType};
+use ic_ckbtc_minter::state::eventlog::{CkBtcMinterEvent, EventType};
 use ic_ckbtc_minter::state::{BtcRetrievalStatusV2, Mode, RetrieveBtcStatus, RetrieveBtcStatusV2};
 use ic_ckbtc_minter::updates::get_btc_address::GetBtcAddressArgs;
 use ic_ckbtc_minter::updates::retrieve_btc::{
@@ -889,7 +889,7 @@ impl CkBtcSetup {
             .entries
     }
 
-    pub fn get_events(&self) -> Vec<Event> {
+    pub fn get_events(&self) -> Vec<CkBtcMinterEvent> {
         const MAX_EVENTS_PER_QUERY: u64 = 2000;
         let mut events = Vec::new();
         loop {
@@ -902,7 +902,7 @@ impl CkBtcSetup {
         events
     }
 
-    fn get_events_batch(&self, start: u64, length: u64) -> Vec<Event> {
+    fn get_events_batch(&self, start: u64, length: u64) -> Vec<CkBtcMinterEvent> {
         use ic_ckbtc_minter::state::eventlog::GetEventsArg;
 
         Decode!(
@@ -915,7 +915,7 @@ impl CkBtcSetup {
                     )
                     .expect("failed to query minter events")
             ),
-            Vec<Event>
+            Vec<CkBtcMinterEvent>
         )
         .expect("Failed to call get_events")
     }
@@ -1914,6 +1914,49 @@ fn test_transaction_resubmission_finalize_middle() {
 
     ckbtc.finalize_transaction(second_tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), second_txid);
+    ckbtc.minter_self_check();
+}
+
+#[test]
+fn test_transaction_resubmission_after_upgrade() {
+    let (ckbtc, block_index, _, tx) = test_transaction_resubmission_finalize_setup();
+    ckbtc.env.advance_time(MIN_RESUBMISSION_DELAY / 2);
+
+    // Upgrade
+    let upgrade_args = UpgradeArgs::default();
+    let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
+    ckbtc
+        .env
+        .upgrade_canister(
+            ckbtc.minter_id,
+            minter_wasm(),
+            Encode!(&minter_arg).unwrap(),
+        )
+        .expect("Failed to upgrade the minter canister");
+
+    // Upgrade should not trigger resubmission
+    ckbtc.assert_for_n_ticks("no resubmission before the delay", 20, |ckbtc| {
+        ckbtc.mempool().len() == 1
+    });
+
+    // Wait for the transaction resubmission
+    ckbtc.env.advance_time(MIN_RESUBMISSION_DELAY / 2);
+
+    let mempool = ckbtc.tick_until("mempool has a replacement transaction", 10, |ckbtc| {
+        let mempool = ckbtc.mempool();
+        (mempool.len() > 1).then_some(mempool)
+    });
+
+    let new_txid = ckbtc.await_btc_transaction(block_index, 10);
+    let new_tx = mempool
+        .get(&new_txid)
+        .expect("the pool does not contain the new transaction");
+
+    assert_replacement_transaction(&tx, new_tx);
+
+    // Finalize the new transaction
+    ckbtc.finalize_transaction(new_tx);
+    assert_eq!(ckbtc.await_finalization(block_index, 10), new_txid);
     ckbtc.minter_self_check();
 }
 

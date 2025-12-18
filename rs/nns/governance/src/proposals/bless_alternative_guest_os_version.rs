@@ -69,8 +69,8 @@ impl BlessAlternativeGuestOsVersion {
 /// Validates chip_ids field.
 ///
 /// Returns a list of defects (empty if valid):
-/// - chip_ids must be non-empty
-/// - Each chip_id must be exactly 64 bytes
+/// - chip_ids must be non-empty.
+/// - Each chip_id must be exactly 64 bytes.
 fn validate_chip_ids(chip_ids: &[Vec<u8>]) -> Vec<String> {
     let mut defects = Vec::new();
 
@@ -97,8 +97,8 @@ fn validate_chip_ids(chip_ids: &[Vec<u8>]) -> Vec<String> {
 /// Validates rootfs_hash field.
 ///
 /// Returns a list of defects (empty if valid):
-/// - Must not be empty
-/// - Must contain only hexadecimal characters (0-9, A-F, a-f)
+/// - Must not be empty.
+/// - Must contain only hexadecimal characters (0-9, A-F, a-f).
 fn validate_rootfs_hash(hexidecimal_fingerprint: &str) -> Vec<String> {
     let mut defects = Vec::new();
 
@@ -125,9 +125,9 @@ fn validate_rootfs_hash(hexidecimal_fingerprint: &str) -> Vec<String> {
 /// Validates base_guest_launch_measurements field.
 ///
 /// Returns a list of defects (empty if valid):
-/// - Must be present (not None)
-/// - Must be non-empty (at least one measurement)
-/// - Each measurement must be valid (48 bytes, non-empty kernel_cmdline)
+/// - Must be present (not None).
+/// - Must be non-empty (at least one measurement).
+/// - Each measurement must be valid (48 bytes, metadata).
 fn validate_base_guest_launch_measurements(
     measurements: &Option<GuestLaunchMeasurements>,
 ) -> Vec<String> {

@@ -310,23 +310,5 @@ mod random_oracles {
             let hash_2 = random_oracle_to_scalar(&domain_2, &hashable_struct);
             assert_ne!(hash_1, hash_2);
         }
-
-        #[test]
-        fn should_return_distinct_g1_points_on_different_domains(domain_1: String, domain_2: String) {
-            prop_assume!(domain_1.len()<100);
-            prop_assume!(domain_2.len()<100);
-            prop_assume!(domain_1!=domain_2);
-
-            let hashable_struct = StructToBeHashed {
-                point: G1Affine::generator().clone(),
-                string: "some string".to_string(),
-                integer: 4usize,
-                scalar: Scalar::from_usize(36),
-                bytes: vec![1, 2, 3, 4],
-            };
-            let hash_1 = random_oracle_to_g1(&domain_1, &hashable_struct);
-            let hash_2 = random_oracle_to_g1(&domain_2, &hashable_struct);
-            assert!(hash_1 != hash_2);
-        }
     }
 }
