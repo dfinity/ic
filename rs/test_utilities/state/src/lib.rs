@@ -12,7 +12,7 @@ use ic_replicated_state::{
     Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
     canister_state::{
         execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
-        system_state::{CyclesUseCase, TaskQueue},
+        system_state::{CyclesUseCase, TaskQueue, log_memory_store::LogMemoryStore},
         testing::new_canister_output_queues_for_test,
     },
     metadata_state::{
@@ -590,6 +590,7 @@ impl Default for ExecutionStateBuilder {
                 ExportedFunctions::new(BTreeSet::new()),
                 Memory::new_for_testing(),
                 Memory::new_for_testing(),
+                LogMemoryStore::new_for_testing(),
                 vec![],
                 wasm_metadata,
             ),

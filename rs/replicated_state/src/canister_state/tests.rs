@@ -11,7 +11,7 @@ use crate::canister_state::execution_state::WasmMetadata;
 use crate::canister_state::system_state::testing::SystemStateTesting;
 use crate::canister_state::system_state::{
     CallContextManager, CanisterHistory, CanisterStatus, CyclesUseCase,
-    MAX_CANISTER_HISTORY_CHANGES,
+    MAX_CANISTER_HISTORY_CHANGES, log_memory_store::LogMemoryStore,
 };
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use assert_matches::assert_matches;
@@ -688,6 +688,7 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
         ExportedFunctions::new(Default::default()),
         Memory::new_for_testing(),
         Memory::new_for_testing(),
+        LogMemoryStore::new_for_testing(),
         vec![Global::I64(14)],
         WasmMetadata::default(),
     ));
@@ -1045,6 +1046,7 @@ fn execution_state_test_partial_eq() {
         ExportedFunctions::new(Default::default()),
         Memory::new_for_testing(),
         Memory::new_for_testing(),
+        LogMemoryStore::new_for_testing(),
         vec![Global::I64(14)],
         WasmMetadata::default(),
     );

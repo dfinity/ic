@@ -1,5 +1,6 @@
 pub mod proto;
 
+use crate::canister_state::system_state::log_memory_store::LogMemoryStore;
 use crate::hash::ic_hashtree_leaf_hash;
 use crate::{NumWasmPages, PageMap, canister_state::WASM_PAGE_SIZE_IN_BYTES, num_bytes_try_from};
 use ic_management_canister_types_private::Global;
@@ -329,6 +330,10 @@ pub struct ExecutionState {
     #[validate_eq(CompareWithValidateEq)]
     pub stable_memory: Memory,
 
+    /// The memory used for storing log entries.
+    #[validate_eq(CompareWithValidateEq)]
+    pub log_memory_store: LogMemoryStore,
+
     /// The state of exported globals. Internal globals are not accessible.
     #[validate_eq(Ignore)]
     pub exported_globals: Vec<Global>,
@@ -364,6 +369,7 @@ impl PartialEq for ExecutionState {
             wasm_binary,
             wasm_memory,
             stable_memory,
+            log_memory_store,
             exported_globals,
             exports,
             metadata,
@@ -376,6 +382,7 @@ impl PartialEq for ExecutionState {
             &self.wasm_binary.binary,
             &self.wasm_memory,
             &self.stable_memory,
+            &self.log_memory_store,
             &self.exported_globals,
             &self.exports,
             &self.metadata,
@@ -386,6 +393,7 @@ impl PartialEq for ExecutionState {
             &wasm_binary.binary,
             wasm_memory,
             stable_memory,
+            log_memory_store,
             exported_globals,
             exports,
             metadata,
@@ -409,6 +417,7 @@ impl ExecutionState {
         exports: ExportedFunctions,
         wasm_memory: Memory,
         stable_memory: Memory,
+        log_memory_store: LogMemoryStore,
         exported_globals: Vec<Global>,
         wasm_metadata: WasmMetadata,
     ) -> Self {
@@ -418,6 +427,7 @@ impl ExecutionState {
             exports,
             wasm_memory,
             stable_memory,
+            log_memory_store,
             exported_globals,
             metadata: wasm_metadata,
             last_executed_round: ExecutionRound::from(0),

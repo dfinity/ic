@@ -10,7 +10,10 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContextManager, CanisterStatus, ExecutionState, ExportedFunctions, NumWasmPages, PageIndex,
-    canister_state::execution_state::{WasmBinary, WasmMetadata},
+    canister_state::{
+        execution_state::{WasmBinary, WasmMetadata},
+        system_state::log_memory_store::LogMemoryStore,
+    },
     page_map::{Buffer, TestPageAllocatorFileDescriptorImpl},
     testing::{ReplicatedStateTesting, SystemStateTesting},
 };
@@ -246,6 +249,7 @@ fn can_recover_from_a_checkpoint() {
             ExportedFunctions::new(BTreeSet::new()),
             wasm_memory.clone(),
             stable_memory,
+            LogMemoryStore::from_checkpoint(PageMap::from(&[1, 2, 3, 4][..]), 4096),
             vec![],
             WasmMetadata::default(),
         );
