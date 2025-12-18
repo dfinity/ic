@@ -705,6 +705,8 @@ class ReproducibilityVerifier:
     # --------------------------------------------------------------------------
     def verify_proposal_artifacts(self, downloads: list[Download] = []) -> None:
         """Verifies proposal artifact SHA-256 if a proposal is specified."""
+        if not self.proposal_id:
+            return
         for completed_download in concurrent.futures.as_completed(downloads):
             proposal_target = completed_download.result()
             actual_hash = compute_sha256(proposal_target)
