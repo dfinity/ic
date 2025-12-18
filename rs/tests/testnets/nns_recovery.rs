@@ -201,6 +201,8 @@ fn main() -> Result<()> {
         .expect("USE_MAINNET_STATE environment variable not set");
 
     SystemTestGroup::new()
+        .with_timeout_per_test(Duration::from_secs(2 * 3600))
+        .with_overall_timeout(Duration::from_secs(2 * 3600))
         .with_setup(move |env| setup(env, use_mainnet_state))
         .add_test(systest!(test))
         .execute_from_args()?;
