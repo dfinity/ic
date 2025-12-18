@@ -38,7 +38,8 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use ic_testnet_mainnet_nns::{
-    proposals::ProposalWithMainnetState, setup as setup_with_mainnet_state,
+    MAINNET_NODE_VM_RESOURCES, proposals::ProposalWithMainnetState,
+    setup as setup_with_mainnet_state,
 };
 use ic_types::ReplicaVersion;
 use manual_guestos_recovery::recovery_utils::build_recovery_upgrader_command;
@@ -52,12 +53,6 @@ pub const NNS_RECOVERY_VM_RESOURCES: VmResources = VmResources {
     vcpus: Some(NrOfVCPUs::new(8)),
     memory_kibibytes: Some(AmountOfMemoryKiB::new(25165824)), // 24GiB
     boot_image_minimal_size_gibibytes: None,
-};
-
-pub const NNS_RECOVERY_WITH_MAINNET_STATE_VM_RESOURCES: VmResources = VmResources {
-    vcpus: Some(NrOfVCPUs::new(8)),
-    memory_kibibytes: Some(AmountOfMemoryKiB::new(25165824)), // 24GiB
-    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(64)), // 64GiB
 };
 
 /// 4 nodes is the minimum subnet size that satisfies 3f+1 for f=1
@@ -236,7 +231,7 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
         NestedNodes::new_with_resources(
             &host_vm_names,
             if cfg.use_mainnet_state {
-                NNS_RECOVERY_WITH_MAINNET_STATE_VM_RESOURCES
+                NNS_RECOVERY_VM_RESOURCES.or(MAINNET_NODE_VM_RESOURCES)
             } else {
                 NNS_RECOVERY_VM_RESOURCES
             },

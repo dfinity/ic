@@ -32,6 +32,12 @@ use crate::proposals::NEURON_CONTROLLER;
 use crate::proposals::NEURON_SECRET_KEY_PEM;
 use crate::proposals::ProposalWithMainnetState;
 
+pub const MAINNET_NODE_VM_RESOURCES: VmResources = VmResources {
+    vcpus: None,
+    memory_kibibytes: None,
+    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(128)),
+};
+
 // Default path to the mainnet NNS state tarball on the backup pod. Can be overridden through the
 // NNS_STATE_ON_BACKUP_POD environment variable.
 const NNS_STATE_ON_BACKUP_POD: &str =
@@ -679,11 +685,7 @@ fn setup_ic(env: TestEnv) {
             .unwrap();
 
     InternetComputer::new()
-        .with_default_vm_resources(VmResources {
-            vcpus: None,
-            memory_kibibytes: None,
-            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-        })
+        .with_default_vm_resources(MAINNET_NODE_VM_RESOURCES)
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .with_api_boundary_nodes(1)
         .with_unassigned_nodes(1)
