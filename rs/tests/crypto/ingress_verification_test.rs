@@ -642,7 +642,7 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                     .await;
 
                     if scenario.expect_success() {
-                        result.expect_update_ok(api_ver);
+                        response.expect_update_ok(api_ver);
                     } else {
                         assert_eq!(
                             response.status(),
