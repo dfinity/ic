@@ -1,6 +1,6 @@
 use crate::{
     pb::v1::{
-        Account, Empty, ManageNeuron, SelfDescribingValue, Topic, Visibility, Vote,
+        Empty, ManageNeuron, SelfDescribingValue, Topic, Visibility, Vote,
         manage_neuron::{
             AddHotKey, ChangeAutoStakeMaturity, ClaimOrRefresh, Command, Configure, Disburse,
             DisburseMaturity, DisburseToNeuron, Follow, IncreaseDissolveDelay, JoinCommunityFund,
@@ -18,8 +18,6 @@ use crate::{
 };
 
 use ic_cdk::println;
-use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use icp_ledger::protobuf::AccountIdentifier;
 
 impl LocallyDescribableProposalAction for ManageNeuron {
     const TYPE_NAME: &'static str = "Manage Neuron";
@@ -28,7 +26,9 @@ impl LocallyDescribableProposalAction for ManageNeuron {
         neurons, registering a vote, or performing other neuron management operations.";
 
     fn to_self_describing_value(&self) -> SelfDescribingValue {
-        // Convert id/neuron_id_or_subaccount using the helper method used by validation.
+        let builder = ValueBuilder::new();
+
+        // Flatten all the id/neuron_id_or_subaccount cases into a single field (either "neuron_id" or "subaccount")
         let neuron_id_or_subaccount = match self.get_neuron_id_or_subaccount() {
             Ok(Some(neuron_id_or_subaccount)) => Some(neuron_id_or_subaccount),
             _ => {
@@ -39,9 +39,23 @@ impl LocallyDescribableProposalAction for ManageNeuron {
                 None
             }
         };
+        let builder = match neuron_id_or_subaccount {
+            Some(NeuronIdOrSubaccount::NeuronId(neuron_id)) => {
+                builder.add_field("neuron_id", neuron_id)
+            }
+            Some(NeuronIdOrSubaccount::Subaccount(subaccount)) => {
+                builder.add_field("subaccount", subaccount)
+            }
+            None => {
+                println!(
+                    "A ManageNeuron proposal is created with an empty or conflicting \
+                    values of id and neuron_id_or_subaccount. This should never happen."
+                );
+                builder.add_empty_field("neuron_id_or_subaccount")
+            }
+        };
 
-        ValueBuilder::new()
-            .add_field_with_empty_as_fallback("neuron_id_or_subaccount", neuron_id_or_subaccount)
+        builder
             .add_field_with_empty_as_fallback("command", self.command.clone())
             .build()
     }
@@ -62,44 +76,43 @@ impl From<NeuronIdOrSubaccount> for SelfDescribingValue {
 
 impl From<Command> for SelfDescribingValue {
     fn from(command: Command) -> Self {
-        use Command::*;
+        use Command as C;
 
-        let builder = ValueBuilder::new();
+        match command {
+            // Flatten the `Configure` into the same level as the other commands.
+            C::Configure(command) => SelfDescribingValue::from(command),
 
-        let builder = match command {
-            Configure(command) => builder.add_field("Configure", command),
-            Disburse(command) => builder.add_field("Disburse", command),
-            Spawn(command) => builder.add_field("Spawn", command),
-            Follow(command) => builder.add_field("Follow", command),
-            RegisterVote(command) => builder.add_field("RegisterVote", command),
-            Split(command) => builder.add_field("Split", command),
-            DisburseToNeuron(command) => builder.add_field("DisburseToNeuron", command),
-            ClaimOrRefresh(command) => builder.add_field("ClaimOrRefresh", command),
-            Merge(command) => builder.add_field("Merge", command),
-            StakeMaturity(command) => builder.add_field("StakeMaturity", command),
-            RefreshVotingPower(command) => builder.add_field("RefreshVotingPower", command),
-            DisburseMaturity(command) => builder.add_field("DisburseMaturity", command),
-            SetFollowing(command) => builder.add_field("SetFollowing", command),
+            C::Disburse(command) => Self::singleton_map("Disburse", command),
+            C::Spawn(command) => Self::singleton_map("Spawn", command),
+            C::Follow(command) => Self::singleton_map("Follow", command),
+            C::RegisterVote(command) => Self::singleton_map("RegisterVote", command),
+            C::Split(command) => Self::singleton_map("Split", command),
+            C::DisburseToNeuron(command) => Self::singleton_map("DisburseToNeuron", command),
+            C::ClaimOrRefresh(command) => Self::singleton_map("ClaimOrRefresh", command),
+            C::Merge(command) => Self::singleton_map("Merge", command),
+            C::StakeMaturity(command) => Self::singleton_map("StakeMaturity", command),
+            C::RefreshVotingPower(command) => Self::singleton_map("RefreshVotingPower", command),
+            C::DisburseMaturity(command) => Self::singleton_map("DisburseMaturity", command),
+            C::SetFollowing(command) => Self::singleton_map("SetFollowing", command),
 
-            MergeMaturity(_) => {
+            C::MergeMaturity(_) => {
                 println!(
-                    "MergeMaturity is obsolete and should not be allowed in a ManageNeuron proposal"
+                    "A ManageNeuron proposal is created with a MergeMaturity command. This should never happen."
                 );
-                builder.add_empty_field("MergeMaturity")
+                Self::singleton_map("MergeMaturity", Self::EMPTY)
             }
-            MakeProposal(_) => {
-                println!("MakeProposal is not allowed in a ManageNeuron proposal");
-                builder.add_empty_field("MakeProposal")
+            C::MakeProposal(_) => {
+                println!(
+                    "A ManageNeuron proposal is created with a MakeProposal command. This should never happen."
+                );
+                Self::singleton_map("MakeProposal", Self::EMPTY)
             }
-        };
-        builder.build()
+        }
     }
 }
 
 impl From<Configure> for SelfDescribingValue {
     fn from(configure: Configure) -> Self {
-        use Operation::*;
-
         let Some(operation) = configure.operation else {
             println!(
                 "A ManageNeuron proposal is created with an empty operation. This should never happen."
@@ -107,22 +120,25 @@ impl From<Configure> for SelfDescribingValue {
             return Self::EMPTY;
         };
 
+        use Operation as O;
         let builder = ValueBuilder::new();
         let builder = match operation {
-            IncreaseDissolveDelay(operation) => {
+            O::IncreaseDissolveDelay(operation) => {
                 builder.add_field("IncreaseDissolveDelay", operation)
             }
-            StartDissolving(operation) => builder.add_field("StartDissolving", operation),
-            StopDissolving(operation) => builder.add_field("StopDissolving", operation),
-            AddHotKey(operation) => builder.add_field("AddHotKey", operation),
-            RemoveHotKey(operation) => builder.add_field("RemoveHotKey", operation),
-            SetDissolveTimestamp(operation) => builder.add_field("SetDissolveTimestamp", operation),
-            JoinCommunityFund(operation) => builder.add_field("JoinCommunityFund", operation),
-            LeaveCommunityFund(operation) => builder.add_field("LeaveCommunityFund", operation),
-            ChangeAutoStakeMaturity(operation) => {
+            O::StartDissolving(operation) => builder.add_field("StartDissolving", operation),
+            O::StopDissolving(operation) => builder.add_field("StopDissolving", operation),
+            O::AddHotKey(operation) => builder.add_field("AddHotKey", operation),
+            O::RemoveHotKey(operation) => builder.add_field("RemoveHotKey", operation),
+            O::SetDissolveTimestamp(operation) => {
+                builder.add_field("SetDissolveTimestamp", operation)
+            }
+            O::JoinCommunityFund(operation) => builder.add_field("JoinCommunityFund", operation),
+            O::LeaveCommunityFund(operation) => builder.add_field("LeaveCommunityFund", operation),
+            O::ChangeAutoStakeMaturity(operation) => {
                 builder.add_field("ChangeAutoStakeMaturity", operation)
             }
-            SetVisibility(operation) => builder.add_field("SetVisibility", operation),
+            O::SetVisibility(operation) => builder.add_field("SetVisibility", operation),
         };
         builder.build()
     }
@@ -159,14 +175,14 @@ impl From<StopDissolving> for SelfDescribingValue {
 impl From<AddHotKey> for SelfDescribingValue {
     fn from(value: AddHotKey) -> Self {
         let AddHotKey { new_hot_key } = value;
-        Self::singleton("new_hot_key", new_hot_key)
+        Self::singleton_map("new_hot_key", new_hot_key)
     }
 }
 
 impl From<RemoveHotKey> for SelfDescribingValue {
     fn from(value: RemoveHotKey) -> Self {
         let RemoveHotKey { hot_key_to_remove } = value;
-        Self::singleton("hot_key_to_remove", hot_key_to_remove)
+        Self::singleton_map("hot_key_to_remove", hot_key_to_remove)
     }
 }
 
@@ -175,7 +191,7 @@ impl From<SetDissolveTimestamp> for SelfDescribingValue {
         let SetDissolveTimestamp {
             dissolve_timestamp_seconds,
         } = value;
-        Self::singleton("dissolve_timestamp_seconds", dissolve_timestamp_seconds)
+        Self::singleton_map("dissolve_timestamp_seconds", dissolve_timestamp_seconds)
     }
 }
 
@@ -198,7 +214,7 @@ impl From<ChangeAutoStakeMaturity> for SelfDescribingValue {
         let ChangeAutoStakeMaturity {
             requested_setting_for_auto_stake_maturity,
         } = value;
-        Self::singleton(
+        Self::singleton_map(
             "requested_setting_for_auto_stake_maturity",
             requested_setting_for_auto_stake_maturity,
         )
@@ -209,7 +225,7 @@ impl From<SetVisibility> for SelfDescribingValue {
     fn from(value: SetVisibility) -> Self {
         let SetVisibility { visibility } = value;
         let visibility = visibility.map(SelfDescribingProstEnum::<Visibility>::new);
-        Self::singleton("visibility", visibility)
+        Self::singleton_map("visibility", visibility)
     }
 }
 
@@ -254,7 +270,7 @@ impl From<StakeMaturity> for SelfDescribingValue {
         let StakeMaturity {
             percentage_to_stake,
         } = value;
-        Self::singleton("percentage_to_stake", percentage_to_stake)
+        Self::singleton_map("percentage_to_stake", percentage_to_stake)
     }
 }
 
@@ -323,8 +339,7 @@ impl From<ClaimOrRefresh> for SelfDescribingValue {
             ClaimOrRefreshBy::NeuronIdOrSubaccount(empty) => {
                 // There is no meaningful value to use here. NeuronIdOrSubaccount is already
                 // specified in the ManageNeuron proposal, and this enum simply specifies that the
-                // one on the upper level should be used. Using destructuring so that if there is a
-                // field in the future, we will get a compile error.
+                // one on the upper level should be used.
                 let Empty {} = empty;
                 ValueBuilder::new()
                     .add_field("By", "NeuronIdOrSubaccount")
@@ -337,7 +352,7 @@ impl From<ClaimOrRefresh> for SelfDescribingValue {
 impl From<Merge> for SelfDescribingValue {
     fn from(merge: Merge) -> Self {
         let Merge { source_neuron_id } = merge;
-        Self::singleton("source_neuron_id", source_neuron_id)
+        Self::singleton_map("source_neuron_id", source_neuron_id)
     }
 }
 
@@ -379,35 +394,6 @@ impl From<FolloweesForTopic> for SelfDescribingValue {
         ValueBuilder::new()
             .add_field("topic", topic)
             .add_field("followees", followees)
-            .build()
-    }
-}
-
-impl From<NeuronId> for SelfDescribingValue {
-    fn from(value: NeuronId) -> Self {
-        Self::from(value.id)
-    }
-}
-
-impl From<ProposalId> for SelfDescribingValue {
-    fn from(value: ProposalId) -> Self {
-        Self::from(value.id)
-    }
-}
-
-impl From<AccountIdentifier> for SelfDescribingValue {
-    fn from(value: AccountIdentifier) -> Self {
-        Self::from(value.hash)
-    }
-}
-
-impl From<Account> for SelfDescribingValue {
-    fn from(account: Account) -> Self {
-        let Account { owner, subaccount } = account;
-        let subaccount = subaccount.map(|subaccount| subaccount.subaccount);
-        ValueBuilder::new()
-            .add_field_with_empty_as_fallback("owner", owner)
-            .add_field("subaccount", subaccount)
             .build()
     }
 }

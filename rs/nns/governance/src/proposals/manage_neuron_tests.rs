@@ -2,14 +2,14 @@ use super::*;
 
 use crate::{
     pb::v1::{
-        Account, SelfDescribingValue as SelfDescribingValuePb, Vote,
+        Account, Vote,
         manage_neuron::{claim_or_refresh, configure::Operation, disburse::Amount, set_following},
     },
     proposals::self_describing::LocallyDescribableProposalAction,
 };
 
 use ic_base_types::PrincipalId;
-use ic_nns_common::pb::v1::ProposalId;
+use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance_api::SelfDescribingValue::{self, Array, Blob, Map, Nat, Text};
 use icp_ledger::protobuf::AccountIdentifier;
 use maplit::hashmap;
@@ -26,7 +26,7 @@ fn assert_manage_neuron_self_describing_value_is(
 
 #[track_caller]
 fn assert_command_self_describing_value_is(command: Command, expected: SelfDescribingValue) {
-    let value = SelfDescribingValuePb::from(command);
+    let value = crate::pb::v1::SelfDescribingValue::from(command);
     let value = SelfDescribingValue::from(value);
     assert_eq!(value, expected);
 }
@@ -40,9 +40,7 @@ fn test_manage_neuron_to_self_describing_with_neuron_id() {
             command: Some(Command::RefreshVotingPower(RefreshVotingPower {})),
         },
         Map(hashmap! {
-            "neuron_id_or_subaccount".to_string() => Map(hashmap! {
-                "NeuronId".to_string() => Nat(candid::Nat::from(123_u64)),
-            }),
+            "neuron_id".to_string() => Nat(candid::Nat::from(123_u64)),
             "command".to_string() => Map(hashmap! {
                 "RefreshVotingPower".to_string() => Array(vec![]),
             }),
@@ -52,7 +50,7 @@ fn test_manage_neuron_to_self_describing_with_neuron_id() {
 
 #[test]
 fn test_manage_neuron_to_self_describing_with_subaccount() {
-    let subaccount = vec![1u8; 32];
+    let subaccount = vec![1_u8; 32];
     assert_manage_neuron_self_describing_value_is(
         ManageNeuron {
             id: None,
@@ -60,9 +58,7 @@ fn test_manage_neuron_to_self_describing_with_subaccount() {
             command: Some(Command::RefreshVotingPower(RefreshVotingPower {})),
         },
         Map(hashmap! {
-            "neuron_id_or_subaccount".to_string() => Map(hashmap! {
-                "Subaccount".to_string() => Blob(subaccount),
-            }),
+            "subaccount".to_string() => Blob(subaccount),
             "command".to_string() => Map(hashmap! {
                 "RefreshVotingPower".to_string() => Array(vec![]),
             }),
@@ -79,9 +75,7 @@ fn test_manage_neuron_to_self_describing_with_legacy_id() {
             command: Some(Command::RefreshVotingPower(RefreshVotingPower {})),
         },
         Map(hashmap! {
-            "neuron_id_or_subaccount".to_string() => Map(hashmap! {
-                "NeuronId".to_string() => Nat(candid::Nat::from(456_u64)),
-            }),
+            "neuron_id".to_string() => Nat(candid::Nat::from(456_u64)),
             "command".to_string() => Map(hashmap! {
                 "RefreshVotingPower".to_string() => Array(vec![]),
             }),
@@ -108,10 +102,8 @@ fn test_command_configure_increase_dissolve_delay_to_self_describing() {
             })),
         }),
         Map(hashmap! {
-            "Configure".to_string() => Map(hashmap! {
-                "IncreaseDissolveDelay".to_string() => Map(hashmap! {
-                    "additional_dissolve_delay_seconds".to_string() => Nat(candid::Nat::from(86_400_u32)),
-                }),
+            "IncreaseDissolveDelay".to_string() => Map(hashmap! {
+                "additional_dissolve_delay_seconds".to_string() => Nat(candid::Nat::from(86_400_u32)),
             }),
         }),
     );
@@ -124,9 +116,7 @@ fn test_command_configure_start_dissolving_to_self_describing() {
             operation: Some(Operation::StartDissolving(StartDissolving {})),
         }),
         Map(hashmap! {
-            "Configure".to_string() => Map(hashmap! {
-                "StartDissolving".to_string() => Array(vec![]),
-            }),
+            "StartDissolving".to_string() => Array(vec![]),
         }),
     );
 }
@@ -138,9 +128,7 @@ fn test_command_configure_stop_dissolving_to_self_describing() {
             operation: Some(Operation::StopDissolving(StopDissolving {})),
         }),
         Map(hashmap! {
-            "Configure".to_string() => Map(hashmap! {
-                "StopDissolving".to_string() => Array(vec![]),
-            }),
+            "StopDissolving".to_string() => Array(vec![]),
         }),
     );
 }
@@ -155,12 +143,10 @@ fn test_command_configure_add_hot_key_to_self_describing() {
             })),
         }),
         Map(hashmap! {
-            "Configure".to_string() => Map(hashmap! {
-                "AddHotKey".to_string() => Map(hashmap! {
-                    "new_hot_key".to_string() => Array(vec![
-                        Text(principal.to_string()),
-                    ]),
-                }),
+            "AddHotKey".to_string() => Map(hashmap! {
+                "new_hot_key".to_string() => Array(vec![
+                    Text(principal.to_string()),
+                ]),
             }),
         }),
     );
@@ -172,7 +158,7 @@ fn test_command_disburse_to_self_describing() {
         Command::Disburse(Disburse {
             amount: Some(Amount { e8s: 100_000_000 }),
             to_account: Some(AccountIdentifier {
-                hash: vec![1u8; 28],
+                hash: vec![1_u8; 28],
             }),
         }),
         Map(hashmap! {
@@ -181,7 +167,7 @@ fn test_command_disburse_to_self_describing() {
                     Nat(candid::Nat::from(100_000_000_u64)),
                 ]),
                 "to_account".to_string() => Array(vec![
-                    Blob(vec![1u8; 28]),
+                    Blob(vec![1_u8; 28]),
                 ]),
             }),
         }),
@@ -256,7 +242,7 @@ fn test_command_disburse_maturity_with_to_account_to_self_describing() {
         }),
         Map(hashmap! {
             "DisburseMaturity".to_string() => Map(hashmap! {
-                "percentage_to_disburse".to_string() => Nat(candid::Nat::from(25u32)),
+                "percentage_to_disburse".to_string() => Nat(candid::Nat::from(25_u32)),
                 "to_account".to_string() => Array(vec![
                     Map(hashmap! {
                         "owner".to_string() => Text(PrincipalId::new_user_test_id(1).to_string()),
@@ -276,15 +262,15 @@ fn test_command_disburse_maturity_with_to_account_identifier_to_self_describing(
             percentage_to_disburse: 50,
             to_account: None,
             to_account_identifier: Some(AccountIdentifier {
-                hash: vec![2u8; 28],
+                hash: vec![2_u8; 28],
             }),
         }),
         Map(hashmap! {
             "DisburseMaturity".to_string() => Map(hashmap! {
-                "percentage_to_disburse".to_string() => Nat(candid::Nat::from(50u32)),
+                "percentage_to_disburse".to_string() => Nat(candid::Nat::from(50_u32)),
                 "to_account".to_string() => Array(vec![]),
                 "to_account_identifier".to_string() => Array(vec![
-                    Blob(vec![2u8; 28]),
+                    Blob(vec![2_u8; 28]),
                 ]),
             }),
         }),
@@ -301,12 +287,10 @@ fn test_command_configure_remove_hot_key_to_self_describing() {
             })),
         }),
         Map(hashmap! {
-            "Configure".to_string() => Map(hashmap! {
-                "RemoveHotKey".to_string() => Map(hashmap! {
-                    "hot_key_to_remove".to_string() => Array(vec![
-                        Text(principal.to_string()),
-                    ]),
-                }),
+            "RemoveHotKey".to_string() => Map(hashmap! {
+                "hot_key_to_remove".to_string() => Array(vec![
+                    Text(principal.to_string()),
+                ]),
             }),
         }),
     );
@@ -321,10 +305,8 @@ fn test_command_configure_set_dissolve_timestamp_to_self_describing() {
             })),
         }),
         Map(hashmap! {
-            "Configure".to_string() => Map(hashmap! {
-                "SetDissolveTimestamp".to_string() => Map(hashmap! {
-                    "dissolve_timestamp_seconds".to_string() => Nat(candid::Nat::from(1_700_000_000_u64)),
-                }),
+            "SetDissolveTimestamp".to_string() => Map(hashmap! {
+                "dissolve_timestamp_seconds".to_string() => Nat(candid::Nat::from(1_700_000_000_u64)),
             }),
         }),
     );
@@ -337,9 +319,7 @@ fn test_command_configure_join_community_fund_to_self_describing() {
             operation: Some(Operation::JoinCommunityFund(JoinCommunityFund {})),
         }),
         Map(hashmap! {
-            "Configure".to_string() => Map(hashmap! {
-                "JoinCommunityFund".to_string() => Array(vec![]),
-            }),
+            "JoinCommunityFund".to_string() => Array(vec![]),
         }),
     );
 }
@@ -351,9 +331,7 @@ fn test_command_configure_leave_community_fund_to_self_describing() {
             operation: Some(Operation::LeaveCommunityFund(LeaveCommunityFund {})),
         }),
         Map(hashmap! {
-            "Configure".to_string() => Map(hashmap! {
-                "LeaveCommunityFund".to_string() => Array(vec![]),
-            }),
+            "LeaveCommunityFund".to_string() => Array(vec![]),
         }),
     );
 }
@@ -369,10 +347,8 @@ fn test_command_configure_change_auto_stake_maturity_to_self_describing() {
             )),
         }),
         Map(hashmap! {
-            "Configure".to_string() => Map(hashmap! {
-                "ChangeAutoStakeMaturity".to_string() => Map(hashmap! {
-                    "requested_setting_for_auto_stake_maturity".to_string() => Nat(candid::Nat::from(1u8)),
-                }),
+            "ChangeAutoStakeMaturity".to_string() => Map(hashmap! {
+                "requested_setting_for_auto_stake_maturity".to_string() => Nat(candid::Nat::from(1_u8)),
             }),
         }),
     );
@@ -387,12 +363,10 @@ fn test_command_configure_set_visibility_to_self_describing() {
             })),
         }),
         Map(hashmap! {
-            "Configure".to_string() => Map(hashmap! {
-                "SetVisibility".to_string() => Map(hashmap! {
-                    "visibility".to_string() => Array(vec![
-                        Text("Public".to_string()),
-                    ]),
-                }),
+            "SetVisibility".to_string() => Map(hashmap! {
+                "visibility".to_string() => Array(vec![
+                    Text("Public".to_string()),
+                ]),
             }),
         }),
     );
@@ -416,7 +390,7 @@ fn test_command_spawn_to_self_describing() {
                     Nat(candid::Nat::from(999_u64)),
                 ]),
                 "percentage_to_spawn".to_string() => Array(vec![
-                    Nat(candid::Nat::from(50u32)),
+                    Nat(candid::Nat::from(50_u32)),
                 ]),
             }),
         }),
@@ -440,8 +414,8 @@ fn test_command_disburse_to_neuron_to_self_describing() {
                     Text(principal.to_string()),
                 ]),
                 "amount_e8s".to_string() => Nat(candid::Nat::from(200_000_000_u64)),
-                "dissolve_delay_seconds".to_string() => Nat(candid::Nat::from(31536000u64)),
-                "kyc_verified".to_string() => Nat(candid::Nat::from(1u8)),
+                "dissolve_delay_seconds".to_string() => Nat(candid::Nat::from(31536000_u64)),
+                "kyc_verified".to_string() => Nat(candid::Nat::from(1_u8)),
                 "nonce".to_string() => Nat(candid::Nat::from(7_777_u64)),
             }),
         }),
@@ -564,7 +538,7 @@ fn test_command_set_following_to_self_describing() {
                         Text("SnsAndCommunityFund".to_string()),
                     ]),
                     "followees".to_string() => Array(vec![
-                        Nat(candid::Nat::from(5u64)),
+                        Nat(candid::Nat::from(5_u64)),
                     ]),
                 }),
             ]),

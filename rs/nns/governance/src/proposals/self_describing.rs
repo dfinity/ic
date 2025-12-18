@@ -1,11 +1,13 @@
 use crate::pb::v1::{
-    ApproveGenesisKyc, Motion, SelfDescribingProposalAction, SelfDescribingValue,
+    Account, ApproveGenesisKyc, Motion, SelfDescribingProposalAction, SelfDescribingValue,
     SelfDescribingValueArray, SelfDescribingValueMap,
     self_describing_value::Value::{self, Array, Blob, Map, Text},
 };
 
 use ic_base_types::PrincipalId;
 use ic_cdk::println;
+use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use icp_ledger::protobuf::AccountIdentifier;
 use std::{collections::HashMap, marker::PhantomData};
 
 /// A proposal action that can be described locally, without having to call `canister_metadata`
@@ -219,12 +221,41 @@ where
         .unwrap_or("???")
 }
 
+impl From<NeuronId> for SelfDescribingValue {
+    fn from(value: NeuronId) -> Self {
+        Self::from(value.id)
+    }
+}
+
+impl From<ProposalId> for SelfDescribingValue {
+    fn from(value: ProposalId) -> Self {
+        Self::from(value.id)
+    }
+}
+
+impl From<AccountIdentifier> for SelfDescribingValue {
+    fn from(value: AccountIdentifier) -> Self {
+        Self::from(value.hash)
+    }
+}
+
+impl From<Account> for SelfDescribingValue {
+    fn from(account: Account) -> Self {
+        let Account { owner, subaccount } = account;
+        let subaccount = subaccount.map(|subaccount| subaccount.subaccount);
+        ValueBuilder::new()
+            .add_field_with_empty_as_fallback("owner", owner)
+            .add_field("subaccount", subaccount)
+            .build()
+    }
+}
+
 impl SelfDescribingValue {
     pub const EMPTY: Self = Self {
         value: Some(Array(SelfDescribingValueArray { values: vec![] })),
     };
 
-    pub fn singleton(key: impl ToString, value: impl Into<SelfDescribingValue>) -> Self {
+    pub fn singleton_map(key: impl ToString, value: impl Into<SelfDescribingValue>) -> Self {
         ValueBuilder::new().add_field(key, value).build()
     }
 }
