@@ -2945,6 +2945,7 @@ fn canister_snapshot_change_guard_do_not_modify_without_reading_doc_comment() {
         wasm_binary,
         wasm_memory: _,
         stable_memory: _,
+        log_memory_store: _,
         exported_globals: _,
         exports: _,
         metadata: _,
