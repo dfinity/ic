@@ -407,9 +407,11 @@ class ReproducibilityVerifier:
                 raise RuntimeError(f"Refusing to clean manually specified base cache directory {base_cache_dir}")
             self.base_cache_dir = base_cache_dir
         else:
-            self.base_cache_dir = base_cache_dir or Path(os.path.expanduser("~/.cache/repro-check"))
-            if clean_base_cache_dir and base_cache_dir.is_dir():
-                shutil.rmtree(base_cache_dir)
+            self.base_cache_dir = Path(os.path.expanduser("~/.cache/repro-check"))
+
+            if clean_base_cache_dir and self.base_cache_dir.is_dir():
+                shutil.rmtree(self.base_cache_dir)
+
         self.cache_for_this_hash: Path = Path()
 
         self.download_executor = concurrent.futures.ThreadPoolExecutor(max_workers=9)
@@ -487,7 +489,7 @@ class ReproducibilityVerifier:
         logger.info("Checking and installing needed dependencies.")
         for d in deps:
             if shutil.which(d) is None:
-                logger.info(f"Installing missing package: {d}")
+                logger.info(f"Installing missing package: '{d}' (Will prompt for password if needed.)")
                 try:
                     subprocess.run(["sudo", "apt-get", "install", "-y", d], check=True)
                 except subprocess.CalledProcessError:
