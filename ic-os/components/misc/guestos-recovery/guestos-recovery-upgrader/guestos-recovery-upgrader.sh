@@ -51,14 +51,14 @@ source /opt/ic/bin/grub.sh
 parse_args() {
     for arg in "$@"; do
         case "$arg" in
+            mode=*)
+                MODE="${arg#*=}"
+                ;;
             version=*)
                 VERSION="${arg#*=}"
                 ;;
             recovery-hash-prefix=*)
                 RECOVERY_HASH_PREFIX="${arg#*=}"
-                ;;
-            mode=*)
-                MODE="${arg#*=}"
                 ;;
         esac
     done
@@ -375,7 +375,7 @@ main() {
 
     parse_args "$@"
 
-    log_message "Parsed VERSION='$VERSION' MODE='$MODE' RECOVERY_HASH_PREFIX='$RECOVERY_HASH_PREFIX'"
+    log_message "Parsed MODE='$MODE' VERSION='$VERSION' RECOVERY_HASH_PREFIX='$RECOVERY_HASH_PREFIX'"
 
     if [[ -z "$MODE" || ("$MODE" != "run" && "$MODE" != "prep" && "$MODE" != "install") ]]; then
         log_message "ERROR: mode must be one of run|prep|install"
@@ -384,7 +384,7 @@ main() {
 
     if [ "$MODE" != "install" ] && { [ -z "$VERSION" ] || [ -z "$RECOVERY_HASH_PREFIX" ]; }; then
         log_message "ERROR: version and recovery-hash-prefix parameters are required"
-        log_message "Usage: mode=<run|prep|install> version=<commit-hash> recovery-hash-prefix=<prefix-hex>"
+        log_message "Usage: mode=<run|prep|install> version=<40-char-hex> recovery-hash-prefix=<6-char-hex>"
         exit 1
     fi
 
