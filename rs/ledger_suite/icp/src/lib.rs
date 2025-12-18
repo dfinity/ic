@@ -954,15 +954,10 @@ impl TryFrom<CandidOperation> for Operation {
                 amount,
                 spender,
             } => {
-                let spender = if spender.is_some() {
-                    Some(address_to_accountidentifier(spender.unwrap())?)
-                } else {
-                    None
-                };
                 Operation::Burn {
                     from: address_to_accountidentifier(from)?,
                     amount,
-                    spender,
+                    spender: spender.map(address_to_accountidentifier).transpose()?,
                 }
             }
             CandidOperation::Mint { to, amount } => Operation::Mint {
@@ -976,15 +971,10 @@ impl TryFrom<CandidOperation> for Operation {
                 amount,
                 fee,
             } => {
-                let spender = if spender.is_some() {
-                    Some(address_to_accountidentifier(spender.unwrap())?)
-                } else {
-                    None
-                };
                 Operation::Transfer {
                     to: address_to_accountidentifier(to)?,
                     from: address_to_accountidentifier(from)?,
-                    spender,
+                    spender: spender.map(address_to_accountidentifier).transpose()?,
                     amount,
                     fee,
                 }
