@@ -628,6 +628,7 @@ mod tests {
         IDkgPayloadTestHelper, create_available_pre_signature_with_key_transcript_and_height,
         set_up_idkg_payload,
     };
+    use assert_matches::assert_matches;
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_crypto_test_utils_canister_threshold_sigs::{
@@ -636,7 +637,7 @@ mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_logger::no_op_logger;
-    use ic_management_canister_types_private::{EcdsaKeyId, SchnorrKeyId};
+    use ic_management_canister_types_private::{EcdsaKeyId, SchnorrKeyId, VetKdKeyId};
     use ic_protobuf::registry::subnet::v1::EcdsaInitialization;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_subnet_features::KeyConfig;
@@ -918,6 +919,56 @@ mod tests {
                     .expect("Should successfully get the config");
 
             assert!(config.is_none());
+        })
+    }
+
+    #[test]
+    fn test_get_chain_key_config_if_enabled_malformed_with_pre_sigs_to_create_for_ecdsa_being_none()
+    {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let malformed_chain_key_config = ChainKeyConfig {
+                key_configs: vec![KeyConfig {
+                    key_id: MasterPublicKeyId::Ecdsa(
+                        EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+                    ),
+                    pre_signatures_to_create_in_advance: None,
+                    max_queue_size: 3,
+                }],
+                ..ChainKeyConfig::default()
+            };
+            let (subnet_id, registry, version) =
+                set_up_get_chain_key_config_test(&malformed_chain_key_config, pool_config);
+
+            let config =
+                get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref());
+
+            assert_matches!(config, Err(RegistryClientError::DecodeError{ error })
+              if error.contains("failed with Missing required struct field: KeyConfig::pre_signatures_to_create_in_advance")
+            );
+        })
+    }
+
+    #[test]
+    fn test_get_chain_key_config_if_enabled_malformed_with_pre_sigs_to_create_for_vetkd_being_some()
+    {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let malformed_chain_key_config = ChainKeyConfig {
+                key_configs: vec![KeyConfig {
+                    key_id: MasterPublicKeyId::VetKd(
+                        VetKdKeyId::from_str("Bls12_381_G2:some_key").unwrap(),
+                    ),
+                    pre_signatures_to_create_in_advance: Some(1),
+                    max_queue_size: 3,
+                }],
+                ..ChainKeyConfig::default()
+            };
+            let (subnet_id, registry, version) =
+                set_up_get_chain_key_config_test(&malformed_chain_key_config, pool_config);
+
+            let config =
+                get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref());
+
+            assert_matches!(config, Ok(None));
         })
     }
 
