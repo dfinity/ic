@@ -1,16 +1,8 @@
 use candid::{CandidType, Deserialize, Principal};
-use ic_ckbtc_minter::lifecycle::{
-    init::InitArgs as CkbtcMinterInitArgs, upgrade::UpgradeArgs as CkbtcMinterUpgradeArgs,
-};
+use ic_ckbtc_minter::lifecycle::init::InitArgs as CkbtcMinterInitArgs;
 use serde::Serialize;
 
 pub use ic_ckbtc_minter::state::Mode;
-
-#[derive(CandidType, serde::Deserialize)]
-pub enum MinterArg {
-    Init(InitArgs),
-    Upgrade(Option<UpgradeArgs>),
-}
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct InitArgs {
@@ -44,32 +36,14 @@ pub struct InitArgs {
     /// the get_utxos cache.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub get_utxos_cache_expiration_seconds: Option<u64>,
-}
 
-#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
-pub struct UpgradeArgs {
-    /// Minimum amount of doge that can be retrieved.
+    /// The minimum number of available UTXOs required to trigger a consolidation.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub retrieve_doge_min_amount: Option<u64>,
+    pub utxo_consolidation_threshold: Option<u64>,
 
-    /// Specifies the minimum number of confirmations on the Dogecoin network
-    /// required for the minter to accept a transaction.
+    /// The maximum number of input UTXOs allowed in a transaction.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub min_confirmations: Option<u32>,
-
-    /// Maximum time in nanoseconds that a transaction should spend in the queue
-    /// before being sent.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_time_in_queue_nanos: Option<u64>,
-
-    /// The mode in which the minter is running.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub mode: Option<Mode>,
-
-    /// The expiration duration (in seconds) for cached entries in
-    /// the get_utxos cache.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub get_utxos_cache_expiration_seconds: Option<u64>,
+    pub max_num_inputs_in_transaction: Option<u64>,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
@@ -110,76 +84,75 @@ impl std::fmt::Display for Network {
 }
 
 impl From<InitArgs> for CkbtcMinterInitArgs {
-    fn from(args: InitArgs) -> Self {
+    fn from(
+        InitArgs {
+            doge_network,
+            ecdsa_key_name,
+            retrieve_doge_min_amount,
+            ledger_id,
+            max_time_in_queue_nanos,
+            min_confirmations,
+            mode,
+            get_utxos_cache_expiration_seconds,
+            utxo_consolidation_threshold,
+            max_num_inputs_in_transaction,
+        }: InitArgs,
+    ) -> Self {
         CkbtcMinterInitArgs {
-            btc_network: ic_ckbtc_minter::Network::from(args.doge_network),
-            ecdsa_key_name: args.ecdsa_key_name,
-            retrieve_btc_min_amount: args.retrieve_doge_min_amount,
-            ledger_id: args
-                .ledger_id
+            btc_network: ic_ckbtc_minter::Network::from(doge_network),
+            ecdsa_key_name,
+            retrieve_btc_min_amount: retrieve_doge_min_amount,
+            ledger_id: ledger_id
                 .as_slice()
                 .try_into()
                 .expect("ERROR: invalid canister ID"),
-            max_time_in_queue_nanos: args.max_time_in_queue_nanos,
-            min_confirmations: args.min_confirmations,
-            mode: args.mode,
+            max_time_in_queue_nanos,
+            min_confirmations,
+            mode,
             check_fee: Some(0),
             #[allow(deprecated)]
             kyt_fee: None,
             btc_checker_principal: None,
             #[allow(deprecated)]
             kyt_principal: None,
-            get_utxos_cache_expiration_seconds: args.get_utxos_cache_expiration_seconds,
-            utxo_consolidation_threshold: None,
-            max_num_inputs_in_transaction: None,
+            get_utxos_cache_expiration_seconds,
+            utxo_consolidation_threshold,
+            max_num_inputs_in_transaction,
         }
     }
 }
 
+#[allow(deprecated)]
 impl From<CkbtcMinterInitArgs> for InitArgs {
-    fn from(args: CkbtcMinterInitArgs) -> Self {
-        InitArgs {
-            doge_network: Network::from(args.btc_network),
-            ecdsa_key_name: args.ecdsa_key_name,
-            retrieve_doge_min_amount: args.retrieve_btc_min_amount,
-            ledger_id: args.ledger_id.into(),
-            max_time_in_queue_nanos: args.max_time_in_queue_nanos,
-            min_confirmations: args.min_confirmations,
-            mode: args.mode,
-            get_utxos_cache_expiration_seconds: args.get_utxos_cache_expiration_seconds,
-        }
-    }
-}
-
-impl From<UpgradeArgs> for CkbtcMinterUpgradeArgs {
     fn from(
-        UpgradeArgs {
-            retrieve_doge_min_amount,
-            min_confirmations,
+        CkbtcMinterInitArgs {
+            btc_network,
+            ecdsa_key_name,
+            retrieve_btc_min_amount,
+            ledger_id,
             max_time_in_queue_nanos,
+            min_confirmations,
             mode,
+            check_fee: _,
+            kyt_fee: _,
+            btc_checker_principal: _,
+            kyt_principal: _,
             get_utxos_cache_expiration_seconds,
-        }: UpgradeArgs,
+            utxo_consolidation_threshold,
+            max_num_inputs_in_transaction,
+        }: CkbtcMinterInitArgs,
     ) -> Self {
-        CkbtcMinterUpgradeArgs {
-            retrieve_btc_min_amount: retrieve_doge_min_amount,
-            min_confirmations,
+        InitArgs {
+            doge_network: Network::from(btc_network),
+            ecdsa_key_name,
+            retrieve_doge_min_amount: retrieve_btc_min_amount,
+            ledger_id: ledger_id.into(),
             max_time_in_queue_nanos,
+            min_confirmations,
             mode,
             get_utxos_cache_expiration_seconds,
-            ..CkbtcMinterUpgradeArgs::default()
-        }
-    }
-}
-
-impl From<CkbtcMinterUpgradeArgs> for UpgradeArgs {
-    fn from(args: CkbtcMinterUpgradeArgs) -> Self {
-        UpgradeArgs {
-            retrieve_doge_min_amount: args.retrieve_btc_min_amount,
-            min_confirmations: args.min_confirmations,
-            max_time_in_queue_nanos: args.max_time_in_queue_nanos,
-            mode: args.mode,
-            get_utxos_cache_expiration_seconds: args.get_utxos_cache_expiration_seconds,
+            utxo_consolidation_threshold,
+            max_num_inputs_in_transaction,
         }
     }
 }

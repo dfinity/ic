@@ -195,7 +195,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     ) -> Result<(), CspDkgCreateFsKeyError> {
         let (mut sks_write_lock, mut pks_write_lock) = self.sks_and_pks_write_locks();
         sks_write_lock
-            .insert(key_id, secret_key, None)
+            .insert(key_id, secret_key, Some(NIDKG_FS_SCOPE))
             .map_err(|e| match e {
                 SecretKeyStoreInsertionError::DuplicateKeyId(key_id) => {
                     CspDkgCreateFsKeyError::DuplicateKeyId(format!(

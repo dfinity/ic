@@ -165,10 +165,10 @@ fn test_fetch_canister_logs_via_replicated_ingress() {
             "ic00 method fetch_canister_logs can not be called via ingress messages",
         );
 
-        let fetch_canister_logs_filter = FlagStatus::Disabled;
+        let log_memory_store_feature = FlagStatus::Disabled;
         let env = setup_env_with(
             replicated_inter_canister_log_fetch,
-            fetch_canister_logs_filter,
+            log_memory_store_feature,
         );
         let canister_a = create_and_install_canister(
             &env,
@@ -202,10 +202,10 @@ fn test_fetch_canister_logs_via_query_call() {
     // Test fetch_canister_logs API call succeeds via non-canister query call.
     for replicated_inter_canister_log_fetch in [FlagStatus::Disabled, FlagStatus::Enabled] {
         let (log_visibility, user) = (LogVisibilityV2::Public, PrincipalId::new_anonymous());
-        let fetch_canister_logs_filter = FlagStatus::Disabled;
+        let log_memory_store_feature = FlagStatus::Disabled;
         let env = setup_env_with(
             replicated_inter_canister_log_fetch,
-            fetch_canister_logs_filter,
+            log_memory_store_feature,
         );
         let canister_a = create_and_install_canister(
             &env,
@@ -307,10 +307,10 @@ fn test_fetch_canister_logs_via_inter_canister_update_call_enabled() {
     let user_controller = PrincipalId::new_user_test_id(42);
     let log_visibility = LogVisibilityV2::Controllers;
     let replicated_inter_canister_log_fetch = FlagStatus::Enabled;
-    let fetch_canister_logs_filter = FlagStatus::Disabled;
+    let log_memory_store_feature = FlagStatus::Disabled;
     let env = setup_env_with(
         replicated_inter_canister_log_fetch,
-        fetch_canister_logs_filter,
+        log_memory_store_feature,
     );
     let canister_a = create_and_install_canister(
         &env,
@@ -376,10 +376,10 @@ fn test_fetch_canister_logs_via_composite_query_call() {
     let user_controller = PrincipalId::new_user_test_id(42);
     let log_visibility = LogVisibilityV2::Controllers;
     let replicated_inter_canister_log_fetch = FlagStatus::Disabled;
-    let fetch_canister_logs_filter = FlagStatus::Disabled;
+    let log_memory_store_feature = FlagStatus::Disabled;
     let env = setup_env_with(
         replicated_inter_canister_log_fetch,
-        fetch_canister_logs_filter,
+        log_memory_store_feature,
     );
     let canister_a = create_and_install_canister(
         &env,
@@ -439,10 +439,10 @@ fn test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enable
     let user = PrincipalId::new_user_test_id(42);
     let log_visibility = LogVisibilityV2::Controllers;
     let replicated_inter_canister_log_fetch = FlagStatus::Enabled;
-    let fetch_canister_logs_filter = FlagStatus::Disabled;
+    let log_memory_store_feature = FlagStatus::Disabled;
     let env = setup_env_with(
         replicated_inter_canister_log_fetch,
-        fetch_canister_logs_filter,
+        log_memory_store_feature,
     );
     let canister_a = create_and_install_canister(
         &env,
@@ -501,10 +501,10 @@ fn run_fetch_canister_logs_with_filtering_test(
 ) -> (Result<WasmResult, UserError>, Vec<SystemTime>) {
     let (log_visibility, user) = (LogVisibilityV2::Public, PrincipalId::new_anonymous());
     let replicated_inter_canister_log_fetch = FlagStatus::Disabled;
-    let fetch_canister_logs_filter = FlagStatus::Enabled;
+    let log_memory_store_feature = FlagStatus::Enabled;
     let env = setup_env_with(
         replicated_inter_canister_log_fetch,
-        fetch_canister_logs_filter,
+        log_memory_store_feature,
     );
     let canister_a = create_and_install_canister(
         &env,
