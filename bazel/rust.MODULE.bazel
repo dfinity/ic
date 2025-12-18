@@ -674,7 +674,7 @@ crate.spec(
 crate.spec(
     git = "https://github.com/dfinity/dogecoin-canister",
     package = "ic-doge-interface",
-    rev = "74e6dc9a10ba64d2dbad013282c26d74cd49863f",
+    rev = "a5f89792a002b060e3f0174f1a87da9764f855f8",
 )
 crate.spec(
     default_features = False,

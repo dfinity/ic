@@ -2774,7 +2774,7 @@ fn convert_guest_launch_measurement_metadata_from_pb_to_pb_api(
     item: PbGuestLaunchMeasurementMetadata,
 ) -> pb_api::GuestLaunchMeasurementMetadata {
     pb_api::GuestLaunchMeasurementMetadata {
-        kernel_cmdline: Some(item.kernel_cmdline),
+        kernel_cmdline: item.kernel_cmdline,
     }
 }
 
@@ -2782,7 +2782,7 @@ fn convert_guest_launch_measurement_metadata_from_pb_api_to_pb(
     item: pb_api::GuestLaunchMeasurementMetadata,
 ) -> PbGuestLaunchMeasurementMetadata {
     PbGuestLaunchMeasurementMetadata {
-        kernel_cmdline: item.kernel_cmdline.unwrap_or_default(),
+        kernel_cmdline: item.kernel_cmdline,
     }
 }
 

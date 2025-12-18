@@ -75,9 +75,10 @@ impl FakeStateManager {
         let fake_hash = CryptoHash(Sha256::hash(&height.get().to_le_bytes()).to_vec());
         let partial_hash = CryptoHashOf::from(fake_hash);
         let fake_hash = CryptoHash(Sha256::hash(&height.get().to_le_bytes()).to_vec());
+        let state = initial_state().take();
         let snapshot = Snapshot {
             height,
-            state: initial_state().take(),
+            state: state.clone(),
             partial_hash,
             root_hash: CryptoHashOf::from(fake_hash),
             certification: None,
@@ -85,10 +86,7 @@ impl FakeStateManager {
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
         Self {
             states: Arc::new(RwLock::new(vec![snapshot])),
-            tip: Arc::new(RwLock::new(Some((
-                height,
-                ReplicatedState::new(subnet_test_id(169), SubnetType::Application),
-            )))),
+            tip: Arc::new(RwLock::new(Some((height, (*state).clone())))),
             tempdir: Arc::new(tmpdir),
             encode_certified_stream_slice_barrier: Arc::new(RwLock::new(Barrier::new(1))),
             fd_factory: Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
@@ -109,7 +107,7 @@ fn initial_state() -> Labeled<Arc<ReplicatedState>> {
     Labeled::new(
         INITIAL_STATE_HEIGHT,
         Arc::new(ReplicatedState::new(
-            subnet_test_id(1),
+            subnet_test_id(169),
             SubnetType::Application,
         )),
     )

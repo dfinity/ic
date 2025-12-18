@@ -1,5 +1,4 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("//rs/tests:common.bzl", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -40,7 +39,7 @@ system_test(
     tags = [
         "long_test",  # The P90 duration of this test was over 6 minutes for the week starting on 2025-08-21.
     ],
-    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + [":root_tests_config_image"],
+    runtime_deps = [":root_tests_config_image"],
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
@@ -98,11 +97,11 @@ system_test(
 # bazel run //rs/tests/node:launch_single_host -- --quiet
 system_test(
     name = "launch_single_host",
+    guestos = False,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    uses_guestos_img = False,
     uses_setupos_img = True,
     deps = [
         # Keep sorted.
@@ -135,7 +134,6 @@ system_test(
     },
     tags = ["long_test"],
     test_driver_target = ":kill_start_test_bin",
-    uses_guestos_img = True,
 )
 
 # Tests if killing and starting a node still allows the node to boot normally.
@@ -145,5 +143,4 @@ system_test(
         "NUM_KILL_START_ITERATIONS": "1",
     },
     test_driver_target = ":kill_start_test_bin",
-    uses_guestos_img = True,
 )

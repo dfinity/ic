@@ -1,5 +1,5 @@
 {
-  "checksum": "5bba51aaf15cae3539a8811baf5d2a5022a20ec14bb5281436382786cc526224",
+  "checksum": "eb1238a28f64129c059dd57bd2fa3a10a476cd9eabe52d5139c092b8f46150f1",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -36835,7 +36835,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/dogecoin-canister",
           "commitish": {
-            "Rev": "74e6dc9a10ba64d2dbad013282c26d74cd49863f"
+            "Rev": "a5f89792a002b060e3f0174f1a87da9764f855f8"
           },
           "strip_prefix": "interface"
         }

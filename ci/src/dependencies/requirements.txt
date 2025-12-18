@@ -12,3 +12,5 @@ PyGithub==2.6.1
 cryptography==45.0.4
 pyjwt==2.10.1
 requests==2.32.4
+toml==0.10.2
+

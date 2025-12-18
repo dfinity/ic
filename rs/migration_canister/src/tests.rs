@@ -12,23 +12,23 @@ use crate::{
 
 #[test]
 fn test() {
-    let migrated = Principal::self_authenticating(vec![1]);
-    let replaced = Principal::self_authenticating(vec![2]);
+    let migrated_canister = Principal::self_authenticating(vec![1]);
+    let replaced_canister = Principal::self_authenticating(vec![2]);
     let migrated_canister_subnet = Principal::self_authenticating(vec![3]);
     let replaced_canister_subnet = Principal::self_authenticating(vec![4]);
     let caller = Principal::self_authenticating(vec![5]);
 
     let request = Request::new(
-        migrated,
+        migrated_canister,
         migrated_canister_subnet,
         vec![],
-        replaced,
+        replaced_canister,
         replaced_canister_subnet,
         vec![],
         caller,
     );
     insert_request(RequestState::Accepted { request });
-    assert!(find_request(migrated, replaced).is_some());
+    assert!(find_request(migrated_canister, replaced_canister).is_some());
 }
 
 #[test]

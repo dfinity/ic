@@ -52,6 +52,7 @@ pub enum Operation<Tokens: TokensType> {
     FeeCollector {
         fee_collector: Option<Account>,
         caller: Option<Principal>,
+        op: Option<String>,
     },
 }
 
@@ -73,7 +74,9 @@ struct FlattenedTransaction<Tokens: TokensType> {
     pub memo: Option<Memo>,
 
     // [Operation] fields.
-    pub op: String,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub op: Option<String>,
 
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -123,6 +126,8 @@ impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<T
     fn try_from(value: FlattenedTransaction<Tokens>) -> Result<Self, Self::Error> {
         let created_at_time = value.created_at_time;
         let memo = value.memo.clone();
+        // This conversion is only done for the ledger internal deduplication window, so we can
+        // assume that the tx.op is always Some.
         let operation = Operation::try_from(value)?;
 
         Ok(Transaction {
@@ -151,6 +156,7 @@ impl<Tokens: TokensType> TryFrom<(Option<String>, FlattenedTransaction<Tokens>)>
             Some("107feecol") => Operation::FeeCollector {
                 fee_collector: value.fee_collector,
                 caller: value.caller,
+                op: value.op,
             },
             _ => Operation::try_from(value)
                 .map_err(|e| format!("{} and/or unknown btype {:?}", e, btype_str))?,
@@ -167,54 +173,54 @@ impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Operation<Tok
     type Error = String;
 
     fn try_from(value: FlattenedTransaction<Tokens>) -> Result<Self, Self::Error> {
-        match value.op.as_str() {
-            "burn" => Ok(Operation::Burn {
-                from: value
-                    .from
-                    .ok_or("`from` field required for `burn` operation")?,
-                amount: value
-                    .amount
-                    .ok_or("`amount` required for `burn` operations")?,
-                spender: value.spender,
-                fee: value.fee,
-            }),
-            "mint" => Ok(Operation::Mint {
-                to: value.to.ok_or("`to` field required for `mint` operation")?,
-                amount: value
-                    .amount
-                    .ok_or("`amount` required for `mint` operations")?,
-                fee: value.fee,
-            }),
-            "xfer" => Ok(Operation::Transfer {
-                from: value
-                    .from
-                    .ok_or("`from` field required for `xfer` operation")?,
-                spender: value.spender,
-                to: value.to.ok_or("`to` field required for `xfer` operation")?,
-                amount: value
-                    .amount
-                    .ok_or("`amount` required for `xfer` operations")?,
-                fee: value.fee,
-            }),
-            "approve" => Ok(Operation::Approve {
-                from: value
-                    .from
-                    .ok_or("`from` field required for `approve` operation")?,
-                spender: value
-                    .spender
-                    .ok_or("`spender` field required for `approve` operation")?,
-                amount: value
-                    .amount
-                    .ok_or("`amount` required for `approve` operations")?,
-                expected_allowance: value.expected_allowance,
-                expires_at: value.expires_at,
-                fee: value.fee,
-            }),
-            "107set_fee_collector" => Ok(Operation::FeeCollector {
-                fee_collector: value.fee_collector,
-                caller: value.caller,
-            }),
-            unknown_op => Err(format!("Unknown operation name {unknown_op}")),
+        if let Some(op) = value.op.as_deref() {
+            match op {
+                "burn" => Ok(Operation::Burn {
+                    from: value
+                        .from
+                        .ok_or("`from` field required for `burn` operation")?,
+                    amount: value
+                        .amount
+                        .ok_or("`amount` required for `burn` operations")?,
+                    spender: value.spender,
+                    fee: value.fee,
+                }),
+                "mint" => Ok(Operation::Mint {
+                    to: value.to.ok_or("`to` field required for `mint` operation")?,
+                    amount: value
+                        .amount
+                        .ok_or("`amount` required for `mint` operations")?,
+                    fee: value.fee,
+                }),
+                "xfer" => Ok(Operation::Transfer {
+                    from: value
+                        .from
+                        .ok_or("`from` field required for `xfer` operation")?,
+                    spender: value.spender,
+                    to: value.to.ok_or("`to` field required for `xfer` operation")?,
+                    amount: value
+                        .amount
+                        .ok_or("`amount` required for `xfer` operations")?,
+                    fee: value.fee,
+                }),
+                "approve" => Ok(Operation::Approve {
+                    from: value
+                        .from
+                        .ok_or("`from` field required for `approve` operation")?,
+                    spender: value
+                        .spender
+                        .ok_or("`spender` field required for `approve` operation")?,
+                    amount: value
+                        .amount
+                        .ok_or("`amount` required for `approve` operations")?,
+                    expected_allowance: value.expected_allowance,
+                    expires_at: value.expires_at,
+                    fee: value.fee,
+                }),
+                unknown_op => Err(format!("Unknown operation name {unknown_op}")),
+            }
+        } else {
+            Err("No operation specified".to_string())
         }
     }
 }
@@ -227,13 +233,12 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
             created_at_time: t.created_at_time,
             memo: t.memo,
             op: match &t.operation {
-                Burn { .. } => "burn",
-                Mint { .. } => "mint",
-                Transfer { .. } => "xfer",
-                Approve { .. } => "approve",
-                FeeCollector { .. } => "107set_fee_collector",
-            }
-            .into(),
+                Burn { .. } => Some("burn".to_string()),
+                Mint { .. } => Some("mint".to_string()),
+                Transfer { .. } => Some("xfer".to_string()),
+                Approve { .. } => Some("approve".to_string()),
+                FeeCollector { op, .. } => op.clone(),
+            },
             from: match &t.operation {
                 Transfer { from, .. } | Burn { from, .. } | Approve { from, .. } => Some(*from),
                 _ => None,

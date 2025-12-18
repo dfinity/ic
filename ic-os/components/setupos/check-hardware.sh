@@ -57,8 +57,8 @@ function detect_hardware_generation() {
 
     local node_reward_type=$(get_config_value '.icos_settings.node_reward_type')
 
-    # All type1.* are considered gen1, all type3.* are gen2
-    if [[ $node_reward_type =~ ^type1(\.[0-9]+)?$ ]]; then
+    # All type0.* and type1.* are considered gen1, all type3.* are gen2
+    if [[ $node_reward_type =~ ^type(0|1)(\.[0-9]+)?$ ]]; then
         HARDWARE_GENERATION=1
     elif [[ $node_reward_type =~ ^type3(\.[0-9]+)?$ ]]; then
         HARDWARE_GENERATION=2

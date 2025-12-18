@@ -115,6 +115,7 @@ const METRIC_SUBNET_SIZE: &str = "mr_subnet_size";
 const METRIC_MAX_CANISTERS: &str = "mr_subnet_max_canisters";
 const METRIC_INITIAL_NOTARY_DELAY: &str = "mr_subnet_initial_notary_delay_seconds";
 const METRIC_MAX_BLOCK_PAYLOAD_SIZE: &str = "mr_subnet_max_block_payload_size_bytes";
+const METRIC_CANISTER_RANGES_COUNT: &str = "mr_canister_ranges_count";
 const METRIC_SUBNET_FEATURES: &str = "mr_subnet_features";
 
 const CRITICAL_ERROR_MISSING_SUBNET_SIZE: &str = "cycles_account_manager_missing_subnet_size_error";
@@ -339,6 +340,7 @@ pub(crate) struct MessageRoutingMetrics {
     max_canisters: IntGauge,
     initial_notary_delay: Gauge,
     max_block_payload_size: IntGauge,
+    canister_ranges_count: IntGauge,
     subnet_features: IntGaugeVec,
 
     /// Critical error for not being able to calculate a subnet size.
@@ -493,6 +495,10 @@ impl MessageRoutingMetrics {
             max_block_payload_size: metrics_registry.int_gauge(
                 METRIC_MAX_BLOCK_PAYLOAD_SIZE,
                 "Maximum size of a block payload, in bytes.",
+            ),
+            canister_ranges_count: metrics_registry.int_gauge(
+                METRIC_CANISTER_RANGES_COUNT,
+                "Number of canister ranges for the own subnet.",
             ),
             subnet_features: metrics_registry.int_gauge_vec(
                 METRIC_SUBNET_FEATURES,
@@ -924,6 +930,9 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         self.metrics
             .max_block_payload_size
             .set(subnet_record.max_block_payload_size as i64);
+        self.metrics
+            .canister_ranges_count
+            .set(network_topology.routing_table.ranges(own_subnet_id).len() as i64);
         // Please export any new features via the `subnet_features` metric below.
         let SubnetFeatures {
             canister_sandboxing,
@@ -1292,6 +1301,9 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         }
 
         // If the subnet is starting up after a split, execute splitting phase 2.
+        //
+        // TODO(DSM-57): Drop the `split_from` field and the `split()` and
+        // `after_split()` methods once online splitting is fully rolled out.
         if let Some(split_from) = state.metadata.split_from {
             info!(
                 self.log,
@@ -1303,6 +1315,14 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
                 .with_label_values(&[&split_from.to_string()])
                 .set(batch.batch_number.get() as i64);
             state.after_split();
+        }
+        // If this is the round after an online subnet split, record the split height.
+        if let Some(split_from) = state.metadata.subnet_split_from {
+            self.metrics
+                .subnet_split_height
+                .with_label_values(&[&split_from.to_string()])
+                .set(batch.batch_number.get() as i64);
+            state.metadata.subnet_split_from = None;
         }
         self.observe_phase_duration(PHASE_LOAD_STATE, &since);
 

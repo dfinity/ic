@@ -323,7 +323,7 @@ type ReviseElectedGuestosVersionsPayload = record {
 
 type GuestLaunchMeasurements = record {
  guest_launch_measurements : vec record {
-   metadata : opt record { kernel_cmdline : text };
+   metadata : opt record { kernel_cmdline : opt text };
    measurement : blob;
  };
 };

@@ -12,9 +12,7 @@ use crate::driver::resource::{
 };
 use crate::driver::test_env::SshKeyGen;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
-use crate::driver::test_env_api::{
-    HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession, get_dependency_path,
-};
+use crate::driver::test_env_api::{HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession};
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
 use anyhow::{Result, bail};
 use chrono::Duration;
@@ -27,6 +25,7 @@ use std::os::unix::prelude::PermissionsExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
+use std::process::Stdio;
 
 use crate::driver::constants::SSH_USERNAME;
 
@@ -56,6 +55,9 @@ const CONF_SSH_IMG_FNAME: &str = "config_ssh_disk.img.zst";
 const CONFIG_DIR_NAME: &str = "config";
 const CONFIG_SSH_DIR_NAME: &str = "config-ssh";
 const CONFIG_DIR_SSH_AUTHORIZED_KEYS_DIR: &str = "ssh-authorized-keys";
+
+const CREATE_UVM_CONFIG_IMAGE_SH: &[u8] =
+    include_bytes!("../../assets/create-universal-vm-config-image.sh");
 
 impl UniversalVm {
     pub fn new(name: String) -> Self {
@@ -207,18 +209,26 @@ fn create_universal_vm_config_image(
     output_img: &Path,
     label: &str,
 ) -> Result<()> {
-    let script_path = get_dependency_path("rs/tests/create-universal-vm-config-image.sh");
-    let output = Command::new(script_path)
+    // pipe the uvm creation script into bash
+    let mut cmd = Command::new("/bin/bash")
+        .stdin(Stdio::piped())
+        // with .spawn() the parent's stdout & stderr are inherited
+        .arg("-s")
+        .arg("--") // run script from stdin
         .arg("--input")
         .arg(input_dir)
         .arg("--output")
         .arg(output_img)
         .arg("--label")
         .arg(label)
-        .output()?;
-    std::io::stdout().write_all(&output.stdout)?;
-    std::io::stderr().write_all(&output.stderr)?;
-    if !output.status.success() {
+        .spawn()?;
+
+    cmd.stdin
+        .take()
+        .expect("could not open stdin")
+        .write_all(CREATE_UVM_CONFIG_IMAGE_SH)?;
+
+    if !cmd.wait_with_output()?.status.success() {
         bail!("could not spawn config image creation process");
     }
     Ok(())

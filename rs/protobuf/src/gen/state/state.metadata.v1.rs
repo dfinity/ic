@@ -515,6 +515,8 @@ pub struct SystemMetadata {
     pub own_subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
     #[prost(message, optional, tag = "8")]
     pub subnet_call_context_manager: ::core::option::Option<SubnetCallContextManager>,
+    #[prost(message, optional, tag = "23")]
+    pub subnet_split_from: ::core::option::Option<super::super::super::types::v1::SubnetId>,
     /// Canister ID ranges allocated (exclusively) to this subnet, to generate
     /// canister IDs from.
     #[prost(message, optional, tag = "16")]

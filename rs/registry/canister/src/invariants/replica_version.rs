@@ -261,7 +261,7 @@ mod tests {
                 guest_launch_measurements: vec![GuestLaunchMeasurement {
                     measurement: vec![0x01, 0x02, 0x03],
                     metadata: Some(GuestLaunchMeasurementMetadata {
-                        kernel_cmdline: "foo=bar".to_string(),
+                        kernel_cmdline: Some("foo=bar".to_string()),
                     }),
                 }],
             }),

@@ -350,6 +350,7 @@ message SystemMetadata {
   NetworkTopology network_topology = 6;
   types.v1.SubnetId own_subnet_id = 7;
   SubnetCallContextManager subnet_call_context_manager = 8;
+  types.v1.SubnetId subnet_split_from = 23;
 
   // Canister ID ranges allocated (exclusively) to this subnet, to generate
   // canister IDs from.

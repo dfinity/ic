@@ -1,4 +1,3 @@
-load("//rs/tests:common.bzl", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -46,13 +45,12 @@ system_test_nns(
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    runtime_deps =
-        UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//:rosetta-cli",
-            "//rs/rosetta-api/icp:ic-rosetta-api",
-            "//rs/rosetta-api/icp:rosetta_image.tar",
-            "//rs/tests:rosetta_workspace",
-        ],
+    runtime_deps = [
+        "//:rosetta-cli",
+        "//rs/rosetta-api/icp:ic-rosetta-api",
+        "//rs/rosetta-api/icp:rosetta_image.tar",
+        "//rs/tests:rosetta_workspace",
+    ],
     deps = [
         "//rs/ledger_suite/common/ledger_core",
         "//rs/nns/common",

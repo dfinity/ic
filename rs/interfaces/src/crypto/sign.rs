@@ -44,12 +44,10 @@ pub trait BasicSigner<T: Signable>: Send + Sync {
     /// Creates a (non-malleable) basic signature.
     ///
     /// # Errors
-    /// * `CryptoError::InternalError`: if the public key in the node's public
-    ///   key store is not found or malformed.
-    /// * `CryptoError::InvalidArgument`: if the secret key in the node's
-    ///   secret key store has the wrong type.
-    /// * `CryptoError::SecretKeyNotFound`: if the `signer`'s secret key cannot
-    ///   be found in the secret key store.
+    /// * `CryptoError::InternalError`: if the node signing public key in the
+    ///   node's public key store is not found or malformed, or the node
+    ///   signing secret key in the node's secret key store is not found or
+    ///   has the wrong type.
     /// * `CryptoError::TransientInternalError`: if there is a transient internal
     ///   error during signing (e.g. RPC error when calling the crypto vault).
     ///

@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -32,7 +32,7 @@ system_test(
     tags = [
         "long_test",
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -71,7 +71,6 @@ system_test(
     tags = [
         "manual",
     ],
-    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/prep",
@@ -91,7 +90,7 @@ system_test(
     tags = [
         "manual",
     ],
-    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + [":replicable_mock_test_uvm_config_image"],
+    runtime_deps = [":replicable_mock_test_uvm_config_image"],
     deps = [
         # Keep sorted.
         "//rs/tests/driver:ic-system-test-driver",
