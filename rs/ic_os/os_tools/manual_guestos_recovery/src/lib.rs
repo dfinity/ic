@@ -8,7 +8,11 @@ use ratatui::crossterm::event::{
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::size;
 use ratatui::{DefaultTerminal, Frame, restore};
-use recovery_utils::build_recovery_upgrader_command;
+use recovery_utils::{
+    RecoveryUpgraderCommand, build_recovery_upgrader_install_command,
+    build_recovery_upgrader_prep_command,
+};
+use std::fs;
 use std::io::{self, BufRead, BufReader, IsTerminal, Read};
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
@@ -22,7 +26,8 @@ use tui_textarea::TextArea;
 
 // Field length constants
 const VERSION_LENGTH: usize = 40; // Git commit hash length (hex characters)
-const HASH_LENGTH: usize = 64; // SHA256 hash length (hex characters)
+const PREFIX_HASH_LENGTH: usize = 6; // Recovery hash prefix length (hex characters)
+const PREP_METADATA_PATH: &str = "/run/guestos-recovery/stage/prep-info";
 
 // Process monitoring constants
 const MAX_ERROR_LINES: usize = 30; // Maximum number of error lines to display
@@ -36,10 +41,12 @@ const PROCESS_POLL_INTERVAL_MS: u64 = 100; // Polling interval for process monit
 pub struct RecoveryParams {
     /// The commit ID of the recovery-GuestOS update image (40 hex characters)
     pub version: String,
-    /// The SHA256 sum of the recovery-GuestOS update image (64 hex characters)
-    pub version_hash: String,
-    /// The SHA256 sum of the recovery.tar.zst (64 hex characters)
-    pub recovery_hash: String,
+    /// The recovery hash prefix provided by the user (6 hex characters)
+    pub recovery_hash_prefix: String,
+    /// Calculated full hash of the downloaded recovery-GuestOS upgrade tarball
+    pub version_hash_full: Option<String>,
+    /// Calculated full hash of the downloaded recovery artifact
+    pub recovery_hash_full: Option<String>,
 }
 
 fn is_lowercase_hex(c: char) -> bool {
@@ -47,44 +54,32 @@ fn is_lowercase_hex(c: char) -> bool {
 }
 
 impl RecoveryParams {
-    pub fn validate(&self) -> Result<()> {
-        for field in Field::INPUT_FIELDS {
-            if let Some(required_len) = field.required_length() {
-                let meta = field.metadata();
-                Self::validate_hex_field(
-                    field.get_value(self),
-                    required_len,
-                    meta.name,
-                    meta.short_desc,
-                )?;
-            }
-        }
+    pub fn validate_inputs(&self) -> Result<()> {
+        Self::validate_hex_field(&self.version, VERSION_LENGTH, "VERSION")?;
+        Self::validate_hex_field(
+            &self.recovery_hash_prefix,
+            PREFIX_HASH_LENGTH,
+            "RECOVERY-HASH-PREFIX",
+        )?;
         Ok(())
     }
 
-    fn validate_hex_field(
-        value: &str,
-        required_len: usize,
-        name: &str,
-        description: &str,
-    ) -> Result<()> {
+    fn validate_hex_field(value: &str, required_len: usize, name: &str) -> Result<()> {
         if value.is_empty() {
             anyhow::bail!("{} is required", name);
         }
         if value.len() != required_len {
             anyhow::bail!(
-                "{} must be exactly {} hexadecimal characters ({}); got {}",
+                "{} must be exactly {} hexadecimal characters; got {}",
                 name,
                 required_len,
-                description,
                 value.len()
             );
         }
         if !value.chars().all(is_lowercase_hex) {
             anyhow::bail!(
-                "{} must contain only lowercase hexadecimal characters ({})",
-                name,
-                description
+                "{} must contain only lowercase hexadecimal characters",
+                name
             );
         }
         Ok(())
@@ -94,15 +89,13 @@ impl RecoveryParams {
 #[derive(PartialEq, Copy, Clone)]
 pub(crate) enum Field {
     Version,
-    VersionHash,
-    RecoveryHash,
+    RecoveryHashPrefix,
     CheckArtifactsButton,
     ExitButton,
 }
 
 struct FieldMetadata {
     name: &'static str,
-    short_desc: &'static str,
     required_len: Option<usize>,
     is_input: bool,
 }
@@ -110,38 +103,27 @@ struct FieldMetadata {
 impl Field {
     const ALL: &'static [Field] = &[
         Field::Version,
-        Field::VersionHash,
-        Field::RecoveryHash,
+        Field::RecoveryHashPrefix,
         Field::CheckArtifactsButton,
         Field::ExitButton,
     ];
 
-    const INPUT_FIELDS: &'static [Field] =
-        &[Field::Version, Field::VersionHash, Field::RecoveryHash];
+    const INPUT_FIELDS: &'static [Field] = &[Field::Version, Field::RecoveryHashPrefix];
 
     fn metadata(&self) -> FieldMetadata {
         match self {
             Field::Version => FieldMetadata {
                 name: "VERSION",
-                short_desc: "Recovery-GuestOS version",
                 required_len: Some(VERSION_LENGTH),
                 is_input: true,
             },
-            Field::VersionHash => FieldMetadata {
-                name: "VERSION-HASH",
-                short_desc: "Recovery-GuestOS hash",
-                required_len: Some(HASH_LENGTH),
-                is_input: true,
-            },
-            Field::RecoveryHash => FieldMetadata {
-                name: "RECOVERY-HASH",
-                short_desc: "Recovery archive hash",
-                required_len: Some(HASH_LENGTH),
+            Field::RecoveryHashPrefix => FieldMetadata {
+                name: "RECOVERY-HASH-PREFIX",
+                required_len: Some(PREFIX_HASH_LENGTH),
                 is_input: true,
             },
             _ => FieldMetadata {
                 name: "",
-                short_desc: "",
                 required_len: None,
                 is_input: false,
             },
@@ -155,15 +137,6 @@ impl Field {
     /// Returns the required length for this field
     fn required_length(&self) -> Option<usize> {
         self.metadata().required_len
-    }
-
-    fn get_value<'a>(&self, params: &'a RecoveryParams) -> &'a str {
-        match self {
-            Field::Version => &params.version,
-            Field::VersionHash => &params.version_hash,
-            Field::RecoveryHash => &params.recovery_hash,
-            _ => "",
-        }
     }
 }
 
@@ -208,6 +181,14 @@ impl InputState {
 pub(crate) struct RunningState {
     pub task: RecoveryTask,
     pub params: RecoveryParams,
+    pub phase: RecoveryPhase,
+    pub previous_input_state: Option<InputState>,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum RecoveryPhase {
+    Prep,
+    Install,
 }
 
 pub struct RecoveryTask {
@@ -217,13 +198,8 @@ pub struct RecoveryTask {
 }
 
 impl RecoveryTask {
-    pub fn start(params: &RecoveryParams) -> Result<Self> {
-        let mut cmd = build_recovery_upgrader_command(
-            &params.version,
-            &params.version_hash,
-            &params.recovery_hash,
-        )
-        .to_command();
+    pub fn start(command: RecoveryUpgraderCommand) -> Result<Self> {
+        let mut cmd = command.to_command();
 
         cmd.stdout(Stdio::piped());
         // Redirect stderr to null to avoid cluttering the TUI output
@@ -523,7 +499,7 @@ impl GuestOSRecoveryApp {
             }
             KeyCode::Enter => match state.selected_option {
                 ConfirmationOption::Yes => {
-                    self.start_recovery_process(state.params.clone())?;
+                    self.start_install(state.params.clone())?;
                     Ok(true)
                 }
                 ConfirmationOption::No => {
@@ -626,20 +602,17 @@ impl GuestOSRecoveryApp {
 
                     let params = RecoveryParams {
                         version: get_field_text(Field::Version),
-                        version_hash: get_field_text(Field::VersionHash),
-                        recovery_hash: get_field_text(Field::RecoveryHash),
+                        recovery_hash_prefix: get_field_text(Field::RecoveryHashPrefix),
+                        version_hash_full: None,
+                        recovery_hash_full: None,
                     };
 
                     // Validate and transition to running
-                    if let Err(e) = params.validate() {
+                    if let Err(e) = params.validate_inputs() {
                         input_state.error_message = Some(e.to_string());
                         Ok(false)
                     } else {
-                        self.state = Some(AppState::InputConfirmation(ConfirmationState {
-                            input_state: input_state.clone(),
-                            params,
-                            selected_option: ConfirmationOption::Yes,
-                        }));
+                        self.start_prep(params, input_state.clone())?;
                         Ok(true)
                     }
                 }
@@ -677,47 +650,85 @@ impl GuestOSRecoveryApp {
         input_state.inputs[idx].input(key);
     }
 
-    fn start_recovery_process(&mut self, params: RecoveryParams) -> Result<()> {
-        let task = RecoveryTask::start(&params)?;
+    fn start_prep(&mut self, params: RecoveryParams, input_state: InputState) -> Result<()> {
+        let command =
+            build_recovery_upgrader_prep_command(&params.version, &params.recovery_hash_prefix);
+        let task = RecoveryTask::start(command)?;
 
-        self.state = Some(AppState::Running(RunningState { task, params }));
+        self.state = Some(AppState::Running(RunningState {
+            task,
+            params,
+            phase: RecoveryPhase::Prep,
+            previous_input_state: Some(input_state),
+        }));
+        Ok(())
+    }
+
+    fn start_install(&mut self, params: RecoveryParams) -> Result<()> {
+        let command = build_recovery_upgrader_install_command();
+        let task = RecoveryTask::start(command)?;
+
+        self.state = Some(AppState::Running(RunningState {
+            task,
+            params,
+            phase: RecoveryPhase::Install,
+            previous_input_state: None,
+        }));
 
         Ok(())
     }
 
     fn tick(&mut self) -> Result<()> {
-        let finished_state = if let Some(AppState::Running(running_state)) = &mut self.state {
-            match running_state.task.check_status()? {
-                Some(status) => {
-                    // Collect logs
-                    let logs = running_state.task.get_logs();
+        if let Some(AppState::Running(running)) = &mut self.state
+            && let Some(status) = running.task.check_status()?
+        {
+            let logs = running.task.get_logs();
 
-                    if status.success() {
-                        self.result = Some(Ok(()));
-                        self.should_quit = true;
-                        None
-                    } else {
-                        // Failure -> Transition to FailureState
-                        let error_messages = extract_errors_from_logs(&logs);
-                        Some(FailureState {
-                            params: running_state.params.clone(),
+            if !status.success() {
+                let error_messages = extract_errors_from_logs(&logs);
+                let failure_state = FailureState {
+                    params: running.params.clone(),
+                    logs,
+                    exit_status: status,
+                    error_messages,
+                };
+                self.result = Some(Err(anyhow::anyhow!("Recovery failed")));
+                self.state = Some(AppState::Failure(failure_state));
+                return Ok(());
+            }
+
+            match running.phase {
+                RecoveryPhase::Prep => match read_prep_metadata() {
+                    Ok(prep) => {
+                        let mut params = running.params.clone();
+                        params.version_hash_full = Some(prep.version_hash_full);
+                        params.recovery_hash_full = Some(prep.recovery_hash_full);
+
+                        let input_state = running.previous_input_state.clone().unwrap_or_default();
+
+                        self.state = Some(AppState::InputConfirmation(ConfirmationState {
+                            input_state,
+                            params,
+                            selected_option: ConfirmationOption::Yes,
+                        }));
+                    }
+                    Err(e) => {
+                        let failure_state = FailureState {
+                            params: running.params.clone(),
                             logs,
                             exit_status: status,
-                            error_messages,
-                        })
+                            error_messages: vec![e.to_string()],
+                        };
+                        self.result = Some(Err(anyhow::anyhow!("Recovery failed during prep")));
+                        self.state = Some(AppState::Failure(failure_state));
                     }
+                },
+                RecoveryPhase::Install => {
+                    self.result = Some(Ok(()));
+                    self.should_quit = true;
                 }
-                None => None, // Still running
             }
-        } else {
-            None
-        };
-
-        if let Some(failure_state) = finished_state {
-            self.result = Some(Err(anyhow::anyhow!("Recovery failed")));
-            self.state = Some(AppState::Failure(failure_state));
         }
-
         Ok(())
     }
 }
@@ -752,4 +763,41 @@ fn extract_errors_from_logs(log_lines: &[String]) -> Vec<String> {
     }
     let start = log_lines.len().saturating_sub(MAX_ERROR_LINES);
     log_lines[start..].to_vec()
+}
+
+struct PrepResults {
+    version_hash_full: String,
+    recovery_hash_full: String,
+}
+
+fn read_prep_metadata() -> Result<PrepResults> {
+    let contents = fs::read_to_string(PREP_METADATA_PATH)
+        .with_context(|| format!("Failed to read prep metadata at {}", PREP_METADATA_PATH))?;
+
+    let mut version_hash_full: Option<String> = None;
+    let mut recovery_hash_full: Option<String> = None;
+
+    for line in contents.lines() {
+        if let Some((key, value)) = line.split_once('=') {
+            match key {
+                "VERSION_HASH_FULL" | "version_hash_full" => {
+                    version_hash_full = Some(value.to_string())
+                }
+                "RECOVERY_HASH_FULL" | "recovery_hash_full" => {
+                    recovery_hash_full = Some(value.to_string())
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let version_hash_full = version_hash_full
+        .ok_or_else(|| anyhow::anyhow!("Prep metadata missing VERSION_HASH_FULL"))?;
+    let recovery_hash_full = recovery_hash_full
+        .ok_or_else(|| anyhow::anyhow!("Prep metadata missing RECOVERY_HASH_FULL"))?;
+
+    Ok(PrepResults {
+        version_hash_full,
+        recovery_hash_full,
+    })
 }
