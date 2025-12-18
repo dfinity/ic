@@ -466,18 +466,20 @@ pub mod local {
         let upgrade_version_cli = opt_cli_arg!(upgrade_version);
         let upgrade_image_url_cli = opt_cli_arg!(upgrade_image_url);
         let upgrade_image_hash_cli = opt_cli_arg!(upgrade_image_hash);
-        if let Some(measurements_path) = &upgrade_image_launch_measurements_path {
-            scp_send_to(
-                logger.clone(),
-                session,
-                measurements_path.as_ref(),
-                &PathBuf::from(GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH),
-                0o400,
-            );
-        }
-        let upgrade_image_launch_measurements_path = upgrade_image_launch_measurements_path
-            .clone()
-            .map(|p| p.display().to_string());
+        let upgrade_image_launch_measurements_path =
+            if let Some(measurements_path) = &upgrade_image_launch_measurements_path {
+                scp_send_to(
+                    logger.clone(),
+                    session,
+                    measurements_path.as_ref(),
+                    &PathBuf::from(GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH),
+                    0o400,
+                );
+
+                Some(GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH)
+            } else {
+                None
+            };
         let upgrade_image_launch_measurements_path_cli =
             opt_cli_arg!(upgrade_image_launch_measurements_path);
         let replacement_nodes_cli = opt_vec_cli_arg!(replacement_nodes);
