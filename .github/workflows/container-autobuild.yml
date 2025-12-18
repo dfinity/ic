@@ -32,7 +32,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: docker:24.0.5-cli
+      image: ubuntu:24.04
     timeout-minutes: 60
     steps:
       - name: Create GitHub App Token
