@@ -47,13 +47,13 @@ use ic_protobuf::registry::{
 use ic_state_machine_tests::{PayloadBuilder, StateMachine};
 use ic_types::PrincipalId;
 use ic_types::batch::BlockmakerMetrics;
-use std::time::SystemTime;
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, TOKEN_SUBDIVIDABLE_BY, Tokens};
 use maplit::btreemap;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rewards_calculation::REWARDS_TABLE_DAYS;
 use rewards_calculation::types::NodeMetricsDailyRaw;
+use std::time::SystemTime;
 use std::{collections::BTreeMap, time::Duration};
 
 struct NodeInfo {
