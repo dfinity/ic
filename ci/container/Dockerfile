@@ -93,13 +93,6 @@ RUN mkdir -p /tmp/sdk && curl -fsSL https://github.com/dfinity/sdk/releases/down
 ARG motoko_version=0.14.7
 RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
-# Add kubectl
-ARG KUBECTL_BIN="/usr/local/bin/kubectl"
-ARG KUBECTL_VERSION="1.22.17"
-RUN curl -sSL "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o "${KUBECTL_BIN}" && \
-    echo "7506a0ae7a59b35089853e1da2b0b9ac0258c5309ea3d165c3412904a9051d48  ${KUBECTL_BIN}" | sha256sum -c - && \
-    chmod +x "${KUBECTL_BIN}"
-
 # Create user groups needed for github actions runner
 RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
     # CI before script requires sudo \
