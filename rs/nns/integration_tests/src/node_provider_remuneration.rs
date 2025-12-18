@@ -47,6 +47,7 @@ use ic_protobuf::registry::{
 use ic_state_machine_tests::{PayloadBuilder, StateMachine};
 use ic_types::PrincipalId;
 use ic_types::batch::BlockmakerMetrics;
+use std::time::SystemTime;
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, TOKEN_SUBDIVIDABLE_BY, Tokens};
 use maplit::btreemap;
@@ -1093,6 +1094,10 @@ fn add_node(
     mutation_id: u8,
     node_type: NodeRewardType,
 ) -> NodeId {
+    // Sync state machine time to current system time to ensure TLS certificates
+    // generated during node addition have valid notBefore dates
+    state_machine.set_time(SystemTime::now());
+
     let (add_node_payload, _) = prepare_add_node_payload(mutation_id, node_type);
     state_machine
         .execute_ingress_as(
