@@ -101,22 +101,25 @@ impl StateSync {
             .checkpoint_in_verification(height)
             .expect("failed to create checkpoint layout");
 
-        let state = match crate::checkpoint::load_checkpoint_and_validate_parallel(
+        let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
+        let state = match crate::checkpoint::load_checkpoint(
             &ro_layout,
             self.state_manager.own_subnet_type,
             &self.state_manager.metrics.checkpoint_metrics,
+            Some(&mut thread_pool),
             self.state_manager.get_fd_factory(),
         ) {
             Ok(state) => state,
             Err(err) => {
                 fatal!(
                     self.log,
-                    "Failed to load and finalize checkpoint or remove the unverified marker @height {}: {}",
+                    "Failed to load checkpoint @height {}: {}",
                     height,
                     err
                 );
             }
         };
+        ro_layout.mark_files_readonly_and_sync(Some(&mut thread_pool));
         drop(timer);
 
         let _timer = state_sync_metrics

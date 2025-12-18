@@ -72,6 +72,7 @@ pub const SYSTEM_METADATA_FILE: &str = "system_metadata.pbuf";
 pub const STATS_FILE: &str = "stats.pbuf";
 pub const WASM_FILE: &str = "software.wasm";
 pub const UNVERIFIED_CHECKPOINT_MARKER: &str = "unverified_checkpoint_marker";
+pub const STATE_SYNC_CHECKPOINT_MARKER: &str = "state_sync_checkpoint_marker";
 pub const OVERLAY: &str = "overlay";
 pub const VMEMORY_0: &str = "vmemory_0";
 pub const STABLE_MEMORY: &str = "stable_memory";
@@ -137,6 +138,16 @@ impl<T> ReadPolicy for RwPolicy<'_, T> {}
 impl<T> WritePolicy for RwPolicy<'_, T> {}
 
 pub type CompleteCheckpointLayout = CheckpointLayout<ReadOnly>;
+
+pub enum CheckpointStatus {
+    /// Locally created checkpoint that has been fully verified.
+    Verified,
+    /// Checkpoint created via state sync (never verified).
+    UnverifiedStateSync,
+    /// Locally created checkpoint that has not yet been verified.
+    /// May be incomplete due to asynchronous writes of protobuf files.
+    UnverifiedRegular,
+}
 
 /// This struct contains bits of the `ExecutionState` that are not already
 /// covered somewhere else and are too small to be serialized separately.
@@ -428,6 +439,8 @@ impl TipHandler {
                 // The unverified checkpoint marker should already be removed at this point.
                 debug_assert!(false);
                 CopyInstruction::Skip
+            } else if path == cp.state_sync_checkpoint_marker() {
+                CopyInstruction::Skip
             } else {
                 // Everything else should be readonly.
                 CopyInstruction::ReadOnly
@@ -651,7 +664,7 @@ impl StateLayout {
         &self,
         thread_pool: &mut Option<scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
-        for height in self.checkpoint_heights()? {
+        for height in self.verified_checkpoint_heights()? {
             let cp_layout = self.checkpoint_verified(height)?;
             let result = cp_layout.mark_files_readonly_and_sync(thread_pool.as_mut())?;
 
@@ -897,7 +910,7 @@ impl StateLayout {
 
     /// Returns if a checkpoint with the given height is verified or not.
     /// If the checkpoint is not found, an error is returned.
-    pub fn checkpoint_verification_status(&self, height: Height) -> Result<bool, LayoutError> {
+    pub fn checkpoint_status(&self, height: Height) -> Result<CheckpointStatus, LayoutError> {
         let cp_name = Self::checkpoint_name(height);
         let path = self.checkpoints().join(cp_name);
         if !path.exists() {
@@ -905,7 +918,7 @@ impl StateLayout {
         }
         // An untracked checkpoint layout is acceptable for temporary use here, as it’s only needed briefly to verify the existence of the marker.
         let cp = CheckpointLayout::<ReadOnly>::new_untracked(path, height)?;
-        Ok(cp.is_checkpoint_verified())
+        cp.checkpoint_status()
     }
 
     fn remove_checkpoint_ref(&self, height: Height) {
@@ -942,17 +955,6 @@ impl StateLayout {
         }
     }
 
-    /// Returns a sorted list of `Height`s for which a checkpoint is available and verified.
-    pub fn checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
-        let checkpoint_heights = self
-            .unfiltered_checkpoint_heights()?
-            .into_iter()
-            .filter(|h| self.checkpoint_verification_status(*h).unwrap_or(false))
-            .collect();
-
-        Ok(checkpoint_heights)
-    }
-
     /// Returns a sorted list of `Height`s for which a checkpoint is available, regardless of verification status.
     pub fn unfiltered_checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
         let names = dir_file_names(&self.checkpoints()).map_err(|err| LayoutError::IoError {
@@ -961,6 +963,37 @@ impl StateLayout {
             io_err: err,
         })?;
         parse_and_sort_checkpoint_heights(&names[..])
+    }
+
+    /// Returns a sorted list of `Height`s for which a checkpoint is available and verified.
+    pub fn checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
+        self.unfiltered_checkpoint_heights()?
+            .into_iter()
+            .filter(|h| matches!(self.checkpoint_status(*h), Ok(CheckpointStatus::Verified)))
+            .collect()
+    }
+
+    /// Returns a sorted list of `Height`s for which a checkpoint is available and verified.
+    pub fn verified_checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
+        self.unfiltered_checkpoint_heights()?
+            .into_iter()
+            .filter(|h| matches!(self.checkpoint_status(*h), Ok(CheckpointStatus::Verified)))
+            .collect()
+    }
+
+    /// Returns a sorted list of `Height`s for which a checkpoint is available and is either verified or a state sync checkpoint.
+    ///
+    /// Useful for determining candidates for the base checkpoint during incremental manifest computation and state sync.
+    pub fn verified_or_state_sync_checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
+        self.unfiltered_checkpoint_heights()?
+            .into_iter()
+            .filter(|h| {
+                matches!(
+                    self.checkpoint_status(*h),
+                    Ok(CheckpointStatus::Verified | CheckpointStatus::UnverifiedStateSync)
+                )
+            })
+            .collect()
     }
 
     /// Returns a sorted in ascended order list of `Height`s of checkpoints that were marked as
@@ -1150,7 +1183,7 @@ impl StateLayout {
     /// Postcondition:
     ///   height ∉ self.checkpoint_heights()[0:-1]
     fn remove_checkpoint_if_not_the_latest<T>(&self, height: Height, drop_after_rename: T) {
-        match self.checkpoint_heights() {
+        match self.verified_checkpoint_heights() {
             Err(err) => {
                 error!(self.log, "Failed to get checkpoint heights: {}", err);
                 self.metrics
@@ -1724,6 +1757,10 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         self.0.root.join(UNVERIFIED_CHECKPOINT_MARKER)
     }
 
+    pub fn state_sync_checkpoint_marker(&self) -> PathBuf {
+        self.0.root.join(STATE_SYNC_CHECKPOINT_MARKER)
+    }
+
     pub fn canister_ids(&self) -> Result<Vec<CanisterId>, LayoutError> {
         let states_dir = self.0.root.join(CANISTER_STATES_DIR);
         Permissions::check_dir(&states_dir)?;
@@ -1823,9 +1860,50 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         &self.0.root
     }
 
-    /// Returns if the checkpoint is marked as unverified or not.
+    /// Returns the status of this checkpoint based on its markers.
+    ///
+    /// The checkpoint can be in one of three states:
+    /// - `Verified`: No markers present (fully verified checkpoint)
+    /// - `UnverifiedStateSync`: Has state sync marker (always unverified)
+    /// - `UnverifiedRegular`: Has unverified marker only
+    ///
+    /// This is the canonical method for determining checkpoint status.
+    /// Other methods should use this function rather than checking markers directly.
+    pub fn checkpoint_status(&self) -> CheckpointStatus {
+        if self.state_sync_checkpoint_marker().exists() {
+            // State sync checkpoints are always unverified. We never remove their unverified
+            // markers, so both markers should be present. The debug_assert verifies this invariant.
+            // For defensive programming, we treat it as unverified even if the unverified marker
+            // is accidentally missing, since the presence of a state sync marker alone indicates
+            // the checkpoint should never be considered verified.
+            debug_assert!(self.unverified_checkpoint_marker().exists());
+            return Ok(CheckpointStatus::UnverifiedStateSync);
+        }
+        if self.unverified_checkpoint_marker().exists() {
+            return Ok(CheckpointStatus::UnverifiedRegular);
+        }
+        Ok(CheckpointStatus::Verified)
+    }
+
+    /// Returns `true` if the checkpoint is verified.
     pub fn is_checkpoint_verified(&self) -> bool {
-        !self.unverified_checkpoint_marker().exists()
+        matches!(self.checkpoint_status(), CheckpointStatus::Verified)
+    }
+
+    /// Returns `true` if the checkpoint was created via state sync.
+    pub fn is_created_via_state_sync(&self) -> bool {
+        matches!(
+            self.checkpoint_status(),
+            CheckpointStatus::UnverifiedStateSync
+        )
+    }
+
+    /// Returns `true` if the checkpoint was created via state sync.
+    pub fn is_verified_or_state_sync_checkpoint(&self) -> bool {
+        matches!(
+            self.checkpoint_status(),
+            CheckpointStatus::Verified | CheckpointStatus::UnverifiedStateSync
+        )
     }
 
     /// Recursively set permissions to readonly for all files under the checkpoint
