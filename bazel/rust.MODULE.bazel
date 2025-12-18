@@ -2107,8 +2107,8 @@ crate.annotation_select(
         "SELINUX_LIB_DIR": "/usr/lib/x86_64-linux-gnu",
     },
     crate = "selinux-sys",
-    deps = ["@@_main~_repo_rules~libselinux//:libselinux"],
     triples = ["x86_64-unknown-linux-gnu"],
+    deps = ["@@_main~_repo_rules~libselinux//:libselinux"],
 )
 crate.annotation(
     build_script_env = {

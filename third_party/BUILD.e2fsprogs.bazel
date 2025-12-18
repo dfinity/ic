@@ -41,4 +41,3 @@ filegroup(
     output_group = "mke2fs",
     visibility = ["//visibility:public"],
 )
-

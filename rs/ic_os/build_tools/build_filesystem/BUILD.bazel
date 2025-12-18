@@ -1,6 +1,4 @@
-load("@bazel_skylib//rules:write_file.bzl", "write_file")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
-load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = [
     "//rs:ic-os-pkg",
