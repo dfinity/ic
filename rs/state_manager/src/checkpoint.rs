@@ -5,7 +5,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::{
     CanisterSnapshot, CanisterSnapshots, ExecutionStateSnapshot, PageMemory,
 };
-use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
+use ic_replicated_state::canister_state::system_state::{
+    log_memory_store::LogMemoryStore, wasm_chunk_store::WasmChunkStore,
+};
 use ic_replicated_state::page_map::{PageAllocatorFileDescriptor, storage::validate};
 use ic_replicated_state::{
     CanisterMetrics, CanisterState, ExecutionState, ReplicatedState, SchedulerState, SystemState,
@@ -805,6 +807,18 @@ pub fn load_canister_state(
             durations.insert("stable_memory", starting_time.elapsed());
 
             let starting_time = Instant::now();
+            let log_memory_store_layout = canister_layout.log_memory_store();
+            let log_memory_store = LogMemoryStore::from_checkpoint(
+                PageMap::open(
+                    Box::new(log_memory_store_layout),
+                    height,
+                    Arc::clone(&fd_factory),
+                )?,
+                canister_state_bits.log_memory_limit.get() as usize,
+            );
+            durations.insert("log_memory_store", starting_time.elapsed());
+
+            let starting_time = Instant::now();
             let wasm_binary = WasmBinary::new(
                 canister_layout
                     .wasm()
@@ -822,6 +836,7 @@ pub fn load_canister_state(
                 exports: execution_state_bits.exports,
                 wasm_memory,
                 stable_memory,
+                log_memory_store,
                 exported_globals: execution_state_bits.exported_globals,
                 metadata: execution_state_bits.metadata,
                 last_executed_round: execution_state_bits.last_executed_round,

@@ -22,6 +22,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     ExecutionState, ExportedFunctions, Memory, NetworkTopology,
     canister_state::execution_state::{WasmBinary, WasmMetadata},
+    canister_state::system_state::log_memory_store::LogMemoryStore,
     page_map::TestPageAllocatorFileDescriptorImpl,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
@@ -118,6 +119,7 @@ fn setup_execution_state(
         ExportedFunctions::new(wasm_methods),
         Memory::new_for_testing(),
         Memory::new_for_testing(),
+        LogMemoryStore::new_for_testing(),
         persisted_globals,
         WasmMetadata::default(),
     )

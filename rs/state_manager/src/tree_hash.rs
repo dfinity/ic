@@ -73,7 +73,7 @@ mod tests {
         ExecutionState, ExportedFunctions, Memory, NumWasmPages, PageMap, ReplicatedState,
         canister_state::{
             execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
-            system_state::CyclesUseCase,
+            system_state::{CyclesUseCase, log_memory_store::LogMemoryStore},
         },
         metadata_state::{ApiBoundaryNodeEntry, Stream, SubnetMetrics},
         page_map::{PAGE_SIZE, PageIndex},
@@ -189,6 +189,7 @@ mod tests {
                 ExportedFunctions::new(BTreeSet::new()),
                 wasm_memory,
                 Memory::new_for_testing(),
+                LogMemoryStore::new_for_testing(),
                 vec![Global::I32(1)],
                 metadata,
             );

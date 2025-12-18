@@ -10,7 +10,9 @@ use crate::wasmtime_embedder::system_api::{
 use ic_management_canister_types_private::Global;
 use ic_replicated_state::{
     ExportedFunctions, Memory, NumWasmPages, PageMap, canister_state::execution_state::WasmBinary,
-    canister_state::execution_state::WasmExecutionMode, page_map::PageAllocatorFileDescriptor,
+    canister_state::execution_state::WasmExecutionMode,
+    canister_state::system_state::log_memory_store::LogMemoryStore,
+    page_map::PageAllocatorFileDescriptor,
 };
 use ic_types::NumOsPages;
 use ic_types::methods::{FuncRef, WasmMethod};
@@ -321,6 +323,7 @@ impl WasmExecutor for WasmExecutorImpl {
                 stable_memory_page_map,
                 ic_replicated_state::NumWasmPages::from(0),
             ),
+            log_memory_store: LogMemoryStore::new(Arc::clone(&self.fd_factory)),
             exported_globals: globals,
             metadata: initial_state_data.wasm_metadata,
             last_executed_round: ExecutionRound::from(0),

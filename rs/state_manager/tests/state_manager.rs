@@ -24,7 +24,10 @@ use ic_replicated_state::{
     ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages, PageMap,
     ReplicatedState, Stream, SubnetTopology,
     canister_snapshots::CanisterSnapshot,
-    canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
+    canister_state::{
+        execution_state::WasmBinary,
+        system_state::{log_memory_store::LogMemoryStore, wasm_chunk_store::WasmChunkStore},
+    },
     metadata_state::ApiBoundaryNodeEntry,
     page_map::{PageIndex, Shard, StorageLayout},
     testing::ReplicatedStateTesting,
@@ -7063,6 +7066,7 @@ fn restore_snapshot(snapshot_id: SnapshotId, canister_id: CanisterId, state: &mu
         ExportedFunctions::new(Default::default()),
         Memory::from(&snapshot.execution_snapshot().wasm_memory),
         Memory::from(&snapshot.execution_snapshot().stable_memory),
+        LogMemoryStore::new_for_testing(),
         Default::default(),
         Default::default(),
     ));

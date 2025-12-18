@@ -3,7 +3,10 @@ mod execution_tests {
     use ic_error_types::ErrorCode;
     use ic_replicated_state::{
         ExecutionState, ExportedFunctions, Memory,
-        canister_state::execution_state::{WasmBinary, WasmExecutionMode, WasmMetadata},
+        canister_state::{
+            execution_state::{WasmBinary, WasmExecutionMode, WasmMetadata},
+            system_state::log_memory_store::LogMemoryStore,
+        },
     };
     use ic_test_utilities_execution_environment::{ExecutionTestBuilder, wat_compilation_cost};
     use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_int_counter_vec};
@@ -330,6 +333,7 @@ mod execution_tests {
             ),
             Memory::new_for_testing(),
             Memory::new_for_testing(),
+            LogMemoryStore::new_for_testing(),
             Vec::new(),
             WasmMetadata::default(),
         ));
