@@ -1291,6 +1291,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "bindgen"
+version = "0.72.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "993776b509cfb49c750f11b8f07a46fa23e0a1386ffc01fb1e7d343efc387895"
+dependencies = [
+ "bitflags 2.10.0",
+ "cexpr",
+ "clang-sys",
+ "itertools 0.13.0",
+ "log",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "rustc-hash 2.1.1",
+ "shlex",
+ "syn 2.0.110",
+]
+
+[[package]]
 name = "binread"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1710,6 +1730,21 @@ dependencies = [
  "serde_json",
  "syn 1.0.109",
  "xz2",
+]
+
+[[package]]
+name = "build_filesystem"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap 4.5.27",
+ "ic_device",
+ "rand 0.8.5",
+ "regex",
+ "selinux",
+ "tar",
+ "tempfile",
+ "xattr",
 ]
 
 [[package]]
@@ -16098,7 +16133,6 @@ dependencies = [
  "rand 0.8.5",
  "sys-mount",
  "tempfile",
- "tokio",
  "uuid",
 ]
 
@@ -22595,6 +22629,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "selinux"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f6af114a661557df02e60c25e5cb40779d295ec2e4ae0fd903fe414578b6191"
+dependencies = [
+ "bitflags 2.10.0",
+ "errno 0.3.10",
+ "libc",
+ "once_cell",
+ "parking_lot",
+ "selinux-sys",
+ "thiserror 2.0.17",
+]
+
+[[package]]
+name = "selinux-sys"
+version = "0.6.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "debaba5832b4831ffe0ba9118b526c752c960f41c46c4ef197d9a15f5179d6fd"
+dependencies = [
+ "bindgen 0.72.1",
+ "cc",
+ "dunce",
+ "walkdir",
+]
+
+[[package]]
 name = "semver"
 version = "1.0.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -26559,13 +26620,12 @@ dependencies = [
 
 [[package]]
 name = "xattr"
-version = "1.4.0"
+version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e105d177a3871454f754b33bb0ee637ecaaac997446375fd3e5d43a2ed00c909"
+checksum = "32e45ad4206f6d2479085147f02bc2ef834ac85886624a23575ae137c8aa8156"
 dependencies = [
  "libc",
- "linux-raw-sys 0.4.15",
- "rustix 0.38.44",
+ "rustix 1.1.2",
 ]
 
 [[package]]
