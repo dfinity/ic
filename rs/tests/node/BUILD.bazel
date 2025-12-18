@@ -74,7 +74,7 @@ system_test(
     ],
 )
 
-# ict testnet create launch_single_guest --lifetime-mins 3600
+# ict testnet create launch_single_guest
 # Or, to measure startup time:
 # bazel run //rs/tests/node:launch_single_guest -- --quiet
 system_test(
@@ -92,7 +92,7 @@ system_test(
     ],
 )
 
-# ict testnet create launch_single_host --lifetime-mins 3600
+# ict testnet create launch_single_host
 # Or, to measure startup time:
 # bazel run //rs/tests/node:launch_single_host -- --quiet
 system_test(

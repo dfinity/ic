@@ -1,5 +1,5 @@
 {
-  "checksum": "86b332746ad65b5627a54df75dc774322dd92882c5ad433e6cf207df93ba769f",
+  "checksum": "971e5d282607108262108ca673f422f2836eabfcb73687aedd1d7aeade59afa4",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -36828,12 +36828,9 @@
       "version": "0.1.0",
       "package_url": "https://github.com/dfinity/dogecoin-canister",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/dogecoin-canister",
-          "commitish": {
-            "Rev": "a5f89792a002b060e3f0174f1a87da9764f855f8"
-          },
-          "strip_prefix": "interface"
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-doge-interface/0.1.0/download",
+          "sha256": "b36c851b8fc6ec45666e3a912c8b22878e4f12f6d1d9f7033a153c7684903829"
         }
       },
       "targets": [
