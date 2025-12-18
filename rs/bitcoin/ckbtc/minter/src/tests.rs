@@ -2,18 +2,21 @@ use crate::state::utxos::UtxoSet;
 use crate::{
     BuildTxError, CacheWithExpiration, Network,
     address::BitcoinAddress,
-    build_unsigned_transaction, estimate_retrieve_btc_fee, fake_sign,
+    build_unsigned_transaction, build_unsigned_transaction_from_inputs, estimate_retrieve_btc_fee,
+    fake_sign,
     fees::{BitcoinFeeEstimator, FeeEstimator},
     greedy,
     lifecycle::init::InitArgs,
+    select_utxos_to_consolidate,
     state::invariants::CheckInvariantsImpl,
     state::{
-        ChangeOutput, CkBtcMinterState, Mode, RetrieveBtcRequest, RetrieveBtcStatus,
-        SubmittedBtcTransaction,
+        ChangeOutput, CkBtcMinterState, DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, Mode,
+        RetrieveBtcRequest, RetrieveBtcStatus, SubmittedBtcTransaction,
     },
     test_fixtures::{arbitrary, bitcoin_fee_estimator, build_bitcoin_unsigned_transaction},
     tx,
 };
+use assert_matches::assert_matches;
 use bitcoin::network::constants::Network as BtcNetwork;
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
 use candid::Principal;
@@ -44,6 +47,8 @@ fn default_init_args() -> InitArgs {
         kyt_principal: None,
         kyt_fee: None,
         get_utxos_cache_expiration_seconds: None,
+        utxo_consolidation_threshold: None,
+        max_num_inputs_in_transaction: None,
     }
 }
 
@@ -257,7 +262,8 @@ fn should_have_same_input_and_output_count() {
     let (tx, change_output, _, _) = build_unsigned_transaction(
         &mut available_utxos,
         vec![(out1_addr.clone(), 100_000), (out2_addr.clone(), 99_999)],
-        minter_addr.clone(),
+        &minter_addr,
+        DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
         fee_per_vbyte,
         &fee_estimator,
     )
@@ -307,7 +313,8 @@ fn test_min_change_amount() {
             (out1_addr.clone(), utxo_1.value),
             (out2_addr.clone(), utxo_2.value - 1),
         ],
-        minter_addr.clone(),
+        &minter_addr,
+        DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
         fee_per_vbyte,
         &fee_estimator,
     )
@@ -427,7 +434,8 @@ fn test_no_dust_in_change_output() {
         let (tx, change_output, _withdrawal_fee, _utxos) = build_unsigned_transaction(
             &mut available_utxos,
             vec![(out1_addr.clone(), utxo.value - change)],
-            minter_addr.clone(),
+            &minter_addr,
+            DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
             fee_per_vbyte,
             &fee_estimator,
         )
@@ -610,13 +618,14 @@ proptest! {
         let fee_estimator = bitcoin_fee_estimator();
         let minter_address= BitcoinAddress::P2wpkhV0(main_pkhash);
         let mut utxos2 = utxos.clone();
-        let fee_estimate = estimate_retrieve_btc_fee(&mut utxos2, target, fee_per_vbyte, &fee_estimator).unwrap();
+        let fee_estimate = estimate_retrieve_btc_fee(&mut utxos2, target, fee_per_vbyte, DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, &fee_estimator).unwrap();
         let fee_estimate = fee_estimate.minter_fee + fee_estimate.bitcoin_fee;
 
         let (unsigned_tx, _, _, _) = build_unsigned_transaction(
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
-            minter_address,
+            &minter_address,
+            DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
             fee_per_vbyte,
             &fee_estimator
         )
@@ -676,7 +685,8 @@ proptest! {
         let (unsigned_tx, change_output, _, _) = build_unsigned_transaction(
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
-            minter_address.clone(),
+            &minter_address,
+            DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
             fee_per_vbyte,
             &fee_estimator
         )
@@ -774,7 +784,7 @@ proptest! {
         }
         for req in requests {
             let block_index = req.block_index;
-            state.push_back_pending_request(req);
+            state.push_back_pending_retrieve_btc_request(req);
             prop_assert_eq!(state.retrieve_btc_status(block_index), RetrieveBtcStatus::Pending);
         }
 
@@ -825,6 +835,7 @@ proptest! {
             change_output: Some(change_output),
             fee_per_vbyte: Some(fee_per_vbyte),
             withdrawal_fee: Some(withdrawal_fee),
+            signed_tx: None,
         });
 
         state.check_invariants().expect("violated invariants");
@@ -850,6 +861,7 @@ proptest! {
                 change_output: Some(change_output),
                 fee_per_vbyte: Some(fee_per_vbyte),
                 withdrawal_fee: Some(withdrawal_fee),
+                signed_tx: None,
             });
 
             for txid in &txids {
@@ -1004,7 +1016,7 @@ proptest! {
 
         let fee_estimator = bitcoin_fee_estimator();
         let amount = max(amount, fee_estimator.fee_based_minimum_withdrawal_amount(fee_per_vbyte));
-        let estimate = estimate_retrieve_btc_fee(&mut utxos, amount, fee_per_vbyte, &fee_estimator).unwrap();
+        let estimate = estimate_retrieve_btc_fee(&mut utxos, amount, fee_per_vbyte, DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, &fee_estimator).unwrap();
         let lower_bound = MIN_MINTER_FEE + SMALLEST_TX_SIZE_VBYTES * fee_per_vbyte / 1000;
         let estimate_amount = estimate.minter_fee + estimate.bitcoin_fee;
         prop_assert!(
@@ -1198,6 +1210,44 @@ fn test_cache_expiration_two() {
     assert_eq!(cache.len(), 2);
     assert_eq!(cache.get(&2, 6), Some(&2));
     assert_eq!(cache.get(&4, 6), Some(&4));
+}
+
+#[test]
+fn test_build_consolidation_transaction() {
+    use proptest::strategy::{Strategy, ValueTree};
+    use proptest::test_runner::{Config, TestRunner};
+
+    let main_address = BitcoinAddress::P2wpkhV0([0; 20]);
+    let fee_estimator = bitcoin_fee_estimator();
+    let fee_millisatoshi_per_vbyte = 10;
+
+    // Randomly generate a utxo set from proptest strategy
+    let strategy = arbitrary::utxo_set(1_000_000u64..1_000_000_000, 1000..2000);
+    let mut runner = TestRunner::new(Config::default());
+    let mut utxos: UtxoSet = strategy.new_tree(&mut runner).unwrap().current();
+
+    let input_utxos = select_utxos_to_consolidate(&mut utxos, 1000);
+    let max_input_value: u64 = input_utxos.iter().map(|x| x.value).max().unwrap();
+    assert!(utxos.iter().all(|x| x.value > max_input_value));
+
+    let total_amount = input_utxos.iter().map(|u| u.value).sum::<u64>();
+    let result = build_unsigned_transaction_from_inputs(
+        &input_utxos,
+        vec![(main_address.clone(), total_amount / 2)],
+        &main_address,
+        DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
+        fee_millisatoshi_per_vbyte,
+        &fee_estimator,
+    );
+    assert_matches!(result, Ok(_));
+    let (unsigned_tx, _change_output, fee) = result.unwrap();
+    let outputs = &unsigned_tx.outputs;
+    assert_eq!(outputs.len(), 2);
+    assert!(outputs.iter().all(|x| x.address == main_address));
+    assert_eq!(
+        total_amount,
+        outputs.iter().map(|x| x.value).sum::<u64>() + fee.bitcoin_fee
+    );
 }
 
 proptest! {

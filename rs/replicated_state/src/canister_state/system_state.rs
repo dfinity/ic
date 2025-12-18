@@ -336,6 +336,9 @@ pub struct SystemState {
     /// Log visibility of the canister.
     pub log_visibility: LogVisibilityV2,
 
+    /// The capacity of the canister log in bytes.
+    pub log_memory_limit: NumBytes,
+
     /// Log records of the canister.
     #[validate_eq(CompareWithValidateEq)]
     pub canister_log: CanisterLog,
@@ -517,6 +520,7 @@ impl SystemState {
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: Default::default(),
+            log_memory_limit: NumBytes::new(0),
             // TODO(EXC-2118): CanisterLog does not store log records efficiently,
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
@@ -549,6 +553,7 @@ impl SystemState {
         wasm_chunk_store_data: PageMap,
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
         log_visibility: LogVisibilityV2,
+        log_memory_limit: NumBytes,
         canister_log: CanisterLog,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
@@ -579,6 +584,7 @@ impl SystemState {
                 wasm_chunk_store_metadata,
             ),
             log_visibility,
+            log_memory_limit,
             canister_log,
             wasm_memory_limit,
             next_snapshot_id,
@@ -1326,6 +1332,9 @@ impl SystemState {
     /// another subnet.
     pub fn drop_in_progress_management_calls_after_split(&mut self) {
         // Remove aborted install code task.
+        //
+        // Note that this cannot be a paused install code task, because we abort all
+        // paused tasks before triggering the split.
         self.task_queue.remove_aborted_install_code_task();
 
         // Roll back `Stopping` canister states to `Running` and drop all their stop
@@ -2215,6 +2224,7 @@ pub mod testing {
             canister_history: Default::default(),
             wasm_chunk_store: WasmChunkStore::new_for_testing(),
             log_visibility: Default::default(),
+            log_memory_limit: Default::default(),
             // TODO(EXC-2118): CanisterLog does not store log records efficiently,
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
