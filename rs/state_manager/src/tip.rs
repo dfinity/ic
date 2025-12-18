@@ -1272,6 +1272,8 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             is_wasm64: execution_state.wasm_execution_mode.is_wasm64(),
         });
 
+    let load_metrics_bits = &canister_state.system_state.canister_metrics.load_metrics;
+
     canister_layout.canister().serialize(
         CanisterStateBits {
             controllers: canister_state.system_state.controllers.clone(),
@@ -1348,23 +1350,12 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .system_state
                 .canister_metrics
                 .instructions_executed,
-            ingress_messages_executed: canister_state
-                .system_state
-                .canister_metrics
-                .ingress_messages_executed,
-            xnet_messages_executed: canister_state
-                .system_state
-                .canister_metrics
-                .xnet_messages_executed,
-            intranet_messages_executed: canister_state
-                .system_state
-                .canister_metrics
-                .intranet_messages_executed,
-            http_outcalls_executed: canister_state
-                .system_state
-                .canister_metrics
-                .http_outcalls_executed,
-            tasks_executed: canister_state.system_state.canister_metrics.tasks_executed,
+            ingress_messages_executed: load_metrics_bits.ingress_messages_executed,
+            xnet_messages_executed: load_metrics_bits.xnet_messages_executed,
+            intranet_messages_executed: load_metrics_bits.intranet_messages_executed,
+            http_outcalls_executed: load_metrics_bits.http_outcalls_executed,
+            heartbeats_executed: load_metrics_bits.heartbeats_executed,
+            global_timers_executed: load_metrics_bits.global_timers_executed,
         }
         .into(),
     )?;

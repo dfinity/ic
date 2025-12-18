@@ -8,6 +8,7 @@ use ic_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::CanisterMetrics;
+use ic_replicated_state::canister_state::system_state::LoadMetrics;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_state_layout::CompleteCheckpointLayout;
 use ic_state_manager::{CheckpointMetrics, checkpoint::load_checkpoint};
@@ -40,7 +41,7 @@ pub fn get(
     // Write the header.
     writeln!(
         output_file,
-        "canister_id,instructions_executed,ingress_messages_executed,xnet_messages_executed,intranet_messages_executed,http_outcalls_executed,tasks_executed"
+        "canister_id,instructions_executed,ingress_messages_executed,xnet_messages_executed,intranet_messages_executed,http_outcalls_executed,heartbeats_executed,global_timers_executed"
     )
     .map_err(|err| format!("Failed to write header: {err}"))?;
 
@@ -48,16 +49,20 @@ pub fn get(
     for (canister_id, canister_state) in replicated_state.canister_states {
         let CanisterMetrics {
             instructions_executed,
-            ingress_messages_executed,
-            xnet_messages_executed,
-            intranet_messages_executed,
-            http_outcalls_executed,
-            tasks_executed,
+            load_metrics:
+                LoadMetrics {
+                    ingress_messages_executed,
+                    xnet_messages_executed,
+                    intranet_messages_executed,
+                    http_outcalls_executed,
+                    heartbeats_executed,
+                    global_timers_executed,
+                },
             ..
         } = canister_state.system_state.canister_metrics;
         writeln!(
             output_file,
-            "{canister_id},{instructions_executed},{ingress_messages_executed},{xnet_messages_executed},{intranet_messages_executed},{http_outcalls_executed},{tasks_executed}"
+            "{canister_id},{instructions_executed},{ingress_messages_executed},{xnet_messages_executed},{intranet_messages_executed},{http_outcalls_executed},{heartbeats_executed},{global_timers_executed}"
         )
         .map_err(|err| format!("Failed to write row: {err}"))?;
     }

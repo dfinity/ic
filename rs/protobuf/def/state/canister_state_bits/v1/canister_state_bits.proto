@@ -401,7 +401,7 @@ message TaskQueue {
   repeated ExecutionTask queue = 3;
 }
 
-// Next ID: 63
+// Next ID: 64
 message CanisterStateBits {
   reserved 1;
   reserved "controller";
@@ -440,7 +440,8 @@ message CanisterStateBits {
   uint64 xnet_messages_executed = 59;
   uint64 intranet_messages_executed = 60;
   uint64 http_outcalls_executed = 61;
-  uint64 tasks_executed = 62;
+  uint64 heartbeats_executed = 62;
+  uint64 global_timers_executed = 63;
   uint64 freeze_threshold = 23;
   reserved 24;
   reserved "stable_memory_size";

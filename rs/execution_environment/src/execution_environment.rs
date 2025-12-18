@@ -1916,6 +1916,7 @@ impl ExecutionEnvironment {
                 canister_stats
                     .system_state
                     .canister_metrics
+                    .load_metrics
                     .http_outcalls_executed += 1;
             }
             self.metrics.observe_message_with_label(
@@ -4407,7 +4408,10 @@ pub enum CanisterInputType {
     Ingress,
     Xnet,
     Intranet,
-    Task,
+    HeartbeatTask,
+    GlobalTimerTask,
+    PausedExecutionTask,
+    OnLowWasmMemoryTask,
 }
 
 /// The result of `execute_canister()`.
@@ -4451,7 +4455,13 @@ fn execute_canister_input(
             CanisterInputType::Intranet
         }
         CanisterMessageOrTask::Message(CanisterMessage::Response(_)) => CanisterInputType::Xnet,
-        CanisterMessageOrTask::Task(_) => CanisterInputType::Task,
+        CanisterMessageOrTask::Task(CanisterTask::GlobalTimer) => {
+            CanisterInputType::GlobalTimerTask
+        }
+        CanisterMessageOrTask::Task(CanisterTask::Heartbeat) => CanisterInputType::HeartbeatTask,
+        CanisterMessageOrTask::Task(CanisterTask::OnLowWasmMemory) => {
+            CanisterInputType::OnLowWasmMemoryTask
+        }
     };
     let result = exec_env.execute_canister_input(
         canister,
@@ -4542,7 +4552,7 @@ pub fn execute_canister(
                     heap_delta,
                     ingress_status,
                     description: Some("paused execution".to_string()),
-                    input_type: Some(CanisterInputType::Task),
+                    input_type: Some(CanisterInputType::PausedExecutionTask),
                 };
             }
             ExecutionTask::Heartbeat => {

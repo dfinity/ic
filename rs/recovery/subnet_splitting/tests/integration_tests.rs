@@ -65,28 +65,31 @@ fn load_metrics_e2e_test() {
             xnet_messages_executed,
             intranet_messages_executed,
             http_outcalls_executed,
-            tasks_executed,
+            heartbeats_executed,
+            global_timers_executed,
         },
-    ) = ic_subnet_splitting::post_split_estimations::estimate(
-        canister_id_ranges,
-        manifest_path,
-        load_samples_path,
-        /*load_samples_reference_path=*/ None,
-    )
-    .expect("Should succeed given valid inputs");
+    ) = dbg!(
+        ic_subnet_splitting::post_split_estimations::estimate(
+            canister_id_ranges,
+            manifest_path,
+            load_samples_path,
+            /*load_samples_reference_path=*/ None,
+        )
+        .expect("Should succeed given valid inputs")
+    );
 
     assert_eq!(
         states_sizes_bytes,
         Estimates {
-            source: 44848036,
-            destination: 46085457,
+            source: 44852255,
+            destination: 46085610,
         }
     );
     assert_eq!(
         instructions_used,
         Estimates {
-            source: 79165267,
-            destination: 80352880,
+            source: 79563911,
+            destination: 80768836,
         }
     );
     assert_eq!(
@@ -118,10 +121,17 @@ fn load_metrics_e2e_test() {
         }
     );
     assert_eq!(
-        tasks_executed,
+        heartbeats_executed,
         Estimates {
             source: 32352,
             destination: 32997,
+        }
+    );
+    assert_eq!(
+        global_timers_executed,
+        Estimates {
+            source: 49,
+            destination: 51,
         }
     );
 }
@@ -148,7 +158,7 @@ fn set_up(canisters_count: usize) -> Arc<StateMachine> {
         let http_outcalls_canister_id =
             create_canister(state_machine.as_ref(), http_outcalls_wasm.to_vec());
 
-        // Grow the canister a bit
+        // Grow the canister a bit and set a global timer
         state_machine
             .execute_ingress(
                 canister_id,
@@ -156,6 +166,8 @@ fn set_up(canisters_count: usize) -> Arc<StateMachine> {
                 wasm()
                     .stable_grow(100)
                     .stable_write(0, &vec![1; 100_000])
+                    .set_global_timer_method(wasm().inc_global_counter())
+                    .api_global_timer_set(1)
                     .reply()
                     .build(),
             )

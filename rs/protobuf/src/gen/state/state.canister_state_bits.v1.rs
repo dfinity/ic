@@ -614,7 +614,7 @@ pub struct TaskQueue {
     #[prost(message, repeated, tag = "3")]
     pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
 }
-/// Next ID: 63
+/// Next ID: 64
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
@@ -651,7 +651,9 @@ pub struct CanisterStateBits {
     #[prost(uint64, tag = "61")]
     pub http_outcalls_executed: u64,
     #[prost(uint64, tag = "62")]
-    pub tasks_executed: u64,
+    pub heartbeats_executed: u64,
+    #[prost(uint64, tag = "63")]
+    pub global_timers_executed: u64,
     #[prost(uint64, tag = "23")]
     pub freeze_threshold: u64,
     #[prost(message, repeated, tag = "25")]
