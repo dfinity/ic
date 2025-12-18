@@ -31,8 +31,6 @@ jobs:
     name: Build Container Image
     runs-on:
       labels: dind-small
-    container:
-      image: ubuntu:24.04
     timeout-minutes: 60
     steps:
       - name: Create GitHub App Token
