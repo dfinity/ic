@@ -259,7 +259,7 @@ pub mod local {
     const ADMIN_HOME: &str = "/var/lib/admin";
     // Remote path where guest launch measurements will be uploaded
     const GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH: &str =
-        "/var/lib/ic/recovery/guest_launch_measurements.json";
+        "/var/lib/ic/data/recovery/guest_launch_measurements.json";
     // Remote path where recovery output will be stored in case of a NNS recovery on same nodes
     pub const NNS_RECOVERY_OUTPUT_DIR_REMOTE_PATH: &str = "/var/lib/ic/data/recovery/output";
 
