@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -33,20 +33,16 @@ rust_doc(
     ],
 )
 
-# TODO: The rust_doc_test rule is disabled because currently it is not possible
-# to enable crate features. This will soon become possible though once
-# https://github.com/bazelbuild/rules_rust/pull/3544 is part of a release and
-# we are using the respective rules_rust version.
-# rust_doc_test(
-#     name = "doc_test",
-#     crate = ":ic-pub-key",
-#     crate_features = [
-#         "secp256k1",
-#         "ed25519",
-#         "vetkeys",
-#     ],
-#     deps = [":ic-pub-key"],
-# )
+rust_doc_test(
+    name = "doc_test",
+    crate = ":ic-pub-key",
+    crate_features = [
+        "secp256k1",
+        "ed25519",
+        "vetkeys",
+    ],
+    deps = [":ic-pub-key"],
+)
 
 rust_test(
     name = "unit_tests",
