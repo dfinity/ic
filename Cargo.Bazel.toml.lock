@@ -6421,7 +6421,8 @@ dependencies = [
 [[package]]
 name = "ic-doge-interface"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/dogecoin-canister?rev=a5f89792a002b060e3f0174f1a87da9764f855f8#a5f89792a002b060e3f0174f1a87da9764f855f8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b36c851b8fc6ec45666e3a912c8b22878e4f12f6d1d9f7033a153c7684903829"
 dependencies = [
  "candid",
  "datasize",
