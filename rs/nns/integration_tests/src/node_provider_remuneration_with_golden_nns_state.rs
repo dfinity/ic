@@ -1,4 +1,7 @@
-// TODO(DRE-6385): Remove this test once PBR is fully rolled out to mainnet.
+// TODO(DRE-6385): Remove this test once Performance Based Rewards is fully rolled out to mainnet.
+// This is because this test compares against well known values obtained from dre tool for January distribution.
+// Run: `dre node-rewards ongoing` to see these values.
+
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
@@ -233,6 +236,8 @@ mod sanity_check {
     lazy_static! {
         /// Expected adjusted rewards for each node provider up to and including December 15th, 2025.
         /// These values represent the total rewards with penalties applied for underperforming nodes.
+        /// These values have been obtained by running `dre node-rewards ongoing` on December 16th, 2025.
+        /// You can retrieve these values by running: `dre node-rewards past-rewards 12-2025`
         pub static ref EXPECTED_REWARDS_UP_TO_15_DEC: BTreeMap<String, u64> = {
             BTreeMap::from([
                 ("trxbq", 372152),
@@ -336,79 +341,78 @@ mod sanity_check {
     /// comparing them to the metrics fetched before the upgrade.
     pub fn advance_time_and_check_january_distribution(
         state_machine: &StateMachine,
-        before: Metrics,
+        december_distribution_metrics: Metrics,
     ) {
         let now_seconds = state_machine.get_time().as_secs_since_unix_epoch();
-        let january_distribution_timestamp: u64 = 1768302559; // Tue Jan 13 2026 11:09:19 UTC
+        let expected_january_distribution_timestamp: u64 = 1768302559; // Tue Jan 13 2026 11:09:19 UTC
 
-        if now_seconds >= january_distribution_timestamp {
+        if now_seconds >= expected_january_distribution_timestamp {
             return;
         }
 
-        let december_distribution_timestamp: u64 = before
+        let december_distribution_timestamp: u64 = december_distribution_metrics
             .governance_most_recent_monthly_node_provider_rewards
             .timestamp;
 
-        let start_date = DateTime::from_timestamp(december_distribution_timestamp as i64, 0)
-            .unwrap()
-            .date_naive();
-
         // Advance time in the state machine to just before the next rewards distribution time.
-        let target_rewards_distribution_timestamp_seconds =
-            december_distribution_timestamp + NODE_PROVIDER_REWARD_PERIOD_SECONDS;
         state_machine.advance_time(std::time::Duration::from_secs(
-            target_rewards_distribution_timestamp_seconds - now_seconds - 1,
+            december_distribution_timestamp + NODE_PROVIDER_REWARD_PERIOD_SECONDS - now_seconds - 1,
         ));
         for _ in 0..100 {
             state_machine.advance_time(std::time::Duration::from_secs(1));
             state_machine.tick();
         }
 
-        let after = fetch_metrics(state_machine);
-
-        let performance_based_rewards = after
+        let january_distribution_metrics = fetch_metrics(state_machine);
+        let january_distribution = january_distribution_metrics
             .governance_most_recent_monthly_node_provider_rewards
             .clone();
-        let rewards_distribution_date =
-            DateTime::from_timestamp(january_distribution_timestamp as i64, 0)
-                .unwrap()
-                .date_naive();
 
         assert!(
-            january_distribution_timestamp.abs_diff(performance_based_rewards.timestamp) <= 120,
+            expected_january_distribution_timestamp.abs_diff(january_distribution.timestamp) <= 120,
             "Expected rewards distribution timestamp around {}, got {}",
-            january_distribution_timestamp,
-            performance_based_rewards.timestamp
+            expected_january_distribution_timestamp,
+            january_distribution.timestamp
         );
 
-        let pbr_end_date = performance_based_rewards.end_date.unwrap();
+        let january_distribution_end_date = january_distribution.end_date.unwrap();
         let observed_end_date = NaiveDate::from_ymd_opt(
-            pbr_end_date.year as i32,
-            pbr_end_date.month,
-            pbr_end_date.day,
+            january_distribution_end_date.year as i32,
+            january_distribution_end_date.month,
+            january_distribution_end_date.day,
         )
         .unwrap();
-        let expected_end_date = rewards_distribution_date.pred_opt().unwrap();
-        assert_eq!(expected_end_date, observed_end_date);
+        let expected_end_date =
+            DateTime::from_timestamp(expected_january_distribution_timestamp as i64, 0)
+                .unwrap()
+                .date_naive()
+                .pred_opt()
+                .unwrap();
+        assert_eq!(observed_end_date, expected_end_date);
 
-        let pbr_start_date = performance_based_rewards.start_date.unwrap();
+        let expected_start_date =
+            DateTime::from_timestamp(december_distribution_timestamp as i64, 0)
+                .unwrap()
+                .date_naive();
+        let january_distribution_start_date = january_distribution.start_date.unwrap();
         let observed_start_date = NaiveDate::from_ymd_opt(
-            pbr_start_date.year as i32,
-            pbr_start_date.month,
-            pbr_start_date.day,
+            january_distribution_start_date.year as i32,
+            january_distribution_start_date.month,
+            january_distribution_start_date.day,
         )
         .unwrap();
-        assert_eq!(start_date, observed_start_date);
+        assert_eq!(observed_start_date, expected_start_date);
 
-        assert_eq!(performance_based_rewards.algorithm_version, Some(1));
+        assert_eq!(january_distribution.algorithm_version, Some(1));
 
         // Fetch daily rewards for each day in the period and sum them up per provider checking
         // rewards up to Dec 15th, 2025 against expected values.
         let dec_15_2025 = chrono::NaiveDate::from_ymd_opt(2025, 12, 15).unwrap();
 
-        let mut daily_rewards_observed: BTreeMap<PrincipalId, u64> = BTreeMap::new();
-        let mut rewards_up_to_dec_15_2025: BTreeMap<String, u64> = BTreeMap::new();
-        for date in start_date
+        let mut observed_node_provider_id_to_xdr: BTreeMap<PrincipalId, u64> = BTreeMap::new();
+        // This only includes rewards up to (and including) Dec 15, not all the way up to observed_end_date.
+        let mut observed_node_provider_id_prefix_to_xdr: BTreeMap<String, u64> = BTreeMap::new();
+        for date in expected_start_date
             .iter_days()
             .take_while(|d| *d <= observed_end_date)
         {
@@ -416,31 +420,36 @@ mod sanity_check {
 
             for (provider_id, daily_result) in daily_rewards.provider_results {
                 let adjusted_reward = daily_result.total_adjusted_rewards_xdr_permyriad.unwrap();
-                *daily_rewards_observed.entry(provider_id).or_default() += adjusted_reward;
+                *observed_node_provider_id_to_xdr
+                    .entry(provider_id)
+                    .or_default() += adjusted_reward;
 
                 // Track rewards up to and including December 15th
                 if date <= dec_15_2025 {
                     let provider_string = provider_id.to_string().clone();
                     let short_provider_id = provider_string.split('-').next().unwrap().to_string();
 
-                    *rewards_up_to_dec_15_2025
+                    *observed_node_provider_id_prefix_to_xdr
                         .entry(short_provider_id)
                         .or_default() += adjusted_reward;
                 }
             }
         }
+
+        // Main assertion for the test: check that observed rewards up to and including
+        // December 15th, 2025 match expected values.
         assert_eq!(
-            *EXPECTED_REWARDS_UP_TO_15_DEC, rewards_up_to_dec_15_2025,
+            *EXPECTED_REWARDS_UP_TO_15_DEC, observed_node_provider_id_prefix_to_xdr,
             "Observed rewards up to and including December 15th, 2025 do not match expected values."
         );
 
-        let xdr_permyriad_per_icp = performance_based_rewards
+        let xdr_permyriad_per_icp = january_distribution
             .xdr_conversion_rate
             .unwrap()
             .xdr_permyriad_per_icp
             .unwrap();
 
-        let xdr_permyriad_distributed = performance_based_rewards
+        let xdr_permyriad_distributed = january_distribution
             .rewards
             .into_iter()
             .filter(|reward| reward.amount_e8s > 0)
@@ -460,12 +469,12 @@ mod sanity_check {
         // 2. Convert back to XDR permyriad (with truncation)
         // This accounts for precision loss in the conversion process.
         let expected_xdr_permyriad_per_provider: BTreeMap<PrincipalId, u64> =
-            daily_rewards_observed
+            observed_node_provider_id_to_xdr
                 .into_iter()
                 .map(|(provider_id, total_xdr_permyriad)| {
                     // Simulate governance.rs conversion: XDR → e8s → XDR
                     // This matches the double truncation that happens in the actual flow
-                    let amount_e8s = ((total_xdr_permyriad as u128 * 10_u64.pow(8) as u128)
+                    let amount_e8s = ((total_xdr_permyriad as u128 * 10_u128.pow(8))
                         / xdr_permyriad_per_icp as u128)
                         as u64;
                     let xdr_back = (amount_e8s as u128 * xdr_permyriad_per_icp as u128
@@ -475,10 +484,14 @@ mod sanity_check {
                 .collect();
 
         assert_eq!(
-            expected_xdr_permyriad_per_provider, xdr_permyriad_distributed,
+            xdr_permyriad_distributed, expected_xdr_permyriad_per_provider,
             "Distributed rewards do not match expected rewards calculated from daily results."
         );
-        MetricsBeforeAndAfter { before, after }.check_all();
+        MetricsBeforeAndAfter {
+            before: december_distribution_metrics,
+            after: january_distribution_metrics,
+        }
+        .check_all();
     }
 
     struct MetricsBeforeAndAfter {
