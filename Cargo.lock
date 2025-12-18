@@ -9642,7 +9642,6 @@ dependencies = [
  "wasmparser 0.240.0",
  "wasmprinter",
  "wasmtime",
- "wasmtime-environ",
  "wast",
  "wat",
  "wirm",
