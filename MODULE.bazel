@@ -670,6 +670,18 @@ http_archive(
     ],
 )
 
+http_archive(
+    name = "e2fsprogs",
+    build_file = "@//third_party:BUILD.e2fsprogs.bazel",
+    patch_args = ["-p1"],
+    patches = ["//bazel:e2fsprogs.patch"],
+    sha256 = "86360777b8e0832f3fcbfc11e333a7a0e9df15ca3b67a8072fcb93d97a2b8ab9",
+    strip_prefix = "e2fsprogs-da631e117dcf8797bfda0f48bdaa05ac0fbcf7af",
+    urls = [
+        "https://github.com/tytso/e2fsprogs/archive/da631e117dcf8797bfda0f48bdaa05ac0fbcf7af.tar.gz",
+    ],
+)
+
 http_file(
     name = "bitcoin_example_canister",
     downloaded_file_path = "basic_bitcoin.wasm.gz",
@@ -1071,6 +1083,14 @@ new_local_repository(
 new_local_repository(
     name = "libvirt",
     build_file = "@//third_party:BUILD.libvirt.bazel",
+    path = "/usr",
+)
+
+# Use libselinux from the host environment
+# Used for SELinux context lookups in build tools.
+new_local_repository(
+    name = "libselinux",
+    build_file = "@//third_party:BUILD.selinux.bazel",
     path = "/usr",
 )
 

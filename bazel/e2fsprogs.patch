@@ -1,0 +1,18 @@
+# Add security.selinux to the xattr filter in create_inode_libarchive.c
+# This ensures that security.selinux xattrs are preserved when creating
+# filesystem images from tar archives.
+diff --git a/misc/create_inode_libarchive.c b/misc/create_inode_libarchive.c
+index 1234567..abcdefg 100644
+--- a/misc/create_inode_libarchive.c
++++ b/misc/create_inode_libarchive.c
+@@ -470,7 +470,7 @@ static errcode_t set_inode_xattr_tar(ext2_filsys fs, ext2_ino_t ino,
+
+ 	dl_archive_entry_xattr_reset(entry);
+ 	while (dl_archive_entry_xattr_next(entry, &name, &value, &value_size) ==
+ 	       ARCHIVE_OK) {
+-		if (strcmp(name, "security.capability") != 0 && strcmp(name, "gnu.translator"))
++		if (strcmp(name, "security.capability") != 0 && strcmp(name, "gnu.translator") && strcmp(name, "security.selinux"))
+ 			continue;
+
+ 		retval = ext2fs_xattr_set(handle, name, value, value_size);
+

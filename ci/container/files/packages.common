@@ -56,6 +56,8 @@ faketime
 grub-efi-amd64-bin
 iasl # to build OVMF
 iputils-ping
+ # Supports tar file handling in IC-OS build
+libarchive-dev
  # Linked in by IC-OS binaries for managing encrypted disks.
 libcryptsetup-dev
  # Linked in by IC-OS binaries for creating mapped devices.

@@ -1404,6 +1404,10 @@ crate.spec(
     version = "^0.22",
 )
 crate.spec(
+    package = "selinux",
+    version = "^0.5",
+)
+crate.spec(
     features = [
         "serde",
     ],
@@ -1815,6 +1819,10 @@ crate.spec(
     version = "^2.3.1",
 )
 crate.spec(
+    package = "xattr",
+    version = "^1.6.1",
+)
+crate.spec(
     package = "walrus",
     version = "^0.23.3",
 )
@@ -2091,6 +2099,16 @@ crate.annotation(
         "-C",
         "opt-level=3",
     ],
+)
+crate.annotation_select(
+    build_script_data = ["@@_main~_repo_rules~libselinux//:libselinux"],
+    build_script_env = {
+        "SELINUX_INCLUDE_DIR": "/usr/include",
+        "SELINUX_LIB_DIR": "/usr/lib/x86_64-linux-gnu",
+    },
+    crate = "selinux-sys",
+    deps = ["@@_main~_repo_rules~libselinux//:libselinux"],
+    triples = ["x86_64-unknown-linux-gnu"],
 )
 crate.annotation(
     build_script_env = {

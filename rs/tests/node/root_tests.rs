@@ -53,9 +53,48 @@ fn root_test(env: TestEnv, test: &str) {
         .expect("Failed to run {test}");
 }
 
+fn build_filesystem_test(env: TestEnv) {
+    let deployed_universal_vm = env
+        .get_deployed_universal_vm(UNIVERSAL_VM_NAME)
+        .expect("unable to get deployed VM.");
+    deployed_universal_vm
+        .block_on_bash_script(&indoc::formatdoc!(
+            r#"
+                set -euo pipefail
+                docker load -i /config/ubuntu_test_runtime.tar
+
+                TMPDIR=$(mktemp -d)
+                trap "rm -rf ${{TMPDIR}}" exit
+                cd "${{TMPDIR}}"
+
+                cp /config/build_filesystem_test .
+                cp /config/mke2fs .
+                chmod +x build_filesystem_test mke2fs
+
+                cat <<EOF > Dockerfile
+                    FROM ubuntu_test_runtime:image
+                    COPY --chmod=755 build_filesystem_test /build_filesystem_test
+                    COPY --chmod=755 mke2fs /mke2fs
+                EOF
+
+                docker build --tag final -f Dockerfile .
+                docker run --privileged -v /dev:/dev --rm final /usr/bin/bash -c "
+                    /usr/lib/systemd/systemd-udevd --daemon
+                    export MKE2FS_BIN=/mke2fs
+                    export RUST_BACKTRACE=1
+                    # We have a limited number of loop devices, so it's not worth
+                    # running too many tests in parallel.
+                    /build_filesystem_test --test-threads=3
+                "
+            "#
+        ))
+        .expect("Failed to run build_filesystem_unit_test");
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
+        .add_test(systest!(build_filesystem_test))
         .add_test(systest!(root_test; "upgrade_device_mapper_test"))
         .add_test(systest!(root_test; "guest_disk_test"))
         .add_test(systest!(root_test; "device_test"))

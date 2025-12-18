@@ -1103,6 +1103,348 @@
 			"arch": "amd64",
 			"dependencies": [
 				{
+					"key": "nettle-dev_3.9.1-2.2build1.1_amd64",
+					"name": "nettle-dev",
+					"version": "3.9.1-2.2build1.1"
+				},
+				{
+					"key": "libgmp-dev_2-6.3.0-p-dfsg-2ubuntu6.1_amd64",
+					"name": "libgmp-dev",
+					"version": "2:6.3.0+dfsg-2ubuntu6.1"
+				},
+				{
+					"key": "libgmpxx4ldbl_2-6.3.0-p-dfsg-2ubuntu6.1_amd64",
+					"name": "libgmpxx4ldbl",
+					"version": "2:6.3.0+dfsg-2ubuntu6.1"
+				},
+				{
+					"key": "libstdc-p--p-6_14.2.0-4ubuntu2_24.04_amd64",
+					"name": "libstdc++6",
+					"version": "14.2.0-4ubuntu2~24.04"
+				},
+				{
+					"key": "libgcc-s1_14.2.0-4ubuntu2_24.04_amd64",
+					"name": "libgcc-s1",
+					"version": "14.2.0-4ubuntu2~24.04"
+				},
+				{
+					"key": "libc6_2.39-0ubuntu8.6_amd64",
+					"name": "libc6",
+					"version": "2.39-0ubuntu8.6"
+				},
+				{
+					"key": "gcc-14-base_14.2.0-4ubuntu2_24.04_amd64",
+					"name": "gcc-14-base",
+					"version": "14.2.0-4ubuntu2~24.04"
+				},
+				{
+					"key": "libgmp10_2-6.3.0-p-dfsg-2ubuntu6.1_amd64",
+					"name": "libgmp10",
+					"version": "2:6.3.0+dfsg-2ubuntu6.1"
+				},
+				{
+					"key": "libhogweed6t64_3.9.1-2.2build1.1_amd64",
+					"name": "libhogweed6t64",
+					"version": "3.9.1-2.2build1.1"
+				},
+				{
+					"key": "libnettle8t64_3.9.1-2.2build1.1_amd64",
+					"name": "libnettle8t64",
+					"version": "3.9.1-2.2build1.1"
+				},
+				{
+					"key": "libext2fs-dev_1.47.0-2.4_exp1ubuntu4.1_amd64",
+					"name": "libext2fs-dev",
+					"version": "1.47.0-2.4~exp1ubuntu4.1"
+				},
+				{
+					"key": "libext2fs2t64_1.47.0-2.4_exp1ubuntu4.1_amd64",
+					"name": "libext2fs2t64",
+					"version": "1.47.0-2.4~exp1ubuntu4.1"
+				},
+				{
+					"key": "comerr-dev_2.1-1.47.0-2.4_exp1ubuntu4.1_amd64",
+					"name": "comerr-dev",
+					"version": "2.1-1.47.0-2.4~exp1ubuntu4.1"
+				},
+				{
+					"key": "libcom-err2_1.47.0-2.4_exp1ubuntu4.1_amd64",
+					"name": "libcom-err2",
+					"version": "1.47.0-2.4~exp1ubuntu4.1"
+				},
+				{
+					"key": "libacl1-dev_2.3.2-1build1.1_amd64",
+					"name": "libacl1-dev",
+					"version": "2.3.2-1build1.1"
+				},
+				{
+					"key": "libattr1-dev_1-2.5.2-1build1.1_amd64",
+					"name": "libattr1-dev",
+					"version": "1:2.5.2-1build1.1"
+				},
+				{
+					"key": "libattr1_1-2.5.2-1build1.1_amd64",
+					"name": "libattr1",
+					"version": "1:2.5.2-1build1.1"
+				},
+				{
+					"key": "libacl1_2.3.2-1build1.1_amd64",
+					"name": "libacl1",
+					"version": "2.3.2-1build1.1"
+				},
+				{
+					"key": "zlib1g-dev_1-1.3.dfsg-3.1ubuntu2.1_amd64",
+					"name": "zlib1g-dev",
+					"version": "1:1.3.dfsg-3.1ubuntu2.1"
+				},
+				{
+					"key": "zlib1g_1-1.3.dfsg-3.1ubuntu2.1_amd64",
+					"name": "zlib1g",
+					"version": "1:1.3.dfsg-3.1ubuntu2.1"
+				},
+				{
+					"key": "libzstd-dev_1.5.5-p-dfsg2-2build1.1_amd64",
+					"name": "libzstd-dev",
+					"version": "1.5.5+dfsg2-2build1.1"
+				},
+				{
+					"key": "libzstd1_1.5.5-p-dfsg2-2build1.1_amd64",
+					"name": "libzstd1",
+					"version": "1.5.5+dfsg2-2build1.1"
+				},
+				{
+					"key": "libxml2-dev_2.9.14-p-dfsg-1.3ubuntu3.6_amd64",
+					"name": "libxml2-dev",
+					"version": "2.9.14+dfsg-1.3ubuntu3.6"
+				},
+				{
+					"key": "libxml2_2.9.14-p-dfsg-1.3ubuntu3.6_amd64",
+					"name": "libxml2",
+					"version": "2.9.14+dfsg-1.3ubuntu3.6"
+				},
+				{
+					"key": "liblzma5_5.6.1-p-really5.4.5-1ubuntu0.2_amd64",
+					"name": "liblzma5",
+					"version": "5.6.1+really5.4.5-1ubuntu0.2"
+				},
+				{
+					"key": "libicu74_74.2-1ubuntu3.1_amd64",
+					"name": "libicu74",
+					"version": "74.2-1ubuntu3.1"
+				},
+				{
+					"key": "libicu-dev_74.2-1ubuntu3.1_amd64",
+					"name": "libicu-dev",
+					"version": "74.2-1ubuntu3.1"
+				},
+				{
+					"key": "icu-devtools_74.2-1ubuntu3.1_amd64",
+					"name": "icu-devtools",
+					"version": "74.2-1ubuntu3.1"
+				},
+				{
+					"key": "liblzma-dev_5.6.1-p-really5.4.5-1ubuntu0.2_amd64",
+					"name": "liblzma-dev",
+					"version": "5.6.1+really5.4.5-1ubuntu0.2"
+				},
+				{
+					"key": "liblz4-dev_1.9.4-1build1.1_amd64",
+					"name": "liblz4-dev",
+					"version": "1.9.4-1build1.1"
+				},
+				{
+					"key": "liblz4-1_1.9.4-1build1.1_amd64",
+					"name": "liblz4-1",
+					"version": "1.9.4-1build1.1"
+				},
+				{
+					"key": "libbz2-dev_1.0.8-5.1build0.1_amd64",
+					"name": "libbz2-dev",
+					"version": "1.0.8-5.1build0.1"
+				},
+				{
+					"key": "libbz2-1.0_1.0.8-5.1build0.1_amd64",
+					"name": "libbz2-1.0",
+					"version": "1.0.8-5.1build0.1"
+				},
+				{
+					"key": "libarchive13t64_3.7.2-2ubuntu0.5_amd64",
+					"name": "libarchive13t64",
+					"version": "3.7.2-2ubuntu0.5"
+				}
+			],
+			"key": "libarchive-dev_3.7.2-2ubuntu0.5_amd64",
+			"name": "libarchive-dev",
+			"sha256": "1f585e013dfbca8fed042de1a959e5ea7738f0594b85ab3319068be4dd46a8a8",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20251204T000000Z/pool/main/liba/libarchive/libarchive-dev_3.7.2-2ubuntu0.5_amd64.deb",
+			"version": "3.7.2-2ubuntu0.5"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "nettle-dev_3.9.1-2.2build1.1_amd64",
+			"name": "nettle-dev",
+			"sha256": "df06f798b64f1b30be477d7260ef6ad573223f66dd31f6d8b8696b27765ade23",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20251204T000000Z/pool/main/n/nettle/nettle-dev_3.9.1-2.2build1.1_amd64.deb",
+			"version": "3.9.1-2.2build1.1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libgmp-dev_2-6.3.0-p-dfsg-2ubuntu6.1_amd64",
+			"name": "libgmp-dev",
+			"sha256": "a9847b5ecfff791a46cb198f29a06d9d23a20afdfdd434812f2b44ccfb61d46a",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20251204T000000Z/pool/main/g/gmp/libgmp-dev_6.3.0+dfsg-2ubuntu6.1_amd64.deb",
+			"version": "2:6.3.0+dfsg-2ubuntu6.1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libgmpxx4ldbl_2-6.3.0-p-dfsg-2ubuntu6.1_amd64",
+			"name": "libgmpxx4ldbl",
+			"sha256": "6f59344240b6dc139ed23ef236b8aa146e5d25e23aa90e79f814e2e4cc4b5752",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20251204T000000Z/pool/main/g/gmp/libgmpxx4ldbl_6.3.0+dfsg-2ubuntu6.1_amd64.deb",
+			"version": "2:6.3.0+dfsg-2ubuntu6.1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libext2fs-dev_1.47.0-2.4_exp1ubuntu4.1_amd64",
+			"name": "libext2fs-dev",
+			"sha256": "2aa2f4694b72e11a6501964266b6d54acc2c49e6af7c0c97d2433032edfdefa8",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20251204T000000Z/pool/main/e/e2fsprogs/libext2fs-dev_1.47.0-2.4~exp1ubuntu4.1_amd64.deb",
+			"version": "1.47.0-2.4~exp1ubuntu4.1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "comerr-dev_2.1-1.47.0-2.4_exp1ubuntu4.1_amd64",
+			"name": "comerr-dev",
+			"sha256": "e457b55be696c176d88e82baff0369b1c5d57f69e5b54f8898fae44892d16adc",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20251204T000000Z/pool/main/e/e2fsprogs/comerr-dev_2.1-1.47.0-2.4~exp1ubuntu4.1_amd64.deb",
+			"version": "2.1-1.47.0-2.4~exp1ubuntu4.1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libacl1-dev_2.3.2-1build1.1_amd64",
+			"name": "libacl1-dev",
+			"sha256": "c9711e29621acc8abb01a337d147e38288f950c75e3f761dbdbbfc634d4a7bdf",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20251204T000000Z/pool/main/a/acl/libacl1-dev_2.3.2-1build1.1_amd64.deb",
+			"version": "2.3.2-1build1.1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libattr1-dev_1-2.5.2-1build1.1_amd64",
+			"name": "libattr1-dev",
+			"sha256": "9a46b3d570e8992ff5ee4631abb4ee42e0e26f3febb01564e795703fe2c649f2",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20251204T000000Z/pool/main/a/attr/libattr1-dev_2.5.2-1build1.1_amd64.deb",
+			"version": "1:2.5.2-1build1.1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "zlib1g-dev_1-1.3.dfsg-3.1ubuntu2.1_amd64",
+			"name": "zlib1g-dev",
+			"sha256": "023cbe9dbf0af87f10e54e342c67571874e412b9950d89c6cd7b010be2e67c3c",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20251204T000000Z/pool/main/z/zlib/zlib1g-dev_1.3.dfsg-3.1ubuntu2.1_amd64.deb",
+			"version": "1:1.3.dfsg-3.1ubuntu2.1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libzstd-dev_1.5.5-p-dfsg2-2build1.1_amd64",
+			"name": "libzstd-dev",
+			"sha256": "6c9d2b5677a4677e9ead62f74723bb919113621a8028ed543a4d78952d54d165",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20251204T000000Z/pool/main/libz/libzstd/libzstd-dev_1.5.5+dfsg2-2build1.1_amd64.deb",
+			"version": "1.5.5+dfsg2-2build1.1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libxml2-dev_2.9.14-p-dfsg-1.3ubuntu3.6_amd64",
+			"name": "libxml2-dev",
+			"sha256": "fea8461ba7b5a5857095640b5397a2673c6c1a6546392de4b950471e1be1db91",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20251204T000000Z/pool/main/libx/libxml2/libxml2-dev_2.9.14+dfsg-1.3ubuntu3.6_amd64.deb",
+			"version": "2.9.14+dfsg-1.3ubuntu3.6"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libxml2_2.9.14-p-dfsg-1.3ubuntu3.6_amd64",
+			"name": "libxml2",
+			"sha256": "665861105ae5603f71607f85363d4a7b2000a55bdbe9de3f02cba6ead6401c8e",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20251204T000000Z/pool/main/libx/libxml2/libxml2_2.9.14+dfsg-1.3ubuntu3.6_amd64.deb",
+			"version": "2.9.14+dfsg-1.3ubuntu3.6"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libicu74_74.2-1ubuntu3.1_amd64",
+			"name": "libicu74",
+			"sha256": "c9a70989678660eed9a1e904c74fa043da8bec8e2036856fc16e31ced79b04f8",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20251204T000000Z/pool/main/i/icu/libicu74_74.2-1ubuntu3.1_amd64.deb",
+			"version": "74.2-1ubuntu3.1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libicu-dev_74.2-1ubuntu3.1_amd64",
+			"name": "libicu-dev",
+			"sha256": "612b98f4fcfc6ebc57a1b21c2695174694db5a0b7ff760b5d41032076c792398",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20251204T000000Z/pool/main/i/icu/libicu-dev_74.2-1ubuntu3.1_amd64.deb",
+			"version": "74.2-1ubuntu3.1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "icu-devtools_74.2-1ubuntu3.1_amd64",
+			"name": "icu-devtools",
+			"sha256": "cfcad4370d2e0d4abdccf33cb3d0ffef24c095d76e2121e0a1fd1286ea50b404",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20251204T000000Z/pool/main/i/icu/icu-devtools_74.2-1ubuntu3.1_amd64.deb",
+			"version": "74.2-1ubuntu3.1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "liblzma-dev_5.6.1-p-really5.4.5-1ubuntu0.2_amd64",
+			"name": "liblzma-dev",
+			"sha256": "f32c9c79c0d9eb88a3267fea803b4ae9f295c9e2a5cc69f030a298d8a238fa79",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20251204T000000Z/pool/main/x/xz-utils/liblzma-dev_5.6.1+really5.4.5-1ubuntu0.2_amd64.deb",
+			"version": "5.6.1+really5.4.5-1ubuntu0.2"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "liblz4-dev_1.9.4-1build1.1_amd64",
+			"name": "liblz4-dev",
+			"sha256": "92144951b88d2bb4dd6ea5b85cab6a63e86109a1a6bb0953ada7ba9714ea0042",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20251204T000000Z/pool/main/l/lz4/liblz4-dev_1.9.4-1build1.1_amd64.deb",
+			"version": "1.9.4-1build1.1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libbz2-dev_1.0.8-5.1build0.1_amd64",
+			"name": "libbz2-dev",
+			"sha256": "012b1118932f20ae3fa706fa44f8ebe203a21f4765893bc7a9f6861aa09fa4c5",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20251204T000000Z/pool/main/b/bzip2/libbz2-dev_1.0.8-5.1build0.1_amd64.deb",
+			"version": "1.0.8-5.1build0.1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libarchive13t64_3.7.2-2ubuntu0.5_amd64",
+			"name": "libarchive13t64",
+			"sha256": "be107a1b001bab8cf4810d00f2235c14463d4c7870ad1abcc9a04ceca00f5c9f",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20251204T000000Z/pool/main/liba/libarchive/libarchive13t64_3.7.2-2ubuntu0.5_amd64.deb",
+			"version": "3.7.2-2ubuntu0.5"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [
+				{
 					"key": "uuid-dev_2.39.3-9ubuntu6.3_amd64",
 					"name": "uuid-dev",
 					"version": "2.39.3-9ubuntu6.3"

@@ -163,6 +163,7 @@ members = [
     "rs/http_utils",
     "rs/ic_os/attestation",
     "rs/ic_os/attestation/testing",
+    "rs/ic_os/build_tools/build_filesystem",
     "rs/ic_os/build_tools/dflate",
     "rs/ic_os/build_tools/diroid",
     "rs/ic_os/build_tools/inject_files",
@@ -823,6 +824,7 @@ serde_cbor = "0.11.2"
 serde_json = { version = "^1.0.107" }
 serde_with = "1.14.0"
 serde_yaml = "0.9.33"
+selinux = "0.5"
 sev = { version = "7.1", default-features = false, features = [
     "crypto_nossl",
     "snp",
@@ -896,6 +898,7 @@ url = { version = "2.5.3", features = ["serde"] }
 uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
+xattr = "1.6.1"
 walrus = "0.23.3"
 wasm-encoder = { version = "0.240.0", features = ["wasmparser"] }
 wasmparser = "0.240.0"
