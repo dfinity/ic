@@ -391,9 +391,7 @@ impl GuestOSRecoveryApp {
             }
         };
         // Wrap terminal in a guard that ensures restore on any exit
-        let mut terminal = scopeguard::guard(terminal, |_| {
-            restore();
-        });
+        let mut terminal = scopeguard::guard(terminal, |_| restore());
         terminal.clear().context("Failed to clear terminal")?;
 
         execute!(terminal.backend_mut(), EnableMouseCapture)
