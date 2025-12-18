@@ -13,7 +13,7 @@ use ic_ckdoge_minter::{
         RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError, WithdrawalFee,
     },
     event::CkDogeMinterEvent,
-    lifecycle::init::MinterArg,
+    lifecycle::MinterArg,
     updates,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
@@ -40,7 +40,7 @@ fn init(args: MinterArg) {
 }
 
 fn setup_tasks() {
-    schedule_now(TaskType::ProcessLogic(true), &DOGECOIN_CANISTER_RUNTIME);
+    schedule_now(TaskType::ProcessLogic, &DOGECOIN_CANISTER_RUNTIME);
     schedule_now(TaskType::RefreshFeePercentiles, &DOGECOIN_CANISTER_RUNTIME);
 }
 
