@@ -404,13 +404,7 @@ pub fn requests_with_delegations(env: TestEnv) {
                     .await;
 
                     if delegation_count <= 20 {
-                        if api_ver == 2 {
-                            assert_eq!(response.status(), 202);
-                            response.expect_empty_body();
-                        } else {
-                            assert_eq!(response.status(), 200);
-                            response.expect_certificate();
-                        }
+                        response.expect_update_ok(api_ver);
                     } else {
                         assert_eq!(response.status(), 400);
                         response.expect_text_error(&format!("Invalid delegation: Chain of delegations is too long: got {delegation_count} delegations, but at most 20 are allowed."));
@@ -428,8 +422,7 @@ pub fn requests_with_delegations(env: TestEnv) {
                     .await;
 
                     if delegation_count <= 20 {
-                        assert_eq!(response.status(), 200);
-                        response.expect_cbor_reply();
+                        response.expect_query_ok(api_ver);
                     } else {
                         assert_eq!(response.status(), 400);
                         response.expect_text_error(&format!("Invalid delegation: Chain of delegations is too long: got {delegation_count} delegations, but at most 20 are allowed."));
@@ -593,13 +586,7 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                     .await;
 
                     if scenario.expect_success() {
-                        assert_eq!(
-                            response.status(),
-                            200,
-                            "Test scenario {} (query) using {api_ver} unexpectedly failed",
-                            scenario.note
-                        );
-                        response.expect_cbor_reply();
+                        response.expect_query_ok(api_ver);
                     } else {
                         assert_eq!(
                             response.status(),
@@ -622,12 +609,7 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                     .await;
 
                     if scenario.expect_success() {
-                        assert_eq!(
-                            response.status(),
-                            200,
-                            "Test scenario {} (read_state) using {api_ver} unexpectedly failed",
-                            scenario.note
-                        );
+                        response.expect_read_state_ok(api_ver);
                     } else {
                         // Which error code is returned depends on API version and the specific scenario
                         assert!(
@@ -660,19 +642,7 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                     .await;
 
                     if scenario.expect_success() {
-                        let expected_update_result = if api_ver == 2 { 202 } else { 200 };
-
-                        assert_eq!(
-                            response.status(),
-                            expected_update_result,
-                            "Test scenario {} (update) using {api_ver} unexpectedly failed",
-                            scenario.note
-                        );
-                        if api_ver == 2 {
-                            response.expect_empty_body();
-                        } else {
-                            response.expect_certificate();
-                        }
+                        result.expect_update_ok(api_ver);
                     } else {
                         assert_eq!(
                             response.status(),
@@ -881,8 +851,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                     .await;
 
                     if include_mgmt_canister_id {
-                        let expected_update = if api_ver == 2 { 202 } else { 200 };
-                        assert_eq!(response.status(), expected_update);
+                        response.expect_update_ok(api_ver);
                     } else {
                         assert_eq!(response.status(), 400);
                         response.expect_text_error(
@@ -1001,8 +970,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                     .await;
 
                     if include_mgmt_canister_id {
-                        assert_eq!(response.status(), 200);
-                        response.expect_cbor_reply();
+                        response.expect_query_ok(api_ver);
                     } else {
                         assert_eq!(response.status(), 400);
                         response.expect_text_error(
@@ -1117,27 +1085,13 @@ pub fn requests_with_canister_signature(env: TestEnv) {
                         perform_query_call_with_delegations(api_ver, &test_info, &id, &id, &[])
                             .await;
 
-                    assert_eq!(
-                        response.status(),
-                        200,
-                        "query should succeed for api_ver={api_ver} and seed={seed:?}"
-                    );
-                    response.expect_cbor_reply();
+                    response.expect_query_ok(api_ver);
                 }
                 for &api_ver in ALL_UPDATE_API_VERSIONS {
                     let response =
                         perform_update_call_with_delegations(api_ver, &test_info, &id, &id, &[])
                             .await;
-                    assert_eq!(
-                        response.status(),
-                        if api_ver == 2 { 202 } else { 200 },
-                        "update should succeed for api_ver={api_ver} and seed={seed:?}"
-                    );
-                    if api_ver == 2 {
-                        response.expect_empty_body();
-                    } else {
-                        response.expect_certificate();
-                    }
+                    response.expect_update_ok(api_ver);
                 }
                 for &api_ver in ALL_READ_STATE_API_VERSIONS {
                     let response = perform_read_state_call_with_delegations(
@@ -1149,12 +1103,7 @@ pub fn requests_with_canister_signature(env: TestEnv) {
                     )
                     .await;
 
-                    assert_eq!(
-                        response.status(),
-                        200,
-                        "read_state should succeed for api_ver={api_ver} and seed={seed:?}"
-                    );
-                    response.expect_certificate();
+                    response.expect_read_state_ok(api_ver);
                 }
             }
 
@@ -1384,6 +1333,26 @@ struct ReplicaResponse {
 impl ReplicaResponse {
     fn status(&self) -> StatusCode {
         self.status
+    }
+
+    fn expect_read_state_ok(&self, _api_ver: usize) {
+        assert_eq!(self.status(), 200);
+        self.expect_certificate();
+    }
+
+    fn expect_query_ok(&self, _api_ver: usize) {
+        assert_eq!(self.status(), 200);
+        self.expect_cbor_reply();
+    }
+
+    fn expect_update_ok(&self, api_ver: usize) {
+        if api_ver == 2 {
+            assert_eq!(self.status(), 202);
+            self.expect_empty_body();
+        } else {
+            assert_eq!(self.status(), 200);
+            self.expect_certificate();
+        }
     }
 
     fn expect_empty_body(&self) {
