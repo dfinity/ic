@@ -13,7 +13,8 @@ use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, H
 use ic_system_test_driver::systest;
 use ic_system_test_driver::types::CanisterIdRecord;
 use ic_system_test_driver::util::{
-    UniversalCanister, block_on, expiry_time, sign_query, sign_read_state, sign_update,
+    UniversalCanister, agent_with_identity, block_on, expiry_time, sign_query, sign_read_state,
+    sign_update,
 };
 use ic_types::messages::{
     Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
@@ -720,12 +721,20 @@ pub fn requests_with_delegation_loop(env: TestEnv) {
 pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
-    let agent = node.build_default_agent();
     let rng = &mut reproducible_rng();
     block_on({
         async move {
             let node_url = node.get_public_url();
             debug!(logger, "Selected replica"; "url" => format!("{}", node_url));
+
+            let user = GenericIdentity::new(GenericIdentityType::Ed25519, rng);
+
+            // We create an agent with an identity we can control so that
+            // the universal canister is installed with `user` as a controller.
+            // Otherwise the canister_status calls would be rejected.
+            let agent = agent_with_identity(node.get_public_url().as_str(), user.clone())
+                .await
+                .unwrap();
 
             let canister =
                 UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
@@ -752,7 +761,8 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
 
             - With the mgmt canister principal as the target for mgmt canister calls
 
-            - With an empty set of targets or a set of targets containing the requested canister ID for mgmt canister calls.
+            - With an empty set of targets or a set of targets not containing the
+              requested canister ID for mgmt canister calls.
 
             The only difference is if the management canister's principal is included in the
             set of delegation targets or not.
@@ -764,8 +774,10 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                 let mut identities = vec![];
                 let mut targets = vec![];
 
-                for _ in 0..=delegation_count {
-                    let id_type = GenericIdentityType::random_incl_canister(&canister, rng);
+                identities.push(user.clone());
+
+                for _ in 1..=delegation_count {
+                    let id_type = GenericIdentityType::random(rng);
                     identities.push(GenericIdentity::new(id_type, rng));
                     let target_canister_ids = if include_mgmt_canister_id {
                         random_canister_ids_including(
@@ -784,6 +796,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                 let delegations = create_delegations_with_targets(&identities, &targets);
 
                 let sender = &identities[0];
+
                 let signer = &identities[identities.len() - 1];
 
                 for &api_ver in ALL_UPDATE_API_VERSIONS {
@@ -819,9 +832,88 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                     .status();
 
                     if include_mgmt_canister_id {
-                        assert_eq!(update_status, 200);
+                        let expected_update = if api_ver == 2 { 202 } else { 200 };
+                        assert_eq!(update_status, expected_update);
                     } else {
                         assert_eq!(update_status, 400);
+                    }
+                }
+
+                for &api_ver in ALL_READ_STATE_API_VERSIONS {
+                    /*
+                     * In order to properly test read state request we must have another
+                     * call to check the status of.
+                     */
+                    let request_id = {
+                        let content = HttpCallContent::Call {
+                            update: HttpCanisterUpdate {
+                                canister_id: Blob(mgmt_canister.get().as_slice().to_vec()),
+                                method_name: "canister_status".to_string(),
+                                arg: Blob(
+                                    Encode!(&CanisterIdRecord {
+                                        canister_id: canister_id.into()
+                                    })
+                                    .unwrap(),
+                                ),
+                                sender: Blob(sender.principal().as_slice().to_vec()),
+                                ingress_expiry: expiry_time().as_nanos() as u64,
+                                nonce: None,
+                            },
+                        };
+
+                        let signature = sender.sign_update(&content);
+                        let request_id = MessageId::from(content.representation_independent_hash());
+
+                        // Always use a v3 call to test read state request since the call is sync,
+                        // otherwise we have to wait until the call executes before checking the read state, which
+                        // requires a potentially flaky retry loop.
+
+                        let response = send_request(
+                            /*api_ver=*/ 3,
+                            &test_info,
+                            "call",
+                            content,
+                            sender.public_key_der(),
+                            None,
+                            signature,
+                        )
+                        .await;
+
+                        assert_eq!(response.status(), 200);
+
+                        request_id
+                    };
+
+                    let paths = vec![vec!["request_status".into(), (request_id).into()].into()];
+
+                    let content = HttpReadStateContent::ReadState {
+                        read_state: HttpReadState {
+                            sender: Blob(sender.principal().as_slice().to_vec()),
+                            paths,
+                            ingress_expiry: expiry_time().as_nanos() as u64,
+                            nonce: None,
+                        },
+                    };
+
+                    let signature = signer.sign_read_state(&content);
+
+                    let response = send_request(
+                        api_ver,
+                        &test_info,
+                        "read_state",
+                        content,
+                        sender.public_key_der(),
+                        Some(delegations.to_vec()),
+                        signature,
+                    )
+                    .await;
+
+                    let read_state_result = response.status();
+
+                    if include_mgmt_canister_id {
+                        assert_eq!(read_state_result, 200);
+                    } else {
+                        assert_eq!(read_state_result, 403);
                     }
                 }
 
@@ -1466,7 +1558,7 @@ fn resign_certificate_with_random_signature<R: Rng + CryptoRng>(
     let previous_signature = certificate.signature.clone();
     assert_eq!(previous_signature.len(), 48);
 
-    let random_g1 = G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>());
+    let random_g1 = G1Affine::hash("bls_signature", &rng.r#gen::<[u8; 32]>());
     certificate.signature = random_g1.serialize().to_vec();
     assert_eq!(certificate.signature.len(), 48);
     assert_ne!(certificate.signature, previous_signature);

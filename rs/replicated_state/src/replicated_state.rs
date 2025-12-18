@@ -1289,38 +1289,7 @@ impl ReplicatedState {
         snapshot_id: SnapshotId,
         snapshot: Arc<CanisterSnapshot>,
     ) {
-        self.metadata
-            .unflushed_checkpoint_ops
-            .create_snapshot_from_metadata(snapshot_id);
         self.canister_snapshots.push(snapshot_id, snapshot);
-    }
-
-    /// This records a data upload event such that the data can be flushed to disk before a checkpoint.
-    pub fn record_snapshot_data_upload(&mut self, snapshot_id: SnapshotId) {
-        self.metadata
-            .unflushed_checkpoint_ops
-            .upload_data(snapshot_id);
-    }
-
-    /// Delete a snapshot from the list of snapshots.
-    pub fn delete_snapshot(&mut self, snapshot_id: SnapshotId) -> Option<Arc<CanisterSnapshot>> {
-        let result = self.canister_snapshots.remove(snapshot_id);
-        if result.is_some() {
-            self.metadata
-                .unflushed_checkpoint_ops
-                .delete_snapshot(snapshot_id)
-        }
-        result
-    }
-
-    /// Delete all snapshots belonging to the given canister id.
-    pub fn delete_snapshots(&mut self, canister_id: CanisterId) {
-        let deleted = self.canister_snapshots.delete_snapshots(canister_id);
-        for snapshot_id in deleted {
-            self.metadata
-                .unflushed_checkpoint_ops
-                .delete_snapshot(snapshot_id);
-        }
     }
 
     /// Splits the replicated state as part of subnet splitting phase 1, retaining
@@ -1403,16 +1372,10 @@ impl ReplicatedState {
 
         // Obtain a new metadata state for subnet B. No-op for subnet A' (apart from
         // setting the split marker).
-        let mut metadata = metadata.split(subnet_id, new_subnet_batch_time)?;
+        let metadata = metadata.split(subnet_id, new_subnet_batch_time)?;
 
         // Retain only the canister snapshots belonging to the local canisters.
-        let deleted =
-            canister_snapshots.split(|canister_id| canister_states.contains_key(&canister_id));
-        for snapshot_id in deleted {
-            metadata
-                .unflushed_checkpoint_ops
-                .delete_snapshot(snapshot_id);
-        }
+        canister_snapshots.split(|canister_id| canister_states.contains_key(&canister_id));
 
         Ok(Self {
             canister_states,
@@ -1451,6 +1414,7 @@ impl ReplicatedState {
         metadata
             .split_from
             .expect("Not a state resulting from a subnet split");
+        assert_eq!(None, metadata.subnet_split_from);
 
         // Adjust `CanisterQueues::(local|remote)_subnet_input_schedule` based on which
         // canisters are present in `canister_states`.
@@ -1481,6 +1445,135 @@ impl ReplicatedState {
 
         // Reset query stats after subnet split.
         *epoch_query_stats = RawQueryStats::default();
+    }
+
+    /// Splits the replicated state during a special DSM round, retaining only the
+    /// canisters mapped to `subnet_id` in the loaded routing table.
+    ///
+    /// A subnet split starts with a subnet A and results in two subnets, A' and B.
+    /// For the sake of clarity, comments refer to the two resulting subnets as
+    /// *subnet A'* and *subnet B*; and to the original subnet as *subnet A*.
+    /// Because subnet A' retains the subnet ID of subnet A, it is identified by
+    /// having `subnet_id == self.own_subnet_id`. Conversely, subnet B has
+    /// `subnet_id != self.own_subnet_id`.
+    ///
+    /// Splitting the replicated state consists of:
+    ///
+    ///  * Retaining only the canisters that are to be hosted by `subnet_id`, as
+    ///    determined by the routing table (*hosted canisters*).
+    ///  * Retaining only the snapshots of *hosted canisters*.
+    ///  * Pruning the ingress history, retaining only messages addressed to this
+    ///    subnet and messages in terminal states (which will eventually time out).
+    ///  * Updating canisters' input schedules, based on `self.canister_states`.
+    ///  * Retaining all streams, subnet messages (ingress and canister) and refunds
+    ///    on *subnet A'* only.
+    ///
+    /// As opposed to the legacy `split()` + `after_split()` approach, because this
+    /// is executed directly by the DSM, there is no requirement to make it possible
+    /// to verify that the state has not been tampered with.
+    pub fn online_split(
+        self,
+        subnet_id: SubnetId,
+        other_subnet_id: SubnetId,
+    ) -> Result<Self, String> {
+        // Destructure `self` and put it back together, in order for the compiler to
+        // enforce an explicit decision whenever new fields are added.
+        //
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS A `match`!
+        let Self {
+            mut canister_states,
+            mut metadata,
+            mut subnet_queues,
+            mut refunds,
+            consensus_queue,
+            epoch_query_stats: _,
+            mut canister_snapshots,
+        } = self;
+
+        // Consensus queue is always empty in-between rounds.
+        assert!(consensus_queue.is_empty());
+
+        // The original `own_subnet_id` must be retained by either `subnet_id` or
+        // `other_subnet_id`.
+        assert!(subnet_id == metadata.own_subnet_id || other_subnet_id == metadata.own_subnet_id);
+
+        // All of the canisters in `canister_states` must be hosted by either
+        // `new_subnet_id` or `other_subnet_id`.
+        let routing_table = metadata.network_topology.routing_table.clone();
+        let lookup_subnet = |canister_id: &CanisterId| {
+            routing_table
+                .lookup_entry(*canister_id)
+                .map(|(_range, subnet_id)| subnet_id)
+        };
+        canister_states.keys().for_each(|canister_id| {
+            let host_subnet_id = lookup_subnet(canister_id);
+            assert!(
+                host_subnet_id == Some(subnet_id) || host_subnet_id == Some(other_subnet_id),
+                "Canister {canister_id} is hosted by an unexpected subnet: {host_subnet_id:?}"
+            );
+        });
+
+        // Retain only canisters hosted by this subnet.
+        canister_states.retain(|canister_id, _| lookup_subnet(canister_id) == Some(subnet_id));
+
+        // Adjust `CanisterQueues::(local|remote)_subnet_input_schedule` based on which
+        // canisters are present in `canister_states`.
+        let local_canister_ids = canister_states.keys().cloned().collect::<Vec<_>>();
+        for canister_id in local_canister_ids.iter() {
+            let mut canister_state = canister_states.remove(canister_id).unwrap();
+            canister_state
+                .system_state
+                .split_input_schedules(canister_id, &canister_states);
+            canister_states.insert(*canister_id, canister_state);
+        }
+
+        // Retain only the canister snapshots of hosted canisters.
+        canister_snapshots.split(|canister_id| canister_states.contains_key(&canister_id));
+
+        // On *subnet B*:
+        if subnet_id != metadata.own_subnet_id {
+            // Start with empty subnet queues.
+            //
+            // All subnet messages (ingress and canister) stay on subnet A' because:
+            //
+            //  * Message Routing would drop a response from subnet B to a request it had
+            //    routed to subnet A.
+            //  * Causing calls targeting canisters that have migrated to (eventually) fail
+            //    is not ideal, but a proper split would require understanding the payloads
+            //    of arbitrary management canister methods (to identify the target).
+            //  * Message Routing will take care of routing the responses to the originator,
+            //    regardless of host subnet.
+            subnet_queues = CanisterQueues::default();
+
+            // Drop one copy of the refund pool.
+            //
+            // Refund messages have no explicit origin, so it does not matter which of the
+            // two subnets they will originate from.
+            refunds = RefundPool::default();
+
+            // Drop in-progress management calls being executed by canisters on *subnet B*.
+            // The corresponding calls are rejected by the *subnet A'* call context manager,
+            // ensuring consistency across subnet call context manager and canister states.
+            for canister_state in canister_states.values_mut() {
+                canister_state.drop_in_progress_management_calls_after_split();
+            }
+        }
+
+        // Split the metadata state.
+        //
+        // Prunes the ingress history. And, on *subnet A'* rejects in-progress management
+        // calls targeting canisters migrated to *subnet B*.
+        metadata = metadata.online_split(subnet_id, &mut subnet_queues)?;
+
+        Ok(Self {
+            canister_states,
+            metadata,
+            subnet_queues,
+            refunds,
+            consensus_queue,
+            epoch_query_stats: RawQueryStats::default(), // Don't preserve query stats during subnet splitting.
+            canister_snapshots,
+        })
     }
 
     /// Records the loss of `cycles` due to dropping messages (e.g. late best-effort

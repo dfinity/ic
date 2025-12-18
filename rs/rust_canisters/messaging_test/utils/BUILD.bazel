@@ -9,6 +9,7 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted
+        "//rs/limits",
         "//rs/rust_canisters/messaging_test",
         "//rs/types/types",
         "@crate_index//:candid",

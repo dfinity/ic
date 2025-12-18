@@ -5,7 +5,7 @@ use crate::external_canister_types::{
 };
 use crate::state_api::routes::into_api_response;
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
-use crate::{BlobStore, OpId, Operation, SubnetBlockmaker};
+use crate::{BlobStore, OpId, Operation, SubnetBlockmakers};
 use askama::Template;
 use async_trait::async_trait;
 use axum::{
@@ -112,7 +112,7 @@ use ic_types::batch::BlockmakerMetrics;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{CertificateDelegationFormat, CertificateDelegationMetadata};
 use ic_types::{
-    CanisterId, Cycles, Height, NodeId, NumInstructions, PrincipalId, RegistryVersion, SnapshotId,
+    CanisterId, Cycles, Height, NumInstructions, PrincipalId, RegistryVersion, SnapshotId,
     SubnetId,
     artifact::UnvalidatedArtifactMutation,
     canister_http::{
@@ -138,7 +138,7 @@ use pocket_ic::common::rest::{
     CanisterHttpResponse, ExtendedSubnetConfigSet, IcpConfig, IcpConfigFlag, IcpFeatures,
     IcpFeaturesConfig, IncompleteStateFlag, MockCanisterHttpResponse, RawAddCycles,
     RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
-    SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
+    SubnetInstructionConfig, SubnetKind, Topology,
 };
 use pocket_ic::{ErrorCode, RejectCode, RejectResponse, copy_dir};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
@@ -3555,16 +3555,12 @@ impl Operation for PubKey {
 
 #[derive(Clone, Debug)]
 pub struct Tick {
-    pub configs: TickConfigs,
+    pub blockmakers: Vec<SubnetBlockmakers>,
 }
 
 impl Tick {
-    fn validate_blockmakers_per_subnet(
-        &self,
-        pic: &mut PocketIc,
-        subnets_blockmaker: &[SubnetBlockmaker],
-    ) -> Result<(), OpOut> {
-        for subnet_blockmaker in subnets_blockmaker {
+    fn validate_blockmakers(&self, pic: &PocketIc) -> Result<(), OpOut> {
+        for subnet_blockmaker in &self.blockmakers {
             if subnet_blockmaker
                 .failed_blockmakers
                 .contains(&subnet_blockmaker.blockmaker)
@@ -3595,37 +3591,26 @@ impl Tick {
 
 impl Operation for Tick {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        let blockmakers_per_subnet = self.configs.blockmakers.as_ref().map(|cfg| {
-            cfg.blockmakers_per_subnet
-                .iter()
-                .cloned()
-                .map(SubnetBlockmaker::from)
-                .collect_vec()
-        });
-
-        if let Some(ref bm_per_subnet) = blockmakers_per_subnet
-            && let Err(error) = self.validate_blockmakers_per_subnet(pic, bm_per_subnet)
-        {
+        if let Err(error) = self.validate_blockmakers(pic) {
             return error;
         }
 
         for subnet in pic.subnets.get_all() {
-            let subnet_id = subnet.get_subnet_id();
-            let blockmaker_metrics = blockmakers_per_subnet.as_ref().and_then(|bm_per_subnet| {
-                bm_per_subnet
-                    .iter()
-                    .find(|bm| bm.subnet == subnet_id)
-                    .map(|bm| BlockmakerMetrics {
-                        blockmaker: bm.blockmaker,
-                        failed_blockmakers: bm.failed_blockmakers.clone(),
-                    })
-            });
+            let state_machine = subnet.state_machine.clone();
+            let subnet_id = state_machine.get_subnet_id();
+
+            let blockmaker_metrics = self
+                .blockmakers
+                .iter()
+                .find(|bm| bm.subnet == subnet_id)
+                .map(|bm| BlockmakerMetrics {
+                    blockmaker: bm.blockmaker,
+                    failed_blockmakers: bm.failed_blockmakers.clone(),
+                });
 
             match blockmaker_metrics {
-                Some(metrics) => subnet
-                    .state_machine
-                    .execute_round_with_blockmaker_metrics(metrics),
-                None => subnet.state_machine.execute_round(),
+                Some(metrics) => state_machine.execute_round_with_blockmaker_metrics(metrics),
+                None => state_machine.execute_round(),
             }
         }
 
@@ -4519,8 +4504,6 @@ impl BasicSigner<QueryResponseHash> for PocketNodeSigner {
     fn sign_basic(
         &self,
         message: &QueryResponseHash,
-        _signer: NodeId,
-        _registry_version: RegistryVersion,
     ) -> CryptoResult<BasicSigOf<QueryResponseHash>> {
         Ok(BasicSigOf::new(BasicSig(
             self.0.sign_message(&message.as_signed_bytes()).to_vec(),
