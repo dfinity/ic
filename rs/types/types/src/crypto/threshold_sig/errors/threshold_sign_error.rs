@@ -17,6 +17,9 @@ pub enum ThresholdSignError {
     TransientInternalError {
         internal_error: String,
     },
+    InternalError {
+        internal_error: String,
+    },
 }
 
 impl fmt::Display for ThresholdSignError {
@@ -41,11 +44,13 @@ impl fmt::Display for ThresholdSignError {
                 f,
                 "Error instantiating KeyId from public coefficients: {internal_error}"
             },
+            ThresholdSignError::InternalError { internal_error } => {
+                write!(f, "{prefix}Internal error: {internal_error}")
+            }
         }
     }
 }
 
-// TODO (CRP-479): Delete this conversion.
 impl From<ThresholdSignError> for CryptoError {
     fn from(error: ThresholdSignError) -> Self {
         match error {
@@ -64,6 +69,9 @@ impl From<ThresholdSignError> for CryptoError {
                 CryptoError::TransientInternalError { internal_error }
             }
             ThresholdSignError::KeyIdInstantiationError(internal_error) => {
+                CryptoError::InternalError { internal_error }
+            }
+            ThresholdSignError::InternalError { internal_error } => {
                 CryptoError::InternalError { internal_error }
             }
         }
