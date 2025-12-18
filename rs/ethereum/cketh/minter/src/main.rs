@@ -1,5 +1,6 @@
 #![allow(deprecated)]
 use crate::dashboard::DashboardPaginationParameters;
+use crate::memo;
 use candid::Nat;
 use dashboard::DashboardTemplate;
 use ic_canister_log::log;
@@ -13,9 +14,10 @@ use ic_cketh_minter::endpoints::events::{
     Event as CandidEvent, EventSource as CandidEventSource, GetEventsArg, GetEventsResult,
 };
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, Eip1559TransactionPrice, Eip1559TransactionPriceArg, Erc20Balance,
-    GasFeeEstimate, MinterInfo, RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg,
-    WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
+    AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, Eip1559TransactionPrice,
+    Eip1559TransactionPriceArg, Erc20Balance, GasFeeEstimate, MemoType, MinterInfo,
+    RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail, WithdrawalError,
+    WithdrawalSearchParameter,
 };
 use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{
@@ -882,6 +884,26 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
     GetEventsResult {
         events,
         total_event_count: storage::total_event_count(),
+    }
+}
+
+#[query]
+fn decode_ledger_memo(arg: DecodeLedgerMemoArgs) -> DecodeLedgerMemoResult {
+    match args.memo_type {
+        MemoType::Burn => match minicbor::decode::<memo::BurnMemo>(&args.encoded_memo) {
+            Ok(burn_memo) => Ok(Some(DecodedMemo::Burn(Some(BurnMemo::from(burn_memo))))),
+            Err(err) => Err(Some(DecodeLedgerMemoError::InvalidMemo(format!(
+                "Error decoding BurnMemo: {}",
+                err
+            )))),
+        },
+        MemoType::Mint => match minicbor::decode::<memo::MintMemo>(&args.encoded_memo) {
+            Ok(mint_memo) => Ok(Some(DecodedMemo::Mint(Some(MintMemo::from(mint_memo))))),
+            Err(err) => Err(Some(DecodeLedgerMemoError::InvalidMemo(format!(
+                "Error decoding MintMemo: {}",
+                err
+            )))),
+        },
     }
 }
 

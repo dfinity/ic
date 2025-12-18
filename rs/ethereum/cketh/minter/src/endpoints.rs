@@ -491,3 +491,17 @@ pub mod events {
         },
     }
 }
+
+#[derive(Clone, Copy, Debug, CandidType, serde::Serialize, serde::Deserialize)]
+pub enum MemoType {
+    Burn,
+    Mint,
+}
+
+#[derive(Debug, CandidType, serde::Serialize, serde::Deserialize)]
+pub struct DecodeLedgerMemoArgs {
+    pub memo_type: MemoType,
+    pub encoded_memo: Vec<u8>,
+}
+
+pub type DecodeLedgerMemoResult = Result<Option<DecodedMemo>, Option<DecodeLedgerMemoError>>;
