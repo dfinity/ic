@@ -1,5 +1,5 @@
 {
-  "checksum": "eb1238a28f64129c059dd57bd2fa3a10a476cd9eabe52d5139c092b8f46150f1",
+  "checksum": "1c4460d6485c31b63de370cb7186e350f7c45b67c356cd4f974f1bd4322a23ec",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22201,7 +22201,7 @@
               "target": "rusb"
             },
             {
-              "id": "rusqlite 0.28.0",
+              "id": "rusqlite 0.29.0",
               "target": "rusqlite"
             },
             {
@@ -22456,6 +22456,10 @@
             {
               "id": "tokio-metrics 0.4.0",
               "target": "tokio_metrics"
+            },
+            {
+              "id": "tokio-rusqlite 0.4.0",
+              "target": "tokio_rusqlite"
             },
             {
               "id": "tokio-rustls 0.26.0",
@@ -45482,14 +45486,14 @@
       ],
       "license_file": null
     },
-    "libsqlite3-sys 0.25.2": {
+    "libsqlite3-sys 0.26.0": {
       "name": "libsqlite3-sys",
-      "version": "0.25.2",
+      "version": "0.26.0",
       "package_url": "https://github.com/rusqlite/rusqlite",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/libsqlite3-sys/0.25.2/download",
-          "sha256": "29f835d03d717946d28b1d1ed632eb6f0e24a299388ee623d0c23118d3e8a7fa"
+          "url": "https://static.crates.io/crates/libsqlite3-sys/0.26.0/download",
+          "sha256": "afc22eff61b133b115c6e8c74e818c628d6d5e7a502afea6f64dee076dd94326"
         }
       },
       "targets": [
@@ -45529,7 +45533,7 @@
             "bundled_bindings",
             "cc",
             "default",
-            "min_sqlite_version_3_6_8",
+            "min_sqlite_version_3_14_0",
             "pkg-config",
             "vcpkg"
           ],
@@ -45538,14 +45542,14 @@
         "deps": {
           "common": [
             {
-              "id": "libsqlite3-sys 0.25.2",
+              "id": "libsqlite3-sys 0.26.0",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.25.2"
+        "version": "0.26.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -68160,14 +68164,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rusqlite 0.28.0": {
+    "rusqlite 0.29.0": {
       "name": "rusqlite",
-      "version": "0.28.0",
+      "version": "0.29.0",
       "package_url": "https://github.com/rusqlite/rusqlite",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rusqlite/0.28.0/download",
-          "sha256": "01e213bc3ecb39ac32e81e51ebe31fd888a940515173e3a18a35f8c6e896422a"
+          "url": "https://static.crates.io/crates/rusqlite/0.29.0/download",
+          "sha256": "549b9d036d571d42e6e85d1c1425e2ac83491075078ca9a15be021c56b1641f2"
         }
       },
       "targets": [
@@ -68199,7 +68203,7 @@
         "deps": {
           "common": [
             {
-              "id": "bitflags 1.3.2",
+              "id": "bitflags 2.10.0",
               "target": "bitflags"
             },
             {
@@ -68215,7 +68219,7 @@
               "target": "hashlink"
             },
             {
-              "id": "libsqlite3-sys 0.25.2",
+              "id": "libsqlite3-sys 0.26.0",
               "target": "libsqlite3_sys"
             },
             {
@@ -68226,7 +68230,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.28.0"
+        "version": "0.29.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -82000,6 +82004,61 @@
             {
               "id": "tokio-stream 0.1.17",
               "target": "tokio_stream"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.4.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "tokio-rusqlite 0.4.0": {
+      "name": "tokio-rusqlite",
+      "version": "0.4.0",
+      "package_url": "https://github.com/programatik29/tokio-rusqlite",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tokio-rusqlite/0.4.0/download",
+          "sha256": "7aa66395f5ff117faee90c9458232c936405f9227ad902038000b74b3bc1feac"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tokio_rusqlite",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tokio_rusqlite",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "crossbeam-channel 0.5.15",
+              "target": "crossbeam_channel"
+            },
+            {
+              "id": "rusqlite 0.29.0",
+              "target": "rusqlite"
+            },
+            {
+              "id": "tokio 1.48.0",
+              "target": "tokio"
             }
           ],
           "selects": {}
@@ -97891,7 +97950,7 @@
     "rsa 0.9.6",
     "rstest 0.19.0",
     "rusb 0.9.3",
-    "rusqlite 0.28.0",
+    "rusqlite 0.29.0",
     "rust-ini 0.21.2",
     "rust_decimal 1.36.0",
     "rust_decimal_macros 1.36.0",
@@ -97959,6 +98018,7 @@
     "tokio 1.48.0",
     "tokio-io-timeout 1.2.0",
     "tokio-metrics 0.4.0",
+    "tokio-rusqlite 0.4.0",
     "tokio-rustls 0.26.0",
     "tokio-serde 0.8.0",
     "tokio-socks 0.5.2",

@@ -49,6 +49,7 @@ DEPENDENCIES = [
     "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-rusqlite",
     "@crate_index//:tower-http",
     "@crate_index//:tower-request-id",
     "@crate_index//:tracing",
