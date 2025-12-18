@@ -1,5 +1,5 @@
 {
-  "checksum": "eb1238a28f64129c059dd57bd2fa3a10a476cd9eabe52d5139c092b8f46150f1",
+  "checksum": "86b332746ad65b5627a54df75dc774322dd92882c5ad433e6cf207df93ba769f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22608,10 +22608,6 @@
             {
               "id": "wasmtime 39.0.1",
               "target": "wasmtime"
-            },
-            {
-              "id": "wasmtime-environ 39.0.1",
-              "target": "wasmtime_environ"
             },
             {
               "id": "wast 240.0.0",
@@ -97997,7 +97993,6 @@
     "wasmparser 0.240.0",
     "wasmprinter 0.240.0",
     "wasmtime 39.0.1",
-    "wasmtime-environ 39.0.1",
     "wast 240.0.0",
     "wat 1.240.0",
     "wee_alloc 0.4.5",
