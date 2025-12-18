@@ -28,7 +28,7 @@ use ic_recovery::{
 use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
-        ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources},
+        ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResources},
         nested::{HasNestedVms, NestedNodes, NestedVm},
         test_env::TestEnv,
         test_env_api::*,
@@ -231,7 +231,7 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
         NestedNodes::new_with_resources(
             &host_vm_names,
             if cfg.use_mainnet_state {
-                NNS_RECOVERY_VM_RESOURCES.or(MAINNET_NODE_VM_RESOURCES)
+                NNS_RECOVERY_VM_RESOURCES.or(&MAINNET_NODE_VM_RESOURCES)
             } else {
                 NNS_RECOVERY_VM_RESOURCES
             },
