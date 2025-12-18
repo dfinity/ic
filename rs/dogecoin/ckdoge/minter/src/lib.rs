@@ -1,4 +1,6 @@
 #[cfg(test)]
+pub mod test_fixtures;
+#[cfg(test)]
 mod tests;
 
 pub mod address;
@@ -7,9 +9,6 @@ pub mod event;
 pub mod fees;
 pub mod lifecycle;
 pub mod updates;
-
-#[cfg(test)]
-pub mod test_fixtures;
 
 use crate::address::DogecoinAddress;
 use crate::dogecoin_canister::MillikoinuPerByte;

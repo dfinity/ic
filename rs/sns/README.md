@@ -1,4 +1,4 @@
-# Service Nerouvs System (SNS)
+# Service Nervous System (SNS)
 A service nervous system, or SNS for short, is an algorithmic DAO that allows
 developers to create decentralized, token-based governance systems for their dapps.
 Thus, similarly to how the Network Nervous System (NNS) is the open tokenized

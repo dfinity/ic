@@ -6,10 +6,8 @@ use ratatui::crossterm::event::{
     DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers,
 };
 use ratatui::crossterm::execute;
-use ratatui::crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode, size,
-};
-use ratatui::{Frame, Terminal, backend::CrosstermBackend};
+use ratatui::crossterm::terminal::size;
+use ratatui::{DefaultTerminal, Frame, restore};
 use recovery_utils::{
     RecoveryUpgraderCommand, build_recovery_upgrader_install_command,
     build_recovery_upgrader_prep_command,
@@ -287,26 +285,6 @@ impl Default for AppState {
 // Terminal Management
 // ============================================================================
 
-fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
-    enable_raw_mode().context("Failed to enable raw mode")?;
-
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")?;
-
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend).context("Failed to create terminal")?;
-    terminal.clear().context("Failed to clear terminal")?;
-
-    Ok(terminal)
-}
-
-fn teardown_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
-    disable_raw_mode().context("Failed to disable raw mode")?;
-    let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
-    terminal.show_cursor().context("Failed to show cursor")?;
-    Ok(())
-}
-
 /// Prints a prominent success message to stderr (outside the TUI).
 /// This message is designed to be highly visible and will appear in the normal
 /// terminal after the TUI exits, before any subsequent service logs.
@@ -336,33 +314,6 @@ fn print_success_summary(message: &str) {
     let _ = handle.flush();
 }
 
-/// Guard struct to ensure terminal cleanup on panic
-struct TerminalGuard {
-    terminal: Option<Terminal<CrosstermBackend<io::Stdout>>>,
-}
-
-impl TerminalGuard {
-    fn new(terminal: Terminal<CrosstermBackend<io::Stdout>>) -> Self {
-        Self {
-            terminal: Some(terminal),
-        }
-    }
-
-    fn get_mut(&mut self) -> &mut Terminal<CrosstermBackend<io::Stdout>> {
-        self.terminal
-            .as_mut()
-            .expect("TerminalGuard: terminal was already taken.")
-    }
-}
-
-impl Drop for TerminalGuard {
-    fn drop(&mut self) {
-        if let Some(ref mut terminal) = self.terminal {
-            let _ = teardown_terminal(terminal);
-        }
-    }
-}
-
 // ============================================================================
 // Application Logic
 // ============================================================================
@@ -388,10 +339,9 @@ impl GuestOSRecoveryApp {
         Self::default()
     }
 
-    fn redraw(&self, terminal_guard: &mut TerminalGuard) -> Result<()> {
+    fn redraw(&self, terminal: &mut DefaultTerminal) -> Result<()> {
         if let Some(state) = &self.state {
-            let _ = terminal_guard
-                .get_mut()
+            terminal
                 .draw(|f: &mut Frame| ui::render(f, state))
                 .map_err(|e| {
                     anyhow::anyhow!(
@@ -409,10 +359,18 @@ impl GuestOSRecoveryApp {
             anyhow::bail!("This tool requires an interactive terminal.");
         }
 
-        let terminal = setup_terminal()?;
-        let mut terminal_guard = TerminalGuard::new(terminal);
+        let terminal = match ratatui::try_init() {
+            Ok(t) => t,
+            Err(e) => {
+                println!("\nERROR: Manual Recovery TUI failed to start.\n{e:#}\n");
+                return Err(e.into());
+            }
+        };
+        // Wrap terminal in a guard that ensures restore on any exit
+        let mut terminal = scopeguard::guard(terminal, |_| restore());
+        terminal.clear().context("Failed to clear terminal")?;
 
-        execute!(terminal_guard.get_mut().backend_mut(), EnableMouseCapture)
+        execute!(terminal.backend_mut(), EnableMouseCapture)
             .context("Failed to enable mouse capture")?;
 
         // Main Loop
@@ -421,7 +379,7 @@ impl GuestOSRecoveryApp {
                 break;
             }
 
-            self.redraw(&mut terminal_guard)?;
+            self.redraw(&mut terminal)?;
 
             // Event polling
             if ratatui::crossterm::event::poll(Duration::from_millis(PROCESS_POLL_INTERVAL_MS))? {
@@ -434,11 +392,11 @@ impl GuestOSRecoveryApp {
             self.tick()?;
         }
 
-        execute!(terminal_guard.get_mut().backend_mut(), DisableMouseCapture)
+        execute!(terminal.backend_mut(), DisableMouseCapture)
             .context("Failed to disable mouse capture")?;
 
         // Drop guard to cleanup terminal before printing any final messages
-        drop(terminal_guard);
+        drop(terminal);
 
         // If we finished successfully, print the message after cleanup
         if let Some(Ok(())) = self.result {

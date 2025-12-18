@@ -1,7 +1,11 @@
+#[cfg(test)]
+mod tests;
+
 use crate::address::DogecoinAddress;
+use crate::candid_api::WithdrawalFee;
 use candid::Deserialize;
 use ic_ckbtc_minter::address::BitcoinAddress;
-use ic_ckbtc_minter::queries::WithdrawalFee;
+use ic_ckbtc_minter::queries::WithdrawalFee as CkBtcWithdrawalFee;
 use ic_ckbtc_minter::state::eventlog::{
     CkBtcMinterEvent, EventLogger, EventType as CkBtcMinterEventType, ReplacedReason,
     ReplayLogError,
@@ -53,7 +57,7 @@ pub enum CkDogeMinterEventType {
 
     /// Indicates the minter upgrade with specified arguments.
     #[serde(rename = "upgrade")]
-    Upgrade(crate::lifecycle::init::UpgradeArgs),
+    Upgrade(crate::lifecycle::upgrade::UpgradeArgs),
 
     /// Indicates that the minter received new UTXOs to the specified account.
     /// The minter emits this event _after_ it minted ckDOGE.
@@ -270,12 +274,37 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
     type Error = String;
     fn try_from(event: CkBtcMinterEventType) -> Result<Self, Self::Error> {
         match event {
-            CkBtcMinterEventType::Init(args) => Ok(CkDogeMinterEventType::Init(
-                crate::lifecycle::init::InitArgs::from(args),
-            )),
-            CkBtcMinterEventType::Upgrade(args) => Ok(CkDogeMinterEventType::Upgrade(
-                crate::lifecycle::init::UpgradeArgs::from(args),
-            )),
+            CkBtcMinterEventType::Init(args) => {
+                match (args.check_fee, args.btc_checker_principal) {
+                    (Some(0), None) => Ok(()),
+                    _ => Err(format!("BUG: unexpected checker for ckDOGE {args:?}")),
+                }?;
+                #[allow(deprecated)]
+                match (args.kyt_fee, args.kyt_principal) {
+                    (None, None) => Ok(()),
+                    _ => Err(format!("BUG: unexpected KYT for ckDOGE {args:?}")),
+                }?;
+                Ok(CkDogeMinterEventType::Init(
+                    crate::lifecycle::init::InitArgs::from(args),
+                ))
+            }
+            CkBtcMinterEventType::Upgrade(args) => {
+                #[allow(deprecated)]
+                match (
+                    args.check_fee,
+                    args.kyt_fee,
+                    args.btc_checker_principal,
+                    args.kyt_principal,
+                ) {
+                    (None, None, None, None) => Ok(()),
+                    _ => Err(format!(
+                        "BUG: unexpected checker or KYT for ckDOGE {args:?}"
+                    )),
+                }?;
+                Ok(CkDogeMinterEventType::Upgrade(
+                    crate::lifecycle::upgrade::UpgradeArgs::from(args),
+                ))
+            }
             CkBtcMinterEventType::ReceivedUtxos {
                 mint_txid,
                 to_account,
@@ -285,22 +314,32 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                 to_account,
                 utxos,
             }),
-            CkBtcMinterEventType::AcceptedRetrieveBtcRequest(RetrieveBtcRequest {
-                amount,
-                address,
-                block_index,
-                received_at,
-                reimbursement_account,
-                kyt_provider: _,
-            }) => Ok(CkDogeMinterEventType::AcceptedRetrieveDogeRequest(
-                RetrieveDogeRequest {
-                    amount,
-                    address: bitcoin_to_dogecoin(address)?,
-                    block_index,
-                    received_at,
-                    reimbursement_account,
-                },
-            )),
+            CkBtcMinterEventType::AcceptedRetrieveBtcRequest(request) => {
+                match &request.kyt_provider {
+                    None => {
+                        let RetrieveBtcRequest {
+                            amount,
+                            address,
+                            block_index,
+                            received_at,
+                            reimbursement_account,
+                            kyt_provider: _,
+                        } = request;
+                        Ok(CkDogeMinterEventType::AcceptedRetrieveDogeRequest(
+                            RetrieveDogeRequest {
+                                amount,
+                                address: bitcoin_to_dogecoin(address)?,
+                                block_index,
+                                received_at,
+                                reimbursement_account,
+                            },
+                        ))
+                    }
+                    Some(provider) => Err(format!(
+                        "BUG: Unexpected KYT provider {provider} for {request:?}"
+                    )),
+                }
+            }
             CkBtcMinterEventType::RemovedRetrieveBtcRequest { block_index } => {
                 Ok(CkDogeMinterEventType::RemovedRetrieveDogeRequest { block_index })
             }
@@ -320,7 +359,7 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                 change_output,
                 submitted_at,
                 fee_per_vbyte,
-                withdrawal_fee,
+                withdrawal_fee: withdrawal_fee.map(ckbtc_withdrawal_fee_to_ckdoge),
                 signed_tx,
             }),
             CkBtcMinterEventType::ReplacedBtcTransaction {
@@ -338,7 +377,7 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                 change_output,
                 submitted_at,
                 fee_per_vbyte,
-                withdrawal_fee,
+                withdrawal_fee: withdrawal_fee.map(ckbtc_withdrawal_fee_to_ckdoge),
                 reason,
                 new_utxos,
             }),
@@ -465,7 +504,7 @@ impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
                 change_output,
                 submitted_at,
                 fee_per_vbyte,
-                withdrawal_fee,
+                withdrawal_fee: withdrawal_fee.map(ckdoge_withdrawal_fee_to_ckbtc),
                 signed_tx,
             },
             CkDogeMinterEventType::ReplacedDogeTransaction {
@@ -483,7 +522,7 @@ impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
                 change_output,
                 submitted_at,
                 fee_per_vbyte,
-                withdrawal_fee,
+                withdrawal_fee: withdrawal_fee.map(ckdoge_withdrawal_fee_to_ckbtc),
                 reason,
                 new_utxos,
             },
@@ -531,13 +570,37 @@ impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
     }
 }
 
+fn ckbtc_withdrawal_fee_to_ckdoge(
+    CkBtcWithdrawalFee {
+        minter_fee,
+        bitcoin_fee,
+    }: CkBtcWithdrawalFee,
+) -> WithdrawalFee {
+    WithdrawalFee {
+        dogecoin_fee: bitcoin_fee,
+        minter_fee,
+    }
+}
+
+fn ckdoge_withdrawal_fee_to_ckbtc(
+    WithdrawalFee {
+        minter_fee,
+        dogecoin_fee,
+    }: WithdrawalFee,
+) -> CkBtcWithdrawalFee {
+    CkBtcWithdrawalFee {
+        minter_fee,
+        bitcoin_fee: dogecoin_fee,
+    }
+}
+
 fn bitcoin_to_dogecoin(address: BitcoinAddress) -> Result<DogecoinAddress, String> {
     match address {
         BitcoinAddress::P2wpkhV0(_) | BitcoinAddress::P2wshV0(_) | BitcoinAddress::P2trV1(_) => {
             Err(format!("BUG: unexpected address type {address:?}"))
         }
         BitcoinAddress::P2pkh(bytes) => Ok(DogecoinAddress::P2pkh(bytes)),
-        BitcoinAddress::P2sh(bytes) => Ok(DogecoinAddress::P2pkh(bytes)),
+        BitcoinAddress::P2sh(bytes) => Ok(DogecoinAddress::P2sh(bytes)),
     }
 }
 

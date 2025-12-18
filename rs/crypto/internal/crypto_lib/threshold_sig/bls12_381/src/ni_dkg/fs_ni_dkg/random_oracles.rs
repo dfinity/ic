@@ -250,14 +250,3 @@ pub fn random_oracle_to_scalar(domain: &str, data: &dyn UniqueHash) -> Scalar {
     let rng = &mut rand_chacha::ChaChaRng::from_seed(hash);
     Scalar::miracl_random(rng)
 }
-
-/// Computes the hash of a struct using an hash function that can be modelled as
-/// a random oracle. Returns a group element of G1 in BLS12_381.
-///
-/// A distinct `domain` should be used for each purpose of the random oracle.
-pub fn random_oracle_to_g1(domain: &str, data: &dyn UniqueHash) -> G1Affine {
-    G1Affine::hash(
-        DomainSeparationContext::new(domain).as_bytes(),
-        &data.unique_hash(),
-    )
-}
