@@ -135,7 +135,6 @@ USER ubuntu
 
 # Set PATH for ubuntu user
 ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
-ENV PYTHONPATH=/ic/ci/src:/ic/ci/src/dependencies:$PYTHONPATH
 
 # Pre-populate the Bazel installation for ubuntu
 RUN cd /tmp/bazel && bazel version
