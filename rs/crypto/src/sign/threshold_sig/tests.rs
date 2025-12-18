@@ -101,7 +101,7 @@ mod sign_threshold {
 
         assert_matches!(
             result,
-            Err(ThresholdSignError::InternalError { internal_error })
+            Err(ThresholdSignError::InternalError(internal_error))
             if internal_error.contains("not supported")
         );
     }
@@ -121,7 +121,7 @@ mod sign_threshold {
 
         assert_matches!(
             result,
-            Err(ThresholdSignError::InternalError { internal_error })
+            Err(ThresholdSignError::InternalError(internal_error))
             if internal_error.contains("wrong type")
         );
     }
@@ -141,7 +141,7 @@ mod sign_threshold {
 
         assert_matches!(
             result,
-            Err(ThresholdSignError::InternalError { internal_error })
+            Err(ThresholdSignError::InternalError(internal_error))
             if internal_error.contains("Unable to parse the secret key")
         );
     }

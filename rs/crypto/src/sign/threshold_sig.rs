@@ -105,16 +105,16 @@ fn map_threshold_sign_error(error: CspThresholdSignError, dkg_id: NiDkgId) -> Th
             }
         }
         CspThresholdSignError::TransientInternalError { internal_error } => {
-            ThresholdSignError::TransientInternalError { internal_error }
+            ThresholdSignError::TransientInternalError(internal_error)
         }
         CspThresholdSignError::KeyIdInstantiationError(internal_error) => {
             ThresholdSignError::KeyIdInstantiationError(internal_error)
         }
         CspThresholdSignError::UnsupportedAlgorithm { .. }
         | CspThresholdSignError::MalformedSecretKey { .. }
-        | CspThresholdSignError::WrongSecretKeyType { .. } => ThresholdSignError::InternalError {
-            internal_error: error.to_string(),
-        },
+        | CspThresholdSignError::WrongSecretKeyType { .. } => {
+            ThresholdSignError::InternalError(error.to_string())
+        }
     }
 }
 
