@@ -5,7 +5,7 @@ use std::{
 };
 
 use clap::{Parser, ValueEnum};
-use slog::{Drain};
+use slog::Drain;
 
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
