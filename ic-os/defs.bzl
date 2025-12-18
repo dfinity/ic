@@ -155,9 +155,9 @@ def icos_build(
     # NOTE: e2fsdroid does not support filenames with spaces, fortunately,
     # these only occur in firmware that we do not use.
     PARTITION_ROOT_STRIP_PATHS = [
-        "/run",
-        "/boot",
-        "/var",
+        "/run/.+",
+        "/boot/.+",
+        "/var/.+",
         "/usr/lib/firmware/brcm/brcmfmac43241b4-sdio.Intel Corp.-VALLEYVIEW C0 PLATFORM.txt.zst",
         "/usr/lib/firmware/brcm/brcmfmac43340-sdio.ASUSTeK COMPUTER INC.-TF103CE.txt.zst",
         "/usr/lib/firmware/brcm/brcmfmac43362-sdio.ASUSTeK COMPUTER INC.-ME176C.txt.zst",
@@ -200,7 +200,7 @@ def icos_build(
             src = ":rootfs-tree.tar",
             file_contexts = ":file_contexts",
             partition_size = image_deps["bootfs_size"],
-            subdir = "boot",
+            subdir = "/boot",
             target_compatible_with = ["@platforms//os:linux"],
             extra_files = {
                 k: v

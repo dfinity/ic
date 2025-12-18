@@ -139,7 +139,7 @@ def _custom_partitions(mode):
         src = "config_tar",
         label = "CONFIG",
         partition_size = "50M",
-        subdir = "config",
+        subdir = "/config",
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -175,7 +175,7 @@ def _custom_partitions(mode):
         name = "partition-data.tzst",
         src = "data_tar",
         partition_size = "2250M",
-        subdir = "data",
+        subdir = "/data",
         target_compatible_with = [
             "@platforms//os:linux",
         ],
