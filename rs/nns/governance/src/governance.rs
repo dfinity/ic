@@ -7498,6 +7498,21 @@ impl Governance {
             .get_node_providers_xdr_permyriad_rewards(start_date, end_date)
             .await?;
 
+        let rewards_list = rewards_per_node_provider
+            .iter()
+            .map(|(node_provider_id, reward_xdr_permyriad)| {
+                format!(
+                    "{} -> {} XDR Permyriad",
+                    node_provider_id, reward_xdr_permyriad
+                )
+            })
+            .collect_vec()
+            .join("\n");
+        println!(
+            "{}INFO: Retrieved node providers rewards from NRC for period {} - {}:\n{}",
+            LOG_PREFIX, start_date, end_date, rewards_list,
+        );
+
         // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP
         let icp_xdr_conversion_rate = self.get_average_icp_xdr_conversion_rate().await?.data;
         let avg_xdr_permyriad_per_icp = icp_xdr_conversion_rate.xdr_permyriad_per_icp;
