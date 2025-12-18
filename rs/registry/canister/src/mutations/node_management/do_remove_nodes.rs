@@ -18,9 +18,10 @@ impl Registry {
     pub fn do_remove_nodes(&mut self, payload: RemoveNodesPayload) {
         println!("{LOG_PREFIX}do_remove_nodes started: {payload:?}");
 
-        // This hashmap tracks node operators for which mutations have already been
+        // This map tracks node operators for which mutations have already been
         // determined; increments to node allowance should not be idempotent
-        let mut node_operator_hmap = HashMap::<PrincipalId, NodeOperatorRecord>::new();
+        let mut principal_to_node_operator_record =
+            HashMap::<PrincipalId, NodeOperatorRecord>::new();
 
         // 1. De-duplicate the node list
         let mut nodes_to_be_removed = payload.node_ids.clone();
@@ -37,12 +38,9 @@ impl Registry {
                 // 4. Skip nodes that are not in the registry.
                 // This tackles the race condition where a node is removed from the registry
                 // by another transaction before this transaction is processed.
-                let node_record = match self.get_node(node_to_remove) {
-                    Some(n) => n,
-                    None => {
+                let Some(node_record) = self.get_node(node_to_remove) else {
                         println!("{LOG_PREFIX}do_remove_nodes: node {node_to_remove} not found in registry, skipping");
                         return vec![];
-                    }
                 };
 
                 let node_operator_id = PrincipalId(Principal::from_slice(&node_record.node_operator_id));
@@ -57,7 +55,7 @@ impl Registry {
                 }
 
                 // 6. Retrieve the NO record, cache it and increment its node allowance by 1
-                let new_node_operator_record = node_operator_hmap.entry(node_operator_id).or_insert(get_node_operator_record(self, node_operator_id)
+                let new_node_operator_record = principal_to_node_operator_record.entry(node_operator_id).or_insert_with(|| get_node_operator_record(self, node_operator_id)
                     .map_err(|err| {
                         format!(
                             "{LOG_PREFIX}do_remove_nodes: Aborting node removal: {err}"
@@ -70,11 +68,11 @@ impl Registry {
                 // 7. Finally, generate the following mutations:
                 //   * Delete the node
                 //   * Delete entries for node encryption keys
-                 make_remove_node_registry_mutations(self, node_to_remove)
+                make_remove_node_registry_mutations(self, node_to_remove)
         }).collect();
 
         // 8. Create node operator update mutations
-        for (node_operator_id, updated_node_operator) in node_operator_hmap {
+        for (node_operator_id, updated_node_operator) in principal_to_node_operator_record {
             mutations.push(make_update_node_operator_mutation(
                 node_operator_id,
                 &updated_node_operator,
@@ -98,11 +96,13 @@ pub struct RemoveNodesPayload {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes};
-    use ic_base_types::PrincipalId;
+    use crate::{
+        common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
+        registry::EncodedVersion,
+    };
     use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
     use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
-    use ic_registry_transport::insert;
+    use ic_registry_transport::{insert, pb::v1::HighCapacityRegistryAtomicMutateRequest};
     use prost::Message;
 
     #[test]
@@ -228,6 +228,22 @@ mod tests {
             .unwrap();
 
         assert_eq!(number_of_mutations_for_operator, 1);
+
+        let encoded_request = registry
+            .changelog
+            .get(EncodedVersion::from(latest_version).as_ref())
+            .unwrap();
+
+        let high_capacity_registry_mutation_request =
+            HighCapacityRegistryAtomicMutateRequest::decode(encoded_request.as_slice()).unwrap();
+
+        let total_node_operator_mutations = high_capacity_registry_mutation_request
+            .mutations
+            .iter()
+            .filter(|m| m.key.eq(key.as_bytes()))
+            .count();
+
+        assert_eq!(total_node_operator_mutations, 1);
     }
 
     #[test]
