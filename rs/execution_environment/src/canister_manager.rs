@@ -2599,7 +2599,14 @@ impl CanisterManager {
         snapshot_id: SnapshotId,
         canister: &CanisterState,
         state: &ReplicatedState,
-    ) -> Result<(ReadCanisterSnapshotMetadataResponse, NumInstructions), CanisterManagerError> {
+        round_limits: &mut RoundLimits,
+    ) -> Result<
+        (
+            ReadCanisterSnapshotMetadataResponse,
+            MessageExecutionInstructions,
+        ),
+        CanisterManagerError,
+    > {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
         let snapshot = self.get_snapshot(canister.canister_id(), snapshot_id, state)?;
@@ -2612,6 +2619,7 @@ impl CanisterManager {
         debug_assert!(maybe_instruction_counter.is_some());
 
         let num_instructions = self.config.canister_snapshot_data_baseline_instructions;
+        let instructions_token = round_limits.charge_message_execution_cost(num_instructions);
 
         Ok((
             ReadCanisterSnapshotMetadataResponse {
@@ -2639,7 +2647,7 @@ impl CanisterManager {
                     .execution_snapshot()
                     .on_low_wasm_memory_hook_status,
             },
-            num_instructions,
+            instructions_token,
         ))
     }
 
@@ -2651,7 +2659,14 @@ impl CanisterManager {
         kind: CanisterSnapshotDataKind,
         state: &ReplicatedState,
         subnet_size: usize,
-    ) -> Result<(ReadCanisterSnapshotDataResponse, NumInstructions), CanisterManagerError> {
+        round_limits: &mut RoundLimits,
+    ) -> Result<
+        (
+            ReadCanisterSnapshotDataResponse,
+            MessageExecutionInstructions,
+        ),
+        CanisterManagerError,
+    > {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
         let snapshot = self.get_snapshot(canister.canister_id(), snapshot_id, state)?;
@@ -2710,7 +2725,8 @@ impl CanisterManager {
             }
         };
 
-        res.map(|x| (ReadCanisterSnapshotDataResponse::new(x), num_instructions))
+        let instructions_token = round_limits.charge_message_execution_cost(num_instructions);
+        res.map(|x| (ReadCanisterSnapshotDataResponse::new(x), instructions_token))
     }
 
     /// Creates a new snapshot based on the provided metadata and returns the new snapshot ID.
@@ -2972,9 +2988,7 @@ impl CanisterManager {
                 {
                     ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
                     ChunkValidationResult::AlreadyExists(_hash) => {
-                        return Ok(
-                            round_limits.charge_message_execution_cost(NumInstructions::new(0))
-                        );
+                        return Ok(MessageExecutionInstructions::none());
                     }
                     ChunkValidationResult::ValidationError(err) => {
                         return Err(CanisterManagerError::WasmChunkStoreError { message: err });

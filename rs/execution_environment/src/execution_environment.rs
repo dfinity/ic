@@ -304,6 +304,11 @@ impl RoundLimits {
         }
     }
 
+    /// Returns the current remaining instructions.
+    pub fn instructions(&self) -> RoundInstructions {
+        self.instructions
+    }
+
     /// Returns true if the instructions limit has been reached.
     pub fn instructions_reached(&self) -> bool {
         self.instructions <= RoundInstructions::from(0)
@@ -552,7 +557,7 @@ impl ExecutionEnvironment {
         registry_settings: &RegistryExecutionSettings,
         current_round: ExecutionRound,
         round_limits: &mut RoundLimits,
-    ) -> (ReplicatedState, Option<NumInstructions>) {
+    ) -> (ReplicatedState, Option<MessageExecutionInstructions>) {
         let since = Instant::now(); // Start logging execution time.
         let cost_schedule = state.get_own_cost_schedule();
 
@@ -563,7 +568,7 @@ impl ExecutionEnvironment {
                     .subnet_call_context_manager
                     .retrieve_context(response.originator_reply_callback, &self.log);
                 return match context {
-                    None => (state, Some(NumInstructions::from(0))),
+                    None => (state, Some(MessageExecutionInstructions::none())),
                     Some(context) => {
                         let time_elapsed =
                             state.time().saturating_duration_since(context.get_time());
@@ -642,7 +647,7 @@ impl ExecutionEnvironment {
                             .into(),
                         );
 
-                        (state, Some(NumInstructions::from(0)))
+                        (state, Some(MessageExecutionInstructions::none()))
                     }
                 };
             }
@@ -669,7 +674,7 @@ impl ExecutionEnvironment {
                 },
                 since,
             );
-            return (state, Some(NumInstructions::from(0)));
+            return (state, Some(MessageExecutionInstructions::none()));
         }
 
         let result: ExecuteSubnetMessageResult = match method {
@@ -723,7 +728,7 @@ impl ExecutionEnvironment {
                             }
                             .into(),
                         );
-                        return (state, Some(NumInstructions::from(0)));
+                        return (state, Some(MessageExecutionInstructions::none()));
                     }
 
                     match SignWithECDSAArgs::decode(payload) {
@@ -1257,7 +1262,7 @@ impl ExecutionEnvironment {
                             }
                             .into(),
                         );
-                        return (state, Some(NumInstructions::from(0)));
+                        return (state, Some(MessageExecutionInstructions::none()));
                     }
 
                     match SignWithSchnorrArgs::decode(payload) {
@@ -1397,7 +1402,7 @@ impl ExecutionEnvironment {
                             }
                             .into(),
                         );
-                        return (state, Some(NumInstructions::from(0)));
+                        return (state, Some(MessageExecutionInstructions::none()));
                     }
 
                     match self.vetkd_derive_key(
@@ -1733,7 +1738,6 @@ impl ExecutionEnvironment {
                         registry_settings.subnet_size,
                         round_limits,
                     );
-                    let instructions_used = instructions_token.amount(); // TODO(mwe)
                     let msg_result = ExecuteSubnetMessageResult::Finished {
                         response: result.map(|res| (res, Some(canister_id))),
                         refund: msg.take_cycles(),
@@ -1741,7 +1745,7 @@ impl ExecutionEnvironment {
                     };
 
                     let state = self.finish_subnet_message_execution(state, msg, msg_result, since);
-                    return (state, Some(instructions_used));
+                    return (state, Some(instructions_token));
                 }
             },
 
@@ -1768,11 +1772,11 @@ impl ExecutionEnvironment {
                     let msg_result = ExecuteSubnetMessageResult::Finished {
                         response: result.map(|res| (res, Some(canister_id))),
                         refund: msg.take_cycles(),
-                        instructions_used: instructions_token,
+                        instructions_used: instructions_token.clone(),
                     };
 
                     let state = self.finish_subnet_message_execution(state, msg, msg_result, since);
-                    return (state, Some(instructions_used));
+                    return (state, Some(instructions_token));
                 }
             },
 
@@ -1827,19 +1831,21 @@ impl ExecutionEnvironment {
                         }
                         FlagStatus::Enabled => {
                             let canister_id = args.get_canister_id();
-                            let (res, instructions_used) =
-                                self.read_canister_snapshot_metadata(*msg.sender(), &state, args);
+                            let (res, instructions_token) = self.read_canister_snapshot_metadata(
+                                *msg.sender(),
+                                &state,
+                                args,
+                                round_limits,
+                            );
                             let res = res.map(|x| (x, Some(canister_id)));
-                            let instructions_token =
-                                round_limits.charge_message_execution_cost(instructions_used);
                             let msg_result = ExecuteSubnetMessageResult::Finished {
                                 response: res,
                                 refund: msg.take_cycles(),
-                                instructions_used: instructions_token,
+                                instructions_used: instructions_token.clone(),
                             };
                             let state =
                                 self.finish_subnet_message_execution(state, msg, msg_result, since);
-                            return (state, Some(instructions_used));
+                            return (state, Some(instructions_token));
                         }
                     },
                     Err(e) => ExecuteSubnetMessageResult::Finished {
@@ -1871,23 +1877,22 @@ impl ExecutionEnvironment {
                         }
                         FlagStatus::Enabled => {
                             let canister_id = args.get_canister_id();
-                            let (result, instructions_used) = self.read_snapshot_data(
+                            let (result, instructions_token) = self.read_snapshot_data(
                                 *msg.sender(),
                                 &mut state,
                                 args,
                                 registry_settings.subnet_size,
+                                round_limits,
                             );
                             let result = result.map(|res| (res, Some(canister_id)));
-                            let instructions_token =
-                                round_limits.charge_message_execution_cost(instructions_used);
                             let msg_result = ExecuteSubnetMessageResult::Finished {
                                 response: result,
                                 refund: msg.take_cycles(),
-                                instructions_used: instructions_token,
+                                instructions_used: instructions_token.clone(),
                             };
                             let state =
                                 self.finish_subnet_message_execution(state, msg, msg_result, since);
-                            return (state, Some(instructions_used));
+                            return (state, Some(instructions_token));
                         }
                     },
                 }
@@ -1918,7 +1923,6 @@ impl ExecutionEnvironment {
                                 registry_settings.subnet_size,
                                 round_limits,
                             );
-                            let instructions_used = instructions_token.amount(); // TODO(mwe)
                             let msg_result = ExecuteSubnetMessageResult::Finished {
                                 response: result.map(|res| (res, Some(canister_id))),
                                 refund: msg.take_cycles(),
@@ -1926,7 +1930,7 @@ impl ExecutionEnvironment {
                             };
                             let state =
                                 self.finish_subnet_message_execution(state, msg, msg_result, since);
-                            return (state, Some(instructions_used));
+                            return (state, Some(instructions_token));
                         }
                     },
                 }
@@ -1957,7 +1961,6 @@ impl ExecutionEnvironment {
                                 registry_settings.subnet_size,
                                 round_limits,
                             );
-                            let instructions_used = instructions_token.amount(); // TODO(mwe)
                             let msg_result = ExecuteSubnetMessageResult::Finished {
                                 response: result.map(|res| (res, Some(canister_id))),
                                 refund: msg.take_cycles(),
@@ -1965,7 +1968,7 @@ impl ExecutionEnvironment {
                             };
                             let state =
                                 self.finish_subnet_message_execution(state, msg, msg_result, since);
-                            return (state, Some(instructions_used));
+                            return (state, Some(instructions_token));
                         }
                     },
                 }
@@ -2006,19 +2009,8 @@ impl ExecutionEnvironment {
         //   - `SignWithECDSA`
         // If you modify code below, please also update
         // these cases.
-        // Default case: no instructions charged
-        let result = match result {
-            ExecuteSubnetMessageResult::Processing => result,
-            ExecuteSubnetMessageResult::Finished {
-                response, refund, ..
-            } => ExecuteSubnetMessageResult::Finished {
-                response,
-                refund,
-                instructions_used: MessageExecutionInstructions::none(),
-            },
-        };
         let state = self.finish_subnet_message_execution(state, msg, result, since);
-        (state, Some(NumInstructions::from(0)))
+        (state, Some(MessageExecutionInstructions::none()))
     }
 
     fn try_add_http_context_to_replicated_state(
@@ -2843,7 +2835,8 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         args: ReadCanisterSnapshotDataArgs,
         subnet_size: usize,
-    ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
+        round_limits: &mut RoundLimits,
+    ) -> (Result<Vec<u8>, UserError>, MessageExecutionInstructions) {
         let canister_id = args.get_canister_id();
         // Take canister out.
         let mut canister = match state.take_canister_state(&canister_id) {
@@ -2853,7 +2846,7 @@ impl ExecutionEnvironment {
                         ErrorCode::CanisterNotFound,
                         format!("Canister {} not found.", &canister_id),
                     )),
-                    NumInstructions::new(0),
+                    MessageExecutionInstructions::none(),
                 );
             }
             Some(canister) => canister,
@@ -2866,9 +2859,13 @@ impl ExecutionEnvironment {
             args.kind,
             state,
             subnet_size,
+            round_limits,
         ) {
-            Ok((result, num_instructions)) => (Ok(Encode!(&result).unwrap()), num_instructions),
-            Err(err) => (Err(UserError::from(err)), NumInstructions::new(0)),
+            Ok((result, instructions_token)) => (Ok(Encode!(&result).unwrap()), instructions_token),
+            Err(err) => (
+                Err(UserError::from(err)),
+                MessageExecutionInstructions::none(),
+            ),
         };
 
         // Put canister back.
@@ -2928,18 +2925,27 @@ impl ExecutionEnvironment {
         sender: PrincipalId,
         state: &ReplicatedState,
         args: ReadCanisterSnapshotMetadataArgs,
-    ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
+        round_limits: &mut RoundLimits,
+    ) -> (Result<Vec<u8>, UserError>, MessageExecutionInstructions) {
         let canister = match get_canister(args.get_canister_id(), state) {
             Ok(canister) => canister,
-            Err(e) => return (Err(e), NumInstructions::new(0)),
+            Err(e) => return (Err(e), MessageExecutionInstructions::none()),
         };
         let snapshot_id = args.get_snapshot_id();
-        match self
-            .canister_manager
-            .read_snapshot_metadata(sender, snapshot_id, canister, state)
-        {
-            Ok((response, instructions)) => (Ok(Encode!(&response).unwrap()), instructions),
-            Err(e) => (Err(UserError::from(e)), NumInstructions::new(0)),
+        match self.canister_manager.read_snapshot_metadata(
+            sender,
+            snapshot_id,
+            canister,
+            state,
+            round_limits,
+        ) {
+            Ok((response, instructions_token)) => {
+                (Ok(Encode!(&response).unwrap()), instructions_token)
+            }
+            Err(e) => (
+                Err(UserError::from(e)),
+                MessageExecutionInstructions::none(),
+            ),
         }
     }
 
@@ -3811,7 +3817,7 @@ impl ExecutionEnvironment {
         instruction_limits: InstructionLimits,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
-    ) -> (ReplicatedState, Option<NumInstructions>) {
+    ) -> (ReplicatedState, Option<MessageExecutionInstructions>) {
         // Start logging execution time for `install_code`.
         let since = Instant::now();
 
@@ -3830,7 +3836,7 @@ impl ExecutionEnvironment {
                         },
                         since,
                     );
-                    return (state, Some(NumInstructions::from(0)));
+                    return (state, Some(MessageExecutionInstructions::none()));
                 }
             };
 
