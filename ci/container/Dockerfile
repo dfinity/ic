@@ -10,7 +10,7 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
 
-RUN apt -yqq install --no-install-recommends podman containernetworking-plugins buildah zip
+RUN apt -yqq install --no-install-recommends podman containernetworking-plugins buildah zip xtail
 
 # install afl & gsutils deps for bazel-fuzzers
 RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
