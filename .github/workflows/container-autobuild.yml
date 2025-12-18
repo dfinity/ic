@@ -29,7 +29,10 @@ permissions:
 jobs:
   ic-build-image:
     name: Build Container Image
-    runs-on: ubuntu-latest
+    runs-on:
+      labels: dind-small
+    container:
+      image: docker:24.0.5-cli
     timeout-minutes: 60
     steps:
       - name: Create GitHub App Token
