@@ -44,8 +44,6 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
 ///   `receiver_keys` isn't supported.
 /// * `CspDkgCreateDealingError::InvalidThresholdError` if the threshold
 ///   is either zero or greater than the number of receivers.
-/// * `CspDkgCreateDealingError::InvalidThresholdError` if key generation
-///   fails.
 /// * `CspDkgCreateDealingError::MalformedFsPublicKeyError` if one of the
 ///   `receiver_keys` is malformed.
 /// * `CspDkgCreateDealingError::MisnumberedReceiverError` if the
@@ -135,8 +133,6 @@ pub fn create_dealing(
 ///   is either zero or greater than the number of receivers.
 /// * `CspDkgCreateReshareDealingError::MalformedReshareSecretKeyError` if
 ///   `resharing_secret` is malformed.
-/// * `CspDkgCreateReshareDealingError::InvalidThresholdError` if key generation
-///   fails.
 /// * `CspDkgCreateReshareDealingError::MalformedFsPublicKeyError` if one of the
 ///   `receiver_keys` is malformed.
 /// * `CspDkgCreateReshareDealingError::MisnumberedReceiverError` if the
@@ -166,15 +162,12 @@ pub fn create_resharing_dealing(
         verify_receiver_indices(receiver_keys, number_of_receivers)?;
     }
 
-    let resharing_secret: ThresholdSecretKey = ThresholdSecretKey::try_from(&resharing_secret)
-        .map_err(|_| {
-            CspDkgCreateReshareDealingError::MalformedReshareSecretKeyError(
-                MalformedSecretKeyError {
-                    algorithm: ALGORITHM_ID,
-                    internal_error: "Malformed reshared secret key".to_string(),
-                },
-            )
-        })?;
+    let resharing_secret = ThresholdSecretKey::try_from(&resharing_secret).map_err(|_| {
+        CspDkgCreateReshareDealingError::MalformedReshareSecretKeyError(MalformedSecretKeyError {
+            algorithm: ALGORITHM_ID,
+            internal_error: "Malformed reshared secret key".to_string(),
+        })
+    })?;
 
     let (public_coefficients, threshold_secret_key_shares) = threshold_share_secret_key(
         keygen_seed,
