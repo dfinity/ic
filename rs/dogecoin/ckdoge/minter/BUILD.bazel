@@ -52,6 +52,7 @@ rust_test(
         # Keep sorted.
         "//rs/types/base_types",
         "@crate_index//:assert_matches",
+        "@crate_index//:bitcoin",
         "@crate_index//:proptest",
         "@crate_index//:serde_json",
     ],

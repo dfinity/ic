@@ -129,7 +129,7 @@ impl DogecoinAddress {
         version_and_hash_to_address(prefix, self.as_array())
     }
 
-    fn as_array(&self) -> &[u8; 20] {
+    pub fn as_array(&self) -> &[u8; 20] {
         match self {
             DogecoinAddress::P2pkh(data) => data,
             DogecoinAddress::P2sh(data) => data,
