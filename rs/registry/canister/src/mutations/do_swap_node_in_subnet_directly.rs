@@ -333,10 +333,10 @@ impl Display for SwapError {
                 SwapError::SubnetNotFoundForNode { old_node_id } =>
                     format!("Node {old_node_id} is not a member of any subnet."),
                 SwapError::SubnetRateLimited { subnet_id } => format!(
-                    "Subnet {subnet_id} had a swap performed within last two hours. Try again later."
+                    "Subnet {subnet_id} had a swap performed within last 4 hours. Try again later."
                 ),
                 SwapError::OperatorRateLimitedOnSubnet { subnet_id, caller } => format!(
-                    "Caller {caller} performed a swap on subnet {subnet_id} within last twelve hours. Try again later."
+                    "Caller {caller} performed a swap on subnet {subnet_id} within last 24 hours. Try again later."
                 ),
                 SwapError::SubnetSizeMismatch { subnet_id } => format!(
                     "Subnet {subnet_id} changed size after performing the swap which shouldn't happen"
