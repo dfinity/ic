@@ -3,8 +3,8 @@
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_secrets_containers::SecretArray;
 use serde::{Deserialize, Serialize};
-use zeroize::{Zeroize, ZeroizeOnDrop};
 use std::fmt;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 #[cfg(test)]
 pub mod arbitrary;
