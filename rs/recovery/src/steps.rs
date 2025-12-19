@@ -998,16 +998,18 @@ echo "$artifacts_hash" > {sha_file:?}
     }
 
     fn get_next_steps(&self, artifacts_hash: &str) -> String {
+        let artifacts_hash_prefix = &artifacts_hash[..6];
+
         // We use debug formatting because it escapes the paths in case they contain spaces.
         format!(
             r#"
 Recovery artifacts with hash {artifacts_hash} were successfully created in {output_dir:?}.
 Now please:
   - Upload {tar_file:?} to:
-    - https://download.dfinity.systems/recovery/{artifacts_hash}/{tar_name}
-    - https://download.dfinity.network/recovery/{artifacts_hash}/{tar_name}
+    - https://download.dfinity.systems/recovery/{artifacts_hash_prefix}/{tar_name}
+    - https://download.dfinity.network/recovery/{artifacts_hash_prefix}/{tar_name}
     - TODO: Update directions after recovery runbook complete
-  - Provide other Node Providers with the commit hash as version, the image hash, and the artifacts hash. Ask them to reboot and follow the recovery instructions.
+  - Provide other Node Providers with the necessary recovery artifacts and ask them to follow the recovery instructions.
             "#,
             output_dir = self.output_dir,
             tar_file = self.output_dir.join(Self::get_tar_name()),
