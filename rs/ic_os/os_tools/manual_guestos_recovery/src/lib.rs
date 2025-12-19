@@ -807,6 +807,25 @@ fn parse_prep_metadata(contents: &str) -> Result<PrepResults> {
 }
 
 #[cfg(test)]
+impl RecoveryTask {
+    /// Creates a mock task for testing with predefined logs.
+    /// Spawns a no-op process that exits immediately.
+    pub(crate) fn mock_with_logs(logs: Vec<String>) -> Self {
+        use std::process::Command;
+
+        let child = Command::new("true")
+            .spawn()
+            .expect("Failed to spawn 'true' command for mock task");
+
+        Self {
+            child,
+            stdout_handle: None,
+            log_lines: Arc::new(Mutex::new(logs)),
+        }
+    }
+}
+
+#[cfg(test)]
 impl GuestOSRecoveryApp {
     pub(crate) fn with_state(state: AppState) -> Self {
         Self {
