@@ -52,17 +52,20 @@ const INSTRUCTION_OVERHEAD_PER_CANISTER: NumInstructions = NumInstructions::new(
 const INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION: NumInstructions =
     NumInstructions::new(12_000);
 
-// If messages are short, then we expect about 2B=(4B - 2B) instructions to run
-// in a round in about 1 second. Short messages followed by one long message
-// would cause the longest possible round of 4B instructions or 2 seconds.
-//
-// In general, the round limit should be close to
-// `slice_limit + 2B * (1 / finalization_rate)` which ensures that
+// The round instruction limit should be close to
+// `2B * (1 / finalization_rate)` which ensures that
 // 1) execution does not slow down finalization.
 // 2) execution does not waste the time available per round.
 //
-// Hence, we set it to `MAX_INSTRUCTIONS_PER_SLICE.max(MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE) + NumInstructions::from(2 * B)`,
-// but have to hard-code it due to `const` requirements.
+// On application subnets, we expect a finalization rate of around 1 block per second
+// and thus we set the round instruction limit to
+// `MAX_INSTRUCTIONS_PER_SLICE.max(MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE) + NumInstructions::from(2 * B)`.
+// We have to hard-code it here due to `const` requirements.
+//
+// This way, if messages are short (the slice limit is not exhausted),
+// then we expect about `2B` instructions to run in a round in about 1 second.
+// Short messages followed by one long message (exhausting the slice limit)
+// would cause the longest possible round of 4B instructions or 2 seconds.
 const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(4 * B);
 
 // Limit per `install_code` message. It's bigger than the limit for a regular
