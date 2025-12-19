@@ -4,10 +4,8 @@
 #
 from __future__ import annotations
 
-import atexit
 import os
 import shutil
-import signal
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -48,7 +46,7 @@ def build_image(image_tag: str, dockerfile: str, context_dir: str, build_args: L
     build_arg_strings_joined = " ".join(build_arg_strings)
 
     log.info("Building image...")
-    cmd = f"podman build --squash-all --no-cache --tag {image_tag} {build_arg_strings_joined} --file {dockerfile} {context_dir}"
+    cmd = f"podman build --squash-all --tag {image_tag} {build_arg_strings_joined} --file {dockerfile} {context_dir}"
     invoke.run(cmd)
     log.info("Image built successfully")
 
@@ -57,7 +55,6 @@ def save_image(image_tag: str, output_file: str):
     log.info("Saving image to tar file")
     cmd = f"podman image save --output {output_file} {image_tag}"
     invoke.run(cmd)
-    invoke.run("sync")  # For determinism (?)
 
     output_path = Path(output_file)
     assert output_path.exists()
@@ -87,14 +84,6 @@ def main():
     # podman (no longer in latest version). bazel strips this out - add it back
     # manually, for now.
     os.environ["PATH"] = ":".join([x for x in [os.environ.get("PATH"), "/usr/bin"] if x is not None])
-
-    def cleanup():
-        invoke.run(f"podman rm -f {image_tag}")
-        invoke.run(f"podman rm -f {image_tag}_container")
-
-    atexit.register(lambda: cleanup())
-    signal.signal(signal.SIGTERM, lambda: cleanup())
-    signal.signal(signal.SIGINT, lambda: cleanup())
 
     build_args = list(build_args or [])
     context_dir = tempfile.mkdtemp()
