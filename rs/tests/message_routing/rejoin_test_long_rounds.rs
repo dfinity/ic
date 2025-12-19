@@ -93,12 +93,6 @@ fn setup(env: TestEnv, config: Config) {
     InternetComputer::new()
         .with_required_host_features(vec![HostFeature::Performance])
         .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_default_vm_resources(vm_resources)
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .add_nodes(1),
-        )
-        .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_default_vm_resources(vm_resources)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
