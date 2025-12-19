@@ -539,3 +539,38 @@ fn build_failure_text<'a>(
 
     text
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_truncate_line() {
+        // Fits - no truncation
+        assert_eq!(truncate_line("hello", 10), "hello");
+        // Truncates with ellipsis
+        assert_eq!(truncate_line("hello world", 8), "hello...");
+    }
+
+    #[test]
+    fn test_calculate_log_viewport() {
+        // Fewer lines than height - show all from start
+        let (start, count) = calculate_log_viewport(5, 20);
+        assert_eq!((start, count), (0, 5));
+
+        // More lines than height - show last N
+        let (start, count) = calculate_log_viewport(100, 20);
+        assert_eq!((start, count), (80, 20));
+    }
+
+    #[test]
+    fn test_centered_rect() {
+        let area = Rect::new(0, 0, 100, 50);
+        let result = centered_rect(Constraint::Length(40), 10, area);
+
+        assert_eq!(result.width, 40);
+        assert_eq!(result.height, 10);
+        assert_eq!(result.x, 30); // (100 - 40) / 2
+        assert_eq!(result.y, 20); // (50 - 10) / 2
+    }
+}

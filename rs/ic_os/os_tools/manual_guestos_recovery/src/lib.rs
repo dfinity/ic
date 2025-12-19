@@ -801,3 +801,110 @@ fn read_prep_metadata() -> Result<PrepResults> {
         recovery_hash_full,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_lowercase_hex() {
+        // Valid: digits and lowercase a-f
+        assert!(is_lowercase_hex('0'));
+        assert!(is_lowercase_hex('9'));
+        assert!(is_lowercase_hex('a'));
+        assert!(is_lowercase_hex('f'));
+
+        // Invalid: uppercase, out of range, special chars
+        assert!(!is_lowercase_hex('A'));
+        assert!(!is_lowercase_hex('F'));
+        assert!(!is_lowercase_hex('g'));
+        assert!(!is_lowercase_hex(' '));
+    }
+
+    #[test]
+    fn test_validate_inputs_valid() {
+        let params = RecoveryParams {
+            version: "0123456789abcdef0123456789abcdef01234567".to_string(),
+            recovery_hash_prefix: "a1b2c3".to_string(),
+            ..Default::default()
+        };
+        assert!(params.validate_inputs().is_ok());
+    }
+
+    #[test]
+    fn test_validate_inputs_rejects_invalid_version() {
+        let valid_hash = "abc123".to_string();
+
+        // Empty
+        let params = RecoveryParams {
+            version: String::new(),
+            recovery_hash_prefix: valid_hash.clone(),
+            ..Default::default()
+        };
+        assert!(params.validate_inputs().is_err());
+
+        // Wrong length
+        let params = RecoveryParams {
+            version: "abc".to_string(),
+            recovery_hash_prefix: valid_hash.clone(),
+            ..Default::default()
+        };
+        assert!(params.validate_inputs().is_err());
+
+        // Invalid chars (uppercase)
+        let params = RecoveryParams {
+            version: "A".repeat(VERSION_LENGTH),
+            recovery_hash_prefix: valid_hash,
+            ..Default::default()
+        };
+        assert!(params.validate_inputs().is_err());
+    }
+
+    #[test]
+    fn test_validate_inputs_rejects_invalid_recovery_hash() {
+        let valid_version = "a".repeat(VERSION_LENGTH);
+
+        // Empty
+        let params = RecoveryParams {
+            version: valid_version.clone(),
+            recovery_hash_prefix: String::new(),
+            ..Default::default()
+        };
+        assert!(params.validate_inputs().is_err());
+
+        // Wrong length
+        let params = RecoveryParams {
+            version: valid_version.clone(),
+            recovery_hash_prefix: "abc".to_string(),
+            ..Default::default()
+        };
+        assert!(params.validate_inputs().is_err());
+
+        // Invalid chars (uppercase)
+        let params = RecoveryParams {
+            version: valid_version,
+            recovery_hash_prefix: "ABCDEF".to_string(),
+            ..Default::default()
+        };
+        assert!(params.validate_inputs().is_err());
+    }
+
+    #[test]
+    fn test_extract_errors_returns_all_when_under_limit() {
+        assert!(extract_errors_from_logs(&[]).is_empty());
+
+        let logs: Vec<String> = (0..10).map(|i| format!("line {}", i)).collect();
+        let result = extract_errors_from_logs(&logs);
+        assert_eq!(result.len(), 10);
+    }
+
+    #[test]
+    fn test_extract_errors_truncates_to_last_n() {
+        let total = MAX_ERROR_LINES + 20;
+        let logs: Vec<String> = (0..total).map(|i| format!("line {}", i)).collect();
+        let result = extract_errors_from_logs(&logs);
+
+        assert_eq!(result.len(), MAX_ERROR_LINES);
+        assert_eq!(result[0], format!("line {}", total - MAX_ERROR_LINES));
+    }
+}
