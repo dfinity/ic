@@ -92,6 +92,4 @@ pub fn public_key_der_to_pem(der_bytes: &[u8]) -> Vec<u8> {
         pem::EncodeConfig::new().set_line_ending(pem::LineEnding::LF),
     )
     .into_bytes()
-
-    //pem::encode(&pem::Pem::new("PUBLIC KEY", der_bytes)).into_bytes()
 }
