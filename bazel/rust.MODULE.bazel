@@ -10,6 +10,7 @@ archive_override(
     patches = [
         "//bazel:rules_rust_strip_level.patch",
         "//bazel:rules_rust_package_alias.patch",
+        "//bazel:rules_rust_rust_test.patch",
     ],
     urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.67.0/rules_rust-0.67.0.tar.gz"],
 )
@@ -671,9 +672,8 @@ crate.spec(
     version = "3.0.3",
 )
 crate.spec(
-    git = "https://github.com/dfinity/dogecoin-canister",
     package = "ic-doge-interface",
-    rev = "74e6dc9a10ba64d2dbad013282c26d74cd49863f",
+    version = "^0.1.0",
 )
 crate.spec(
     default_features = False,
@@ -1859,10 +1859,6 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^39.0.1",
-)
-crate.spec(
-    package = "wasmtime-environ",
     version = "^39.0.1",
 )
 crate.spec(

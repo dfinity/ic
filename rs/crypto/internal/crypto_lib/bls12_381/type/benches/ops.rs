@@ -8,7 +8,7 @@ use std::sync::Arc;
 const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(100);
 
 fn random_g1<R: Rng + CryptoRng>(rng: &mut R) -> G1Projective {
-    G1Projective::hash(b"domain_sep", &rng.r#gen::<[u8; 32]>())
+    G1Projective::hash("domain_sep", &rng.r#gen::<[u8; 32]>())
 }
 
 fn n_random_g1<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G1Projective> {
@@ -20,7 +20,7 @@ fn n_random_g1<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G1Projective> {
 }
 
 fn random_g2<R: Rng + CryptoRng>(rng: &mut R) -> G2Projective {
-    G2Projective::hash(b"domain_sep", &rng.r#gen::<[u8; 32]>())
+    G2Projective::hash("domain_sep", &rng.r#gen::<[u8; 32]>())
 }
 
 fn n_random_g2<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G2Projective> {
@@ -206,7 +206,7 @@ fn bls12_381_scalar_ops(c: &mut Criterion) {
     group.bench_function("serialize", |b| {
         b.iter_batched_ref(
             || random_scalar(rng),
-            |pt| pt.serialize(),
+            |s| s.serialize(),
             BatchSize::SmallInput,
         )
     });
@@ -275,7 +275,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
 
     group.bench_function("serialize", |b| {
         b.iter_batched_ref(
-            || random_g1(rng),
+            || random_g1(rng).to_affine(),
             |pt| pt.serialize(),
             BatchSize::SmallInput,
         )
@@ -283,16 +283,16 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
 
     group.bench_function("deserialize", |b| {
         b.iter_batched_ref(
-            || random_g1(rng).serialize(),
-            |bytes| G1Projective::deserialize(bytes),
+            || random_g1(rng).to_affine().serialize(),
+            |bytes| G1Affine::deserialize(bytes),
             BatchSize::SmallInput,
         )
     });
 
     group.bench_function("deserialize_unchecked", |b| {
         b.iter_batched_ref(
-            || random_g1(rng).serialize(),
-            |bytes| G1Projective::deserialize_unchecked(bytes),
+            || random_g1(rng).to_affine().serialize(),
+            |bytes| G1Affine::deserialize_unchecked(bytes),
             BatchSize::SmallInput,
         )
     });
@@ -300,7 +300,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
     group.bench_function("hash_32_B", |b| {
         b.iter_batched_ref(
             || rng.r#gen::<[u8; 32]>(),
-            |bytes| G1Projective::hash(b"dst", bytes.as_slice()),
+            |bytes| G1Projective::hash("dst", bytes.as_slice()),
             BatchSize::SmallInput,
         )
     });
@@ -475,7 +475,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
 
     group.bench_function("serialize", |b| {
         b.iter_batched_ref(
-            || random_g2(rng),
+            || random_g2(rng).to_affine(),
             |pt| pt.serialize(),
             BatchSize::SmallInput,
         )
@@ -483,23 +483,27 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
 
     group.bench_function("deserialize", |b| {
         b.iter_batched_ref(
-            || random_g2(rng).serialize(),
-            |bytes| G2Projective::deserialize(bytes),
+            || random_g2(rng).to_affine().serialize(),
+            |bytes| G2Affine::deserialize(bytes),
             BatchSize::SmallInput,
         )
     });
 
     group.bench_function("deserialize_unchecked", |b| {
         b.iter_batched_ref(
-            || random_g2(rng).serialize(),
-            |bytes| G2Projective::deserialize_unchecked(bytes),
+            || random_g2(rng).to_affine().serialize(),
+            |bytes| G2Affine::deserialize_unchecked(bytes),
             BatchSize::SmallInput,
         )
     });
 
     group.bench_function("deserialize_cached", |b| {
         b.iter_batched_ref(
-            || (G2Affine::generator() * Scalar::from_u32(rng.r#gen::<u32>() % 100)).serialize(),
+            || {
+                (G2Affine::generator() * Scalar::from_u32(rng.r#gen::<u32>() % 100))
+                    .to_affine()
+                    .serialize()
+            },
             |bytes| G2Affine::deserialize_cached(bytes),
             BatchSize::SmallInput,
         )
@@ -507,7 +511,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
 
     group.bench_function("deserialize_cached_miss", |b| {
         b.iter_batched_ref(
-            || random_g2(rng).serialize(),
+            || random_g2(rng).to_affine().serialize(),
             |bytes| G2Affine::deserialize_cached(bytes),
             BatchSize::SmallInput,
         )
@@ -516,7 +520,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
     group.bench_function("hash_32_B", |b| {
         b.iter_batched_ref(
             || rng.r#gen::<[u8; 32]>(),
-            |bytes| G2Projective::hash(b"dst", bytes.as_slice()),
+            |bytes| G2Projective::hash("dst", bytes.as_slice()),
             BatchSize::SmallInput,
         )
     });
