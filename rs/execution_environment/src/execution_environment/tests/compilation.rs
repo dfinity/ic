@@ -388,6 +388,7 @@ mod execution_tests {
             ),
             Memory::new_for_testing(),
             Memory::new_for_testing(),
+            LogMemoryStore::new_for_testing(),
             Vec::new(),
             WasmMetadata::default(),
         ));
@@ -404,6 +405,7 @@ mod execution_tests {
             ),
             Memory::new_for_testing(),
             Memory::new_for_testing(),
+            LogMemoryStore::new_for_testing(),
             Vec::new(),
             WasmMetadata::default(),
         ));
@@ -455,6 +457,7 @@ mod execution_tests {
             ),
             Memory::new_for_testing(),
             Memory::new_for_testing(),
+            LogMemoryStore::new_for_testing(),
             Vec::new(),
             WasmMetadata::default(),
         ));
@@ -513,6 +516,7 @@ mod execution_tests {
             ),
             Memory::new_for_testing(),
             Memory::new_for_testing(),
+            LogMemoryStore::new_for_testing(),
             Vec::new(),
             WasmMetadata::default(),
         ));
