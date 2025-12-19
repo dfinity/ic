@@ -504,7 +504,11 @@ impl Encode for SignedInput {
         self.previous_output.encode(buf);
         // Script signature is empty, the witness part goes at the end of the
         // transaction encoding.
-        buf.write(&[0]);
+        write_compact_size(1 + 72 + 1 + 33, buf);
+        buf.write(&[0x48]); //OP_PUSHBYTES_72
+        buf.write(self.signature.as_slice());
+        buf.write(&[0x21]); //OP_PUSHBYTES_33
+        buf.write(self.pubkey.as_ref());
         self.sequence.encode(buf);
     }
 }
@@ -534,16 +538,16 @@ impl Encode for SignedTransaction {
         // Reference implementation:
         // https://github.com/bitcoin/bitcoin/blob/c90f86e4c7760a9f7ed0a574f54465964e006a64/src/primitives/transaction.h#L254-L281
         TX_VERSION.encode(buf);
-        buf.write(&[MARKER, FLAGS]);
+        // buf.write(&[MARKER, FLAGS]);
         self.inputs.encode(buf);
         self.outputs.encode(buf);
-        for txin in self.inputs.iter() {
-            [
-                Bytes::new(txin.signature.as_slice()),
-                Bytes::new(&txin.pubkey),
-            ][..]
-                .encode(buf);
-        }
+        // for txin in self.inputs.iter() {
+        //     [
+        //         Bytes::new(txin.signature.as_slice()),
+        //         Bytes::new(&txin.pubkey),
+        //     ][..]
+        //         .encode(buf);
+        // }
         self.lock_time.encode(buf)
     }
 }
