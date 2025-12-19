@@ -104,13 +104,13 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_recoverable_corrupt_cup_with_chain_keys_test",
     env = MESSAGE_CANISTER_ENV,
+    guestos_update = "test",
     tags = [
         "colocate",
-        "long_test",  # since it takes longer than 5 minutes.
+        "long_test",
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    uses_guestos_test_update = True,
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
         ":lib",
