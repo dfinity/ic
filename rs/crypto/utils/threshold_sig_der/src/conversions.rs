@@ -17,9 +17,6 @@ pub enum KeyConversionError {
     /// The DER encoding is invalid or decoding failed.
     #[error("Invalid DER encoding: {0}")]
     InvalidDer(String),
-    /// The base64 encoding is invalid.
-    #[error("Invalid base64 encoding: {0}")]
-    InvalidBase64(String),
     /// Failed to encode the key to DER format.
     #[error("Failed to encode key to DER: {0}")]
     DerEncoding(String),
@@ -39,31 +36,16 @@ pub fn parse_threshold_sig_key_from_pem_file(
     pem_file: &Path,
 ) -> Result<ThresholdSigPublicKey, KeyConversionError> {
     let buf = std::fs::read(pem_file).map_err(|e| KeyConversionError::IoError(e.to_string()))?;
-    let s = String::from_utf8_lossy(&buf);
-    let lines: Vec<_> = s.trim_end().lines().collect();
-    let n = lines.len();
+    let pem = pem::parse(&buf).map_err(|e| KeyConversionError::InvalidPem(format!("{e:?}")))?;
 
-    if n < 3 {
-        return Err(KeyConversionError::InvalidPem(
-            "input file is too short".to_string(),
-        ));
+    if pem.tag() != "PUBLIC KEY" {
+        return Err(KeyConversionError::InvalidPem(format!(
+            "expected 'PUBLIC KEY' tag, got '{}'",
+            pem.tag()
+        )));
     }
 
-    if !lines[0].starts_with("-----BEGIN PUBLIC KEY-----") {
-        return Err(KeyConversionError::InvalidPem(
-            "PEM file doesn't start with 'BEGIN PUBLIC KEY' block".to_string(),
-        ));
-    }
-    if !lines[n - 1].starts_with("-----END PUBLIC KEY-----") {
-        return Err(KeyConversionError::InvalidPem(
-            "PEM file doesn't end with 'END PUBLIC KEY' block".to_string(),
-        ));
-    }
-
-    let decoded = base64::decode(lines[1..n - 1].join(""))
-        .map_err(|err| KeyConversionError::InvalidBase64(err.to_string()))?;
-
-    parse_threshold_sig_key_from_der(&decoded)
+    parse_threshold_sig_key_from_der(pem.contents())
 }
 
 /// Parse a DER format threshold signature public key from bytes.
@@ -105,12 +87,11 @@ pub fn threshold_sig_public_key_to_pem(
 
 /// Encodes DER-encoded public key bytes into PEM format.
 pub fn public_key_der_to_pem(der_bytes: &[u8]) -> Vec<u8> {
-    let mut pem = vec![];
-    pem.extend_from_slice(b"-----BEGIN PUBLIC KEY-----\n");
-    for chunk in base64::encode(der_bytes).as_bytes().chunks(64) {
-        pem.extend_from_slice(chunk);
-        pem.extend_from_slice(b"\n");
-    }
-    pem.extend_from_slice(b"-----END PUBLIC KEY-----\n");
-    pem
+    pem::encode_config(
+        &pem::Pem::new("PUBLIC KEY", der_bytes),
+        pem::EncodeConfig::new().set_line_ending(pem::LineEnding::LF),
+    )
+    .into_bytes()
+
+    //pem::encode(&pem::Pem::new("PUBLIC KEY", der_bytes)).into_bytes()
 }
