@@ -3,6 +3,8 @@ use crate::tx::UnsignedTransaction;
 use crate::{Network, fake_sign};
 use ic_btc_interface::{MillisatoshiPerByte, Satoshi};
 use std::cmp::max;
+#[cfg(test)]
+mod tests;
 
 pub trait FeeEstimator {
     const DUST_LIMIT: u64;
