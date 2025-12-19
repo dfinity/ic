@@ -9,7 +9,6 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 pub mod arbitrary;
 
 pub mod conversions;
-mod generic_traits;
 
 /// A BLS secret key is a field element.
 pub type SecretKey = Scalar;
@@ -41,8 +40,15 @@ impl SecretKeyBytes {
     }
 }
 
+// Note: This is needed to keep sensitive material from getting Debug logged.
+impl std::fmt::Debug for SecretKeyBytes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "REDACTED")
+    }
+}
+
 /// Wrapper for a serialized individual signature.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct IndividualSignatureBytes(pub [u8; IndividualSignatureBytes::SIZE]);
 ic_crypto_internal_types::derive_serde!(IndividualSignatureBytes, IndividualSignatureBytes::SIZE);
 impl IndividualSignatureBytes {
@@ -50,7 +56,7 @@ impl IndividualSignatureBytes {
 }
 
 /// Wrapper for a serialized proof of possession.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct PopBytes(pub [u8; PopBytes::SIZE]);
 ic_crypto_internal_types::derive_serde!(PopBytes, PopBytes::SIZE);
 impl PopBytes {
@@ -58,7 +64,7 @@ impl PopBytes {
 }
 
 /// Wrapper for a serialized combined signature.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct CombinedSignatureBytes(pub [u8; CombinedSignatureBytes::SIZE]);
 ic_crypto_internal_types::derive_serde!(CombinedSignatureBytes, CombinedSignatureBytes::SIZE);
 impl CombinedSignatureBytes {
@@ -66,7 +72,7 @@ impl CombinedSignatureBytes {
 }
 
 /// Wrapper for a serialized public key.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct PublicKeyBytes(pub [u8; PublicKeyBytes::SIZE]);
 ic_crypto_internal_types::derive_serde!(PublicKeyBytes, PublicKeyBytes::SIZE);
 impl PublicKeyBytes {
