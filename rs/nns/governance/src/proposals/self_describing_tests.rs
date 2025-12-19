@@ -8,7 +8,7 @@ use ic_nns_governance_derive_self_describing::SelfDescribing;
 use maplit::hashmap;
 
 #[track_caller]
-fn assert_self_describing_value_is(
+fn assert_proposal_action_self_describing_value_is(
     action: impl LocallyDescribableProposalAction,
     expected: SelfDescribingValue,
 ) {
@@ -40,7 +40,7 @@ fn test_motion_to_self_describing() {
     let motion = Motion {
         motion_text: "This is a motion".to_string(),
     };
-    assert_self_describing_value_is(
+    assert_proposal_action_self_describing_value_is(
         motion,
         SelfDescribingValue::Map(hashmap! {
             "motion_text".to_string() => SelfDescribingValue::Text("This is a motion".to_string()),
@@ -56,7 +56,7 @@ fn test_approve_genesis_kyc_to_self_describing() {
             PrincipalId::new_user_test_id(2),
         ],
     };
-    assert_self_describing_value_is(
+    assert_proposal_action_self_describing_value_is(
         approve_genesis_kyc,
         SelfDescribingValue::Map(hashmap! {
             "principals".to_string() => SelfDescribingValue::Array(vec![
@@ -73,7 +73,7 @@ fn test_approve_genesis_kyc_to_self_describing() {
 #[derive(SelfDescribing)]
 struct TestNamedStruct {
     name: String,
-    count: u64,
+    count: Option<u64>,
 }
 
 /// Test enum with all unit variants.
@@ -105,18 +105,29 @@ enum TestMixedEnum {
     WithValue(InnerValue),
 }
 
+#[track_caller]
+fn assert_self_describing_value_is<T>(value: T, expected: SelfDescribingValue)
+where
+    crate::pb::v1::SelfDescribingValue: From<T>,
+{
+    assert_eq!(
+        SelfDescribingValue::from(SelfDescribingValuePb::from(value)),
+        expected
+    );
+}
+
 #[test]
 fn test_derive_named_struct() {
-    let test_struct = TestNamedStruct {
-        name: "test".to_string(),
-        count: 42,
-    };
-    let value = SelfDescribingValue::from(SelfDescribingValuePb::from(test_struct));
-    assert_eq!(
-        value,
+    assert_self_describing_value_is(
+        TestNamedStruct {
+            name: "test".to_string(),
+            count: Some(42),
+        },
         SelfDescribingValue::Map(hashmap! {
             "name".to_string() => SelfDescribingValue::Text("test".to_string()),
-            "count".to_string() => SelfDescribingValue::Nat(candid::Nat::from(42u64)),
+            "count".to_string() => SelfDescribingValue::Array(
+                vec![SelfDescribingValue::Nat(candid::Nat::from(42u64))]
+            ),
         }),
     );
 }
@@ -128,20 +139,20 @@ fn test_derive_all_unit_enum() {
         (TestAllUnitEnum::VariantB, "VariantB"),
         (TestAllUnitEnum::VariantC, "VariantC"),
     ] {
-        let value = SelfDescribingValue::from(SelfDescribingValuePb::from(variant));
-        assert_eq!(value, SelfDescribingValue::Text(expected_name.to_string()));
+        assert_self_describing_value_is(
+            variant,
+            SelfDescribingValue::Text(expected_name.to_string()),
+        );
     }
 }
 
 #[test]
 fn test_derive_single_tuple_enum() {
-    let variant = TestSingleTupleEnum::First(InnerValue { id: 123 });
-    let value = SelfDescribingValue::from(SelfDescribingValuePb::from(variant));
-    assert_eq!(
-        value,
+    assert_self_describing_value_is(
+        TestSingleTupleEnum::First(InnerValue { id: 123 }),
         SelfDescribingValue::Map(hashmap! {
             "First".to_string() => SelfDescribingValue::Map(hashmap! {
-                "id".to_string() => SelfDescribingValue::Nat(candid::Nat::from(123u64)),
+                "id".to_string() => SelfDescribingValue::Nat(candid::Nat::from(123_u64)),
             }),
         }),
     );
@@ -149,10 +160,8 @@ fn test_derive_single_tuple_enum() {
 
 #[test]
 fn test_derive_mixed_enum_unit_variant() {
-    let variant = TestMixedEnum::Empty;
-    let value = SelfDescribingValue::from(SelfDescribingValuePb::from(variant));
-    assert_eq!(
-        value,
+    assert_self_describing_value_is(
+        TestMixedEnum::Empty,
         SelfDescribingValue::Map(hashmap! {
             "Empty".to_string() => SelfDescribingValue::Array(vec![]),
         }),
@@ -161,13 +170,11 @@ fn test_derive_mixed_enum_unit_variant() {
 
 #[test]
 fn test_derive_mixed_enum_tuple_variant() {
-    let variant = TestMixedEnum::WithValue(InnerValue { id: 456 });
-    let value = SelfDescribingValue::from(SelfDescribingValuePb::from(variant));
-    assert_eq!(
-        value,
+    assert_self_describing_value_is(
+        TestMixedEnum::WithValue(InnerValue { id: 456 }),
         SelfDescribingValue::Map(hashmap! {
             "WithValue".to_string() => SelfDescribingValue::Map(hashmap! {
-                "id".to_string() => SelfDescribingValue::Nat(candid::Nat::from(456u64)),
+                "id".to_string() => SelfDescribingValue::Nat(candid::Nat::from(456_u64)),
             }),
         }),
     );
