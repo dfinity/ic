@@ -764,6 +764,7 @@ fn extract_errors_from_logs(log_lines: &[String]) -> Vec<String> {
     log_lines[start..].to_vec()
 }
 
+#[derive(Debug)]
 struct PrepResults {
     version_hash_full: String,
     recovery_hash_full: String,
@@ -772,7 +773,11 @@ struct PrepResults {
 fn read_prep_metadata() -> Result<PrepResults> {
     let contents = fs::read_to_string(PREP_METADATA_PATH)
         .with_context(|| format!("Failed to read prep metadata at {}", PREP_METADATA_PATH))?;
+    parse_prep_metadata(&contents)
+}
 
+/// Parses prep metadata from a key=value formatted string.
+fn parse_prep_metadata(contents: &str) -> Result<PrepResults> {
     let mut version_hash_full: Option<String> = None;
     let mut recovery_hash_full: Option<String> = None;
 
@@ -1456,5 +1461,25 @@ mod tests {
         } else {
             panic!("Expected Input state");
         }
+    }
+
+    // ========================================================================
+    // Unit Tests: Prep Metadata Parsing
+    // ========================================================================
+
+    #[test]
+    fn test_parse_prep_metadata() {
+        let contents = "VERSION_HASH_FULL=abc123def456\nRECOVERY_HASH_FULL=789xyz";
+        let result = parse_prep_metadata(contents).unwrap();
+
+        assert_eq!(result.version_hash_full, "abc123def456");
+        assert_eq!(result.recovery_hash_full, "789xyz");
+    }
+
+    #[test]
+    fn test_parse_prep_metadata_empty_content() {
+        let result = parse_prep_metadata("");
+
+        assert!(result.is_err());
     }
 }
