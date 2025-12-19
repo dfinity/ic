@@ -14,10 +14,10 @@ use ic_cketh_minter::endpoints::events::{
     Event as CandidEvent, EventSource as CandidEventSource, GetEventsArg, GetEventsResult,
 };
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, Eip1559TransactionPrice,
-    Eip1559TransactionPriceArg, Erc20Balance, GasFeeEstimate, MemoType, MinterInfo,
-    RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail, WithdrawalError,
-    WithdrawalSearchParameter,
+    AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoError, DecodeLedgerMemoResult,
+    DecodedMemo, Eip1559TransactionPrice, Eip1559TransactionPriceArg, Erc20Balance, GasFeeEstimate,
+    MemoType, MinterInfo, RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail,
+    WithdrawalError, WithdrawalSearchParameter,
 };
 use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{
@@ -27,7 +27,7 @@ use ic_cketh_minter::guard::retrieve_withdraw_guard;
 use ic_cketh_minter::ledger_client::{LedgerBurnError, LedgerClient};
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::INFO;
-use ic_cketh_minter::memo::BurnMemo;
+use ic_cketh_minter::memo::{BurnMemo, MintMemo};
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
 use ic_cketh_minter::state::audit::{Event, EventType, process_event};
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
@@ -890,15 +890,19 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
 #[query]
 fn decode_ledger_memo(arg: DecodeLedgerMemoArgs) -> DecodeLedgerMemoResult {
     match args.memo_type {
-        MemoType::Burn => match minicbor::decode::<memo::BurnMemo>(&args.encoded_memo) {
-            Ok(burn_memo) => Ok(Some(DecodedMemo::Burn(Some(BurnMemo::from(burn_memo))))),
+        MemoType::Burn => match minicbor::decode::<BurnMemo>(&args.encoded_memo) {
+            Ok(burn_memo) => Ok(Some(DecodedMemo::Burn(Some(endpoints::BurnMemo::from(
+                burn_memo,
+            ))))),
             Err(err) => Err(Some(DecodeLedgerMemoError::InvalidMemo(format!(
                 "Error decoding BurnMemo: {}",
                 err
             )))),
         },
-        MemoType::Mint => match minicbor::decode::<memo::MintMemo>(&args.encoded_memo) {
-            Ok(mint_memo) => Ok(Some(DecodedMemo::Mint(Some(MintMemo::from(mint_memo))))),
+        MemoType::Mint => match minicbor::decode::<MintMemo>(&args.encoded_memo) {
+            Ok(mint_memo) => Ok(Some(DecodedMemo::Mint(Some(endpoints::MintMemo::from(
+                mint_memo,
+            ))))),
             Err(err) => Err(Some(DecodeLedgerMemoError::InvalidMemo(format!(
                 "Error decoding MintMemo: {}",
                 err
