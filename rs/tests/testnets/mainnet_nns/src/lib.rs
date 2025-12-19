@@ -148,6 +148,7 @@ pub fn setup(env: TestEnv) {
 
     patch_env_local_store(&env);
     patch_env_root_public_key(&env);
+    remove_large_files(&env);
 }
 
 fn setup_recovered_nns(
@@ -781,4 +782,12 @@ fn patch_env_root_public_key(env: &TestEnv) {
         env.prep_dir("").unwrap().root_public_key_path(),
     )
     .unwrap();
+}
+
+fn remove_large_files(env: &TestEnv) {
+    let mut rm = Command::new("rm");
+    rm.arg("-rf")
+        .arg(env.get_path(PATH_STATE_TARBALL))
+        .arg(env.get_path("recovery"));
+    rm.output().expect("Failed to remove large files");
 }
