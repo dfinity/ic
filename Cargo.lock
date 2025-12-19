@@ -12327,6 +12327,7 @@ dependencies = [
  "candid",
  "ic-base-types",
  "ic-cdk",
+ "ic-management-canister-types-private",
  "ic-nervous-system-clients",
  "ic-nns-constants",
  "serde",
