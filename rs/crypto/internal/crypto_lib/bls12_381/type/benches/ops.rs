@@ -8,7 +8,7 @@ use std::sync::Arc;
 const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(100);
 
 fn random_g1<R: Rng + CryptoRng>(rng: &mut R) -> G1Projective {
-    G1Projective::hash(b"domain_sep", &rng.r#gen::<[u8; 32]>())
+    G1Projective::hash("domain_sep", &rng.r#gen::<[u8; 32]>())
 }
 
 fn n_random_g1<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G1Projective> {
@@ -20,7 +20,7 @@ fn n_random_g1<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G1Projective> {
 }
 
 fn random_g2<R: Rng + CryptoRng>(rng: &mut R) -> G2Projective {
-    G2Projective::hash(b"domain_sep", &rng.r#gen::<[u8; 32]>())
+    G2Projective::hash("domain_sep", &rng.r#gen::<[u8; 32]>())
 }
 
 fn n_random_g2<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G2Projective> {
@@ -300,7 +300,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
     group.bench_function("hash_32_B", |b| {
         b.iter_batched_ref(
             || rng.r#gen::<[u8; 32]>(),
-            |bytes| G1Projective::hash(b"dst", bytes.as_slice()),
+            |bytes| G1Projective::hash("dst", bytes.as_slice()),
             BatchSize::SmallInput,
         )
     });
@@ -520,7 +520,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
     group.bench_function("hash_32_B", |b| {
         b.iter_batched_ref(
             || rng.r#gen::<[u8; 32]>(),
-            |bytes| G2Projective::hash(b"dst", bytes.as_slice()),
+            |bytes| G2Projective::hash("dst", bytes.as_slice()),
             BatchSize::SmallInput,
         )
     });

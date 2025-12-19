@@ -8,7 +8,7 @@ use ic_adapter_metrics_client::AdapterMetrics;
 use ic_config::crypto::{CryptoConfig, CspVaultType};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_logger::{ReplicaLogger, info};
-use ic_types::crypto::{AlgorithmId, CryptoError};
+use ic_types::crypto::CryptoError;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -92,13 +92,16 @@ fn unix_socket_vault(
 impl From<CspBasicSignatureError> for CryptoError {
     fn from(e: CspBasicSignatureError) -> CryptoError {
         match e {
-            CspBasicSignatureError::SecretKeyNotFound(key_id) => CryptoError::SecretKeyNotFound {
-                algorithm: AlgorithmId::Ed25519,
-                key_id: key_id.to_string(),
+            CspBasicSignatureError::SecretKeyNotFound(key_id) => CryptoError::InternalError {
+                internal_error: format!(
+                    "missing node signing secret key in secret key store (Key ID: {key_id})"
+                ),
             },
             CspBasicSignatureError::WrongSecretKeyType { secret_key_variant } => {
-                CryptoError::InvalidArgument {
-                    message: format!("Wrong secret key type: {secret_key_variant}"),
+                CryptoError::InternalError {
+                    internal_error: format!(
+                        "the node signing secret key has the wrong type in the secret key store: {secret_key_variant}"
+                    ),
                 }
             }
             CspBasicSignatureError::TransientInternalError { internal_error } => {

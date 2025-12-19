@@ -17,12 +17,11 @@ use ic_types::{
 
 /// Domain separator for Hash-to-G1 to be used for signature generation as
 /// as specified in the Basic ciphersuite in https://tools.ietf.org/html/draft-irtf-cfrg-bls-signature-04#section-4.2.1
-const DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG: &[u8; 43] =
-    b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
+const DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG: &str = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
 
 /// Hashes `msg` to a point in `G1`.
 fn hash_message_to_g1(msg: &[u8]) -> G1Projective {
-    G1Projective::hash(&DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG[..], msg)
+    G1Projective::hash(DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG, msg)
 }
 
 #[cfg(test)]

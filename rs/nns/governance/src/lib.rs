@@ -226,7 +226,7 @@ thread_local! {
 }
 
 thread_local! {
-    static ARE_PERFORMANCE_BASED_REWARDS_ENABLED: Cell<bool> = const { Cell::new(cfg!(any(feature = "test", feature = "performance-based-rewards"))) };
+    static ARE_PERFORMANCE_BASED_REWARDS_ENABLED: Cell<bool> = const { Cell::new(true) };
 }
 
 pub(crate) fn are_performance_based_rewards_enabled() -> bool {
