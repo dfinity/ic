@@ -17,7 +17,6 @@ ic-testnet-mainnet-nns = { path = "../../testnets/mainnet_nns" }
 ic-types = { path = "../../../types/types" }
 nested = { path = "../../nested" }
 rand = { workspace = true }
-sha2 = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 
