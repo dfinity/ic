@@ -897,589 +897,580 @@ mod tests {
     }
 
     // ========================================================================
-    // Unit Tests: Validation and Helpers
+    // Unit Tests
     // ========================================================================
 
-    #[test]
-    fn test_is_lowercase_hex() {
-        // Valid: digits and lowercase a-f
-        assert!(is_lowercase_hex('0'));
-        assert!(is_lowercase_hex('9'));
-        assert!(is_lowercase_hex('a'));
-        assert!(is_lowercase_hex('f'));
+    mod validation {
+        use super::*;
 
-        // Invalid: uppercase, out of range, special chars
-        assert!(!is_lowercase_hex('A'));
-        assert!(!is_lowercase_hex('F'));
-        assert!(!is_lowercase_hex('g'));
-        assert!(!is_lowercase_hex(' '));
+        #[test]
+        fn is_lowercase_hex_accepts_valid() {
+            assert!(is_lowercase_hex('0'));
+            assert!(is_lowercase_hex('9'));
+            assert!(is_lowercase_hex('a'));
+            assert!(is_lowercase_hex('f'));
+        }
+
+        #[test]
+        fn is_lowercase_hex_rejects_invalid() {
+            assert!(!is_lowercase_hex('A'));
+            assert!(!is_lowercase_hex('F'));
+            assert!(!is_lowercase_hex('g'));
+            assert!(!is_lowercase_hex(' '));
+        }
+
+        #[test]
+        fn validate_inputs_accepts_valid_params() {
+            let params = RecoveryParams {
+                version: "0123456789abcdef0123456789abcdef01234567".to_string(),
+                recovery_hash_prefix: "a1b2c3".to_string(),
+                ..Default::default()
+            };
+            assert!(params.validate_inputs().is_ok());
+        }
+
+        #[test]
+        fn validate_inputs_rejects_invalid_version() {
+            let valid_hash = "abc123".to_string();
+
+            // Empty
+            let params = RecoveryParams {
+                version: String::new(),
+                recovery_hash_prefix: valid_hash.clone(),
+                ..Default::default()
+            };
+            assert!(params.validate_inputs().is_err());
+
+            // Wrong length
+            let params = RecoveryParams {
+                version: "abc".to_string(),
+                recovery_hash_prefix: valid_hash.clone(),
+                ..Default::default()
+            };
+            assert!(params.validate_inputs().is_err());
+
+            // Invalid chars (uppercase)
+            let params = RecoveryParams {
+                version: "A".repeat(VERSION_LENGTH),
+                recovery_hash_prefix: valid_hash,
+                ..Default::default()
+            };
+            assert!(params.validate_inputs().is_err());
+        }
+
+        #[test]
+        fn validate_inputs_rejects_invalid_recovery_hash() {
+            let valid_version = "a".repeat(VERSION_LENGTH);
+
+            // Empty
+            let params = RecoveryParams {
+                version: valid_version.clone(),
+                recovery_hash_prefix: String::new(),
+                ..Default::default()
+            };
+            assert!(params.validate_inputs().is_err());
+
+            // Wrong length
+            let params = RecoveryParams {
+                version: valid_version.clone(),
+                recovery_hash_prefix: "abc".to_string(),
+                ..Default::default()
+            };
+            assert!(params.validate_inputs().is_err());
+
+            // Invalid chars (uppercase)
+            let params = RecoveryParams {
+                version: valid_version,
+                recovery_hash_prefix: "ABCDEF".to_string(),
+                ..Default::default()
+            };
+            assert!(params.validate_inputs().is_err());
+        }
     }
 
-    #[test]
-    fn test_validate_inputs_valid() {
-        let params = RecoveryParams {
-            version: "0123456789abcdef0123456789abcdef01234567".to_string(),
-            recovery_hash_prefix: "a1b2c3".to_string(),
-            ..Default::default()
-        };
-        assert!(params.validate_inputs().is_ok());
+    mod prep_metadata {
+        use super::*;
+
+        #[test]
+        fn parses_valid_metadata() {
+            let contents = "VERSION_HASH_FULL=abc123def456\nRECOVERY_HASH_FULL=789xyz";
+            let result = parse_prep_metadata(contents).unwrap();
+
+            assert_eq!(result.version_hash_full, "abc123def456");
+            assert_eq!(result.recovery_hash_full, "789xyz");
+        }
+
+        #[test]
+        fn rejects_empty_content() {
+            let result = parse_prep_metadata("");
+            assert!(result.is_err());
+        }
     }
 
-    #[test]
-    fn test_validate_inputs_rejects_invalid_version() {
-        let valid_hash = "abc123".to_string();
+    mod log_extraction {
+        use super::*;
 
-        // Empty
-        let params = RecoveryParams {
-            version: String::new(),
-            recovery_hash_prefix: valid_hash.clone(),
-            ..Default::default()
-        };
-        assert!(params.validate_inputs().is_err());
+        #[test]
+        fn returns_all_when_under_limit() {
+            assert!(extract_errors_from_logs(&[]).is_empty());
 
-        // Wrong length
-        let params = RecoveryParams {
-            version: "abc".to_string(),
-            recovery_hash_prefix: valid_hash.clone(),
-            ..Default::default()
-        };
-        assert!(params.validate_inputs().is_err());
+            let logs: Vec<String> = (0..10).map(|i| format!("line {}", i)).collect();
+            let result = extract_errors_from_logs(&logs);
+            assert_eq!(result.len(), 10);
+        }
 
-        // Invalid chars (uppercase)
-        let params = RecoveryParams {
-            version: "A".repeat(VERSION_LENGTH),
-            recovery_hash_prefix: valid_hash,
-            ..Default::default()
-        };
-        assert!(params.validate_inputs().is_err());
-    }
+        #[test]
+        fn truncates_to_last_n() {
+            let total = MAX_ERROR_LINES + 20;
+            let logs: Vec<String> = (0..total).map(|i| format!("line {}", i)).collect();
+            let result = extract_errors_from_logs(&logs);
 
-    #[test]
-    fn test_validate_inputs_rejects_invalid_recovery_hash() {
-        let valid_version = "a".repeat(VERSION_LENGTH);
-
-        // Empty
-        let params = RecoveryParams {
-            version: valid_version.clone(),
-            recovery_hash_prefix: String::new(),
-            ..Default::default()
-        };
-        assert!(params.validate_inputs().is_err());
-
-        // Wrong length
-        let params = RecoveryParams {
-            version: valid_version.clone(),
-            recovery_hash_prefix: "abc".to_string(),
-            ..Default::default()
-        };
-        assert!(params.validate_inputs().is_err());
-
-        // Invalid chars (uppercase)
-        let params = RecoveryParams {
-            version: valid_version,
-            recovery_hash_prefix: "ABCDEF".to_string(),
-            ..Default::default()
-        };
-        assert!(params.validate_inputs().is_err());
-    }
-
-    #[test]
-    fn test_extract_errors_returns_all_when_under_limit() {
-        assert!(extract_errors_from_logs(&[]).is_empty());
-
-        let logs: Vec<String> = (0..10).map(|i| format!("line {}", i)).collect();
-        let result = extract_errors_from_logs(&logs);
-        assert_eq!(result.len(), 10);
-    }
-
-    #[test]
-    fn test_extract_errors_truncates_to_last_n() {
-        let total = MAX_ERROR_LINES + 20;
-        let logs: Vec<String> = (0..total).map(|i| format!("line {}", i)).collect();
-        let result = extract_errors_from_logs(&logs);
-
-        assert_eq!(result.len(), MAX_ERROR_LINES);
-        assert_eq!(result[0], format!("line {}", total - MAX_ERROR_LINES));
-    }
-
-    // ========================================================================
-    // State Machine Tests: Global Behaviors
-    // ========================================================================
-
-    #[test]
-    fn test_ctrl_c_quits_from_any_state() {
-        // From Input state
-        let mut app = GuestOSRecoveryApp::default();
-        app.handle_event(Event::Key(ctrl_c_event())).unwrap();
-        assert!(app.is_should_quit());
-
-        // From Confirmation state
-        let confirmation = ConfirmationState {
-            input_state: InputState::default(),
-            params: RecoveryParams::default(),
-            selected_option: ConfirmationOption::Yes,
-        };
-        let mut app = GuestOSRecoveryApp::with_state(AppState::InputConfirmation(confirmation));
-        app.handle_event(Event::Key(ctrl_c_event())).unwrap();
-        assert!(app.is_should_quit());
-
-        // From Failure state
-        let failure = create_test_failure_state();
-        let mut app = GuestOSRecoveryApp::with_state(AppState::Failure(failure));
-        app.handle_event(Event::Key(ctrl_c_event())).unwrap();
-        assert!(app.is_should_quit());
-    }
-
-    // ========================================================================
-    // State Machine Tests: Input State Navigation
-    // ========================================================================
-
-    #[test]
-    fn test_tab_navigates_forward() {
-        let mut app = GuestOSRecoveryApp::default();
-
-        // Start at Version (index 0)
-        assert!(matches!(
-            app.get_state(),
-            Some(AppState::Input(s)) if s.current_field() == Field::Version
-        ));
-
-        // Tab to RecoveryHashPrefix
-        app.handle_event(Event::Key(key_event(KeyCode::Tab)))
-            .unwrap();
-        assert!(matches!(
-            app.get_state(),
-            Some(AppState::Input(s)) if s.current_field() == Field::RecoveryHashPrefix
-        ));
-
-        // Tab to CheckArtifactsButton
-        app.handle_event(Event::Key(key_event(KeyCode::Tab)))
-            .unwrap();
-        assert!(matches!(
-            app.get_state(),
-            Some(AppState::Input(s)) if s.current_field() == Field::CheckArtifactsButton
-        ));
-
-        // Tab to ExitButton
-        app.handle_event(Event::Key(key_event(KeyCode::Tab)))
-            .unwrap();
-        assert!(matches!(
-            app.get_state(),
-            Some(AppState::Input(s)) if s.current_field() == Field::ExitButton
-        ));
-
-        // Tab wraps to Version
-        app.handle_event(Event::Key(key_event(KeyCode::Tab)))
-            .unwrap();
-        assert!(matches!(
-            app.get_state(),
-            Some(AppState::Input(s)) if s.current_field() == Field::Version
-        ));
-    }
-
-    #[test]
-    fn test_up_arrow_navigates_backward() {
-        let mut app = GuestOSRecoveryApp::default();
-
-        // Up from Version wraps to ExitButton
-        app.handle_event(Event::Key(key_event(KeyCode::Up)))
-            .unwrap();
-        assert!(matches!(
-            app.get_state(),
-            Some(AppState::Input(s)) if s.current_field() == Field::ExitButton
-        ));
-
-        // Up to CheckArtifactsButton
-        app.handle_event(Event::Key(key_event(KeyCode::Up)))
-            .unwrap();
-        assert!(matches!(
-            app.get_state(),
-            Some(AppState::Input(s)) if s.current_field() == Field::CheckArtifactsButton
-        ));
-    }
-
-    #[test]
-    fn test_left_right_toggles_buttons() {
-        let input_state = InputState {
-            focused_index: 2, // CheckArtifactsButton
-            ..Default::default()
-        };
-        let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
-
-        assert!(matches!(
-            app.get_state(),
-            Some(AppState::Input(s)) if s.current_field() == Field::CheckArtifactsButton
-        ));
-
-        // Right arrow toggles to ExitButton
-        app.handle_event(Event::Key(key_event(KeyCode::Right)))
-            .unwrap();
-        assert!(matches!(
-            app.get_state(),
-            Some(AppState::Input(s)) if s.current_field() == Field::ExitButton
-        ));
-
-        // Left arrow toggles back to CheckArtifactsButton
-        app.handle_event(Event::Key(key_event(KeyCode::Left)))
-            .unwrap();
-        assert!(matches!(
-            app.get_state(),
-            Some(AppState::Input(s)) if s.current_field() == Field::CheckArtifactsButton
-        ));
-    }
-
-    #[test]
-    fn test_left_right_does_nothing_on_input_fields() {
-        let mut app = GuestOSRecoveryApp::default();
-
-        // On Version field, left/right should not change focus
-        app.handle_event(Event::Key(key_event(KeyCode::Left)))
-            .unwrap();
-        assert!(matches!(
-            app.get_state(),
-            Some(AppState::Input(s)) if s.current_field() == Field::Version
-        ));
-
-        app.handle_event(Event::Key(key_event(KeyCode::Right)))
-            .unwrap();
-        assert!(matches!(
-            app.get_state(),
-            Some(AppState::Input(s)) if s.current_field() == Field::Version
-        ));
-    }
-
-    // ========================================================================
-    // State Machine Tests: Input State - Escape Key
-    // ========================================================================
-
-    #[test]
-    fn test_escape_quits_from_input_state() {
-        let mut app = GuestOSRecoveryApp::default();
-
-        app.handle_event(Event::Key(key_event(KeyCode::Esc)))
-            .unwrap();
-
-        assert!(app.is_should_quit());
-        if let Some(AppState::Input(state)) = app.get_state() {
-            assert!(state.exit_message.is_some());
-            assert!(state.exit_message.as_ref().unwrap().contains("cancelled"));
-        } else {
-            panic!("Expected Input state");
+            assert_eq!(result.len(), MAX_ERROR_LINES);
+            assert_eq!(result[0], format!("line {}", total - MAX_ERROR_LINES));
         }
     }
 
     // ========================================================================
-    // State Machine Tests: Input State - Text Entry
+    // State Machine Tests
     // ========================================================================
 
-    #[test]
-    fn test_text_input_accepts_lowercase_hex() {
-        let mut app = GuestOSRecoveryApp::default();
+    mod global_behavior {
+        use super::*;
 
-        // Type valid hex characters
-        for c in ['0', '1', '9', 'a', 'b', 'f'] {
-            app.handle_event(Event::Key(char_event(c))).unwrap();
+        #[test]
+        fn ctrl_c_quits_from_input_state() {
+            let mut app = GuestOSRecoveryApp::default();
+            app.handle_event(Event::Key(ctrl_c_event())).unwrap();
+            assert!(app.is_should_quit());
         }
 
-        if let Some(AppState::Input(state)) = app.get_state() {
-            assert_eq!(state.get_field_text(Field::Version), "019abf");
-        } else {
-            panic!("Expected Input state");
-        }
-    }
-
-    #[test]
-    fn test_text_input_rejects_invalid_characters() {
-        let mut app = GuestOSRecoveryApp::default();
-
-        // Try to type invalid characters (uppercase, non-hex)
-        for c in ['A', 'G', 'z', ' ', '!'] {
-            app.handle_event(Event::Key(char_event(c))).unwrap();
+        #[test]
+        fn ctrl_c_quits_from_confirmation_state() {
+            let confirmation = ConfirmationState {
+                input_state: InputState::default(),
+                params: RecoveryParams::default(),
+                selected_option: ConfirmationOption::Yes,
+            };
+            let mut app = GuestOSRecoveryApp::with_state(AppState::InputConfirmation(confirmation));
+            app.handle_event(Event::Key(ctrl_c_event())).unwrap();
+            assert!(app.is_should_quit());
         }
 
-        if let Some(AppState::Input(state)) = app.get_state() {
-            // Should be empty - no characters accepted
-            assert_eq!(state.get_field_text(Field::Version), "");
-        } else {
-            panic!("Expected Input state");
-        }
-    }
-
-    #[test]
-    fn test_text_input_respects_max_length() {
-        let mut app = GuestOSRecoveryApp::default();
-
-        // Type more than VERSION_LENGTH characters
-        for _ in 0..(VERSION_LENGTH + 10) {
-            app.handle_event(Event::Key(char_event('a'))).unwrap();
+        #[test]
+        fn ctrl_c_quits_from_failure_state() {
+            let failure = create_test_failure_state();
+            let mut app = GuestOSRecoveryApp::with_state(AppState::Failure(failure));
+            app.handle_event(Event::Key(ctrl_c_event())).unwrap();
+            assert!(app.is_should_quit());
         }
 
-        if let Some(AppState::Input(state)) = app.get_state() {
-            // Should be capped at VERSION_LENGTH
-            assert_eq!(state.get_field_text(Field::Version).len(), VERSION_LENGTH);
-        } else {
-            panic!("Expected Input state");
+        #[test]
+        fn non_press_events_are_ignored() {
+            let mut app = GuestOSRecoveryApp::default();
+
+            let release_event = KeyEvent {
+                code: KeyCode::Tab,
+                modifiers: KeyModifiers::empty(),
+                kind: KeyEventKind::Release,
+                state: KeyEventState::empty(),
+            };
+            app.handle_event(Event::Key(release_event)).unwrap();
+
+            assert!(matches!(
+                app.get_state(),
+                Some(AppState::Input(s)) if s.current_field() == Field::Version
+            ));
         }
-    }
 
-    #[test]
-    fn test_enter_on_input_field_advances_focus() {
-        let mut app = GuestOSRecoveryApp::default();
+        #[test]
+        fn repeat_events_are_handled() {
+            let mut app = GuestOSRecoveryApp::default();
 
-        // Press Enter on Version field
-        app.handle_event(Event::Key(key_event(KeyCode::Enter)))
-            .unwrap();
+            let repeat_event = KeyEvent {
+                code: KeyCode::Tab,
+                modifiers: KeyModifiers::empty(),
+                kind: KeyEventKind::Repeat,
+                state: KeyEventState::empty(),
+            };
+            app.handle_event(Event::Key(repeat_event)).unwrap();
 
-        // Should advance to RecoveryHashPrefix
-        assert!(matches!(
-            app.get_state(),
-            Some(AppState::Input(s)) if s.current_field() == Field::RecoveryHashPrefix
-        ));
-    }
-
-    #[test]
-    fn test_typing_clears_error_message() {
-        let input_state = InputState {
-            error_message: Some("Previous error".to_string()),
-            ..Default::default()
-        };
-        let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
-
-        // Any key event should clear the error
-        app.handle_event(Event::Key(char_event('a'))).unwrap();
-
-        if let Some(AppState::Input(state)) = app.get_state() {
-            assert!(state.error_message.is_none());
-        } else {
-            panic!("Expected Input state");
+            assert!(matches!(
+                app.get_state(),
+                Some(AppState::Input(s)) if s.current_field() == Field::RecoveryHashPrefix
+            ));
         }
     }
 
-    // ========================================================================
-    // State Machine Tests: Input State - Submission
-    // ========================================================================
+    mod input_state {
+        use super::*;
 
-    #[test]
-    fn test_exit_button_quits() {
-        let input_state = InputState {
-            focused_index: 3, // ExitButton
-            ..Default::default()
-        };
-        let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
+        mod navigation {
+            use super::*;
 
-        app.handle_event(Event::Key(key_event(KeyCode::Enter)))
-            .unwrap();
+            #[test]
+            fn tab_navigates_forward_through_all_fields() {
+                let mut app = GuestOSRecoveryApp::default();
 
-        assert!(app.is_should_quit());
-    }
+                assert!(matches!(
+                    app.get_state(),
+                    Some(AppState::Input(s)) if s.current_field() == Field::Version
+                ));
 
-    #[test]
-    fn test_check_artifacts_with_empty_inputs_shows_error() {
-        let input_state = InputState {
-            focused_index: 2, // CheckArtifactsButton
-            ..Default::default()
-        };
-        let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
+                app.handle_event(Event::Key(key_event(KeyCode::Tab)))
+                    .unwrap();
+                assert!(matches!(
+                    app.get_state(),
+                    Some(AppState::Input(s)) if s.current_field() == Field::RecoveryHashPrefix
+                ));
 
-        app.handle_event(Event::Key(key_event(KeyCode::Enter)))
-            .unwrap();
+                app.handle_event(Event::Key(key_event(KeyCode::Tab)))
+                    .unwrap();
+                assert!(matches!(
+                    app.get_state(),
+                    Some(AppState::Input(s)) if s.current_field() == Field::CheckArtifactsButton
+                ));
 
-        // Should remain in Input state with error
-        assert!(!app.is_should_quit());
-        if let Some(AppState::Input(state)) = app.get_state() {
-            assert!(state.error_message.is_some());
-            assert!(state.error_message.as_ref().unwrap().contains("VERSION"));
-        } else {
-            panic!("Expected Input state");
-        }
-    }
+                app.handle_event(Event::Key(key_event(KeyCode::Tab)))
+                    .unwrap();
+                assert!(matches!(
+                    app.get_state(),
+                    Some(AppState::Input(s)) if s.current_field() == Field::ExitButton
+                ));
 
-    #[test]
-    fn test_check_artifacts_with_invalid_version_length_shows_error() {
-        let mut input_state = InputState::default();
-        set_field_text(&mut input_state, Field::Version, "abc"); // Too short
-        set_field_text(&mut input_state, Field::RecoveryHashPrefix, "123456");
-        input_state.focused_index = 2; // CheckArtifactsButton
-        let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
-
-        app.handle_event(Event::Key(key_event(KeyCode::Enter)))
-            .unwrap();
-
-        if let Some(AppState::Input(state)) = app.get_state() {
-            assert!(state.error_message.is_some());
-            let error = state.error_message.as_ref().unwrap();
-            assert!(error.contains("40") || error.contains("VERSION"));
-        } else {
-            panic!("Expected Input state");
-        }
-    }
-
-    // ========================================================================
-    // State Machine Tests: Confirmation State
-    // ========================================================================
-
-    #[test]
-    fn test_confirmation_escape_returns_to_input() {
-        let confirmation = ConfirmationState {
-            input_state: InputState::default(),
-            params: RecoveryParams::default(),
-            selected_option: ConfirmationOption::Yes,
-        };
-        let mut app = GuestOSRecoveryApp::with_state(AppState::InputConfirmation(confirmation));
-
-        app.handle_event(Event::Key(key_event(KeyCode::Esc)))
-            .unwrap();
-
-        assert!(matches!(app.get_state(), Some(AppState::Input(_))));
-        assert!(!app.is_should_quit());
-    }
-
-    #[test]
-    fn test_confirmation_navigation() {
-        let confirmation = ConfirmationState {
-            input_state: InputState::default(),
-            params: RecoveryParams::default(),
-            selected_option: ConfirmationOption::Yes,
-        };
-        let mut app = GuestOSRecoveryApp::with_state(AppState::InputConfirmation(confirmation));
-
-        let get_selection = |app: &GuestOSRecoveryApp| {
-            if let Some(AppState::InputConfirmation(state)) = app.get_state() {
-                state.selected_option.clone()
-            } else {
-                panic!("Expected InputConfirmation state");
+                app.handle_event(Event::Key(key_event(KeyCode::Tab)))
+                    .unwrap();
+                assert!(matches!(
+                    app.get_state(),
+                    Some(AppState::Input(s)) if s.current_field() == Field::Version
+                ));
             }
-        };
 
-        // Tab toggles Yes → No → Yes
-        app.handle_event(Event::Key(key_event(KeyCode::Tab)))
-            .unwrap();
-        assert_eq!(get_selection(&app), ConfirmationOption::No);
-        app.handle_event(Event::Key(key_event(KeyCode::Tab)))
-            .unwrap();
-        assert_eq!(get_selection(&app), ConfirmationOption::Yes);
+            #[test]
+            fn up_arrow_navigates_backward() {
+                let mut app = GuestOSRecoveryApp::default();
 
-        // Right selects No, Left selects Yes
-        app.handle_event(Event::Key(key_event(KeyCode::Right)))
-            .unwrap();
-        assert_eq!(get_selection(&app), ConfirmationOption::No);
-        app.handle_event(Event::Key(key_event(KeyCode::Left)))
-            .unwrap();
-        assert_eq!(get_selection(&app), ConfirmationOption::Yes);
-    }
+                app.handle_event(Event::Key(key_event(KeyCode::Up)))
+                    .unwrap();
+                assert!(matches!(
+                    app.get_state(),
+                    Some(AppState::Input(s)) if s.current_field() == Field::ExitButton
+                ));
 
-    #[test]
-    fn test_confirmation_enter_no_returns_to_input() {
-        let confirmation = ConfirmationState {
-            input_state: create_valid_input_state(),
-            params: RecoveryParams::default(),
-            selected_option: ConfirmationOption::No,
-        };
-        let mut app = GuestOSRecoveryApp::with_state(AppState::InputConfirmation(confirmation));
+                app.handle_event(Event::Key(key_event(KeyCode::Up)))
+                    .unwrap();
+                assert!(matches!(
+                    app.get_state(),
+                    Some(AppState::Input(s)) if s.current_field() == Field::CheckArtifactsButton
+                ));
+            }
 
-        app.handle_event(Event::Key(key_event(KeyCode::Enter)))
-            .unwrap();
+            #[test]
+            fn left_right_toggles_buttons() {
+                let input_state = InputState {
+                    focused_index: 2, // CheckArtifactsButton
+                    ..Default::default()
+                };
+                let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
 
-        assert!(matches!(app.get_state(), Some(AppState::Input(_))));
-        assert!(!app.is_should_quit());
-    }
+                app.handle_event(Event::Key(key_event(KeyCode::Right)))
+                    .unwrap();
+                assert!(matches!(
+                    app.get_state(),
+                    Some(AppState::Input(s)) if s.current_field() == Field::ExitButton
+                ));
 
-    // ========================================================================
-    // State Machine Tests: Failure State
-    // ========================================================================
+                app.handle_event(Event::Key(key_event(KeyCode::Left)))
+                    .unwrap();
+                assert!(matches!(
+                    app.get_state(),
+                    Some(AppState::Input(s)) if s.current_field() == Field::CheckArtifactsButton
+                ));
+            }
 
-    #[test]
-    fn test_failure_state_any_key_quits() {
-        let failure = create_test_failure_state();
-        let mut app = GuestOSRecoveryApp::with_state(AppState::Failure(failure));
+            #[test]
+            fn left_right_does_nothing_on_text_fields() {
+                let mut app = GuestOSRecoveryApp::default();
 
-        app.handle_event(Event::Key(char_event('x'))).unwrap();
+                app.handle_event(Event::Key(key_event(KeyCode::Left)))
+                    .unwrap();
+                assert!(matches!(
+                    app.get_state(),
+                    Some(AppState::Input(s)) if s.current_field() == Field::Version
+                ));
 
-        assert!(app.is_should_quit());
-    }
+                app.handle_event(Event::Key(key_event(KeyCode::Right)))
+                    .unwrap();
+                assert!(matches!(
+                    app.get_state(),
+                    Some(AppState::Input(s)) if s.current_field() == Field::Version
+                ));
+            }
 
-    // ========================================================================
-    // State Machine Tests: Non-Key Events
-    // ========================================================================
+            #[test]
+            fn escape_quits_with_message() {
+                let mut app = GuestOSRecoveryApp::default();
+                app.handle_event(Event::Key(key_event(KeyCode::Esc)))
+                    .unwrap();
 
-    #[test]
-    fn test_non_press_events_are_ignored() {
-        let mut app = GuestOSRecoveryApp::default();
+                assert!(app.is_should_quit());
+                if let Some(AppState::Input(state)) = app.get_state() {
+                    assert!(state.exit_message.as_ref().unwrap().contains("cancelled"));
+                } else {
+                    panic!("Expected Input state");
+                }
+            }
+        }
 
-        // Release events should be ignored
-        let release_event = KeyEvent {
-            code: KeyCode::Tab,
-            modifiers: KeyModifiers::empty(),
-            kind: KeyEventKind::Release,
-            state: KeyEventState::empty(),
-        };
-        app.handle_event(Event::Key(release_event)).unwrap();
+        mod text_entry {
+            use super::*;
 
-        // Should still be at Version (no navigation occurred)
-        assert!(matches!(
-            app.get_state(),
-            Some(AppState::Input(s)) if s.current_field() == Field::Version
-        ));
-    }
+            #[test]
+            fn accepts_lowercase_hex() {
+                let mut app = GuestOSRecoveryApp::default();
 
-    #[test]
-    fn test_repeat_events_are_handled() {
-        let mut app = GuestOSRecoveryApp::default();
+                for c in ['0', '1', '9', 'a', 'b', 'f'] {
+                    app.handle_event(Event::Key(char_event(c))).unwrap();
+                }
 
-        // Repeat events should be handled like press events
-        let repeat_event = KeyEvent {
-            code: KeyCode::Tab,
-            modifiers: KeyModifiers::empty(),
-            kind: KeyEventKind::Repeat,
-            state: KeyEventState::empty(),
-        };
-        app.handle_event(Event::Key(repeat_event)).unwrap();
+                if let Some(AppState::Input(state)) = app.get_state() {
+                    assert_eq!(state.get_field_text(Field::Version), "019abf");
+                } else {
+                    panic!("Expected Input state");
+                }
+            }
 
-        // Should have navigated
-        assert!(matches!(
-            app.get_state(),
-            Some(AppState::Input(s)) if s.current_field() == Field::RecoveryHashPrefix
-        ));
-    }
+            #[test]
+            fn rejects_invalid_characters() {
+                let mut app = GuestOSRecoveryApp::default();
 
-    // ========================================================================
-    // State Machine Tests: Backspace Handling
-    // ========================================================================
+                for c in ['A', 'G', 'z', ' ', '!'] {
+                    app.handle_event(Event::Key(char_event(c))).unwrap();
+                }
 
-    #[test]
-    fn test_backspace_deletes_characters() {
-        let mut input_state = InputState::default();
-        set_field_text(&mut input_state, Field::Version, "abc123");
-        let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
+                if let Some(AppState::Input(state)) = app.get_state() {
+                    assert_eq!(state.get_field_text(Field::Version), "");
+                } else {
+                    panic!("Expected Input state");
+                }
+            }
 
-        // Backspace should delete the last character
-        app.handle_event(Event::Key(key_event(KeyCode::Backspace)))
-            .unwrap();
+            #[test]
+            fn respects_max_length() {
+                let mut app = GuestOSRecoveryApp::default();
 
-        if let Some(AppState::Input(state)) = app.get_state() {
-            assert_eq!(state.get_field_text(Field::Version), "abc12");
-        } else {
-            panic!("Expected Input state");
+                for _ in 0..(VERSION_LENGTH + 10) {
+                    app.handle_event(Event::Key(char_event('a'))).unwrap();
+                }
+
+                if let Some(AppState::Input(state)) = app.get_state() {
+                    assert_eq!(state.get_field_text(Field::Version).len(), VERSION_LENGTH);
+                } else {
+                    panic!("Expected Input state");
+                }
+            }
+
+            #[test]
+            fn enter_advances_focus() {
+                let mut app = GuestOSRecoveryApp::default();
+                app.handle_event(Event::Key(key_event(KeyCode::Enter)))
+                    .unwrap();
+
+                assert!(matches!(
+                    app.get_state(),
+                    Some(AppState::Input(s)) if s.current_field() == Field::RecoveryHashPrefix
+                ));
+            }
+
+            #[test]
+            fn typing_clears_error_message() {
+                let input_state = InputState {
+                    error_message: Some("Previous error".to_string()),
+                    ..Default::default()
+                };
+                let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
+
+                app.handle_event(Event::Key(char_event('a'))).unwrap();
+
+                if let Some(AppState::Input(state)) = app.get_state() {
+                    assert!(state.error_message.is_none());
+                } else {
+                    panic!("Expected Input state");
+                }
+            }
+
+            #[test]
+            fn backspace_deletes_characters() {
+                let mut input_state = InputState::default();
+                set_field_text(&mut input_state, Field::Version, "abc123");
+                let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
+
+                app.handle_event(Event::Key(key_event(KeyCode::Backspace)))
+                    .unwrap();
+
+                if let Some(AppState::Input(state)) = app.get_state() {
+                    assert_eq!(state.get_field_text(Field::Version), "abc12");
+                } else {
+                    panic!("Expected Input state");
+                }
+            }
+        }
+
+        mod submission {
+            use super::*;
+
+            #[test]
+            fn exit_button_quits() {
+                let input_state = InputState {
+                    focused_index: 3, // ExitButton
+                    ..Default::default()
+                };
+                let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
+
+                app.handle_event(Event::Key(key_event(KeyCode::Enter)))
+                    .unwrap();
+
+                assert!(app.is_should_quit());
+            }
+
+            #[test]
+            fn empty_inputs_shows_error() {
+                let input_state = InputState {
+                    focused_index: 2, // CheckArtifactsButton
+                    ..Default::default()
+                };
+                let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
+
+                app.handle_event(Event::Key(key_event(KeyCode::Enter)))
+                    .unwrap();
+
+                assert!(!app.is_should_quit());
+                if let Some(AppState::Input(state)) = app.get_state() {
+                    assert!(state.error_message.as_ref().unwrap().contains("VERSION"));
+                } else {
+                    panic!("Expected Input state");
+                }
+            }
+
+            #[test]
+            fn invalid_version_length_shows_error() {
+                let mut input_state = InputState::default();
+                set_field_text(&mut input_state, Field::Version, "abc"); // Too short
+                set_field_text(&mut input_state, Field::RecoveryHashPrefix, "123456");
+                input_state.focused_index = 2; // CheckArtifactsButton
+                let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
+
+                app.handle_event(Event::Key(key_event(KeyCode::Enter)))
+                    .unwrap();
+
+                if let Some(AppState::Input(state)) = app.get_state() {
+                    let error = state.error_message.as_ref().unwrap();
+                    assert!(error.contains("40") || error.contains("VERSION"));
+                } else {
+                    panic!("Expected Input state");
+                }
+            }
         }
     }
 
-    // ========================================================================
-    // Unit Tests: Prep Metadata Parsing
-    // ========================================================================
+    mod confirmation_state {
+        use super::*;
 
-    #[test]
-    fn test_parse_prep_metadata() {
-        let contents = "VERSION_HASH_FULL=abc123def456\nRECOVERY_HASH_FULL=789xyz";
-        let result = parse_prep_metadata(contents).unwrap();
+        #[test]
+        fn escape_returns_to_input() {
+            let confirmation = ConfirmationState {
+                input_state: InputState::default(),
+                params: RecoveryParams::default(),
+                selected_option: ConfirmationOption::Yes,
+            };
+            let mut app = GuestOSRecoveryApp::with_state(AppState::InputConfirmation(confirmation));
 
-        assert_eq!(result.version_hash_full, "abc123def456");
-        assert_eq!(result.recovery_hash_full, "789xyz");
+            app.handle_event(Event::Key(key_event(KeyCode::Esc)))
+                .unwrap();
+
+            assert!(matches!(app.get_state(), Some(AppState::Input(_))));
+            assert!(!app.is_should_quit());
+        }
+
+        #[test]
+        fn tab_toggles_selection() {
+            let confirmation = ConfirmationState {
+                input_state: InputState::default(),
+                params: RecoveryParams::default(),
+                selected_option: ConfirmationOption::Yes,
+            };
+            let mut app = GuestOSRecoveryApp::with_state(AppState::InputConfirmation(confirmation));
+
+            let get_selection = |app: &GuestOSRecoveryApp| {
+                if let Some(AppState::InputConfirmation(state)) = app.get_state() {
+                    state.selected_option.clone()
+                } else {
+                    panic!("Expected InputConfirmation state");
+                }
+            };
+
+            app.handle_event(Event::Key(key_event(KeyCode::Tab)))
+                .unwrap();
+            assert_eq!(get_selection(&app), ConfirmationOption::No);
+
+            app.handle_event(Event::Key(key_event(KeyCode::Tab)))
+                .unwrap();
+            assert_eq!(get_selection(&app), ConfirmationOption::Yes);
+        }
+
+        #[test]
+        fn left_right_changes_selection() {
+            let confirmation = ConfirmationState {
+                input_state: InputState::default(),
+                params: RecoveryParams::default(),
+                selected_option: ConfirmationOption::Yes,
+            };
+            let mut app = GuestOSRecoveryApp::with_state(AppState::InputConfirmation(confirmation));
+
+            let get_selection = |app: &GuestOSRecoveryApp| {
+                if let Some(AppState::InputConfirmation(state)) = app.get_state() {
+                    state.selected_option.clone()
+                } else {
+                    panic!("Expected InputConfirmation state");
+                }
+            };
+
+            app.handle_event(Event::Key(key_event(KeyCode::Right)))
+                .unwrap();
+            assert_eq!(get_selection(&app), ConfirmationOption::No);
+
+            app.handle_event(Event::Key(key_event(KeyCode::Left)))
+                .unwrap();
+            assert_eq!(get_selection(&app), ConfirmationOption::Yes);
+        }
+
+        #[test]
+        fn enter_no_returns_to_input() {
+            let confirmation = ConfirmationState {
+                input_state: create_valid_input_state(),
+                params: RecoveryParams::default(),
+                selected_option: ConfirmationOption::No,
+            };
+            let mut app = GuestOSRecoveryApp::with_state(AppState::InputConfirmation(confirmation));
+
+            app.handle_event(Event::Key(key_event(KeyCode::Enter)))
+                .unwrap();
+
+            assert!(matches!(app.get_state(), Some(AppState::Input(_))));
+            assert!(!app.is_should_quit());
+        }
     }
 
-    #[test]
-    fn test_parse_prep_metadata_empty_content() {
-        let result = parse_prep_metadata("");
+    mod failure_state {
+        use super::*;
 
-        assert!(result.is_err());
+        #[test]
+        fn any_key_quits() {
+            let failure = create_test_failure_state();
+            let mut app = GuestOSRecoveryApp::with_state(AppState::Failure(failure));
+
+            app.handle_event(Event::Key(char_event('x'))).unwrap();
+
+            assert!(app.is_should_quit());
+        }
     }
 }
