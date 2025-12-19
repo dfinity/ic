@@ -15205,11 +15205,11 @@ name = "ic-testnet-mainnet-nns"
 version = "0.9.0"
 dependencies = [
  "anyhow",
- "base64 0.13.1",
  "ic-agent 0.40.1",
  "ic-base-types",
  "ic-canister-client",
  "ic-canister-client-sender",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-limits",
  "ic-nervous-system-common",
  "ic-nns-common",

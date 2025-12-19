@@ -2,6 +2,7 @@ use anyhow::Result;
 use ic_base_types::PrincipalId;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_system_test_utils::set_sandbox_env_vars;
+use ic_crypto_utils_threshold_sig_der::public_key_der_to_pem;
 use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nervous_system_common::E8;
 use ic_nns_common::types::NeuronId;
@@ -548,15 +549,7 @@ fn fetch_recovered_nns_public_key_pem(recovered_nns_node: &IcNodeSnapshot) -> Ve
     block_on(recovered_nns_agent.fetch_root_key()).unwrap();
     let der_encoded = recovered_nns_agent.read_root_key();
 
-    let mut pem = vec![];
-    pem.extend_from_slice(b"-----BEGIN PUBLIC KEY-----\n");
-    for chunk in base64::encode(der_encoded).as_bytes().chunks(64) {
-        pem.extend_from_slice(chunk);
-        pem.extend_from_slice(b"\n");
-    }
-    pem.extend_from_slice(b"-----END PUBLIC KEY-----\n");
-
-    pem
+    public_key_der_to_pem(der_encoded)
 }
 
 fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcNodeSnapshot) {
