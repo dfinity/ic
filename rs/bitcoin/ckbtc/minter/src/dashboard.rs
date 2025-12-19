@@ -392,7 +392,7 @@ pub fn build_submitted_transactions(s: &CkBtcMinterState) -> String {
                     .unwrap();
 
                     write!(buf, "<td rowspan='{rowspan}'>").unwrap();
-                    for req in tx.requests.iter() {
+                    for req in tx.requests.clone().into_tx_request_iter() {
                         write!(
                             buf,
                             "<table>
@@ -401,10 +401,10 @@ pub fn build_submitted_transactions(s: &CkBtcMinterState) -> String {
                             <tr><th>Address</th><td><code>{}</code></td></tr>
                             <tr><th>Received at</th><td>{}</td></tr>
                             </table>",
-                            req.block_index,
-                            DisplayAmount(req.amount),
-                            req.address.display(s.btc_network),
-                            req.received_at,
+                            req.block_index(),
+                            DisplayAmount(req.amount()),
+                            req.address().display(s.btc_network),
+                            req.received_at(),
                         )
                         .unwrap();
                     }
@@ -433,9 +433,9 @@ pub fn build_finalized_requests(s: &CkBtcMinterState) -> String {
                         <td>{}</td>
                         <td><code>{}</code></td>
                         <td>{}</td>",
-                req.request.block_index,
-                req.request.address.display(s.btc_network),
-                DisplayAmount(req.request.amount),
+                req.request.block_index(),
+                req.request.address().display(s.btc_network),
+                DisplayAmount(req.request.amount()),
             )
             .unwrap();
             match &req.state {

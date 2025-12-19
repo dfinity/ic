@@ -73,6 +73,17 @@ enum DownloadState {
     Complete,
 }
 
+impl DownloadState {
+    pub fn as_string(&self) -> String {
+        match self {
+            DownloadState::Blank => "blank".into(),
+            DownloadState::Prep { .. } => "prep".into(),
+            DownloadState::Loading { .. } => "loading".into(),
+            DownloadState::Complete => "complete".into(),
+        }
+    }
+}
+
 /// An implementation of Chunkable trait that represents a (on-disk) state under
 /// construction.
 ///
@@ -1269,98 +1280,8 @@ impl IncompleteState {
                 .collect()
         }
     }
-}
 
-#[cfg(feature = "malicious_code")]
-fn maliciously_alter_chunk_data(
-    mut chunk: Chunk,
-    chunk_id: ChunkId,
-    malicious_flags: &mut MaliciousFlags,
-) -> Chunk {
-    let allowance = match malicious_flags
-        .maliciously_alter_state_sync_chunk_receiving_side
-        .as_mut()
-    {
-        Some(allowance) => allowance,
-        None => {
-            return chunk;
-        }
-    };
-
-    let ix = chunk_id.get();
-    match state_sync_chunk_type(ix) {
-        StateSyncChunk::MetaManifestChunk => {
-            if allowance.meta_manifest_chunk_error_allowance == 0 {
-                return chunk;
-            }
-            allowance.meta_manifest_chunk_error_allowance -= 1;
-            let meta_manifest = match decode_meta_manifest(chunk.as_bytes().to_vec().into()) {
-                Ok(meta_manifest) => meta_manifest,
-                Err(_) => {
-                    return chunk;
-                }
-            };
-            chunk = crate::state_sync::types::maliciously_alter_meta_manifest(meta_manifest).into();
-        }
-        StateSyncChunk::ManifestChunk(_) => {
-            if allowance.manifest_chunk_error_allowance == 0 {
-                return chunk;
-            }
-            allowance.manifest_chunk_error_allowance -= 1;
-            chunk = crate::state_sync::types::maliciously_alter_chunk_payload(
-                chunk.as_bytes().to_vec(),
-            )
-            .into();
-        }
-        _ => {
-            if allowance.state_chunk_error_allowance == 0 {
-                return chunk;
-            }
-            allowance.state_chunk_error_allowance -= 1;
-            chunk = crate::state_sync::types::maliciously_alter_chunk_payload(
-                chunk.as_bytes().to_vec(),
-            )
-            .into();
-        }
-    }
-    // Sleep for 15 seconds to allow the replica connecting to more peers for state sync.
-    // Otherwise, the first invalid chunk in the very beginning will immediately fail the state sync
-    // if there is only one peer connected.
-    // Note that this is only an issue for tests not the real system.
-    std::thread::sleep(std::time::Duration::from_secs(15));
-    chunk
-}
-
-impl Chunkable<StateSyncMessage> for IncompleteState {
-    fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
-        match self.state {
-            DownloadState::Blank => Box::new(std::iter::once(META_MANIFEST_CHUNK)),
-            DownloadState::Prep {
-                meta_manifest: _,
-                manifest_in_construction: _,
-                ref manifest_chunks,
-            } => {
-                let ids: Vec<_> = manifest_chunks.iter().map(|id| ChunkId::new(*id)).collect();
-                Box::new(ids.into_iter())
-            }
-            DownloadState::Loading {
-                meta_manifest: _,
-                manifest: _,
-                state_sync_file_group: _,
-                ref fetch_chunks,
-                copied_chunks_from_file_group: _,
-            } => {
-                let ids: Vec<_> = fetch_chunks
-                    .iter()
-                    .map(|id| ChunkId::new(*id as u32))
-                    .collect();
-                Box::new(ids.into_iter())
-            }
-            DownloadState::Complete => Box::new(std::iter::empty()),
-        }
-    }
-
-    fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError> {
+    fn add_chunk_inner(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError> {
         #[cfg(feature = "malicious_code")]
         let chunk = maliciously_alter_chunk_data(chunk, chunk_id, &mut self.malicious_flags);
         let ix = chunk_id.get();
@@ -1755,5 +1676,116 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                 Ok(())
             }
         }
+    }
+}
+
+#[cfg(feature = "malicious_code")]
+fn maliciously_alter_chunk_data(
+    mut chunk: Chunk,
+    chunk_id: ChunkId,
+    malicious_flags: &mut MaliciousFlags,
+) -> Chunk {
+    let allowance = match malicious_flags
+        .maliciously_alter_state_sync_chunk_receiving_side
+        .as_mut()
+    {
+        Some(allowance) => allowance,
+        None => {
+            return chunk;
+        }
+    };
+
+    let ix = chunk_id.get();
+    match state_sync_chunk_type(ix) {
+        StateSyncChunk::MetaManifestChunk => {
+            if allowance.meta_manifest_chunk_error_allowance == 0 {
+                return chunk;
+            }
+            allowance.meta_manifest_chunk_error_allowance -= 1;
+            let meta_manifest = match decode_meta_manifest(chunk.as_bytes().to_vec().into()) {
+                Ok(meta_manifest) => meta_manifest,
+                Err(_) => {
+                    return chunk;
+                }
+            };
+            chunk = crate::state_sync::types::maliciously_alter_meta_manifest(meta_manifest).into();
+        }
+        StateSyncChunk::ManifestChunk(_) => {
+            if allowance.manifest_chunk_error_allowance == 0 {
+                return chunk;
+            }
+            allowance.manifest_chunk_error_allowance -= 1;
+            chunk = crate::state_sync::types::maliciously_alter_chunk_payload(
+                chunk.as_bytes().to_vec(),
+            )
+            .into();
+        }
+        _ => {
+            if allowance.state_chunk_error_allowance == 0 {
+                return chunk;
+            }
+            allowance.state_chunk_error_allowance -= 1;
+            chunk = crate::state_sync::types::maliciously_alter_chunk_payload(
+                chunk.as_bytes().to_vec(),
+            )
+            .into();
+        }
+    }
+    // Sleep for 15 seconds to allow the replica connecting to more peers for state sync.
+    // Otherwise, the first invalid chunk in the very beginning will immediately fail the state sync
+    // if there is only one peer connected.
+    // Note that this is only an issue for tests not the real system.
+    std::thread::sleep(std::time::Duration::from_secs(15));
+    chunk
+}
+
+impl Chunkable<StateSyncMessage> for IncompleteState {
+    fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
+        match self.state {
+            DownloadState::Blank => Box::new(std::iter::once(META_MANIFEST_CHUNK)),
+            DownloadState::Prep {
+                meta_manifest: _,
+                manifest_in_construction: _,
+                ref manifest_chunks,
+            } => {
+                let ids: Vec<_> = manifest_chunks.iter().map(|id| ChunkId::new(*id)).collect();
+                Box::new(ids.into_iter())
+            }
+            DownloadState::Loading {
+                meta_manifest: _,
+                manifest: _,
+                state_sync_file_group: _,
+                ref fetch_chunks,
+                copied_chunks_from_file_group: _,
+            } => {
+                let ids: Vec<_> = fetch_chunks
+                    .iter()
+                    .map(|id| ChunkId::new(*id as u32))
+                    .collect();
+                Box::new(ids.into_iter())
+            }
+            DownloadState::Complete => Box::new(std::iter::empty()),
+        }
+    }
+
+    fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError> {
+        let started_at = Instant::now();
+        let state_before = self.state.as_string();
+        let result = self.add_chunk_inner(chunk_id, chunk);
+        let state_after = self.state.as_string();
+        let success = result.is_ok();
+
+        // Record metric
+        self.metrics
+            .state_sync_metrics
+            .add_chunk_duration
+            .with_label_values(&[
+                &state_before,
+                &state_after,
+                if success { "ok" } else { "err" },
+            ])
+            .observe(started_at.elapsed().as_secs_f64());
+
+        result
     }
 }

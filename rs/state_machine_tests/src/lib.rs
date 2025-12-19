@@ -1111,13 +1111,18 @@ pub struct StateMachine {
     // The atomicity is required for internal mutability and sending across threads.
     checkpoint_interval_length: AtomicU64,
     nonce: AtomicU64,
-    // the time used to derive the time of the next round that is:
-    //  - equal to `time` + 1ns if `time` = `time_of_last_round`;
-    //  - equal to `time`       otherwise.
+    /// The time used to derive the time of the next round that is:
+    ///  - equal to `time + execute_round_time_increment` if `time == time_of_last_round`;
+    ///  - equal to `time` otherwise.
     time: AtomicU64,
-    // the time of the last round
-    // (equal to `time` when this `StateMachine` is initialized)
+    /// The time of the last round
+    /// (equal to `time` when this `StateMachine` is initialized)
     time_of_last_round: RwLock<Time>,
+    /// Time increment between two rounds, automatically applied if `time` has not
+    /// been explicitly updated.
+    ///
+    /// Defaults to 1 ns.
+    execute_round_time_increment: Duration,
     chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     chain_key_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
     ni_dkg_ids: BTreeMap<NiDkgMasterPublicKeyId, NiDkgId>,
@@ -1207,6 +1212,7 @@ pub struct StateMachineBuilder {
     features: SubnetFeatures,
     runtime: Option<Arc<Runtime>>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
+    execute_round_time_increment: Duration,
     lsmt_override: Option<LsmtConfig>,
     seed: [u8; 32],
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
@@ -1251,6 +1257,7 @@ impl StateMachineBuilder {
             },
             runtime: None,
             registry_data_provider: Arc::new(ProtoRegistryDataProvider::new()),
+            execute_round_time_increment: StateMachine::EXECUTE_ROUND_TIME_INCREMENT,
             lsmt_override: None,
             seed: [42; 32],
             with_extra_canister_range: None,
@@ -1471,6 +1478,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_execute_round_time_increment(self, execute_round_time_increment: Duration) -> Self {
+        Self {
+            execute_round_time_increment,
+            ..self
+        }
+    }
+
     pub fn with_log_level(self, log_level: Option<Level>) -> Self {
         Self { log_level, ..self }
     }
@@ -1537,6 +1551,7 @@ impl StateMachineBuilder {
                     .expect("failed to create a tokio runtime")
                     .into()
             }),
+            self.execute_round_time_increment,
             self.registry_data_provider,
             self.lsmt_override,
             self.seed,
@@ -1876,6 +1891,7 @@ impl StateMachine {
         is_snapshot_upload_enabled: bool,
         features: SubnetFeatures,
         runtime: Arc<Runtime>,
+        execute_round_time_increment: Duration,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         lsmt_override: Option<LsmtConfig>,
         seed: [u8; 32],
@@ -2247,6 +2263,7 @@ impl StateMachine {
             nonce: AtomicU64::new(nonce),
             time: AtomicU64::new(time.as_nanos_since_unix_epoch()),
             time_of_last_round: RwLock::new(time),
+            execute_round_time_increment,
             chain_key_subnet_public_keys,
             chain_key_subnet_secret_keys,
             ni_dkg_ids,
@@ -2871,6 +2888,46 @@ impl StateMachine {
     /// Advances time by 1ns (to make sure that time is strictly monotonic)
     /// and triggers a single round of execution with the given payload as input.
     pub fn execute_payload(&self, payload: PayloadBuilder) -> Height {
+        let checkpoint_interval_length = self.checkpoint_interval_length.load(Ordering::Relaxed);
+        let checkpoint_interval_length_plus_one = checkpoint_interval_length.saturating_add(1);
+        let requires_full_state_hash = self
+            .message_routing
+            .expected_batch_height()
+            .get()
+            .is_multiple_of(checkpoint_interval_length_plus_one);
+        let content = BatchContent::Data {
+            batch_messages: BatchMessages {
+                signed_ingress_msgs: payload.ingress_messages,
+                certified_stream_slices: payload.xnet_payload.stream_slices,
+                bitcoin_adapter_responses: payload
+                    .self_validating
+                    .map(|p| p.get().to_vec())
+                    .unwrap_or_default(),
+                query_stats: payload.query_stats,
+            },
+            chain_key_data: ChainKeyData {
+                master_public_keys: self.chain_key_subnet_public_keys.clone(),
+                idkg_pre_signatures: BTreeMap::new(),
+                nidkg_ids: self.ni_dkg_ids.clone(),
+            },
+            consensus_responses: payload.consensus_responses,
+            requires_full_state_hash,
+        };
+        let blockmaker_metrics = payload
+            .blockmaker_metrics
+            .unwrap_or(BlockmakerMetrics::new_for_test());
+
+        self.execute_payload_impl(content, blockmaker_metrics)
+    }
+
+    /// Advances time by 1ns (to make sure that time is strictly monotonic)
+    /// and triggers a single round of execution with the given batch content and
+    /// blockmaker metrics as input.
+    fn execute_payload_impl(
+        &self,
+        content: BatchContent,
+        blockmaker_metrics: BlockmakerMetrics,
+    ) -> Height {
         let batch_number = self.message_routing.expected_batch_height();
 
         let mut seed = [0u8; 32];
@@ -2887,43 +2944,19 @@ impl StateMachine {
             next_checkpoint_height: next_checkpoint_height.into(),
             current_interval_length: checkpoint_interval_length.into(),
         }));
-        let requires_full_state_hash = batch_number
-            .get()
-            .is_multiple_of(checkpoint_interval_length_plus_one);
 
         let current_time = self.get_time();
         let time_of_next_round = if current_time == *self.time_of_last_round.read().unwrap() {
-            current_time + Self::EXECUTE_ROUND_TIME_INCREMENT
+            current_time + self.execute_round_time_increment
         } else {
             current_time
         };
 
-        let blockmaker_metrics = payload
-            .blockmaker_metrics
-            .unwrap_or(BlockmakerMetrics::new_for_test());
-
         let batch = Batch {
             batch_number,
             batch_summary,
-            requires_full_state_hash,
             blockmaker_metrics,
-            content: BatchContent::Data {
-                batch_messages: BatchMessages {
-                    signed_ingress_msgs: payload.ingress_messages,
-                    certified_stream_slices: payload.xnet_payload.stream_slices,
-                    bitcoin_adapter_responses: payload
-                        .self_validating
-                        .map(|p| p.get().to_vec())
-                        .unwrap_or_default(),
-                    query_stats: payload.query_stats,
-                },
-                chain_key_data: ChainKeyData {
-                    master_public_keys: self.chain_key_subnet_public_keys.clone(),
-                    idkg_pre_signatures: BTreeMap::new(),
-                    nidkg_ids: self.ni_dkg_ids.clone(),
-                },
-                consensus_responses: payload.consensus_responses,
-            },
+            content,
             randomness: Randomness::from(seed),
             registry_version: self.registry_client.get_latest_version(),
             time: time_of_next_round,
@@ -3257,6 +3290,21 @@ impl StateMachine {
         self.set_checkpoint_interval_length(checkpoint_interval_length);
     }
 
+    /// Executes an online subnet split round with checkpointing enabled.
+    pub fn split_tick(&self, other_subnet_id: SubnetId) {
+        let checkpoint_interval_length = self.checkpoint_interval_length.load(Ordering::Relaxed);
+        self.set_checkpoints_enabled(true);
+
+        let content = BatchContent::Splitting {
+            new_subnet_id: self.subnet_id,
+            other_subnet_id,
+        };
+        let blockmaker_metrics = BlockmakerMetrics::new_for_test();
+        self.execute_payload_impl(content, blockmaker_metrics);
+
+        self.set_checkpoint_interval_length(checkpoint_interval_length);
+    }
+
     /// Replaces the canister state in this state machine with the canister
     /// state in given source replicated state.
     ///
@@ -3532,6 +3580,89 @@ impl StateMachine {
             CertificationScope::Full,
             None,
         );
+
+        Ok(env)
+    }
+
+    /// Triggers an online subnet split, with the corresponding registry entries
+    /// assumed to have been done beforehand, i.e. `make_registry_entries_for_subnet_split`
+    /// should have been called first using the same `seed`.
+    ///
+    /// The process has the following steps:
+    ///  1. Write a checkpoint on `self`.
+    ///  2. Clone its enire state directory into a new `state_dir`.
+    ///  3. Create a new `StateMachine` using this `state_dir` and the provided
+    ///     `seed`.
+    ///  4. Reload the registry and update it to the latest version.
+    ///  5. Call `split_tick()` on both `self` and the new `StateMachine`.
+    ///
+    /// Step (1) (the checkpoint) does not happen in an actual online subnet split,
+    /// but is done here because cloning the state machine (the equivalent of having
+    /// had two sets of replicas, each branching off here) is not trivial.
+    ///
+    /// Returns an error if the routing table does not contain the subnet ID of the
+    /// new `env` that was just created or if the split itself fails.
+    pub fn online_split(&self, seed: [u8; 32]) -> Result<Arc<StateMachine>, String> {
+        use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
+
+        // Write a checkpoint.
+        self.checkpointed_tick();
+        self.state_manager.flush_tip_channel();
+
+        // Create a state dir for the new env; and copy the our state layout into it.
+        let state_dir = Box::new(TempDir::new().expect("failed to create a temporary directory"));
+        fs_extra::dir::copy(
+            self.state_manager.state_layout().raw_path(),
+            state_dir.path(),
+            &fs_extra::dir::CopyOptions {
+                content_only: true,
+                ..fs_extra::dir::CopyOptions::new()
+            },
+        )
+        .expect("failed to copy state layout");
+
+        // Create a new `StateMachine` using the same XNet pool.
+        let env = StateMachineBuilder::new()
+            .with_state_machine_state_dir(state_dir)
+            .with_nonce(self.nonce.load(Ordering::Relaxed))
+            .with_time(Time::from_nanos_since_unix_epoch(
+                self.time.load(Ordering::Relaxed),
+            ))
+            .with_checkpoint_interval_length(
+                self.checkpoint_interval_length.load(Ordering::Relaxed),
+            )
+            .with_subnet_size(self.nodes.len())
+            .with_subnet_seed(seed)
+            .with_subnet_type(self.subnet_type)
+            .with_registry_data_provider(self.registry_data_provider.clone())
+            .build_with_subnets(
+                (*self.pocket_xnet.read().unwrap())
+                    .as_ref()
+                    .ok_or("no XNet layer found")?
+                    .subnets(),
+            );
+
+        // Get the newest registry version.
+        self.reload_registry();
+        self.registry_client.update_to_latest_version();
+
+        // Check that the new subnet is in the routing table.
+        let last_version = self.registry_client.get_latest_version();
+        let routing_table = self
+            .registry_client
+            .get_routing_table(last_version)
+            .expect("malformed routing table")
+            .expect("missing routing table");
+        if routing_table.ranges(env.get_subnet_id()).is_empty() {
+            return Err("Routing table does not contain the new subnet".to_string());
+        }
+
+        // Perform the split on `self`.
+        self.split_tick(env.subnet_id);
+
+        // Perform the split on `env`, which requires preserving the `prev_state_hash`
+        // (as opposed to MVP subnet splitting where it is adjusted manually).
+        env.split_tick(self.subnet_id);
 
         Ok(env)
     }
@@ -5159,6 +5290,9 @@ fn multi_subnet_setup(
         .with_subnet_seed([subnet_seed; 32])
         .with_subnet_type(subnet_type)
         .with_registry_data_provider(registry_data_provider)
+        // For XNet tests, advance time by 1 second between rounds, to make it possible
+        // for any bounded wait calls to eventually expire and for canisters to stop.
+        .with_execute_round_time_increment(Duration::from_secs(1))
         .build_with_subnets(subnets)
 }
 

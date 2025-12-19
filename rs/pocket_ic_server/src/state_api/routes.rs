@@ -15,7 +15,9 @@ use crate::pocket_ic::{
     IngressMessageStatus, MockCanisterHttp, PubKey, Query, QueryRequest, SetCertifiedTime,
     SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage, SubnetReadStateRequest, Tick,
 };
-use crate::{BlobStore, InstanceId, OpId, Operation, async_trait, pocket_ic::PocketIc};
+use crate::{
+    BlobStore, InstanceId, OpId, Operation, SubnetBlockmakers, async_trait, pocket_ic::PocketIc,
+};
 use aide::{
     NoApi,
     axum::ApiRouter,
@@ -46,7 +48,7 @@ use pocket_ic::common::rest::{
     RawCanisterResult, RawCanisterSnapshotDownload, RawCanisterSnapshotId,
     RawCanisterSnapshotUpload, RawCycles, RawIngressStatusArgs, RawMessageId,
     RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
-    RawTime, TickConfigs, Topology,
+    RawTickConfigs, RawTime, Topology,
 };
 use serde::Serialize;
 use slog::Level;
@@ -1392,12 +1394,19 @@ pub async fn handler_tick(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
-    axum::extract::Json(ticks_configs): axum::extract::Json<TickConfigs>,
+    axum::extract::Json(tick_configs): axum::extract::Json<RawTickConfigs>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
     let timeout = timeout_or_default(headers);
-    let op = Tick {
-        configs: ticks_configs,
-    };
+    let blockmakers = tick_configs
+        .blockmakers
+        .map(|blockmakers| {
+            blockmakers
+                .into_iter()
+                .map(SubnetBlockmakers::from)
+                .collect()
+        })
+        .unwrap_or_default();
+    let op = Tick { blockmakers };
     let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))
 }

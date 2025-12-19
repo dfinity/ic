@@ -13,7 +13,7 @@ use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_types::batch::{Batch, BatchContent};
-use ic_types::{Cycles, ExecutionRound, NumBytes};
+use ic_types::{Cycles, ExecutionRound, NumBytes, SubnetId};
 use std::time::Instant;
 
 #[cfg(test)]
@@ -75,6 +75,37 @@ impl StateMachineImpl {
             .with_label_values(&[phase])
             .observe(since.elapsed().as_secs_f64());
     }
+
+    /// Runs a special round during which the state is split (and no messages are
+    /// inducted, executed or routed).
+    ///
+    /// Retains the canisters mapped to `new_subnet_id` in the routing table.
+    /// Validates that all other canisters are mapped to and will be retained by
+    /// `other_subnet_id`.
+    ///
+    /// Shapshots and ingress messages are split accordingly. Streams, refunds and
+    /// subnet queues are preserved on *subnet A* only (i.e., the one retaining the
+    /// original `own_subnet_id`).
+    fn online_split(
+        &self,
+        mut state: ReplicatedState,
+        new_subnet_id: SubnetId,
+        other_subnet_id: SubnetId,
+    ) -> ReplicatedState {
+        // Abort all paused executions and wipe `SystemMetadata` caches.
+        self.scheduler
+            .checkpoint_round_with_no_execution(&mut state);
+
+        let old_subnet_id = state.metadata.own_subnet_id;
+        state
+            .online_split(new_subnet_id, other_subnet_id)
+            .unwrap_or_else(|err| {
+                fatal!(
+                    self.log,
+                    "Failed to split {new_subnet_id} from {old_subnet_id}: {err}"
+                )
+            })
+    }
 }
 
 impl StateMachine for StateMachineImpl {
@@ -111,16 +142,29 @@ impl StateMachine for StateMachineImpl {
                 .observe_no_canister_allocation_range(&self.log, message);
         }
 
-        let (batch_messages, mut consensus_responses, chain_key_data) = match batch.content {
-            // Regular batch, proceed with round execution.
-            BatchContent::Data {
-                batch_messages,
-                consensus_responses,
-                chain_key_data,
-            } => (batch_messages, consensus_responses, chain_key_data),
+        let (batch_messages, mut consensus_responses, chain_key_data, requires_full_state_hash) =
+            match batch.content {
+                // Regular batch, proceed with round execution.
+                BatchContent::Data {
+                    batch_messages,
+                    consensus_responses,
+                    chain_key_data,
+                    requires_full_state_hash,
+                } => (
+                    batch_messages,
+                    consensus_responses,
+                    chain_key_data,
+                    requires_full_state_hash,
+                ),
 
-            BatchContent::Splitting { .. } => unimplemented!("Subnet splitting is not yet enabled"),
-        };
+                // Consensus is telling us to split, do so and return the new state.
+                BatchContent::Splitting {
+                    new_subnet_id,
+                    other_subnet_id,
+                } => {
+                    return self.online_split(state, new_subnet_id, other_subnet_id);
+                }
+            };
 
         // Get query stats from blocks and add them to the state, so that they can be aggregated later.
         if let Some(query_stats) = &batch_messages.query_stats {
@@ -183,7 +227,7 @@ impl StateMachine for StateMachineImpl {
 
         self.observe_phase_duration(PHASE_INDUCTION, &since);
 
-        let execution_round_type = if batch.requires_full_state_hash {
+        let execution_round_type = if requires_full_state_hash {
             ExecutionRoundType::CheckpointRound
         } else {
             ExecutionRoundType::OrdinaryRound

@@ -34,7 +34,9 @@ jq
 less
 lvm2
 net-tools
+netcat-openbsd
 nftables
+traceroute
 # NODE-1718: Parted has a conflict with the new libvirt, install it below
 # parted
 python-is-python3

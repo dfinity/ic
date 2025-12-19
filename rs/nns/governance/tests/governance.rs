@@ -7131,7 +7131,7 @@ fn test_manage_and_reward_node_providers() {
         .err()
         .unwrap()
         .error_message
-        .contains("cannot add already existing Node Provider")
+        .contains("already exists")
     );
 
     // Rewarding the node provider to the default account should now work.
@@ -7492,7 +7492,7 @@ fn test_manage_and_reward_multiple_node_providers() {
             .err()
             .unwrap()
             .error_message
-            .contains("cannot add already existing Node Provider")
+            .contains("already exists")
         );
     }
 

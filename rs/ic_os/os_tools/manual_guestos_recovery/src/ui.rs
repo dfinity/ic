@@ -126,10 +126,16 @@ fn render_if_too_small(f: &mut Frame, size: Rect) -> bool {
 }
 
 fn create_parameter_lines(params: &RecoveryParams) -> Vec<Line<'_>> {
+    let calculated_version_hash = params.version_hash_full.as_deref().unwrap_or("<pending>");
+    let calculated_recovery_hash = params.recovery_hash_full.as_deref().unwrap_or("<pending>");
     let lines = vec![
-        format!("  VERSION: {}", params.version),
-        format!("  VERSION-HASH: {}", params.version_hash),
-        format!("  RECOVERY-HASH: {}", params.recovery_hash),
+        format!("Inputted parameters:"),
+        format!("VERSION: {}", params.version),
+        format!("RECOVERY-HASH-PREFIX: {}", params.recovery_hash_prefix),
+        format!(""),
+        format!("Calculated hashes:"),
+        format!("    VERSION-HASH: {}", calculated_version_hash),
+        format!("    RECOVERY-HASH: {}", calculated_recovery_hash),
     ];
 
     lines
@@ -232,14 +238,14 @@ fn render_input_screen(f: &mut Frame, state: &InputState, size: Rect) {
         .constraints([
             Constraint::Length(1), // Title area
             Constraint::Length(3), // Instructions area
-            Constraint::Length(9), // Input fields area (3 fields × 3 rows each)
+            Constraint::Length(6), // Input fields area (2 fields × 3 rows each)
             Constraint::Length(1), // Button area
             Constraint::Length(1), // Spacing after buttons
             Constraint::Min(0),    // Remaining space
         ])
         .split(size);
 
-    let title = Paragraph::new("NNS recovery")
+    let title = Paragraph::new("Manual Recovery TUI")
         .block(
             Block::default()
                 .borders(Borders::NONE)
@@ -250,7 +256,7 @@ fn render_input_screen(f: &mut Frame, state: &InputState, size: Rect) {
     f.render_widget(title, main_layout[0]);
 
     let instructions = vec![
-        Line::from("Enter the information supplied by the recovery coordinator."),
+        Line::from("Enter the recovery version and the 6-character recovery hash prefix."),
         Line::from("Use Up/Down arrows or TAB to move between fields."),
     ];
     let instructions_para = Paragraph::new(instructions)
@@ -262,8 +268,7 @@ fn render_input_screen(f: &mut Frame, state: &InputState, size: Rect) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // Version field
-            Constraint::Length(3), // VersionHash field
-            Constraint::Length(3), // RecoveryHash field
+            Constraint::Length(3), // Recovery hash prefix field
         ])
         .split(main_layout[2]);
 
