@@ -1,6 +1,6 @@
 use crate::state::utxos::UtxoSet;
 use crate::{
-    BuildTxError, CacheWithExpiration, Network,
+    BuildTxError, CacheWithExpiration, IC_CANISTER_RUNTIME, Network,
     address::BitcoinAddress,
     build_unsigned_transaction, build_unsigned_transaction_from_inputs, estimate_retrieve_btc_fee,
     fake_sign,
@@ -321,7 +321,7 @@ fn test_min_change_amount() {
     .expect("failed to build a transaction");
     let change_value = 1;
 
-    let fee = fake_sign(&tx).vsize() as u64 * fee_per_vbyte / 1000;
+    let fee = fake_sign(&tx, true).vsize() as u64 * fee_per_vbyte / 1000;
     let minter_fee =
         fee_estimator.evaluate_minter_fee(tx.inputs.len() as u64, tx.outputs.len() as u64);
 

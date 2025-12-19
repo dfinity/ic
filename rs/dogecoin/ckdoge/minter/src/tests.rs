@@ -70,6 +70,7 @@ fn should_use_p2pkh() {
             sequence: unsigned_input.sequence,
             signature: EncodedSignature::try_from_slice(&signature).unwrap(),
             pubkey: public_key.to_vec().into(),
+            uses_segwit: false,
         }],
         outputs: unsigned_tx.outputs,
         lock_time: unsigned_tx.lock_time,

@@ -1109,6 +1109,7 @@ pub async fn sign_transaction<R: CanisterRuntime, F: Fn(&tx::OutPoint) -> Option
             pubkey,
             previous_output: outpoint.clone(),
             sequence: input.sequence,
+            uses_segwit: runtime.uses_segwit(),
         });
     }
     Ok(tx::SignedTransaction {
@@ -1118,7 +1119,10 @@ pub async fn sign_transaction<R: CanisterRuntime, F: Fn(&tx::OutPoint) -> Option
     })
 }
 
-pub fn fake_sign(unsigned_tx: &tx::UnsignedTransaction) -> tx::SignedTransaction {
+pub fn fake_sign(
+    unsigned_tx: &tx::UnsignedTransaction,
+    uses_segwit: bool,
+) -> tx::SignedTransaction {
     tx::SignedTransaction {
         inputs: unsigned_tx
             .inputs
@@ -1128,6 +1132,7 @@ pub fn fake_sign(unsigned_tx: &tx::UnsignedTransaction) -> tx::SignedTransaction
                 sequence: unsigned_input.sequence,
                 signature: signature::EncodedSignature::fake(),
                 pubkey: ByteBuf::from(vec![0u8; tx::PUBKEY_LEN]),
+                uses_segwit,
             })
             .collect(),
         outputs: unsigned_tx.outputs.clone(),
@@ -1636,6 +1641,11 @@ pub trait CanisterRuntime {
 
     /// How to record and replay events.
     fn event_logger(&self) -> Self::EventLogger;
+
+    /// Whether segregated witness can be used (BIP-144).
+    fn uses_segwit(&self) -> bool {
+        true
+    }
 
     /// Retrieves the current transaction fee percentiles.
     async fn get_current_fee_percentiles(

@@ -149,7 +149,7 @@ impl FeeEstimator for BitcoinFeeEstimator {
         unsigned_tx: &UnsignedTransaction,
         fee_per_vbyte: u64,
     ) -> u64 {
-        let tx_vsize = fake_sign(unsigned_tx).vsize();
+        let tx_vsize = fake_sign(unsigned_tx, true).vsize();
         (tx_vsize as u64 * fee_per_vbyte) / 1000
     }
 

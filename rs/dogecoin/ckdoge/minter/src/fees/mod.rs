@@ -119,7 +119,7 @@ impl FeeEstimator for DogecoinFeeEstimator {
         unsigned_tx: &UnsignedTransaction,
         fee_per_byte: u64,
     ) -> u64 {
-        let tx_size = ic_ckbtc_minter::fake_sign(unsigned_tx).serialized_len();
+        let tx_size = ic_ckbtc_minter::fake_sign(unsigned_tx, false).serialized_len();
         (tx_size as u64 * fee_per_byte) / 1000
     }
 

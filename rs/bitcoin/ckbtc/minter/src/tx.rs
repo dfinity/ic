@@ -2,7 +2,7 @@
 //! encode them into a byte stream.
 
 use crate::address::BitcoinAddress;
-use crate::signature::EncodedSignature;
+use crate::signature::{EncodedSignature, MAX_ENCODED_SIGNATURE_LEN};
 use ic_crypto_sha2::Sha256;
 use serde_bytes::{ByteBuf, Bytes};
 use std::fmt;
@@ -14,12 +14,12 @@ pub use ic_btc_interface::{OutPoint, Satoshi, Txid};
 pub const TX_VERSION: u32 = 2;
 
 /// The length of the public key.
-pub const PUBKEY_LEN: usize = 32;
+pub const PUBKEY_LEN: usize = 33;
 
 // The marker indicating the segregated witness encoding.
-const MARKER: u8 = 0;
+const SEGWIT_MARKER: u8 = 0;
 // The flags for the segregated witness encoding.
-const FLAGS: u8 = 1;
+const SEGWIT_FLAG: u8 = 1;
 // The signature applies to all inputs and outputs.
 pub const SIGHASH_ALL: u32 = 1;
 
@@ -201,9 +201,11 @@ pub struct SignedInput {
     pub previous_output: OutPoint,
     pub sequence: u32,
     pub signature: EncodedSignature,
-    // The public key bytes.
-    // Must be PUBKEY_LEN bytes long.
+    /// The public key bytes.
+    /// Must be PUBKEY_LEN bytes long.
     pub pubkey: ByteBuf,
+    /// Whether to use segwit for this input (BIP-144)
+    pub uses_segwit: bool,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -409,6 +411,18 @@ impl SignedTransaction {
         let tx_weight = base_tx_size * 3 + total_tx_size;
         tx_weight.div_ceil(4)
     }
+
+    /// Returns whether or not to serialize transaction as specified in BIP-144.
+    ///
+    /// See the bitcoin implementation of [uses_segwit_serialization](https://github.com/rust-bitcoin/rust-bitcoin/blob/195019967ae199dd8f7d586f7c2ac09ffd83cd1b/primitives/src/transaction.rs#L190)
+    fn uses_segwit_serialization(&self) -> bool {
+        if self.inputs.iter().any(|input| input.uses_segwit) {
+            return true;
+        }
+        // To avoid serialization ambiguity, no inputs means we use BIP141 serialization (see
+        // `Transaction` docs for full explanation).
+        self.inputs.is_empty()
+    }
 }
 
 struct BaseTxView<'a>(&'a SignedTransaction);
@@ -500,16 +514,36 @@ fn encode_p2wsh_script(pkhash: &[u8; 32], buf: &mut impl Buffer) {
 
 impl Encode for SignedInput {
     fn encode(&self, buf: &mut impl Buffer) {
-        // See: https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki#p2wpkh
-        self.previous_output.encode(buf);
-        // Script signature is empty, the witness part goes at the end of the
-        // transaction encoding.
-        write_compact_size(1 + 72 + 1 + 33, buf);
-        buf.write(&[0x48]); //OP_PUSHBYTES_72
-        buf.write(self.signature.as_slice());
-        buf.write(&[0x21]); //OP_PUSHBYTES_33
-        buf.write(self.pubkey.as_ref());
-        self.sequence.encode(buf);
+        if self.uses_segwit {
+            // See: https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki#p2wpkh
+            self.previous_output.encode(buf);
+            // Script signature is empty, the witness part goes at the end of the
+            // transaction encoding.
+            buf.write(&[0]);
+            self.sequence.encode(buf);
+        } else {
+            const OP_PUSHBYTES_33: u8 = 0x21;
+
+            self.previous_output.encode(buf);
+            // due to DER encoding the signature is variable-length but guaranteed
+            // to contain at most MAX_ENCODED_SIGNATURE_LEN bytes.
+            let signature = self.signature.as_slice();
+            assert!(signature.len() <= MAX_ENCODED_SIGNATURE_LEN);
+            let op_push_bytes_sig_len = signature.len() as u8;
+            let pubkey = self.pubkey.as_ref();
+            assert_eq!(
+                pubkey.len(),
+                33,
+                "BUG: ECDSA public key must be in compressed format"
+            );
+
+            write_compact_size(1 + signature.len() + 1 + pubkey.len(), buf);
+            buf.write(&[op_push_bytes_sig_len]);
+            buf.write(signature);
+            buf.write(&[OP_PUSHBYTES_33]);
+            buf.write(pubkey);
+            self.sequence.encode(buf);
+        }
     }
 }
 
@@ -531,23 +565,24 @@ impl Encode for UnsignedTransaction {
 }
 
 impl Encode for SignedTransaction {
+    // See the bitcoin implementation of [encode](https://github.com/rust-bitcoin/rust-bitcoin/blob/195019967ae199dd8f7d586f7c2ac09ffd83cd1b/bitcoin/src/blockdata/transaction.rs#L728)
     fn encode(&self, buf: &mut impl Buffer) {
-        // Spec:
-        // https://github.com/bitcoin/bips/blob/master/bip-0144.mediawiki#serialization
-        //
-        // Reference implementation:
-        // https://github.com/bitcoin/bitcoin/blob/c90f86e4c7760a9f7ed0a574f54465964e006a64/src/primitives/transaction.h#L254-L281
         TX_VERSION.encode(buf);
-        // buf.write(&[MARKER, FLAGS]);
-        self.inputs.encode(buf);
-        self.outputs.encode(buf);
-        // for txin in self.inputs.iter() {
-        //     [
-        //         Bytes::new(txin.signature.as_slice()),
-        //         Bytes::new(&txin.pubkey),
-        //     ][..]
-        //         .encode(buf);
-        // }
+        if !self.uses_segwit_serialization() {
+            self.inputs.encode(buf);
+            self.outputs.encode(buf);
+        } else {
+            buf.write(&[SEGWIT_MARKER, SEGWIT_FLAG]);
+            self.inputs.encode(buf);
+            self.outputs.encode(buf);
+            for txin in self.inputs.iter() {
+                [
+                    Bytes::new(txin.signature.as_slice()),
+                    Bytes::new(&txin.pubkey),
+                ][..]
+                    .encode(buf);
+            }
+        }
         self.lock_time.encode(buf)
     }
 }

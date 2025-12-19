@@ -62,6 +62,10 @@ impl CanisterRuntime for DogeCanisterRuntime {
         SIX_MINUTES
     }
 
+    fn uses_segwit(&self) -> bool {
+        false
+    }
+
     async fn get_current_fee_percentiles(
         &self,
         request: &GetCurrentFeePercentilesRequest,
