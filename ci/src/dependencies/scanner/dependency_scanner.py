@@ -1,4 +1,3 @@
-import datetime
 import logging
 import os
 import pathlib
@@ -12,9 +11,14 @@ from data_source.finding_data_source import FindingDataSource
 from data_source.findings_failover_data_store import FindingsFailoverDataStore
 from integration.github.github_api import GithubApi
 from integration.github.github_app import GithubApp
+from integration.github.github_dependabot import (
+    GHDependabotAlertEcosystem,
+    GHDependabotAlertSeverity,
+    GHDependabotAlertState,
+    GHDependabotSearchQuery,
+)
 from model.finding import Finding
 from model.repository import Repository
-from model.security_risk import SecurityRisk
 from scanner.manager.dependency_manager import DependencyManager
 from scanner.process_executor import ProcessExecutor
 from scanner.scanner_job_type import ScannerJobType
@@ -35,12 +39,14 @@ class DependencyScanner:
         scanner_subscribers: typing.List[ScannerSubscriber],
         failover_data_store: typing.Optional[FindingsFailoverDataStore] = None,
         github_app: GithubApp = None,
+        github_api: GithubApi = None,
     ):
         self.subscribers = scanner_subscribers
         self.dependency_manager = dependency_manager
         self.finding_data_source = finding_data_source
         self.failover_data_store = failover_data_store
         self.github_app = github_app
+        self.github_api = github_api
         self.job_id = os.environ.get("CI_PIPELINE_ID", "CI_PIPELINE_ID")
         self.root = PROJECT_ROOT
 
@@ -278,65 +284,39 @@ class DependencyScanner:
 
     def do_release_scan(self, repository: Repository):
         should_fail_job = False
+        scanner_id = "DEPENDABOT"
         try:
-            findings = self.dependency_manager.get_findings(repository.name, repository.projects[0], None)
-            failures: typing.List = []
+            # we only want to fail if there are open rust findings with severity HIGH or CRITICAL
+            findings = self.github_api.get_dependabot_alerts(
+                GHDependabotSearchQuery(
+                    "dfinity",
+                    repository.projects[0].path,
+                    [GHDependabotAlertState.OPEN],
+                    [GHDependabotAlertSeverity.HIGH, GHDependabotAlertSeverity.CRITICAL],
+                    [GHDependabotAlertEcosystem.RUST],
+                )
+            )
 
+            # no open findings -> all good
             if len(findings) == 0:
                 return
 
-            for finding in findings:
-                vulnerable_dependency = finding.vulnerable_dependency
-                jira_finding = self.finding_data_source.get_open_finding(
-                    repository.name,
-                    self.dependency_manager.get_scanner_id(),
-                    vulnerable_dependency.id,
-                    vulnerable_dependency.version,
-                )
-                if jira_finding:
-                    if not jira_finding.risk:
-                        failures.append(f"Risk assessment not done for {jira_finding.more_info}")
-
-                    if (jira_finding.risk == SecurityRisk.HIGH or jira_finding.risk == SecurityRisk.CRITICAL) and (
-                        not jira_finding.due_date
-                        or jira_finding.due_date - int(datetime.datetime.utcnow().timestamp()) < 0
-                    ):
-                        failures.append(
-                            f"Risk for finding {jira_finding.more_info} crosses release threshold and due date for fixing it has passed"
-                        )
-                else:
-                    failures.append(f"New finding has been found {finding}")
-
-            if len(failures) == 0:
-                return
-
-            git_commit_sha = os.environ.get("CI_COMMIT_SHA", "CI_COMMIT_SHA")
-            exception = self.finding_data_source.commit_has_block_exception(CommitType.RELEASE_COMMIT, git_commit_sha)
-
-            if exception:
-                return
-
-            # At this point, there are failures and there is no exceptions
-            # Job must be failed
+            # we have open rust findings -> fail job
             for subscriber in self.subscribers:
-                subscriber.on_release_build_blocked(self.dependency_manager.get_scanner_id(), self.job_id)
-            logging.error("Release job failed with failures.")
-            logging.info(f"Release job failed with failures : {failures}")
+                subscriber.on_release_build_blocked(scanner_id, self.job_id)
+            # safe to print finding details because these contain only severity and link to dependabot finding which you can only open if you're authorized
+            logging.error(f"Release job failed with failures : {findings}")
 
             sys.exit(1)
         except Exception as err:
             should_fail_job = True
-            logging.error(f"{self.dependency_manager.get_scanner_id()} for {repository.name} failed for {self.job_id}.")
+            logging.error(f"{scanner_id} for {repository.name} failed for {self.job_id}.")
             logging.debug(
-                f"{self.dependency_manager.get_scanner_id()} for {repository.name} failed for {self.job_id} with error:\n{traceback.format_exc()}"
+                f"{scanner_id} for {repository.name} failed for {self.job_id} with error:\n{traceback.format_exc()}"
             )
             for subscriber in self.subscribers:
-                subscriber.on_scan_job_failed(
-                    self.dependency_manager.get_scanner_id(), ScannerJobType.RELEASE_SCAN, self.job_id, str(err)
-                )
+                subscriber.on_scan_job_failed(scanner_id, ScannerJobType.RELEASE_SCAN, self.job_id, str(err))
         finally:
             if not should_fail_job:
                 for subscriber in self.subscribers:
-                    subscriber.on_scan_job_succeeded(
-                        self.dependency_manager.get_scanner_id(), ScannerJobType.RELEASE_SCAN, self.job_id
-                    )
+                    subscriber.on_scan_job_succeeded(scanner_id, ScannerJobType.RELEASE_SCAN, self.job_id)
