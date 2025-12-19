@@ -11,92 +11,22 @@ load("//bazel:mainnet-icos-images.bzl", "icos_dev_image_download_url", "icos_ima
 load("//rs/tests:common.bzl", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
+    env = dict(ctx.attr.env.items())  # environment variables for the run script
+    data = []  # runtime dependencies for the run script
+
+    # this is a dummy exec() as a placeholder before the rule is implemented by a macro
     run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
-
-    no_logs = True
-    if ctx.executable.colocated_test_bin != None:
-        # The colocated driver has the logic to see if it should spawn vector
-        no_logs = True
-    elif "VECTOR_VM_PATH" in ctx.attr.env:
-        no_logs = False
-
     ctx.actions.write(
         output = run_test_script_file,
         is_executable = True,
         content = """#!/bin/bash
-            set -eEuo pipefail
-
-            # Resolve any RUN_SCRIPT_ variables
-
-            # RUN_SCRIPT_ICOS_IMAGES:
-            # For every ic-os image specified, first ensure it's in remote
-            # storage, then export its download URL and HASH as environment variables.
-            if [ -n "${{RUN_SCRIPT_ICOS_IMAGES:-}}" ]; then
-              # split the ";"-delimited list of "env_prefix:filepath;env_prefix2:filepath2;..."
-              # into an array
-              IFS=';' read -ra icos_images <<<"$RUN_SCRIPT_ICOS_IMAGES"
-              for image in "${{icos_images[@]}}"; do
-                  # split "envvar:filepath"
-                  image_var_prefix=${{image%:*}}
-                  image_filename=${{image#*:}}
-
-                  # ensure the dep is uploaded
-                  image_download_url=$("$RUN_SCRIPT_UPLOAD_SYSTEST_DEP" "$image_filename")
-                  echo "  -> $image_filename=$image_download_url" >&2
-
-                  # Since this is a CAS url, we assume the last URL path part is the sha256
-                  image_download_hash="${{image_download_url##*/}}"
-                  # set the environment variables for the test
-                  export "${{image_var_prefix}}_URL=$image_download_url"
-                  export "${{image_var_prefix}}_HASH=$image_download_hash"
-              done
-            fi
-
-            # RUN_SCRIPT_INFO_FILE_VARS:
-            # For every var specified, pull the value from info_file, and
-            # expose it to the test plus the given suffix.
-            if [ -n "${{RUN_SCRIPT_INFO_FILE_VARS:-}}" ]; then
-              # split the ";"-delimited list of "env_var:info_var:suffix;env_var2:info_var2:suffix;..."
-              # into an array
-              IFS=';' read -ra vars <<<"$RUN_SCRIPT_INFO_FILE_VARS"
-              for var in "${{vars[@]}}"; do
-                  # split "envvar:infovar:suffix"
-                  IFS=':' read -ra parts <<<"$var"
-                  env_var_name="${{parts[0]}}"
-                  info_var_name="${{parts[1]}}"
-                  suffix="${{parts[2]:-}}"
-
-                  # Expose the variable to the test.
-                  export "${{env_var_name}}"="$(grep <{info_file} -e ${{info_var_name}} | cut -d' ' -f2)${{suffix}}"
-              done
-            fi
-
-            # clean up the env for the test
-            unset RUN_SCRIPT_ICOS_IMAGES RUN_SCRIPT_UPLOAD_SYSTEST_DEP RUN_SCRIPT_INFO_FILE_VARS
-
-            # We export RUNFILES such that the from_location_specified_by_env_var() function in
-            # rs/rust_canisters/canister_test/src/canister.rs can find canisters
-            # relative to the $RUNFILES directory.
-            export RUNFILES="$PWD"
-            mkdir "$TEST_TMPDIR/root_env"
-            "$RUNFILES/{test_executable}" \
-              --working-dir "$TEST_TMPDIR" \
-              --group-base-name {group_base_name} \
-              {logs} \
-              {no_summary_report} \
-              {exclude_logs} \
-              "$@" run
+        exec {run_systest} "$@"
         """.format(
-            test_executable = ctx.executable.src.short_path,
-            group_base_name = ctx.label.name,
-            no_summary_report = "--no-summary-report" if ctx.executable.colocated_test_bin != None else "",
-            info_file = ctx.info_file.short_path,
-            logs = "--no-logs" if no_logs else "",
-            exclude_logs = " ".join(["--exclude-logs {pattern}".format(pattern = pattern) for pattern in ctx.attr.exclude_logs]),
+            run_systest = ctx.executable._run_systest.short_path,
         ),
     )
-
-    env = dict(ctx.attr.env.items())
+    data.append(run_test_script_file)
+    data.append(ctx.executable._run_systest)
 
     # Expand Make variables in env vars, with runtime_deps as targets
     for key, value in env.items():
@@ -104,58 +34,62 @@ def _run_system_test(ctx):
         if value.startswith("$"):
             env[key] = ctx.expand_location(value, ctx.attr.runtime_deps)
 
-    env |= {
-        "FARM_METADATA_PATH": ctx.info_file.short_path,
-    }
+    # Used by the run script and by farm to read metadata
+    env["FARM_METADATA_PATH"] = ctx.info_file.short_path
+    data.append(ctx.info_file)
 
     # We use the RUN_SCRIPT_ prefix for variables that are processed by the run
     # script, and not passed directly to the test.
+
+    # The test driver
+    env["RUN_SCRIPT_TEST_EXECUTABLE"] = ctx.executable.src.short_path
+    data.append(ctx.executable.src)
+
+    # The uploader for dependencies fetched remotely from the runner
+    env["RUN_SCRIPT_UPLOAD_SYSTEST_DEP"] = ctx.executable._upload_systest_dep.short_path
+    data.append(ctx.executable._upload_systest_dep)
 
     # RUN_SCRIPT_ICOS_IMAGES:
     # Have the run script resolve repo based ICOS images.
     # The run script expects a map of enviromment variable prefixes to targets. e.g.
     # RUN_SCRIPT_ICOS_IMAGES=ENV_DEPS__GUESTOS_DISK_IMG:ic-os/guestos/envs/dev/disk-img.tar.zst;ENV_DEPS__GUESTOS_UPDATE_IMG:ic-os/guestos/envs/dev/update-img.tar.zst
-    icos_images = ctx.attr.icos_images
-    env |= {
-        "RUN_SCRIPT_ICOS_IMAGES": ";".join([k + ":" + v.files.to_list()[0].short_path for k, v in icos_images.items()]),
-    }
-
-    env["RUN_SCRIPT_UPLOAD_SYSTEST_DEP"] = ctx.executable._upload_systest_dep.short_path
+    env["RUN_SCRIPT_ICOS_IMAGES"] = ";".join([k + ":" + v.files.to_list()[0].short_path for k, v in ctx.attr.icos_images.items()])
+    [data.append(image.files.to_list()[0]) for _, image in ctx.attr.icos_images.items()]
 
     # RUN_SCRIPT_INFO_FILE_VARS:
     # Have the run script resolve some vars from info_file.
     # The run script expects a map of enviromment variables to their info_file counterparts plus a suffix. e.g.
     # RUN_SCRIPT_INFO_FILE_VARS=ENV_DEPS__GUESTOS_DISK_IMG_VERSION:STABLE_VERSION;ENV_DEPS__OTHER:STABLE_OTHER:suffix
     info_file_vars = ctx.attr.info_file_vars
-    env |= {
-        "RUN_SCRIPT_INFO_FILE_VARS": ";".join([k + ":" + ":".join(v) for k, v in info_file_vars.items()]),
-    }
+    env["RUN_SCRIPT_INFO_FILE_VARS"] = ";".join([k + ":" + ":".join(v) for k, v in info_file_vars.items()])
 
     if ctx.executable.colocated_test_bin != None:
         env["COLOCATED_TEST_BIN"] = ctx.executable.colocated_test_bin.short_path
 
-    runtime_deps = []
+    # set some extra arguments for the test driver
+    extra_args = []
 
-    for target in ctx.attr.runtime_deps:
-        runtime_deps.append(target.files)
+    # we enable logs _if_ the VECTOR_VM_PATH is set, but only if it's _not_ a colocated test
+    # (colocated tests have their own vector VM logic)
+    enable_logs = ("VECTOR_VM_PATH" in ctx.attr.env) and ctx.executable.colocated_test_bin == None
+    if not enable_logs:
+        extra_args.append("--no-logs")
 
-    for e, t in icos_images.items():
-        runtime_deps.append(t.files)
-        env[e] = t.files.to_list()[0].short_path
+    if ctx.executable.colocated_test_bin != None:
+        extra_args.append("--no-summary-report")
+
+    [extra_args.extend(["--exclude-logs", pat]) for pat in ctx.attr.exclude_logs]
+    extra_args.extend(["--group-base-name", ctx.label.name])
+
+    env["RUN_SCRIPT_DRIVER_EXTRA_ARGS"] = " ".join(extra_args)
 
     return [
         DefaultInfo(
             executable = run_test_script_file,
             runfiles = ctx.runfiles(
-                files = [
-                    run_test_script_file,
-                    ctx.info_file,
-                    ctx.executable.src,
-                    ctx.executable._upload_systest_dep,
-                ],
+                files = data,
                 transitive_files = depset(
-                    direct = [],
-                    transitive = runtime_deps,
+                    transitive = [dep.files for dep in ctx.attr.runtime_deps],
                 ),
             ),
         ),
@@ -172,7 +106,8 @@ run_system_test = rule(
         "src": attr.label(executable = True, cfg = "exec"),
         "colocated_test_bin": attr.label(executable = True, cfg = "exec", default = None),
         "env": attr.string_dict(allow_empty = True),
-        "_upload_systest_dep": attr.label(executable = True, cfg = "exec", default = "//bazel:upload_systest_dep"),
+        "_upload_systest_dep": attr.label(executable = True, cfg = "exec", default = "//rs/tests:upload_systest_dep"),
+        "_run_systest": attr.label(executable = True, cfg = "exec", default = "//rs/tests:run_systest"),
         "runtime_deps": attr.label_list(allow_files = True),
         "icos_images": attr.string_keyed_label_dict(doc = "Specifies images to be used by the test. Values will be replaced with actual download URLs and hashes.", allow_files = True),
         "info_file_vars": attr.string_list_dict(doc = "Specifies variables to be pulled from info_file. Expects a map of varname to [infovar_name, optional_suffix]."),
