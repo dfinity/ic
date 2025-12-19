@@ -49,15 +49,15 @@ impl FeeEstimator for DogecoinFeeEstimator {
     // corresponding to 10k millikoinus/byte
     const MIN_RELAY_FEE_RATE_INCREASE: u64 = 10_000;
 
-    fn estimate_median_fee(&self, fee_percentiles: &[u64]) -> Option<u64> {
+    fn estimate_nth_fee(&self, fee_percentiles: &[u64], nth: usize) -> Option<u64> {
         const DEFAULT_REGTEST_FEE: MillisatoshiPerByte = DogecoinFeeEstimator::DUST_LIMIT * 1_000;
 
         match &self.network {
             Network::Mainnet | Network::Testnet => {
-                if fee_percentiles.len() < 100 {
+                if fee_percentiles.len() < 100 || nth >= 100 {
                     return None;
                 }
-                Some(fee_percentiles[50])
+                Some(fee_percentiles[nth])
             }
             Network::Regtest => Some(DEFAULT_REGTEST_FEE),
         }

@@ -14,6 +14,15 @@ pub trait FeeEstimator {
     fn estimate_median_fee(
         &self,
         fee_percentiles: &[MillisatoshiPerByte],
+    ) -> Option<MillisatoshiPerByte> {
+        self.estimate_nth_fee(fee_percentiles, 50)
+    }
+
+    /// Estimate the n-th percentile fees (n < 100) based on the given fee percentiles (slice of fee rates in milli base unit per vbyte/byte).
+    fn estimate_nth_fee(
+        &self,
+        fee_percentiles: &[MillisatoshiPerByte],
+        nth: usize,
     ) -> Option<MillisatoshiPerByte>;
 
     /// Evaluate the fee necessary to cover the minter's cycles consumption.
@@ -90,19 +99,20 @@ impl FeeEstimator for BitcoinFeeEstimator {
 
     const MIN_RELAY_FEE_RATE_INCREASE: MillisatoshiPerByte = 1_000;
 
-    fn estimate_median_fee(
+    fn estimate_nth_fee(
         &self,
         fee_percentiles: &[MillisatoshiPerByte],
+        nth: usize,
     ) -> Option<MillisatoshiPerByte> {
         /// The default fee we use on regtest networks.
         const DEFAULT_REGTEST_FEE: MillisatoshiPerByte = 5_000;
 
         let median_fee = match &self.network {
             Network::Mainnet | Network::Testnet => {
-                if fee_percentiles.len() < 100 {
+                if fee_percentiles.len() < 100 || nth >= 100 {
                     return None;
                 }
-                Some(fee_percentiles[50])
+                Some(fee_percentiles[nth])
             }
             Network::Regtest => Some(DEFAULT_REGTEST_FEE),
         };
