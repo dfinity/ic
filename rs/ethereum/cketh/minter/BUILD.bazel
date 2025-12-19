@@ -151,6 +151,7 @@ rust_test(
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-metrics-encoder",
+        "@crate_index//:minicbor",
         "@crate_index//:num-traits",
         "@crate_index//:serde_bytes",
         "@crate_index//:time",

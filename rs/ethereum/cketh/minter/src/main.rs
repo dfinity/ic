@@ -1,6 +1,5 @@
 #![allow(deprecated)]
 use crate::dashboard::DashboardPaginationParameters;
-use crate::memo;
 use candid::Nat;
 use dashboard::DashboardTemplate;
 use ic_canister_log::log;
@@ -888,7 +887,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
 }
 
 #[query]
-fn decode_ledger_memo(arg: DecodeLedgerMemoArgs) -> DecodeLedgerMemoResult {
+fn decode_ledger_memo(args: DecodeLedgerMemoArgs) -> DecodeLedgerMemoResult {
     match args.memo_type {
         MemoType::Burn => match minicbor::decode::<BurnMemo>(&args.encoded_memo) {
             Ok(burn_memo) => Ok(Some(DecodedMemo::Burn(Some(endpoints::BurnMemo::from(
