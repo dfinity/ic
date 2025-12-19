@@ -218,7 +218,7 @@ where
         let mut mempool = self.setup.as_ref().dogecoin().mempool();
         let tx = mempool
             .remove(&txid)
-            .expect("the mempool does not contain the withdrawal transaction");
+            .unwrap_or_else(|| panic!("BUG: transaction {} not found in mempool", txid));
 
         let (request_block_indices, change_amount, withdrawal_fee, used_utxos) = {
             let sent_tx_event = minter
