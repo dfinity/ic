@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 base64 = { workspace = true }
 hex = { workspace = true }
+ic-crypto-utils-threshold-sig-der = { path = "../../../crypto/utils/threshold_sig_der" }
 ic-icrc1-test-utils = { path = "../../../ledger_suite/icrc1/test_utils" }
 ic-rosetta-api = { path = "../" }
 ic-types = { path = "../../../types/types" }

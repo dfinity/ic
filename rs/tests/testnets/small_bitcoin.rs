@@ -4,10 +4,10 @@
 //
 // Note, all canisters will be installed on a system subnet by default.
 //
-// You can setup this testnet with a lifetime of 180 mins by executing the following commands:
+// You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/tools/docker-run
-//   $ ict testnet create small_bitcoin --lifetime-mins=180 --output-dir=./small_bitcoin -- --test_tmpdir=./small_bitcoin
+//   $ ict testnet create small_bitcoin --output-dir=./small_bitcoin -- --test_tmpdir=./small_bitcoin
 //
 // The --output-dir=./small_bitcoin will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./small_bitcoin will store the remaining test output in the specified directory.

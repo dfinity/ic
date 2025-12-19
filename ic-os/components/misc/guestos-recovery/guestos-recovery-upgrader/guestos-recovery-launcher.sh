@@ -6,12 +6,12 @@ set -e
 
 validate_argument() {
     local arg="$1"
-    # Only allow known parameters with hexadecimal values
+    # Only allow known parameters with constrained formats
     # NOTE: version=RECOVERY_VERSION is allowed as a dummy value for testing purposes.
-    if [[ "$arg" =~ ^version=[a-f0-9]{40}$ ]] \
-        || [[ "$arg" == "version=RECOVERY_VERSION" ]] \
-        || [[ "$arg" =~ ^version-hash=[a-f0-9]{64}$ ]] \
-        || [[ "$arg" =~ ^recovery-hash=[a-f0-9]{64}$ ]]; then
+    if [[ "$arg" =~ ^mode=(prep|install|run)$ ]] \
+        || [[ "$arg" =~ ^version=[a-f0-9]{40}$ ]] \
+        || [[ "$arg" =~ ^recovery-hash-prefix=[a-f0-9]{6}$ ]] \
+        || [[ "$arg" == "version=RECOVERY_VERSION" ]]; then
         return 0
     else
         echo "ERROR: Invalid argument format: $arg" >&2
@@ -20,13 +20,13 @@ validate_argument() {
 }
 
 if [ $# -eq 0 ]; then
-    echo "Usage: $0 version=<version> version-hash=<hash> recovery-hash=<hash>"
+    echo "Usage: $0 mode=<run|prep|install> version=<40-char-hex> recovery-hash-prefix=<6-char-hex>"
     exit 1
 fi
 
 for arg in "$@"; do
     if ! validate_argument "$arg"; then
-        echo "Arguments must be: version=<40-char-hex> version-hash=<64-char-hex> recovery-hash=<64-char-hex>"
+        echo "Arguments must be: mode=<run|prep|install> version=<40-char-hex> recovery-hash-prefix=<6-char-hex>"
         exit 1
     fi
 done
