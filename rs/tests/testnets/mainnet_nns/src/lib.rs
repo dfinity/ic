@@ -35,7 +35,7 @@ use crate::proposals::ProposalWithMainnetState;
 pub const MAINNET_NODE_VM_RESOURCES: VmResources = VmResources {
     vcpus: None,
     memory_kibibytes: None,
-    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(128)),
+    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(192)),
 };
 
 // Default path to the mainnet NNS state tarball on the backup pod. Can be overridden through the
