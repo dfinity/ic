@@ -13,6 +13,7 @@ rust_library(
     deps = [
         "@crate_index//:anyhow",
         "@crate_index//:ratatui",
+        "@crate_index//:scopeguard",
         "@crate_index//:shell-escape",
         "@crate_index//:tui-textarea",
     ],

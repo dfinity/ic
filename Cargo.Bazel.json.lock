@@ -1,5 +1,5 @@
 {
-  "checksum": "d6681672ce3a92c94fb408a809ed5b2b660a49f76cac197c8ade1be20a5c6b32",
+  "checksum": "971e5d282607108262108ca673f422f2836eabfcb73687aedd1d7aeade59afa4",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22610,10 +22610,6 @@
               "target": "wasmtime"
             },
             {
-              "id": "wasmtime-environ 39.0.1",
-              "target": "wasmtime_environ"
-            },
-            {
               "id": "wast 240.0.0",
               "target": "wast"
             },
@@ -36832,12 +36828,9 @@
       "version": "0.1.0",
       "package_url": "https://github.com/dfinity/dogecoin-canister",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/dogecoin-canister",
-          "commitish": {
-            "Rev": "a5f89792a002b060e3f0174f1a87da9764f855f8"
-          },
-          "strip_prefix": "interface"
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-doge-interface/0.1.0/download",
+          "sha256": "b36c851b8fc6ec45666e3a912c8b22878e4f12f6d1d9f7033a153c7684903829"
         }
       },
       "targets": [
@@ -98104,7 +98097,6 @@
     "wasmparser 0.240.0",
     "wasmprinter 0.240.0",
     "wasmtime 39.0.1",
-    "wasmtime-environ 39.0.1",
     "wast 240.0.0",
     "wat 1.240.0",
     "wee_alloc 0.4.5",

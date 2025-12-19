@@ -27,6 +27,7 @@ pub mod deregister_known_neuron;
 pub mod execute_nns_function;
 pub mod fulfill_subnet_rental_request;
 pub mod install_code;
+pub mod manage_neuron;
 pub mod register_known_neuron;
 pub mod self_describing;
 pub mod stop_or_start_canister;
@@ -221,6 +222,9 @@ impl ValidProposalAction {
             }
             ValidProposalAction::UpdateCanisterSettings(update_canister_settings) => {
                 Ok(update_canister_settings.to_self_describing_action())
+            }
+            ValidProposalAction::ManageNeuron(manage_neuron) => {
+                Ok(manage_neuron.to_self_describing_action())
             }
             _ => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
