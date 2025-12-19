@@ -67,6 +67,7 @@ system_test_nns(
 #     bazel \
 #         test \
 #         --test_env=SSH_AUTH_SOCK \
+#         --test_timeout=10800 \  # 3 hours
 #         //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state
 #
 # The only unusual thing in this command is `--test_env=SSH_AUTH_SOCK`. That causes the
@@ -88,7 +89,7 @@ system_test_nns(
         "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
         "requires-network",  # Because mainnet state is downloaded (and used).
     ],
-    test_timeout = "eternal",
+    test_timeout = "eternal", # "eternal" (1 hour) is not even enough for this test. Use `--test_timeout=10800` when running it.
     uses_setupos_mainnet_latest_img = True,
     runtime_deps = RUNTIME_DEPS + [
         "//rs/tests:recovery/binaries",
