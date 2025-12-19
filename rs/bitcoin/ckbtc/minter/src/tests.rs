@@ -1,6 +1,7 @@
 use crate::state::utxos::UtxoSet;
+use crate::tx::SignedInput;
 use crate::{
-    BuildTxError, CacheWithExpiration, IC_CANISTER_RUNTIME, Network,
+    BuildTxError, CacheWithExpiration, Network,
     address::BitcoinAddress,
     build_unsigned_transaction, build_unsigned_transaction_from_inputs, estimate_retrieve_btc_fee,
     fake_sign,
@@ -163,13 +164,9 @@ fn unsigned_tx_to_bitcoin_tx(tx: &tx::UnsignedTransaction) -> bitcoin::Transacti
 }
 
 fn signed_tx_to_bitcoin_tx(tx: &tx::SignedTransaction) -> bitcoin::Transaction {
-    bitcoin::Transaction {
-        version: tx::TX_VERSION as i32,
-        lock_time: tx.lock_time,
-        input: tx
-            .inputs
-            .iter()
-            .map(|txin| bitcoin::TxIn {
+    fn to_bitcoin_tx_in(txin: &SignedInput) -> bitcoin::TxIn {
+        if txin.uses_segwit {
+            bitcoin::TxIn {
                 previous_output: bitcoin::OutPoint {
                     txid: as_txid(&txin.previous_output.txid.into()),
                     vout: txin.previous_output.vout,
@@ -180,8 +177,26 @@ fn signed_tx_to_bitcoin_tx(tx: &tx::SignedTransaction) -> bitcoin::Transaction {
                     txin.signature.as_slice().to_vec(),
                     txin.pubkey.to_vec(),
                 ]),
-            })
-            .collect(),
+            }
+        } else {
+            bitcoin::TxIn {
+                previous_output: bitcoin::OutPoint {
+                    txid: as_txid(&txin.previous_output.txid.into()),
+                    vout: txin.previous_output.vout,
+                },
+                sequence: txin.sequence,
+                script_sig: bitcoin::blockdata::script::Builder::new()
+                    .push_slice(txin.signature.as_slice())
+                    .push_slice(&txin.pubkey)
+                    .into_script(),
+                witness: bitcoin::Witness::default(),
+            }
+        }
+    }
+    bitcoin::Transaction {
+        version: tx::TX_VERSION as i32,
+        lock_time: tx.lock_time,
+        input: tx.inputs.iter().map(to_bitcoin_tx_in).collect(),
         output: tx
             .outputs
             .iter()
@@ -587,12 +602,9 @@ proptest! {
         lock_time in any::<u32>(),
     ) {
         let arb_tx = tx::SignedTransaction { inputs, outputs, lock_time };
-        println!("{arb_tx:?}");
         let btc_tx = signed_tx_to_bitcoin_tx(&arb_tx);
-        println!("{:?}", btc_tx.serialize());
 
         let tx_bytes = tx::encode_into(&arb_tx, Vec::<u8>::new());
-        println!("{tx_bytes:?}");
         let decoded_btc_tx = bitcoin::Transaction::deserialize(&tx_bytes).expect("failed to deserialize a signed transaction");
 
         prop_assert_eq!(btc_tx.serialize(), tx_bytes);

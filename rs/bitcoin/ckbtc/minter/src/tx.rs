@@ -576,11 +576,18 @@ impl Encode for SignedTransaction {
             self.inputs.encode(buf);
             self.outputs.encode(buf);
             for txin in self.inputs.iter() {
-                [
-                    Bytes::new(txin.signature.as_slice()),
-                    Bytes::new(&txin.pubkey),
-                ][..]
-                    .encode(buf);
+                if txin.uses_segwit {
+                    [
+                        Bytes::new(txin.signature.as_slice()),
+                        Bytes::new(&txin.pubkey),
+                    ][..]
+                        .encode(buf);
+                } else {
+                    // A segwit transaction can unlock inputs of different types, e.g. P2PKH or P2WPKH outputs.
+                    // Every input must have a witness field, which is set to 0 for non-segwit inputs.
+                    // See [learnmeabitcoin](https://learnmeabitcoin.com/technical/transaction/witness/#example-p2wpkh-and-p2wsh).
+                    buf.write(&[0]);
+                }
             }
         }
         self.lock_time.encode(buf)

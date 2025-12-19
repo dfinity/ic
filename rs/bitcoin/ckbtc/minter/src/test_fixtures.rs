@@ -394,6 +394,7 @@ pub mod arbitrary {
             sequence: any::<u32>(),
             signature: encoded_signature(),
             pubkey: pvec(any::<u8>(), tx::PUBKEY_LEN).prop_map(ByteBuf::from),
+            uses_segwit: any::<bool>(),
         })
     }
 
