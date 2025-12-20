@@ -12,6 +12,5 @@ tmpfs_tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
 sudo mount -t tmpfs none "${tmpfs_tmpdir}"
 
 tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
-# NOTE: Ignore failure to cleanup the directory for now. This should not be a problem after NODE-1048.
-trap 'sudo umount "${tmpfs_tmpdir}"; sudo rm -rf "$tmpdir" "${tmpfs_tmpdir}" || true' INT TERM EXIT
+trap 'sudo umount "${tmpfs_tmpdir}"; sudo rm -rf "$tmpdir" "${tmpfs_tmpdir}"' INT TERM EXIT
 TMPDIR="$tmpdir" TMPFS_TMPDIR="${tmpfs_tmpdir}" "$@"
