@@ -590,6 +590,69 @@ type AddCkErc20Token = record {
     ckerc20_ledger_id : principal;
 };
 
+type MemoType = variant {
+    Burn;
+    Mint;
+};
+
+type DecodeLedgerMemoArgs = record {
+    // The encoded memo type
+    memo_type : MemoType;
+    // The encoded memo from a minter transaction on the ledger
+    encoded_memo : blob;
+};
+
+type MintMemo = variant {
+    Convert : record {
+        from_address: text;
+        tx_hash: text;
+        log_index: nat;
+    };
+    ReimburseTransaction : record {
+        withdrawal_id: nat64;
+        tx_hash: text;
+    };
+    ReimburseWithdrawal : record {
+        withdrawal_id: nat64;
+    };    
+};
+
+type BurnMemo = variant {
+    Convert : record {
+        to_address: text;
+    };
+    Erc20GasFee : record {
+        ckerc20_token_symbol: text;
+        ckerc20_withdrawal_amount: nat;
+        to_address: text;
+    };
+    Erc20Convert : record {
+        ckerc20_withdrawal_id: nat64;
+        to_address: text;
+    };    
+};
+
+type DecodedMemo = variant {
+    // The decoded MintMemo - `opt` since other variants of `MintMemo` could be added in the future.
+    Mint : opt MintMemo;
+    // The decoded BurnMemo - `opt` since other variants of `BurnMemo` could be added in the future.
+    Burn : opt BurnMemo;
+};
+
+type DecodeLedgerMemoError = variant {
+    // The provided memo could not be decoded.
+    InvalidMemo : text;
+};
+
+type DecodeLedgerMemoResult = variant {
+    // The decoded memo, if the minter was able to decode it. This field is `opt`, so that other memo types can be
+    // added in the future.
+    Ok : opt DecodedMemo;
+    // An error in case the minter was not able to decode the provided memo. This field is `opt`, so that other error
+    // types can be added in the future.
+    Err : opt DecodeLedgerMemoError;
+}
+
 service : (MinterArg) -> {
     // Retrieve the Ethereum address controlled by the minter:
     // * Deposits will be transferred from the helper smart contract to this address
@@ -639,4 +702,7 @@ service : (MinterArg) -> {
     // Add a ckERC-20 token to be supported by the minter.
     // This call is restricted to the orchestrator ID.
     add_ckerc20_token : (AddCkErc20Token) -> ();
+
+    // Returns information related to minter transactions.
+    decode_ledger_memo : (DecodeLedgerMemoArgs) -> (DecodeLedgerMemoResult) query;
 }
