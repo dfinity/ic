@@ -45,7 +45,7 @@ jobs:
   bazel-build-pocket-ic:
     name: Bazel Build PocketIC
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:f5cb4f3813d09becd303fc14036568eecb7cdf3ffc65098e5a42c15d3ce77cee
+      image: ghcr.io/dfinity/ic-build@sha256:499a8cd1efd84e7493e8e3350047dee6743bbf7289e85e14ec2b1dba47467c27
       options: >-
         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
     timeout-minutes: 90
