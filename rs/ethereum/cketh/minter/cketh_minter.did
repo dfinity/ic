@@ -603,31 +603,49 @@ type DecodeLedgerMemoArgs = record {
 };
 
 type MintMemo = variant {
+    // The minter received some ETH or ERC20 token.
     Convert : record {
+        // The sender of the ETH or ERC20 token.
         from_address: text;
+        // Hash of the transaction.
         tx_hash: text;
         log_index: nat;
     };
     ReimburseTransaction : record {
+        // The id corresponding to the withdrawal request.
         withdrawal_id: nat64;
+        // Hash of the failed transaction.
         tx_hash: text;
     };
+    // The minter failed to process a withdrawal request,
+    // so no transaction was issued, but some reimbursement was made.
     ReimburseWithdrawal : record {
+        // The id corresponding to the withdrawal request.
         withdrawal_id: nat64;
     };    
 };
 
 type BurnMemo = variant {
+    // The minter processed a withdrawal request.
     Convert : record {
+        // The destination of the withdrawal request.
         to_address: text;
     };
+    // The minter processed a ckERC20 withdrawal request
+    // and that burn pays the transaction fee.
     Erc20GasFee : record {
+        // ckERC20 token symbol of the withdrawal request.
         ckerc20_token_symbol: text;
+        // The amount of the ckERC20 withdrawal request.
         ckerc20_withdrawal_amount: nat;
+        // The destination of the withdrawal request.
         to_address: text;
     };
+    // The minter processed a ckERC20 withdrawal request.
     Erc20Convert : record {
+        // ckETH ledger burn index identifying the burn to pay for the transaction fee.
         ckerc20_withdrawal_id: nat64;
+        // The destination of the withdrawal request.
         to_address: text;
     };    
 };
