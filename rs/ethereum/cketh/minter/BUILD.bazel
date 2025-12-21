@@ -37,6 +37,7 @@ rust_library(
         "//packages/icrc-cbor:icrc-cbor_u256",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ledger_suite/icrc1/tokens_u256",
         "//rs/phantom_newtype",
         "//rs/types/management_canister_types",
         "//rs/utils/ensure",

@@ -7755,6 +7755,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-ethereum-types",
  "ic-http-types",
+ "ic-icrc1-tokens-u256",
  "ic-ledger-suite-orchestrator-test-utils",
  "ic-management-canister-types-private",
  "ic-metrics-encoder",
