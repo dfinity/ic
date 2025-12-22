@@ -548,6 +548,7 @@ proptest! {
         prop_assert_eq!(btc_tx.serialize(), tx_bytes);
         prop_assert_eq!(&decoded_btc_tx, &btc_tx);
         prop_assert_eq!(&arb_tx.txid().as_ref().to_vec(), &*btc_tx.txid());
+        prop_assert_eq!(&arb_tx.txid().as_ref().to_vec(), &*btc_tx.ntxid());
     }
 
     #[test]
@@ -610,6 +611,8 @@ proptest! {
         prop_assert_eq!(btc_tx.serialize(), tx_bytes);
         prop_assert_eq!(&decoded_btc_tx, &btc_tx);
         prop_assert_eq!(&arb_tx.wtxid(), &*btc_tx.wtxid());
+        prop_assert_eq!(&arb_tx.compute_txid().as_ref().to_vec(), &*btc_tx.txid());
+        prop_assert_eq!(&arb_tx.compute_ntxid().as_ref().to_vec(), &*btc_tx.ntxid());
         prop_assert_eq!(arb_tx.vsize(), btc_tx.vsize());
     }
 

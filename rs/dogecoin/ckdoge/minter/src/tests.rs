@@ -118,6 +118,10 @@ fn should_use_p2pkh() {
             ],
         }
     );
+    assert_eq!(
+        dogecoin_tx.compute_txid().as_byte_array(),
+        &signed_tx.wtxid()
+    );
 }
 
 fn dogecoin_address_to_bitcoin(address: DogecoinAddress) -> BitcoinAddress {

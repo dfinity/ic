@@ -386,6 +386,26 @@ impl SignedTransaction {
         Sha256::hash(&encode_into(self, Sha256::new()))
     }
 
+    /// Computes the [`Txid`].
+    ///
+    /// Hashes the transaction **excluding** the segwit data (i.e. the marker, flag bytes, and the
+    /// witness fields themselves). For non-segwit transactions which do not have any segwit data,
+    /// this will be equal to [`Self::wtxid`].
+    pub fn compute_txid(&self) -> Txid {
+        Txid::from(Sha256::hash(&encode_into(&BaseTxView(self), Sha256::new())))
+    }
+
+    /// Computes a "normalized TXID" which does not include any signatures.
+    ///
+    /// This gives a way to identify a transaction that is "the same" as
+    /// another in the sense of having same inputs and outputs.
+    pub fn compute_ntxid(&self) -> Txid {
+        Txid::from(Sha256::hash(&encode_into(
+            &UnsignedTxView(self),
+            Sha256::new(),
+        )))
+    }
+
     /// Returns the virtual transaction size that nodes use to compute fees.
     pub fn vsize(&self) -> usize {
         // # Transaction size calculations
@@ -422,6 +442,29 @@ impl SignedTransaction {
         // To avoid serialization ambiguity, no inputs means we use BIP141 serialization (see
         // `Transaction` docs for full explanation).
         self.inputs.is_empty()
+    }
+}
+
+struct UnsignedTxView<'a>(&'a SignedTransaction);
+struct UnsignedInputView<'a>(&'a SignedInput);
+
+impl Encode for UnsignedTxView<'_> {
+    fn encode(&self, buf: &mut impl Buffer) {
+        TX_VERSION.encode(buf);
+        let inputs: Vec<_> = self.0.inputs.iter().map(UnsignedInputView).collect();
+        inputs.encode(buf);
+        self.0.outputs.encode(buf);
+        self.0.lock_time.encode(buf);
+    }
+}
+
+impl Encode for UnsignedInputView<'_> {
+    fn encode(&self, buf: &mut impl Buffer) {
+        //like `Encode` for `UnsignedInput`
+        self.0.previous_output.encode(buf);
+        // Script signature is empty
+        buf.write(&[0]);
+        self.0.sequence.encode(buf);
     }
 }
 
