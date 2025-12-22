@@ -692,3 +692,51 @@ fn test_scalar_inversion() -> CanisterThresholdResult<()> {
     }
     Ok(())
 }
+
+#[test]
+fn test_scalarbytes_deserialization_with_old_cbor_format() {
+    let old_ser = [
+        (EccCurveType::K256, hex!("a1644b323536982018c8183c18431893183f188f188e182e1857181b18ab18ce041870187f183b1856185d1886187018d518ce182418421871184618ba187b186918ac09183d").to_vec()),
+        (EccCurveType::P256, hex!("a1645032353698201830182a185d1018c018290a189e189b04183c1822185b061896182e187018af1887182f18d1182e183b189b18cb18441822187618b303185c186f").to_vec()),
+        (EccCurveType::Ed25519, hex!("a16745643235353139982018a118a9187c11187818ed18df18cb182218ad184b18ce182b187f1878188618d9185d18d9186d11181f182b1892186018221882187a18a8186f0c0e").to_vec()),
+    ];
+
+    for (curve, bytes) in &old_ser {
+        let sb: EccScalarBytes =
+            serde_cbor::from_slice(&bytes).expect("Failed to deserialize CBOR encoding");
+
+        assert_eq!(*curve, sb.curve_type());
+
+        // Confirm that (for now) the default serialization is the old format for K256 and Ed25519
+        if *curve == EccCurveType::K256 || *curve == EccCurveType::Ed25519 {
+            assert_eq!(
+                hex::encode(serde_cbor::to_vec(&sb).unwrap()),
+                hex::encode(bytes)
+            );
+        }
+    }
+}
+
+#[test]
+fn test_scalarbytes_deserialization_compact_cbor_format() {
+    let old_ser = [
+        (EccCurveType::K256, hex!("a1644b3235365820b5ebe6143c8a7f7f459413a69c34ffce7227ea0e37f3524e67283b1e99fd8194").to_vec()),
+        (EccCurveType::P256, hex!("a164503235365820eadb7e4360365ce1a417d9fdddda706296e367053e14136f57b4a69b00494c06").to_vec()),
+        (EccCurveType::Ed25519, hex!("a1674564323535313958207f7096a7e536695c1ecce3d6b3ba75e81bd910a79cb2e33f1e60cc4df292e404").to_vec()),
+    ];
+
+    for (curve, bytes) in &old_ser {
+        let sb: EccScalarBytes =
+            serde_cbor::from_slice(&bytes).expect("Failed to deserialize CBOR encoding");
+
+        assert_eq!(*curve, sb.curve_type());
+
+        // Confirm that the new format is used for P256
+        if *curve == EccCurveType::P256 {
+            assert_eq!(
+                hex::encode(serde_cbor::to_vec(&sb).unwrap()),
+                hex::encode(bytes)
+            );
+        }
+    }
+}

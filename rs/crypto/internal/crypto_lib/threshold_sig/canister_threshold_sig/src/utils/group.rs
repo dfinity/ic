@@ -531,11 +531,114 @@ impl<'de> Deserialize<'de> for EccScalar {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Deserialize, Serialize, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub enum EccScalarBytes {
     K256(Box<[u8; 32]>),
     P256(Box<[u8; 32]>),
     Ed25519(Box<[u8; 32]>),
+}
+
+// Helper enum for serialization
+//
+// TODO add #[serde(with = "serde_bytes")] once we are sure
+// that all existing nodes are upgraded to be able to
+// understand both formats.
+#[derive(Serialize)]
+enum EccScalarBytesSerializeHelper<'a> {
+    K256(&'a [u8; 32]),
+    P256(#[serde(with = "serde_bytes")] &'a [u8; 32]),
+    Ed25519(&'a [u8; 32]),
+}
+
+// TODO after a sufficient amount of time using bytes as the default
+// serialization, remove the explicit Serialize and Deserialize traits
+// so that going forward only bytes are supported for decoding
+impl Serialize for EccScalarBytes {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::K256(bytes) => {
+                EccScalarBytesSerializeHelper::K256(bytes.as_ref()).serialize(serializer)
+            }
+            Self::P256(bytes) => {
+                EccScalarBytesSerializeHelper::P256(bytes.as_ref()).serialize(serializer)
+            }
+            Self::Ed25519(bytes) => {
+                EccScalarBytesSerializeHelper::Ed25519(bytes.as_ref()).serialize(serializer)
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for EccScalarBytes {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::{self, MapAccess, SeqAccess, Visitor};
+        /// Visitor that can handle both CBOR byte string and array formats
+        struct BytesOrArrayVisitor;
+        impl<'de> Visitor<'de> for BytesOrArrayVisitor {
+            type Value = Box<[u8; 32]>;
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a byte string or array of 32 bytes")
+            }
+            // New efficient format: CBOR byte string
+            fn visit_bytes<E: de::Error>(self, v: &[u8]) -> Result<Self::Value, E> {
+                if v.len() != 32 {
+                    return Err(E::invalid_length(v.len(), &"32 bytes"));
+                }
+                let mut arr = [0u8; 32];
+                arr.copy_from_slice(v);
+                Ok(Box::new(arr))
+            }
+            // Old format: CBOR array of integers
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+                let mut arr = [0u8; 32];
+                for (i, byte) in arr.iter_mut().enumerate() {
+                    *byte = seq
+                        .next_element()?
+                        .ok_or_else(|| de::Error::invalid_length(i, &"32 elements"))?;
+                }
+                Ok(Box::new(arr))
+            }
+        }
+
+        /// DeserializeScalar to use deserialize_any for the inner value
+        struct BytesOrArrayScalar;
+        impl<'de> de::DeserializeSeed<'de> for BytesOrArrayScalar {
+            type Value = Box<[u8; 32]>;
+            fn deserialize<D2: Deserializer<'de>>(
+                self,
+                deserializer: D2,
+            ) -> Result<Self::Value, D2::Error> {
+                deserializer.deserialize_any(BytesOrArrayVisitor)
+            }
+        }
+
+        struct EccScalarBytesVisitor;
+
+        impl<'de> Visitor<'de> for EccScalarBytesVisitor {
+            type Value = EccScalarBytes;
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("EccScalarBytes enum with K256, P256, or Ed25519 variant")
+            }
+            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+                let curve_str: String = map
+                    .next_key()?
+                    .ok_or_else(|| de::Error::custom("Expected curve name"))?;
+                // Use deserialize_any to handle both bytes and seq
+                let bytes: Box<[u8; 32]> = map.next_value_seed(BytesOrArrayScalar)?;
+                match curve_str.as_str() {
+                    "K256" => Ok(EccScalarBytes::K256(bytes)),
+                    "P256" => Ok(EccScalarBytes::P256(bytes)),
+                    "Ed25519" => Ok(EccScalarBytes::Ed25519(bytes)),
+                    other => Err(de::Error::unknown_variant(
+                        other,
+                        &["K256", "P256", "Ed25519"],
+                    )),
+                }
+            }
+        }
+
+        deserializer.deserialize_map(EccScalarBytesVisitor)
+    }
 }
 
 impl EccScalarBytes {
