@@ -203,6 +203,18 @@ impl CanisterRuntime for DogeCanisterRuntime {
         })
     }
 
+    fn derivation_path(&self, account: &Account) -> Vec<Vec<u8>> {
+        const SCHEMA_V1: u8 = 1;
+        const PREFIX: [u8; 4] = *b"doge";
+
+        vec![
+            vec![SCHEMA_V1],
+            PREFIX.to_vec(),
+            account.owner.as_slice().to_vec(),
+            account.effective_subaccount().to_vec(),
+        ]
+    }
+
     fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String {
         updates::account_to_p2pkh_address_from_state(state, account)
             .display(&Network::from(state.btc_network))
