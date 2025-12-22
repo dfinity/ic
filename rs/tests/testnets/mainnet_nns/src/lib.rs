@@ -445,7 +445,9 @@ fn ic_replay(env: &TestEnv, mut mutate_cmd: impl FnMut(&mut Command)) -> Output 
         .arg(&ic_config_file);
     mutate_cmd(&mut cmd);
     info!(logger, "{cmd:?} ...");
-    let ic_replay_out = cmd.output().expect(&format!("Failed to run {cmd:?}"));
+    let ic_replay_out = cmd
+        .output()
+        .unwrap_or_else(|_| panic!("Failed to run {cmd:?}"));
     if !ic_replay_out.status.success() {
         std::io::stdout().write_all(&ic_replay_out.stdout).unwrap();
         std::io::stderr().write_all(&ic_replay_out.stderr).unwrap();
@@ -544,7 +546,7 @@ fn test_recovered_nns(env: &TestEnv, nns_node: &IcNodeSnapshot) {
     info!(logger, "Testing recovered NNS ...");
 
     block_on(ProposalWithMainnetState::bless_replica_version(
-        &nns_node,
+        nns_node,
         &ReplicaVersion::try_from("1111111111111111111111111111111111111111").unwrap(),
         &logger,
         "2222222222222222222222222222222222222222222222222222222222222222".to_string(),
@@ -596,7 +598,7 @@ fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcN
     .expect("Could not patch NNS public key of API BN");
 
     block_on(ProposalWithMainnetState::add_api_boundary_nodes(
-        &recovered_nns_node,
+        recovered_nns_node,
         &env.logger(),
         vec![api_bn.node_id],
         get_mainnet_nns_revision().unwrap().to_string(),
@@ -667,13 +669,13 @@ fn patch_config_nns_public_key(
 
     scp_send_to(
         logger.clone(),
-        &session,
+        session,
         new_nns_public_key_path,
         &PathBuf::from(TMP_NNS_PUBLIC_KEY),
         0o644,
     );
     node.block_on_bash_script_from_session(
-        &session,
+        session,
         &format!(
             r#"
                 set -e

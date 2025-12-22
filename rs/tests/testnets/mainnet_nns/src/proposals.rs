@@ -96,7 +96,7 @@ impl ProposalWithMainnetState {
         RecoveredNnsDictatorNeuron {
             recovered_nns_dictator_neuron_id: neuron_id,
         }
-        .write_attribute(&env);
+        .write_attribute(env);
 
         RECOVERED_NNS_DICTATOR_NEURON_ID
             .set(neuron_id)
@@ -212,39 +212,5 @@ impl ProposalWithMainnetState {
             logger,
             "API Boundary Nodes addition proposal {:?} has been executed", proposal_id,
         );
-    }
-
-    /// Code duplicate of rs/tests/driver/src/nns.rs:change_subnet_membership
-    pub async fn change_subnet_membership(
-        url: Url,
-        subnet_id: SubnetId,
-        node_ids_add: &[NodeId],
-        node_ids_remove: &[NodeId],
-    ) -> Result<(), String> {
-        let self_ = Self::new();
-
-        let nns = runtime_from_url(url, REGISTRY_CANISTER_ID.into());
-        let governance_canister = get_governance_canister(&nns);
-        let proposal_payload = ChangeSubnetMembershipPayload {
-            subnet_id: subnet_id.get(),
-            node_ids_add: node_ids_add.to_vec(),
-            node_ids_remove: node_ids_remove.to_vec(),
-        };
-        let neuron_id = self_.neuron_id;
-        let proposal_sender = self_.proposal_sender.clone();
-
-        let proposal_id = submit_external_update_proposal(
-            &governance_canister,
-            proposal_sender,
-            neuron_id,
-            NnsFunction::ChangeSubnetMembership,
-            proposal_payload,
-            String::from("Change subnet membership for testing"),
-            "Motivation: testing".to_string(),
-        )
-        .await;
-
-        wait_for_final_state(&governance_canister, proposal_id).await;
-        Ok(())
     }
 }
