@@ -32,7 +32,7 @@ jobs:
     runs-on: &dind-small-setup
       labels: dind-small
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:30b49530b965954154a44fa703aace501c6d5f6c60eb30f51083213659d5bae3
+      image: ghcr.io/dfinity/ic-build@sha256:9896617d0d867468cbaf17cc1ecf8daa0988354abc5a8a32bb51bcb8ef15650d
       options: >-
          -e NODE_NAME --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
     steps:
