@@ -22,6 +22,7 @@ use crate::fees::{BitcoinFeeEstimator, FeeEstimator};
 use crate::state::eventlog::{CkBtcEventLogger, EventLogger};
 use crate::state::utxos::UtxoSet;
 use crate::state::{CkBtcMinterState, mutate_state, read_state};
+use crate::tx::TransactionVersion;
 use crate::updates::get_btc_address;
 use crate::updates::retrieve_btc::BtcAddressCheckStatus;
 pub use ic_btc_checker::CheckTransactionResponse;
@@ -354,6 +355,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             &main_address,
             max_num_inputs_in_transaction,
             fee_millisatoshi_per_vbyte,
+            runtime.transaction_version(),
             &fee_estimator,
         ) {
             Ok((unsigned_tx, change_output, total_fee, utxos)) => Some((
@@ -864,6 +866,7 @@ pub async fn resubmit_transactions<
             &main_address,
             max_num_inputs_in_transaction,
             tx_fee_per_vbyte,
+            runtime.transaction_version(),
             fee_estimator,
         ) {
             Err(BuildTxError::InvalidTransaction(err)) => {
@@ -901,6 +904,7 @@ pub async fn resubmit_transactions<
                     &main_address,
                     max_num_inputs_in_transaction,
                     fee_per_vbyte, // Use normal fee
+                    runtime.transaction_version(),
                     fee_estimator,
                 )
             }
@@ -1212,6 +1216,7 @@ pub fn build_unsigned_transaction<F: FeeEstimator>(
     main_address: &BitcoinAddress,
     max_num_inputs_in_transaction: usize,
     fee_per_vbyte: u64,
+    tx_version: TransactionVersion,
     fee_estimator: &F,
 ) -> Result<
     (
@@ -1234,6 +1239,7 @@ pub fn build_unsigned_transaction<F: FeeEstimator>(
         main_address,
         max_num_inputs_in_transaction,
         fee_per_vbyte,
+        tx_version,
         fee_estimator,
     ) {
         Ok((tx, change, total_fee)) => Ok((tx, change, total_fee, inputs)),
@@ -1253,6 +1259,7 @@ pub fn build_unsigned_transaction_from_inputs<F: FeeEstimator>(
     main_address: &BitcoinAddress,
     max_num_inputs_in_transaction: usize,
     fee_per_vbyte: u64,
+    tx_version: TransactionVersion,
     fee_estimator: &F,
 ) -> Result<(tx::UnsignedTransaction, state::ChangeOutput, WithdrawalFee), BuildTxError> {
     #[cfg(feature = "canbench-rs")]
@@ -1313,6 +1320,7 @@ pub fn build_unsigned_transaction_from_inputs<F: FeeEstimator>(
     );
 
     let mut unsigned_tx = tx::UnsignedTransaction {
+        version: tx_version,
         inputs: input_utxos
             .iter()
             .map(|utxo| tx::UnsignedInput {
@@ -1410,6 +1418,7 @@ pub fn estimate_retrieve_btc_fee<F: FeeEstimator>(
     withdrawal_amount: u64,
     median_fee_millisatoshi_per_vbyte: u64,
     max_num_inputs_in_transaction: usize,
+    tx_version: TransactionVersion,
     fee_estimator: &F,
 ) -> Result<WithdrawalFee, BuildTxError> {
     // Only the address type matters for the amount of vbytes, not the actual bytes in the address.
@@ -1422,6 +1431,7 @@ pub fn estimate_retrieve_btc_fee<F: FeeEstimator>(
         dummy_minter_address,
         dummy_recipient_address,
         max_num_inputs_in_transaction,
+        tx_version,
         fee_estimator,
     )
 }
@@ -1510,6 +1520,7 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
         &main_address,
         max_num_inputs_in_transaction,
         fee_millisatoshi_per_vbyte,
+        runtime.transaction_version(),
         &fee_estimator,
     ) {
         Ok(result) => result,
@@ -1645,6 +1656,11 @@ pub trait CanisterRuntime {
     /// Whether segregated witness can be used (BIP-144).
     fn uses_segwit(&self) -> bool {
         true
+    }
+
+    /// Uses post BIP-68 transactions.
+    fn transaction_version(&self) -> TransactionVersion {
+        TransactionVersion::TWO
     }
 
     /// Retrieves the current transaction fee percentiles.

@@ -1,5 +1,5 @@
 use crate::state::utxos::UtxoSet;
-use crate::tx::SignedInput;
+use crate::tx::{SignedInput, TransactionVersion};
 use crate::{
     BuildTxError, CacheWithExpiration, Network,
     address::BitcoinAddress,
@@ -137,7 +137,7 @@ fn p2wpkh_script_code(pkhash: &[u8; 20]) -> bitcoin::Script {
 
 fn unsigned_tx_to_bitcoin_tx(tx: &tx::UnsignedTransaction) -> bitcoin::Transaction {
     bitcoin::Transaction {
-        version: tx::TX_VERSION as i32,
+        version: u32::from(tx.version) as i32,
         lock_time: tx.lock_time,
         input: tx
             .inputs
@@ -280,6 +280,7 @@ fn should_have_same_input_and_output_count() {
         &minter_addr,
         DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
         fee_per_vbyte,
+        TransactionVersion::TWO,
         &fee_estimator,
     )
     .expect("failed to build a transaction");
@@ -331,6 +332,7 @@ fn test_min_change_amount() {
         &minter_addr,
         DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
         fee_per_vbyte,
+        TransactionVersion::TWO,
         &fee_estimator,
     )
     .expect("failed to build a transaction");
@@ -452,6 +454,7 @@ fn test_no_dust_in_change_output() {
             &minter_addr,
             DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
             fee_per_vbyte,
+            TransactionVersion::TWO,
             &fee_estimator,
         )
         .expect("failed to build a transaction");
@@ -532,17 +535,15 @@ proptest! {
 
     #[test]
     fn unsigned_tx_encoding_model(
+        version in arbitrary::tx_version(),
         inputs in pvec(arbitrary::unsigned_input(5_000u64..1_000_000_000), 1..20),
         outputs in pvec(arbitrary::tx_out(), 1..20),
         lock_time in any::<u32>(),
     ) {
-        let arb_tx = tx::UnsignedTransaction { inputs, outputs, lock_time };
-        println!("{arb_tx:?}");
+        let arb_tx = tx::UnsignedTransaction { version, inputs, outputs, lock_time };
         let btc_tx = unsigned_tx_to_bitcoin_tx(&arb_tx);
-        println!("{:?}", btc_tx.serialize());
 
         let tx_bytes = tx::encode_into(&arb_tx, Vec::<u8>::new());
-        println!("{tx_bytes:?}");
         let decoded_btc_tx = bitcoin::Transaction::deserialize(&tx_bytes).expect("failed to deserialize an unsigned transaction");
 
         prop_assert_eq!(btc_tx.serialize(), tx_bytes);
@@ -551,6 +552,7 @@ proptest! {
 
     #[test]
     fn unsigned_tx_sighash_model(
+        version in arbitrary::tx_version(),
         inputs_data in pvec(
             (
                 arbitrary::utxo(5_000u64..1_000_000_000),
@@ -570,7 +572,7 @@ proptest! {
                 sequence: *seq,
             })
             .collect();
-        let arb_tx = tx::UnsignedTransaction { inputs, outputs, lock_time };
+        let arb_tx = tx::UnsignedTransaction { version, inputs, outputs, lock_time };
         let btc_tx = unsigned_tx_to_bitcoin_tx(&arb_tx);
 
         let sighasher = tx::TxSigHasher::new(&arb_tx);
@@ -616,6 +618,7 @@ proptest! {
 
     #[test]
     fn build_tx_splits_utxos(
+        version in arbitrary::tx_version(),
         mut utxos in arbitrary::utxo_set(5_000u64..1_000_000_000, 1..20),
         dst_pkhash in uniform20(any::<u8>()),
         main_pkhash in uniform20(any::<u8>()),
@@ -631,7 +634,7 @@ proptest! {
         let fee_estimator = bitcoin_fee_estimator();
         let minter_address= BitcoinAddress::P2wpkhV0(main_pkhash);
         let mut utxos2 = utxos.clone();
-        let fee_estimate = estimate_retrieve_btc_fee(&mut utxos2, target, fee_per_vbyte, DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, &fee_estimator).unwrap();
+        let fee_estimate = estimate_retrieve_btc_fee(&mut utxos2, target, fee_per_vbyte, DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, version, &fee_estimator).unwrap();
         let fee_estimate = fee_estimate.minter_fee + fee_estimate.bitcoin_fee;
 
         let (unsigned_tx, _, _, _) = build_unsigned_transaction(
@@ -640,6 +643,7 @@ proptest! {
             &minter_address,
             DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
             fee_per_vbyte,
+            version,
             &fee_estimator
         )
         .expect("failed to build transaction");
@@ -681,6 +685,7 @@ proptest! {
 
     #[test]
     fn build_tx_handles_change_from_inputs(
+        version in arbitrary::tx_version(),
         mut utxos in arbitrary::utxo_set(1_000_000u64..1_000_000_000, 1..20),
         dst_pkhash in uniform20(any::<u8>()),
         main_pkhash in uniform20(any::<u8>()),
@@ -701,6 +706,7 @@ proptest! {
             &minter_address,
             DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
             fee_per_vbyte,
+            version,
             &fee_estimator
         )
         .expect("failed to build transaction");
@@ -1023,6 +1029,7 @@ proptest! {
 
     #[test]
     fn test_fee_range(
+        version in arbitrary::tx_version(),
         mut utxos in arbitrary::utxo_set(5_000u64..1_000_000_000, 20..40),
         amount in 0_u64..15_000, //can be covered by UTXOs
         fee_per_vbyte in 2000..10000u64,
@@ -1032,7 +1039,7 @@ proptest! {
 
         let fee_estimator = bitcoin_fee_estimator();
         let amount = max(amount, fee_estimator.fee_based_minimum_withdrawal_amount(fee_per_vbyte));
-        let estimate = estimate_retrieve_btc_fee(&mut utxos, amount, fee_per_vbyte, DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, &fee_estimator).unwrap();
+        let estimate = estimate_retrieve_btc_fee(&mut utxos, amount, fee_per_vbyte, DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, version, &fee_estimator).unwrap();
         let lower_bound = MIN_MINTER_FEE + SMALLEST_TX_SIZE_VBYTES * fee_per_vbyte / 1000;
         let estimate_amount = estimate.minter_fee + estimate.bitcoin_fee;
         prop_assert!(
@@ -1253,6 +1260,7 @@ fn test_build_consolidation_transaction() {
         &main_address,
         DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
         fee_millisatoshi_per_vbyte,
+        TransactionVersion::TWO,
         &fee_estimator,
     );
     assert_matches!(result, Ok(_));

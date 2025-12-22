@@ -3,6 +3,7 @@ use crate::fees::BitcoinFeeEstimator;
 use crate::lifecycle::init::InitArgs;
 use crate::queries::WithdrawalFee;
 use crate::state::utxos::UtxoSet;
+use crate::tx::TransactionVersion;
 use crate::{
     BuildTxError, ECDSAPublicKey, GetUtxosResponse, IC_CANISTER_RUNTIME, Network, Timestamp,
     lifecycle, state, state::DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, tx,
@@ -163,6 +164,7 @@ pub fn build_bitcoin_unsigned_transaction(
         &main_address,
         DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
         fee_per_vbyte,
+        TransactionVersion::TWO,
         &bitcoin_fee_estimator,
     )
 }
@@ -227,6 +229,7 @@ pub mod mock {
 pub mod arbitrary {
     use crate::state::eventlog::CkBtcMinterEvent;
     use crate::state::utxos::UtxoSet;
+    use crate::tx::TransactionVersion;
     use crate::{
         WithdrawalFee,
         address::BitcoinAddress,
@@ -413,6 +416,10 @@ pub mod arbitrary {
             value: amount(),
             address: address(),
         })
+    }
+
+    pub fn tx_version() -> impl Strategy<Value = TransactionVersion> {
+        prop_oneof![Just(TransactionVersion::ONE), Just(TransactionVersion::TWO),]
     }
 
     pub fn utxo(amount: impl Strategy<Value = Satoshi>) -> impl Strategy<Value = Utxo> {

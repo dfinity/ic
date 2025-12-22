@@ -222,6 +222,7 @@ fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
             s.last_median_fee_per_vbyte
                 .expect("Bitcoin current fee percentiles not retrieved yet."),
             s.max_num_inputs_in_transaction,
+            IC_CANISTER_RUNTIME.transaction_version(),
             &fee_estimator,
         )
     }) {

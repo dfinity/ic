@@ -344,9 +344,31 @@ impl<'a> TxSigHasher<'a> {
 
 #[derive(Eq, PartialEq, Debug)]
 pub struct UnsignedTransaction {
+    pub version: TransactionVersion,
     pub inputs: Vec<UnsignedInput>,
     pub outputs: Vec<TxOut>,
     pub lock_time: u32,
+}
+
+/// The transaction version.
+///
+/// Currently, as specified by [BIP-68], only version 1 and 2 are considered standard.
+///
+/// [BIP-68]: https://github.com/bitcoin/bips/blob/master/bip-0068.mediawiki
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct TransactionVersion(u32);
+
+impl TransactionVersion {
+    /// The original Bitcoin transaction version (pre-BIP-68).
+    pub const ONE: Self = Self(1);
+    /// The second Bitcoin transaction version (post-BIP-68).
+    pub const TWO: Self = Self(2);
+}
+
+impl From<TransactionVersion> for u32 {
+    fn from(version: TransactionVersion) -> Self {
+        version.0
+    }
 }
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -587,10 +609,16 @@ impl Encode for TxOut {
     }
 }
 
+impl Encode for TransactionVersion {
+    fn encode(&self, buf: &mut impl Buffer) {
+        self.0.encode(buf)
+    }
+}
+
 impl Encode for UnsignedTransaction {
     fn encode(&self, buf: &mut impl Buffer) {
         // Same as for SignedTransaction, but does not include the witness.
-        TX_VERSION.encode(buf);
+        self.version.encode(buf);
         self.inputs.encode(buf);
         self.outputs.encode(buf);
         self.lock_time.encode(buf)

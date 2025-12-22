@@ -6,7 +6,7 @@ use crate::lifecycle::init::Network;
 use crate::tx::UnsignedTransaction;
 use ic_ckbtc_minter::{
     BuildTxError, MillisatoshiPerByte, Satoshi, address::BitcoinAddress, fees::FeeEstimator,
-    state::utxos::UtxoSet,
+    state::utxos::UtxoSet, tx::TransactionVersion,
 };
 use std::cmp::max;
 
@@ -135,6 +135,7 @@ pub fn estimate_retrieve_doge_fee<F: FeeEstimator>(
     withdrawal_amount: u64,
     median_fee_millikoinu_per_byte: u64,
     max_num_inputs_in_transaction: usize,
+    tx_version: TransactionVersion,
     fee_estimator: &F,
 ) -> Result<WithdrawalFee, BuildTxError> {
     // We simulate the algorithm that selects UTXOs for the specified amount.
@@ -149,6 +150,7 @@ pub fn estimate_retrieve_doge_fee<F: FeeEstimator>(
         dummy_minter_address,
         dummy_recipient_address,
         max_num_inputs_in_transaction,
+        tx_version,
         fee_estimator,
     )
     .map(WithdrawalFee::from)

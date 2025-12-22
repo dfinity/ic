@@ -290,6 +290,7 @@ mod benches {
         let dummy_recipient_address = crate::BitcoinAddress::P2wpkhV0([42_u8; 20]);
         let median_fee_millisatoshi_per_vbyte = 1_000; //1 sat/vbyte
         let fee_estimator = state::read_state(|s| IC_CANISTER_RUNTIME.fee_estimator(s));
+        let tx_version = IC_CANISTER_RUNTIME.transaction_version();
 
         canbench_rs::bench_fn(|| {
             state::mutate_state(|s| {
@@ -299,6 +300,7 @@ mod benches {
                     &dummy_minter_address,
                     s.max_num_inputs_in_transaction,
                     median_fee_millisatoshi_per_vbyte,
+                    tx_version,
                     &fee_estimator,
                 )
                 .unwrap()
@@ -318,6 +320,7 @@ mod benches {
             assert_eq!(s.available_utxos.len(), 66_212);
         });
         let fee_estimator = state::read_state(|s| IC_CANISTER_RUNTIME.fee_estimator(s));
+        let tx_version = IC_CANISTER_RUNTIME.transaction_version();
 
         canbench_rs::bench_fn(|| {
             state::mutate_state(|s| {
@@ -326,6 +329,7 @@ mod benches {
                     withdrawal_amount,
                     s.last_median_fee_per_vbyte.unwrap(),
                     s.max_num_inputs_in_transaction,
+                    tx_version,
                     &fee_estimator,
                 )
                 .unwrap()

@@ -107,6 +107,7 @@ fn estimate_withdrawal_fee(
             s.last_median_fee_per_vbyte
                 .expect("Bitcoin current fee percentiles not retrieved yet."),
             s.max_num_inputs_in_transaction,
+            DOGECOIN_CANISTER_RUNTIME.transaction_version(),
             &fee_estimator,
         )
         .map_err(|e| match e {

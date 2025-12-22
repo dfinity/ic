@@ -4,6 +4,7 @@ use crate::fees::FeeEstimator;
 use crate::metrics::encode_metrics;
 use crate::state::read_state;
 use crate::state::utxos::UtxoSet;
+use crate::tx::TransactionVersion;
 use crate::updates::update_balance::UpdateBalanceArgs;
 use crate::{BuildTxError, build_unsigned_transaction_from_inputs, utxos_selection};
 use candid::CandidType;
@@ -45,6 +46,7 @@ pub fn estimate_withdrawal_fee<F: FeeEstimator>(
     minter_address: BitcoinAddress,
     recipient_address: BitcoinAddress,
     max_num_inputs_in_transaction: usize,
+    tx_version: TransactionVersion,
     fee_estimator: &F,
 ) -> Result<WithdrawalFee, BuildTxError> {
     // We simulate the algorithm that selects UTXOs for the
@@ -57,6 +59,7 @@ pub fn estimate_withdrawal_fee<F: FeeEstimator>(
         &minter_address,
         max_num_inputs_in_transaction,
         median_fee_millisatoshi_per_vbyte,
+        tx_version,
         fee_estimator,
     )
     .map(|(unsigned_tx, _change_output, fee)| {

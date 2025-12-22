@@ -38,6 +38,7 @@ pub use ic_ckbtc_minter::{
 };
 use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};
 use std::time::Duration;
+use ic_ckbtc_minter::tx::TransactionVersion;
 
 pub const DOGECOIN_CANISTER_RUNTIME: DogeCanisterRuntime = DogeCanisterRuntime {};
 
@@ -64,6 +65,11 @@ impl CanisterRuntime for DogeCanisterRuntime {
 
     fn uses_segwit(&self) -> bool {
         false
+    }
+
+    fn transaction_version(&self) -> TransactionVersion {
+        // Dogecoin does not support BIP-68
+        TransactionVersion::ONE
     }
 
     async fn get_current_fee_percentiles(
