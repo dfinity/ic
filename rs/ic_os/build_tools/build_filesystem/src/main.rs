@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::str::FromStr;
 use tempfile::NamedTempFile;
 
 mod ext4;
@@ -18,20 +19,12 @@ mod selinux;
 mod tar;
 
 use crate::partition_size::PartitionSize;
+use crate::path_converter::ImagePath;
 use ext4::Ext4Builder;
 use fat::{FatBuilder, FatType};
 use fs_builder::FilesystemBuilder;
 use selinux::FileContexts;
 use tar::TarBuilder;
-
-#[derive(Debug, Clone, ValueEnum, Eq, PartialEq)]
-#[cfg_attr(test, derive(Copy))]
-pub(crate) enum OutputType {
-    Tar,
-    Ext4,
-    Vfat,
-    Fat32,
-}
 
 #[derive(Parser, Debug)]
 #[command(about = "Build filesystem images from input tar with transformations")]
@@ -71,11 +64,53 @@ pub(crate) struct Args {
 
     /// Extra files to inject (format: source:target:mode)
     #[arg(long = "extra-files", num_args = 0..)]
-    pub(crate) extra_files: Vec<String>,
+    pub(crate) extra_files: Vec<ExtraFile>,
 
     /// Path to mke2fs binary (optional, defaults to system mke2fs)
     #[arg(long = "mke2fs")]
     pub(crate) mke2fs_path: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, ValueEnum, Eq, PartialEq)]
+#[cfg_attr(test, derive(Copy))]
+pub(crate) enum OutputType {
+    Tar,
+    Ext4,
+    Vfat,
+    Fat32,
+}
+
+/// Extra file to inject into the filesystem image
+#[derive(Debug, Clone)]
+pub(crate) struct ExtraFile {
+    /// Source file path on the host filesystem
+    pub(crate) source: PathBuf,
+    /// Target path in the filesystem image
+    pub(crate) target: ImagePath,
+    /// File permissions mode (octal, e.g., 0o644)
+    pub(crate) mode: u32,
+}
+
+impl FromStr for ExtraFile {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        let parts: Vec<&str> = s.split(':').collect();
+        if parts.len() != 3 {
+            bail!("Invalid extra file format: {s}. Expected source:target:mode");
+        }
+
+        let source = PathBuf::from(parts[0]);
+        let target = ImagePath::from(parts[1]);
+        let mode = u32::from_str_radix(parts[2], 8)
+            .with_context(|| format!("Invalid mode in extra file: {}", parts[2]))?;
+
+        Ok(ExtraFile {
+            source,
+            target,
+            mode,
+        })
+    }
 }
 
 fn main() -> Result<()> {
@@ -143,34 +178,26 @@ pub(crate) fn build_filesystem(args: Args) -> Result<()> {
         .map(|path| FileContexts::new(&path))
         .transpose()?;
 
-    let extra_files: Vec<(PathBuf, String, u32)> = args
-        .extra_files
-        .iter()
-        .map(|s| parse_extra_file(s))
-        .collect::<Result<_>>()?;
-
     let strip_paths = RegexSet::new(args.strip_paths.iter().map(|s| {
         assert!(s.starts_with('/'), "strip path must start with /");
         // RegexSet matches anywhere in the string, so we anchor it
         format!("^{s}$")
     }))?;
 
+    let _compressed_temp;
     // If compression is required, create a temporary file first, then compress it later
-    let (output_path, _) = if needs_compression {
+    let output_path: &Path = if needs_compression {
         // Create a temporary file and close it right away so it can be written by the image
         // creation process.
-        let output_file = NamedTempFile::new()?.into_temp_path();
-        // Remove temp file because it will be generated below, we only need the temp path for
-        // automatic cleanup
-        std::fs::remove_file(&output_file)?;
-        (output_file.to_path_buf(), Some(output_file))
+        _compressed_temp = NamedTempFile::new()?.into_temp_path();
+        _compressed_temp.as_ref()
     } else {
-        (args.output.clone(), None)
+        &args.output
     };
 
     let mut output_builder: Box<dyn FilesystemBuilder> = match args.output_type {
         OutputType::Tar => {
-            let output_file = File::create(&output_path)
+            let output_file = File::create(output_path)
                 .with_context(|| format!("Failed to create output file {:?}", output_path))?;
             let tar_builder = ::tar::Builder::new(BufWriter::new(output_file));
             Box::new(TarBuilder::new(tar_builder))
@@ -180,7 +207,7 @@ pub(crate) fn build_filesystem(args: Args) -> Result<()> {
                 .partition_size
                 .context("Partition size is required for ext4")?;
             Box::new(Ext4Builder::new(
-                &output_path,
+                output_path,
                 partition_size,
                 args.label,
                 args.mke2fs_path.clone(),
@@ -191,7 +218,7 @@ pub(crate) fn build_filesystem(args: Args) -> Result<()> {
                 .partition_size
                 .context("Partition size is required for vfat")?;
             Box::new(FatBuilder::new(
-                &output_path,
+                output_path,
                 partition_size,
                 FatType::Vfat,
                 args.label,
@@ -202,7 +229,7 @@ pub(crate) fn build_filesystem(args: Args) -> Result<()> {
                 .partition_size
                 .context("Partition size is required for fat32")?;
             Box::new(FatBuilder::new(
-                &output_path,
+                output_path,
                 partition_size,
                 FatType::Fat32,
                 args.label,
@@ -215,14 +242,14 @@ pub(crate) fn build_filesystem(args: Args) -> Result<()> {
         output_builder.as_mut(),
         args.subdir.as_deref(),
         &strip_paths,
-        &extra_files,
+        &args.extra_files,
         &file_contexts,
     )?;
 
     output_builder.finish()?;
 
     if needs_compression {
-        compress_output(&args.output, &output_path, args.output_type)?;
+        compress_output(&args.output, output_path, args.output_type)?;
     }
 
     Ok(())
@@ -260,18 +287,4 @@ fn compress_output(
 
     ensure!(output.status.success(), "compression failed: {output:?}");
     Ok(())
-}
-
-fn parse_extra_file(s: &str) -> Result<(PathBuf, String, u32)> {
-    let parts: Vec<&str> = s.split(':').collect();
-    if parts.len() != 3 {
-        bail!("Invalid extra file format: {s}. Expected source:target:mode",);
-    }
-
-    let source = PathBuf::from(parts[0]);
-    let target = parts[1].to_string();
-    let mode = u32::from_str_radix(parts[2], 8)
-        .with_context(|| format!("Invalid mode in extra file: {}", parts[2]))?;
-
-    Ok((source, target, mode))
 }

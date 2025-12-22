@@ -102,7 +102,6 @@ impl ImageFixtureBuilder {
         let output_path = NamedTempFile::with_suffix(format!(".{}", self.output_extension))
             .unwrap()
             .into_temp_path();
-        std::fs::remove_file(&output_path).unwrap();
 
         let input_tar = if let Some(builder) = self.tar_builder {
             let mut tar = NamedTempFile::new().unwrap();
@@ -112,6 +111,12 @@ impl ImageFixtureBuilder {
         } else {
             None
         };
+
+        let parsed_extra_files = self
+            .extra_files
+            .iter()
+            .map(|s| s.parse().expect(&format!("Cannot parse {s}")))
+            .collect();
 
         build_filesystem(Args {
             output: output_path.to_path_buf(),
@@ -127,7 +132,7 @@ impl ImageFixtureBuilder {
             subdir: self.subdir,
             file_contexts: self.file_contexts,
             strip_paths: self.strip_paths,
-            extra_files: self.extra_files,
+            extra_files: parsed_extra_files,
             mke2fs_path: Some(get_mke2fs_path()),
         })
         .unwrap();
@@ -398,6 +403,15 @@ fn test_basic_files_and_dirs() {
         mounted.assert_file_content("subdir/file2.txt", "nested content");
         mounted.assert_dir_exists("emptydir");
         mounted.assert_dir_exists("subdir");
+
+        if output_type != OutputType::Tar {
+            let metadata = fs::metadata(image.path()).unwrap();
+            assert_eq!(
+                metadata.len(),
+                4 * 1024 * 1024,
+                "Image size mismatch for {output_type:?} with partition_size 4M",
+            );
+        }
     }
 }
 

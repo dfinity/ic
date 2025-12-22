@@ -1,3 +1,4 @@
+use crate::ExtraFile;
 use crate::fs_builder::{FileEntry, FilesystemBuilder};
 use crate::path_converter::{ImagePath, PathConverter};
 use crate::selinux::{FileContexts, FileType};
@@ -5,7 +6,7 @@ use anyhow::{Context, Result, bail};
 use regex::RegexSet;
 use std::fs::File;
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tar::{Archive, Header};
 
 pub fn process_filesystem(
@@ -13,7 +14,7 @@ pub fn process_filesystem(
     output_builder: &mut dyn FilesystemBuilder,
     subdir: Option<&Path>,
     strip_paths: &RegexSet,
-    extra_files: &[(PathBuf, String, u32)],
+    extra_files: &[ExtraFile],
     selinux_file_contexts: &Option<FileContexts>,
 ) -> Result<()> {
     let path_converter = PathConverter::new(subdir.map(PathBuf::from));
@@ -71,7 +72,7 @@ fn process_input_tar(
                     entry.header().clone(),
                     &target_path,
                     &mut std::io::empty(),
-                    &path_converter,
+                    path_converter,
                     selinux_file_contexts,
                 )?;
             } else {
@@ -80,7 +81,7 @@ fn process_input_tar(
                     entry.header().clone(),
                     &target_path,
                     &mut entry,
-                    &path_converter,
+                    path_converter,
                     selinux_file_contexts,
                 )?;
             }
@@ -91,26 +92,25 @@ fn process_input_tar(
 }
 
 fn process_extra_files(
-    extra_files: &[(PathBuf, String, u32)],
+    extra_files: &[ExtraFile],
     output_builder: &mut dyn FilesystemBuilder,
     path_converter: &PathConverter,
     selinux_file_contexts: &Option<FileContexts>,
 ) -> Result<()> {
-    for (source, target, mode) in extra_files {
-        let metadata = std::fs::metadata(source)
-            .with_context(|| format!("Failed to read metadata for {:?}", source))?;
-        let target = ImagePath::from(target);
+    for extra_file in extra_files {
+        let metadata = std::fs::metadata(&extra_file.source)
+            .with_context(|| format!("Failed to read metadata for {:?}", extra_file.source))?;
         let mut header = Header::new_gnu();
         header.set_size(metadata.len());
-        header.set_mode(*mode);
+        header.set_mode(extra_file.mode);
         header.set_entry_type(tar::EntryType::Regular);
         header.set_cksum();
         add_entry(
             output_builder,
             header,
-            &target,
-            &mut File::open(source)?,
-            &path_converter,
+            &extra_file.target,
+            &mut File::open(&extra_file.source)?,
+            path_converter,
             selinux_file_contexts,
         )?;
     }

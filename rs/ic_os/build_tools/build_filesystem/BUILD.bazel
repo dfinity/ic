@@ -14,18 +14,11 @@ rust_binary(
         # Keep sorted.
         "@crate_index//:anyhow",
         "@crate_index//:clap",
-        "@crate_index//:nix",
-        "@crate_index//:rand",
         "@crate_index//:regex",
         "@crate_index//:selinux",
         "@crate_index//:tar",
         "@crate_index//:tempfile",
-        "@crate_index//:tokio",
-        "@crate_index//:walkdir",
-    ] + select({
-        "@platforms//os:linux": ["//rs/ic_os/device"],
-        "//conditions:default": [],
-    }),
+    ],
 )
 
 rust_test(
@@ -43,7 +36,7 @@ rust_test(
         "@platforms//os:linux",
     ],
     deps = [
-        "@crate_index//:proptest",
+        "//rs/ic_os/device",
         "@crate_index//:xattr",
     ],
 )

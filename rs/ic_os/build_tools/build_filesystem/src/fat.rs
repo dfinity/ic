@@ -60,6 +60,10 @@ impl FatBuilder {
     /// Initialize the FAT filesystem if not already done
     fn ensure_initialized(&mut self) -> Result<()> {
         if !self.initialized {
+            if self.output_path.exists() {
+                std::fs::remove_file(&self.output_path)?;
+            }
+
             let mut cmd = Command::new("/usr/sbin/mkfs.vfat");
 
             // Add FAT type flag if FAT32
