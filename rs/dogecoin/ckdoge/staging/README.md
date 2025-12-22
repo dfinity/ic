@@ -78,7 +78,7 @@ About the initialization arguments:
 
 
 ```bash
-dfx deploy minter --network ic --argument '
+dfx deploy ledger --network ic --argument '
 (
   variant {
     Init = record {

@@ -58,7 +58,7 @@ pub const MIN_PENDING_REQUESTS: usize = 20;
 pub const MAX_REQUESTS_PER_BATCH: usize = 100;
 
 /// The minimum time the minter should wait before replacing a stuck transaction.
-pub const MIN_RESUBMISSION_DELAY: Duration = Duration::from_secs(24 * 60 * 60);
+pub const MIN_RESUBMISSION_DELAY: Duration = Duration::from_secs(60);
 
 /// Minimum interval between UTXO consolidations.
 pub const MIN_CONSOLIDATION_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);

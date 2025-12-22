@@ -311,7 +311,7 @@ mod dogecoin_canister {
         match network {
             Network::Mainnet => MAINNET_ID,
             Network::Testnet => TESTNET_ID,
-            Network::Regtest => REGTEST_ID,
+            Network::Regtest => MAINNET_ID,
         }
     }
 
