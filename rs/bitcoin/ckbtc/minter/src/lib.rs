@@ -1117,6 +1117,7 @@ pub async fn sign_transaction<R: CanisterRuntime, F: Fn(&tx::OutPoint) -> Option
         });
     }
     Ok(tx::SignedTransaction {
+        version: unsigned_tx.version,
         inputs: signed_inputs,
         outputs: unsigned_tx.outputs,
         lock_time: unsigned_tx.lock_time,
@@ -1128,6 +1129,7 @@ pub fn fake_sign(
     uses_segwit: bool,
 ) -> tx::SignedTransaction {
     tx::SignedTransaction {
+        version: unsigned_tx.version,
         inputs: unsigned_tx
             .inputs
             .iter()

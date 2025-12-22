@@ -9,10 +9,6 @@ use std::fmt;
 
 pub use ic_btc_interface::{OutPoint, Satoshi, Txid};
 
-/// The current Bitcoin transaction encoding version.
-/// See https://github.com/bitcoin/bitcoin/blob/c90f86e4c7760a9f7ed0a574f54465964e006a64/src/primitives/transaction.h#L291.
-pub const TX_VERSION: u32 = 2;
-
 /// The length of the public key.
 pub const PUBKEY_LEN: usize = 33;
 
@@ -302,7 +298,7 @@ impl<'a> TxSigHasher<'a> {
 
         // Double SHA256 of the serialization of:
         //      1. nVersion of the transaction (4-byte little endian)
-        TX_VERSION.encode(buf);
+        self.tx.version.encode(buf);
         //      2. hashPrevouts (32-byte hash)
         buf.write(&self.hash_prevouts[..]);
         //      3. hashSequence (32-byte hash)
@@ -373,6 +369,7 @@ impl From<TransactionVersion> for u32 {
 
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub struct SignedTransaction {
+    pub version: TransactionVersion,
     pub inputs: Vec<SignedInput>,
     pub outputs: Vec<TxOut>,
     pub lock_time: u32,
@@ -462,7 +459,7 @@ struct UnsignedInputView<'a>(&'a SignedInput);
 
 impl Encode for UnsignedTxView<'_> {
     fn encode(&self, buf: &mut impl Buffer) {
-        TX_VERSION.encode(buf);
+        self.0.version.encode(buf);
         let inputs: Vec<_> = self.0.inputs.iter().map(UnsignedInputView).collect();
         inputs.encode(buf);
         self.0.outputs.encode(buf);
@@ -484,7 +481,7 @@ struct BaseTxView<'a>(&'a SignedTransaction);
 
 impl Encode for BaseTxView<'_> {
     fn encode(&self, buf: &mut impl Buffer) {
-        TX_VERSION.encode(buf);
+        self.0.version.encode(buf);
         self.0.inputs.encode(buf);
         self.0.outputs.encode(buf);
         self.0.lock_time.encode(buf);
@@ -628,7 +625,7 @@ impl Encode for UnsignedTransaction {
 impl Encode for SignedTransaction {
     // See the bitcoin implementation of [encode](https://github.com/rust-bitcoin/rust-bitcoin/blob/195019967ae199dd8f7d586f7c2ac09ffd83cd1b/bitcoin/src/blockdata/transaction.rs#L728)
     fn encode(&self, buf: &mut impl Buffer) {
-        TX_VERSION.encode(buf);
+        self.version.encode(buf);
         if !self.uses_segwit_serialization() {
             self.inputs.encode(buf);
             self.outputs.encode(buf);

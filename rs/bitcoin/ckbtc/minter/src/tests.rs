@@ -194,7 +194,7 @@ fn signed_tx_to_bitcoin_tx(tx: &tx::SignedTransaction) -> bitcoin::Transaction {
         }
     }
     bitcoin::Transaction {
-        version: tx::TX_VERSION as i32,
+        version: u32::from(tx.version) as i32,
         lock_time: tx.lock_time,
         input: tx.inputs.iter().map(to_bitcoin_tx_in).collect(),
         output: tx
@@ -598,11 +598,12 @@ proptest! {
 
     #[test]
     fn signed_tx_encoding_model(
+        version in arbitrary::tx_version(),
         inputs in pvec(arbitrary::signed_input(), 1..20),
         outputs in pvec(arbitrary::tx_out(), 1..20),
         lock_time in any::<u32>(),
     ) {
-        let arb_tx = tx::SignedTransaction { inputs, outputs, lock_time };
+        let arb_tx = tx::SignedTransaction { version, inputs, outputs, lock_time };
         let btc_tx = signed_tx_to_bitcoin_tx(&arb_tx);
 
         let tx_bytes = tx::encode_into(&arb_tx, Vec::<u8>::new());
