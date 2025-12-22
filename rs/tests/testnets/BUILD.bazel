@@ -337,12 +337,12 @@ system_test_nns(
 
 system_test_nns(
     name = "mainnet_nns",
-    env_inherit = ["SSH_AUTH_SOCK"],
     env = MAINNET_ENV | {
         # TODO (CON-1624): Remove those dependencies once #8170 reached mainnet NNS
         "IC_RECOVERY_PATH": "$(rootpath //rs/recovery:ic-recovery)",
         "IC_REPLAY_PATH": "$(rootpath //rs/replay:ic-replay)",
     },
+    env_inherit = ["SSH_AUTH_SOCK"],
     guestos = "mainnet_nns",
     tags = [
         "dynamic_testnet",
