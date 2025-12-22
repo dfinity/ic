@@ -54,8 +54,7 @@ def _run_system_test(ctx):
     # The run script expects a map of enviromment variable prefixes to targets. e.g.
     # RUN_SCRIPT_ICOS_IMAGES=ENV_DEPS__GUESTOS_DISK_IMG:ic-os/guestos/envs/dev/disk-img.tar.zst;ENV_DEPS__GUESTOS_UPDATE_IMG:ic-os/guestos/envs/dev/update-img.tar.zst
     env["RUN_SCRIPT_ICOS_IMAGES"] = ";".join([k + ":" + v.files.to_list()[0].short_path for k, v in ctx.attr.icos_images.items()])
-    for _, image in ctx.attr.icos_images.items():
-        data.append(image.files.to_list()[0])
+    data += [image.files.to_list()[0] for _, image in ctx.attr.icos_images.items()]
 
     # RUN_SCRIPT_INFO_FILE_VARS:
     # Have the run script resolve some vars from info_file.
