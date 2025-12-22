@@ -119,8 +119,12 @@ fn should_use_p2pkh() {
         }
     );
     assert_eq!(
+        dogecoin_tx.compute_ntxid().as_byte_array(),
+        signed_tx.compute_ntxid().as_ref()
+    );
+    assert_eq!(
         dogecoin_tx.compute_txid().as_byte_array(),
-        &signed_tx.wtxid()
+        signed_tx.compute_txid().as_ref()
     );
 }
 

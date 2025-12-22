@@ -547,8 +547,6 @@ proptest! {
 
         prop_assert_eq!(btc_tx.serialize(), tx_bytes);
         prop_assert_eq!(&decoded_btc_tx, &btc_tx);
-        prop_assert_eq!(&arb_tx.txid().as_ref().to_vec(), &*btc_tx.txid());
-        prop_assert_eq!(&arb_tx.txid().as_ref().to_vec(), &*btc_tx.ntxid());
     }
 
     #[test]
@@ -822,6 +820,7 @@ proptest! {
         requests in arbitrary::retrieve_btc_requests(5_000_000u64..10_000_000, 1..5),
         main_pkhash in uniform20(any::<u8>()),
         resubmission_chain_length in 1..=5,
+        use_segwit in any::<bool>(),
     ) {
         let mut state = CkBtcMinterState::from(InitArgs {
             retrieve_btc_min_amount: 100_000,
@@ -839,7 +838,8 @@ proptest! {
             fee_per_vbyte
         )
         .expect("failed to build transaction");
-        let mut txids = vec![tx.txid()];
+        let signed_tx = fake_sign(&tx, use_segwit);
+        let mut txids = vec![signed_tx.compute_txid()];
         let submitted_at = 1_234_567_890;
 
         state.push_submitted_transaction(SubmittedBtcTransaction {
@@ -865,8 +865,9 @@ proptest! {
                 fee_per_vbyte + 1000 * i as u64,
             )
             .expect("failed to build transaction");
+            let new_signed_tx = fake_sign(&tx, use_segwit);
 
-            let new_txid = tx.txid();
+            let new_txid = new_signed_tx.compute_txid();
 
             state.replace_transaction(prev_txid, SubmittedBtcTransaction {
                 requests: requests.clone().into(),

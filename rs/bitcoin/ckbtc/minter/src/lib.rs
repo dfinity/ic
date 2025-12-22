@@ -488,7 +488,6 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
         undo_withdrawal_request(reqs, utxos);
     });
 
-    let txid = req.unsigned_tx.txid();
     let signed_tx = sign_transaction(
         req.key_name,
         &req.ecdsa_public_key,
@@ -504,6 +503,7 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
             err
         );
     })?;
+    let txid = signed_tx.compute_txid();
 
     state::mutate_state(|s| {
         for block_index in requests_guard.0.iter_block_index() {
@@ -921,7 +921,6 @@ pub async fn resubmit_transactions<
             }
         };
 
-        let new_txid = unsigned_tx.txid();
         let maybe_signed_tx = sign_transaction(
             key_name.to_string(),
             &ecdsa_public_key,
@@ -942,6 +941,7 @@ pub async fn resubmit_transactions<
                 continue;
             }
         };
+        let new_txid = signed_tx.compute_txid();
 
         match runtime.send_transaction(&signed_tx, btc_network).await {
             Ok(()) => {

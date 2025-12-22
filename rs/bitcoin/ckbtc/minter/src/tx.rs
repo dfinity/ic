@@ -349,16 +349,6 @@ pub struct UnsignedTransaction {
     pub lock_time: u32,
 }
 
-impl UnsignedTransaction {
-    pub fn txid(&self) -> Txid {
-        Sha256::hash(&encode_into(self, Sha256::new())).into()
-    }
-
-    pub fn serialized_len(&self) -> usize {
-        encode_into(self, CountBytes::default())
-    }
-}
-
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub struct SignedTransaction {
     pub inputs: Vec<SignedInput>,
