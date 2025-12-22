@@ -10,7 +10,6 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
 
-
 # install afl & gsutils deps for bazel-fuzzers
 RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
     echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-18 main" | tee -a /etc/apt/sources.list.d/llvm.list && \
