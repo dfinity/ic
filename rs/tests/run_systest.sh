@@ -4,7 +4,12 @@ set -euo pipefail
 
 # RUN_SCRIPT_ variables are meant for this script only and shouldn't be forwarded
 # to the test driver
-export -n RUN_SCRIPT_ICOS_IMAGES RUN_SCRIPT_UPLOAD_SYSTEST_DEP RUN_SCRIPT_INFO_FILE_VARS RUN_SCRIPT_TEST_EXECUTABLE RUN_SCRIPT_DRIVER_EXTRA_ARGS
+export -n \
+  RUN_SCRIPT_ICOS_IMAGES \
+  RUN_SCRIPT_UPLOAD_SYSTEST_DEP \
+  RUN_SCRIPT_INFO_FILE_VARS \
+  RUN_SCRIPT_TEST_EXECUTABLE \
+  RUN_SCRIPT_DRIVER_EXTRA_ARGS
 
 # RUN_SCRIPT_ICOS_IMAGES:
 # For every ic-os image specified, first ensure it's in remote
