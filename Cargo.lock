@@ -1392,9 +1392,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "bitcoin"
-version = "0.32.5-doge.0"
-source = "git+https://github.com/dfinity/rust-dogecoin?rev=cda2b5ec270017c82abd6ef2e71b7fe583a133fd#cda2b5ec270017c82abd6ef2e71b7fe583a133fd"
+name = "bitcoin-dogecoin"
+version = "0.32.5-doge.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1142f01cb554e9d8be5d79f782f2a371735436ebd9445c54333c27eaf97081bc"
 dependencies = [
  "base58ck",
  "bech32 0.11.0",
@@ -6726,7 +6727,7 @@ name = "ic-bitcoin-canister-mock"
 version = "0.9.0"
 dependencies = [
  "bech32 0.9.1",
- "bitcoin 0.32.5-doge.0",
+ "bitcoin-dogecoin",
  "candid",
  "candid_parser",
  "hex",
@@ -7016,7 +7017,7 @@ dependencies = [
 name = "ic-btc-adapter"
 version = "0.9.0"
 dependencies = [
- "bitcoin 0.32.5-doge.0",
+ "bitcoin-dogecoin",
  "clap 4.5.27",
  "criterion",
  "flate2",
@@ -7086,7 +7087,7 @@ dependencies = [
 name = "ic-btc-adapter-test-utils"
 version = "0.9.0"
 dependencies = [
- "bitcoin 0.32.5-doge.0",
+ "bitcoin-dogecoin",
  "flate2",
  "hex",
  "ic-btc-adapter",
@@ -7105,7 +7106,7 @@ version = "0.9.0"
 dependencies = [
  "askama",
  "base64 0.13.1",
- "bitcoin 0.32.5-doge.0",
+ "bitcoin-dogecoin",
  "candid",
  "candid_parser",
  "ciborium",
@@ -7200,7 +7201,7 @@ dependencies = [
 name = "ic-btc-validation"
 version = "0.9.0"
 dependencies = [
- "bitcoin 0.32.5-doge.0",
+ "bitcoin-dogecoin",
  "csv",
  "hex",
  "rstest",
@@ -7626,7 +7627,7 @@ dependencies = [
  "assert_matches",
  "async-trait",
  "bech32 0.9.1",
- "bitcoin 0.28.2",
+ "bitcoin",
  "bs58 0.5.1",
  "canbench-rs",
  "candid",
@@ -7714,7 +7715,7 @@ name = "ic-ckdoge-minter-test-utils"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "bitcoin 0.32.5-doge.0",
+ "bitcoin-dogecoin",
  "candid",
  "canlog 0.2.0",
  "ic-bitcoin-canister-mock",
@@ -8758,7 +8759,7 @@ name = "ic-crypto-internal-threshold-sig-canister-threshold-sig-test-utils"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "bitcoin 0.28.2",
+ "bitcoin",
  "ed25519-dalek",
  "hex",
  "ic-crypto-internal-threshold-sig-canister-threshold-sig",
@@ -13752,7 +13753,7 @@ name = "ic-secp256k1"
 version = "0.3.0"
 dependencies = [
  "bip32 0.5.3",
- "bitcoin 0.28.2",
+ "bitcoin",
  "hex",
  "hex-literal 0.4.1",
  "hmac",
@@ -15193,7 +15194,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_matches",
- "bitcoin 0.32.5-doge.0",
+ "bitcoin-dogecoin",
  "candid",
  "canister-test",
  "dfn_candid",
@@ -19786,7 +19787,7 @@ version = "11.0.0"
 dependencies = [
  "backoff",
  "base64 0.13.1",
- "bitcoin 0.28.2",
+ "bitcoin",
  "candid",
  "candid_parser",
  "cycles-minting-canister",
@@ -19845,7 +19846,7 @@ dependencies = [
  "axum-server",
  "backoff",
  "base64 0.13.1",
- "bitcoin 0.32.5-doge.0",
+ "bitcoin-dogecoin",
  "bytes",
  "candid",
  "candid_parser",
