@@ -12,7 +12,7 @@ rust_library(
         # Keep sorted.
         "//rs/bitcoin/adapter",
         "//rs/config",
-        "@crate_index//:bitcoin",
+        "@crate_index//:bitcoin-dogecoin",
         "@crate_index//:flate2",
         "@crate_index//:hex",
         "@crate_index//:jsonrpc",

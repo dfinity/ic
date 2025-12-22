@@ -172,7 +172,6 @@ crate.spec(
         "serde",
     ],
     package = "bitcoin-dogecoin",
-    package_alias = "bitcoin",
     version = "^0.32.5-doge.1",
 )
 crate.spec(
