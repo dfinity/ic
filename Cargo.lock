@@ -15201,6 +15201,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-testnet-mainnet-nns"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "ic-agent 0.40.1",
+ "ic-base-types",
+ "ic-canister-client",
+ "ic-canister-client-sender",
+ "ic-crypto-utils-threshold-sig-der",
+ "ic-limits",
+ "ic-nervous-system-common",
+ "ic-nns-common",
+ "ic-nns-constants",
+ "ic-nns-governance-api",
+ "ic-nns-test-utils",
+ "ic-protobuf",
+ "ic-registry-nns-data-provider",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "nix 0.24.3",
+ "once_cell",
+ "registry-canister",
+ "serde",
+ "slog",
+ "ssh2",
+ "url",
+]
+
+[[package]]
 name = "ic-tests-ckbtc"
 version = "0.9.0"
 dependencies = [
@@ -18880,9 +18911,9 @@ version = "0.9.0"
 
 [[package]]
 name = "once_cell"
-version = "1.20.2"
+version = "1.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1261fe7e33c73b354eab43b1273a57c8f967d0391e80353e51f764ac02cf6775"
+checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
 dependencies = [
  "critical-section",
  "portable-atomic",
@@ -24052,6 +24083,7 @@ dependencies = [
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
+ "ic-testnet-mainnet-nns",
  "ic-xrc-types",
  "ic_consensus_system_test_subnet_recovery",
  "ic_consensus_system_test_utils",
