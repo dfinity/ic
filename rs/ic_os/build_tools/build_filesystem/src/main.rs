@@ -134,7 +134,6 @@ pub(crate) fn build_filesystem(args: Args) -> Result<()> {
             tar_extensions.iter().any(|ext| output_str.ends_with(ext)),
             "Output file for tar must have one of the following extensions: {}",
             tar_extensions.join(", ")
-            args.output.display()
         );
         ensure!(
             args.label.is_none(),

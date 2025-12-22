@@ -1739,7 +1739,6 @@ dependencies = [
  "anyhow",
  "clap 4.5.27",
  "ic_device",
- "rand 0.8.5",
  "regex",
  "selinux",
  "tar",

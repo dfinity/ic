@@ -6,7 +6,7 @@ use anyhow::{Context, Result, bail};
 use regex::RegexSet;
 use std::fs::File;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tar::{Archive, Header};
 
 pub fn process_filesystem(

@@ -4,34 +4,18 @@ filegroup(
     name = "all_srcs",
     srcs = glob(
         include = ["**"],
-        exclude = ["*.bazel"],
     ),
 )
 
 configure_make(
     name = "e2fsprogs",
-    args = ["-j12"],
-    configure_options = [
-        "--disable-nls",
-        "--disable-fuse2fs",
-        "--enable-libuuid",
-        "--enable-libblkid",
-        "--disable-elf-shlibs",
-    ],
-    env = {
-        "LDFLAGS": "-static",
-    },
     lib_name = "e2fsprogs",
     lib_source = ":all_srcs",
-    out_binaries = [
-        "mke2fs",
-    ],
+    out_binaries = ["mke2fs"],
     postfix_script = """
-        cp misc/mke2fs $INSTALLDIR/bin
+        mv misc/mke2fs $INSTALLDIR/bin
     """,
-    targets = [
-        "progs",
-    ],
+    targets = ["progs"],
     visibility = ["//visibility:public"],
 )
 
