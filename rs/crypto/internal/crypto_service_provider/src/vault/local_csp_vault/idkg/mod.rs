@@ -765,13 +765,7 @@ fn generate_idkg_key_material_from_seed(
 ) -> Result<(MEGaPublicKey, CspSecretKey, KeyId), CspCreateMEGaKeyError> {
     let (public_key, private_key) = gen_keypair(EccCurveType::K256, seed);
 
-    let key_id =
-        KeyId::try_from(&public_key).map_err(|e| CspCreateMEGaKeyError::InternalError {
-            internal_error: format!(
-                "Failed to create key ID from MEGa public key {:?}: {e}",
-                &public_key
-            ),
-        })?;
+    let key_id = KeyId::from(&public_key);
     let csp_secret_key = CspSecretKey::MEGaEncryptionK256(MEGaKeySetK256Bytes {
         public_key: MEGaPublicKeyK256Bytes::try_from(&public_key)
             .map_err(CspCreateMEGaKeyError::SerializationError)?,
