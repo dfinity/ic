@@ -32,7 +32,7 @@ jobs:
       labels: dind-large
 
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:30b49530b965954154a44fa703aace501c6d5f6c60eb30f51083213659d5bae3
+      image: ghcr.io/dfinity/ic-build@sha256:74dabd71fe7737f26899406e34e88da93d01dd71594cb48276984f4737bc32d9
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
 
