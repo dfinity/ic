@@ -530,13 +530,10 @@ impl BackupHelper {
         file.write_all(stdout.as_bytes())
             .context("Failed to write to log file")?;
 
-        if let Some(max_logs_age_to_keep) = self.max_logs_age_to_keep {
-            let min_time_to_keep = SystemTime::now()
-                .checked_sub(max_logs_age_to_keep)
-                .ok_or_else(|| {
-                    anyhow!("`max_logs_age_to_keep` is greater than `SystemTime::now()`!")
-                })?;
-
+        if let Some(min_time_to_keep) = self
+            .max_logs_age_to_keep
+            .and_then(|max_age| SystemTime::now().checked_sub(max_age))
+        {
             self.purge_old_logs(&logs_dir, min_time_to_keep)
                 .context("Failed to purge old logs")?;
         }
