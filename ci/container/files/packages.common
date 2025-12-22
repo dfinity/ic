@@ -68,9 +68,6 @@ lsb-release
 lvm2
 mtools
 nasm # to build OVMF
-python-is-python3
-python3
-python3-pip
 zstd
 
 # Unknown
