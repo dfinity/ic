@@ -9,7 +9,6 @@ use candid::{CandidType, Deserialize, Principal};
 use canlog::log;
 use ic_cdk::bitcoin_canister;
 use ic_cdk::management_canister::SignWithEcdsaArgs;
-use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::Memo;
 use scopeguard::{ScopeGuard, guard};
@@ -1083,7 +1082,7 @@ pub async fn sign_transaction<R: CanisterRuntime, F: Fn(&tx::OutPoint) -> Option
     unsigned_tx: tx::UnsignedTransaction,
     runtime: &R,
 ) -> Result<tx::SignedTransaction, CallError> {
-    use crate::address::{derivation_path, derive_public_key_from_account};
+    use crate::address::derive_public_key_from_raw_path;
 
     let mut signed_inputs = Vec::with_capacity(unsigned_tx.inputs.len());
     let sighasher = tx::TxSigHasher::new(&unsigned_tx);
@@ -1093,20 +1092,17 @@ pub async fn sign_transaction<R: CanisterRuntime, F: Fn(&tx::OutPoint) -> Option
         let account = lookup_outpoint_account(outpoint)
             .unwrap_or_else(|| panic!("bug: no account for outpoint {outpoint:?}"));
 
-        let path = derivation_path(&account);
-        let pubkey =
-            ByteBuf::from(derive_public_key_from_account(ecdsa_public_key, &account).public_key);
+        let derivation_path = runtime.derivation_path(&account);
+        let pubkey = ByteBuf::from(
+            derive_public_key_from_raw_path(ecdsa_public_key, derivation_path.clone()).public_key,
+        );
         let pkhash = tx::hash160(&pubkey);
 
         let sighash = sighasher.sighash(input, &pkhash);
 
-        let sec1_signature = management::sign_with_ecdsa(
-            key_name.clone(),
-            DerivationPath::new(path),
-            sighash,
-            runtime,
-        )
-        .await?;
+        let sec1_signature =
+            management::sign_with_ecdsa(key_name.clone(), derivation_path, sighash, runtime)
+                .await?;
 
         signed_inputs.push(tx::SignedInput {
             signature: signature::EncodedSignature::from_sec1(&sec1_signature),
@@ -1637,6 +1633,10 @@ pub trait CanisterRuntime {
 
     fn parse_address(&self, address: &str, network: Network) -> Result<BitcoinAddress, String>;
 
+    /// Returns the derivation path that should be used to sign a message from a
+    /// specified account.
+    fn derivation_path(&self, account: &Account) -> Vec<Vec<u8>>;
+
     /// Address controlled by the minter (via threshold ECDSA) for a given user.
     fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String;
 
@@ -1830,6 +1830,16 @@ impl CanisterRuntime for IcCanisterRuntime {
         network: Network,
     ) -> Result<BitcoinAddress, std::string::String> {
         BitcoinAddress::parse(address, network).map_err(|e| e.to_string())
+    }
+
+    fn derivation_path(&self, account: &Account) -> Vec<Vec<u8>> {
+        const SCHEMA_V1: u8 = 1;
+
+        vec![
+            vec![SCHEMA_V1],
+            account.owner.as_slice().to_vec(),
+            account.effective_subaccount().to_vec(),
+        ]
     }
 
     fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String {

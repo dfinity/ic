@@ -115,6 +115,19 @@ pub fn derive_public_key_from_account(
     derive_public_key(ecdsa_public_key, &path)
 }
 
+pub fn derive_public_key_from_raw_path(
+    ecdsa_public_key: &ECDSAPublicKey,
+    raw_path: Vec<Vec<u8>>,
+) -> ECDSAPublicKey {
+    let path = ic_secp256k1::DerivationPath::new(
+        raw_path
+            .into_iter()
+            .map(ic_secp256k1::DerivationIndex)
+            .collect(),
+    );
+    derive_public_key(ecdsa_public_key, &path)
+}
+
 pub fn derive_public_key(
     ecdsa_public_key: &ECDSAPublicKey,
     path: &ic_secp256k1::DerivationPath,
