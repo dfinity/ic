@@ -1,5 +1,5 @@
 {
-  "checksum": "971e5d282607108262108ca673f422f2836eabfcb73687aedd1d7aeade59afa4",
+  "checksum": "a2f6512354937fc6b92fd44613b226dddf991775ef4e52ac82e3f8e46b22af5e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -6867,50 +6867,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "bech32 0.8.1": {
-      "name": "bech32",
-      "version": "0.8.1",
-      "package_url": "https://github.com/rust-bitcoin/rust-bech32",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bech32/0.8.1/download",
-          "sha256": "cf9ff0bbfd639f15c74af777d81383cf53efb7c93613f6cab67c6c11e05bbf8b"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bech32",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bech32",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "std"
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.8.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": null
-    },
     "bech32 0.9.1": {
       "name": "bech32",
       "version": "0.9.1",
@@ -8062,112 +8018,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "bitcoin 0.28.2": {
-      "name": "bitcoin",
-      "version": "0.28.2",
-      "package_url": "https://github.com/rust-bitcoin/rust-bitcoin/",
+    "bitcoin-dogecoin 0.32.5-doge.1": {
+      "name": "bitcoin-dogecoin",
+      "version": "0.32.5-doge.1",
+      "package_url": "https://github.com/dfinity/rust-dogecoin",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/bitcoin/0.28.2/download",
-          "sha256": "d4d30fb43d287492017964a1fd7d3f82e8cc760818471c6ef2d44111e317d5c3"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bitcoin",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bitcoin",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "rand",
-            "secp-recovery",
-            "serde",
-            "std",
-            "use-serde"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bech32 0.8.1",
-              "target": "bech32"
-            },
-            {
-              "id": "bitcoin_hashes 0.10.0",
-              "target": "bitcoin_hashes"
-            },
-            {
-              "id": "secp256k1 0.22.2",
-              "target": "secp256k1"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "rustc_flags": {
-          "common": [],
-          "selects": {
-            "@@//bazel:fuzzing_code_enabled": [
-              "-Cpasses=sancov-module",
-              "-Cllvm-args=-sanitizer-coverage-level=4",
-              "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
-              "-Cllvm-args=-sanitizer-coverage-pc-table",
-              "-Cllvm-args=-sanitizer-coverage-trace-compares",
-              "-Cllvm-args=-sanitizer-coverage-stack-depth",
-              "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
-              "-Ctarget-cpu=native",
-              "-Coverflow_checks",
-              "-Copt-level=3",
-              "-Clink-dead-code",
-              "-Cdebug-assertions",
-              "-Ccodegen-units=1",
-              "-Zextra-const-ub-checks",
-              "-Zstrict-init-checks",
-              "-Zsanitizer=address",
-              "-Zexternal-clangrt",
-              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust~~rust~rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
-            ]
-          }
-        },
-        "version": "0.28.2"
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "bitcoin 0.32.5-doge.0": {
-      "name": "bitcoin",
-      "version": "0.32.5-doge.0",
-      "package_url": "https://github.com/rust-dogecoin/rust-dogecoin/",
-      "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/rust-dogecoin",
-          "commitish": {
-            "Rev": "cda2b5ec270017c82abd6ef2e71b7fe583a133fd"
-          },
-          "strip_prefix": "bitcoin"
+          "url": "https://static.crates.io/crates/bitcoin-dogecoin/0.32.5-doge.1/download",
+          "sha256": "1142f01cb554e9d8be5d79f782f2a371735436ebd9445c54333c27eaf97081bc"
         }
       },
       "targets": [
@@ -8224,7 +8082,7 @@
               "target": "bech32"
             },
             {
-              "id": "bitcoin 0.32.5-doge.0",
+              "id": "bitcoin-dogecoin 0.32.5-doge.1",
               "target": "build_script_build"
             },
             {
@@ -8298,7 +8156,7 @@
             ]
           }
         },
-        "version": "0.32.5-doge.0"
+        "version": "0.32.5-doge.1"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -8311,8 +8169,9 @@
           "**"
         ]
       },
-      "license": "CC0-1.0",
+      "license": "Apache-2.0 OR CC0-1.0",
       "license_ids": [
+        "Apache-2.0",
         "CC0-1.0"
       ],
       "license_file": null
@@ -8504,60 +8363,6 @@
         "CC0-1.0"
       ],
       "license_file": null
-    },
-    "bitcoin_hashes 0.10.0": {
-      "name": "bitcoin_hashes",
-      "version": "0.10.0",
-      "package_url": "https://github.com/rust-bitcoin/bitcoin_hashes/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bitcoin_hashes/0.10.0/download",
-          "sha256": "006cc91e1a1d99819bc5b8214be3555c1f0611b169f527a1fdc54ed1f2b745b0"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bitcoin_hashes",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bitcoin_hashes",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "serde",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.10.0"
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": "LICENSE"
     },
     "bitcoin_hashes 0.14.0": {
       "name": "bitcoin_hashes",
@@ -21310,13 +21115,9 @@
               "target": "bit_vec"
             },
             {
-              "id": "bitcoin 0.28.2",
+              "id": "bitcoin-dogecoin 0.32.5-doge.1",
               "target": "bitcoin",
-              "alias": "bitcoin_0_28"
-            },
-            {
-              "id": "bitcoin 0.32.5-doge.0",
-              "target": "bitcoin"
+              "alias": "bitcoin_dogecoin"
             },
             {
               "id": "bitflags 1.3.2",
@@ -71533,8 +71334,6 @@
             "global-context",
             "rand",
             "rand-std",
-            "recovery",
-            "serde",
             "std"
           ],
           "selects": {}
@@ -71548,10 +71347,6 @@
             {
               "id": "secp256k1-sys 0.5.2",
               "target": "secp256k1_sys"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
             }
           ],
           "selects": {}
@@ -71679,7 +71474,6 @@
         ],
         "crate_features": {
           "common": [
-            "recovery",
             "std"
           ],
           "selects": {}
@@ -97656,8 +97450,7 @@
     "bindgen 0.65.1",
     "bip32 0.5.1",
     "bit-vec 0.6.3",
-    "bitcoin 0.28.2",
-    "bitcoin 0.32.5-doge.0",
+    "bitcoin-dogecoin 0.32.5-doge.1",
     "bitflags 1.3.2",
     "bs58 0.5.0",
     "build-info 0.0.27",
