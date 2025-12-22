@@ -21,8 +21,7 @@ struct Cli {
 const GUESTOS_PATH: &str = "/guest-os.img.tar.zst";
 const SETUPOS_DATA_INDEX: u32 = 4;
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let cli = Cli::parse();
     let tmpdir = tempdir()?;
 
@@ -35,15 +34,13 @@ async fn main() -> Result<()> {
 
     // Open the image
     let mut partition = ExtPartition::open(partition_path, Some(SETUPOS_DATA_INDEX))
-        .await
         .expect("Could not open partition");
 
     partition
         .copy_file_to(Path::new(GUESTOS_PATH), &cli.dest)
-        .await
         .unwrap();
 
-    partition.close().await.expect("Could not close partition");
+    partition.close().expect("Could not close partition");
 
     Ok(())
 }

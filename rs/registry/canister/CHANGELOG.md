@@ -11,6 +11,48 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-12-05: Proposal 139679
+
+http://dashboard.internetcomputer.org/proposal/139679
+
+## Changed
+
+* When performing subnet creation, subnet update, or subnet recovery, it is now allowed to omit the `KeyConfig`'s `pre_signatures_to_create_in_advance` field for keys that do not have pre-signatures. Currently only vetKD keys do not have pre-signatures (unlike Ecdsa/Schnorr keys). When the field is omitted, it is automatically set to zero.
+
+### Fixed
+
+* Repair a handful or so of broken node operator records.
+
+
+# 2025-11-28: Proposal 139576
+
+http://dashboard.internetcomputer.org/proposal/139576
+
+## Added
+
+### Node Swaps
+
+All node operators can now swap nodes on non-system subnets; later, swapping will be enabled on all subnets.
+
+### Other
+
+* Temporary logging for when add_node traps.
+
+* Migration Swiss subnet Node Operators max_rewardable_nodes to btreemap! {"type3.1" => 1} as requested by
+  Alexander Ufimtsev.
+
+
+# 2025-11-14: Proposal 139405
+
+http://dashboard.internetcomputer.org/proposal/139405
+
+## Added
+
+### Node Swaps
+
+DFINITY's node operators can now swap nodes on non-system subnets; later, swapping nodes will gradually become available to all node operators.
+
+
 # 2025-11-07: Proposal 139312
 
 http://dashboard.internetcomputer.org/proposal/139312

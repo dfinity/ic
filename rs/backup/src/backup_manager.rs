@@ -10,11 +10,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_pem_file;
 use ic_logger::ReplicaLogger;
 use ic_recovery::command_helper::exec_cmd;
-use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
 use slog::{Logger, error, info, o};
@@ -32,7 +30,7 @@ const DEFAULT_SYNC_NODES: usize = 5;
 const DEFAULT_SYNC_PERIOD: u64 = 30;
 const DEFAULT_REPLAY_PERIOD: u64 = 240;
 const DEFAULT_VERSIONS_HOT: usize = 2;
-const SECONDS_IN_DAY: u64 = 24u64 * 60 * 60;
+const SECONDS_IN_DAY: u64 = 24 * 60 * 60;
 const COLD_STORAGE_PERIOD: u64 = 60 * 60; // each hour
 const PERIODIC_METRICS_PUSH_PERIOD: u64 = 5 * 60; // each 5 min
 
@@ -44,9 +42,7 @@ struct SubnetBackup {
 }
 
 pub struct BackupManager {
-    _local_store: Arc<LocalStoreImpl>,
-    _registry_client: Arc<RegistryClientImpl>,
-    _registry_replicator: Arc<RegistryReplicator>,
+    _registry_replicator: RegistryReplicator,
     subnet_backups: Vec<SubnetBackup>,
     log: Logger,
 }
@@ -69,41 +65,35 @@ impl BackupManager {
             Ok(f) => f,
             Err(e) => panic!("Bad file name for ssh credentials: {e:?}"),
         };
-        let local_store_dir = config.root_dir.join("ic_registry_local_store");
-        let data_provider = Arc::new(LocalStoreImpl::new(local_store_dir.clone()));
-        let registry_client = Arc::new(RegistryClientImpl::new(data_provider, None));
-
-        let local_store = Arc::new(LocalStoreImpl::new(local_store_dir));
 
         let replica_logger = ReplicaLogger::from(log.clone());
-        let registry_replicator = Arc::new(RegistryReplicator::new_with_clients(
-            replica_logger,
-            local_store.clone(),
-            registry_client.clone(),
-            Duration::from_secs(30),
-        ));
-        let nns_public_key =
-            parse_threshold_sig_key(&config.nns_pem).expect("Missing NNS public key");
+        let local_store_dir = config.root_dir.join("ic_registry_local_store");
         let nns_urls = vec![config.nns_url.expect("Missing NNS Url")];
+        let nns_public_key =
+            parse_threshold_sig_key_from_pem_file(&config.nns_pem).expect("Missing NNS public key");
+
+        let registry_replicator = RegistryReplicator::new(
+            replica_logger,
+            &local_store_dir,
+            Duration::from_secs(30),
+            nns_urls,
+            Some(nns_public_key),
+        )
+        .await;
 
         info!(log, "Starting the registry replicator");
         let registry_replicator_future = registry_replicator
-            .start_polling(nns_urls, Some(nns_public_key), cancellation_token)
-            .await
+            .start_polling(cancellation_token)
             .expect("Failed to start registry replicator");
 
         info!(log, "Spawning the registry replicator background thread.");
         tokio::spawn(registry_replicator_future);
 
-        info!(log, "Fetch and start polling");
-        if let Err(err) = registry_client.fetch_and_start_polling() {
-            error!(log, "Error fetching registry by the client: {err}");
-        }
-
         let mut backups = Vec::new();
 
         let downloads = Arc::new(Mutex::new(true));
         let blacklisted = Arc::new(config.blacklisted_nodes.unwrap_or_default());
+        let logs_dir = Arc::new(Mutex::new(config.root_dir.join("logs")));
 
         for subnet_config in config.subnets {
             let subnet_log =
@@ -126,9 +116,13 @@ impl BackupManager {
                 root_dir: config.root_dir.clone(),
                 excluded_dirs: config.excluded_dirs.clone(),
                 ssh_private_key: ssh_credentials_file.clone(),
-                registry_client: registry_client.clone(),
+                registry_client: registry_replicator.get_registry_client(),
                 notification_client,
                 downloads_guard: downloads.clone(),
+                logs_dir: logs_dir.clone(),
+                max_logs_age_to_keep: config
+                    .max_logs_age_to_keep_days
+                    .map(|days| Duration::from_secs(days * SECONDS_IN_DAY)),
                 hot_disk_resource_threshold_percentage: config
                     .hot_disk_resource_threshold_percentage,
                 cold_disk_resource_threshold_percentage: config
@@ -152,8 +146,6 @@ impl BackupManager {
         }
 
         BackupManager {
-            _local_store: local_store,
-            _registry_client: registry_client,
             _registry_replicator: registry_replicator, // it will be used as a background task, so keep it
             subnet_backups: backups,
             log,

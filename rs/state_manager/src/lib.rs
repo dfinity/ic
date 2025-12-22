@@ -194,6 +194,7 @@ pub struct StateSyncMetrics {
     remaining: IntGauge,
     corrupted_chunks_critical: IntCounter,
     corrupted_chunks: IntCounterVec,
+    add_chunk_duration: HistogramVec,
 }
 
 #[derive(Clone)]
@@ -684,6 +685,32 @@ impl StateSyncMetrics {
             corrupted_chunks.with_label_values(&[*source]);
         }
 
+        let add_chunk_duration = metrics_registry.histogram_vec(
+            "state_sync_add_chunk_duration_seconds",
+            "Duration of add_chunk calls indexed by state before, state after, and success status.",
+            // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, …, 100s, 200s, 500s
+            decimal_buckets(-4, 2),
+            &["state_before", "state_after", "status"],
+        );
+
+        // Preallocate important state transitions
+        let transitions_to_preallocate = &[
+            // Successful transitions
+            ("blank", "prep", "ok"),
+            ("prep", "loading", "ok"),
+            ("loading", "complete", "ok"),
+            ("prep", "complete", "ok"),
+            ("prep", "prep", "ok"),
+            ("loading", "loading", "ok"),
+            ("blank", "blank", "err"),
+            ("prep", "prep", "err"),
+            ("loading", "loading", "err"),
+        ];
+
+        for (state_before, state_after, success) in transitions_to_preallocate {
+            add_chunk_duration.with_label_values(&[state_before, state_after, success]);
+        }
+
         Self {
             size,
             duration,
@@ -691,6 +718,7 @@ impl StateSyncMetrics {
             remaining,
             corrupted_chunks_critical,
             corrupted_chunks,
+            add_chunk_duration,
         }
     }
 }
@@ -885,7 +913,7 @@ impl Drop for StateManagerImpl {
         // Make sure the tip thread didn't panic. Otherwise we may be blind to it in tests.
         // If the tip thread panics after the latest communication with tip_channel the test returns
         // success.
-        self.flush_tip_channel();
+        self.flush_all();
     }
 }
 
@@ -1224,6 +1252,12 @@ impl StateManagerImpl {
         flush_tip_channel(&self.tip_channel)
     }
 
+    /// Finish all asynchronous operations.
+    pub fn flush_all(&self) {
+        self.flush_tip_channel();
+        self.state_layout().flush_checkpoint_removal_channel();
+    }
+
     /// Height for the initial default state.
     const INITIAL_STATE_HEIGHT: Height = Height::new(0);
 
@@ -1471,6 +1505,13 @@ impl StateManagerImpl {
 
         metrics.min_resident_height.set(last_snapshot_height);
         metrics.max_resident_height.set(last_snapshot_height);
+        metrics.state_size.set(
+            states_metadata
+                .values()
+                .last()
+                .and_then(|metadata| metadata.manifest())
+                .map_or(0, |manifest| manifest.state_size_bytes() as i64),
+        );
 
         let states = Arc::new(parking_lot::RwLock::new(SharedState {
             certifications_metadata,
@@ -1992,11 +2033,7 @@ impl StateManagerImpl {
             );
         }
 
-        let state_size_bytes: i64 = manifest
-            .file_table
-            .iter()
-            .map(|f| f.size_bytes as i64)
-            .sum();
+        let state_size_bytes = manifest.state_size_bytes() as i64;
 
         if !is_state_metadata_present {
             // Normal case: we don't have the state metadata yet.

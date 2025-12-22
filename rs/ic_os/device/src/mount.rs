@@ -1,6 +1,6 @@
-use crate::io::retry_if_busy;
-use anyhow::{Context, Error, Result};
-use async_trait::async_trait;
+use crate::device_mapping::LoopDeviceWrapper;
+use crate::io::retry_if_io_error;
+use anyhow::{Context, Result};
 use gpt::GptDisk;
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -23,7 +23,6 @@ use uuid::Uuid;
 // (to allow for more fine-grained control).
 
 /// Trait for accessing partitions by UUID from a device
-#[async_trait]
 pub trait PartitionProvider: Send + Sync {
     /// Mounts a partition by its UUID with specified mount options.
     ///
@@ -34,7 +33,7 @@ pub trait PartitionProvider: Send + Sync {
     /// # Returns
     /// A boxed MountedPartition trait object that provides access to the mounted filesystem.
     /// The mount is automatically cleaned up when the returned object is dropped.
-    async fn mount_partition(
+    fn mount_partition(
         &self,
         partition_uuid: Uuid,
         options: MountOptions,
@@ -42,7 +41,6 @@ pub trait PartitionProvider: Send + Sync {
 }
 
 /// Handles mounting raw device ranges (offset + length) to filesystem paths
-#[async_trait]
 pub trait Mounter: Send + Sync {
     /// Mounts a range of bytes from a block device to a filesystem path.
     ///
@@ -55,7 +53,7 @@ pub trait Mounter: Send + Sync {
     /// # Returns
     /// A boxed MountedPartition trait object that provides access to the mounted filesystem.
     /// The mount is automatically cleaned up when the returned object is dropped.
-    async fn mount_range(
+    fn mount_range(
         &self,
         device: PathBuf,
         offset_bytes: u64,
@@ -131,9 +129,8 @@ impl Drop for GptPartitionProvider {
     }
 }
 
-#[async_trait]
 impl PartitionProvider for GptPartitionProvider {
-    async fn mount_partition(
+    fn mount_partition(
         &self,
         partition_uuid: Uuid,
         options: MountOptions,
@@ -150,7 +147,6 @@ impl PartitionProvider for GptPartitionProvider {
 
         self.mounter
             .mount_range(self.device.clone(), offset_bytes, len_bytes, options)
-            .await
             .context("mount_range failed")
     }
 }
@@ -164,12 +160,15 @@ struct LoopDeviceMount {
     // drop order as well. According to the spec, fields are dropped in the
     // order of declaration.
     mount: Mount,
+    _loop_device: LoopDeviceWrapper,
     _tempdir: TempDir,
 }
 
 impl Drop for LoopDeviceMount {
     fn drop(&mut self) {
-        if let Err(e) = retry_if_busy(|| self.mount.unmount(UnmountFlags::empty())) {
+        if let Err(e) = retry_if_io_error(nix::Error::EBUSY, || {
+            self.mount.unmount(UnmountFlags::empty())
+        }) {
             // If umount fails, we need to avoid cleaning the tmpdir, as this
             // will purge the contents of the mounted fs, instead.
             eprintln!("Error dropping mount: {e:?}");
@@ -190,33 +189,37 @@ impl MountedPartition for LoopDeviceMount {
 pub struct LoopDeviceMounter;
 
 #[cfg(target_os = "linux")]
-#[async_trait]
 impl Mounter for LoopDeviceMounter {
-    async fn mount_range(
+    fn mount_range(
         &self,
         device: PathBuf,
         offset_bytes: u64,
         _len_bytes: u64,
         options: MountOptions,
     ) -> Result<Box<dyn MountedPartition>> {
-        let mount = tokio::task::spawn_blocking(move || {
-            let tempdir = TempDir::new()?;
-            let mount_point = tempdir.path();
-            Ok::<LoopDeviceMount, Error>(LoopDeviceMount {
-                mount: retry_if_busy(|| {
-                    Mount::builder()
-                        .fstype(FilesystemType::Manual(options.file_system.as_str()))
-                        .loopback_offset(offset_bytes)
-                        .flags(MountFlags::empty())
-                        .explicit_loopback()
-                        .mount(&device, mount_point)
-                })
-                .context("Failed to create mount")?,
-                _tempdir: tempdir,
-            })
+        let tempdir = TempDir::new()?;
+        let mount_point = tempdir.path();
+        let loop_device = LoopDeviceWrapper::attach_to_next_free(&device, offset_bytes)?;
+
+        // Sometimes the mount can fail with EIO when udev is not ready yet
+        let mount = retry_if_io_error(nix::Error::EIO, || {
+            Mount::builder()
+                .fstype(FilesystemType::Manual(options.file_system.as_str()))
+                .flags(MountFlags::empty())
+                .mount(
+                    loop_device
+                        .path()
+                        .ok_or_else(|| std::io::Error::other("Loop device has no path"))?,
+                    mount_point,
+                )
         })
-        .await??;
-        Ok(Box::new(mount))
+        .context("Failed to create mount")?;
+
+        Ok(Box::new(LoopDeviceMount {
+            mount,
+            _loop_device: loop_device,
+            _tempdir: tempdir,
+        }))
     }
 }
 
@@ -242,9 +245,8 @@ pub mod testing {
         }
     }
 
-    #[async_trait]
     impl PartitionProvider for MockPartitionProvider {
-        async fn mount_partition(
+        fn mount_partition(
             &self,
             partition_uuid: Uuid,
             _options: MountOptions,
@@ -282,13 +284,11 @@ pub mod testing {
     /// always returns the same directory.
     #[derive(Clone, Default)]
     pub struct ExtractingFilesystemMounter {
-        #[allow(clippy::disallowed_types)] // Using tokio Mutex in testing is fine.
-        mounts: Arc<tokio::sync::Mutex<PartitionMap>>,
+        mounts: Arc<std::sync::Mutex<PartitionMap>>,
     }
 
-    #[async_trait]
     impl Mounter for ExtractingFilesystemMounter {
-        async fn mount_range(
+        fn mount_range(
             &self,
             device: PathBuf,
             offset_bytes: u64,
@@ -296,7 +296,7 @@ pub mod testing {
             options: MountOptions,
         ) -> Result<Box<dyn MountedPartition>> {
             let key = (device.clone(), offset_bytes, len_bytes);
-            let mut mounts = self.mounts.lock().await;
+            let mut mounts = self.mounts.lock().unwrap();
             if !mounts.contains_key(&key) {
                 mounts.insert(
                     key.clone(),
@@ -305,8 +305,7 @@ pub mod testing {
                         offset_bytes,
                         len_bytes,
                         options,
-                    )
-                    .await?,
+                    )?,
                 );
             }
 
@@ -317,47 +316,39 @@ pub mod testing {
     }
 
     impl ExtractingFilesystemMounter {
-        async fn extract_partition_to_tempdir(
+        fn extract_partition_to_tempdir(
             &self,
             device: PathBuf,
             offset_bytes: u64,
             len_bytes: u64,
             options: MountOptions,
         ) -> Result<Arc<TempDir>> {
-            async fn extract_partition<P: Partition>(
+            fn extract_partition<P: Partition>(
                 device: &Path,
                 offset_bytes: u64,
                 len_bytes: u64,
                 target: &Path,
             ) -> Result<()> {
-                P::open_range(device.to_path_buf(), offset_bytes, len_bytes)
-                    .await?
+                P::open_range(device.to_path_buf(), offset_bytes, len_bytes)?
                     .copy_files_to(target)
-                    .await
                     .context("Could not copy files to tempdir")
             }
 
             let extraction_dir = TempDir::new().context("Could not create tempdir")?;
 
             match options.file_system {
-                FileSystem::Vfat => {
-                    extract_partition::<FatPartition>(
-                        &device,
-                        offset_bytes,
-                        len_bytes,
-                        extraction_dir.path(),
-                    )
-                    .await
-                }
-                FileSystem::Ext4 => {
-                    extract_partition::<ExtPartition>(
-                        &device,
-                        offset_bytes,
-                        len_bytes,
-                        extraction_dir.path(),
-                    )
-                    .await
-                }
+                FileSystem::Vfat => extract_partition::<FatPartition>(
+                    &device,
+                    offset_bytes,
+                    len_bytes,
+                    extraction_dir.path(),
+                ),
+                FileSystem::Ext4 => extract_partition::<ExtPartition>(
+                    &device,
+                    offset_bytes,
+                    len_bytes,
+                    extraction_dir.path(),
+                ),
             }
             .context(format!(
                 "Could not extract partition to {}",
@@ -384,7 +375,7 @@ mod tests {
         write!(File::create(temp_dir.path().join("foo.txt"))?, "hello")?;
 
         ensure!(
-            Command::new("mkfs.ext4")
+            Command::new("/usr/sbin/mkfs.ext4")
                 .arg(out.path())
                 .arg("-d")
                 .arg(temp_dir.path())
@@ -397,8 +388,8 @@ mod tests {
         Ok(out)
     }
 
-    #[tokio::test]
-    async fn test_loop_device_mount_drop_with_unmount_failure() {
+    #[test]
+    fn test_loop_device_mount_drop_with_unmount_failure() {
         let image = create_test_image().unwrap();
 
         let mount = LoopDeviceMounter
@@ -410,7 +401,6 @@ mod tests {
                     file_system: FileSystem::Ext4,
                 },
             )
-            .await
             .unwrap();
 
         let mount_point = mount.mount_point().to_path_buf();

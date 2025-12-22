@@ -24,9 +24,9 @@ jobs:
       # see linux-x86-64 runner group
       labels: rust-benchmarks
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:da93235247c6651bae459e4e8cc987fccb37f0d53294b30f7e1ae57c0b553557
+      image: ghcr.io/dfinity/ic-build@sha256:cb3a6693a10777d16c301d98f5b67e23db405bf962d0eb8cec74082916c17bc7
       # running on bare metal machine using ubuntu user
-      options: --user ubuntu
+      options: --user ubuntu --mount type=tmpfs,target="/home/ubuntu/.local/share/containers"
     timeout-minutes: 720 # 12 hours
     strategy:
       matrix:
@@ -60,8 +60,11 @@ jobs:
           run: |
             echo -e "\e[34mRunning rust benchmarks on dedicated machine fr1-spm15!\e[0m"
 
+            CRITERION_HOME=$(mktemp -d)
+            trap "rm -rf $CRITERION_HOME" INT TERM EXIT
+
             while IFS= read -r tgt; do
-                bazel run "$tgt"
+                bazel run "$tgt" -- --criterion-home "$CRITERION_HOME"
             done < <(bazel query "attr(tags, 'rust_bench', ${{ matrix.target }})")
 
             while IFS= read -r bench_dir; do
@@ -82,6 +85,6 @@ jobs:
                     >report.json
                 curl --fail --retry 2 -sS -o /dev/null -X POST -H 'Content-Type: application/json' --data @report.json \
                     "https://elasticsearch.testnet.dfinity.network/ci-performance-test/_doc"
-            done < <(find -L ./bazel-out -type d -path '*/new')
+            done < <(find -L "$CRITERION_HOME" -type d -path '*/new')
 
             echo -e "\e[34mRust benchmarks on dedicated machine fr1-spm15 finished.\e[0m"

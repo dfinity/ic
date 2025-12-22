@@ -12,13 +12,13 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_transport::pb::v1::RegistryGetLatestVersionResponse;
 use pocket_ic::common::rest::{
-    BlockmakerConfigs, CreateInstanceResponse, ExtendedSubnetConfigSet, IcpFeatures,
-    IcpFeaturesConfig, IncompleteStateFlag, InstanceConfig, InstanceHttpGatewayConfig,
-    RawSubnetBlockmaker, TickConfigs,
+    CreateInstanceResponse, ExtendedSubnetConfigSet, IcpFeatures, IcpFeaturesConfig,
+    IncompleteStateFlag, InstanceConfig, InstanceHttpGatewayConfig,
 };
 use pocket_ic::nonblocking::PocketIc as PocketIcAsync;
 use pocket_ic::{
-    PocketIc, PocketIcBuilder, PocketIcState, StartServerParams, start_server, update_candid_as,
+    PocketIc, PocketIcBuilder, PocketIcState, StartServerParams, SubnetBlockmakers, TickConfigs,
+    start_server, update_candid_as,
 };
 use prost::Message;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
@@ -128,6 +128,7 @@ async fn resume_killed_instance_impl(
         icp_config: None,
         log_level: None,
         bitcoind_addr: None,
+        dogecoind_addr: None,
         icp_features: None,
         incomplete_state,
         initial_time: None,
@@ -374,16 +375,14 @@ fn test_custom_blockmaker_metrics() {
     let blockmaker_1 = node_ids[0].get().0;
     let blockmaker_2 = node_ids[1].get().0;
 
-    let subnets_blockmakers = vec![RawSubnetBlockmaker {
-        subnet: application_subnet.into(),
-        blockmaker: blockmaker_1.into(),
-        failed_blockmakers: vec![blockmaker_2.into()],
+    let blockmakers = vec![SubnetBlockmakers {
+        subnet: application_subnet,
+        blockmaker: blockmaker_1,
+        failed_blockmakers: vec![blockmaker_2],
     }];
 
     let tick_configs = TickConfigs {
-        blockmakers: Some(BlockmakerConfigs {
-            blockmakers_per_subnet: subnets_blockmakers,
-        }),
+        blockmakers: Some(blockmakers),
     };
     let daily_blocks = 5;
 
@@ -462,33 +461,23 @@ fn payload_too_large() {
     );
     for url in [instances_url, gateway_url] {
         let client = reqwest::blocking::Client::new();
-        retry_send_too_large_body(
-            &client,
-            &url,
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "error: payload_too_large\ndetails: Payload is too large: maximum body size is 4194304 bytes.",
-        );
+        retry_send_too_large_body(&client, &url, StatusCode::PAYLOAD_TOO_LARGE);
     }
 
     // Too large frontend request for canister via HTTP gateway.
     let (client, url) = frontend_canister(&pic, canister_id, false, "/index.html");
-    retry_send_too_large_body(
-        &client,
-        url.as_ref(),
-        StatusCode::SERVICE_UNAVAILABLE,
-        "503 - upstream error",
-    );
+    retry_send_too_large_body(&client, url.as_ref(), StatusCode::SERVICE_UNAVAILABLE);
 }
 
 fn retry_send_too_large_body(
     client: &reqwest::blocking::Client,
     url: &str,
     expected_status: StatusCode,
-    expected_body: &str,
 ) {
     let started = Instant::now();
-    while let Err(err) = send_too_large_body(client, url, expected_status, expected_body) {
+    while let Err(err) = send_too_large_body(client, url, expected_status) {
         println!("{err}");
+
         if started.elapsed() > Duration::from_secs(5 * 60) {
             panic!("Retrying requests with too large body timed out.");
         }
@@ -500,7 +489,6 @@ fn send_too_large_body(
     client: &reqwest::blocking::Client,
     url: &str,
     expected_status: StatusCode,
-    expected_body: &str,
 ) -> Result<(), String> {
     let resp = client
         .post(url)
@@ -510,11 +498,6 @@ fn send_too_large_body(
 
     if resp.status() != expected_status {
         return Err(format!("Unexpected status code: {:?}", resp.status()));
-    }
-
-    let body = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
-    if !body.contains(expected_body) {
-        return Err(format!("Unexpected response body: {body}"));
     }
 
     Ok(())

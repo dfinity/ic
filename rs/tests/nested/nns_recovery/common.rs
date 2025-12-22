@@ -38,9 +38,9 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use ic_types::ReplicaVersion;
-use nested::util::{get_host_boot_id_async, setup_ic_infrastructure};
+use manual_guestos_recovery::recovery_utils::build_recovery_upgrader_run_command;
+use nested::util::setup_ic_infrastructure;
 use rand::seq::SliceRandom;
-use sha2::{Digest, Sha256};
 use slog::{Logger, info};
 use tokio::task::JoinSet;
 
@@ -189,12 +189,6 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
     let recovery_img_path = get_dependency_path_from_env("RECOVERY_GUESTOS_IMG_PATH");
-    let recovery_img =
-        std::fs::read(&recovery_img_path).expect("Failed to read recovery GuestOS image");
-    let recovery_img_hash = Sha256::digest(&recovery_img)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect::<String>();
 
     let AdminAndUserKeys {
         ssh_admin_priv_key_path,
@@ -385,8 +379,13 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             .unwrap()
             .trim()
             .to_string();
-    impersonate_upstreams::uvm_serve_recovery_artifacts(&env, &artifacts_path, &artifacts_hash)
-        .expect("Failed to serve recovery artifacts from UVM");
+    let recovery_hash_prefix = &artifacts_hash[..6.min(artifacts_hash.len())];
+    impersonate_upstreams::uvm_serve_recovery_artifacts(
+        &env,
+        &artifacts_path,
+        recovery_hash_prefix,
+    )
+    .expect("Failed to serve recovery artifacts from UVM");
 
     info!(logger, "Setup UVM to serve recovery-dev GuestOS image");
     impersonate_upstreams::uvm_serve_recovery_image(
@@ -431,8 +430,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             let logger = logger.clone();
             let env = env.clone();
             let vm = vm.clone();
-            let recovery_img_hash = recovery_img_hash.clone();
-            let artifacts_hash = artifacts_hash.clone();
+            let recovery_hash_prefix = recovery_hash_prefix.to_string();
             let upgrade_version = upgrade_version.clone();
 
             handles.spawn(async move {
@@ -441,8 +439,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                     &env,
                     &vm,
                     RECOVERY_GUESTOS_IMG_VERSION,
-                    &recovery_img_hash,
-                    &artifacts_hash,
+                    &recovery_hash_prefix,
                     &upgrade_version,
                 )
                 .await
@@ -473,52 +470,10 @@ async fn simulate_node_provider_action(
     env: &TestEnv,
     host: &NestedVm,
     img_version: &str,
-    img_version_hash: &str,
-    artifacts_hash: &str,
+    recovery_hash_prefix: &str,
     upgrade_version: &ReplicaVersion,
 ) {
-    let host_boot_id_pre_reboot = get_host_boot_id_async(host).await;
-
-    // Trigger HostOS reboot and run guestos-recovery-upgrader
-    info!(
-        logger,
-        "Remounting /boot as read-write, updating boot_args file and rebooting host {}",
-        host.vm_name(),
-    );
-    let boot_args_command = format!(
-        "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={} version-hash={} recovery-hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot && sudo reboot",
-        &img_version, &img_version_hash, &artifacts_hash
-    );
-    host.block_on_bash_script_async(&boot_args_command)
-        .await
-        .expect("Failed to update boot_args file and reboot host");
-
-    // Wait for HostOS to reboot by checking that its boot ID changes
-    retry_with_msg_async!(
-        format!(
-            "Waiting until the host's boot ID changes from its pre reboot value of '{}'",
-            host_boot_id_pre_reboot
-        ),
-        &logger,
-        secs(5 * 60),
-        secs(5),
-        || async {
-            let host_boot_id = get_host_boot_id_async(host).await;
-            if host_boot_id != host_boot_id_pre_reboot {
-                info!(
-                    logger,
-                    "Host boot ID changed from '{}' to '{}'", host_boot_id_pre_reboot, host_boot_id
-                );
-                Ok(())
-            } else {
-                bail!("Host boot ID is still '{}'", host_boot_id_pre_reboot)
-            }
-        }
-    )
-    .await
-    .unwrap();
-
-    // Once HostOS is back up, spoof its DNS such that it downloads the GuestOS image from the UVM
+    // Spoof the HostOS DNS such that it downloads the GuestOS image from the UVM
     let server_ipv6 = impersonate_upstreams::get_upstreams_uvm_ipv6(env);
     info!(
         logger,
@@ -530,7 +485,21 @@ async fn simulate_node_provider_action(
         .await
         .expect("Failed to spoof HostOS DNS");
 
-    // Once GuestOS is launched, we still need to spoof its DNS for the same reason as HostOS
+    // Run guestos-recovery-upgrader directly, bypassing the limited-console manual recovery TUI
+    info!(
+        logger,
+        "Running guestos-recovery-upgrader on GuestOS {} with version={}, recovery-hash-prefix={}",
+        host.vm_name(),
+        img_version,
+        recovery_hash_prefix,
+    );
+    let recovery_upgrader_command =
+        build_recovery_upgrader_run_command(img_version, recovery_hash_prefix).to_shell_string();
+    host.block_on_bash_script_async(&recovery_upgrader_command)
+        .await
+        .expect("Failed to run guestos-recovery-upgrader");
+
+    // Spoof the GuestOS DNS such that it downloads the recovery artifacts from the UVM
     let guest = host.get_guest_ssh().unwrap();
     info!(
         logger,
@@ -545,7 +514,7 @@ async fn simulate_node_provider_action(
     // Wait until the node has booted the expected GuestOS version
     retry_with_msg_async!(
         format!(
-            "Waiting until GuestOS {} reboots on the upgrade version {}",
+            "Waiting until GuestOS {} boots on the upgrade version {}",
             host.vm_name(),
             upgrade_version
         ),

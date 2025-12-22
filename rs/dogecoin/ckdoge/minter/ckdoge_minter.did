@@ -1,5 +1,6 @@
 type MinterArg = variant {
     Init : InitArgs;
+    Upgrade : opt UpgradeArgs;
 };
 
 // The initialization parameters of the minter canister.
@@ -19,19 +20,51 @@ type InitArgs = record {
     // The minimal amount of ckDOGE that can be converted to DOGE.
     retrieve_doge_min_amount : nat64;
 
+    // Maximum time in nanoseconds that a transaction should spend in the queue
+    // before being sent.
+    max_time_in_queue_nanos : nat64;
+
+    // The minimum number of confirmations required for the minter to
+    // accept a Dogecoin transaction.
+    min_confirmations : opt nat32;
+
+    // The minter's operation mode.
+    mode : Mode;
+
+    // The expiration duration (in seconds) for cached entries in the get_utxos cache.
+    get_utxos_cache_expiration_seconds: opt nat64;
+
+    /// The minimum number of available UTXOs to trigger a consolidation.
+    utxo_consolidation_threshold: opt nat64;
+
+    /// The maximum number of input UTXOs allowed in a transaction.
+    max_num_inputs_in_transaction: opt nat64;
+};
+
+// The upgrade parameters of the minter canister.
+type UpgradeArgs = record {
+    // The minimal amount of ckDOGE that can be converted to DOGE.
+    retrieve_doge_min_amount : opt nat64;
+
     /// Maximum time in nanoseconds that a transaction should spend in the queue
     /// before being sent.
-    max_time_in_queue_nanos : nat64;
+    max_time_in_queue_nanos : opt nat64;
 
     /// The minimum number of confirmations required for the minter to
     /// accept a Dogecoin transaction.
     min_confirmations : opt nat32;
 
     /// The minter's operation mode.
-    mode : Mode;
+    mode : opt Mode;
 
     /// The expiration duration (in seconds) for cached entries in the get_utxos cache.
     get_utxos_cache_expiration_seconds: opt nat64;
+
+    /// The minimum number of available UTXOs to trigger a consolidation.
+    utxo_consolidation_threshold: opt nat64;
+
+    /// The maximum number of input UTXOs allowed in a transaction.
+    max_num_inputs_in_transaction: opt nat64;
 };
 
 type Network = variant {
@@ -202,10 +235,202 @@ type RetrieveDogeStatus = variant {
     // transaction for this request.  The payload contains the
     // identifier of the transaction on the Dogecoin network.
     Confirmed : record { txid : blob };
-    /// The retrieve Dogecoin request has been reimbursed.
+    // The retrieve Dogecoin request has been reimbursed.
     Reimbursed : ReimbursedDeposit;
-    /// The minter will try to reimburse this transaction.
+    // The minter will try to reimburse this transaction.
     WillReimburse : ReimbursementRequest;
+};
+
+type WithdrawalFee = record {
+    // Fee paid to the Dogecoin network to include the transaction in a block.
+    dogecoin_fee : nat64;
+    // Fee paid to the minter for its cycles consumption when building, signing and sending a transaction.
+    minter_fee : nat64;
+};
+
+type EstimateWithdrawalFeeError = variant {
+    // The given withdrawal amount is too low to pay for the transaction and minter fee.
+    // The minimum withdrawal amount may vary depending on the current transaction fees.
+    AmountTooLow : record { min_amount : nat64};
+
+    // The current withdrawal amount is too high so that either the minter does not have enough
+    // funds to satisfy that request; or, it would use too many UTXOs so that the transaction may be
+    // non-standard.
+    AmountTooHigh;
+};
+
+type MinterInfo = record {
+    // The minimum number of confirmations required for the minter to
+    // accept a Dogecoin transaction.
+    min_confirmations : nat32;
+
+    // This amount is based on the `retrieve_doge_min_amount` setting during canister
+    // initialization or upgrades, but may vary according to current network fees.
+    retrieve_doge_min_amount : nat64;
+};
+
+type CanisterStatusResponse = record {
+  status : CanisterStatusType;
+  ready_for_migration : bool;
+  version : nat64;
+  memory_size : nat;
+  cycles : nat;
+  settings : DefiniteCanisterSettings;
+  idle_cycles_burned_per_day : nat;
+  module_hash : opt vec nat8;
+  query_stats : QueryStats;
+  reserved_cycles : nat;
+  memory_metrics : MemoryMetrics;
+};
+
+type QueryStats = record {
+  response_payload_bytes_total : nat;
+  num_instructions_total : nat;
+  num_calls_total : nat;
+  request_payload_bytes_total : nat;
+};
+
+type MemoryMetrics = record {
+    wasm_memory_size : nat;
+    stable_memory_size : nat;
+    global_memory_size : nat;
+    wasm_binary_size : nat;
+    custom_sections_size : nat;
+    canister_history_size : nat;
+    wasm_chunk_store_size : nat;
+    snapshots_size : nat;
+};
+
+type CanisterStatusType = variant { stopped; stopping; running };
+
+type DefiniteCanisterSettings = record {
+  freezing_threshold : nat;
+  controllers : vec principal;
+  memory_allocation : nat;
+  compute_allocation : nat;
+  reserved_cycles_limit : nat;
+  log_visibility: log_visibility;
+  wasm_memory_limit : nat;
+  wasm_memory_threshold : nat;
+  environment_variables : vec environment_variable;
+};
+
+type log_visibility = variant {
+    controllers;
+    public;
+    allowed_viewers : vec principal;
+};
+
+type environment_variable = record {
+    name: text;
+    value: text;
+};
+
+type Event = record {
+    timestamp : opt nat64;
+    payload : EventType;
+};
+
+type DogecoinAddress = variant {
+    P2pkh : blob;
+    P2sh : blob;
+};
+
+type RetrieveDogeRequest = record {
+    amount : nat64;
+    address : DogecoinAddress;
+    block_index : nat64;
+    received_at : nat64;
+    reimbursement_account : opt Account;
+};
+
+type ConsolidateUtxosRequest = record {
+    amount : nat64;
+    address : DogecoinAddress;
+    block_index : nat64;
+    received_at : nat64;
+};
+
+type ChangeOutput = record {
+    vout : nat32;
+    value : nat64;
+};
+
+type ReplacedReason = variant {
+    to_retry;
+    to_cancel : record {
+        reason : WithdrawalReimbursementReason;
+    };
+};
+
+type WithdrawalReimbursementReason = variant {
+    invalid_transaction : InvalidTransactionError;
+};
+
+type InvalidTransactionError = variant {
+    too_many_inputs : record {
+        num_inputs : nat64;
+        max_num_inputs : nat64;
+    };
+};
+
+type EventType = variant {
+    init : InitArgs;
+    upgrade : UpgradeArgs;
+    received_utxos : record {
+        mint_txid : opt nat64;
+        to_account : Account;
+        utxos : vec Utxo;
+    };
+    checked_utxo : record {
+        utxo : Utxo;
+        account : Account;
+    };
+    accepted_retrieve_doge_request : RetrieveDogeRequest;
+    removed_retrieve_doge_request : record {
+        block_index : nat64;
+    };
+    sent_transaction : record {
+        requests : vec nat64;
+        txid : blob;
+        utxos : vec Utxo;
+        change_output : opt ChangeOutput;
+        submitted_at : nat64;
+        fee : opt nat64;
+        withdrawal_fee : opt WithdrawalFee;
+        signed_tx : opt blob;
+    };
+    replaced_transaction : record {
+        old_txid : blob;
+        new_txid : blob;
+        change_output : ChangeOutput;
+        submitted_at : nat64;
+        fee : nat64;
+        withdrawal_fee : opt WithdrawalFee;
+        reason : opt ReplacedReason;
+        new_utxos : opt vec Utxo;
+    };
+    confirmed_transaction : record {
+        txid : blob;
+    };
+    checked_utxo_mint_unknown : record {
+        account : Account;
+        utxo : Utxo;
+    };
+    schedule_withdrawal_reimbursement : record {
+        account : Account;
+        amount : nat64;
+        reason : WithdrawalReimbursementReason;
+        burn_block_index : nat64;
+    };
+    quarantined_withdrawal_reimbursement : record {
+        burn_block_index : nat64;
+    };
+    reimbursed_withdrawal : record {
+        burn_block_index : nat64;
+        mint_block_index : nat64;
+    };
+    created_consolidate_utxos_request : ConsolidateUtxosRequest;
 };
 
 service : (minter_arg : MinterArg) -> {
@@ -234,6 +459,10 @@ service : (minter_arg : MinterArg) -> {
     //   [get_doge_address] endpoint returns.
     update_balance : (record { owner: opt principal; subaccount : opt blob }) -> (variant { Ok : vec UtxoStatus; Err : UpdateBalanceError });
 
+    /// Returns an estimate of the user's fee (in Koinu) for a
+    /// retrieve_doge_with_approval request based on the current status of the Dogecoin network.
+    estimate_withdrawal_fee : (record { amount : opt nat64 }) -> (variant { Ok : WithdrawalFee; Err : EstimateWithdrawalFeeError }) query;
+
     // Submits a request to convert ckDOGE to DOGE.
     //
     // # Note
@@ -249,6 +478,23 @@ service : (minter_arg : MinterArg) -> {
     //   using [icrc2_approve] on the ckDOGE ledger.
     retrieve_doge_with_approval : (RetrieveDogeWithApprovalArgs) -> (variant { Ok : RetrieveDogeOk; Err : RetrieveDogeWithApprovalError });
 
-    /// Returns the status of a withdrawal request.
+    // Returns the status of a withdrawal request.
     retrieve_doge_status : (record { block_index : nat64 }) -> (RetrieveDogeStatus) query;
+
+    // Returns internal minter parameters.
+    get_minter_info : () -> (MinterInfo) query;
+
+    // Returns the output of the IC method
+    // [`canister_status`](https://internetcomputer.org/docs/references/ic-interface-spec#ic-canister_status)
+    get_canister_status : () -> (CanisterStatusResponse);
+
+    // The minter keeps track of all state modifications in an internal event log.
+    //
+    // This method returns a list of events in the specified range.
+    // The minter can return fewer events than requested. The result is
+    // an empty vector if the start position is greater than the total
+    // number of events.
+    //
+    // NOTE: this method exists for debugging purposes and backwards-compatibility is **not** guaranteed.
+    get_events : (record { start: nat64; length : nat64 }) -> (vec Event) query;
 }

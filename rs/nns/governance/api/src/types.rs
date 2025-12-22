@@ -1,8 +1,9 @@
 #![allow(clippy::all)]
+use candid::{Int, Nat};
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::protobuf::AccountIdentifier;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// The entity that owns the nodes that run the network.
 ///
@@ -544,6 +545,9 @@ pub struct Proposal {
     /// This section describes the action that the proposal proposes to
     /// take.
     pub action: Option<proposal::Action>,
+    /// A self-describing action that can be understood without the schema of a specific
+    /// proposal type.
+    pub self_describing_action: Option<SelfDescribingProposalAction>,
 }
 /// Nested message and enum types in `Proposal`.
 pub mod proposal {
@@ -583,7 +587,7 @@ pub mod proposal {
         /// key can be destroyed so that the neuron can only be controlled
         /// by its followees, although this makes it impossible to
         /// subsequently unlock the balance.
-        ManageNeuron(Box<super::ManageNeuron>),
+        ManageNeuron(Box<super::ManageNeuronProposal>),
         /// Propose a change to some network parameters of network
         /// economics.
         ManageNetworkEconomics(super::NetworkEconomics),
@@ -627,6 +631,16 @@ pub mod proposal {
         /// charged for the use of computational resources (mainly, executing
         /// instructions, storing data, network, etc.)
         FulfillSubnetRentalRequest(super::FulfillSubnetRentalRequest),
+        /// The main use case for this is when the virtual machine (VM) where
+        /// replica runs is totally hosed such that it cannot be upgraded (and
+        /// therefore fixed) using the usual mechanisms. When the VM is started
+        /// with this alternative software, a signed copy of the ProposalInfo is
+        /// passed to the VM, and read at boot time to prove that NNS has
+        /// approved this alternative set of software. One of the main goals of
+        /// this alternative software would generally be to bring the system
+        /// back to a healthy state, to recover from some kind of disaster, like
+        /// a boot loop, or something like that.
+        BlessAlternativeGuestOsVersion(super::BlessAlternativeGuestOsVersion),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -646,12 +660,12 @@ pub struct Empty {}
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
 )]
-pub struct ManageNeuron {
+pub struct ManageNeuronProposal {
     /// This is the legacy way to specify neuron IDs that is now discouraged.
     pub id: Option<NeuronId>,
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
     pub neuron_id_or_subaccount: Option<manage_neuron::NeuronIdOrSubaccount>,
-    pub command: Option<manage_neuron::Command>,
+    pub command: Option<manage_neuron::ManageNeuronProposalCommand>,
 }
 /// Nested message and enum types in `ManageNeuron`.
 pub mod manage_neuron {
@@ -1009,7 +1023,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug,
     )]
-    pub enum Command {
+    pub enum ManageNeuronProposalCommand {
         Configure(Configure),
         Disburse(Disburse),
         Spawn(Spawn),
@@ -1384,6 +1398,7 @@ pub enum ProposalActionRequest {
     StopOrStartCanister(StopOrStartCanister),
     UpdateCanisterSettings(UpdateCanisterSettings),
     FulfillSubnetRentalRequest(FulfillSubnetRentalRequest),
+    BlessAlternativeGuestOsVersion(BlessAlternativeGuestOsVersion),
 }
 
 #[derive(
@@ -2657,6 +2672,44 @@ pub struct FulfillSubnetRentalRequest {
     pub node_ids: Option<Vec<PrincipalId>>,
     pub replica_version_id: Option<String>,
 }
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug, Default,
+)]
+pub struct BlessAlternativeGuestOsVersion {
+    pub chip_ids: Option<Vec<Vec<u8>>>,
+    pub rootfs_hash: Option<String>,
+    pub base_guest_launch_measurements: Option<GuestLaunchMeasurements>,
+}
+
+/// See also the definition of GuestLaunchMeasurements (plural!) in
+/// rs/protobuf/def/registry/replica_version/v1/replica_version.proto
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug, Default,
+)]
+pub struct GuestLaunchMeasurements {
+    pub guest_launch_measurements: Option<Vec<GuestLaunchMeasurement>>,
+}
+
+/// See also the definition of GuestLaunchMeasurement in
+/// rs/protobuf/def/registry/replica_version/v1/replica_version.proto
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug, Default,
+)]
+pub struct GuestLaunchMeasurement {
+    pub measurement: Option<Vec<u8>>,
+    pub metadata: Option<GuestLaunchMeasurementMetadata>,
+}
+
+/// See also the definition of GuestLaunchMeasurementMetadata in
+/// rs/protobuf/def/registry/replica_version/v1/replica_version.proto
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug, Default,
+)]
+pub struct GuestLaunchMeasurementMetadata {
+    pub kernel_cmdline: Option<String>,
+}
+
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
 /// across upgrades of the NNS governance system.
@@ -2958,6 +3011,8 @@ pub struct ListProposalInfoRequest {
     /// is useful to improve download times and to ensure that the response to the
     /// request doesn't exceed the message size limit.
     pub omit_large_fields: Option<bool>,
+    /// Whether to include self-describing proposal actions in the response.
+    pub return_self_describing_action: Option<bool>,
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, Debug, PartialEq)]
 pub struct ListProposalInfoResponse {
@@ -3144,6 +3199,9 @@ pub struct MonthlyNodeProviderRewards {
     pub maximum_node_provider_rewards_e8s: Option<u64>,
     /// The registry version used to calculate these rewards at the time the rewards were calculated.
     pub registry_version: Option<u64>,
+    /// Rewards calculation algorithm version used to calculate rewards.
+    /// See RewardsCalculationAlgorithmVersion for the allowed values.
+    pub algorithm_version: Option<u32>,
     /// The list of node_provieders at the time when the rewards were calculated.
     pub node_providers: Vec<NodeProvider>,
 }
@@ -4501,4 +4559,26 @@ pub struct NeuronVotes {
 pub struct NeuronVote {
     pub proposal_id: Option<ProposalId>,
     pub vote: Option<Vote>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub enum SelfDescribingValue {
+    Blob(Vec<u8>),
+    Text(String),
+    Nat(Nat),
+    Int(Int),
+    Array(Vec<SelfDescribingValue>),
+    Map(HashMap<String, SelfDescribingValue>),
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct SelfDescribingProposalAction {
+    pub type_name: Option<String>,
+    pub type_description: Option<String>,
+    pub value: Option<SelfDescribingValue>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct GetPendingProposalsRequest {
+    pub return_self_describing_action: Option<bool>,
 }

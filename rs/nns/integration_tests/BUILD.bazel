@@ -124,8 +124,10 @@ DEV_DEPENDENCIES = [
     "//rs/nervous_system/common/test_utils",
     "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
     "//rs/nns/test_utils/golden_nns_state",
+    "//rs/node_rewards/rewards_calculation",
     "//rs/test_utilities/metrics",
     "//rs/types/types_test_utils",
+    "@crate_index//:chrono_canisters",
     "@crate_index//:ic-cbor",
     "@crate_index//:ic-certificate-verification",
     "@crate_index//:ic-certification",
@@ -158,6 +160,7 @@ DEV_DATA = [
     "//rs/nns/handlers/root/impl:root-canister",
     "//rs/nns/sns-wasm:sns-wasm-canister",
     "//rs/node_rewards/canister:node-rewards-canister",
+    "//rs/node_rewards/canister:node-rewards-canister-test",
     "//rs/pocket_ic_server:pocket-ic-server",
     "//rs/registry/canister:registry-canister",
     "//rs/registry/canister:registry-canister-test",
@@ -188,6 +191,7 @@ DEV_ENV = {
     "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
     "MEM_UTILS_TEST_CANISTER_WASM_PATH": "$(rootpath :mem-utils-test-canister)",
     "NODE_REWARDS_CANISTER_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister)",
+    "NODE_REWARDS_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister-test)",
     "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     "CANISTER_PLAYGROUND_CANISTER_WASM_PATH": "$(rootpath :canister-playground-canister)",
     "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
@@ -256,6 +260,7 @@ rust_ic_test_suite_with_extra_srcs(
             # mostly due to long running times.
             "src/canister_playground.rs",
             "src/upgrade_canisters_with_golden_nns_state.rs",
+            "src/node_provider_remuneration_with_golden_nns_state.rs",
         ],
     ),
     aliases = ALIASES,
@@ -348,6 +353,27 @@ rust_ic_test(
     ],
     aliases = ALIASES,
     crate_root = "src/upgrade_canisters_with_golden_nns_state.rs",
+    data = DEV_DATA,
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
+        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
+        "requires-network",  # Because mainnet state is downloaded (and used).
+    ],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_ic_test(
+    name = "node_provider_remuneration_with_golden_nns_state",
+    # This uses on the order of 10 GB of disk space.
+    # Therefore, size = "large" is not large enough.
+    size = "enormous",
+    srcs = [
+        "src/node_provider_remuneration_with_golden_nns_state.rs",
+    ],
+    aliases = ALIASES,
+    crate_root = "src/node_provider_remuneration_with_golden_nns_state.rs",
     data = DEV_DATA,
     env = DEV_ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,

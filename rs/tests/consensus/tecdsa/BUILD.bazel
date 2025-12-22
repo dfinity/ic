@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "SIGNER_CANISTER_ENV", "SIGNER_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "SIGNER_CANISTER_ENV", "SIGNER_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -6,9 +6,8 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 system_test_nns(
     name = "tecdsa_complaint_test",
     env = MESSAGE_CANISTER_ENV,
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
-    uses_guestos_test_update = True,
+    guestos = "malicious",
+    guestos_update = "test",
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -107,6 +106,30 @@ system_test_nns(
         "//rs/rust_canisters/canister_test",
         "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
+    name = "pre_signature_stash_management_test",
+    env = MESSAGE_CANISTER_ENV,
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/nns/constants",
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
         "@crate_index//:tokio",
@@ -282,7 +305,6 @@ tecdsa_performance_test_template = system_test_nns(
         "manual",
     ],
     test_timeout = "eternal",
-    runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_features",
@@ -303,6 +325,8 @@ tecdsa_performance_test_template = system_test_nns(
     ],
 )
 
+DEFAULT_NODES_COUNT = str(25)
+
 system_test_nns(
     name = "tecdsa_performance_test",
     additional_colocate_tags = [
@@ -321,6 +345,7 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV | SIGNER_CANISTER_ENV | {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "ecdsa_secp256k1",
         "BENCHMARK_NAME": "tecdsa_performance_test",
+        "DEFAULT_NODES_COUNT": DEFAULT_NODES_COUNT,
     },
     tags = [
         "colocate",
@@ -328,7 +353,7 @@ system_test_nns(
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     test_timeout = "eternal",
-    runtime_deps = GRAFANA_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
 )
 
 system_test_nns(
@@ -349,6 +374,7 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV | SIGNER_CANISTER_ENV | {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "schnorr_ed25519",
         "BENCHMARK_NAME": "tschnorr_ed25519_performance_test",
+        "DEFAULT_NODES_COUNT": DEFAULT_NODES_COUNT,
     },
     tags = [
         "colocate",
@@ -356,7 +382,7 @@ system_test_nns(
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     test_timeout = "eternal",
-    runtime_deps = GRAFANA_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
 )
 
 system_test_nns(
@@ -377,6 +403,7 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV | SIGNER_CANISTER_ENV | {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "schnorr_bip340",
         "BENCHMARK_NAME": "tschnorr_bip340_performance_test",
+        "DEFAULT_NODES_COUNT": DEFAULT_NODES_COUNT,
     },
     tags = [
         "colocate",
@@ -384,7 +411,7 @@ system_test_nns(
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     test_timeout = "eternal",
-    runtime_deps = GRAFANA_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
 )
 
 system_test_nns(
@@ -405,6 +432,7 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV | SIGNER_CANISTER_ENV | {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "vetkd_bls12_381_g2",
         "BENCHMARK_NAME": "vetkd_performance_test",
+        "DEFAULT_NODES_COUNT": DEFAULT_NODES_COUNT,
     },
     tags = [
         "colocate",
@@ -412,5 +440,5 @@ system_test_nns(
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     test_timeout = "eternal",
-    runtime_deps = GRAFANA_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
 )

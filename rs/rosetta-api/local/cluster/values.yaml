@@ -1,18 +1,51 @@
+# Number of replicas for each deployment
+replicaCount: 1
+
+# Use persistent volumes for /data partition
+usePersistentVolumes: false
+
+# Volume configuration
+volumeMounts:
+  - name: data-volume
+    mountPath: /data
+
+volumes:
+  - name: data-volume
+
+# PersistentVolumeClaim configuration (used when usePersistentVolumes is true)
+persistentVolume:
+  storageClass: "standard"
+  accessModes:
+    - ReadWriteOnce
+  size: 50Gi
+
 commonResources: &commonResources
   limits:
-    memory: "256Mi"
+    memory: "1024Mi"
     cpu: "5"
   requests:
-    memory: "128Mi"
+    memory: "512Mi"
     cpu: "500m"
+
+replicaCount: 1
+
+volumes:
+  - name: data
+
+volumeMounts:
+  - name: data
+    mountPath: /data
 
 icrcConfig:
   networkType: mainnet
-  multiTokens: vtrom-gqaaa-aaaaq-aabia-cai
-  multiTokensStoreDir: /data
+  # Comma-separated list of ledger IDs for multi-token support (e.g., "ledger1,ledger2")
+  ledgerId: vtrom-gqaaa-aaaaq-aabia-cai
+  storeFile: /data/db.sqlite
   useLocallyBuilt: false
   # Deploy the latest ICRC Rosetta image from Docker Hub
   deployLatest: true
+  # Flush the database cache and shrink the memory after updating account balances
+  flushCacheShrinkMem: false
 
 icpConfig:
   storeLocation: /data
@@ -74,3 +107,4 @@ cadvisor:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+

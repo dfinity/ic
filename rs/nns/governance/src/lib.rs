@@ -206,6 +206,16 @@ thread_local! {
 
     static ENABLE_NEURON_FOLLOW_RESTRICTIONS: Cell<bool>
         = const { Cell::new(true) };
+
+    static ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS: Cell<bool>
+        = const { Cell::new(false) };
+
+    static ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
+
+    // This covers both taking and loading canister snapshots.
+    static ENABLE_CANISTER_SNAPSHOT_PROPOSALS: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
 }
 
 thread_local! {
@@ -216,7 +226,7 @@ thread_local! {
 }
 
 thread_local! {
-    static ARE_PERFORMANCE_BASED_REWARDS_ENABLED: Cell<bool> = const { Cell::new(false) };
+    static ARE_PERFORMANCE_BASED_REWARDS_ENABLED: Cell<bool> = const { Cell::new(true) };
 }
 
 pub(crate) fn are_performance_based_rewards_enabled() -> bool {
@@ -265,6 +275,48 @@ pub fn temporarily_enable_neuron_follow_restrictions() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_neuron_follow_restrictions() -> Temporary {
     Temporary::new(&ENABLE_NEURON_FOLLOW_RESTRICTIONS, false)
+}
+
+pub fn is_self_describing_proposal_actions_enabled() -> bool {
+    ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_self_describing_proposal_actions() -> Temporary {
+    Temporary::new(&ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_self_describing_proposal_actions() -> Temporary {
+    Temporary::new(&ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS, false)
+}
+
+pub fn are_bless_alternative_guest_os_version_proposals_enabled() -> bool {
+    ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_bless_alternative_guest_os_version_proposals() -> Temporary {
+    Temporary::new(&ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_bless_alternative_guest_os_version_proposals() -> Temporary {
+    Temporary::new(&ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS, false)
+}
+
+pub fn are_canister_snapshot_proposals_enabled() -> bool {
+    ENABLE_CANISTER_SNAPSHOT_PROPOSALS.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_canister_snapshot_proposals() -> Temporary {
+    Temporary::new(&ENABLE_CANISTER_SNAPSHOT_PROPOSALS, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_canister_snapshot_proposals() -> Temporary {
+    Temporary::new(&ENABLE_CANISTER_SNAPSHOT_PROPOSALS, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {

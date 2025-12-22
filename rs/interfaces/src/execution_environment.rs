@@ -543,10 +543,24 @@ pub enum ExecutionMode {
 
 pub type HypervisorResult<T> = Result<T, HypervisorError>;
 
+/// Errors that can occur when filtering out ingress messages that
+/// the canister is not willing to accept.
+#[derive(Debug, Error)]
+pub enum IngressFilterError {
+    #[error("Certified state is not available yet")]
+    CertifiedStateUnavailable,
+}
+
+/// The response type to a `call()` request in [`IngressFilterService`].
+pub type IngressFilterResponse = Result<Result<(), UserError>, IngressFilterError>;
+
+/// The input type to a `call()` request in [`IngressFilterService`].
+pub type IngressFilterInput = (ProvisionalWhitelist, SignedIngress);
+
 /// Interface for the component to filter out ingress messages that
 /// the canister is not willing to accept.
 pub type IngressFilterService =
-    BoxCloneService<(ProvisionalWhitelist, SignedIngress), Result<(), UserError>, Infallible>;
+    BoxCloneService<IngressFilterInput, IngressFilterResponse, Infallible>;
 
 /// Errors that can occur when handling a query execution request.
 #[derive(Debug, Error)]
@@ -1512,6 +1526,13 @@ pub trait Scheduler: Send {
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> Self::State;
+
+    /// Code to be executed in a checkpoint round, iff `execute_round()` was not
+    /// called (e.g. during a subnet split).
+    ///
+    /// This aborts all paused executions and resets transient state (such as heap
+    /// delta estimate and compiled Wasms).
+    fn checkpoint_round_with_no_execution(&self, state: &mut Self::State);
 }
 
 /// Combination of memory used by and reserved for guaranteed response messages

@@ -433,6 +433,8 @@ fn lazy_wasms() {
         .take_canister_snapshot(TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         })
         .unwrap()
         .snapshot_id();
@@ -3781,12 +3783,12 @@ fn can_group_small_files_in_state_sync() {
             insert_canister_with_many_controllers(&mut state, canister_test_id(id), 400);
         }
 
-        // With 1000 controllers' Principal ID serialized to the 'canister.pbuf' file,
+        // With 20,000 controllers' Principal ID serialized to the 'canister.pbuf' file,
         // the size will be larger than the file grouping limit and thus it will not be grouped.
         insert_canister_with_many_controllers(
             &mut state,
             canister_test_id(100 + num_canisters),
-            1000,
+            20_000,
         );
 
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
@@ -3808,7 +3810,7 @@ fn can_group_small_files_in_state_sync() {
             .map(|(_, indices)| indices.len())
             .sum();
 
-        // `canister.pbuf` files of all the canisters should be grouped, except for the one with 1000 controllers.
+        // `canister.pbuf` files of all the canisters should be grouped, except for the one with 20,000 controllers.
         assert_eq!(num_files, num_canisters as usize);
 
         // In this test, each canister has a `canister.pubf` file of about 6.0 KiB in the checkpoint.
@@ -7129,7 +7131,7 @@ fn can_create_and_delete_canister_snapshot() {
 
         let (_height, mut state) = state_manager.take_tip();
 
-        state.delete_snapshot(snapshot_id);
+        state.canister_snapshots.remove(snapshot_id);
 
         state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -7456,6 +7458,8 @@ fn restore_heap_from_snapshot() {
         .take_canister_snapshot(TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         })
         .unwrap()
         .snapshot_id();
@@ -7528,6 +7532,8 @@ fn restore_stable_memory_from_snapshot() {
         .take_canister_snapshot(TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         })
         .unwrap()
         .snapshot_id();
@@ -7600,6 +7606,8 @@ fn restore_binary_from_snapshot() {
         .take_canister_snapshot(TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         })
         .unwrap()
         .snapshot_id();
@@ -7670,6 +7678,8 @@ fn restore_chunk_store_from_snapshot() {
         .take_canister_snapshot(TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         })
         .unwrap()
         .snapshot_id();

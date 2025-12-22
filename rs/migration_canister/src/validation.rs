@@ -16,98 +16,149 @@ use crate::{
     canister_state::CanisterGuard,
     canister_state::requests::list_by,
     external_interfaces::{
-        management::{CanisterStatusType, assert_no_snapshots, canister_status},
+        management::{
+            CanisterStatusResponse, CanisterStatusType, assert_no_snapshots, canister_status,
+            get_canister_info,
+        },
         registry::get_subnet_for_canister,
     },
+    processing::ProcessingResult,
 };
 
-/// Given caller-provided data, returns a `Request` that can very likely be processed or an informative error.
-pub async fn validate_request(
-    source: Principal,
-    target: Principal,
+async fn check_controllers_and_get_status(
+    canister_id: Principal,
     caller: Principal,
-) -> Result<Request, ValidationError> {
+) -> Result<CanisterStatusResponse, ValidationError> {
+    let canister_info = match get_canister_info(canister_id).await {
+        ProcessingResult::Success(canister_info) => canister_info,
+        ProcessingResult::NoProgress => {
+            return Err(ValidationError::CallFailed {
+                reason: "Call to management canister (`canister_info`) failed. Try again later."
+                    .to_string(),
+            });
+        }
+        ProcessingResult::FatalFailure(()) => {
+            return Err(ValidationError::CanisterNotFound {
+                canister: canister_id,
+            });
+        }
+    };
+    if !canister_info.controllers.contains(&canister_self()) {
+        return Err(ValidationError::NotController {
+            canister: canister_id,
+        });
+    }
+    if !canister_info.controllers.contains(&caller) {
+        return Err(ValidationError::CallerNotController {
+            canister: canister_id,
+        });
+    }
+    let ProcessingResult::Success(canister_status) = canister_status(canister_id).await else {
+        return Err(ValidationError::CallFailed {
+            reason: "Call to management canister (`canister_status`) failed. Try again later."
+                .to_string(),
+        });
+    };
+    Ok(canister_status)
+}
+
+/// Given caller-provided data, returns
+/// - a `Request` that can very likely be processed and
+///   locks that should only be dropped after inserting the `Request`
+///   into canister state;
+/// - or an informative error.
+pub async fn validate_request(
+    migrated_canister: Principal,
+    replaced_canister: Principal,
+    caller: Principal,
+) -> Result<(Request, Vec<CanisterGuard>), ValidationError> {
     // We first check if the caller is authorized (i.e.,
-    // if the caller is a controller of both the source and target)
-    // before acquiring locks for the source and target
+    // if the caller is a controller of both the migrated and replaced canisters)
+    // before acquiring locks for the migrated and replaced canisters
     // to prevent unauthorized callers from acquiring the lock
     // and blocking authorized callers from performing canister migration.
 
-    // 1. The source must not be equal to the target.
-    if source == target {
+    // 1. The migrated canister must not be equal to the replaced canister.
+    if migrated_canister == replaced_canister {
         return Err(ValidationError::SameSubnet(Reserved));
     }
 
-    // 2. Is the caller controller of the source? This call also fails if we are not controller.
-    let source_status = canister_status(source)
-        .await
-        .into_result(&format!("Call to management canister (`canister_status`) failed. Ensure that the canister {} is the expected source and try again later.", source))?;
-    if !source_status.settings.controllers.contains(&caller) {
-        return Err(ValidationError::CallerNotController { canister: source });
-    }
-    // 3. Is the caller controller of the target? This call also fails if we are not controller.
-    let target_status = canister_status(target)
-        .await
-        .into_result(&format!("Call to management canister (`canister_status`) failed. Ensure that the canister {} is the expected target and try again later.", target))?;
-    if !target_status.settings.controllers.contains(&caller) {
-        return Err(ValidationError::CallerNotController { canister: target });
-    }
+    // 2. Is the caller controller of the migrated canister?
+    let migrated_canister_status =
+        check_controllers_and_get_status(migrated_canister, caller).await?;
+    // 3. Is the caller controller of the replaced canister?
+    let replaced_canister_status =
+        check_controllers_and_get_status(replaced_canister, caller).await?;
 
     // Now we can acquire the locks
     // to prevent reentrancy bugs across asynchronous calls
-    // while validating the source and target.
-    let Ok(_source_guard) = CanisterGuard::new(source) else {
-        return Err(ValidationError::ValidationInProgress { canister: source });
+    // while validating the migrated and replaced canisters.
+    let Ok(migrated_canister_guard) = CanisterGuard::new(migrated_canister) else {
+        return Err(ValidationError::ValidationInProgress {
+            canister: migrated_canister,
+        });
     };
-    let Ok(_target_guard) = CanisterGuard::new(target) else {
-        return Err(ValidationError::ValidationInProgress { canister: target });
+    let Ok(replaced_canister_guard) = CanisterGuard::new(replaced_canister) else {
+        return Err(ValidationError::ValidationInProgress {
+            canister: replaced_canister,
+        });
     };
 
     // 4. Is any of these canisters already in a migration process?
     for request in list_by(|_| true) {
-        if let Some(id) = request.request().affects_canister(source, target) {
+        if let Some(id) = request
+            .request()
+            .affects_canister(migrated_canister, replaced_canister)
+        {
             return Err(ValidationError::MigrationInProgress { canister: id });
         }
     }
-    // 5. Are the source and target on the same subnet?
-    let source_subnet = get_subnet_for_canister(source).await?;
-    let target_subnet = get_subnet_for_canister(target).await?;
-    if source_subnet == target_subnet {
+    // 5. Are the migrated and replaced canisters on the same subnet?
+    let migrated_canister_subnet = get_subnet_for_canister(migrated_canister).await?;
+    let replaced_canister_subnet = get_subnet_for_canister(replaced_canister).await?;
+    if migrated_canister_subnet == replaced_canister_subnet {
         return Err(ValidationError::SameSubnet(Reserved));
     }
-    // 6. Is the source stopped?
-    if source_status.status != CanisterStatusType::Stopped {
-        return Err(ValidationError::SourceNotStopped(Reserved));
+    // 6. Is the migrated canister stopped?
+    if migrated_canister_status.status != CanisterStatusType::Stopped {
+        return Err(ValidationError::MigratedCanisterNotStopped(Reserved));
     }
-    // 7. Is the source ready for migration?
-    if !source_status.ready_for_migration {
-        return Err(ValidationError::SourceNotReady(Reserved));
+    // 7. Is the migrated canister ready for migration?
+    if !migrated_canister_status.ready_for_migration {
+        return Err(ValidationError::MigratedCanisterNotReady(Reserved));
     }
-    // 8. Is the target stopped?
-    if target_status.status != CanisterStatusType::Stopped {
-        return Err(ValidationError::TargetNotStopped(Reserved));
+    // 8. Is the replaced canister stopped?
+    if replaced_canister_status.status != CanisterStatusType::Stopped {
+        return Err(ValidationError::ReplacedCanisterNotStopped(Reserved));
     }
-    // 9. Does the target have snapshots?
-    assert_no_snapshots(target).await.into_result(
+    // 9. Does the replaced canister have snapshots?
+    assert_no_snapshots(replaced_canister).await.into_result(
         "Call to management canister `list_canister_snapshots` failed. Try again later.",
     )?;
 
-    // 10. Does the source have sufficient cycles for the migration?
-    if source_status.cycles < CYCLES_COST_PER_MIGRATION {
-        return Err(ValidationError::SourceInsufficientCycles(Reserved));
+    // 10. Does the migrated canister have sufficient cycles for the migration?
+    if migrated_canister_status.cycles < CYCLES_COST_PER_MIGRATION {
+        return Err(ValidationError::MigratedCanisterInsufficientCycles(
+            Reserved,
+        ));
     }
 
-    let mut source_original_controllers = source_status.settings.controllers;
-    source_original_controllers.retain(|e| *e != canister_self());
-    let mut target_original_controllers = target_status.settings.controllers;
-    target_original_controllers.retain(|e| *e != canister_self());
-    Ok(Request {
-        source,
-        source_subnet,
-        source_original_controllers,
-        target,
-        target_subnet,
-        target_original_controllers,
+    let mut migrated_canister_original_controllers = migrated_canister_status.settings.controllers;
+    migrated_canister_original_controllers.retain(|e| *e != canister_self());
+    let mut replaced_canister_original_controllers = replaced_canister_status.settings.controllers;
+    replaced_canister_original_controllers.retain(|e| *e != canister_self());
+    let request = Request {
+        migrated_canister,
+        migrated_canister_subnet,
+        migrated_canister_original_controllers,
+        replaced_canister,
+        replaced_canister_subnet,
+        replaced_canister_original_controllers,
         caller,
-    })
+    };
+
+    Ok((
+        request,
+        vec![migrated_canister_guard, replaced_canister_guard],
+    ))
 }

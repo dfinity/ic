@@ -70,6 +70,27 @@ async fn test_limit_outstanding_calls() {
             fn canister_version(&self) -> Option<u64> {
                 unimplemented!();
             }
+
+            async fn stop_canister(
+                &self,
+                _canister_id_record: CanisterIdRecord,
+            ) -> Result<(), (i32, String)> {
+                unimplemented!();
+            }
+
+            async fn delete_canister(
+                &self,
+                _canister_id_record: CanisterIdRecord,
+            ) -> Result<(), (i32, String)> {
+                unimplemented!();
+            }
+
+            async fn take_canister_snapshot(
+                &self,
+                _args: TakeCanisterSnapshotArgs,
+            ) -> Result<CanisterSnapshotResponse, (i32, String)> {
+                unimplemented!();
+            }
         }
 
         impl Drop for MockManagementCanisterClient {

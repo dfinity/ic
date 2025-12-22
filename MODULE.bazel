@@ -12,22 +12,26 @@ use_repo(ext, "rules_buf_toolchains")
 register_toolchains("@rules_buf_toolchains//:all")
 
 # General Bazel helpers
-bazel_dep(name = "bazel_skylib", version = "1.7.1")
+bazel_dep(name = "bazel_skylib", version = "1.8.2")
 bazel_dep(name = "aspect_bazel_lib", version = "2.9.0")
 bazel_dep(name = "rules_shell", version = "0.6.1")
 
 bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = True)
 
 # CC dependencies (for C libs like miracl-core, etc)
-bazel_dep(name = "rules_cc", version = "0.0.16")
-bazel_dep(name = "platforms", version = "0.0.11")
-bazel_dep(name = "hermetic_cc_toolchain", version = "3.1.1")
+bazel_dep(name = "rules_cc", version = "0.2.8")
+bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "hermetic_cc_toolchain", version = "4.0.1")
 archive_override(
     module_name = "hermetic_cc_toolchain",
-    integrity = "sha256-kHdFv5FVX3foI0wLlTNx5srFunFdHPEv9kFJbdG86dE=",
+    integrity = "sha256-ziFGNqyR/zQFkoqxcOdCAbAYnhNxXXObBfUjxO9LGoM=",
     patch_strip = 1,
-    patches = ["//bazel:hermetic_cc_toolchain.patch"],
-    urls = ["https://github.com/uber/hermetic_cc_toolchain/releases/download/v3.1.1/hermetic_cc_toolchain-v3.1.1.tar.gz"],
+    patches = [
+        "//bazel:hermetic_cc_toolchain_strip.patch",
+        "//bazel:hermetic_cc_toolchain_cache_dir.patch",
+    ],
+    strip_prefix = "hermetic_cc_toolchain-32c6f9ec9e0b3aebfa92950e7019f1275390bda1",
+    urls = ["https://github.com/uber/hermetic_cc_toolchain/archive/32c6f9ec9e0b3aebfa92950e7019f1275390bda1.tar.gz"],
 )
 
 # configure/make dependencies
@@ -55,6 +59,10 @@ archive_override(
 # Misc tools
 
 bazel_dep(name = "pigz", version = "2.8")  # (parallel) gzip
+
+# Rust
+
+include("//bazel:rust.MODULE.bazel")
 
 # Python dependencies
 
@@ -670,14 +678,21 @@ http_file(
 )
 
 http_file(
+    name = "dogecoin_example_canister",
+    downloaded_file_path = "basic_dogecoin.wasm",
+    sha256 = "2eacb8de00dc2fc9bd43f7a5a8a4cd79c61c40ed3f761df84105a4a450f9e0c4",
+    url = "https://github.com/dfinity/dogecoin-canister/releases/download/example%2Fbasic-dogecoin%2F2025-11-12/basic_dogecoin.wasm",
+)
+
+http_file(
     name = "pocket-ic-mainnet-gz",
     # Calculate this hash using:
     # git checkout $revision
     # ci/container/container-run.sh
     # bazel build //publish/binaries:pocket-ic.gz
     # sha256sum bazel-bin/publish/binaries/pocket-ic.gz
-    sha256 = "237272216498074e5250a0685813b96632963ff9abbc51a7030d9b625985028d",
-    url = "https://github.com/dfinity/pocketic/releases/download/9.0.1/pocket-ic-x86_64-linux.gz",
+    sha256 = "dd8a95dd5a784e9b7c8c79fc4fa3a5c97d449f9666afe57aefa960aef0d68b8c",
+    url = "https://github.com/dfinity/pocketic/releases/download/10.0.0/pocket-ic-x86_64-linux.gz",
 )
 
 ## Rosetta CLI
@@ -766,20 +781,32 @@ http_archive(
     url = "https://github.com/aquasecurity/trivy/releases/download/v0.35.0/trivy_0.35.0_macOS-64bit.tar.gz",
 )
 
-# even if the macOS version is "x86_64" it runs on ARM chips because of
-# emulation
 http_archive(
     name = "dfx-x86_64-darwin",
     build_file = "@//third_party:BUILD.dfx.bazel",
-    sha256 = "4b1c24805f655576fb97f61aba019fbbe7c1bdca0598a5c1a9220a4bfe80f460",
-    url = "https://github.com/dfinity/sdk/releases/download/0.20.1/dfx-0.20.1-x86_64-darwin.tar.gz",
+    sha256 = "be1079c5f48e4bb88c2421f65b501040250a13a4ea57c6ccc1d3edf17812f674",
+    url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-x86_64-darwin.tar.gz",
 )
 
 http_archive(
     name = "dfx-x86_64-linux",
     build_file = "@//third_party:BUILD.dfx.bazel",
-    sha256 = "011c8a6ff9af0578ee2c8b0a7af3abc5b3d5950cc64421b4c3a7acd1fc18265e",
-    url = "https://github.com/dfinity/sdk/releases/download/0.20.1/dfx-0.20.1-x86_64-linux.tar.gz",
+    sha256 = "d1473ae15ece44e782f0f2f8ac586ead349fe434189df8b587eb738becce0138",
+    url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-x86_64-linux.tar.gz",
+)
+
+http_archive(
+    name = "dfx-aarch64-darwin",
+    build_file = "@//third_party:BUILD.dfx.bazel",
+    sha256 = "c97b3975f3c72c20f016f7ef4d394fea5bb7e7d849dd77f6ab0ea0361ad6276c",
+    url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-aarch64-darwin.tar.gz",
+)
+
+http_archive(
+    name = "dfx-aarch64-linux",
+    build_file = "@//third_party:BUILD.dfx.bazel",
+    sha256 = "9da909e8a3cbcb938cfe8502afab87ec61e75c5744025cd0a18b621695c38a5e",
+    url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-aarch64-linux.tar.gz",
 )
 
 http_file(
@@ -796,6 +823,72 @@ http_file(
     executable = True,
     sha256 = "5df9a457c5ede103c7d017c23a4c1abce4d17db50442a9407724a9006db2f710",
     url = "https://github.com/dfinity/candid/releases/download/2023-11-16/didc-macos",
+)
+
+# pebble & pebble dns server for Boundary Nodes ACME tests
+
+http_archive(
+    name = "pebble-aarch64-darwin",
+    build_file = "@//third_party:BUILD.pebble.bazel",
+    sha256 = "39e07d63dc776521f2ffe0584e5f4f081c984ac02742c882b430891d89f0c866",
+    strip_prefix = "pebble-darwin-arm64/darwin/arm64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-darwin-arm64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-x86_64-darwin",
+    build_file = "@//third_party:BUILD.pebble.bazel",
+    sha256 = "9b9625651f8ce47706235179503fec149f8f38bce2b2554efe8c0f2a021f877c",
+    strip_prefix = "pebble-darwin-amd64/darwin/amd64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-darwin-amd64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-aarch64-linux",
+    build_file = "@//third_party:BUILD.pebble.bazel",
+    sha256 = "0e70f2537353f61cbf06aa54740bf7f7bb5f963ba00e909f23af5f85bc13fd1a",
+    strip_prefix = "pebble-linux-arm64/linux/arm64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-linux-arm64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-x86_64-linux",
+    build_file = "@//third_party:BUILD.pebble.bazel",
+    sha256 = "34595d915bbc2fc827affb3f58593034824df57e95353b031c8d5185724485ce",
+    strip_prefix = "pebble-linux-amd64/linux/amd64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-linux-amd64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-challtestsrv-aarch64-darwin",
+    build_file = "@//third_party:BUILD.pebble-challtestsrv.bazel",
+    sha256 = "1bc5a6cfa062d9756e98d67825daf67f61dd655bcb6025efca2138fe836c9bbc",
+    strip_prefix = "pebble-challtestsrv-darwin-arm64/darwin/arm64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-darwin-arm64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-challtestsrv-x86_64-darwin",
+    build_file = "@//third_party:BUILD.pebble-challtestsrv.bazel",
+    sha256 = "3d1343b1bbe892145fd2da70be36e67b149e482fbff897e109b8053f4f790f40",
+    strip_prefix = "pebble-challtestsrv-darwin-amd64/darwin/amd64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-darwin-amd64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-challtestsrv-aarch64-linux",
+    build_file = "@//third_party:BUILD.pebble-challtestsrv.bazel",
+    sha256 = "99a276aac8ceac121859b799708218e6dc57d7ca1dc1b8b5b586246b3c4160e6",
+    strip_prefix = "pebble-challtestsrv-linux-arm64/linux/arm64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-linux-arm64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-challtestsrv-x86_64-linux",
+    build_file = "@//third_party:BUILD.pebble-challtestsrv.bazel",
+    sha256 = "a817449d1f05ae58bcb7bf073b4cebe5d31512f859ba4b83951bd825d28d2114",
+    strip_prefix = "pebble-challtestsrv-linux-amd64/linux/amd64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-linux-amd64.tar.gz",
 )
 
 ## shfmt, for formatting bash code
@@ -940,12 +1033,13 @@ toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolcha
 
 # The use_hermetic_cc setting is added to each toolchain to allow us to opt out
 # in favor of system toolchains, when needed.
-toolchains.extra_settings(settings = ["//bazel:use_hermetic_cc"])
+toolchains.extra_target_settings(settings = ["//bazel:use_hermetic_cc"])
 use_repo(toolchains, "zig_sdk")
 
 register_toolchains(
     # Linux toolchains
     "@zig_sdk//toolchain:linux_amd64_gnu.2.31",
+    "@zig_sdk//toolchain:linux_arm64_gnu.2.31",
 
     # macOS toolchains
     # Do not use hermetic toolchains for macOS until we have had a chance to
