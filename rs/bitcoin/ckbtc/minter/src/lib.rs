@@ -701,7 +701,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R) {
     // one confirmation.
     let main_utxos_zero_confirmations = match management::get_utxos(
         btc_network,
-        &main_address.display(btc_network),
+        &main_address_str,
         /*min_confirmations=*/ 0,
         management::CallSource::Minter,
         runtime,
