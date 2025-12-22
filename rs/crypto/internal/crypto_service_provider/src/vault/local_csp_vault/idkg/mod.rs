@@ -799,9 +799,7 @@ fn idkg_public_key_proto_to_key_id(
                     internal_error: format!("Error deserializing IDKG public key: {err:?}"),
                 })?;
 
-            KeyId::try_from(&mega_public_key).map_err(|error| IDkgRetainKeysError::InternalError {
-                internal_error: format!("Invalid key ID {error:?}"),
-            })
+            Ok(KeyId::from(&mega_public_key))
         })
         .collect()
 }
