@@ -1957,7 +1957,7 @@ crate.annotation_select(
     triples = ["@@//bazel:fuzzing_code_enabled"],
 )
 crate.annotation_select(
-    crate = "bitcoin",
+    crate = "bitcoin-dogecoin",
     rustc_flags = DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
     triples = ["@@//bazel:fuzzing_code_enabled"],
 )
