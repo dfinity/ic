@@ -46,26 +46,3 @@ protobuf-compiler
 llvm
 liblmdb-dev
 liblzma-dev
-
-# IC-OS
-fdisk
-cryptsetup-bin
-dosfstools
-fakeroot
-faketime
-grub-efi-amd64-bin
-iasl # to build OVMF
-iputils-ping
- # Linked in by IC-OS binaries for managing encrypted disks.
-libcryptsetup-dev
- # Linked in by IC-OS binaries for creating mapped devices.
-libdevmapper-dev
-libselinux-dev
-libsystemd-dev
- # Linked in by IC-OS binaries for managing virtual machines programmatically.
-libvirt-dev
-lsb-release
-lvm2
-mtools
-nasm # to build OVMF
-zstd
