@@ -49,6 +49,8 @@ node-json5
 
 # IC-OS
 libsystemd-dev
+ # Linked in by IC-OS binaries for managing virtual machines programmatically.
+libvirt-dev
 
 # Unknown
 containernetworking-plugins
