@@ -33,6 +33,7 @@ url = { workspace = true }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-local-store = { path = "../registry/local_store" }
 ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
+rstest = { workspace = true }
 
 [[bin]]
 name = "ic-backup"
