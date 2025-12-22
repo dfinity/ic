@@ -539,3 +539,252 @@ fn build_failure_text<'a>(
 
     text
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod helpers {
+        use super::*;
+
+        #[test]
+        fn truncate_line_no_change_when_fits() {
+            assert_eq!(truncate_line("hello", 10), "hello");
+        }
+
+        #[test]
+        fn truncate_line_adds_ellipsis() {
+            assert_eq!(truncate_line("hello world", 8), "hello...");
+        }
+
+        #[test]
+        fn calculate_log_viewport_shows_all_when_under_limit() {
+            let (start, count) = calculate_log_viewport(5, 20);
+            assert_eq!((start, count), (0, 5));
+        }
+
+        #[test]
+        fn calculate_log_viewport_shows_last_n_when_over_limit() {
+            let (start, count) = calculate_log_viewport(100, 20);
+            assert_eq!((start, count), (80, 20));
+        }
+
+        #[test]
+        fn centered_rect_with_fixed_length() {
+            let area = Rect::new(0, 0, 100, 50);
+            let result = centered_rect(Constraint::Length(40), 10, area);
+
+            assert_eq!(result.width, 40);
+            assert_eq!(result.height, 10);
+            assert_eq!(result.x, 30); // (100 - 40) / 2
+            assert_eq!(result.y, 20); // (50 - 10) / 2
+        }
+
+        #[test]
+        fn centered_rect_with_percentage() {
+            let area = Rect::new(0, 0, 100, 50);
+            let result = centered_rect(Constraint::Percentage(50), 10, area);
+
+            assert_eq!(result.width, 50);
+            assert_eq!(result.height, 10);
+        }
+    }
+
+    mod rendering {
+        use super::*;
+        use crate::{RecoveryParams, RecoveryPhase, RecoveryTask};
+        use ratatui::{Terminal, backend::TestBackend};
+
+        // ====================================================================
+        // Test Helpers
+        // ====================================================================
+
+        /// Renders a state to a test buffer and returns the terminal
+        fn render_state(state: &AppState, width: u16, height: u16) -> Terminal<TestBackend> {
+            let backend = TestBackend::new(width, height);
+            let mut terminal = Terminal::new(backend).unwrap();
+            terminal
+                .draw(|f| render(f, state))
+                .expect("Failed to render");
+            terminal
+        }
+
+        /// Extracts all text content from the terminal buffer as a single string
+        fn buffer_to_string(terminal: &Terminal<TestBackend>) -> String {
+            terminal
+                .backend()
+                .buffer()
+                .content()
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect()
+        }
+
+        /// Checks if the buffer contains a specific substring
+        fn buffer_contains(terminal: &Terminal<TestBackend>, text: &str) -> bool {
+            buffer_to_string(terminal).contains(text)
+        }
+
+        fn create_test_failure_state() -> FailureState {
+            let status = std::process::Command::new("false")
+                .status()
+                .expect("Failed to run 'false' command");
+            FailureState {
+                params: RecoveryParams {
+                    version: "a".repeat(40),
+                    recovery_hash_prefix: "abc123".to_string(),
+                    version_hash_full: Some("fullhash123".to_string()),
+                    recovery_hash_full: Some("rechash456".to_string()),
+                },
+                logs: vec!["Error line 1".to_string(), "Error line 2".to_string()],
+                exit_status: status,
+                error_messages: vec!["Test error".to_string()],
+            }
+        }
+
+        #[test]
+        fn too_small_terminal_hides_normal_ui() {
+            let state = AppState::Input(InputState::default());
+
+            // Width below minimum
+            let terminal = render_state(&state, MIN_TERMINAL_WIDTH - 1, 20);
+            assert!(!buffer_contains(&terminal, "Manual Recovery TUI"));
+
+            // Height below minimum
+            let terminal = render_state(&state, 40, MIN_TERMINAL_HEIGHT - 1);
+            assert!(buffer_contains(&terminal, "too small"));
+            assert!(!buffer_contains(&terminal, "Manual Recovery TUI"));
+        }
+
+        #[test]
+        fn input_screen_renders_all_elements() {
+            let state = AppState::Input(InputState::default());
+            let terminal = render_state(&state, 80, 24);
+
+            // Title and instructions
+            assert!(buffer_contains(&terminal, "Manual Recovery TUI"));
+            assert!(buffer_contains(&terminal, "recovery version"));
+            assert!(buffer_contains(&terminal, "TAB"));
+
+            // Field labels
+            assert!(buffer_contains(&terminal, "VERSION"));
+            assert!(buffer_contains(&terminal, "RECOVERY-HASH-PREFIX"));
+
+            // Buttons
+            assert!(buffer_contains(&terminal, "<Run recovery>"));
+            assert!(buffer_contains(&terminal, "<Exit>"));
+        }
+
+        #[test]
+        fn input_screen_shows_error_popup() {
+            let input = InputState {
+                error_message: Some("Validation failed".to_string()),
+                ..Default::default()
+            };
+            let state = AppState::Input(input);
+            let terminal = render_state(&state, 80, 24);
+
+            assert!(buffer_contains(&terminal, "Error"));
+            assert!(buffer_contains(&terminal, "Validation failed"));
+        }
+
+        #[test]
+        fn input_screen_shows_exit_message() {
+            let input = InputState {
+                exit_message: Some("Recovery cancelled".to_string()),
+                ..Default::default()
+            };
+            let state = AppState::Input(input);
+            let terminal = render_state(&state, 80, 24);
+
+            assert!(buffer_contains(&terminal, "Recovery cancelled"));
+        }
+
+        #[test]
+        fn confirmation_screen_renders_all_elements() {
+            let state = AppState::InputConfirmation(ConfirmationState {
+                input_state: InputState::default(),
+                params: RecoveryParams {
+                    version: "abc123def456".to_string(),
+                    recovery_hash_prefix: "fedcba".to_string(),
+                    version_hash_full: Some("fullversionhash".to_string()),
+                    recovery_hash_full: Some("fullrecoveryhash".to_string()),
+                },
+                selected_option: ConfirmationOption::Yes,
+            });
+            let terminal = render_state(&state, 100, 30);
+
+            // Title and question
+            assert!(buffer_contains(&terminal, "Confirm Parameters"));
+            assert!(buffer_contains(&terminal, "confirm"));
+
+            // Input parameters
+            assert!(buffer_contains(&terminal, "VERSION:"));
+            assert!(buffer_contains(&terminal, "abc123def456"));
+            assert!(buffer_contains(&terminal, "RECOVERY-HASH-PREFIX:"));
+            assert!(buffer_contains(&terminal, "fedcba"));
+
+            // Calculated hashes
+            assert!(buffer_contains(&terminal, "VERSION-HASH:"));
+            assert!(buffer_contains(&terminal, "fullversionhash"));
+            assert!(buffer_contains(&terminal, "RECOVERY-HASH:"));
+            assert!(buffer_contains(&terminal, "fullrecoveryhash"));
+
+            // Buttons
+            assert!(buffer_contains(&terminal, "< Yes >"));
+            assert!(buffer_contains(&terminal, "< No >"));
+        }
+
+        #[test]
+        fn failure_screen_renders_all_elements() {
+            let state = AppState::Failure(create_test_failure_state());
+            let terminal = render_state(&state, 100, 30);
+
+            assert!(buffer_contains(&terminal, "Recovery Failed"));
+            assert!(buffer_contains(&terminal, "exit code"));
+            assert!(buffer_contains(&terminal, "Recovery Parameters"));
+            assert!(buffer_contains(&terminal, "Error line 1"));
+            assert!(buffer_contains(&terminal, "Error line 2"));
+            assert!(buffer_contains(&terminal, "Press any key"));
+        }
+
+        #[test]
+        fn running_screen_renders_all_elements() {
+            let state = AppState::Running(RunningState {
+                task: RecoveryTask::mock_with_logs(vec![]),
+                params: RecoveryParams {
+                    version: "testversion123".to_string(),
+                    recovery_hash_prefix: "abc123".to_string(),
+                    version_hash_full: None,
+                    recovery_hash_full: None,
+                },
+                phase: RecoveryPhase::Prep,
+                previous_input_state: None,
+            });
+            let terminal = render_state(&state, 100, 30);
+
+            assert!(buffer_contains(&terminal, "GuestOS Recovery Upgrader"));
+            assert!(buffer_contains(&terminal, "VERSION:"));
+            assert!(buffer_contains(&terminal, "testversion123"));
+            assert!(buffer_contains(&terminal, "<pending>"));
+            assert!(buffer_contains(&terminal, "Recovery process logs"));
+        }
+
+        #[test]
+        fn running_screen_displays_log_output() {
+            let state = AppState::Running(RunningState {
+                task: RecoveryTask::mock_with_logs(vec![
+                    "Downloading artifacts...".to_string(),
+                    "Verifying checksums...".to_string(),
+                ]),
+                params: RecoveryParams::default(),
+                phase: RecoveryPhase::Prep,
+                previous_input_state: None,
+            });
+            let terminal = render_state(&state, 100, 30);
+
+            assert!(buffer_contains(&terminal, "Downloading artifacts"));
+            assert!(buffer_contains(&terminal, "Verifying checksums"));
+        }
+    }
+}
