@@ -1862,10 +1862,6 @@ crate.spec(
     version = "^39.0.1",
 )
 crate.spec(
-    package = "wasmtime-environ",
-    version = "^39.0.1",
-)
-crate.spec(
     package = "wast",
     version = "^240.0.0",
 )
