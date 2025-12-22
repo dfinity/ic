@@ -1,6 +1,6 @@
 use anyhow::{Context, Error};
 use clap::Parser;
-use regex::Regex;
+use regex_lite::Regex;
 use std::fs;
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;

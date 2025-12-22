@@ -50,7 +50,7 @@ DEPENDENCIES = [
     "@crate_index//:pprof",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
-    "@crate_index//:regex",
+    "@crate_index//:regex-lite",
     "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:tikv-jemalloc-ctl",

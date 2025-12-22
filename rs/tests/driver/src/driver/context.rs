@@ -2,7 +2,7 @@
 
 use crate::driver::test_env::TestEnv;
 use anyhow::{Context, Result, bail};
-use regex::Regex;
+use regex_lite::Regex;
 use slog::Logger;
 use std::{
     fs,

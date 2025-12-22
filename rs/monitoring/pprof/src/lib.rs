@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use lazy_static::lazy_static;
 use pprof::{ProfilerGuard, Report, protos::Message};
-use regex::Regex;
+use regex_lite::Regex;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::{task::spawn_blocking, time::sleep};

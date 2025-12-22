@@ -2,7 +2,7 @@ use std::path::Path;
 use std::process::Command;
 
 use anyhow::{Context, Result, anyhow};
-use regex::Regex;
+use regex_lite::Regex;
 
 use crate::systemd::generate_systemd_config_files;
 use config_types::{Ipv6Config, NetworkSettings};

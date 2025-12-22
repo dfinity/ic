@@ -7,7 +7,7 @@ DEPENDENCIES = [
     "//rs/ic_os/build_tools/partition_tools",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
-    "@crate_index//:regex",
+    "@crate_index//:regex-lite",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
 ]

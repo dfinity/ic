@@ -11,6 +11,6 @@ async-trait = { workspace = true }
 lazy_static = { workspace = true }
 pprof = { workspace = true }
 prost = "^0.12"
-regex = { workspace = true }
+regex-lite = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

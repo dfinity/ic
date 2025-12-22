@@ -14,5 +14,5 @@ config = { path = "../../config" }
 config_types = { path = "../../config_types" }
 indoc = { workspace = true }
 network = { path = "../../network" }
-regex = { workspace = true }
+regex-lite = { workspace = true }
 utils = { path = "../../utils" }

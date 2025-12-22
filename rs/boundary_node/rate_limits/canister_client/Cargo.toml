@@ -13,7 +13,7 @@ clap = { workspace = true }
 ic-agent = { workspace = true }
 k256 = { workspace = true }
 rate-limits-api = { path = "../api" }
-regex = { workspace = true }
+regex-lite = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }
 tokio = { workspace = true }
