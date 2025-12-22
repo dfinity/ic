@@ -5,7 +5,8 @@ use bitcoin::consensus::Encodable;
 use ic_ckbtc_minter::address::BitcoinAddress;
 use ic_ckbtc_minter::signature::EncodedSignature;
 use ic_ckbtc_minter::tx::{
-    OutPoint, SignedInput, SignedTransaction, TxOut, UnsignedInput, UnsignedTransaction,
+    OutPoint, SignedInput, SignedTransaction, TransactionVersion, TxOut, UnsignedInput,
+    UnsignedTransaction,
 };
 
 #[test]
@@ -45,6 +46,7 @@ fn should_use_p2pkh() {
     let minter_address =
         DogecoinAddress::parse("DJsTUj3DPhJG3GMDr66mqxnQGL7dF8N9eU", &Network::Mainnet).unwrap();
     let unsigned_tx = UnsignedTransaction {
+        version: TransactionVersion::ONE,
         inputs: vec![unsigned_input.clone()],
         outputs: vec![
             TxOut {
@@ -65,6 +67,7 @@ fn should_use_p2pkh() {
             .unwrap();
     let signature: [u8; 72] = hex::decode("3045022100a56244d8c7fafcabf69bbfac3288a8f88e918ff200a0ed7304fa4bcfecac203d02207604f23a2430391dec2fc1b31f4db6ff70ae53227accad2ad339703b241a0fa801").unwrap().try_into().unwrap();
     let signed_tx = SignedTransaction {
+        version: unsigned_tx.version,
         inputs: vec![SignedInput {
             previous_output: unsigned_input.previous_output,
             sequence: unsigned_input.sequence,
@@ -88,7 +91,7 @@ fn should_use_p2pkh() {
     assert_eq!(
         dogecoin_tx,
         bitcoin::Transaction {
-            version: bitcoin::transaction::Version::TWO,
+            version: bitcoin::transaction::Version::ONE,
             lock_time: bitcoin::absolute::LockTime::ZERO,
             input: vec![bitcoin::TxIn {
                 previous_output:

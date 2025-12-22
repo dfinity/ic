@@ -3,6 +3,7 @@ use crate::lifecycle::init::Network;
 use crate::test_fixtures::{arbitrary, dogecoin_fee_estimator};
 use ic_ckbtc_minter::fees::FeeEstimator;
 use ic_ckbtc_minter::state::utxos::UtxoSet;
+use ic_ckbtc_minter::tx::TransactionVersion;
 use proptest::prop_assert;
 use test_strategy::proptest;
 
@@ -49,6 +50,7 @@ fn test_fee_range(
         amount,
         fee_rate_in_millikoinus_per_byte,
         crate::DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
+        TransactionVersion::ONE,
         &fee_estimator,
     )
     .unwrap();

@@ -19,6 +19,7 @@ use async_trait::async_trait;
 use candid::Principal;
 pub use dogecoin_canister::get_dogecoin_canister_id;
 use ic_cdk::management_canister::SignWithEcdsaArgs;
+use ic_ckbtc_minter::tx::TransactionVersion;
 use ic_ckbtc_minter::{
     CanisterRuntime, CheckTransactionResponse, GetCurrentFeePercentilesRequest, GetUtxosRequest,
     GetUtxosResponse, management::CallError, state::CkBtcMinterState, tx,
@@ -38,7 +39,6 @@ pub use ic_ckbtc_minter::{
 };
 use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};
 use std::time::Duration;
-use ic_ckbtc_minter::tx::TransactionVersion;
 
 pub const DOGECOIN_CANISTER_RUNTIME: DogeCanisterRuntime = DogeCanisterRuntime {};
 
