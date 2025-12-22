@@ -172,6 +172,7 @@ crate.spec(
         "serde",
     ],
     package = "bitcoin-dogecoin",
+    package_alias = "bitcoin",
     version = "^0.32.5-doge.1",
 )
 crate.spec(
@@ -1957,7 +1958,7 @@ crate.annotation_select(
     triples = ["@@//bazel:fuzzing_code_enabled"],
 )
 crate.annotation_select(
-    crate = "bitcoin-dogecoin",
+    crate = "bitcoin",
     rustc_flags = DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
     triples = ["@@//bazel:fuzzing_code_enabled"],
 )
