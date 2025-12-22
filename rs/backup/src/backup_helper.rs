@@ -48,7 +48,7 @@ pub(crate) struct BackupHelper {
     pub(crate) versions_hot: usize,
     pub(crate) max_logs_age_to_keep: Option<Duration>,
     pub(crate) artifacts_guard: Mutex<bool>,
-    pub(crate) logs_guard: Arc<Mutex<()>>,
+    pub(crate) logs_dir: Arc<Mutex<PathBuf>>,
     pub(crate) daily_replays: usize,
     pub(crate) do_cold_storage: bool,
     pub(crate) thread_id: u32,
@@ -75,8 +75,10 @@ impl BackupHelper {
         self.binary_dir(replica_version).join(executable)
     }
 
-    fn logs_dir(&self) -> PathBuf {
-        create_if_not_exists(self.root_dir.join("logs"))
+    fn logs_dir<'a>(&'a self) -> std::sync::MutexGuard<'a, PathBuf> {
+        let guard = self.logs_dir.lock().unwrap();
+        create_if_not_exists(guard.to_path_buf());
+        guard
     }
 
     fn spool_root_dir(&self) -> PathBuf {
@@ -475,12 +477,14 @@ impl BackupHelper {
             Err(err) => {
                 error!(self.log, "[#{}] Error: {}", self.thread_id, err.to_string());
                 if let RecoveryError::CommandError(_, ref out_str) = err {
-                    self.dump_log_file(start_height, out_str)?;
+                    self.dump_log_file(start_height, out_str)
+                        .context("Failed to dump error logs to file")?;
                 }
                 bail!("Failed to run `ic-replay`: {err}");
             }
             Ok(Some(stdout)) => {
-                self.dump_log_file(start_height, &stdout)?;
+                self.dump_log_file(start_height, &stdout)
+                    .context("Failed to dump success logs to file")?;
 
                 if let Some(upgrade_version) = self.check_upgrade_request(stdout) {
                     debug!(
@@ -519,7 +523,6 @@ impl BackupHelper {
             "{}_{:010}_{:012}.log",
             self.subnet_id, timestamp, start_height
         );
-        let _guard = self.logs_guard.lock().unwrap();
         let logs_dir = self.logs_dir();
         let file_name = logs_dir.join(log_file_name);
         debug!(self.log, "Write replay log to: {file_name:?}");
@@ -530,7 +533,9 @@ impl BackupHelper {
         if let Some(max_logs_age_to_keep) = self.max_logs_age_to_keep {
             let min_time_to_keep = SystemTime::now()
                 .checked_sub(max_logs_age_to_keep)
-                .expect("`max_logs_age_to_keep` should be small enough");
+                .ok_or_else(|| {
+                    anyhow!("`max_logs_age_to_keep` is greater than `SystemTime::now()`!")
+                })?;
 
             self.purge_old_logs(&logs_dir, min_time_to_keep)
                 .context("Failed to purge old logs")?;
@@ -1402,7 +1407,9 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            std::fs::read_dir(backup_helper.logs_dir()).unwrap().count(),
+            std::fs::read_dir(backup_helper.logs_dir().to_path_buf())
+                .unwrap()
+                .count(),
             expected_logs_count,
         );
     }
@@ -1455,7 +1462,7 @@ mod tests {
             registry_client,
             notification_client,
             downloads_guard: Mutex::new(true).into(),
-            logs_guard: Arc::new(Mutex::new(())),
+            logs_dir: Arc::new(Mutex::new(temp_dir.join("backup").join("logs"))),
             max_logs_age_to_keep: None,
             hot_disk_resource_threshold_percentage: 75,
             cold_disk_resource_threshold_percentage: 95,

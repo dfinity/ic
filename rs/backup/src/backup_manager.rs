@@ -93,7 +93,7 @@ impl BackupManager {
 
         let downloads = Arc::new(Mutex::new(true));
         let blacklisted = Arc::new(config.blacklisted_nodes.unwrap_or_default());
-        let logs_guard = Arc::new(Mutex::new(()));
+        let logs_dir = Arc::new(Mutex::new(config.root_dir.join("logs")));
 
         for subnet_config in config.subnets {
             let subnet_log =
@@ -119,7 +119,7 @@ impl BackupManager {
                 registry_client: registry_replicator.get_registry_client(),
                 notification_client,
                 downloads_guard: downloads.clone(),
-                logs_guard: logs_guard.clone(),
+                logs_dir: logs_dir.clone(),
                 max_logs_age_to_keep: config
                     .max_logs_age_to_keep_days
                     .map(|days| Duration::from_secs(days * SECONDS_IN_DAY)),
