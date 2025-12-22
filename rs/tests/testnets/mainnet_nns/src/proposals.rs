@@ -5,8 +5,7 @@ use ic_nns_common::types::NeuronId;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance_api::NnsFunction;
 use ic_nns_test_utils::governance::{
-    submit_external_update_proposal, submit_external_update_proposal_allowing_error,
-    wait_for_final_state,
+    submit_external_update_proposal_allowing_error, wait_for_final_state,
 };
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
@@ -18,12 +17,10 @@ use ic_system_test_driver::{
     nns::{get_governance_canister, submit_update_elected_replica_versions_proposal},
     util::runtime_from_url,
 };
-use ic_types::{NodeId, ReplicaVersion, SubnetId};
+use ic_types::{NodeId, ReplicaVersion};
 use once_cell::sync::OnceCell;
 use registry_canister::mutations::{
-    do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
-    do_change_subnet_membership::ChangeSubnetMembershipPayload,
-    do_update_subnet::UpdateSubnetPayload,
+    do_add_api_boundary_nodes::AddApiBoundaryNodesPayload, do_update_subnet::UpdateSubnetPayload,
 };
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
