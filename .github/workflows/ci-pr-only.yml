@@ -32,7 +32,7 @@ jobs:
     runs-on: &dind-small-setup
       labels: dind-small
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:59684b173cd648274fd01b393bdf2fb86087b3ab2ee9a2cf8d1b38a64b1937cf
+      image: ghcr.io/dfinity/ic-build@sha256:30b49530b965954154a44fa703aace501c6d5f6c60eb30f51083213659d5bae3
       options: >-
          -e NODE_NAME --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
     steps:
@@ -201,7 +201,7 @@ jobs:
       pull-requests: write
     env:
       SHELL_WRAPPER: "/usr/bin/time"
-      CARGO_AUDIT_VERSION: "0.21.0"
+      CARGO_AUDIT_VERSION: "0.22.0"
       CI_MERGE_REQUEST_IID: ${{ inputs.pr-number }}
       CI_PROJECT_PATH: ${{ github.repository }}
       CI_PIPELINE_ID: ${{ github.run_id }}
