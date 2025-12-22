@@ -36,12 +36,14 @@ fn main() -> Result<()> {
                 env,
                 SetupConfig {
                     impersonate_upstreams: true,
+                    use_mainnet_state: false,
                     subnet_size: SUBNET_SIZE,
                     dkg_interval: DKG_INTERVAL,
                 },
             )
         })
         .add_test(systest!(test; TestConfig {
+            use_mainnet_state: false,
             local_recovery: true,
             break_dfinity_owned_node: false,
             add_and_bless_upgrade_version: true,

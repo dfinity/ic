@@ -1,3 +1,4 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//rs/tests:common.bzl", "IC_GATEWAY_RUNTIME_DEPS", "MAINNET_ENV", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_ENV", "SNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
@@ -314,15 +315,10 @@ system_test_nns(
     ],
 )
 
-system_test_nns(
-    name = "nns_recovery",
-    guestos_update = "test",
-    tags = [
-        "dynamic_testnet",
-        "manual",
-    ],
-    uses_setupos_img = True,
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
+rust_binary(
+    name = "nns_recovery_testnet_bin",
+    testonly = True,
+    srcs = ["nns_recovery.rs"],
     deps = [
         # Keep sorted.
         "//rs/limits",
@@ -332,6 +328,45 @@ system_test_nns(
         "//rs/tests/nested/nns_recovery:common",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
+    ],
+)
+
+system_test_nns(
+    name = "nns_recovery",
+    env = {
+        "USE_MAINNET_STATE": "false",
+    },
+    guestos_update = "test",
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    test_driver_target = ":nns_recovery_testnet_bin",
+    uses_setupos_img = True,
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
+)
+
+system_test_nns(
+    name = "mainnet_nns_recovery",
+    env_inherit = ["SSH_AUTH_SOCK"],
+    env = MAINNET_ENV | {
+        "USE_MAINNET_STATE": "true",
+        # TODO (CON-1624): Remove those dependencies once changes reached mainnet NNS
+        "IC_RECOVERY_PATH": "$(rootpath //rs/recovery:ic-recovery)",
+        "IC_REPLAY_PATH": "$(rootpath //rs/replay:ic-replay)",
+    },
+    guestos = "mainnet_nns_dev",  # necessary for configuring NNS public key
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    test_driver_target = ":nns_recovery_testnet_bin",
+    uses_setupos_mainnet_latest_img = True,
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS + [
+        "//rs/tests:recovery/binaries",
+        # TODO (CON-1624): Remove those dependencies once changes reached mainnet NNS
+        "//rs/recovery:ic-recovery",
+        "//rs/replay:ic-replay",
     ],
 )
 

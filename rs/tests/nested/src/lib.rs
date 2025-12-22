@@ -38,18 +38,14 @@ pub fn simple_setup(env: TestEnv) {
 pub fn registration(env: TestEnv) {
     let logger = env.logger();
 
-    let initial_topology = block_on(
-        env.topology_snapshot()
-            .block_for_min_registry_version(ic_types::RegistryVersion::from(1)),
-    )
-    .unwrap();
+    let initial_topology = env.topology_snapshot();
 
-    // Check that there are initially no unassigned nodes.
-    let num_unassigned_nodes = initial_topology.unassigned_nodes().count();
-    assert_eq!(num_unassigned_nodes, 0);
+    // Keep track of the initial number of unassigned nodes.
+    let initial_num_unassigned_nodes = initial_topology.unassigned_nodes().count();
 
     let nested_vms = env.get_all_nested_vms().unwrap();
     let n = nested_vms.len();
+
     for node in nested_vms {
         let node_name = &node.vm_name();
         info!(
@@ -74,6 +70,7 @@ pub fn registration(env: TestEnv) {
     // If the nodes are able to join successfully, the registry will be updated,
     // and the new node IDs will enter the unassigned pool.
     let mut new_topology = initial_topology;
+    let expected_num_unassigned_nodes = initial_num_unassigned_nodes + n;
     retry_with_msg!(
         format!("Waiting for all {n} nodes to join ..."),
         logger.clone(),
@@ -88,10 +85,10 @@ pub fn registration(env: TestEnv) {
             )
             .unwrap();
             let num_unassigned_nodes = new_topology.unassigned_nodes().count();
-            if num_unassigned_nodes == n {
+            if num_unassigned_nodes == expected_num_unassigned_nodes {
                 Ok(())
             } else {
-                bail!("Expected {n} unassigned nodes, but found {num_unassigned_nodes}. Waiting for the rest to register ...");
+                bail!("Expected {expected_num_unassigned_nodes} unassigned nodes, but found {num_unassigned_nodes}. Waiting for the rest to register ...");
             }
         }
     ).unwrap();
