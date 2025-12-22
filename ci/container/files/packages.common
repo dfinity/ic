@@ -46,3 +46,6 @@ protobuf-compiler
 llvm
 liblmdb-dev
 liblzma-dev
+
+# IC-OS
+libsystemd-dev
