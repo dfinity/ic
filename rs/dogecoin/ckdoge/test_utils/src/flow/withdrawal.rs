@@ -243,7 +243,7 @@ where
             }
         };
         assert_eq!(
-            WithdrawalFee::from(withdrawal_fee),
+            withdrawal_fee,
             self.withdrawal_fee.expect(
                 "BUG: failed to estimate withdrawal fee, even though transaction is expected"
             ),
@@ -296,8 +296,8 @@ where
         );
 
         let total_outputs: u64 = tx.output.iter().map(|output| output.value.to_sat()).sum();
-        assert_eq!(total_inputs - total_outputs, withdrawal_fee.bitcoin_fee);
-        let total_fee = withdrawal_fee.bitcoin_fee + withdrawal_fee.minter_fee;
+        assert_eq!(total_inputs - total_outputs, withdrawal_fee.dogecoin_fee);
+        let total_fee = withdrawal_fee.dogecoin_fee + withdrawal_fee.minter_fee;
         // Fee is shared across all outputs, excepted for the change output to the minter
         // There might be a one-off error due to sharing the fee evenly across the involved outputs.
         let fee_share_lower_bound = total_fee / (tx.output.len() as u64 - 1);
