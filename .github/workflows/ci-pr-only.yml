@@ -201,7 +201,7 @@ jobs:
       pull-requests: write
     env:
       SHELL_WRAPPER: "/usr/bin/time"
-      CARGO_AUDIT_VERSION: "0.21.0"
+      CARGO_AUDIT_VERSION: "0.22.0"
       CI_MERGE_REQUEST_IID: ${{ inputs.pr-number }}
       CI_PROJECT_PATH: ${{ github.repository }}
       CI_PIPELINE_ID: ${{ github.run_id }}

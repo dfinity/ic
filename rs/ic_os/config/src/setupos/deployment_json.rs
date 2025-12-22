@@ -10,8 +10,6 @@ use url::Url;
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct DeploymentSettings {
     pub deployment: Deployment,
-    #[serde(default)]
-    pub logging: Logging,
     pub nns: Nns,
     pub dev_vm_resources: VmResources,
 }
@@ -25,10 +23,6 @@ pub struct Deployment {
     /// Optional management MAC address for network configuration, used for nested environments
     pub mgmt_mac: Option<String>,
 }
-
-// NODE-1762: Remove default once default attribute on mainnet nodes
-#[derive(PartialEq, Debug, Deserialize, Serialize, Default)]
-pub struct Logging {}
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Nns {
@@ -109,7 +103,6 @@ mod test {
             deployment_environment: DeploymentEnvironment::Mainnet,
             mgmt_mac: None,
         },
-        logging: Logging {},
         nns: Nns {
             urls: vec![
                 Url::parse("https://icp-api.io").unwrap(),
