@@ -69,7 +69,7 @@ rust_ic_test(
         "//rs/types/base_types",
         "//rs/types/types",
         "//rs/universal_canister/lib",
-        "@crate_index//:bitcoin-dogecoin",
+        "@crate_index//:bitcoin_dogecoin",
         "@crate_index//:candid",
         "@crate_index//:candid_parser",
         "@crate_index//:hex",

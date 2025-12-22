@@ -9,7 +9,7 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
-        "@crate_index//:bitcoin-dogecoin",
+        "@crate_index//:bitcoin_dogecoin",
     ],
 )
 
