@@ -288,3 +288,11 @@ sh_binary(
     srcs = ["run_systest.sh"],
     visibility = ["//visibility:public"],
 )
+
+# the STABLE_VERSION, suffixed with `-test`. Used in testing.
+genrule(
+    name = "version-test",
+    srcs = ["//bazel:version.txt"],
+    outs = ["version-test.txt"],
+    cmd = "cat $< | sed 's/$$/-test/' > $@",
+)

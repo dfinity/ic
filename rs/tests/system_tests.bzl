@@ -56,12 +56,12 @@ def _run_system_test(ctx):
     env["RUN_SCRIPT_ICOS_IMAGES"] = ";".join([k + ":" + v.files.to_list()[0].short_path for k, v in ctx.attr.icos_images.items()])
     data += [image.files.to_list()[0] for _, image in ctx.attr.icos_images.items()]
 
-    # RUN_SCRIPT_INFO_FILE_VARS:
-    # Have the run script resolve some vars from info_file.
-    # The run script expects a map of enviromment variables to their info_file counterparts plus a suffix. e.g.
-    # RUN_SCRIPT_INFO_FILE_VARS=ENV_DEPS__GUESTOS_DISK_IMG_VERSION:STABLE_VERSION;ENV_DEPS__OTHER:STABLE_OTHER:suffix
-    info_file_vars = ctx.attr.info_file_vars
-    env["RUN_SCRIPT_INFO_FILE_VARS"] = ";".join([k + ":" + ":".join(v) for k, v in info_file_vars.items()])
+    # RUN_SCRIPT_ENV_VAR_FILES:
+    # Used to set environment variable from the content of files.
+    # The run script expects a map of enviromment variable prefixes to targets. e.g.
+    # RUN_SCRIPT_ENV_VAR_FILES=MY_VAR://foo/env-var-contents;BAR://other-var-content
+    env["RUN_SCRIPT_ENV_VAR_FILES"] = ";".join([k + ":" + v.files.to_list()[0].short_path for k, v in ctx.attr.env_var_files.items()])
+    data += [env_var_file.files.to_list()[0] for _, env_var_file in ctx.attr.env_var_files.items()]
 
     if ctx.executable.colocated_test_bin != None:
         env["COLOCATED_TEST_BIN"] = ctx.executable.colocated_test_bin.short_path
@@ -111,7 +111,7 @@ run_system_test = rule(
         "_run_systest": attr.label(executable = True, cfg = "exec", default = "//rs/tests:run_systest"),
         "runtime_deps": attr.label_list(allow_files = True),
         "icos_images": attr.string_keyed_label_dict(doc = "Specifies images to be used by the test. Values will be replaced with actual download URLs and hashes.", allow_files = True),
-        "info_file_vars": attr.string_list_dict(doc = "Specifies variables to be pulled from info_file. Expects a map of varname to [infovar_name, optional_suffix]."),
+        "env_var_files": attr.string_keyed_label_dict(doc = "Specifies environment variables whose values are set to the _content_ of the files.", allow_files = True),
         "env_inherit": attr.string_list(doc = "Specifies additional environment variables to inherit from the external environment when the test is executed by bazel test."),
         "exclude_logs": attr.string_list(doc = "Specifies uvm name patterns to exclude from streaming."),
     },
@@ -215,8 +215,8 @@ def system_test(
     # Environment variable names to targets (targets are resolved)
     # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
     _env_deps = {}
+    env_var_files = {}
     icos_images = dict()
-    info_file_vars = dict()
 
     if int(uses_setupos_img) + int(uses_setupos_mainnet_latest_img) >= 2:
         fail("More than one initial SetupOS (disk) image was provided!")
@@ -227,13 +227,13 @@ def system_test(
     # ICOS image handling
     if guestos:
         if guestos == True:  # HEAD version
-            info_file_vars["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]
+            env_var_files["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = "//bazel:version.txt"
             icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/guestos/envs/dev:disk-img.tar.zst"
             icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = "//ic-os/guestos/envs/dev:update-img.tar.zst"
             _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev:launch-measurements.json"
 
         elif guestos == "malicious":
-            info_file_vars["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]
+            env_var_files["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = "//bazel:version.txt"
             icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/guestos/envs/dev-malicious:disk-img.tar.zst"
             icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = "//ic-os/guestos/envs/dev-malicious:update-img.tar.zst"
             _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev-malicious:launch-measurements.json"
@@ -267,7 +267,7 @@ def system_test(
             _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_app_images//:launch-measurements-guest.json"
 
         elif guestos == "recovery_dev":
-            info_file_vars["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]
+            env_var_files["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = "//bazel:version.txt"
             icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/guestos/envs/recovery-dev:disk-img.tar.zst"
             icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = "//ic-os/guestos/envs/dev:update-img.tar.zst"  # use the branch update image for initial update image
             _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev:launch-measurements.json"  # use the branch update image for initial update image
@@ -277,17 +277,17 @@ def system_test(
 
     if guestos_update:
         if guestos_update == True:  # HEAD version
-            info_file_vars["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION"]
+            env_var_files["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = "//bazel:version.txt"
             icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = "//ic-os/guestos/envs/dev:update-img.tar.zst"
             _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev:launch-measurements.json"
 
         elif guestos_update == "test":
-            info_file_vars["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION", "-test"]
+            env_var_files["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = "//rs/tests:version-test"
             icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = "//ic-os/guestos/envs/dev:update-img-test.tar.zst"
             _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev:launch-measurements-test.json"
 
         elif guestos_update == "malicious":
-            info_file_vars["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION"]
+            env_var_files["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = "//bazel:version.txt"
             icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = "//ic-os/guestos/envs/dev-malicious:update-img.tar.zst"
             _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev-malicious:launch-measurements.json"
 
@@ -314,7 +314,7 @@ def system_test(
 
     if uses_setupos_img:
         icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
-        info_file_vars["ENV_DEPS__SETUPOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]
+        env_var_files["ENV_DEPS__SETUPOS_DISK_IMG_VERSION"] = "//bazel:version.txt"
         icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:test-img.tar.zst"
         _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev:launch-measurements.json"
 
@@ -330,11 +330,11 @@ def system_test(
         _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
 
     if uses_hostos_update:
-        info_file_vars["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION"]
+        env_var_files["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = "//bazel:version.txt"
         icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG"] = "//ic-os/hostos/envs/dev:update-img.tar.zst"
 
     if uses_hostos_test_update:
-        info_file_vars["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION", "-test"]
+        env_var_files["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = "//rs/tests:version-test"
         icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG"] = "//ic-os/hostos/envs/dev:update-img-test.tar.zst"
 
     # note: which image is used here depends on guestos
@@ -366,7 +366,7 @@ def system_test(
         runtime_deps = deps,
         env = env,
         icos_images = icos_images,
-        info_file_vars = info_file_vars,
+        env_var_files = env_var_files,
         env_inherit = env_inherit,
         tags = tags + ["requires-network", "system_test"] +
                (["manual"] if "colocate" in tags else []),
@@ -394,6 +394,7 @@ def system_test(
         name = test_name + "_colocate",
         src = "//rs/tests/idx:colocate_test_bin",
         colocated_test_bin = test_driver_target,
+        env_var_files = env_var_files,
         runtime_deps = deps + [
             "//rs/tests:colocate_uvm_config_image",
             test_driver_target,
@@ -401,7 +402,6 @@ def system_test(
         env_inherit = env_inherit,
         env = env,
         icos_images = icos_images,
-        info_file_vars = info_file_vars,
         tags = tags + ["requires-network", "system_test"] +
                (["colocated"] if "colocate" in tags else ["manual"]) +
                additional_colocate_tags,
