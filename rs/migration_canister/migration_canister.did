@@ -1,11 +1,10 @@
-type ListEventsArgs = record { page_size : nat64; page_index : nat64 };
 type MigrationStatus = variant {
   Failed : record { time : nat64; reason : text };
   Succeeded : record { time : nat64 };
   InProgress : record { status : text };
 };
 
-type MigrateCanisterArgs = record { canister_id : principal; replace_canister_id : principal };
+type MigrateCanisterArgs = record { migrated_canister_id : principal; replaced_canister_id : principal };
 
 type MigrationCanisterResult = variant { Ok; Err : opt MigrationCanisterError };
 type MigrationCanisterError = variant { CallerNotAuthorized : reserved };
@@ -16,16 +15,16 @@ type ValidationError = variant {
   CallFailed : record { reason : text };
   NotController : record { canister : principal };
   CallerNotController : record { canister : principal };
-  TargetHasSnapshots : reserved;
+  ReplacedCanisterHasSnapshots : reserved;
   MigrationInProgress : record { canister : principal };
   ValidationInProgress : record { canister : principal };
-  SourceNotStopped : reserved;
+  MigratedCanisterNotStopped : reserved;
   RateLimited : reserved;
   MigrationsDisabled : reserved;
-  SourceNotReady : reserved;
-  SourceInsufficientCycles : reserved;
+  MigratedCanisterNotReady : reserved;
+  MigratedCanisterInsufficientCycles : reserved;
   SameSubnet : reserved;
-  TargetNotStopped : reserved;
+  ReplacedCanisterNotStopped : reserved;
 };
 
 type MigrationCanisterInitArgs = record { allowlist : opt vec principal };
@@ -33,9 +32,6 @@ type MigrationCanisterInitArgs = record { allowlist : opt vec principal };
 service : (MigrationCanisterInitArgs) -> {
   disable_api : () -> (MigrationCanisterResult);
   enable_api : () -> (MigrationCanisterResult);
-  list_events : (ListEventsArgs) -> (vec MigrationStatus) query;
   migrate_canister : (MigrateCanisterArgs) -> (ValidationResult);
-  // The same `(canister_id, replace_canister_id)` pair might be processed again after a failure
-  // and thus we return a vector.
-  migration_status : (MigrateCanisterArgs) -> (vec MigrationStatus) query;
+  migration_status : (MigrateCanisterArgs) -> (opt MigrationStatus) query;
 }

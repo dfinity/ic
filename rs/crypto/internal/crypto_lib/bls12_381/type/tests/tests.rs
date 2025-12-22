@@ -990,7 +990,7 @@ fn test_verify_bls_signature() {
 
     let sk = Scalar::random(rng);
     let pk = G2Affine::from(G2Affine::generator() * &sk);
-    let message = G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>());
+    let message = G1Affine::hash("bls_signature", &rng.r#gen::<[u8; 32]>());
     let signature = G1Affine::from(&message * &sk);
 
     assert!(verify_bls_signature(&signature, &pk, &message));
@@ -1033,7 +1033,7 @@ fn with_random_new_msgs_signed_by_existing_keys(
         let in_index = rng.gen_range(0..sigs.len());
         let out_index = rng.gen_range(0..result_sigs.len() + 1);
 
-        let rand_new_msg = G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>());
+        let rand_new_msg = G1Affine::hash("bls_signature", &rng.r#gen::<[u8; 32]>());
 
         let rand_selected_pk = pks[in_index].clone();
         let rand_selected_sk = sks[in_index].clone();
@@ -1092,7 +1092,7 @@ macro_rules! generic_test_verify_bls_signature_batch {
                 .map(|sk| G2Affine::from(G2Affine::generator() * sk))
                 .collect();
             let msgs: Vec<_> = (0..num_inputs)
-                .map(|_| G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>()))
+                .map(|_| G1Affine::hash("bls_signature", &rng.r#gen::<[u8; 32]>()))
                 .collect();
             let sigs: Vec<_> = sks
                 .iter()
@@ -1183,7 +1183,7 @@ macro_rules! generic_test_verify_bls_signature_batch {
                         .map(|(j, sig)| {
                             if j == i {
                                 // corrupt signature i
-                                G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>())
+                                G1Affine::hash("bls_signature", &rng.r#gen::<[u8; 32]>())
                             } else {
                                 sig.clone()
                             }
@@ -1244,7 +1244,7 @@ fn test_verify_bls_signature_batch_with_same_msg() {
             .iter()
             .map(|sk| G2Affine::from(G2Affine::generator() * sk))
             .collect();
-        let msg = G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>());
+        let msg = G1Affine::hash("bls_signature", &rng.r#gen::<[u8; 32]>());
         let sigs: Vec<_> = sks.iter().map(|sk| G1Affine::from(&msg * sk)).collect();
 
         for i in 0..num_inputs {
@@ -1270,7 +1270,7 @@ fn test_verify_bls_signature_batch_with_same_msg() {
 
         assert!(!verify_bls_signature_batch_same_msg(
             &sigs.iter().zip(pks.iter()).collect::<Vec<_>>()[..],
-            &G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>()),
+            &G1Affine::hash("bls_signature", &rng.r#gen::<[u8; 32]>()),
             rng
         ));
 
@@ -1322,7 +1322,7 @@ fn test_verify_bls_signature_batch_with_same_pk() {
         let sk = Scalar::random(rng);
         let pk = G2Affine::from(G2Affine::generator() * &sk);
         let msgs: Vec<_> = (0..num_inputs)
-            .map(|_| G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>()))
+            .map(|_| G1Affine::hash("bls_signature", &rng.r#gen::<[u8; 32]>()))
             .collect();
         let sigs: Vec<_> = msgs.iter().map(|msg| G1Affine::from(msg * &sk)).collect();
 
@@ -1398,30 +1398,30 @@ fn test_hash_to_scalar_matches_known_values() {
     // I was not able to locate any official test vectors for BLS12-381 hash_to_scalar
     // so these were just generated using ic_bls12_381 itself.
 
-    let dst = b"QUUX-V01-CS02-with-BLS12381SCALAR_XMD:SHA-256_SSWU_RO_";
+    let dst = "QUUX-V01-CS02-with-BLS12381SCALAR_XMD:SHA-256_SSWU_RO_";
 
     scalar_test_encoding(
-        Scalar::hash(&dst[..], b""),
+        Scalar::hash(dst, b""),
         "3b3fdf74b194c0a0f683d67a312a4e72d663d74b8478dc7b56be41e0ce11caa1",
     );
 
     scalar_test_encoding(
-        Scalar::hash(&dst[..], b"abc"),
+        Scalar::hash(dst, b"abc"),
         "47e7a8839695a3df27f202cf71e295a8554b47cef75c1e316b1865317720e188",
     );
 
     scalar_test_encoding(
-        Scalar::hash(&dst[..], b"abcdef0123456789"),
+        Scalar::hash(dst, b"abcdef0123456789"),
         "3dff572f262e702f2ee8fb79b70e3225f5ee543a389eea2e58eec7b2bfd6afeb",
     );
 
     scalar_test_encoding(
-        Scalar::hash(&dst[..], format!("q128_{}", "q".repeat(128)).as_bytes()),
+        Scalar::hash(dst, format!("q128_{}", "q".repeat(128)).as_bytes()),
         "2874c0e7814fcf42a5f63258417d4be8ea0465ff7352691493d0eca2dd5a9729",
     );
 
     scalar_test_encoding(
-        Scalar::hash(&dst[..], format!("a512_{}", "a".repeat(512)).as_bytes()),
+        Scalar::hash(dst, format!("a512_{}", "a".repeat(512)).as_bytes()),
         "3cf6864b1a81fba0798c370f6daf9c23a838f9dbb96ea3a3a1145899ddf259b4",
     );
 }
@@ -1443,30 +1443,30 @@ fn test_hash_to_g1_matches_draft() {
     (because the "sign" of the y coordinate happens to be 0 for this case)
     */
 
-    let dst = b"QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_";
+    let dst = "QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_";
 
     g1_test_encoding(
-        G1Affine::hash(&dst[..], b""),
+        G1Affine::hash(dst, b""),
         "852926add2207b76ca4fa57a8734416c8dc95e24501772c814278700eed6d1e4e8cf62d9c09db0fac349612b759e79a1",
     );
 
     g1_test_encoding(
-        G1Affine::hash(&dst[..], b"abc"),
+        G1Affine::hash(dst, b"abc"),
         "83567bc5ef9c690c2ab2ecdf6a96ef1c139cc0b2f284dca0a9a7943388a49a3aee664ba5379a7655d3c68900be2f6903",
     );
 
     g1_test_encoding(
-        G1Affine::hash(&dst[..], b"abcdef0123456789"),
+        G1Affine::hash(dst, b"abcdef0123456789"),
         "91e0b079dea29a68f0383ee94fed1b940995272407e3bb916bbf268c263ddd57a6a27200a784cbc248e84f357ce82d98",
     );
 
     g1_test_encoding(
-        G1Affine::hash(&dst[..], format!("q128_{}", "q".repeat(128)).as_bytes()),
+        G1Affine::hash(dst, format!("q128_{}", "q".repeat(128)).as_bytes()),
         "b5f68eaa693b95ccb85215dc65fa81038d69629f70aeee0d0f677cf22285e7bf58d7cb86eefe8f2e9bc3f8cb84fac488",
     );
 
     g1_test_encoding(
-        G1Affine::hash(&dst[..], format!("a512_{}", "a".repeat(512)).as_bytes()),
+        G1Affine::hash(dst, format!("a512_{}", "a".repeat(512)).as_bytes()),
         "882aabae8b7dedb0e78aeb619ad3bfd9277a2f77ba7fad20ef6aabdc6c31d19ba5a6d12283553294c1825c4b3ca2dcfe",
     );
 }
@@ -1483,30 +1483,30 @@ fn test_hash_to_g2_matches_draft() {
     However the serialization of G2 orders as <b> || <a> instead.
     */
 
-    let dst = b"QUUX-V01-CS02-with-BLS12381G2_XMD:SHA-256_SSWU_RO_";
+    let dst = "QUUX-V01-CS02-with-BLS12381G2_XMD:SHA-256_SSWU_RO_";
 
     g2_test_encoding(
-        G2Affine::hash(&dst[..], b""),
+        G2Affine::hash(dst, b""),
         "a5cb8437535e20ecffaef7752baddf98034139c38452458baeefab379ba13dff5bf5dd71b72418717047f5b0f37da03d0141ebfbdca40eb85b87142e130ab689c673cf60f1a3e98d69335266f30d9b8d4ac44c1038e9dcdd5393faf5c41fb78a",
     );
 
     g2_test_encoding(
-        G2Affine::hash(&dst[..], b"abc"),
+        G2Affine::hash(dst, b"abc"),
         "939cddbccdc5e91b9623efd38c49f81a6f83f175e80b06fc374de9eb4b41dfe4ca3a230ed250fbe3a2acf73a41177fd802c2d18e033b960562aae3cab37a27ce00d80ccd5ba4b7fe0e7a210245129dbec7780ccc7954725f4168aff2787776e6",
     );
 
     g2_test_encoding(
-        G2Affine::hash(&dst[..], b"abcdef0123456789"),
+        G2Affine::hash(dst, b"abcdef0123456789"),
         "990d119345b94fbd15497bcba94ecf7db2cbfd1e1fe7da034d26cbba169fb3968288b3fafb265f9ebd380512a71c3f2c121982811d2491fde9ba7ed31ef9ca474f0e1501297f68c298e9f4c0028add35aea8bb83d53c08cfc007c1e005723cd0",
     );
 
     g2_test_encoding(
-        G2Affine::hash(&dst[..], format!("q128_{}", "q".repeat(128)).as_bytes()),
+        G2Affine::hash(dst, format!("q128_{}", "q".repeat(128)).as_bytes()),
         "8934aba516a52d8ae479939a91998299c76d39cc0c035cd18813bec433f587e2d7a4fef038260eef0cef4d02aae3eb9119a84dd7248a1066f737cc34502ee5555bd3c19f2ecdb3c7d9e24dc65d4e25e50d83f0f77105e955d78f4762d33c17da",
     );
 
     g2_test_encoding(
-        G2Affine::hash(&dst[..], format!("a512_{}", "a".repeat(512)).as_bytes()),
+        G2Affine::hash(dst, format!("a512_{}", "a".repeat(512)).as_bytes()),
         "91fca2ff525572795a801eed17eb12785887c7b63fb77a42be46ce4a34131d71f7a73e95fee3f812aea3de78b4d0156901a6ba2f9a11fa5598b2d8ace0fbe0a0eacb65deceb476fbbcb64fd24557c2f4b18ecfc5663e54ae16a84f5ab7f62534",
     );
 }
@@ -1648,7 +1648,7 @@ impl BiasedValue for G1Projective {
         } else if coin < 30 {
             Self::generator().neg()
         } else {
-            Self::hash(b"random-g1-val-for-testing", &rng.r#gen::<[u8; 32]>())
+            Self::hash("random-g1-val-for-testing", &rng.r#gen::<[u8; 32]>())
         }
     }
 }
@@ -1666,7 +1666,7 @@ impl BiasedValue for G2Projective {
         } else if coin < 30 {
             Self::generator().neg()
         } else {
-            Self::hash(b"random-g2-val-for-testing", &rng.r#gen::<[u8; 32]>())
+            Self::hash("random-g2-val-for-testing", &rng.r#gen::<[u8; 32]>())
         }
     }
 }
@@ -1714,14 +1714,14 @@ test_point_operation!(serialization_round_trip, [g1, g2], {
     let rng = &mut reproducible_rng();
 
     for _ in 1..30 {
-        let orig = Projective::hash(b"serialization-round-trip-test", &rng.r#gen::<[u8; 32]>());
+        let orig = Affine::hash("serialization-round-trip-test", &rng.r#gen::<[u8; 32]>());
         let bits = orig.serialize();
 
-        let d = Projective::deserialize(&bits).expect("Invalid serialization");
+        let d = Affine::deserialize(&bits).expect("Invalid serialization");
         assert_eq!(orig, d);
         assert_eq!(d.serialize(), bits);
 
-        let du = Projective::deserialize_unchecked(&bits).expect("Invalid serialization");
+        let du = Affine::deserialize_unchecked(&bits).expect("Invalid serialization");
         assert_eq!(orig, du);
         assert_eq!(du.serialize(), bits);
     }
@@ -1834,20 +1834,28 @@ test_point_operation!(multiply, [g1, g2, gt], {
 test_point_operation!(mul_with_precompute, [g1, g2], {
     let rng = &mut reproducible_rng();
 
-    let g = Affine::hash(b"random-point-for-mul-precompute", &rng.r#gen::<[u8; 32]>());
+    let g = Affine::hash("random-point-for-mul-precompute", &rng.r#gen::<[u8; 32]>());
 
     let mut g_with_precompute = g.clone();
     g_with_precompute.precompute();
 
     let assert_same_result = |s: Scalar| {
-        let no_precomp = &g * &s;
-        let with_precomp = &g_with_precompute * &s;
-        assert_eq!(no_precomp, with_precomp);
+        let p1 = &g * &s;
+        let p2 = &g_with_precompute * &s;
+        let p3 = g.mul_vartime(&s);
+        let p4 = g_with_precompute.mul_vartime(&s);
+
+        assert_eq!(p1, p2);
+        assert_eq!(p2, p3);
+        assert_eq!(p3, p4);
     };
 
     assert_same_result(Scalar::zero());
     assert_same_result(Scalar::one());
     assert_same_result(Scalar::one().neg());
+    for _ in 0..1000 {
+        assert_same_result(Scalar::biased(rng));
+    }
     for _ in 0..1000 {
         assert_same_result(Scalar::random(rng));
     }
@@ -1856,7 +1864,7 @@ test_point_operation!(mul_with_precompute, [g1, g2], {
 test_point_operation!(batch_mul, [g1, g2], {
     let rng = &mut reproducible_rng();
 
-    let pt = Affine::hash(b"ic-crypto-batch-mul-test", &rng.r#gen::<[u8; 32]>());
+    let pt = Affine::hash("ic-crypto-batch-mul-test", &rng.r#gen::<[u8; 32]>());
 
     for i in 0..20 {
         let scalars = Scalar::batch_random(rng, i);
@@ -1893,6 +1901,34 @@ test_point_operation!(mul2, [g1, g2], {
 
         assert_eq!(Projective::mul2(&p1, &s1, &p2, &s2), reference);
         assert_eq!(Projective::mul2(&p2, &s2, &p1, &s1), reference);
+    }
+});
+
+test_point_operation!(mul2_vartime, [g1, g2], {
+    let rng = &mut reproducible_rng();
+
+    let g = Projective::generator();
+    let zero = Scalar::zero();
+    let one = Scalar::one();
+
+    assert_eq!(
+        Projective::mul2_vartime(g, &zero, g, &zero),
+        Projective::identity()
+    );
+    assert_eq!(Projective::mul2_vartime(g, &one, g, &zero), *g);
+    assert_eq!(Projective::mul2_vartime(g, &zero, g, &one), *g);
+
+    for _ in 0..1000 {
+        let s1 = Scalar::biased(rng);
+        let s2 = Scalar::biased(rng);
+
+        let p1 = Projective::biased(rng);
+        let p2 = Projective::biased(rng);
+
+        let reference = &p1 * &s1 + &p2 * &s2;
+
+        assert_eq!(Projective::mul2_vartime(&p1, &s1, &p2, &s2), reference);
+        assert_eq!(Projective::mul2_vartime(&p2, &s2, &p1, &s1), reference);
     }
 });
 
@@ -1991,6 +2027,36 @@ test_point_operation!(muln, [g1, g2], {
             .fold(Projective::identity(), |accum, (p, s)| accum + p * s);
 
         let computed = Projective::muln_vartime(&points[..], &scalars[..]);
+
+        assert_eq!(computed, reference_val);
+    }
+});
+
+test_point_operation!(muln_affine, [g1, g2], {
+    let rng = &mut reproducible_rng();
+
+    assert_eq!(
+        Projective::muln_affine_vartime(&[], &[]),
+        Projective::identity()
+    );
+
+    for t in 1..100 {
+        let mut points = Vec::with_capacity(t);
+        let mut scalars = Vec::with_capacity(t);
+
+        for _ in 0..t {
+            points.push(Projective::biased(rng));
+            scalars.push(Scalar::biased(rng));
+        }
+
+        let points = Projective::batch_normalize(&points);
+
+        let reference_val = points
+            .iter()
+            .zip(scalars.iter())
+            .fold(Projective::identity(), |accum, (p, s)| accum + p * s);
+
+        let computed = Projective::muln_affine_vartime(&points[..], &scalars[..]);
 
         assert_eq!(computed, reference_val);
     }

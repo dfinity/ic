@@ -76,6 +76,7 @@ rs/nns/cmc/*.rs //rs/tests/nns:nns_cycles_minting_test
 rs/backup/*.rs //rs/tests/consensus/backup/...
 
 rs/orchestrator/*.rs //rs/tests/consensus/orchestrator/...
+                     //rs/tests/consensus/upgrade/...
 
 *guestos-recovery-engine* //rs/tests/consensus:guestos_recovery_engine_smoke_test
                           //rs/tests/nested/nns_recovery/...
@@ -93,3 +94,5 @@ rs/bitcoin/* //rs/tests/ckbtc:btc_adapter_basics_test
              //rs/tests/execution:btc_get_balance_test_colocate
 
 rs/boundary_node/rate_limits/* //rs/tests/boundary_nodes:rate_limit_canister_test
+
+rs/migration_canister/* //rs/tests/execution:canister_migration_test_head_nns

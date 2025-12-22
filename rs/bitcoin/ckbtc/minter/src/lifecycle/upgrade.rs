@@ -1,9 +1,9 @@
 use crate::CanisterRuntime;
 use crate::logs::Priority;
-use crate::state::eventlog::{EventType, replay};
+use crate::state::eventlog::{EventLogger, EventType};
 use crate::state::invariants::CheckInvariantsImpl;
 use crate::state::{Mode, replace_state};
-use crate::storage::{count_events, events, migrate_old_events_if_not_empty, record_event};
+use crate::storage::{count_events, migrate_old_events_if_not_empty, record_event};
 use candid::{CandidType, Deserialize};
 use canlog::log;
 use ic_base_types::CanisterId;
@@ -49,6 +49,14 @@ pub struct UpgradeArgs {
     /// the get_utxos cache.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub get_utxos_cache_expiration_seconds: Option<u64>,
+
+    /// The minimum number of available UTXOs required to trigger a conslidation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub utxo_consolidation_threshold: Option<u64>,
+
+    /// The maximum number of input UTXOs allowed in a transaction.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_num_inputs_in_transaction: Option<u64>,
 }
 
 pub fn post_upgrade<R: CanisterRuntime>(upgrade_args: Option<UpgradeArgs>, runtime: &R) {
@@ -76,11 +84,15 @@ pub fn post_upgrade<R: CanisterRuntime>(upgrade_args: Option<UpgradeArgs>, runti
         count_events()
     );
 
-    let state = replay::<CheckInvariantsImpl>(events()).unwrap_or_else(|e| {
-        ic_cdk::trap(format!("[upgrade]: failed to replay the event log: {e:?}"))
-    });
+    let event_logger = runtime.event_logger();
 
-    state.validate_config();
+    let state = event_logger
+        .replay::<CheckInvariantsImpl>(event_logger.events_iter())
+        .unwrap_or_else(|e| {
+            ic_cdk::trap(format!("[upgrade]: failed to replay the event log: {e:?}"))
+        });
+
+    runtime.validate_config(&state);
 
     replace_state(state);
 

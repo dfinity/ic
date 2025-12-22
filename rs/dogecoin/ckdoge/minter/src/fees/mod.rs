@@ -1,15 +1,14 @@
 #[cfg(test)]
 mod tests;
 
-use crate::Utxo;
 use crate::candid_api::WithdrawalFee;
 use crate::lifecycle::init::Network;
 use crate::tx::UnsignedTransaction;
 use ic_ckbtc_minter::{
     BuildTxError, MillisatoshiPerByte, Satoshi, address::BitcoinAddress, fees::FeeEstimator,
+    state::utxos::UtxoSet,
 };
 use std::cmp::max;
-use std::collections::BTreeSet;
 
 // TODO DEFI-2458: have proper domain design for handling units:
 // * fee rate (millisatoshis/vbyte or millikoinus/byte)
@@ -132,26 +131,24 @@ impl FeeEstimator for DogecoinFeeEstimator {
 }
 
 pub fn estimate_retrieve_doge_fee<F: FeeEstimator>(
-    available_utxos: &BTreeSet<Utxo>,
+    available_utxos: &mut UtxoSet,
     withdrawal_amount: u64,
     median_fee_millikoinu_per_byte: u64,
+    max_num_inputs_in_transaction: usize,
     fee_estimator: &F,
 ) -> Result<WithdrawalFee, BuildTxError> {
-    // We simulate the algorithm that selects UTXOs for the
-    // specified amount.
-    // TODO DEFI-2518: remove expensive clone operation
-    let mut utxos = available_utxos.clone();
-
+    // We simulate the algorithm that selects UTXOs for the specified amount.
     // Only the address type matters for the amount of bytes, not the actual bytes in the address.
     let dummy_minter_address = BitcoinAddress::P2pkh([u8::MAX; 20]);
     let dummy_recipient_address = BitcoinAddress::P2pkh([42_u8; 20]);
 
     ic_ckbtc_minter::queries::estimate_withdrawal_fee(
-        &mut utxos,
+        available_utxos,
         withdrawal_amount,
         median_fee_millikoinu_per_byte,
         dummy_minter_address,
         dummy_recipient_address,
+        max_num_inputs_in_transaction,
         fee_estimator,
     )
     .map(WithdrawalFee::from)

@@ -27,7 +27,7 @@ impl CspSigner for Csp {
             AlgorithmId::Ed25519 => {
                 let result = self
                     .csp_vault
-                    .sign(algorithm_id, message, key_id)
+                    .sign(message)
                     .map_err(CspBasicSignatureError::into);
                 self.metrics.observe_parameter_size(
                     MetricsDomain::BasicSignature,

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 11.0.0 - 2025-12-05
+
 ### Added
 - The function `PocketIcBuilder::with_initial_time` to specify the initial timestamp of the newly created PocketIC instance.
 - The parameter `ttl` to `StartServerParams` to specify the TTL of the PocketIC server.
@@ -15,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for Dogecoin support in PocketIC.
 - The function `PocketIc::canister_snapshot_download` to download a canister snapshot to a given snapshot directory.
 - The function `PocketIc::canister_snapshot_upload` to upload a canister snapshot from a given snapshot directory.
+- The types `TickConfigs` and `SubnetBlockmakers` used as argument of `PocketIc::tick_with_configs`
+  instead of the server REST API types `RawTickConfigs` and `RawSubnetBlockmakers`.
 
 ### Changed
 - Deprecated `PocketIcBuilder::with_initial_timestamp`, use `PocketIcBuilder::with_initial_time` instead.
