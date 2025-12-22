@@ -29,6 +29,7 @@ rust_library(
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nested",
+        "//rs/tests/testnets/mainnet_nns:lib",
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:rand",
@@ -57,22 +58,39 @@ system_test_nns(
     ],
 )
 
+# To run this test,
+#
+#     bazel \
+#         test \
+#         --test_env=SSH_AUTH_SOCK \
+#         --test_timeout=10800 \  # 3 hours
+#         //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state
+#
+# The only unusual thing in this command is `--test_env=SSH_AUTH_SOCK`. That causes the
+# SSH_AUTH_SOCK environment variable to be "forwarded" from your shell to the sandbox where the test
+# is run. This authorizes the test to download the test data.
 system_test_nns(
-    name = "nr_large",
+    name = "nr_large_with_mainnet_state",
     data = [
         "//rs/tests:recovery/binaries",
     ],
     enable_head_nns_variant = False,
     env = ENV,
     flaky = True,
+    guestos = "mainnet_nns_dev",  # necessary for configuring NNS public key
     guestos_update = "test",
     tags = [
-        "manual",
-        "system_test_large",
+        "manual", # to prevent the job to be ran twice.
+        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
+        "requires-network",  # Because mainnet state is downloaded (and used).
     ],
-    test_timeout = "eternal",
-    uses_setupos_img = True,
-    runtime_deps = RUNTIME_DEPS,
+    test_timeout = "eternal", # "eternal" (1 hour) is not even enough for this test. Use `--test_timeout=10800` when running it.
+    uses_setupos_mainnet_latest_img = True,
+    runtime_deps = RUNTIME_DEPS | {
+        # TODO (CON-1624): Remove those dependencies once changes reached mainnet NNS
+        "IC_RECOVERY_PATH": "//rs/recovery:ic-recovery",
+        "IC_REPLAY_PATH": "//rs/replay:ic-replay",
+    },
     deps = [
         # Keep sorted.
         ":common",
