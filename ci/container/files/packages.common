@@ -14,6 +14,7 @@ shellcheck
 xxd
 vim
 retry
+zip
 
 # Bitcoin core (for bitcoin adapter integration test)
 libtool
@@ -27,10 +28,9 @@ jq
 rclone
 time
 qemu-system-x86
-
-# Test
-rsync
-lcov
+podman # rosetta-release.yml
+rsync # container-base-images.yml
+lcov # used for bazel coverage
 
 # RUST
 gcc
@@ -72,3 +72,7 @@ python-is-python3
 python3
 python3-pip
 zstd
+
+# Unknown
+containernetworking-plugins
+buildah
