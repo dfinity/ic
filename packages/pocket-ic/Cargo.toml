@@ -50,7 +50,7 @@ tracing-subscriber = { workspace = true }
 wslpath = "0.0.2"
 
 [dev-dependencies]
-bitcoin = { workspace = true }
+bitcoin = { version = "0.28.2" }
 candid_parser = { workspace = true }
 cycles-minting-canister = { path = "../../rs/nns/cmc" }
 ed25519-dalek = { workspace = true }

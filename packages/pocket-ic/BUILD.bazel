@@ -86,7 +86,7 @@ rust_test(
         "//rs/registry/helpers",
         "//rs/registry/proto_data_provider",
         "//rs/types/base_types",
-        "@crate_index//:bitcoin_dogecoin",
+        "@crate_index//:bitcoin-0.28.2",
         "@crate_index//:candid",
         "@crate_index//:ed25519-dalek",
         "@crate_index//:flate2",
