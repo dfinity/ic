@@ -703,7 +703,7 @@ fn test_scalarbytes_deserialization_with_old_cbor_format() {
 
     for (curve, bytes) in &old_ser {
         let sb: EccScalarBytes =
-            serde_cbor::from_slice(&bytes).expect("Failed to deserialize CBOR encoding");
+            serde_cbor::from_slice(bytes).expect("Failed to deserialize CBOR encoding");
 
         assert_eq!(*curve, sb.curve_type());
 
@@ -727,7 +727,7 @@ fn test_scalarbytes_deserialization_compact_cbor_format() {
 
     for (curve, bytes) in &old_ser {
         let sb: EccScalarBytes =
-            serde_cbor::from_slice(&bytes).expect("Failed to deserialize CBOR encoding");
+            serde_cbor::from_slice(bytes).expect("Failed to deserialize CBOR encoding");
 
         assert_eq!(*curve, sb.curve_type());
 
