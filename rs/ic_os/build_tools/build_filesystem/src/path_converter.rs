@@ -18,8 +18,7 @@ impl PathConverter {
     /// Converts a path from the source filesystem to the target filesystem image.
     /// (removes the subdir prefix)
     ///
-    /// Returns `None` if the path does not start with the subdir that is it is not be included
-    /// in the target.
+    /// Returns `None` if the path is outside the subdir to be included in the target.
     pub fn source_to_target(&self, source_path: &ImagePath) -> Option<ImagePath> {
         match &self.subdir {
             Some(subdir) => match source_path.0.strip_prefix(subdir) {

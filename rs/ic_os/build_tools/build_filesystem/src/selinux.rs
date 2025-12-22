@@ -55,7 +55,7 @@ impl FileContexts {
             "Path must be absolute: {}",
             path.display()
         );
-        // File access modes from https://man7.org/linux/man-pages/man2/stat.2.html
+        // File access modes from https://man7.org/linux/man-pages/man7/inode.7.html
         // S_IFDIR = 0o040000, S_IFREG = 0o100000, S_IFLNK = 0o120000
         let mode_value = match file_type {
             FileType::Directory => 0o040000,

@@ -1,6 +1,7 @@
 # Add security.selinux to the xattr filter in create_inode_libarchive.c
 # This ensures that security.selinux xattrs are preserved when creating
 # filesystem images from tar archives.
+# See: https://github.com/tytso/e2fsprogs/issues/255
 diff --git a/misc/create_inode_libarchive.c b/misc/create_inode_libarchive.c
 index 1234567..abcdefg 100644
 --- a/misc/create_inode_libarchive.c

@@ -121,21 +121,19 @@ fn main() -> Result<()> {
 /// Main build_filesystem logic that can be called programmatically
 pub(crate) fn build_filesystem(args: Args) -> Result<()> {
     let output_str = args.output.to_str().unwrap_or_default();
+    let valid_extensions = [".tar", ".tar.zst", ".tzst", ".img"];
     ensure!(
-        output_str.ends_with(".tar")
-            || output_str.ends_with(".tar.zst")
-            || output_str.ends_with(".tzst")
-            || output_str.ends_with(".img"),
-        "Output file must have .tar, .tar.zst, .tzst, or .img extension: {}",
-        args.output.display()
+        valid_extensions.iter().any(|ext| output_str.ends_with(ext)),
+        "Output file must have one of the following extensions: {}",
+        valid_extensions.join(", ")
     );
 
     if args.output_type == OutputType::Tar {
+        let tar_extensions = [".tar", ".tar.zst", ".tzst"];
         ensure!(
-            output_str.ends_with(".tar")
-                || output_str.ends_with(".tar.zst")
-                || output_str.ends_with(".tzst"),
-            "Output file for tar must have .tar, .tar.zst or .tzst extension: {}",
+            tar_extensions.iter().any(|ext| output_str.ends_with(ext)),
+            "Output file for tar must have one of the following extensions: {}",
+            tar_extensions.join(", ")
             args.output.display()
         );
         ensure!(
