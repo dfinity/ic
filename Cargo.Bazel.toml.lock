@@ -3777,7 +3777,7 @@ dependencies = [
  "nftables",
  "nix 0.24.3",
  "num-bigint 0.4.6",
- "num-bigint-dig",
+ "num-bigint-dig 0.9.1",
  "num-rational 0.2.4",
  "num-traits",
  "num_cpus",
@@ -8844,9 +8844,24 @@ dependencies = [
  "num-iter",
  "num-traits",
  "rand 0.8.5",
- "serde",
  "smallvec",
  "zeroize",
+]
+
+[[package]]
+name = "num-bigint-dig"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7f9a86e097b0d187ad0e65667c2f58b9254671e86e7dbb78036b16692eae099"
+dependencies = [
+ "libm",
+ "num-integer",
+ "num-iter",
+ "num-traits",
+ "once_cell",
+ "rand 0.9.0",
+ "serde",
+ "smallvec",
 ]
 
 [[package]]
@@ -11484,7 +11499,7 @@ checksum = "5d0e5124fcb30e76a7e79bfee683a2746db83784b86289f6251b54b7950a0dfc"
 dependencies = [
  "const-oid",
  "digest 0.10.7",
- "num-bigint-dig",
+ "num-bigint-dig 0.8.4",
  "num-integer",
  "num-traits",
  "pkcs1",
