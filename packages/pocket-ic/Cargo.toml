@@ -50,6 +50,7 @@ tracing-subscriber = { workspace = true }
 wslpath = "0.0.2"
 
 [dev-dependencies]
+#TODO: try upgrading this to the latest bitcion crate
 bitcoin = { version = "0.28.2" }
 candid_parser = { workspace = true }
 cycles-minting-canister = { path = "../../rs/nns/cmc" }
