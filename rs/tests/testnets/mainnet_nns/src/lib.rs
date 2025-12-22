@@ -147,8 +147,20 @@ pub fn setup(env: TestEnv) {
 
     write_sh_lib(&env, neuron_id, &http_gateway_url);
 
+    info!(
+        env.logger(),
+        "Patching test environment's registry local store..."
+    );
     patch_env_local_store(&env);
+    info!(
+        env.logger(),
+        "Patching test environment's root public key..."
+    );
     patch_env_root_public_key(&env);
+    info!(
+        env.logger(),
+        "Removing large files to speed up subsequent test tasks..."
+    );
     remove_large_files(&env);
 }
 
@@ -769,6 +781,8 @@ fn patch_env_local_store(env: &TestEnv) {
     .unwrap();
 }
 
+// Overwrite the root public key of the test environment with the new one, corresponding to the
+// recovered NNS. This enables future nested VMs to register using the correct root public key.
 fn patch_env_root_public_key(env: &TestEnv) {
     std::fs::copy(
         env.get_path(PATH_RECOVERED_NNS_PUBLIC_KEY_PEM),
@@ -777,6 +791,9 @@ fn patch_env_root_public_key(env: &TestEnv) {
     .unwrap();
 }
 
+// Remove large files inside the test environment that are no longer needed to speed up the
+// transition between `setup` and following `test` tasks, since every `test` task will copy the
+// `setup` test environment to a new location.
 fn remove_large_files(env: &TestEnv) {
     let mut rm = Command::new("rm");
     rm.arg("-rf")

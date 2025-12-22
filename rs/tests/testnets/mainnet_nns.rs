@@ -5,8 +5,7 @@
 //
 // This is achieved by creating an initial NNS subnet and an unasigned node. We recover the initial
 // NNS on the unassigned node while also using the mainnet state, previously downloaded from the
-// backup pod. The API BN is then patched to re-register itself to the new NNS since the latter do
-// not know of its existence.
+// backup pod.
 // We also add a test neuron who is followed by the mainnet neurons with large stake such that any
 // proposal can later be passed instantly.
 //
