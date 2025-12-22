@@ -549,7 +549,7 @@ fn fetch_recovered_nns_public_key_pem(recovered_nns_node: &IcNodeSnapshot) -> Ve
     block_on(recovered_nns_agent.fetch_root_key()).unwrap();
     let der_encoded = recovered_nns_agent.read_root_key();
 
-    public_key_der_to_pem(der_encoded)
+    public_key_der_to_pem(&der_encoded)
 }
 
 fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcNodeSnapshot) {
