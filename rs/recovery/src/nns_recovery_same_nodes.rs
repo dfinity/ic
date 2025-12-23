@@ -1,8 +1,8 @@
 use crate::{
     RecoveryArgs, RecoveryResult,
     cli::{
-        consent_given, print_height_info, read_optional, read_optional_data_location,
-        read_optional_version,
+        consent_given, print_height_info, read_existing_path, read_optional,
+        read_optional_data_location, read_optional_version,
     },
     error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
@@ -131,6 +131,10 @@ pub struct NNSRecoverySameNodesArgs {
     /// SHA256 hash of the upgrade image
     #[clap(long)]
     pub upgrade_image_hash: Option<String>,
+
+    /// Path to the file containing the guest launch measurements for the upgrade image
+    #[clap(long)]
+    pub upgrade_image_launch_measurements_path: Option<PathBuf>,
 
     /// Whether to add and bless the upgrade version before upgrading the subnet to it.
     #[clap(long)]
@@ -288,13 +292,29 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                     self.params.upgrade_version =
                         read_optional_version(&self.logger, "Upgrade version: ");
                 };
-                if self.params.upgrade_version.is_some()
-                    && self.params.add_and_bless_upgrade_version.is_none()
-                {
-                    self.params.add_and_bless_upgrade_version = Some(consent_given(
-                        &self.logger,
-                        "Add and bless the upgrade version before upgrading the subnet?",
-                    ));
+                if let Some(upgrade_version) = &self.params.upgrade_version {
+                    if self.params.add_and_bless_upgrade_version.is_none() {
+                        self.params.add_and_bless_upgrade_version = Some(consent_given(
+                            &self.logger,
+                            &format!(
+                                "Add and bless version {} before upgrading the subnet?",
+                                upgrade_version
+                            ),
+                        ));
+                    }
+
+                    if self.params.add_and_bless_upgrade_version == Some(true)
+                        && self.params.upgrade_image_launch_measurements_path.is_none()
+                    {
+                        self.params.upgrade_image_launch_measurements_path =
+                            Some(read_existing_path(
+                                &self.logger,
+                                &format!(
+                                    "Enter path to guest launch measurements file for version {}: ",
+                                    upgrade_version,
+                                ),
+                            ));
+                    }
                 }
 
                 if self.params.replay_until_height.is_none() {
@@ -408,6 +428,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                         upgrade_version,
                         url,
                         hash,
+                        params.upgrade_image_launch_measurements_path,
                         params.add_and_bless_upgrade_version == Some(true),
                         self.params.replay_until_height,
                         !self.interactive(),
