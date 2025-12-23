@@ -669,6 +669,30 @@ impl CkEthSetup {
             2_000_000,
         ]
     }
+
+    pub fn decode_ledger_memo(
+        &self,
+        memo_type: MemoType,
+        encoded_memo: Vec<u8>,
+    ) -> DecodeLedgerMemoResult {
+        Decode!(
+            &assert_reply(
+                self.env
+                    .query(
+                        self.minter_id,
+                        "decode_ledger_memo",
+                        Encode!(&DecodeLedgerMemoArgs {
+                            memo_type,
+                            encoded_memo
+                        })
+                        .unwrap()
+                    )
+                    .expect("failed to call decode_ledger_memo")
+            ),
+            DecodeLedgerMemoResult
+        )
+        .unwrap()
+    }
 }
 
 pub fn format_ethereum_address_to_eip_55(address: &str) -> String {

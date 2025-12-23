@@ -1282,6 +1282,11 @@ fn format_ethereum_address_to_eip_55(address: &str) -> String {
     Address::from_str(address).unwrap().to_string()
 }
 
+#[test]
+fn should_decode_ledger_memo() {
+    let cketh = CkEthSetup::default();
+}
+
 /// Tests with the EVM RPC canister
 mod cketh_evm_rpc {
     use super::*;
