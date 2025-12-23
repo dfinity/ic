@@ -61,6 +61,13 @@ fn default_canister_state_bits() -> CanisterStateBits {
         next_snapshot_id: 0,
         snapshots_memory_usage: NumBytes::from(0),
         environment_variables: BTreeMap::new(),
+        instructions_executed: NumInstructions::new(0),
+        ingress_messages_executed: NumMessages::new(0),
+        xnet_messages_executed: NumMessages::new(0),
+        intranet_messages_executed: NumMessages::new(0),
+        http_outcalls_executed: 0,
+        heartbeats_executed: 0,
+        global_timers_executed: 0,
     }
 }
 
