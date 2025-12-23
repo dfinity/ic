@@ -344,7 +344,6 @@ pub fn parse_dogecoin_address(network: Network, tx_out: &TxOut) -> bitcoin::doge
 pub fn into_rust_dogecoin_network(network: Network) -> bitcoin::dogecoin::Network {
     match network {
         Network::Mainnet => bitcoin::dogecoin::Network::Dogecoin,
-        Network::Testnet => bitcoin::dogecoin::Network::Testnet,
         Network::Regtest => bitcoin::dogecoin::Network::Regtest,
     }
 }
