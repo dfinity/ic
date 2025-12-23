@@ -1,5 +1,5 @@
 use crate::address::DogecoinAddress;
-use ic_ckbtc_minter::{CanisterRuntime, ECDSAPublicKey, management};
+use ic_ckbtc_minter::{CanisterRuntime, ECDSAPublicKey, management, tx::SignedRawTransaction};
 use icrc_ledger_types::icrc1::account::Account;
 
 pub struct DogecoinTransactionSigner {
@@ -13,7 +13,7 @@ impl DogecoinTransactionSigner {
         unsigned_tx: ic_ckbtc_minter::tx::UnsignedTransaction,
         accounts: Vec<Account>,
         runtime: &R,
-    ) -> Result<bitcoin::Transaction, management::CallError> {
+    ) -> Result<SignedRawTransaction, management::CallError> {
         use bitcoin::hashes::Hash;
 
         assert_eq!(
@@ -118,7 +118,11 @@ impl DogecoinTransactionSigner {
             .for_each(|(input, script_sig)| {
                 input.script_sig = script_sig;
             });
+        let txid = ic_ckbtc_minter::Txid::from(signed_tx.compute_txid().to_byte_array());
 
-        Ok(signed_tx)
+        Ok(SignedRawTransaction::new(
+            bitcoin::consensus::encode::serialize(&signed_tx),
+            txid,
+        ))
     }
 }
