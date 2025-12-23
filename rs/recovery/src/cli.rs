@@ -264,6 +264,8 @@ pub fn read_optional_data_location(logger: &Logger, prompt: &str) -> Option<Data
     read_optional_type(logger, prompt, data_location_from_str)
 }
 
+/// Read an optional input of the generic type by applying the given deserialization function if the
+/// input is not empty.
 fn read_optional_type<T, E: Display>(
     logger: &Logger,
     prompt: &str,
