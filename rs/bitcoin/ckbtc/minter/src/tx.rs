@@ -577,6 +577,13 @@ pub struct BitcoinTransactionSigner {
 }
 
 impl BitcoinTransactionSigner {
+    pub fn new(key_name: String, ecdsa_public_key: ECDSAPublicKey) -> Self {
+        Self {
+            key_name,
+            ecdsa_public_key,
+        }
+    }
+
     pub async fn sign_transaction<R: CanisterRuntime>(
         &self,
         unsigned_tx: crate::tx::UnsignedTransaction,

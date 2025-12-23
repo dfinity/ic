@@ -21,6 +21,7 @@ use crate::fees::{BitcoinFeeEstimator, FeeEstimator};
 use crate::state::eventlog::{CkBtcEventLogger, EventLogger};
 use crate::state::utxos::UtxoSet;
 use crate::state::{CkBtcMinterState, mutate_state, read_state};
+use crate::tx::{BitcoinTransactionSigner, SignedRawTransaction, UnsignedTransaction};
 use crate::updates::get_btc_address;
 use crate::updates::retrieve_btc::BtcAddressCheckStatus;
 pub use ic_btc_checker::CheckTransactionResponse;
@@ -1657,6 +1658,12 @@ pub trait CanisterRuntime {
         memo: Memo,
     ) -> Result<u64, UpdateBalanceError>;
 
+    async fn sign_transaction(
+        &self,
+        state: &CkBtcMinterState,
+        unsigned_tx: crate::tx::UnsignedTransaction,
+    ) -> Result<SignedRawTransaction, CallError>;
+
     async fn sign_with_ecdsa(
         &self,
         key_name: String,
@@ -1734,6 +1741,22 @@ impl CanisterRuntime for IcCanisterRuntime {
         memo: Memo,
     ) -> Result<u64, UpdateBalanceError> {
         updates::update_balance::mint(amount, to, memo).await
+    }
+
+    async fn sign_transaction(
+        &self,
+        state: &CkBtcMinterState,
+        unsigned_tx: UnsignedTransaction,
+    ) -> Result<SignedRawTransaction, CallError> {
+        let signer = BitcoinTransactionSigner::new(
+            state.ecdsa_key_name.clone(),
+            state
+                .ecdsa_public_key
+                .clone()
+                .expect("BUG: minter is not initialized"),
+        );
+        let accounts = state.find_all_accounts(&unsigned_tx);
+        signer.sign_transaction(unsigned_tx, accounts, self).await
     }
 
     async fn sign_with_ecdsa(
