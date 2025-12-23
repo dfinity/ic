@@ -369,6 +369,16 @@ impl SignedRawTransaction {
     pub fn new(signed_tx: Vec<u8>, txid: Txid) -> Self {
         Self { signed_tx, txid }
     }
+
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.signed_tx
+    }
+}
+
+impl AsRef<[u8]> for SignedRawTransaction {
+    fn as_ref(&self) -> &[u8] {
+        &self.signed_tx
+    }
 }
 
 #[derive(Eq, PartialEq, Debug, Clone)]

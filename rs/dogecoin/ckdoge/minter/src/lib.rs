@@ -23,8 +23,8 @@ pub use dogecoin_canister::get_dogecoin_canister_id;
 use ic_cdk::management_canister::SignWithEcdsaArgs;
 use ic_ckbtc_minter::tx::{SignedRawTransaction, UnsignedTransaction};
 use ic_ckbtc_minter::{
-    CanisterRuntime, CheckTransactionResponse, GetCurrentFeePercentilesRequest, GetUtxosRequest,
-    GetUtxosResponse, management::CallError, state::CkBtcMinterState, tx,
+    CanisterRuntime, CheckTransactionResponse, ECDSAPublicKey, GetCurrentFeePercentilesRequest,
+    GetUtxosRequest, GetUtxosResponse, management::CallError, state::CkBtcMinterState, tx,
     updates::retrieve_btc::BtcAddressCheckStatus,
 };
 pub use ic_ckbtc_minter::{
@@ -102,17 +102,12 @@ impl CanisterRuntime for DogeCanisterRuntime {
 
     async fn sign_transaction(
         &self,
-        state: &CkBtcMinterState,
+        key_name: String,
+        ecdsa_public_key: ECDSAPublicKey,
         unsigned_tx: UnsignedTransaction,
+        accounts: Vec<Account>,
     ) -> Result<SignedRawTransaction, CallError> {
-        let signer = DogecoinTransactionSigner::new(
-            state.ecdsa_key_name.clone(),
-            state
-                .ecdsa_public_key
-                .clone()
-                .expect("BUG: minter is not initialized"),
-        );
-        let accounts = state.find_all_accounts(&unsigned_tx);
+        let signer = DogecoinTransactionSigner::new(key_name, ecdsa_public_key);
         signer.sign_transaction(unsigned_tx, accounts, self).await
     }
 

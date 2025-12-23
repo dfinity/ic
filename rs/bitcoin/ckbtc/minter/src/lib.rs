@@ -164,6 +164,7 @@ struct SignTxRequest {
     network: Network,
     ecdsa_public_key: ECDSAPublicKey,
     unsigned_tx: tx::UnsignedTransaction,
+    accounts: Vec<Account>,
     change_output: state::ChangeOutput,
     requests: state::SubmittedWithdrawalRequests,
     utxos: Vec<Utxo>,
@@ -362,6 +363,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                     ecdsa_public_key,
                     change_output,
                     network: s.btc_network,
+                    accounts: s.find_all_accounts(&unsigned_tx),
                     unsigned_tx,
                     requests: state::SubmittedWithdrawalRequests::ToConfirm {
                         requests: batch.into_iter().collect(),
@@ -489,21 +491,21 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
     });
 
     let txid = req.unsigned_tx.txid();
-    let signed_tx = sign_transaction(
-        req.key_name,
-        &req.ecdsa_public_key,
-        |outpoint| state::read_state(|s| s.outpoint_account.get(outpoint).cloned()),
-        req.unsigned_tx,
-        runtime,
-    )
-    .await
-    .inspect_err(|err| {
-        log!(
-            Priority::Info,
-            "[sign_and_submit_request]: failed to sign a Bitcoin transaction: {}",
-            err
-        );
-    })?;
+    let signed_tx = runtime
+        .sign_transaction(
+            req.key_name,
+            req.ecdsa_public_key,
+            req.unsigned_tx,
+            req.accounts,
+        )
+        .await
+        .inspect_err(|err| {
+            log!(
+                Priority::Info,
+                "[sign_and_submit_request]: failed to sign a Bitcoin transaction: {}",
+                err
+            );
+        })?;
 
     state::mutate_state(|s| {
         for block_index in requests_guard.0.iter_block_index() {
@@ -514,10 +516,11 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
     log!(
         Priority::Info,
         "[sign_and_submit_request]: sending a signed transaction {}",
-        hex::encode(tx::encode_into(&signed_tx, Vec::new()))
+        hex::encode(&signed_tx)
     );
+    let signed_tx_bytes = signed_tx.into_bytes();
     runtime
-        .send_transaction(&signed_tx, req.network)
+        .send_raw_transaction(signed_tx_bytes.clone(), req.network)
         .await
         .inspect_err(|err| {
             log!(
@@ -538,7 +541,7 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
 
     // Only fill signed_tx when it is a consolidation transaction.
     let signed_tx = match requests {
-        state::SubmittedWithdrawalRequests::ToConsolidate { .. } => Some(signed_tx.serialize()),
+        state::SubmittedWithdrawalRequests::ToConsolidate { .. } => Some(signed_tx_bytes),
         _ => None,
     };
 
@@ -759,7 +762,6 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R) {
         btc_network,
         state::read_state(|s| s.retrieve_btc_min_amount),
         maybe_finalized_transactions,
-        |outpoint| state::read_state(|s| s.outpoint_account.get(outpoint).cloned()),
         |old_txid, new_tx, reason| {
             state::mutate_state(|s| {
                 state::audit::replace_transaction(s, old_txid, new_tx, reason, runtime);
@@ -773,7 +775,6 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R) {
 
 pub async fn resubmit_transactions<
     R: CanisterRuntime,
-    F: Fn(&OutPoint) -> Option<Account>,
     G: Fn(Txid, state::SubmittedBtcTransaction, state::eventlog::ReplacedReason),
     Fee: FeeEstimator,
 >(
@@ -784,7 +785,6 @@ pub async fn resubmit_transactions<
     btc_network: Network,
     retrieve_btc_min_amount: u64,
     transactions: BTreeMap<Txid, state::SubmittedBtcTransaction>,
-    lookup_outpoint_account: F,
     replace_transaction: G,
     runtime: &R,
     fee_estimator: &Fee,
@@ -922,14 +922,15 @@ pub async fn resubmit_transactions<
         };
 
         let new_txid = unsigned_tx.txid();
-        let maybe_signed_tx = sign_transaction(
-            key_name.to_string(),
-            &ecdsa_public_key,
-            &lookup_outpoint_account,
-            unsigned_tx,
-            runtime,
-        )
-        .await;
+        let accounts = read_state(|s| s.find_all_accounts(&unsigned_tx));
+        let maybe_signed_tx = runtime
+            .sign_transaction(
+                key_name.to_string(),
+                ecdsa_public_key.clone(),
+                unsigned_tx,
+                accounts,
+            )
+            .await;
 
         let signed_tx = match maybe_signed_tx {
             Ok(tx) => tx,
@@ -943,7 +944,11 @@ pub async fn resubmit_transactions<
             }
         };
 
-        match runtime.send_transaction(&signed_tx, btc_network).await {
+        let signed_tx_hex = hex::encode(&signed_tx);
+        match runtime
+            .send_raw_transaction(signed_tx.into_bytes(), btc_network)
+            .await
+        {
             Ok(()) => {
                 if old_txid == new_txid {
                     // DEFENSIVE: We should never take this branch because we increase fees for
@@ -952,18 +957,16 @@ pub async fn resubmit_transactions<
                     // equality in case the fee computation rules change in the future.
                     log!(
                         Priority::Info,
-                        "[finalize_requests]: resent transaction {} with a new signature. TX bytes: {}",
+                        "[finalize_requests]: resent transaction {} with a new signature. TX bytes: {signed_tx_hex}",
                         &new_txid,
-                        hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                     );
                     continue;
                 }
                 log!(
                     Priority::Info,
-                    "[finalize_requests]: sent transaction {} to replace stuck transaction {}. TX bytes: {}",
+                    "[finalize_requests]: sent transaction {} to replace stuck transaction {}. TX bytes: {signed_tx_hex}",
                     &new_txid,
                     &old_txid,
-                    hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                 );
                 let new_tx = state::SubmittedBtcTransaction {
                     requests: new_tx_requests,
@@ -981,8 +984,7 @@ pub async fn resubmit_transactions<
             Err(err) => {
                 log!(
                     Priority::Info,
-                    "[finalize_requests]: failed to send transaction bytes {} to replace stuck transaction {}: {}",
-                    hex::encode(tx::encode_into(&signed_tx, Vec::new())),
+                    "[finalize_requests]: failed to send transaction bytes {signed_tx_hex} to replace stuck transaction {}: {}",
                     &old_txid,
                     err,
                 );
@@ -1063,57 +1065,6 @@ fn greedy(target: u64, available_utxos: &mut UtxoSet) -> Vec<Utxo> {
     debug_assert!(solution.is_empty() || solution.iter().map(|u| u.value).sum::<u64>() >= target);
 
     solution
-}
-
-/// Gathers ECDSA signatures for all the inputs in the specified unsigned
-/// transaction.
-///
-/// # Panics
-///
-/// This function panics if the `output_account` map does not have an entry for
-/// at least one of the transaction previous output points.
-pub async fn sign_transaction<R: CanisterRuntime, F: Fn(&tx::OutPoint) -> Option<Account>>(
-    key_name: String,
-    ecdsa_public_key: &ECDSAPublicKey,
-    lookup_outpoint_account: F,
-    unsigned_tx: tx::UnsignedTransaction,
-    runtime: &R,
-) -> Result<tx::SignedTransaction, CallError> {
-    use crate::address::{derivation_path, derive_public_key_from_account};
-
-    let mut signed_inputs = Vec::with_capacity(unsigned_tx.inputs.len());
-    let sighasher = tx::TxSigHasher::new(&unsigned_tx);
-    for input in &unsigned_tx.inputs {
-        let outpoint = &input.previous_output;
-
-        let account = lookup_outpoint_account(outpoint)
-            .unwrap_or_else(|| panic!("bug: no account for outpoint {outpoint:?}"));
-
-        let path = derivation_path(&account)
-            .into_iter()
-            .map(|buf| buf.to_vec())
-            .collect();
-        let pubkey =
-            ByteBuf::from(derive_public_key_from_account(ecdsa_public_key, &account).public_key);
-        let pkhash = tx::hash160(&pubkey);
-
-        let sighash = sighasher.sighash(input, &pkhash);
-
-        let sec1_signature =
-            management::sign_with_ecdsa(key_name.clone(), path, sighash, runtime).await?;
-
-        signed_inputs.push(tx::SignedInput {
-            signature: signature::EncodedSignature::from_sec1(&sec1_signature),
-            pubkey,
-            previous_output: outpoint.clone(),
-            sequence: input.sequence,
-        });
-    }
-    Ok(tx::SignedTransaction {
-        inputs: signed_inputs,
-        outputs: unsigned_tx.outputs,
-        lock_time: unsigned_tx.lock_time,
-    })
 }
 
 pub fn fake_sign(unsigned_tx: &tx::UnsignedTransaction) -> tx::SignedTransaction {
@@ -1554,6 +1505,7 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
         ecdsa_public_key,
         change_output,
         network: s.btc_network,
+        accounts: s.find_all_accounts(&unsigned_tx),
         unsigned_tx,
         requests: state::SubmittedWithdrawalRequests::ToConsolidate { request },
         utxos,
@@ -1660,8 +1612,10 @@ pub trait CanisterRuntime {
 
     async fn sign_transaction(
         &self,
-        state: &CkBtcMinterState,
-        unsigned_tx: crate::tx::UnsignedTransaction,
+        key_name: String,
+        ecdsa_public_key: ECDSAPublicKey,
+        unsigned_tx: UnsignedTransaction,
+        accounts: Vec<Account>,
     ) -> Result<SignedRawTransaction, CallError>;
 
     async fn sign_with_ecdsa(
@@ -1745,17 +1699,12 @@ impl CanisterRuntime for IcCanisterRuntime {
 
     async fn sign_transaction(
         &self,
-        state: &CkBtcMinterState,
+        key_name: String,
+        ecdsa_public_key: ECDSAPublicKey,
         unsigned_tx: UnsignedTransaction,
+        accounts: Vec<Account>,
     ) -> Result<SignedRawTransaction, CallError> {
-        let signer = BitcoinTransactionSigner::new(
-            state.ecdsa_key_name.clone(),
-            state
-                .ecdsa_public_key
-                .clone()
-                .expect("BUG: minter is not initialized"),
-        );
-        let accounts = state.find_all_accounts(&unsigned_tx);
+        let signer = BitcoinTransactionSigner::new(key_name, ecdsa_public_key);
         signer.sign_transaction(unsigned_tx, accounts, self).await
     }
 

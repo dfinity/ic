@@ -1775,6 +1775,12 @@ impl CkBtcMinterState {
         );
     }
 
+    /// Find all accounts used for the transaction previous output points.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the `output_account` map does not have an entry for
+    /// at least one of the transaction previous output points.
     pub fn find_all_accounts(&self, tx: &tx::UnsignedTransaction) -> Vec<Account> {
         let mut accounts = Vec::with_capacity(tx.inputs.len());
         for input in &tx.inputs {

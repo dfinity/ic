@@ -174,15 +174,16 @@ pub fn bitcoin_fee_estimator() -> BitcoinFeeEstimator {
 }
 
 pub mod mock {
-    use crate::CkBtcMinterState;
     use crate::fees::BitcoinFeeEstimator;
     use crate::management::CallError;
     use crate::state::eventlog::CkBtcEventLogger;
+    use crate::tx::{SignedRawTransaction, UnsignedTransaction};
     use crate::updates::update_balance::UpdateBalanceError;
     use crate::{
         BitcoinAddress, BtcAddressCheckStatus, CanisterRuntime, GetCurrentFeePercentilesRequest,
         GetUtxosRequest, GetUtxosResponse, Network, tx,
     };
+    use crate::{CkBtcMinterState, ECDSAPublicKey};
     use async_trait::async_trait;
     use candid::Principal;
     use ic_btc_checker::CheckTransactionResponse;
@@ -217,6 +218,7 @@ pub mod mock {
             async fn check_transaction(&self, btc_checker_principal: Option<Principal>, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;
             async fn mint_ckbtc(&self, amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError>;
             async fn sign_with_ecdsa(&self, key_name: String, derivation_path: Vec<Vec<u8>>, message_hash: [u8; 32]) -> Result<Vec<u8>, CallError>;
+            async fn sign_transaction( &self, key_name: String, ecdsa_public_key: ECDSAPublicKey, unsigned_tx: UnsignedTransaction, accounts: Vec<Account>) -> Result<SignedRawTransaction, CallError>;
             async fn send_transaction(&self, transaction: &tx::SignedTransaction, network: Network) -> Result<(), CallError>;
             async fn send_raw_transaction(&self, transaction: Vec<u8>, network: Network) -> Result<(), CallError>;
             async fn check_address( &self, btc_checker_principal: Option<Principal>, address: String) -> Result<BtcAddressCheckStatus, CallError>;
