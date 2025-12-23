@@ -1579,6 +1579,10 @@ crate.spec(
     version = "^0.6.18",
 )
 crate.spec(
+    package = "sysinfo",
+    version = "0.37",
+)
+crate.spec(
     package = "systemd",
     version = "0.10",
 )
