@@ -48,8 +48,9 @@ fish
 node-json5
 
 # IC-OS
-faketime
 dosfstools # provides mkfs.vfat
+faketime
+iasl # to build OVMF
  # Linked in by IC-OS binaries for managing encrypted disks.
 libcryptsetup-dev
  # Linked in by IC-OS binaries for creating mapped devices.
@@ -60,7 +61,6 @@ libsystemd-dev
 libvirt-dev
 mtools # used for mcopy and mmd
 nasm # to build OVMF
-qemu-system-x86 # used for guestos
 zstd
 
 # Unknown
