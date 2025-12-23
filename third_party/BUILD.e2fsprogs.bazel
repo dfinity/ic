@@ -1,3 +1,5 @@
+# Build e2fsprogs for mkfs dependency which is used to build IC-OS filesystem images
+
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
 
 filegroup(
