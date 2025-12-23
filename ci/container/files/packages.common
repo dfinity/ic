@@ -49,6 +49,7 @@ node-json5
 
 # IC-OS
 dosfstools # provides mkfs.vfat
+fakeroot
 faketime
 fdisk
 iasl # to build OVMF
