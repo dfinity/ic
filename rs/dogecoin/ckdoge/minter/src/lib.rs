@@ -292,13 +292,9 @@ mod dogecoin_canister {
     /// Gets the canister ID of the Dogecoin canister for the specified network.
     pub fn get_dogecoin_canister_id(network: &Network) -> Principal {
         const MAINNET_ID: Principal = Principal::from_slice(&[0_u8, 0, 0, 0, 1, 160, 0, 7, 1, 1]); // "gordg-fyaaa-aaaan-aaadq-cai"
-        const TESTNET_ID: Principal = Principal::from_slice(&[0, 0, 0, 0, 1, 160, 0, 8, 1, 1]); // "hd7hi-kqaaa-aaaan-aaaea-cai"
-        const REGTEST_ID: Principal = Principal::from_slice(&[0, 0, 0, 0, 1, 160, 0, 8, 1, 1]); // "hd7hi-kqaaa-aaaan-aaaea-cai"
 
         match network {
-            Network::Mainnet => MAINNET_ID,
-            Network::Testnet => TESTNET_ID,
-            Network::Regtest => REGTEST_ID,
+            Network::Mainnet | Network::Regtest => MAINNET_ID,
         }
     }
 

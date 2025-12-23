@@ -10,6 +10,6 @@ fn should_have_correct_dogecoin_canister_id() {
 
     assert_eq!(
         get_dogecoin_canister_id(&Network::Regtest).to_string(),
-        "hd7hi-kqaaa-aaaan-aaaea-cai"
+        "gordg-fyaaa-aaaan-aaadq-cai"
     );
 }
