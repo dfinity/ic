@@ -9,7 +9,6 @@ use candid::{CandidType, Deserialize, Principal};
 use canlog::log;
 use ic_cdk::bitcoin_canister;
 use ic_cdk::management_canister::SignWithEcdsaArgs;
-use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::Memo;
 use scopeguard::{ScopeGuard, guard};
@@ -1089,20 +1088,18 @@ pub async fn sign_transaction<R: CanisterRuntime, F: Fn(&tx::OutPoint) -> Option
         let account = lookup_outpoint_account(outpoint)
             .unwrap_or_else(|| panic!("bug: no account for outpoint {outpoint:?}"));
 
-        let path = derivation_path(&account);
+        let path = derivation_path(&account)
+            .into_iter()
+            .map(|buf| buf.to_vec())
+            .collect();
         let pubkey =
             ByteBuf::from(derive_public_key_from_account(ecdsa_public_key, &account).public_key);
         let pkhash = tx::hash160(&pubkey);
 
         let sighash = sighasher.sighash(input, &pkhash);
 
-        let sec1_signature = management::sign_with_ecdsa(
-            key_name.clone(),
-            DerivationPath::new(path),
-            sighash,
-            runtime,
-        )
-        .await?;
+        let sec1_signature =
+            management::sign_with_ecdsa(key_name.clone(), path, sighash, runtime).await?;
 
         signed_inputs.push(tx::SignedInput {
             signature: signature::EncodedSignature::from_sec1(&sec1_signature),

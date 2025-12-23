@@ -17,7 +17,6 @@ mod update_balance {
     use crate::{CanisterRuntime, GetUtxosResponse, Timestamp};
     use ic_btc_checker::{CheckTransactionResponse, CheckTransactionStatus};
     use ic_btc_interface::Utxo;
-    use ic_management_canister_types_private::BoundedVec;
     use icrc_ledger_types::icrc1::account::Account;
     use std::iter;
     use std::time::Duration;
@@ -640,7 +639,7 @@ mod update_balance {
             result: MetricsResult,
         ) -> Result<Vec<u8>, CallError> {
             let key_name = "test_key".to_string();
-            let derivation_path = BoundedVec::new(vec![]);
+            let derivation_path = vec![];
             let message_hash = [0u8; 32];
 
             let mut runtime = MockCanisterRuntime::new();
