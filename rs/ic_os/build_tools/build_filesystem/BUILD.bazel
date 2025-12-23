@@ -19,6 +19,9 @@ rust_binary(
         "@crate_index//:tar",
         "@crate_index//:tempfile",
     ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 rust_test(
@@ -49,4 +52,5 @@ filegroup(
         "@e2fsprogs//:mke2fs",
     ],
     visibility = ["//rs/tests/node:__subpackages__"],
+    tags = ["manual"],
 )

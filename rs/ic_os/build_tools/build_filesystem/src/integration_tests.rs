@@ -113,7 +113,7 @@ impl ImageFixtureBuilder {
         let parsed_extra_files = self
             .extra_files
             .iter()
-            .map(|s| s.parse().expect(&format!("Cannot parse {s}")))
+            .map(|s| s.parse().unwrap_or_else(|_| panic!("Cannot parse {s}")))
             .collect();
 
         build_filesystem(Args {
