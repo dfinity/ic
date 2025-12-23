@@ -9,6 +9,10 @@ on:
   schedule:
     - cron: "0 */2 * * *"
   workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/update-mainnet-canister-revisions.yaml'
+
 
 defaults:
   run:
@@ -60,6 +64,7 @@ jobs:
       - name: Update mainnet canister versions file
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          DRY_RUN: ${{ if github.event_name == 'pull_request' }} then 'dry_run' else '' end
         run: |
           set -eEuxo pipefail
 
@@ -72,3 +77,4 @@ jobs:
             -- time python \
             ci/src/mainnet_revisions/mainnet_revisions.py \
             canisters
+            $DRY_RUN
