@@ -474,7 +474,7 @@ impl PayloadAssembler<SignedIDkgDealing> for BlockProposalAssembler {
     }
 
     fn try_reconstruct_block(
-        signed_dealings: Vec<((NodeIndex, IDkgArtifactId), Option<SignedIDkgDealing>)>,
+        signed_dealings: Vec<(Self::MissingArtifactId, Option<SignedIDkgDealing>)>,
         block: &mut pb::Block,
     ) -> Result<(), AssemblyError> {
         let mut idkg_dealings =
@@ -571,14 +571,10 @@ impl BlockProposalAssembler {
     ) -> Result<(), InsertionError> {
         match message {
             StrippedMessage::Ingress(signed_ingress_id, signed_ingress) => {
-                PayloadAssembler::<SignedIngress>::try_insert(
-                    self,
-                    signed_ingress_id,
-                    signed_ingress,
-                )
+                self.try_insert(signed_ingress_id, signed_ingress)
             }
             StrippedMessage::IDkgDealing(dealing_id, _, signed_dealing) => {
-                PayloadAssembler::<SignedIDkgDealing>::try_insert(self, dealing_id, signed_dealing)
+                self.try_insert(dealing_id, signed_dealing)
             }
         }
     }
@@ -597,14 +593,8 @@ impl BlockProposalAssembler {
             stripped_block_proposal.pruned_block_proposal_proto;
 
         if let Some(block) = reconstructed_block_proposal_proto.value.as_mut() {
-            <BlockProposalAssembler as PayloadAssembler<SignedIngress>>::try_reconstruct_block(
-                ingress_messages,
-                block,
-            )?;
-            <BlockProposalAssembler as PayloadAssembler<SignedIDkgDealing>>::try_reconstruct_block(
-                signed_dealings,
-                block,
-            )?;
+            Self::try_reconstruct_block(ingress_messages, block)?;
+            Self::try_reconstruct_block(signed_dealings, block)?;
         }
 
         reconstructed_block_proposal_proto
@@ -737,8 +727,7 @@ mod tests {
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         // insert back only one missing messages
-        PayloadAssembler::<SignedIngress>::try_insert(&mut assembler, ingress_id_1, ingress_1)
-            .unwrap();
+        assembler.try_insert(ingress_id_1, ingress_1).unwrap();
 
         // try to reassemble the block
         let assembly_error = assembler.try_assemble().unwrap_err();
@@ -768,12 +757,9 @@ mod tests {
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         // insert back only one missing message
-        PayloadAssembler::<SignedIDkgDealing>::try_insert(
-            &mut assembler,
-            dealing_1.message_id(),
-            dealing_1,
-        )
-        .unwrap();
+        assembler
+            .try_insert(dealing_1.message_id(), dealing_1)
+            .unwrap();
 
         // try to reassemble the block
         let assembly_error = assembler.try_assemble().unwrap_err();
@@ -809,18 +795,12 @@ mod tests {
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         // insert back only the missing message
-        PayloadAssembler::<SignedIDkgDealing>::try_insert(
-            &mut assembler,
-            dealing_1.message_id(),
-            dealing_1,
-        )
-        .unwrap();
-        let err = PayloadAssembler::<SignedIDkgDealing>::try_insert(
-            &mut assembler,
-            dealing_2.message_id(),
-            dealing_2,
-        )
-        .unwrap_err();
+        assembler
+            .try_insert(dealing_1.message_id(), dealing_1)
+            .unwrap();
+        let err = assembler
+            .try_insert(dealing_2.message_id(), dealing_2)
+            .unwrap_err();
         assert_matches!(err, InsertionError::NotNeeded);
 
         // try to reassemble the block
@@ -867,18 +847,12 @@ mod tests {
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         // insert back only the missing message
-        PayloadAssembler::<SignedIDkgDealing>::try_insert(
-            &mut assembler,
-            dealing_1.message_id(),
-            dealing_1,
-        )
-        .unwrap();
-        let err = PayloadAssembler::<SignedIDkgDealing>::try_insert(
-            &mut assembler,
-            dealing_2.message_id(),
-            dealing_2,
-        )
-        .unwrap_err();
+        assembler
+            .try_insert(dealing_1.message_id(), dealing_1)
+            .unwrap();
+        let err = assembler
+            .try_insert(dealing_2.message_id(), dealing_2)
+            .unwrap_err();
         assert_matches!(err, InsertionError::NotNeeded);
 
         // try to reassemble the block
