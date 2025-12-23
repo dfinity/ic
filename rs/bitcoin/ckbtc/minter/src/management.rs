@@ -238,14 +238,14 @@ pub async fn ecdsa_public_key(
 /// Signs a message hash using the tECDSA API.
 pub async fn sign_with_ecdsa<R: CanisterRuntime>(
     key_name: String,
-    derivation_path: DerivationPath,
+    derivation_path: Vec<Vec<u8>>,
     message_hash: [u8; 32],
     runtime: &R,
 ) -> Result<Vec<u8>, CallError> {
     let start_time = runtime.time();
 
     let result = runtime
-        .sign_with_ecdsa(key_name, derivation_path.into_inner(), message_hash)
+        .sign_with_ecdsa(key_name, derivation_path, message_hash)
         .await;
 
     observe_sign_with_ecdsa_latency(&result, start_time, runtime.time());

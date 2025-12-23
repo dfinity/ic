@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 async-trait = { workspace = true }
+bitcoin = {workspace = true}
 bs58 = "0.5.0"
 candid = { workspace = true }
 candid_parser = { workspace = true }

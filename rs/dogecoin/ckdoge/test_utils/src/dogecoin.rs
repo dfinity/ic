@@ -53,8 +53,6 @@ impl DogecoinCanister {
     }
 
     pub fn mempool(&self) -> Mempool {
-        use bitcoin::consensus::Decodable;
-
         fn vec_to_txid(vec: Vec<u8>) -> Txid {
             let bytes: [u8; 32] = vec.try_into().expect("Vector length must be exactly 32");
             bytes.into()
@@ -73,8 +71,7 @@ impl DogecoinCanister {
         response
             .into_iter()
             .map(|tx_bytes| {
-                let tx = bitcoin::Transaction::consensus_decode(&mut &tx_bytes[..])
-                    .expect("failed to parse a dogecoin transaction");
+                let tx = decode_dogecoin_transaction(&tx_bytes);
 
                 (vec_to_txid(tx.compute_txid().as_byte_array().to_vec()), tx)
             })
@@ -100,4 +97,23 @@ impl DogecoinCanister {
             num_ticks += 1;
         }
     }
+}
+
+fn decode_dogecoin_transaction(tx_bytes: &[u8]) -> bitcoin::Transaction {
+    use bitcoin::consensus::Decodable;
+
+    let tx = bitcoin::Transaction::consensus_decode(&mut &tx_bytes[..])
+        .expect("failed to parse a dogecoin transaction");
+    assert_eq!(
+        tx.version,
+        bitcoin::transaction::Version::ONE,
+        "Dogecoin does not support BIP-68"
+    );
+    for input in &tx.input {
+        assert!(
+            input.witness.is_empty() && !input.script_sig.is_empty(),
+            "Dogecoin does not support segwit"
+        );
+    }
+    tx
 }

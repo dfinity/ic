@@ -6,7 +6,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::Priority;
+use crate::{Priority, tx};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
@@ -1773,6 +1773,27 @@ impl CkBtcMinterState {
             None,
             "BUG: Reimbursement of withdrawal {reimbursement:?} was already completed!"
         );
+    }
+
+    /// Find all accounts used for the transaction previous output points.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the `output_account` map does not have an entry for
+    /// at least one of the transaction previous output points.
+    pub fn find_all_accounts(&self, tx: &tx::UnsignedTransaction) -> Vec<Account> {
+        let mut accounts = Vec::with_capacity(tx.inputs.len());
+        for input in &tx.inputs {
+            accounts.push(
+                self.outpoint_account
+                    .get(&input.previous_output)
+                    .copied()
+                    .unwrap_or_else(|| {
+                        panic!("BUG: no account for outpoint {:?}", &input.previous_output)
+                    }),
+            )
+        }
+        accounts
     }
 }
 
