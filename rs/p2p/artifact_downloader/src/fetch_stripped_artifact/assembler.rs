@@ -556,12 +556,12 @@ impl BlockProposalAssembler {
 
     /// Returns the list of messages which have been stripped from the block.
     pub(crate) fn missing_stripped_messages(&self) -> Vec<StrippedMessageId> {
-        let ingress = PayloadAssembler::<SignedIngress>::missing_artifacts(self)
+        let ingress_messages = PayloadAssembler::<SignedIngress>::missing_artifacts(self)
             .map(StrippedMessageId::Ingress);
         let idkg_dealings = PayloadAssembler::<SignedIDkgDealing>::missing_artifacts(self)
             .map(|(node_index, dealing_id)| StrippedMessageId::IDkgDealing(dealing_id, node_index));
 
-        ingress.chain(idkg_dealings).collect()
+        ingress_messages.chain(idkg_dealings).collect()
     }
 
     /// Tries to insert a missing stripped message into the block.
