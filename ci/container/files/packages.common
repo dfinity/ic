@@ -50,7 +50,6 @@ node-json5
 # IC-OS
 cryptsetup-bin
 dosfstools # provides mkfs.vfat
-fakeroot # maybe remove
 faketime
 fdisk
 iasl # to build OVMF
