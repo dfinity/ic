@@ -16,7 +16,7 @@ use icrc_ledger_types::icrc1::account::Account;
 pub const TX_VERSION: u32 = 2;
 
 /// The length of the public key.
-pub const PUBKEY_LEN: usize = 32;
+pub const PUBKEY_LEN: usize = 33;
 
 // The marker indicating the segregated witness encoding.
 const MARKER: u8 = 0;
@@ -349,16 +349,6 @@ pub struct UnsignedTransaction {
     pub lock_time: u32,
 }
 
-impl UnsignedTransaction {
-    pub fn txid(&self) -> Txid {
-        Sha256::hash(&encode_into(self, Sha256::new())).into()
-    }
-
-    pub fn serialized_len(&self) -> usize {
-        encode_into(self, CountBytes::default())
-    }
-}
-
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub struct SignedRawTransaction {
     signed_tx: Vec<u8>,
@@ -368,6 +358,10 @@ pub struct SignedRawTransaction {
 impl SignedRawTransaction {
     pub fn new(signed_tx: Vec<u8>, txid: Txid) -> Self {
         Self { signed_tx, txid }
+    }
+
+    pub fn txid(&self) -> Txid {
+        self.txid
     }
 
     pub fn into_bytes(self) -> Vec<u8> {
