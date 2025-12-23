@@ -48,6 +48,7 @@ fish
 node-json5
 
 # IC-OS
+faketime
 dosfstools # provides mkfs.vfat
  # Linked in by IC-OS binaries for managing encrypted disks.
 libcryptsetup-dev
