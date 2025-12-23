@@ -8,7 +8,7 @@ use std::{
 use crate::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy};
 use crate::driver::log_events;
 use crate::driver::test_env::{RequiredHostFeaturesFromCmdLine, TestEnvAttribute};
-use crate::driver::test_env_api::{HasFarmUrl, read_dependency_to_string};
+use crate::driver::test_env_api::HasFarmUrl;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use ic_crypto_sha2::Sha256;
@@ -450,26 +450,11 @@ pub struct GroupSpec {
 
 impl GroupSpec {
     pub fn add_meta(mut self, group_base_name: &str) -> Self {
-        // Acquire bazel's stable status containing key value pairs like user and job name:
-        let farm_metadata_path = std::env::var("FARM_METADATA_PATH")
-            .expect("Expected the environment variable FARM_METADATA_PATH to be defined!");
-        let farm_metadata = read_dependency_to_string(&farm_metadata_path)
-            .unwrap_or_else(|e| {
-                panic!("Couldn't read content of the status file {farm_metadata_path}: {e:?}")
-            })
-            .trim_end()
-            .to_string();
-        let runtime_args_map = parse_farm_metadata_file(farm_metadata);
-
-        // Read values from the runtime args and use sensible defaults if unset
-        let user = runtime_args_map
-            .get("STABLE_FARM_USER") // Always set by bazel
-            .cloned()
-            .unwrap_or("CI".to_string());
-        let job_schedule = runtime_args_map
-            .get("STABLE_FARM_JOB_NAME") // Injected by workspace status
-            .cloned()
-            .unwrap_or("manual".to_string());
+        // Read injected farm metadata. We expect 'USER' and 'JOB_NAME' to be set and
+        // use sensible defaults if unset.
+        let mut runtime_args_map = parse_farm_metadata_env();
+        let user = runtime_args_map.remove("USER").unwrap_or("CI".to_string());
+        let job_schedule = runtime_args_map.remove("JOB_NAME").unwrap_or("manual".to_string());
         let metadata = GroupMetadata {
             user,
             job_schedule,
@@ -490,11 +475,15 @@ pub struct GroupMetadata {
     pub test_name: String,
 }
 
-fn parse_farm_metadata_file(input: String) -> HashMap<String, String> {
+fn parse_farm_metadata_env() -> HashMap<String, String> {
+    // Read the FARM_METADATA environment variable containing ';' separated key pairs:
+    //      'FARM_METADATA=FOO=bar;BAZ=quux'
+    let farm_metadata = std::env::var("FARM_METADATA")
+        .expect("Expected the environment variable FARM_METADATA to be defined!");
     let mut map = HashMap::new();
-    let lines = input.split('\n');
-    for line in lines {
-        if let Some((key, value)) = line.split_once(' ') {
+    let pairs = farm_metadata.split(';');
+    for pair in pairs {
+        if let Some((key, value)) = pair.split_once('=') {
             map.insert(String::from(key), String::from(value));
         }
     }

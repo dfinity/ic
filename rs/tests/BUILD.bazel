@@ -3,7 +3,7 @@ load("@rules_distroless//apt:defs.bzl", "dpkg_status")
 load("@rules_distroless//distroless:defs.bzl", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
-load("//bazel:defs.bzl", "symlink_dir", "symlink_dir_test")
+load("//bazel:defs.bzl", "symlink_dir", "symlink_dir_test", "write_info_file_var")
 load(":system_tests.bzl", "oci_tar", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -295,4 +295,10 @@ genrule(
     srcs = ["//bazel:version.txt"],
     outs = ["version-test.txt"],
     cmd = "sed < $< 's/$$/-test/' > $@",
+)
+
+write_info_file_var(
+    name = "farm_metadata.txt",
+    varname = "STABLE_FARM_METADATA",
+    visibility = ["//visibility:public"],
 )
