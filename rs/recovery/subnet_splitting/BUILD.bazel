@@ -77,15 +77,15 @@ rust_test(
 
 rust_ic_test(
     name = "integration_test",
+    srcs = glob(["tests/**"]),
     data = [
-        "//rs/rust_canisters/proxy_canister:proxy_canister",
+        "//rs/rust_canisters/proxy_canister",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = {
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
-    srcs = glob(["tests/**"]),
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":subnet_splitting",
         "//rs/rust_canisters/proxy_canister:lib",
