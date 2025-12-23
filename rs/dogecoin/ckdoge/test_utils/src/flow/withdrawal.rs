@@ -165,7 +165,10 @@ where
 
         let balance_after = self.setup.as_ref().ledger().icrc1_balance_of(self.account);
 
-        assert_eq!(balance_before - balance_after, self.withdrawal_amount);
+        assert_eq!(
+            balance_before - balance_after,
+            self.withdrawal_amount as u128
+        );
 
         DogecoinWithdrawalTransactionFlow {
             setup: self.setup,
@@ -381,7 +384,7 @@ where
 
         assert_eq!(
             ledger.icrc1_balance_of(self.account),
-            balance_after_withdrawal + reimbursement_amount
+            balance_after_withdrawal + (reimbursement_amount as u128)
         );
     }
 }
