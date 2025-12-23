@@ -61,15 +61,14 @@ impl LocallyDescribableProposalAction for ApproveGenesisKyc {
 }
 
 /// A builder for `SelfDescribingValue` objects.
-pub(crate) struct ValueBuilder {
+#[derive(Default)]
+pub struct ValueBuilder {
     fields: HashMap<String, SelfDescribingValue>,
 }
 
 impl ValueBuilder {
     pub fn new() -> Self {
-        Self {
-            fields: HashMap::new(),
-        }
+        Self::default()
     }
 
     pub fn add_field(mut self, key: impl ToString, value: impl Into<SelfDescribingValue>) -> Self {
